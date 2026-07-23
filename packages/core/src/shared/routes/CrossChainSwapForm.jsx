@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ChainPicker,
     Screen,
     PageHeader,
     Button,
@@ -17,10 +18,18 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
+    AddressField,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -103,6 +112,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [expirationBlocks, setExpirationBlocks] = useState('1000');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
+    const [givePickerOpen, setGivePickerOpen] = useState(false);
+    const [getPickerOpen, setGetPickerOpen] = useState(false);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -211,6 +223,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const getDescriptor = getChainId ? chainRegistry.get(getChainId) : null;
     const giveCoinTicker = giveDescriptor ? PROTOCOL_COIN_TICKER[giveDescriptor.coin] || '' : '';
     const getCoinTicker = getDescriptor ? PROTOCOL_COIN_TICKER[getDescriptor.coin] || '' : '';
+
+    // Source balance of the give ticker on the give chain, backing the
+    // give AmountField's Max button + "available" footer.
+    const giveBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId: giveChainId,
+        address: fromAddress?.address,
+        tick: giveTick,
+    });
     const hw = isHwSource(fromAddress);
 
     const validationError = useMemo(() => {
@@ -509,6 +531,54 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (givePickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select give token"
+                networkFilter={coinFromChainId(giveChainId)}
+                onSelect={(sel) => {
+                    setGiveTick(String(sel.tick || '').toUpperCase());
+                    setGivePickerOpen(false);
+                }}
+                onBack={() => setGivePickerOpen(false)}
+            />
+        );
+    }
+
+    if (getPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="receive"
+                walletId={walletId}
+                title="Select get token"
+                networkFilter={coinFromChainId(getChainId)}
+                onSelect={(sel) => {
+                    setGetTick(String(sel.tick || '').toUpperCase());
+                    setGetPickerOpen(false);
+                }}
+                onBack={() => setGetPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div style={{
@@ -518,77 +588,60 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             }}>
                 <fieldset style={fieldsetStyle}>
                     <legend style={legendStyle}>You give</legend>
-                    <label className={styles.pickerLabel}>
-                        <span>Give chain</span>
-                        <select
-                            className={styles.picker}
-                            value={giveChainId || ''}
-                            onChange={(e) => setGiveChainId(e.target.value)}
-                        >
-                            {chainIds.map((cid) => {
-                                const d = chainRegistry.get(cid);
-                                return (
-                                    <option key={cid} value={cid}>
-                                        {d ? d.displayName : cid}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                    </label>
-                    <label className={styles.pickerLabel}>
-                        <span>From address</span>
-                        <select
-                            className={styles.picker}
-                            value={fromAddressId || ''}
-                            onChange={(e) => setFromAddressId(e.target.value)}
-                        >
-                            {(addressesByChain[giveChainId] || []).map((a) => (
-                                <option key={a.id} value={a.id}>{a.address}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <Input
-                            label="Give ticker"
-                            value={giveTick}
-                            onChange={(e) => setGiveTick(e.target.value)}
-                            placeholder="e.g. RAREPEPE"
-                            autoCapitalize="characters"
-                            style={{ flex: 1 }}
+                    <ChainPicker
+                        label="Give chain"
+                        value={giveChainId || ''}
+                        onChange={setGiveChainId}
+                        chainIds={chainIds}
+                        chainRegistry={chainRegistry}
+                    />
+                    {fromAddress ? (
+                        <AddressField
+                            label="From"
+                            icon="addresses"
+                            value={fromAddress.address}
+                            readOnly
+                            onChange={() => {}}
+                            onIconClick={() => setSourcePickerOpen(true)}
+                            iconLabel="Choose source address"
                         />
-                        <Input
-                            label="Give amount"
-                            type="text"
-                            inputMode="decimal"
-                            value={giveAmount}
-                            onChange={(e) => setGiveAmount(e.target.value)}
-                            style={{ flex: 1 }}
-                        />
-                    </div>
+                    ) : null}
+                    <TokenField
+                        label="Give token"
+                        value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
+                        onOpenPicker={() => setGivePickerOpen(true)}
+                    />
+                    <AmountField
+                        label="Give amount"
+                        amount={giveAmount}
+                        tick={giveTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setGiveAmount(stripped);
+                        }}
+                        onMax={giveBalance && Number(giveBalance) > 0
+                            ? () => setGiveAmount(giveBalance)
+                            : undefined}
+                        maxDisabled={!giveBalance}
+                        balanceText={giveBalance != null && giveTick.trim()
+                            ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
+                            : null}
+                    />
                 </fieldset>
 
                 <fieldset style={fieldsetStyle}>
                     <legend style={legendStyle}>You get</legend>
-                    <label className={styles.pickerLabel}>
-                        <span>Get chain</span>
-                        <select
-                            className={styles.picker}
-                            value={getChainId || ''}
-                            onChange={(e) => {
-                                setGetChainId(e.target.value);
-                                setGetAddressTouched(false);
-                            }}
-                        >
-                            {chainIds.map((cid) => {
-                                const d = chainRegistry.get(cid);
-                                return (
-                                    <option key={cid} value={cid}>
-                                        {d ? d.displayName : cid}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                    </label>
+                    <ChainPicker
+                        label="Get chain"
+                        value={getChainId || ''}
+                        onChange={(cid) => {
+                            setGetChainId(cid);
+                            setGetAddressTouched(false);
+                        }}
+                        chainIds={chainIds}
+                        chainRegistry={chainRegistry}
+                    />
                     <Input
                         label="Receive at"
                         value={getAddress}
@@ -598,24 +651,21 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         }}
                         placeholder="auto-filled from your get-chain wallet"
                     />
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <Input
-                            label="Get ticker"
-                            value={getTick}
-                            onChange={(e) => setGetTick(e.target.value)}
-                            placeholder="e.g. PEPECASH"
-                            autoCapitalize="characters"
-                            style={{ flex: 1 }}
-                        />
-                        <Input
-                            label="Get amount"
-                            type="text"
-                            inputMode="decimal"
-                            value={getAmount}
-                            onChange={(e) => setGetAmount(e.target.value)}
-                            style={{ flex: 1 }}
-                        />
-                    </div>
+                    <TokenField
+                        label="Get token"
+                        value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
+                        onOpenPicker={() => setGetPickerOpen(true)}
+                    />
+                    <AmountField
+                        label="Get amount"
+                        amount={getAmount}
+                        tick={getTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setGetAmount(stripped);
+                        }}
+                    />
                 </fieldset>
             </div>
 

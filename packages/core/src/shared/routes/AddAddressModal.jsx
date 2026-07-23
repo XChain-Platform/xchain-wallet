@@ -21,9 +21,9 @@
 // device round-trip.
 
 import { useMemo, useState } from 'react';
-import { Button, ChainPicker } from '@xchain-wallet/core/ui';
+import { Button, ChainPicker, Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { useMessaging } from '../useMessaging.js';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -37,8 +37,36 @@ const MAX_ADDRESSES = 25;
  * @param {() => void} props.onClose
  * @param {(count: number) => void} [props.onGenerated]   called after a successful batch
  */
+// Users recognize address formats by their leading characters, not by
+// script-type names, so each Type option carries a "starts with ..."
+// hint. Keyed by coin family + network kind + type.
+const ADDRESS_TYPE_HINT = {
+    bitcoin: {
+        mainnet: { p2pkh: '1...', 'p2sh-p2wpkh': '3...', p2wpkh: 'bc1q...', p2tr: 'bc1p...' },
+        testnet: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': '2...', p2wpkh: 'tb1q...', p2tr: 'tb1p...' },
+        regtest: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': '2...', p2wpkh: 'bcrt1q...', p2tr: 'bcrt1p...' },
+    },
+    litecoin: {
+        mainnet: { p2pkh: 'L...', 'p2sh-p2wpkh': 'M...', p2wpkh: 'ltc1...' },
+        testnet: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': 'Q...', p2wpkh: 'tltc1...' },
+        regtest: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': 'Q...', p2wpkh: 'rltc1...' },
+    },
+    dogecoin: {
+        mainnet: { p2pkh: 'D...' },
+        // Dogecoin regtest reuses Bitcoin-testnet base58 prefixes (see the
+        // dogecoin descriptor).
+        testnet: { p2pkh: 'n...' },
+        regtest: { p2pkh: 'm.../n...' },
+    },
+};
+
+export function addressTypeHint(descriptor, type) {
+    return ADDRESS_TYPE_HINT[descriptor?.coin]?.[descriptor?.networkKind]?.[type] || null;
+}
+
 export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGenerated }) {
-    const { messaging } = useMessaging();
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
 
     // Coin options come from the chains the account is already on.
     const coinOptions = useMemo(() => (chainIds || [])
@@ -49,6 +77,8 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             displayName: d.displayName,
             addressTypes: d.addressTypes,
             defaultAddressType: d.defaultAddressType,
+            coin: d.coin,
+            networkKind: d.networkKind,
         })), [chainIds]);
 
     const [chainId, setChainId] = useState(coinOptions[0]?.chainId || '');
@@ -100,16 +130,16 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     const countNum = Math.floor(Number(count));
     const generateLabel = Number.isInteger(countNum) && countNum > 1 ? `Generate ${countNum}` : 'Generate';
 
+    const header = (
+        <PageHeader
+            onBack={busy ? undefined : onClose}
+            title="Add addresses"
+            titleIcon={<Icon.PlusIcon />}
+        />
+    );
     return (
-        <div
-            className={styles.backdrop}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add addresses"
-            onClick={busy ? undefined : onClose}
-        >
-            <div className={styles.card} onClick={(e) => e.stopPropagation()}>
-                <h2 className={styles.title}>Add addresses</h2>
+        <Screen variant={variant} header={header}>
+            <>
                 {coinOptions.length === 0 ? (
                     <>
                         <p className={styles.empty}>No chains are active for this account yet.</p>
@@ -119,16 +149,14 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                     </>
                 ) : (
                     <form onSubmit={handleGenerate} noValidate>
-                        <div className={styles.field}>
-                            <ChainPicker
-                                label="Coin"
-                                value={chainId}
-                                onChange={changeCoin}
-                                chainIds={coinOptions.map((c) => c.chainId)}
-                                chainRegistry={chainRegistry}
-                                disabled={busy}
-                            />
-                        </div>
+                        <ChainPicker
+                            label="Coin"
+                            value={chainId}
+                            onChange={changeCoin}
+                            chainIds={coinOptions.map((c) => c.chainId)}
+                            chainRegistry={chainRegistry}
+                            disabled={busy}
+                        />
                         <label className={styles.field}>
                             <span className={styles.label}>Type</span>
                             <select
@@ -137,9 +165,14 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 onChange={(e) => { setAddressType(e.target.value); setError(null); }}
                                 disabled={busy || !selected}
                             >
-                                {(selected?.addressTypes || []).map((t) => (
-                                    <option key={t} value={t}>{t.toUpperCase()}</option>
-                                ))}
+                                {(selected?.addressTypes || []).map((t) => {
+                                    const hint = addressTypeHint(selected, t);
+                                    return (
+                                        <option key={t} value={t}>
+                                            {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                        </option>
+                                    );
+                                })}
                             </select>
                         </label>
                         <label className={styles.field}>
@@ -159,16 +192,13 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                         {error ? <div role="alert" className={styles.error}>{error}</div> : null}
                         {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         <div className={styles.actions}>
-                            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={busy}>
-                                Cancel
-                            </Button>
                             <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !chainId}>
                                 {generateLabel}
                             </Button>
                         </div>
                     </form>
                 )}
-            </div>
-        </div>
+            </>
+        </Screen>
     );
 }

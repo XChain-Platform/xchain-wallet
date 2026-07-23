@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -28,9 +28,25 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * Token admin surfaces (§40.5).
@@ -83,6 +99,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // button enables (on top of the existing password / HW gate).
     const [typedConfirm, setTypedConfirm] = useState('');
     const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'LOCK';
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -151,6 +171,39 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
+    useEffect(() => {
+        let cancelled = false;
+        if (mode !== 'transfer' || typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [mode, messaging]);
 
     const actionParams = useMemo(
         () => composeAdminParams(mode, {
@@ -229,6 +282,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -236,6 +290,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     chainId,
                     from: base.from,
                     actionData: { action: 'ISSUE', params: actionParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
                 res = await messaging.issueTokenHw({ ...base, signerId: fromAddress.signerId });
@@ -333,6 +388,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
@@ -405,6 +466,52 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select token"
+                onSelect={(sel) => {
+                    setTicker(String(sel.tick || '').toUpperCase());
+                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    setTransferTo(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {mode === 'lock' ? (
@@ -430,10 +537,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             )}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Fee paid by</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -441,15 +553,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             )}
 
             {lockedToken ? null : (
-                <Input
-                    label="Ticker"
-                    hint="The token you own. Uppercase."
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                    autoCapitalize="characters"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
+                <TokenField
+                    label="Token"
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
 
@@ -465,14 +572,24 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             ) : null}
 
             {mode === 'transfer' ? (
-                <Input
+                <AddressField
                     label="New owner address"
+                    icon="contacts"
                     hint="The address that will receive ownership."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    autoCorrect="off"
+                    onIconClick={() => setContactsPickerOpen(true)}
+                />
+            ) : null}
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
 

@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -24,15 +24,33 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * Airdrop form: §40.9.
@@ -77,6 +95,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
     const lockedToken = !!(initialChainId && initialTick);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -244,7 +264,40 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
+    // Balance of the amount tick at the source address (Max + "available").
+    const tickAmtBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: token,
+    });
+
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices both broadcasts (the LIST and the AIRDROP).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     const listParams = useMemo(() => {
         /** @type {Record<string, string | string[]>} */
@@ -386,6 +439,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     signerId: fromAddress.signerId,
                 },
                 params: listParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = hw
                 ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
@@ -443,6 +497,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     signerId: fromAddress.signerId,
                 },
                 params: airdropParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = hw
                 ? await messaging.airdropActionHw({ ...base, signerId: fromAddress.signerId })
@@ -600,6 +655,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     {(listDecoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {listDecoded && listDecoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
@@ -675,6 +736,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             </dd>
                         </>
                     ) : null}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
@@ -730,6 +797,38 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select token"
+                onSelect={(sel) => {
+                    setToken(String(sel.tick || '').toUpperCase());
+                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
     // stage === 'compose'
     return wrap(
         <form onSubmit={handleReviewList} noValidate>
@@ -748,10 +847,15 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             )}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Airdropping from</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -759,24 +863,29 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             )}
 
             {lockedToken ? null : (
-                <Input
+                <TokenField
                     label="Token to drop"
-                    hint="Ticker of the token each recipient will receive."
-                    value={token}
-                    onChange={(e) => setToken(e.target.value.toUpperCase())}
-                    autoCapitalize="characters"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
+                    value={token && chainId ? { chainId, tick: token } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
-            <Input
+            <AmountField
                 label="Per-recipient amount"
                 hint="Amount sent to each address on the list."
-                inputMode="decimal"
-                value={amountPer}
-                onChange={(e) => setAmountPer(e.target.value)}
-                autoComplete="off"
+                amount={amountPer}
+                tick={token}
+                onAmountFieldChange={(rawValue) => {
+                    const stripped = String(rawValue).replace(/,/g, '');
+                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                    setAmountPer(stripped);
+                }}
+                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
+                    ? () => setAmountPer(tickAmtBalance)
+                    : undefined}
+                maxDisabled={!tickAmtBalance}
+                balanceText={tickAmtBalance != null && (token)
+                    ? `${formatWithThousands(tickAmtBalance)} ${String(token).toUpperCase()} available`
+                    : null}
             />
 
             <label
@@ -850,6 +959,17 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

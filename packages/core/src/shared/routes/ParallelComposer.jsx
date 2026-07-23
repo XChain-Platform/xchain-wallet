@@ -16,12 +16,18 @@ import {
     Input,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, FeeSelector,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -198,6 +204,34 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
     const activeFromAddress = fromAddressFor(activeRow);
     const activeHw = isHwSource(activeFromAddress);
 
+    // Network fee for the active row's chain: Low / Normal / Fast / Custom
+    // via FeeSelector; feePerKb prices the broadcast of each signed row.
+    const activeChainId = activeRow?.chainId || null;
+    const activeDescriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
+    const activeCoinTicker = activeDescriptor
+        ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[activeDescriptor.coin] || '')
+        : '';
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId: activeChainId, chainRegistry }),
+        [activeChainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId: activeChainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [activeChainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId: activeChainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     async function signActiveRow() {
         if (!activeRow || !activeFromAddress) return;
         if (!activeHw && (!signerReady && password.length === 0)) return;
@@ -219,6 +253,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 },
                 action: activeRow.action,
                 params,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const result = activeHw
                 ? await messaging.advancedActionHw({ ...base, signerId: activeFromAddress.signerId })
@@ -330,6 +365,17 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                         submitError={activeRow.error || null}
                         disabled={activeRow.status === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
+                    />
+                ) : null}
+
+                {feeTiers ? (
+                    <FeeSelector
+                        label="Network fee"
+                        coinTicker={activeCoinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                     />
                 ) : null}
 

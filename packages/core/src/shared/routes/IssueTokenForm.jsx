@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon, StatusMessage,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, StatusMessage, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -28,6 +28,14 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
@@ -79,6 +87,9 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [transferTo, setTransferTo] = useState('');
     const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
     const [password, setPassword] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -176,6 +187,38 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
         const p = {
@@ -260,6 +303,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 },
                 params: actionParams,
                 payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -267,7 +311,10 @@ export function IssueTokenForm({ walletId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action: 'ISSUE', params: actionParams },
-                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                    encoderOpts: {
+                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.issueTokenHw({ ...base, signerId: fromAddress.signerId });
@@ -372,6 +419,12 @@ export function IssueTokenForm({ walletId, onBack }) {
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {payFeeInNativeCoin ? (
                     <div role="alert" className={styles.warnings}>
@@ -451,6 +504,36 @@ export function IssueTokenForm({ walletId, onBack }) {
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    setTransferTo(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
             variant="status"
@@ -489,10 +572,15 @@ export function IssueTokenForm({ walletId, onBack }) {
             ) : null}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Fee paid by</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -540,15 +628,26 @@ export function IssueTokenForm({ walletId, onBack }) {
                 />
                 <span>Lock supply + minting (irreversible)</span>
             </label>
-            <Input
+            <AddressField
                 label="Transfer ownership to (optional)"
+                icon="contacts"
                 hint="Leave blank to keep control."
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
+                onIconClick={() => setContactsPickerOpen(true)}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
+
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}

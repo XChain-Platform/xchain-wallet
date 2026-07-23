@@ -20,6 +20,7 @@
 // so all policy-shape knowledge lives in one place.
 
 import { Input, Button, Textarea } from '@xchain-wallet/core/ui';
+import { AmountField } from '../components/AmountField.jsx';
 
 /**
  * @typedef {Object} PolicyDraft
@@ -289,11 +290,17 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             onChange={(e) => patchRow('maxPerAction', i, { tick: e.target.value })}
                             placeholder="*"
                         />
-                        <Input
+                        {/* Policy limit, not a spend: AmountField without Max /
+                            balance (there is no wallet balance to cap against here). */}
+                        <AmountField
                             label="Max amount"
-                            value={row.cap}
-                            onChange={(e) => patchRow('maxPerAction', i, { cap: e.target.value })}
-                            placeholder="100"
+                            amount={row.cap}
+                            tick={row.tick}
+                            onAmountFieldChange={(rawValue) => {
+                                const stripped = String(rawValue).replace(/,/g, '');
+                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                                patchRow('maxPerAction', i, { cap: stripped });
+                            }}
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('maxPerAction', i)}>Remove</Button>
                     </div>

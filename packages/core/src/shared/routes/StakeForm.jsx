@@ -16,17 +16,33 @@ import {
     Input,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 // Plain-language labels for the four capabilities (capability-staking-model.md
 // §3). Keyed by the protocol capability id the hub returns.
@@ -78,6 +94,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [amount, setAmount] = useState('');
     const [signingPubkey, setSigningPubkey] = useState('');
     const [password, setPassword] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     // Auto-detection of new-vs-top-up: when the pubkey is a valid 64-hex,
     // query the indexer for existing stakes by this source and surface the
@@ -110,6 +127,15 @@ export function StakeForm({ walletId, chainId, onBack }) {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+
+    // Balance of the amount tick at the source address (Max + "available").
+    const tickAmtBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: 'XCHAIN',
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -208,6 +234,31 @@ export function StakeForm({ walletId, chainId, onBack }) {
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
         const p = {
@@ -288,6 +339,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -295,6 +347,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action: 'STAKE', params: actionParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
                 res = await messaging.stakeActionHw({ ...base, signerId: fromAddress.signerId });
@@ -395,6 +448,12 @@ export function StakeForm({ walletId, chainId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Amount</dt>
                     <dd className={styles.detailsValue}>{actionParams.AMOUNT} XCHAIN</dd>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -444,16 +503,37 @@ export function StakeForm({ walletId, chainId, onBack }) {
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
             </div>
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Staking from</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : null}
 
             <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
@@ -489,13 +569,23 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 ) : null}
             </fieldset>
 
-            <Input
+            <AmountField
                 label="Amount"
                 hint="How much XCHAIN to stake. You don't pick capabilities; each one activates automatically once your total stake reaches its threshold, so a larger stake can unlock more."
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                autoComplete="off"
-                inputMode="decimal"
+                amount={amount}
+                tick="XCHAIN"
+                onAmountFieldChange={(rawValue) => {
+                    const stripped = String(rawValue).replace(/,/g, '');
+                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                    setAmount(stripped);
+                }}
+                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
+                    ? () => setAmount(tickAmtBalance)
+                    : undefined}
+                maxDisabled={!tickAmtBalance}
+                balanceText={tickAmtBalance != null && ('XCHAIN')
+                    ? `${formatWithThousands(tickAmtBalance)} ${String('XCHAIN').toUpperCase()} available`
+                    : null}
             />
 
             {qualifyReadout ? (
@@ -559,6 +649,17 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

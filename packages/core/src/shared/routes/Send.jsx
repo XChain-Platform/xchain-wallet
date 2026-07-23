@@ -14,7 +14,7 @@ import {
     PageHeader,
     Button,
     Input,
-    AddressCombobox,
+    AddressField,
     ChainBadge,
     AddressText,
     FeeSelector,
@@ -1229,9 +1229,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     const wrap = (children, footer = null) => (
         <Screen variant={variant} header={header}>
-            <div className={`${styles.card} ${isFull ? styles.cardFull : styles.cardSmall}`}>
-                {children}
-            </div>
+            {children}
             {footer}
         </Screen>
     );
@@ -1619,39 +1617,24 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 prefill={prefill}
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
-            <div className={styles.toFieldWrap}>
-                <AddressCombobox
-                    size="lg"
-                    label={matchedContact
-                        ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
-                        : 'To'}
-                    value={toAddress}
-                    onChange={(e) => {
-                        setToAddress(e.target.value);
-                        if (toError) setToError(null);
-                        if (pasteHint) setPasteHint(null);
-                        if (pasteWarning) setPasteWarning(null);
-                    }}
-                    onPaste={onAddressPaste}
-                    suggestions={suggestions}
-                    placeholder="Enter or paste an address or name..."
-                    hint={pasteHint || undefined}
-                    error={toError || undefined}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    style={{ paddingRight: '52px' }}
-                />
-                <button
-                    type="button"
-                    className={styles.inlineContactsButton}
-                    onClick={() => setContactsPickerOpen(true)}
-                    aria-label="Open contacts"
-                    title="Contacts"
-                >
-                    <Icon.UsersIcon />
-                </button>
-            </div>
+            <AddressField
+                icon="contacts"
+                label={matchedContact
+                    ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
+                    : 'To'}
+                value={toAddress}
+                onChange={(e) => {
+                    setToAddress(e.target.value);
+                    if (toError) setToError(null);
+                    if (pasteHint) setPasteHint(null);
+                    if (pasteWarning) setPasteWarning(null);
+                }}
+                onPaste={onAddressPaste}
+                onIconClick={() => setContactsPickerOpen(true)}
+                placeholder="Enter or paste an address or name..."
+                hint={pasteHint || undefined}
+                error={toError || undefined}
+            />
             {pasteWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{pasteWarning}</p>
@@ -1662,28 +1645,23 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     <p className={styles.warning}>{lookalikeWarning}</p>
                 </div>
             ) : null}
-            {!hasTokenSelected ? (
-                onChangeAsset ? (
-                    <TokenField
-                        size="lg"
-                        label="Token"
-                        value={null}
-                        onOpenPicker={() => onChangeAsset({ address: toAddress, amount })}
-                    />
-                ) : (
-                    <Input
-                        size="lg"
-                        label="Token"
-                        hint="Tick. Native coin by default."
-                        value={tick}
-                        onChange={(e) => setTick(e.target.value)}
-                        autoComplete="off"
-                        autoCapitalize="characters"
-                    />
-                )
-            ) : null}
+            {onChangeAsset ? (
+                <TokenField
+                    label="Token"
+                    value={hasTokenSelected ? { chainId, tick: tick.trim().toUpperCase() } : null}
+                    onOpenPicker={() => onChangeAsset({ address: toAddress, amount })}
+                />
+            ) : (
+                <Input
+                    label="Token"
+                    hint="Tick. Native coin by default."
+                    value={tick}
+                    onChange={(e) => setTick(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                />
+            )}
             <AmountField
-                size="lg"
                 amount={amount}
                 fiatAmount={fiatAmount}
                 tick={tick}

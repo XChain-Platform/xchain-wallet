@@ -71,8 +71,11 @@
     top: calc(100% + 4px);
     inset-inline-end: 0;
     z-index: 200;
-    min-width: 12rem;
-    background: var(--xc-surface-raised);
+    /* px, not rem: the popup must hold its width in every shell
+       (extension popup / dev variant) regardless of root font metrics */
+    min-width: 200px;
+    width: max-content;
+    background: var(--xc-surface-raised, #1B2231);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
     box-shadow: var(--xc-shadow-md);
@@ -87,6 +90,7 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
+    white-space: nowrap;
     padding: var(--xc-space-2);
     background: transparent;
     border: none;

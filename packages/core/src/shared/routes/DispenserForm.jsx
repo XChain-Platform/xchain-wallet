@@ -16,12 +16,18 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon, StatusMessage,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, StatusMessage, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
@@ -33,6 +39,11 @@ import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { contactsPickerStyles } from '../components/ContactsPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import segStyles from './AddressList.module.css';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -124,6 +135,49 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [password, setPassword] = useState('');
     const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
+    // §16 extension: where the dispenser itself lives (GET_ADDRESS).
+    //   'new'      derive a fresh dispenser address at review (default)
+    //   'current'  open on the active/current address (GET_ADDRESS omitted
+    //              when it equals SOURCE; protocol defaults to SOURCE)
+    //   'existing' reuse a previously derived role='dispenser' address
+    const [addressMode, setAddressMode] = useState(
+        /** @type {'new' | 'current' | 'existing'} */ ('new'),
+    );
+    const [existingAddressId, setExistingAddressId] = useState(
+        /** @type {string | null} */ (null),
+    );
+    const [addressPickerOpen, setAddressPickerOpen] = useState(false);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    // From (SOURCE) picker: the QR icon on the From field opens the wallet's
+    // own address list. A manual pick pins the source: the newest-receive /
+    // best-token-holder auto-selection effects stand down until the chain
+    // changes.
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const manualSourceRef = useRef(false);
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector. Mirrors
+    // SwapForm / ComposeMessage; `feePerKb` prices the broadcast.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
@@ -145,13 +199,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
-            showAdvanced, payFeeInNativeCoin,
+            showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, giveAmount, escrow,
         triggerPrice, oracleAddress, fiatCode, fiatAmount,
-        showAdvanced, payFeeInNativeCoin,
+        showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -167,6 +221,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
+        if (v.addressMode === 'new' || v.addressMode === 'current' || v.addressMode === 'existing') {
+            setAddressMode(v.addressMode);
+        }
+        if (typeof v.existingAddressId === 'string') setExistingAddressId(v.existingAddressId);
         setDraftPending(true);
     }, [draft]);
     const dismissDraft = useCallback(() => {
@@ -208,6 +266,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             const match = all.find((a) => a.address === initialFromAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
+        if (manualSourceRef.current) {
+            if (all.some((a) => a.id === fromAddressId)) return;
+            manualSourceRef.current = false;
+        }
         const addrs = all.filter(
             (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
         );
@@ -232,7 +294,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // the source is pinned by an incoming `initialFromAddress`.
     useEffect(() => {
         const tick = ticker.trim().toUpperCase();
-        if (initialFromAddress) return undefined;
+        if (initialFromAddress || manualSourceRef.current) return undefined;
         if (!chainId || !addressesByChain || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
         let cancelled = false;
@@ -279,13 +341,36 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
+    // Previously derived dispenser addresses on this chain, reusable as
+    // the open target when addressMode === 'existing'.
+    const existingDispenserAddresses = useMemo(() => {
+        if (!chainId || !addressesByChain) return [];
+        return (addressesByChain[chainId] || []).filter((a) => a.role === 'dispenser');
+    }, [chainId, addressesByChain]);
+    const existingAddress = useMemo(() => {
+        if (!chainId || !addressesByChain) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.id === existingAddressId) || null;
+    }, [chainId, addressesByChain, existingAddressId]);
+    // Chain switch invalidates an 'existing' pick; fall back to 'new'.
+    useEffect(() => {
+        if (addressMode === 'existing' && !existingAddress) {
+            setAddressMode('new');
+            setExistingAddressId(null);
+        }
+    }, [addressMode, existingAddress]);
+
+    // Effective SOURCE for signing / balance checks / review display. The
+    // From field (own-address picker) writes fromAddressId directly, so the
+    // source can be any wallet address, including a dispenser address.
+    const sourceAddress = fromAddress;
+
     // Resolve the SOURCE address's balance of the entered ticker for the
     // escrow AmountField (Max + "available"). Debounced on the ticker for
     // the same reason as the source-resolve effect above.
     useEffect(() => {
         const tick = ticker.trim().toUpperCase();
         setSourceTickBalance(null);
-        if (!chainId || !fromAddress || !tick) return undefined;
+        if (!chainId || !sourceAddress || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
         let cancelled = false;
         const timer = setTimeout(() => {
@@ -293,7 +378,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 .then((byChain) => {
                     if (cancelled || !byChain) return;
                     const entries = byChain[chainId] || [];
-                    const entry = entries.find((e) => e && e.address === fromAddress.address);
+                    const entry = entries.find((e) => e && e.address === sourceAddress.address);
                     const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
                     const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
                     setSourceTickBalance(match ? String(match.amount) : '0');
@@ -301,7 +386,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 .catch(() => { /* footer just stays empty on failure */ });
         }, 400);
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [ticker, chainId, fromAddress, activeAccountId, walletId, messaging]);
+    }, [ticker, chainId, sourceAddress, activeAccountId, walletId, messaging]);
 
     const fillsEstimate = useMemo(() => {
         const ga = Number(giveAmount);
@@ -345,10 +430,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // Coin-paid lane: GET_COIN = chain coin, GET_TICK empty.
         if (coinTicker) p.GET_COIN = coinTicker;
 
-        // §16: open the dispenser on its dedicated fresh sub-address (the
-        // change=2 GET_ADDRESS). SOURCE stays the token-holding signer and
-        // the escrow debits from it; this is still a single DISPENSER tx.
-        if (dispenserGetAddress?.address) p.GET_ADDRESS = dispenserGetAddress.address;
+        // §16: GET_ADDRESS by address mode. 'new' = the fresh dedicated
+        // dispenser address derived at review; 'existing' = a reused
+        // role='dispenser' address; 'current' omits GET_ADDRESS so the
+        // protocol defaults to SOURCE. SOURCE stays the token-holding
+        // signer and the escrow debits from it in all three modes.
+        if (addressMode === 'new' && dispenserGetAddress?.address) {
+            p.GET_ADDRESS = dispenserGetAddress.address;
+        } else if (addressMode === 'existing' && existingAddress?.address
+            && existingAddress.address !== sourceAddress?.address) {
+            p.GET_ADDRESS = existingAddress.address;
+        }
 
         if (oracle) {
             // Oracle pricing: validator path (fiatAmount + code) or user-
@@ -370,7 +462,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         }
 
         return p;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress]);
+    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress, addressMode, existingAddress, sourceAddress]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -430,12 +522,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setFormError('Fiat amount must look like 12.34.');
             return;
         }
+        if (addressMode === 'existing' && !existingAddress) {
+            setFormError('Pick an existing dispenser address, or choose a new one.');
+            return;
+        }
         setFormError(null);
         // §16: derive the dedicated dispenser sub-address (GET_ADDRESS) once
         // per chain/account, after validation so an invalid form consumes no
         // index. SOURCE (fromAddress) is unchanged. If the wallet build has
         // no derivation handler, fall back to opening on SOURCE.
-        if (!dispenserGetAddress && typeof messaging.generateDispenserAddress === 'function') {
+        if (addressMode === 'new' && !dispenserGetAddress && typeof messaging.generateDispenserAddress === 'function') {
             try {
                 setDerivingGetAddress(true);
                 const addr = await messaging.generateDispenserAddress({
@@ -454,7 +550,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         setStage('review');
     }
 
-    const hw = isHwSource(fromAddress);
+    const hw = isHwSource(sourceAddress);
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
@@ -472,15 +568,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 walletId,
                 chainId,
                 from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
+                    address: sourceAddress.address,
+                    publicKey: sourceAddress.publicKey,
+                    derivationPath: sourceAddress.derivationPath,
+                    addressId: sourceAddress.id,
+                    source: sourceAddress.source,
+                    signerId: sourceAddress.signerId,
                 },
                 params: actionParams,
                 payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -488,10 +585,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     chainId,
                     from: base.from,
                     actionData: { action: 'DISPENSER', params: actionParams },
-                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                    encoderOpts: {
+                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (hw) {
-                res = await messaging.dispenserActionHw({ ...base, signerId: fromAddress.signerId });
+                res = await messaging.dispenserActionHw({ ...base, signerId: sourceAddress.signerId });
             } else {
                 res = await messaging.dispenserAction({ ...base, password });
             }
@@ -590,19 +690,27 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
+                        <AddressText address={sourceAddress.address} />
                     </dd>
-                    {dispenserGetAddress ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Dispenser address</dt>
-                            <dd className={styles.detailsValue}>
-                                <AddressText address={dispenserGetAddress.address} />
-                            </dd>
-                        </>
-                    ) : null}
+                    <dt className={styles.detailsLabel}>Dispenser address</dt>
+                    <dd className={styles.detailsValue}>
+                        {addressMode === 'new' && dispenserGetAddress ? (
+                            <AddressText address={dispenserGetAddress.address} />
+                        ) : addressMode === 'existing' && existingAddress ? (
+                            <AddressText address={existingAddress.address} />
+                        ) : (
+                            <AddressText address={fromAddress.address} />
+                        )}
+                    </dd>
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {payFeeInNativeCoin ? (
                     <div role="alert" className={styles.warnings}>
@@ -625,7 +733,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
-                        fromAddress={fromAddress}
+                        fromAddress={sourceAddress}
                         chainId={chainId}
                         password={password}
                         onPasswordChange={(v) => {
@@ -672,11 +780,67 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         {isWatcherMode
                             ? 'Create unsigned transaction'
                             : hw
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
                     </Button>
                 </div>
             </form>,
+        );
+    }
+
+    // Full-screen dispenser-address picker, rendered in place of the form
+    // (same pattern as Send's ContactsPickerScreen); all other form state
+    // stays intact behind it.
+    if (addressPickerOpen) {
+        return (
+            <DispenserAddressPickerScreen
+                variant={variant}
+                currentAddress={fromAddress}
+                addresses={(chainId && addressesByChain && addressesByChain[chainId]) || []}
+                onPick={(pick) => {
+                    setAddressMode(pick.mode);
+                    setExistingAddressId(pick.mode === 'existing' ? pick.id : null);
+                    setAddressPickerOpen(false);
+                }}
+                onBack={() => setAddressPickerOpen(false)}
+            />
+        );
+    }
+
+    // Token picker: spendable balances, rendered in place of the form.
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                accountId={activeAccountId}
+                title="Select token"
+                onSelect={(sel) => {
+                    setTicker(String(sel.tick || '').toUpperCase());
+                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    // From (SOURCE) picker: the wallet's own addresses on the active chain.
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                accountId={activeAccountId}
+                chainId={chainId}
+                onPick={(a) => {
+                    manualSourceRef.current = true;
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
         );
     }
 
@@ -724,10 +888,33 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             )}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Opening on</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <>
+                    {/* Address: where the dispenser opens (GET_ADDRESS). */}
+                    <AddressField
+                        label="Address"
+                        icon="addresses"
+                        value={addressMode === 'new'
+                            ? 'New dispenser address (generated at preview)'
+                            : (addressMode === 'existing' && existingAddress
+                                ? existingAddress.address
+                                : fromAddress.address)}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setAddressPickerOpen(true)}
+                        iconLabel="Change dispenser address"
+                    />
+
+                    {/* From: which address funds and signs the action. */}
+                    <AddressField
+                        label="From"
+                        icon="addresses"
+                        value={fromAddress.address}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setSourcePickerOpen(true)}
+                        iconLabel="Choose source address"
+                    />
+                </>
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -735,24 +922,29 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             )}
 
             {lockedToken ? null : (
-                <Input
+                <TokenField
                     label="Token"
-                    hint="Ticker of the token you will dispense. Must be owned by this address."
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                    autoCapitalize="characters"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
-            <Input
+            <AmountField
                 label="Give amount (per fill)"
                 hint="Tokens sent to the buyer every time the dispenser is triggered."
-                inputMode="decimal"
-                value={giveAmount}
-                onChange={(e) => setGiveAmount(e.target.value)}
-                autoComplete="off"
+                amount={giveAmount}
+                tick={ticker}
+                onAmountFieldChange={(rawValue) => {
+                    const stripped = String(rawValue).replace(/,/g, '');
+                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                    setGiveAmount(stripped);
+                }}
+                onMax={sourceTickBalance && Number(sourceTickBalance) > 0
+                    ? () => setGiveAmount(sourceTickBalance)
+                    : undefined}
+                maxDisabled={!sourceTickBalance}
+                balanceText={sourceTickBalance != null && ticker.trim()
+                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
+                    : null}
             />
             <AmountField
                 label="Escrow amount"
@@ -825,6 +1017,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </>
             ) : null}
 
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
+
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
@@ -844,6 +1047,92 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </Button>
             </div>
         </form>,
+    );
+}
+
+/**
+ * Address picker for the dispenser's open target, rendered in place of
+ * the form. The Addresses segment lists a fresh dispenser address, the
+ * current/active address, and any imported (non-HD) addresses; the
+ * Dispenser segment lists every role='dispenser' address the wallet has
+ * generated. Reuses the ContactsPickerScreen list styling and the
+ * AddressList segmented toggle.
+ *
+ * @param {object} props
+ * @param {'small' | 'full'} props.variant
+ * @param {any} props.currentAddress
+ * @param {any[]} props.addresses      all wallet addresses on the active chain
+ * @param {(pick: { mode: 'new' | 'current' | 'existing', id?: string }) => void} props.onPick
+ * @param {() => void} props.onBack
+ */
+function DispenserAddressPickerScreen({ variant, currentAddress, addresses, onPick, onBack }) {
+    const [segment, setSegment] = useState(/** @type {'addresses' | 'dispenser'} */ ('addresses'));
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            title="Dispenser address"
+            titleIcon={<Icon.AddressIcon />}
+        />
+    );
+    const ab = contactsPickerStyles;
+    const importedAddresses = addresses.filter(
+        (a) => a.source !== 'hd' && a.id !== currentAddress.id,
+    );
+    const dispenserAddresses = addresses.filter((a) => a.role === 'dispenser');
+    return (
+        <Screen variant={variant} header={header}>
+            <div className={segStyles.segmented} role="tablist" aria-label="Address kind">
+                {[['addresses', 'Addresses'], ['dispenser', 'Dispenser']].map(([key, label]) => (
+                    <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={segment === key}
+                        className={`${segStyles.segment} ${segment === key ? segStyles.segmentActive : ''}`}
+                        onClick={() => setSegment(/** @type {any} */ (key))}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+            {segment === 'addresses' ? (
+                <ul className={ab.abList}>
+                    <li>
+                        <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'new' })}>
+                            <span className={ab.abName}>New dispenser address</span>
+                            <span className={ab.abAddr}>Generated fresh when you preview</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'current' })}>
+                            <span className={ab.abName}>Current address</span>
+                            <span className={ab.abAddr} title={currentAddress.address}>{currentAddress.address}</span>
+                        </button>
+                    </li>
+                    {importedAddresses.map((a) => (
+                        <li key={a.id}>
+                            <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'existing', id: a.id })}>
+                                <span className={ab.abName}>{a.label || 'Imported address'}</span>
+                                <span className={ab.abAddr} title={a.address}>{a.address}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : dispenserAddresses.length === 0 ? (
+                <div className={ab.emptyCard}>No dispenser addresses yet</div>
+            ) : (
+                <ul className={ab.abList}>
+                    {dispenserAddresses.map((a) => (
+                        <li key={a.id}>
+                            <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'existing', id: a.id })}>
+                                <span className={ab.abName}>{a.label || 'Dispenser address'}</span>
+                                <span className={ab.abAddr} title={a.address}>{a.address}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </Screen>
     );
 }
 

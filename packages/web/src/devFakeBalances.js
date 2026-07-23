@@ -132,6 +132,15 @@ const TOKENS_BY_COIN = {
  * @param {string} chainId
  * @returns {{ address: string, chain: string, native: FakeToken, tokens: FakeToken[] }}
  */
+// USD-per-coin rates for the dev shell's fake price source, keyed by
+// coin family. Mirrors NATIVE_BY_COIN so the fiat toggle and "≈ $" line
+// render in dev with the same figures the fake balances imply.
+export function fakeNativeFiatRates() {
+    return Object.fromEntries(
+        Object.entries(NATIVE_BY_COIN).map(([coin, v]) => [coin, v.fiatRate]),
+    );
+}
+
 export function fakeBalanceFor(address, chainId) {
     const coin = coinForChain(chainId);
     const native = NATIVE_BY_COIN[coin] || NATIVE_BY_COIN.bitcoin;

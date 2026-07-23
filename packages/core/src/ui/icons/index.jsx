@@ -31,6 +31,7 @@ import {
     Handshake as LucideHandshake,
     ShieldCheck as LucideShieldCheck,
     Save as LucideSave,
+    LayoutList as LucideLayoutList,
 } from 'lucide-react';
 
 const STROKE_PROPS = {
@@ -221,6 +222,12 @@ export function StakeIcon() {
 
 export function MoreIcon() {
     return <LucideMoreHorizontal {...LUCIDE_PROPS} />;
+}
+
+// Rows-with-thumbnails glyph: "browse a list of items". Used as the
+// token field's trailing affordance.
+export function TokenListIcon() {
+    return <LucideLayoutList {...LUCIDE_PROPS} />;
 }
 
 export function MenuIcon() {

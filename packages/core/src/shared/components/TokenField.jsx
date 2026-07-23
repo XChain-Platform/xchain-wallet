@@ -11,6 +11,7 @@
 import { useId } from 'react';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { TickerIcon } from './TickerIcon.jsx';
+import { TokenListIcon } from '../../ui/icons/index.jsx';
 import styles from './TokenField.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -94,19 +95,10 @@ export function TokenField({
                 ) : (
                     <span className={styles.placeholder}>{placeholder}</span>
                 )}
+                {/* Trailing token-list icon: mirrors AddressField's icon slot; the
+                    whole control opens the token list, the icon signals it. */}
                 <span className={styles.caret} aria-hidden="true">
-                    <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                    >
-                        <path d="m6 9 6 6 6-6" />
-                    </svg>
+                    <TokenListIcon />
                 </span>
             </button>
             {error ? (

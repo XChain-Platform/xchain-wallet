@@ -22,6 +22,7 @@ export { Select } from './Select.jsx';
 export { Textarea } from './Textarea.jsx';
 export { IconSelect } from './IconSelect.jsx';
 export { AddressCombobox } from './AddressCombobox.jsx';
+export { AddressField } from './AddressField.jsx';
 export { ChainBadge } from './ChainBadge.jsx';
 export { FeeSelector } from './FeeSelector.jsx';
 export { AddressText } from './AddressText.jsx';

@@ -17,11 +17,18 @@ import {
     AddressText,
     Icon,
     PageHeader,
+    FeeSelector,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import dashStyles from './ActionsMenu.module.css';
 import formStyles from './IssueTokenForm.module.css';
 
@@ -305,6 +312,35 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
 
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinTicker = descriptor
+        ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor.coin] || '')
+        : '';
+    const signerReady = useSignerReady(walletId);
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices each rapid-entry publish broadcast.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (submitState === 'submitting') return;
@@ -332,6 +368,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                     BROADCAST_ACTION_INDEX: String(feedActionIndex).trim(),
                     VALUE: String(value).trim(),
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const fn = isHwSource ? messaging.broadcastActionHw : messaging.broadcastAction;
             const args = isHwSource
@@ -403,6 +440,16 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                     ) : (
                         <p className={dashStyles.entryDescription}>Loading source address…</p>
                     )}
+                    {feeTiers ? (
+                        <FeeSelector
+                            label="Network fee"
+                            coinTicker={coinTicker}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={setFeePick}
+                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                        />
+                    ) : null}
                     {error ? <div role="alert" className={formStyles.error}>{error}</div> : null}
                     {lastTxid ? (
                         <p className={dashStyles.entryDescription}>

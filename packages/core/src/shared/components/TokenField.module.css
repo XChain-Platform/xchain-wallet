@@ -23,7 +23,9 @@
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-3);
+    /* space-1 vertical (not Input's space-2): the 20px token icon plus
+       borders must fit inside the same 36px outer height as Input md. */
+    padding: var(--xc-space-1) var(--xc-space-3);
     min-height: 36px;
     font-family: var(--xc-font-sans);
     font-size: var(--xc-text-md);
@@ -70,12 +72,21 @@
     font-weight: 600;
 }
 
+/* md: single line ("TICK on Chain") so the control stays at the Input
+   md height (36px); lg stacks the two lines in the 48px hero field. */
 .text {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--xc-space-2);
     min-width: 0;
     flex: 1 1 auto;
+}
+
+.lg .text {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
 }
 
 .tick {
@@ -105,6 +116,14 @@
     align-items: center;
     color: var(--xc-text-muted);
     flex: 0 0 auto;
+    margin-inline-start: auto;
+}
+
+/* The trailing action is a list icon (AddressField's icon-slot look);
+   cap it below the Lucide default so it sits inside the md field. */
+.caret svg {
+    width: 18px;
+    height: 18px;
 }
 
 .error {

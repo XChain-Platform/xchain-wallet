@@ -16,17 +16,38 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    FeeSelector,
+    AddressField,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 // Contract-targeted staking is BTC-only at launch (mirrors capability staking's
 // indexer-side coin gate). All staking actions in this form go through STAKE v3 /
@@ -73,6 +94,8 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
     const [amount, setAmount] = useState('');
     const [signingPubkey, setSigningPubkey] = useState('');
     const [tick, setTick] = useState('XCHAIN');
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -144,9 +167,43 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
+    // Balance of the amount tick at the source address (Max + "available").
+    const tickAmtBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: tick,
+    });
+
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -210,6 +267,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 },
                 mode,
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -223,6 +281,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                     chainId,
                     from: base.from,
                     actionData: { action, params: { VERSION: version, ...actionParams } },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
                 res = await messaging.contractStakeActionHw({ ...base, signerId: fromAddress.signerId });
@@ -348,6 +407,12 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                     ) : null}
                     <dt className={styles.detailsLabel}>Cooldown</dt>
                     <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
                     <dt className={styles.detailsLabel} style={{ color: '#b94a48' }}>Slash risk</dt>
                     <dd className={styles.detailsValue} style={{ color: '#b94a48' }}>
                         Funds slashed by this contract are sent to{' '}
@@ -404,6 +469,40 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    // Token picker (spendable balances, locked to the contract's chain),
+    // rendered in place of the form.
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select token"
+                networkFilter={coinFromChainId(chainId)}
+                onSelect={(sel) => {
+                    setTick(String(sel.tick || '').toUpperCase());
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.summary} style={{ marginBottom: '0.5rem' }}>
@@ -416,10 +515,15 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
             </div>
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>From</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain yet. Use Receive to generate one first.
@@ -454,25 +558,30 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 </label>
             </fieldset>
 
-            <Input
-                label="Token ticker"
-                hint="Any registered token. XCHAIN is the platform default."
-                value={tick}
-                onChange={(e) => setTick(e.target.value.toUpperCase())}
-                autoComplete="off"
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck={false}
+            <TokenField
+                label="Token"
+                value={tick && chainId ? { chainId, tick } : null}
+                onOpenPicker={() => setTokenPickerOpen(true)}
             />
 
             {mode === 'stake' ? (
-                <Input
+                <AmountField
                     label="Amount"
                     hint="How much of the token to stake. Decimals must not exceed the token's precision."
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    autoComplete="off"
+                    amount={amount}
+                    tick={tick}
+                    onAmountFieldChange={(rawValue) => {
+                    const stripped = String(rawValue).replace(/,/g, '');
+                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                    setAmount(stripped);
+                }}
+                    onMax={tickAmtBalance && Number(tickAmtBalance) > 0
+                        ? () => setAmount(tickAmtBalance)
+                        : undefined}
+                    maxDisabled={!tickAmtBalance}
+                    balanceText={tickAmtBalance != null && (tick)
+                        ? `${formatWithThousands(tickAmtBalance)} ${String(tick).toUpperCase()} available`
+                        : null}
                 />
             ) : null}
 
@@ -490,6 +599,17 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 autoCorrect="off"
                 spellCheck={false}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

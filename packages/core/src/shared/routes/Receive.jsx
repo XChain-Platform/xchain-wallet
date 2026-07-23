@@ -15,6 +15,7 @@ import {
     PageHeader,
     ChainBadge,
     AddressText,
+    AddressField,
     Button,
     CopyButton,
     MultisigBadge,
@@ -37,6 +38,8 @@ import { useSettings } from '../hooks/useSettings.js';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import {
     formatWithThousands,
     countNonCommaBefore,
@@ -90,6 +93,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         /** @type {string | null} */ (prefill?.chainId || null),
     );
     const [address, setAddress] = useState(/** @type {any | null} */ (null));
+    // Receive-address picker: the QR icon on the Address field opens the
+    // wallet's own address list for the active chain; picking one becomes
+    // the address the QR / request encodes. A chain switch re-runs the
+    // newest-address effect and resets the pick, which is the right
+    // default for a new chain.
+    const [addressPickerOpen, setAddressPickerOpen] = useState(false);
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -493,6 +502,23 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             titleIcon={<Icon.ReceiveIcon />}
         />
     );
+    if (addressPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Receive address"
+                walletId={walletId}
+                accountId={accountId}
+                chainId={activeChainId}
+                onPick={(a) => {
+                    setAddress(a);
+                    setAddressPickerOpen(false);
+                }}
+                onBack={() => setAddressPickerOpen(false)}
+            />
+        );
+    }
+
     const body = (
         <>
             {loadError ? (
@@ -515,75 +541,40 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </div>
             ) : null}
 
+            {address ? (
+                <AddressField
+                    label="Address"
+                    icon="addresses"
+                    value={address.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setAddressPickerOpen(true)}
+                    iconLabel="Choose receive address"
+                />
+            ) : null}
+
             {descriptor ? (() => {
                 const prefillTickUpper = prefill?.tick ? prefill.tick.toUpperCase() : '';
                 const isTokenSelection = !!prefillTickUpper
                     && nativeTicker
                     && prefillTickUpper !== nativeTicker;
-                const assetName = isTokenSelection
-                    ? (prefill?.displayName || prefillTickUpper)
-                    : (descriptor.displayName || nativeTicker || '');
-                const assetImageUrl = isTokenSelection
-                    ? (prefill?.imageUrl || null)
-                    : brandingLib.chainIconLargeUrl(descriptor.id);
-                const assetLetter = isTokenSelection
-                    ? prefillTickUpper.slice(0, 1)
-                    : (nativeTicker || descriptor.displayName || '?').slice(0, 1);
+                // Standard token field: shows the selected token (or the
+                // chain's native coin) and reopens the picker to change it.
                 return (
-                    <button
-                        type="button"
-                        className={styles.assetCard}
-                        onClick={onChangeAsset || onBack}
-                        aria-label={`Change asset (currently ${assetName})`}
-                    >
-                        <span className={styles.assetIconWrap}>
-                            {assetImageUrl ? (
-                                <img
-                                    src={assetImageUrl}
-                                    alt=""
-                                    aria-hidden="true"
-                                    className={styles.assetIcon}
-                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                />
-                            ) : (
-                                <span
-                                    className={styles.assetIconFallback}
-                                    style={{ background: tickerColor(isTokenSelection ? prefillTickUpper : (nativeTicker || '')) }}
-                                    aria-hidden="true"
-                                >
-                                    {assetLetter}
-                                </span>
-                            )}
-                            {isTokenSelection ? (() => {
-                                const chainPipUrl = brandingLib.chainIconSmallUrl(descriptor.id);
-                                return chainPipUrl ? (
-                                    <img
-                                        src={chainPipUrl}
-                                        alt=""
-                                        aria-hidden="true"
-                                        title={descriptor.displayName}
-                                        className={styles.assetChainOverlay}
-                                    />
-                                ) : null;
-                            })() : null}
-                        </span>
-                        <span className={styles.assetText}>
-                            <span className={styles.assetName}>{assetName}</span>
-                            {isTokenSelection ? (
-                                <span className={styles.assetSub}>{prefillTickUpper}</span>
-                            ) : descriptor.networkKind !== 'mainnet' ? (
-                                <span className={styles.assetSub}>{descriptor.networkKind}</span>
-                            ) : null}
-                        </span>
-                        <span className={styles.assetChevron} aria-hidden="true">›</span>
-                    </button>
+                    <TokenField
+                        label="Token"
+                        value={{
+                            chainId: descriptor.id,
+                            tick: isTokenSelection ? prefillTickUpper : (nativeTicker || ''),
+                        }}
+                        onOpenPicker={onChangeAsset || onBack}
+                    />
                 );
             })() : null}
 
             {address ? (
                 <>
                     <AmountField
-                        size="lg"
                         amount={reqAmount}
                         fiatAmount={fiatAmount}
                         tick={reqTick.trim() || nativeTicker || ''}

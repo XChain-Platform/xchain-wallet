@@ -19,12 +19,12 @@ import {
     FeeSelector,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { ContactsPickerScreen, contactsPickerStyles } from '../components/ContactsPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -615,28 +615,15 @@ export function ComposeMessage({
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {/* 1. Address (recipient), with an address-book shortcut */}
-            <div className={contactsPickerStyles.fieldWrap}>
-                <Input
-                    label="Address"
-                    value={toAddress}
-                    onChange={(e) => setToAddress(e.target.value)}
-                    placeholder="Recipient address"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    error={addressError}
-                    style={{ paddingRight: '48px' }}
-                />
-                <button
-                    type="button"
-                    className={contactsPickerStyles.inlineContactsButton}
-                    onClick={() => setContactsPickerOpen(true)}
-                    aria-label="Open contacts"
-                    title="Contacts"
-                >
-                    <Icon.UsersIcon />
-                </button>
-            </div>
+            <AddressField
+                label="Address"
+                icon="contacts"
+                value={toAddress}
+                onChange={(e) => setToAddress(e.target.value)}
+                onIconClick={() => setContactsPickerOpen(true)}
+                placeholder="Recipient address"
+                error={addressError}
+            />
 
             {/* 2. Message */}
             <Textarea

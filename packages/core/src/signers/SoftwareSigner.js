@@ -147,13 +147,15 @@ export class SoftwareSigner extends Signer {
             let importedWifs;
             try {
                 importedWifs = await decryptImportedKeys(masterKey, imported);
-            } finally {
+            } catch (e) {
                 masterKey.fill(0);
+                throw e;
             }
             this._acceptUnlockedState({
                 mnemonicBytes: new Uint8Array(0),
                 seed: new Uint8Array(0),
                 importedWifs,
+                masterKey,
             });
             logConsole.record({
                 source: 'signer:software',
@@ -163,11 +165,13 @@ export class SoftwareSigner extends Signer {
             return;
         }
 
+        let sessionMasterKey = null;
         const plaintext = await decryptWalletSeed({
             password,
             encryptedSeed: enc.encryptedSeed,
             kdfParams: enc.kdfParams,
             aad: enc.aad,
+            retainMasterKey: (k) => { sessionMasterKey = k; },
         });
 
         const mnemonic = new TextDecoder().decode(plaintext);
@@ -198,13 +202,8 @@ export class SoftwareSigner extends Signer {
         // them without a second KDF round.
         let importedWifs;
         const importedRecords = enc.importedKeys ?? [];
-        if (importedRecords.length > 0) {
-            const masterKey = deriveMasterKey(password, enc.kdfParams);
-            try {
-                importedWifs = await decryptImportedKeys(masterKey, importedRecords);
-            } finally {
-                masterKey.fill(0);
-            }
+        if (importedRecords.length > 0 && sessionMasterKey) {
+            importedWifs = await decryptImportedKeys(sessionMasterKey, importedRecords);
         } else {
             importedWifs = new Map();
         }
@@ -213,6 +212,7 @@ export class SoftwareSigner extends Signer {
             mnemonicBytes: plaintext,
             seed,
             importedWifs,
+            masterKey: sessionMasterKey,
         });
         logConsole.record({
             source: 'signer:software',
@@ -227,6 +227,7 @@ export class SoftwareSigner extends Signer {
             this._unlocked.seed.fill(0);
             this._unlocked.mnemonicBytes.fill(0);
             for (const wif of this._unlocked.importedWifs.values()) wif.fill(0);
+            if (this._unlocked.masterKey) this._unlocked.masterKey.fill(0);
             this._unlocked = null;
         }
         if (this._status !== 'locked') {
@@ -251,6 +252,18 @@ export class SoftwareSigner extends Signer {
         this._unlocked = state;
         this._status = 'available';
         this._emitStatus('available');
+    }
+
+    /**
+     * Session copy of the password-derived vault master key (§15.5).
+     * No more sensitive than the seed this signer already holds; lets
+     * vault-write flows (WIF import) run without re-prompting for the
+     * password. Null when the wallet was unlocked by a path that could
+     * not retain it.
+     */
+    getMasterKey() {
+        this._assertUnlocked();
+        return this._unlocked.masterKey || null;
     }
 
     _assertUnlocked() {

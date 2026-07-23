@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -28,9 +28,22 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * BROADCAST form (§40.6).
@@ -85,6 +98,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const [feedFee, setFeedFee] = useState('');
     const [includeTimestamp, setIncludeTimestamp] = useState(false);
     const [password, setPassword] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -150,6 +164,30 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     const actionParams = useMemo(() => {
         const feed = feedName.trim();
@@ -244,6 +282,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -251,6 +290,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     chainId,
                     from: base.from,
                     actionData: { action: 'BROADCAST', params: actionParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
                 res = await messaging.broadcastActionHw({ ...base, signerId: fromAddress.signerId });
@@ -348,6 +388,12 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
@@ -407,6 +453,22 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {lockedToken && chainId ? (
@@ -424,10 +486,15 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             )}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Fee paid by</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -475,6 +542,17 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 />
                 {' '}Prepend UTC timestamp to memo
             </label>
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

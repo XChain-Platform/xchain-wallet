@@ -56,11 +56,16 @@ export async function encryptWalletSeed({ password, seed, kdfParams, aad }) {
  * @param {Uint8Array} [input.aad]
  * @returns {Promise<Uint8Array>}
  */
-export async function decryptWalletSeed({ password, encryptedSeed, kdfParams, aad }) {
+export async function decryptWalletSeed({ password, encryptedSeed, kdfParams, aad, retainMasterKey }) {
     const masterKey = deriveMasterKey(password, kdfParams);
     try {
         const blob = base64ToBytes(encryptedSeed);
-        return await decrypt(masterKey, blob, aad);
+        const plaintext = await decrypt(masterKey, blob, aad);
+        // Session retention (§15.5 password-less WIF import): hand the
+        // caller its own copy of the derived key instead of re-running
+        // the KDF. The caller owns zeroing it.
+        if (typeof retainMasterKey === 'function') retainMasterKey(new Uint8Array(masterKey));
+        return plaintext;
     } finally {
         masterKey.fill(0);
     }

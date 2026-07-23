@@ -18,7 +18,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -29,6 +29,13 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -130,6 +137,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [password, setPassword] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     useEffect(() => {
@@ -258,6 +266,29 @@ export function AdvancedActionsForm({ walletId, onBack }) {
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     const actionParams = useMemo(
         () => buildParams(fields, values, version),
         [fields, values, version],
@@ -324,6 +355,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 },
                 action,
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -331,7 +363,10 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action, params: actionParams },
-                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                    encoderOpts: {
+                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.advancedActionHw({
@@ -441,6 +476,12 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {payFeeInNativeCoin ? (
                     <div role="alert" className={styles.warnings}>
@@ -504,6 +545,22 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     // stage === 'compose'
     return wrap(
         <form onSubmit={handleReview} noValidate>
@@ -516,10 +573,15 @@ export function AdvancedActionsForm({ walletId, onBack }) {
             ) : null}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Signing from</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -612,6 +674,17 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                         </p>
                     ))}
                 </div>
+            ) : null}
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
             ) : null}
 
             <NativeFeeToggle

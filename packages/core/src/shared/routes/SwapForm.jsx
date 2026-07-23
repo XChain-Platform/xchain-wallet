@@ -18,9 +18,17 @@ import {
     ChainPicker,
     AddressText,
     FeeSelector,
+    AddressField,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -106,6 +114,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [memo, setMemo] = useState('');
     const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
     const [password, setPassword] = useState('');
+    const [givePickerOpen, setGivePickerOpen] = useState(false);
+    const [getPickerOpen, setGetPickerOpen] = useState(false);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -168,6 +179,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Source balance of the give ticker, backing the give AmountField's
+    // Max button + "available" footer.
+    const giveBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: giveTick,
+    });
     const hw = isHwSource(fromAddress);
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -482,6 +503,54 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // --- Form screen ----------------------------------------------------
     const chainIds = Object.keys(addressesByChain || {});
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (givePickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select give token"
+                networkFilter={coinFromChainId(chainId)}
+                onSelect={(sel) => {
+                    setGiveTick(String(sel.tick || '').toUpperCase());
+                    setGivePickerOpen(false);
+                }}
+                onBack={() => setGivePickerOpen(false)}
+            />
+        );
+    }
+
+    if (getPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="receive"
+                walletId={walletId}
+                title="Select get token"
+                networkFilter={coinFromChainId(chainId)}
+                onSelect={(sel) => {
+                    setGetTick(String(sel.tick || '').toUpperCase());
+                    setGetPickerOpen(false);
+                }}
+                onBack={() => setGetPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <ChainPicker
@@ -492,39 +561,42 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 chainRegistry={chainRegistry}
             />
 
-            <label className={styles.fieldLabel}>
-                <span>From address</span>
-                <select
-                    className={styles.select}
-                    value={fromAddressId || ''}
-                    onChange={(e) => setFromAddressId(e.target.value)}
-                >
-                    {(addressesByChain[chainId] || []).map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
-                    ))}
-                </select>
-            </label>
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Input
-                    label="Give ticker"
-                    value={giveTick}
-                    onChange={(e) => setGiveTick(e.target.value)}
-                    placeholder="e.g. RAREPEPE"
-                    autoCapitalize="characters"
-                    style={{ flex: 1 }}
+            {fromAddress ? (
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
                 />
-                {giveOwnership ? null : (
-                    <Input
-                        label="Give amount"
-                        type="text"
-                        inputMode="decimal"
-                        value={giveAmount}
-                        onChange={(e) => setGiveAmount(e.target.value)}
-                        style={{ flex: 1 }}
-                    />
-                )}
-            </div>
+            ) : null}
+
+            <TokenField
+                label="Give token"
+                value={giveTick && chainId ? { chainId, tick: giveTick } : null}
+                onOpenPicker={() => setGivePickerOpen(true)}
+            />
+            {giveOwnership ? null : (
+                <AmountField
+                    label="Give amount"
+                    amount={giveAmount}
+                    tick={giveTick}
+                    onAmountFieldChange={(rawValue) => {
+                        const stripped = String(rawValue).replace(/,/g, '');
+                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                        setGiveAmount(stripped);
+                    }}
+                    onMax={giveBalance && Number(giveBalance) > 0
+                        ? () => setGiveAmount(giveBalance)
+                        : undefined}
+                    maxDisabled={!giveBalance}
+                    balanceText={giveBalance != null && giveTick.trim()
+                        ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
+                        : null}
+                />
+            )}
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
                 <input
                     type="checkbox"
@@ -539,26 +611,23 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 </p>
             ) : null}
 
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Input
-                    label="Get ticker"
-                    value={getTick}
-                    onChange={(e) => setGetTick(e.target.value)}
-                    placeholder="e.g. PEPECASH"
-                    autoCapitalize="characters"
-                    style={{ flex: 1 }}
+            <TokenField
+                label="Get token"
+                value={getTick && chainId ? { chainId, tick: getTick } : null}
+                onOpenPicker={() => setGetPickerOpen(true)}
+            />
+            {getOwnership ? null : (
+                <AmountField
+                    label="Get amount"
+                    amount={getAmount}
+                    tick={getTick}
+                    onAmountFieldChange={(rawValue) => {
+                        const stripped = String(rawValue).replace(/,/g, '');
+                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                        setGetAmount(stripped);
+                    }}
                 />
-                {getOwnership ? null : (
-                    <Input
-                        label="Get amount"
-                        type="text"
-                        inputMode="decimal"
-                        value={getAmount}
-                        onChange={(e) => setGetAmount(e.target.value)}
-                        style={{ flex: 1 }}
-                    />
-                )}
-            </div>
+            )}
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
                 <input
                     type="checkbox"

@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -24,9 +24,22 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * DELEGATE combined form (rotate v0 + revoke v2): §42.7.2 delegation-lane.
@@ -69,6 +82,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [pubkey, setPubkey] = useState('');
     const [password, setPassword] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -144,6 +158,31 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
 
     const { isWatcherMode } = useWalletMode();
 
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
         if (isDelegate) return { VERSION: '0', NEW_SIGNING_PUBKEY: pk };
@@ -185,6 +224,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -194,6 +234,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action: 'DELEGATE', params: wireParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else {
                 const fn = isDelegate
@@ -299,6 +340,12 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                     <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {shownPubkey}
                     </dd>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -348,18 +395,34 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
             </div>
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>
-                        {isDelegate ? 'Delegating from' : 'Revoking for'}
-                    </span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : null}
 
             <Input
@@ -374,6 +437,17 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

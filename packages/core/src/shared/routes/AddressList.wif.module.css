@@ -26,14 +26,20 @@
     color: var(--xc-text-muted);
 }
 
+/* Plain form column: the import page renders fields directly on the
+   screen background like every other form (no card chrome). */
 .wifForm {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+}
+
+/* The flex gap is the ONLY vertical rhythm here: ChainPicker and Input
+   ship their own margin-bottom for margin-flow forms, which would stack
+   with the gap and make the spacing uneven. Doubled class beats the
+   field components' single-class specificity. */
+.wifForm.wifForm > * {
+    margin-bottom: 0;
 }
 
 .wifWarning {
@@ -43,8 +49,9 @@
     background: var(--xc-warning-bg, var(--xc-surface));
     border: 1px solid var(--xc-warning, var(--xc-border));
     color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
+    /* sm, not xs: this is a safety notice the user must actually read */
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
 }
 
 .wifField {
@@ -92,6 +99,9 @@
 
 .wifActions {
     display: flex;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
+    flex-direction: column;
+}
+
+.wifActions button {
+    width: 100%;
 }

@@ -25,6 +25,9 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -81,6 +84,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
     // 'coin' → sell for native coin (GET_TICK empty); 'token' → sell for a token.
     const [getMode, setGetMode] = useState(/** @type {'coin' | 'token'} */ ('coin'));
     const [getTick, setGetTick] = useState('');
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [price, setPrice] = useState('');
     const [expiration, setExpiration] = useState('');
     const [memo, setMemo] = useState('');
@@ -396,6 +400,19 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         );
     }
 
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="receive"
+                walletId={walletId}
+                title="Select price token"
+                networkFilter={coinFromChainId(chainId)}
+                onSelect={(sel) => { setGetTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>
@@ -471,13 +488,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
             </div>
 
             {getMode === 'token' ? (
-                <Input
+                <TokenField
                     label="Price token"
-                    value={getTick}
-                    onChange={(e) => setGetTick(e.target.value)}
-                    placeholder="e.g. XCHAIN"
-                    autoCapitalize="characters"
-                    autoComplete="off"
+                    value={getTick && chainId ? { chainId, tick: getTick } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             ) : null}
 

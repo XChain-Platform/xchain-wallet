@@ -18,16 +18,18 @@ import {
     Skeleton,
     Input,
     Icon,
+    ChainPicker,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
-import { AddAddressModal } from './AddAddressModal.jsx';
+import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './History.module.css';
 import local from './AddressList.module.css';
@@ -78,6 +80,9 @@ export function AddressList({
     onShowPrivateKey,
     networkFilter = 'all',
     tokenQuery = '',
+    pickerMode = false,
+    onPick,
+    title,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -86,6 +91,9 @@ export function AddressList({
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
     // per-address balance here too, matching BalanceList's dot convention.
     const [balancesHidden] = useBalancesHidden();
+    // Unlocked session: WIF import runs off the pooled signer's master
+    // key, so the password field only renders when the wallet is locked.
+    const signerReady = useSignerReady(walletId);
 
     // In-page search + network filter (toolbar below), seeded from any
     // shell-provided defaults so deep-links still apply on first render.
@@ -218,12 +226,14 @@ export function AddressList({
     const [wifInput, setWifInput] = useState('');
     const [wifLabel, setWifLabel] = useState('');
     const [wifPassword, setWifPassword] = useState('');
+    const [wifAddressType, setWifAddressType] = useState('');
     const [wifWarningAck, setWifWarningAck] = useState(false);
     const [wifBusy, setWifBusy] = useState(false);
     const [wifError, setWifError] = useState(/** @type {string | null} */ (null));
     const [wifNotice, setWifNotice] = useState(/** @type {string | null} */ (null));
 
     function resetWifForm() {
+        setWifAddressType('');
         setWifChainId('');
         setWifInput('');
         setWifLabel('');
@@ -247,7 +257,7 @@ export function AddressList({
             setWifError('Paste a WIF private key.');
             return;
         }
-        if (wifPassword.length === 0) {
+        if (!signerReady && wifPassword.length === 0) {
             setWifError('Wallet password is required to encrypt the imported key.');
             return;
         }
@@ -259,6 +269,8 @@ export function AddressList({
         setWifError(null);
         try {
             const r = await messaging.importWifRequest({
+                addressType: wifAddressType || undefined,
+                ...(signerReady ? {} : { password: wifPassword }),
                 walletId,
                 password: wifPassword,
                 chainId: wifChainId,
@@ -361,13 +373,18 @@ export function AddressList({
         // by the record's source ('hd' = normal, 'imported-wif' = imported).
         if (sourceFilter !== 'all') {
             next = next.filter((r) => {
+                // Misc catches everything that is neither a plain HD receive
+                // address nor a WIF import: dispenser-role addresses,
+                // multisig, hardware, watch-only.
                 const cat = r.multisig
-                    ? 'other'
-                    : r.record?.source === 'imported-wif'
-                        ? 'imported'
-                        : r.record?.source === 'hd'
-                            ? 'normal'
-                            : 'other';
+                    ? 'misc'
+                    : r.record?.role === 'dispenser'
+                        ? 'misc'
+                        : r.record?.source === 'imported-wif'
+                            ? 'imported'
+                            : r.record?.source === 'hd'
+                                ? 'normal'
+                                : 'misc';
                 return cat === sourceFilter;
             });
         }
@@ -381,10 +398,140 @@ export function AddressList({
         return next;
     }, [addressesByChain, network, query, sourceFilter, multisigs]);
 
+    // Add addresses is its own page, same pattern as Import address.
+    if (showAddModal) {
+        return (
+            <AddAddressModal
+                walletId={walletId}
+                accountId={accountId}
+                chainIds={Object.keys(addressesByChain || {})}
+                onClose={() => setShowAddModal(false)}
+                onGenerated={() => setReloadKey((k) => k + 1)}
+            />
+        );
+    }
+
+    // Import address is its own page (not an inline bar): the + menu
+    // navigates here, and back returns to the list. The success notice
+    // renders back on the list after the import completes.
+    if (showWifForm) {
+        return (
+            <Screen
+                variant={variant}
+                header={(
+                    <PageHeader
+                        onBack={() => { setShowWifForm(false); resetWifForm(); }}
+                        title="Import address"
+                        titleIcon={<Icon.DownloadIcon />}
+                    />
+                )}
+            >
+                <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
+                        <ChainPicker
+                            label="Chain"
+                            value={wifChainId}
+                            onChange={(cid) => {
+                                setWifChainId(cid);
+                                setWifAddressType(chainRegistry.get(cid)?.defaultAddressType || '');
+                                if (wifError) setWifError(null);
+                            }}
+                            chainIds={Object.keys(addressesByChain || {})}
+                            chainRegistry={chainRegistry}
+                            disabled={wifBusy}
+                        />
+                        {wifChainId ? (
+                            <label className={wifStyles.wifField}>
+                                <span className={wifStyles.wifLabel}>Address type</span>
+                                <select
+                                    value={wifAddressType}
+                                    onChange={(e) => setWifAddressType(e.target.value)}
+                                    disabled={wifBusy}
+                                    className={wifStyles.wifSelect}
+                                >
+                                    {(chainRegistry.get(wifChainId)?.addressTypes || []).map((t) => {
+                                        const hint = addressTypeHint(chainRegistry.get(wifChainId), t);
+                                        return (
+                                            <option key={t} value={t}>
+                                                {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </label>
+                        ) : null}
+                        <Input
+                            label="WIF private key"
+                            value={wifInput}
+                            onChange={(e) => {
+                                setWifInput(e.target.value);
+                                if (wifError) setWifError(null);
+                            }}
+                            placeholder="L1aW…"
+                            autoComplete="off"
+                            spellCheck={false}
+                            disabled={wifBusy}
+                        />
+                        <Input
+                            label="Label (optional)"
+                            value={wifLabel}
+                            onChange={(e) => setWifLabel(e.target.value)}
+                            placeholder="e.g. Cold storage 2024"
+                            autoComplete="off"
+                            disabled={wifBusy}
+                        />
+                        {signerReady ? null : (
+                        <Input
+                            type="password"
+                            label="Wallet password"
+                            hint="Required even while unlocked: your password derives the vault's encryption key, which is never kept in memory, and the imported key must be encrypted with it."
+                            value={wifPassword}
+                            onChange={(e) => {
+                                setWifPassword(e.target.value);
+                                if (wifError) setWifError(null);
+                            }}
+                            autoComplete="current-password"
+                            disabled={wifBusy}
+                        />
+                        )}
+                        <p className={wifStyles.wifWarning}>
+                            <strong>Not covered by your recovery phrase.</strong>{' '}
+                            Keep a copy of the WIF, or a current backup file (Settings &gt; Backup).
+                        </p>
+                        <label className={wifStyles.wifAck}>
+                            <input
+                                type="checkbox"
+                                checked={wifWarningAck}
+                                onChange={(e) => {
+                                    setWifWarningAck(e.target.checked);
+                                    if (wifError) setWifError(null);
+                                }}
+                                disabled={wifBusy}
+                            />
+                            <span>I understand this key is not backed up by my recovery phrase.</span>
+                        </label>
+                        {wifError ? (
+                            <div role="alert" className={wifStyles.wifErrorBox}>{wifError}</div>
+                        ) : null}
+                        <div className={wifStyles.wifActions}>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                size="md"
+                                loading={wifBusy}
+                                disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
+                            >
+                                Import
+                            </Button>
+                        </div>
+                </form>
+            </Screen>
+        );
+    }
+
     const header = (
         <PageHeader
             onBack={onBack}
-            title="Addresses"
+            title={title || (pickerMode ? 'Choose address' : 'Addresses')}
             titleIcon={<Icon.ScanIcon />}
             trailing={(
                 <div className={local.addMenuWrap} ref={addMenuRef}>
@@ -417,7 +564,16 @@ export function AddressList({
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
-                                    onClick={() => { setAddMenuOpen(false); setWifNotice(null); setShowWifForm(true); }}
+                                    onClick={() => {
+                                        setAddMenuOpen(false);
+                                        setWifNotice(null);
+                                        const first = Object.keys(addressesByChain || {})[0] || '';
+                                        if (!wifChainId && first) {
+                                            setWifChainId(first);
+                                            setWifAddressType(chainRegistry.get(first)?.defaultAddressType || '');
+                                        }
+                                        setShowWifForm(true);
+                                    }}
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
                                     Import address
@@ -666,6 +822,7 @@ export function AddressList({
                     { id: 'all', label: 'All' },
                     { id: 'normal', label: 'Normal' },
                     { id: 'imported', label: 'Imported' },
+                    { id: 'misc', label: 'Misc' },
                 ].map((opt) => (
                     <button
                         key={opt.id}
@@ -679,120 +836,12 @@ export function AddressList({
                     </button>
                 ))}
             </div>
-            {showWifForm || wifNotice ? (
-            <div className={wifStyles.wifBar}>
-                {wifNotice && !showWifForm ? (
+            {wifNotice ? (
+                <div className={wifStyles.wifBar}>
                     <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>
-                ) : null}
-                {showWifForm ? (
-                    <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
-                        <p className={wifStyles.wifWarning}>
-                            <strong>Heads up: imported keys are not covered by your recovery phrase.</strong>{' '}
-                            If you wipe this device or restore from your seed words, this address will not come back. You must keep a separate copy of the WIF, or move the funds back to a derived address before that happens.
-                        </p>
-                        <label className={wifStyles.wifField}>
-                            <span className={wifStyles.wifLabel}>Chain</span>
-                            <select
-                                value={wifChainId}
-                                onChange={(e) => {
-                                    setWifChainId(e.target.value);
-                                    if (wifError) setWifError(null);
-                                }}
-                                disabled={wifBusy}
-                                className={wifStyles.wifSelect}
-                            >
-                                <option value="">Pick a chain…</option>
-                                {Object.keys(addressesByChain || {}).map((cid) => {
-                                    const d = chainRegistry.get(cid);
-                                    return (
-                                        <option key={cid} value={cid}>
-                                            {d?.displayName || cid}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </label>
-                        <Input
-                            label="WIF private key"
-                            value={wifInput}
-                            onChange={(e) => {
-                                setWifInput(e.target.value);
-                                if (wifError) setWifError(null);
-                            }}
-                            placeholder="L1aW…"
-                            autoComplete="off"
-                            spellCheck={false}
-                            disabled={wifBusy}
-                        />
-                        <Input
-                            label="Label (optional)"
-                            value={wifLabel}
-                            onChange={(e) => setWifLabel(e.target.value)}
-                            placeholder="e.g. Cold storage 2024"
-                            autoComplete="off"
-                            disabled={wifBusy}
-                        />
-                        <Input
-                            type="password"
-                            label="Wallet password"
-                            hint="Encrypts the imported key with the same key as your seed."
-                            value={wifPassword}
-                            onChange={(e) => {
-                                setWifPassword(e.target.value);
-                                if (wifError) setWifError(null);
-                            }}
-                            autoComplete="current-password"
-                            disabled={wifBusy}
-                        />
-                        <label className={wifStyles.wifAck}>
-                            <input
-                                type="checkbox"
-                                checked={wifWarningAck}
-                                onChange={(e) => {
-                                    setWifWarningAck(e.target.checked);
-                                    if (wifError) setWifError(null);
-                                }}
-                                disabled={wifBusy}
-                            />
-                            <span>I understand this key is not backed up by my recovery phrase.</span>
-                        </label>
-                        {wifError ? (
-                            <div role="alert" className={wifStyles.wifErrorBox}>{wifError}</div>
-                        ) : null}
-                        <div className={wifStyles.wifActions}>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={wifBusy}
-                                onClick={() => { setShowWifForm(false); resetWifForm(); setWifNotice(null); }}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                size="sm"
-                                loading={wifBusy}
-                                disabled={!wifWarningAck || wifInput.trim().length === 0 || wifPassword.length === 0 || !wifChainId}
-                            >
-                                Import
-                            </Button>
-                        </div>
-                    </form>
-                ) : null}
-            </div>
+                </div>
             ) : null}
 
-            {showAddModal ? (
-                <AddAddressModal
-                    walletId={walletId}
-                    accountId={accountId}
-                    chainIds={Object.keys(addressesByChain || {})}
-                    onClose={() => setShowAddModal(false)}
-                    onGenerated={() => setReloadKey((k) => k + 1)}
-                />
-            ) : null}
 
             {rows.length === 0 ? (
                 <div className={local.emptyCard}>
@@ -808,7 +857,11 @@ export function AddressList({
                             <button
                                 type="button"
                                 className={local.addrRow}
-                                onClick={() => { setSelected(row); setLabelDraft(row.label || ''); }}
+                                onClick={() => {
+                                    if (pickerMode && onPick && row.record) { onPick(row.record); return; }
+                                    setSelected(row);
+                                    setLabelDraft(row.label || '');
+                                }}
                                 aria-label={`View address ${row.address}`}
                             >
                                 {(row.label || isActiveRow(row)) ? (

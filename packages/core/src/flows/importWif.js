@@ -69,6 +69,7 @@ export async function importWif({
     vault,
     walletId,
     password,
+    masterKey: sessionMasterKey,
     chainRegistry,
     sdkRegistry,
     chainId,
@@ -80,8 +81,12 @@ export async function importWif({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('importWif: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('importWif: password is required');
+    // §15.5 password-less import: an unlocked session may supply the
+    // vault master key directly (SoftwareSigner.getMasterKey()) instead
+    // of the password. One of the two is required.
+    const hasSessionKey = sessionMasterKey instanceof Uint8Array && sessionMasterKey.length > 0;
+    if (!hasSessionKey && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('importWif: password or masterKey is required');
     }
     if (!chainRegistry) throw new Error('importWif: chainRegistry is required');
     if (!sdkRegistry) throw new Error('importWif: sdkRegistry is required');
@@ -117,9 +122,12 @@ export async function importWif({
         type,
     });
 
-    // Derive the master key once; verify password against the seed blob;
-    // encrypt the WIF with the same key. Zero the key on exit.
-    const masterKey = deriveMasterKey(password, walletRecord.kdfParams);
+    // Derive (or take) the master key; verify it against the seed blob;
+    // encrypt the WIF with the same key. A derived key is zeroed on exit;
+    // a session-supplied key belongs to the signer and is left alone.
+    const masterKey = hasSessionKey
+        ? sessionMasterKey
+        : deriveMasterKey(password, walletRecord.kdfParams);
     let encryptedWif;
     try {
         try {
@@ -135,7 +143,7 @@ export async function importWif({
             wifBytes.fill(0);
         }
     } finally {
-        masterKey.fill(0);
+        if (!hasSessionKey) masterKey.fill(0);
     }
 
     // Build and persist the Address record. accountId=null / derivationPath=null

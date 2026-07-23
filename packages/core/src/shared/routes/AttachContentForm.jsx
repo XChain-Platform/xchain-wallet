@@ -24,6 +24,13 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { normalizeGenesisRow } from './ManageToken.jsx';
+import { FeeSelector } from '@xchain-wallet/core/ui';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -242,6 +249,29 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices every broadcast in this multi-step flow (file / link / TIS / edit).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     // Owner mismatch: the LINK leg will be recorded but not honoured
     // unless it's signed by the token's current owner.
     const ownerMismatch = !!(issuerAddress && fromAddress && fromAddress.address !== issuerAddress);
@@ -356,6 +386,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
                 name: fileMeta.name,
                 type: fileMeta.type,
                 title: title.trim() || undefined,
@@ -405,6 +436,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
                 coin1: coinTicker,
                 coin1ActionIndex: fileActionIndex,
                 coin2: coinTicker,
@@ -479,6 +511,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
                 name: String(tick).toUpperCase() + '.json',
                 type: 'application/json',
                 title: 'Token information',
@@ -527,6 +560,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
                 // ISSUE v1: edit description (owner-only at the indexer).
                 params: {
                     VERSION: '1',
@@ -1033,6 +1067,16 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         by the current owner.
                     </p>
                 </div>
+            ) : null}
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
             ) : null}
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

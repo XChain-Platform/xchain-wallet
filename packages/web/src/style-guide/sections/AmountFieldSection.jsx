@@ -28,6 +28,33 @@ export function AmountFieldSection() {
     const [amountInputMode, setAmountInputMode] = useState(/** @type {'coin' | 'fiat'} */ ('coin'));
     const [tokenAmount, setTokenAmount] = useState('1000');
 
+    // Hero (lg) demo state, independent of the standard demo above.
+    const [heroAmount, setHeroAmount] = useState('0.5');
+    const [heroFiat, setHeroFiat] = useState('');
+    const [heroMode, setHeroMode] = useState(/** @type {'coin' | 'fiat'} */ ('coin'));
+    const onHeroChange = (rawValue) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        if (heroMode === 'fiat') {
+            setHeroFiat(stripped);
+            const n = parseFloat(stripped);
+            setHeroAmount(Number.isFinite(n) ? (n / SAMPLE_FIAT_RATE.rate).toFixed(8) : '');
+        } else {
+            setHeroAmount(stripped);
+        }
+    };
+    const toggleHeroMode = () => {
+        setHeroMode((prev) => {
+            if (prev === 'coin') {
+                const n = parseFloat(heroAmount);
+                setHeroFiat(Number.isFinite(n) ? (n * SAMPLE_FIAT_RATE.rate).toFixed(2) : '');
+                return 'fiat';
+            }
+            setHeroFiat('');
+            return 'coin';
+        });
+    };
+
     // Second demo, permanently in fiat-input mode, so the flipped state
     // (type USD, coin equivalent underneath) is visible without the
     // reviewer having to click the swap toggle.
@@ -98,7 +125,7 @@ export function AmountFieldSection() {
             id="amount-field"
             title="Amount field"
             tag="CANONICAL amount entry"
-            kicker="The amount-entry block from Send: input with inline Max button, coin/fiat swap toggle with the converted figure underneath, and an 'X available' balance line on the right. Used anywhere the user types a quantity of coin or tokens: Send, Receive, dispenser escrow, dispenser refill. Takes the shared size prop (md default, lg for hero screens)."
+            kicker="The standard amount-entry block: an input sized like every other field (md, 36px), with an inline Max button, a coin/fiat swap toggle showing the converted figure underneath, and an 'X available' balance line on the right. Used anywhere the user types a quantity of coin or tokens. size='lg' exists only for hero screens (Send/Receive)."
         >
             <Guidance
                 what={<>A composed block around the shared <code>Input</code> primitive: an amount input at the given <code>size</code> (see Field sizes), an optional inline <b>Max</b> button on the right edge, and a footer row with the coin/fiat swap toggle + derived conversion (left) and caller-supplied balance text (right). The canonical <code>amount</code> is always coin-scale; in fiat mode the parent derives it via the price rate. Fiat affordances render only when a <code>fiatRate</code> is passed (native coins with an oracle price); token fields pass <code>null</code> and get a plain amount input.</>}
@@ -130,9 +157,8 @@ export function AmountFieldSection() {
 />`}
             </Markup>
 
-            <LiveExample label="Send variant (coin input, lg): Max button, USD equivalent + swap toggle underneath, balance on the right. Click the ⇄ toggle to flip to USD entry; click Max to fill the balance.">
+            <LiveExample label="Standard (md): the default size, matching the To / From / Token fields. Max button, USD equivalent + swap toggle underneath, balance on the right. Click the ⇄ toggle to flip to USD entry; click Max to fill the balance.">
                 <AmountField
-                    size="lg"
                     amount={amount}
                     fiatAmount={fiatAmount}
                     tick="BTC"
@@ -145,9 +171,8 @@ export function AmountFieldSection() {
                 />
             </LiveExample>
 
-            <LiveExample label="Send variant (fiat input, flipped, lg): the same field with the toggle in USD mode. You type dollars; the coin equivalent shows underneath. The stored amount stays coin-scale.">
+            <LiveExample label="Standard flipped to fiat (md): the same field with the toggle in USD mode. You type dollars; the coin equivalent shows underneath. The stored amount stays coin-scale.">
                 <AmountField
-                    size="lg"
                     amount={fiatModeCoin}
                     fiatAmount={fiatModeFiat}
                     tick="BTC"
@@ -160,7 +185,7 @@ export function AmountFieldSection() {
                 />
             </LiveExample>
 
-            <LiveExample label="Token variant (dispenser escrow / refill, md default): custom label, no fiat rate (no swap toggle, no USD line), Max + balance only. This is the compact size that matches a form's other inputs.">
+            <LiveExample label="Token variant (md): no oracle price, so fiatRate is null and the swap toggle + USD line hide; Max + balance only (dispenser escrow / refill).">
                 <AmountField
                     label="Escrow amount"
                     amount={tokenAmount}
@@ -168,6 +193,21 @@ export function AmountFieldSection() {
                     onAmountFieldChange={onTokenFieldChange}
                     onMax={() => setTokenAmount('1000')}
                     balanceText="1,000 PEPECREATURE available"
+                />
+            </LiveExample>
+
+            <LiveExample label="Hero (lg): Send / Receive sizing; identical functionality, bigger field.">
+                <AmountField
+                    size="lg"
+                    amount={heroAmount}
+                    fiatAmount={heroFiat}
+                    tick="BTC"
+                    fiatRate={SAMPLE_FIAT_RATE}
+                    amountInputMode={heroMode}
+                    onAmountFieldChange={onHeroChange}
+                    toggleAmountInputMode={toggleHeroMode}
+                    onMax={() => { setHeroAmount(SAMPLE_BALANCE); setHeroMode('coin'); }}
+                    balanceText={`${SAMPLE_BALANCE} BTC available`}
                 />
             </LiveExample>
         </Section>

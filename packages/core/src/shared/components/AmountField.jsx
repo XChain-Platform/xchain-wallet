@@ -35,6 +35,7 @@ import styles from './AmountField.module.css';
  * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
  * @param {boolean} [props.maxDisabled]                      grey out the Max button (e.g. while balance is loading)
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
+ * @param {string} [props.hint]                           hint line under the input, forwarded to Input
  * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
  */
 export function AmountField({
@@ -46,6 +47,7 @@ export function AmountField({
     fiatRate = null,
     fiatCurrency = 'USD',
     amountInputMode = 'coin',
+    hint,
     onAmountFieldChange,
     toggleAmountInputMode,
     inputRef,
@@ -79,6 +81,7 @@ export function AmountField({
                     ref={inputRef}
                     size={size}
                     label={activeUnit ? `${label} (${activeUnit})` : label}
+                    hint={hint}
                     inputMode="decimal"
                     value={formatWithThousands(inputValue)}
                     onChange={(e) => onAmountFieldChange(e.target.value, e.target.selectionStart)}

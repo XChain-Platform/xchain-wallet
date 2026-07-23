@@ -73,7 +73,10 @@
 
 .actions {
     display: flex;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
+    flex-direction: column;
     margin-top: var(--xc-space-4);
+}
+
+.actions button {
+    width: 100%;
 }

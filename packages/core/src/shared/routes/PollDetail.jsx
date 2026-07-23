@@ -16,6 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    FeeSelector,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -24,9 +25,21 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -119,6 +132,31 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     const options = Array.isArray(poll?.options) ? poll.options : [];
     const isSplit = poll?.tally_mode === 'split';
     const maxSel = Number(poll?.max_selections) || 1;
@@ -177,12 +215,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId, from,
                     actionData: { action: 'VOTE', params: { VERSION: '1', POLL_REF: String(pollIndex), BALLOT: wireBallot, ...(memo.trim() && { MEMO: memo.trim() }) } },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else {
                 const fn = isHwSource ? messaging.castBallotActionHw : messaging.castBallotAction;
                 const args = isHwSource
-                    ? { walletId, chainId, from, params, signerId: fromAddress.signerId }
-                    : { walletId, chainId, from, params, password };
+                    ? { walletId, chainId, from, params, signerId: fromAddress.signerId, ...(feePerKb != null ? { feePerKb } : {}) }
+                    : { walletId, chainId, from, params, password, ...(feePerKb != null ? { feePerKb } : {}) };
                 res = await fn(args);
             }
             setResult(res);
@@ -280,6 +319,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Your choice</dt>
                     <dd className={styles.detailsValue}>{shown}</dd>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
@@ -335,6 +380,16 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         ))}
                     </div>
                     <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    {feeTiers ? (
+                        <FeeSelector
+                            label="Network fee"
+                            coinTicker={coinTicker}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={setFeePick}
+                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                        />
+                    ) : null}
                     {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
                     <div className={styles.actions}>
                         <Button type="submit" variant="primary" disabled={!fromAddress}>Vote</Button>

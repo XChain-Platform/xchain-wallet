@@ -16,19 +16,38 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * Mint form (§40.3).
@@ -65,6 +84,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         chainId,
         setChainId,
         fromAddress,
+        setFromAddressId,
         chainsWithAddresses,
         descriptor,
         signerReady,
@@ -84,10 +104,58 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             'No addresses on any chain yet. Use Receive to generate one before minting.',
     });
 
+
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+
+    // Balance of the amount tick at the source address (Max + "available").
+    const tickAmtBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: ticker,
+    });
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -155,7 +223,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         setStage('submitting');
         setSubmitError(null);
         try {
-            const res = await submit({ params: actionParams, password });
+            const res = await submit({
+                params: actionParams,
+                password,
+                ...(feePerKb != null ? { extraBase: { feePerKb }, encoderOpts: { feePerKb } } : {}),
+            });
             setResult(res);
             setPassword('');
             setStage('done');
@@ -247,6 +319,12 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
@@ -305,6 +383,52 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         );
     }
 
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select token"
+                onSelect={(sel) => {
+                    setTicker(String(sel.tick || '').toUpperCase());
+                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    setDestination(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {lockedToken && chainId ? (
@@ -322,10 +446,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             )}
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Fee paid by</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
@@ -333,34 +462,49 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             )}
 
             {lockedToken ? null : (
-                <Input
-                    label="Ticker"
-                    hint="The token you own. Uppercase."
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                    autoCapitalize="characters"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
+                <TokenField
+                    label="Token"
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
-            <Input
+            <AmountField
                 label="Amount"
                 hint="How much to mint."
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                autoComplete="off"
+                amount={amount}
+                tick={ticker}
+                onAmountFieldChange={(rawValue) => {
+                    const stripped = String(rawValue).replace(/,/g, '');
+                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                    setAmount(stripped);
+                }}
+                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
+                    ? () => setAmount(tickAmtBalance)
+                    : undefined}
+                maxDisabled={!tickAmtBalance}
+                balanceText={tickAmtBalance != null && (ticker)
+                    ? `${formatWithThousands(tickAmtBalance)} ${String(ticker).toUpperCase()} available`
+                    : null}
             />
-            <Input
+            <AddressField
                 label="Destination (optional)"
+                icon="contacts"
                 hint="Leave blank to mint to the fee-paying address."
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
+                onIconClick={() => setContactsPickerOpen(true)}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

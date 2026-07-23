@@ -17,14 +17,19 @@ import {
     ChainBadge,
     ChainPicker,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, FeeSelector,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -219,11 +224,28 @@ export function LinkForm({ walletId, onBack }) {
 
     const { isWatcherMode } = useWalletMode();
 
-    // Network fee estimate for the submit chain (shown on review screen).
-    const feeEstimate = useMemo(() => {
-        if (!submitChainId) return null;
-        return estimateNativeSendFee({ chainId: submitChainId, chainRegistry });
-    }, [submitChainId]);
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector on the
+    // submit chain; feePerKb prices the broadcast.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId: submitChainId, chainRegistry }),
+        [submitChainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId: submitChainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [submitChainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId: submitChainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     // Derive the submit-chain coin ticker for the fee row display.
     const submitDescriptor = submitChainId ? chainRegistry.get(submitChainId) : null;
@@ -276,6 +298,7 @@ export function LinkForm({ walletId, onBack }) {
                 coin2: ticker2,
                 coin2ActionIndex: actionIndex2,
                 ...(memo.trim() ? { memo: memo.trim() } : {}),
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let r;
             if (isWatcherMode) {
@@ -291,6 +314,7 @@ export function LinkForm({ walletId, onBack }) {
                     chainId: submitChainId,
                     from: base.from,
                     actionData: { action: 'LINK', params: linkParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (hw) {
                 r = await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId });
@@ -575,6 +599,17 @@ export function LinkForm({ walletId, onBack }) {
                         {ticker2} #{actionIndex2 || '?'}
                     </dd>
                 </dl>
+            ) : null}
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={feeCoinTicker || ''}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
             ) : null}
 
             {formError ? (

@@ -17,7 +17,7 @@ import {
     Select,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -25,6 +25,13 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
 import { extractSingle, sanitizeAbi } from './contractResponseShape.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
@@ -32,6 +39,12 @@ import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * EXECUTE contract method form (§42.4).
@@ -170,6 +183,31 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     }, [chainId, contractActionIndex, messaging]);
 
     const descriptor = chainRegistry.get(chainId);
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -297,6 +335,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -304,6 +343,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     chainId,
                     from: base.from,
                     actionData: { action: 'EXECUTE', params: actionParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
                 res = await messaging.executeActionHw({ ...base, signerId: fromAddress.signerId });
@@ -418,6 +458,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     ) : null}
                     <dt className={styles.detailsLabel}>Gas limit</dt>
                     <dd className={styles.detailsValue}>{actionParams.GAS_LIMIT}</dd>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
                     <ContractConsentPanel
                         manifest={manifest}
                         labelClassName={styles.detailsLabel}
@@ -473,6 +519,19 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>
@@ -480,10 +539,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 {' '}Contract #{contractActionIndex}
             </div>
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Caller</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="Caller"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : null}
             {abiActive ? (
                 <>
@@ -562,6 +626,18 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 onChange={(e) => setGasLimit(e.target.value)}
                 autoComplete="off"
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
+
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

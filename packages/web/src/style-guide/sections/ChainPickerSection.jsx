@@ -27,7 +27,7 @@ export function ChainPickerSection() {
             id="chain-picker"
             title="Chain picker"
             tag="CANONICAL network selector"
-            kicker="The 'which network' selector on nearly every form (Send, Swap, Issue, Add address, Compose message, filters). A dropdown showing the chain's icon + name, with a testnet/regtest cue. Sized to the shared Input contract so it lines up with the other fields."
+            kicker="The standard Chain field, sibling of the To / From / Token / Amount fields: an Input-sized field showing the selected chain's icon + name (testnet/regtest cue included) that opens a popover of icon rows, searchable past 6 options. Use it for EVERY chain choice on a form; never a native select (it cannot render the chain icons)."
         >
             <Guidance
                 what={<>A custom single-select popover (not a native <code>&lt;select&gt;</code>) whose trigger matches the shared <code>Input</code> chrome and size: one line of chain icon + display name + an optional <code>· testnet</code> / <code>· regtest</code> suffix + a caret. The dropdown lists each chain's icon, name, ticker, and network kind, and adds a search box past 6 options. Icons come from <code>branding.chainIconSmallUrl</code>, so it stays decoupled from the registry's image wiring.</>}

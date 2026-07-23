@@ -16,6 +16,8 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    FeeSelector,
+    AddressField,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -24,9 +26,26 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 /**
  * VOTE delegation form (v3): set or clear a standing delegation of a token's
@@ -63,6 +82,10 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     const [delegateTo, setDelegateTo] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
@@ -107,6 +130,40 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices the broadcast (mirrors DispenserForm / SwapForm).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
+    useEffect(() => {
+        let cancelled = false;
+        if (isClear || typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [isClear, messaging]);
+
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No source address available.'); return; }
@@ -139,6 +196,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                     signerId: fromAddress.signerId,
                 },
                 params,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
             if (isWatcherMode) {
@@ -147,6 +205,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                     chainId,
                     from: base.from,
                     actionData: { action: 'VOTE', params: { VERSION: '3', TICK: tick.trim(), DELEGATE_TO: isClear ? '' : delegateTo.trim(), ...(memo.trim() && { MEMO: memo.trim() }) } },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else {
                 const fn = isClear
@@ -228,6 +287,12 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                             <dd className={styles.detailsValue}><AddressText address={delegateTo} /></dd>
                         </>
                     ) : null}
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -265,6 +330,43 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select token"
+                networkFilter={coinFromChainId(chainId)}
+                onSelect={(sel) => { setTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => { setDelegateTo(entry.address); setContactsPickerOpen(false); }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}</div>
@@ -273,32 +375,31 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                 <Button type="button" variant={isClear ? 'primary' : 'ghost'} onClick={() => { setMode('clear'); setFormError(null); }}>Clear</Button>
             </div>
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>{isClear ? 'Clearing for' : 'Delegating from'}</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : null}
 
-            <Input
+            <TokenField
                 label="Governance token"
-                hint="The token whose voting weight this delegation applies to."
-                value={tick}
-                onChange={(e) => setTick(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
+                value={tick && chainId ? { chainId, tick } : null}
+                onOpenPicker={() => setTokenPickerOpen(true)}
             />
 
             {!isClear ? (
-                <Input
+                <AddressField
                     label="Delegate to address"
+                    icon="contacts"
                     hint="The holder who will cast your weight on polls you do not vote on directly."
                     value={delegateTo}
                     onChange={(e) => setDelegateTo(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
+                    onIconClick={() => setContactsPickerOpen(true)}
                 />
             ) : null}
 
@@ -308,6 +409,17 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
             <div className={styles.actions}>

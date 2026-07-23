@@ -36,6 +36,7 @@ import {
     signers as signersLib,
     storage as storageLib,
     notifications as notificationsLib,
+    flows as flowsLib,
 } from '@xchain-wallet/core';
 import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
@@ -56,6 +57,7 @@ import {
     fakeHistoryFor,
     fakeGenesisFor,
     fakeSubassetsFor,
+    fakeNativeFiatRates,
 } from './devFakeBalances.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
@@ -99,6 +101,35 @@ const chainRegistry = registryLib.defaultRegistry();
 // was referenced from live code paths and shipped in every build. The
 // `?.` keeps the module importable under raw Node (smoke harness),
 // where import.meta.env is undefined and the mock stays available.
+// Dev-shell fiat rates: the real §45 price sources (mainnet explorer
+// oracle, CoinGecko) aren't reachable from the dev mock environment, so
+// seed priceLookup with a fake fetch that serves the devFakeBalances
+// rates via the CoinGecko response shape (oracle URLs 404 to force the
+// fallback). Same PROD gate as the mock SDK: dead-code-eliminated from
+// production builds.
+if (!import.meta.env?.PROD) {
+    const rates = fakeNativeFiatRates();
+    flowsLib.configureFiatRateSource({
+        fetch: async (url) => {
+            const u = String(url);
+            if (u.includes('simple/price')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        bitcoin: { usd: rates.bitcoin },
+                        litecoin: { usd: rates.litecoin },
+                        dogecoin: { usd: rates.dogecoin },
+                    }),
+                };
+            }
+            // Oracle price_snapshots (and anything else): report
+            // unreachable so refreshFiatRates falls back to the fake
+            // CoinGecko branch above.
+            return { ok: false, status: 404, json: async () => ({}) };
+        },
+    });
+}
+
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
     // so the fake-balance dataset can return chain-appropriate values.

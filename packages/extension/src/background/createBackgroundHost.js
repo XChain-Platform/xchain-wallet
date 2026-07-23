@@ -963,11 +963,21 @@ export function createBackgroundHost(deps) {
     // §15.5 / G020: add a single imported WIF (private key) to an existing
     // HD wallet. Caller (shell) is responsible for surfacing the
     // §15.5.3 backup-implications warning before invoking this handler.
-    host.register('wallet.importWif', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('wallet.importWif', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        // Unlocked session: pull the vault master key from the pooled
+        // signer so the UI does not have to re-prompt for the password.
+        let sessionMasterKey = null;
+        if (!req?.password && signerPool && typeof signerPool.get === 'function') {
+            const pooled = signerPool.get(req?.walletId);
+            if (pooled && typeof pooled.getMasterKey === 'function') {
+                try { sessionMasterKey = pooled.getMasterKey(); } catch { /* locked: fall through */ }
+            }
+        }
         const r = await importWif({
             vault,
             walletId: req?.walletId,
             password: req?.password,
+            masterKey: sessionMasterKey || undefined,
             chainId: req?.chainId,
             wif: req?.wif,
             addressType: req?.addressType,

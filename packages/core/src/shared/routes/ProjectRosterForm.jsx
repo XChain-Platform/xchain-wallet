@@ -16,6 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    FeeSelector,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -23,6 +24,12 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { normalizeGenesisRow } from './ManageToken.jsx';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -216,6 +223,30 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
+
+    // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
+    // prices both broadcasts (the LIST and the LINK).
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -302,6 +333,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     TYPE: '1',
                     ITEM: memberTicks,
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = hw
                 ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
@@ -351,6 +383,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 coin2: coinTicker,
                 coin2ActionIndex: issueActionIndex,
                 ...(memo.trim() ? { memo: memo.trim() } : {}),
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = hw
                 ? await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId })
@@ -654,6 +687,16 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                         by the current owner.
                     </p>
                 </div>
+            ) : null}
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
             ) : null}
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
