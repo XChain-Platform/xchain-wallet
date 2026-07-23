@@ -2,6 +2,48 @@
     position: relative;
 }
 
+/* Trailing in-field icon button, anchored over the input box only (never
+ * the hint/error lines below it), keyed to the pinned label metrics
+ * (20px label line + space-1 gap) and the Input size contract
+ * (36px md / 48px lg). Mirrors AddressField.iconButton. */
+.wrap label {
+    line-height: 20px;
+}
+
+.iconButton {
+    position: absolute;
+    inset-inline-end: 4px;
+    top: calc(20px + var(--xc-space-1));
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.lg .iconButton {
+    height: 48px;
+}
+
+.noLabel .iconButton {
+    top: 0;
+}
+
+.iconButton:hover:not(:disabled) {
+    color: var(--xc-text);
+}
+
+.iconButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .dropdown {
     position: absolute;
     top: 100%;

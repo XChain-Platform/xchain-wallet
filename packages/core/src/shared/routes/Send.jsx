@@ -14,7 +14,7 @@ import {
     PageHeader,
     Button,
     Input,
-    AddressField,
+    AddressCombobox,
     ChainBadge,
     AddressText,
     FeeSelector,
@@ -1662,7 +1662,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 prefill={prefill}
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
-            <AddressField
+            <AddressCombobox
+                size="lg"
                 icon="contacts"
                 label={matchedContact
                     ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
@@ -1675,9 +1676,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     if (pasteWarning) setPasteWarning(null);
                 }}
                 onPaste={onAddressPaste}
+                suggestions={suggestions}
+                hint={pasteHint || undefined}
                 onIconClick={() => setContactsPickerOpen(true)}
                 placeholder="Enter or paste an address or name..."
-                hint={pasteHint || undefined}
                 error={toError || undefined}
             />
             {pasteWarning ? (
@@ -1707,6 +1709,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 />
             )}
             <AmountField
+                size="lg"
                 amount={amount}
                 fiatAmount={fiatAmount}
                 tick={tick}

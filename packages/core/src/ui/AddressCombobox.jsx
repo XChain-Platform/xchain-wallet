@@ -10,8 +10,14 @@
 
 import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
+import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
+
+const ICONS = {
+    contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
+    addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
+};
 
 /**
  * AddressCombobox: destination input for Send / authoring forms, with
@@ -22,6 +28,11 @@ import styles from './AddressCombobox.module.css';
  * This component owns dropdown visibility, filtering against the live
  * input, keyboard navigation, and selection.
  *
+ * Like AddressField, it can render one trailing icon action inside the
+ * field (`icon` + `onIconClick`), so the autocomplete field keeps the
+ * standardized in-field affordance (e.g. the contacts book on Send's To)
+ * instead of a separate floating button.
+ *
  * Props
  *   - value, onChange       same shape as `<Input>`; onChange fires
  *                             with `{ target: { value } }` so callers
@@ -29,6 +40,11 @@ import styles from './AddressCombobox.module.css';
  *   - suggestions           `Suggestion[]` from buildRecentDestinations.
  *   - onPaste               pass-through to the underlying input.
  *                             Send.jsx wires this for BIP21 / WIF detect.
+ *   - icon                  'contacts' | 'addresses'; renders the in-field
+ *                             trailing button when set.
+ *   - onIconClick           handler for the trailing icon button.
+ *   - iconLabel             accessible label override for the icon button.
+ *   - size                  'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
  *                             placeholder, autoComplete, etc.).
  *
@@ -37,6 +53,9 @@ import styles from './AddressCombobox.module.css';
  * @property {(e: { target: { value: string } }) => void} onChange
  * @property {import('../flows/recentDestinations.js').Suggestion[]} [suggestions]
  * @property {(e: React.ClipboardEvent<HTMLInputElement>) => void} [onPaste]
+ * @property {'contacts' | 'addresses'} [icon]
+ * @property {() => void} [onIconClick]
+ * @property {string} [iconLabel]
  */
 export const AddressCombobox = forwardRef(function AddressCombobox(
     {
@@ -44,6 +63,13 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         onChange,
         suggestions = [],
         onPaste,
+        icon,
+        onIconClick,
+        iconLabel,
+        size = 'md',
+        label,
+        disabled,
+        style,
         ...rest
     },
     ref,
@@ -102,8 +128,15 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         ? `${listboxId}-opt-${activeIndex}`
         : undefined;
 
+    const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
+    const wrapClass = [
+        styles.wrap,
+        size === 'lg' ? styles.lg : '',
+        label ? '' : styles.noLabel,
+    ].filter(Boolean).join(' ');
+
     return (
-        <div className={styles.wrap} ref={containerRef} onBlur={onBlur}>
+        <div className={wrapClass} ref={containerRef} onBlur={onBlur}>
             <Input
                 ref={ref}
                 role="combobox"
@@ -112,6 +145,10 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
                 placeholder="Address"
+                label={label}
+                size={size}
+                disabled={disabled}
+                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
                 value={value}
                 onChange={(e) => {
                     onChange(e);
@@ -123,6 +160,18 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 onPaste={onPaste}
                 {...rest}
             />
+            {IconComponent ? (
+                <button
+                    type="button"
+                    className={styles.iconButton}
+                    onClick={onIconClick}
+                    disabled={disabled}
+                    aria-label={iconLabel || defaultLabel}
+                    title={iconLabel || defaultLabel}
+                >
+                    <IconComponent />
+                </button>
+            ) : null}
             {showDropdown ? (
                 <ul
                     id={listboxId}
