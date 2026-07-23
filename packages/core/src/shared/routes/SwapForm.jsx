@@ -20,8 +20,10 @@ import {
     FeeSelector,
     AddressField,
  Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -239,6 +241,74 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
+    // Wire-format SWAP v0 params: the one definition the confirm compose and
+    // the legacy submit both use.
+    const swapParams = useMemo(() => ({
+        VERSION: '0',
+        GIVE_COIN: coinTicker,
+        GIVE_TICK: giveTick.trim(),
+        // Ownership side escrows the token's ownership record. No amount;
+        // otherwise serialize the balance amount.
+        ...(giveOwnership
+            ? { GIVE_OWNERSHIP: '1' }
+            : { GIVE_AMOUNT: String(giveAmount).trim() }),
+        GET_COIN: coinTicker,
+        GET_TICK: getTick.trim(),
+        ...(getOwnership
+            ? { GET_OWNERSHIP: '1' }
+            : { GET_AMOUNT: String(getAmount).trim() }),
+        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
+    }), [coinTicker, giveTick, giveOwnership, giveAmount, getTick, getOwnership, getAmount, memo]);
+
+    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // host-side and confirms it on the shared confirm page; hardware +
+    // watcher keep the legacy review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'SWAP', params: swapParams },
+                encoderOpts: {
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                onApprove: (prebuiltPsbt) => messaging.swapAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params: swapParams,
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Swap failed.');
+        }
+    }
+
     // handleReview validates the form then moves to the review stage.
     // No signing happens here: the actual flow calls live in handleSubmit
     // and are only reachable after the user confirms on the review screen.
@@ -253,6 +323,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             return;
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -267,22 +338,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         setStage('submitting');
         setSubmitError(null);
         try {
-            const params = {
-                VERSION: '0',
-                GIVE_COIN: coinTicker,
-                GIVE_TICK: giveTick.trim(),
-                // Ownership side escrows the token's ownership record. No
-                // amount; otherwise serialize the balance amount.
-                ...(giveOwnership
-                    ? { GIVE_OWNERSHIP: '1' }
-                    : { GIVE_AMOUNT: String(giveAmount).trim() }),
-                GET_COIN: coinTicker,
-                GET_TICK: getTick.trim(),
-                ...(getOwnership
-                    ? { GET_OWNERSHIP: '1' }
-                    : { GET_AMOUNT: String(getAmount).trim() }),
-                ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-            };
+            const params = swapParams;
             const base = {
                 walletId,
                 chainId,
@@ -503,6 +559,31 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // --- Form screen ----------------------------------------------------
     const chainIds = Object.keys(addressesByChain || {});
 
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: 'SWAP',
+                    params: swapParams,
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -681,13 +762,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 <Button
                     type="submit"
                     variant="primary"
+                    block
+                    loading={actionConfirm.composing}
                     disabled={!!validationError
                         || !fromAddress
                         || !giveTick || !getTick
                         || (!giveOwnership && !giveAmount)
-                        || (!getOwnership && !getAmount)}
+                        || (!getOwnership && !getAmount)
+                        || actionConfirm.composing}
                 >
-                    Review
+                    {singleEncode ? 'Swap' : 'Review'}
                 </Button>
             </div>
         </form>,

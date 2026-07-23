@@ -21,8 +21,10 @@ import {
     FeeSelector,
     AddressField,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -203,6 +205,77 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
         return p;
     }, [tick, endBlock, cleanOptions, maxSelections, tallyMode, weightMode, question, quorum, minVoters, minVoteBalance, decideThreshold, deposit]);
 
+    // Wire-format VOTE v0 params: what the encoder actually sees. The host's
+    // sdk.voting.createPollParams builds the same shape from `pollParams`;
+    // watcher mode and the single-encode confirm page both need it here.
+    const wireParams = useMemo(() => ({
+        VERSION: '0',
+        TICK: pollParams.tick,
+        END_BLOCK: pollParams.endBlock,
+        OPTIONS: cleanOptions.join(','),
+        MAX_SELECTIONS: pollParams.maxSelections,
+        TALLY_MODE: pollParams.tallyMode,
+        WEIGHT_MODE: pollParams.weightMode,
+        ...(pollParams.quorum && { QUORUM: pollParams.quorum }),
+        ...(pollParams.minVoters && { MIN_VOTERS: pollParams.minVoters }),
+        ...(pollParams.minVoteBalance && { MIN_VOTE_BALANCE: pollParams.minVoteBalance }),
+        ...(pollParams.decideThreshold && { DECIDE_THRESHOLD: pollParams.decideThreshold }),
+        ...(pollParams.question && { QUESTION: pollParams.question }),
+        ...(pollParams.deposit && { DEPOSIT: pollParams.deposit }),
+    }), [pollParams, cleanOptions]);
+
+    //  ( §5.6 slice 2): software polls go through the
+    // single-encode confirm page; hardware + watcher keep the legacy
+    // review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    const decoded = useMemo(() => {
+        if (!actionConfirm.open) return null;
+        return decoderLib.decodeAction({
+            action: 'VOTE', params: wireParams, chainId: chainId || undefined, chainRegistry,
+        });
+    }, [actionConfirm.open, wireParams, chainId]);
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT via createPollAction.prebuiltPsbt.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'VOTE', params: wireParams },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => messaging.createPollAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params: pollParams,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Create poll failed.');
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No source address available.'); return; }
@@ -211,6 +284,7 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
         if (cleanOptions.length < 2) { setFormError('Add at least two non-empty options.'); return; }
         if (cleanOptions.some((o) => o.includes(','))) { setFormError('Option labels cannot contain a comma.'); return; }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -244,20 +318,7 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                     // Watcher mode can't run the sdk.voting builder here; hand the wire-form
                     // params through directly (OPTIONS is a comma-joined label list).
-                    actionData: {
-                        action: 'VOTE',
-                        params: {
-                            VERSION: '0', TICK: pollParams.tick, END_BLOCK: pollParams.endBlock,
-                            OPTIONS: cleanOptions.join(','), MAX_SELECTIONS: pollParams.maxSelections,
-                            TALLY_MODE: pollParams.tallyMode, WEIGHT_MODE: pollParams.weightMode,
-                            ...(pollParams.quorum && { QUORUM: pollParams.quorum }),
-                            ...(pollParams.minVoters && { MIN_VOTERS: pollParams.minVoters }),
-                            ...(pollParams.minVoteBalance && { MIN_VOTE_BALANCE: pollParams.minVoteBalance }),
-                            ...(pollParams.decideThreshold && { DECIDE_THRESHOLD: pollParams.decideThreshold }),
-                            ...(pollParams.question && { QUESTION: pollParams.question }),
-                            ...(pollParams.deposit && { DEPOSIT: pollParams.deposit }),
-                        },
-                    },
+                    actionData: { action: 'VOTE', params: wireParams },
                 });
             } else {
                 const fn = isHwSource ? messaging.createPollActionHw : messaging.createPollAction;
@@ -365,6 +426,26 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
                     </Button>
                 </div>
             </form>,
+        );
+    }
+
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
         );
     }
 
@@ -480,8 +561,14 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
 
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
             <div className={styles.actions}>
-                <Button type="submit" variant="primary" disabled={!fromAddress || !tick.trim() || cleanOptions.length < 2 || !endBlock.trim()}>
-                    Preview
+                <Button
+                    type="submit"
+                    variant="primary"
+                    block
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !tick.trim() || cleanOptions.length < 2 || !endBlock.trim() || actionConfirm.composing}
+                >
+                    {singleEncode ? 'Create poll' : 'Preview'}
                 </Button>
             </div>
         </form>,

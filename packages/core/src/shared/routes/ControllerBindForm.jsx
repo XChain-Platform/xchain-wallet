@@ -17,8 +17,10 @@ import {
     ChainBadge,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -185,6 +187,67 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
 
     const { isWatcherMode } = useWalletMode();
 
+    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // host-side and confirms it on the shared confirm page; hardware +
+    // watcher keep the legacy Preview/review stage. Unlike the other action
+    // forms the wire action/params are built HOST-side (the SDK's controller
+    // helper lives there), so the built pair is stashed for the confirm
+    // page's decoded intent.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const [builtAction, setBuiltAction] = useState(
+        /** @type {{ action: string, params: object } | null} */ (null),
+    );
+
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const { action, params } = await messaging.buildControllerBindParams({
+                chainId,
+                target,
+                unbind,
+                tick: target === 'token' ? String(tick).trim() : undefined,
+                controller: String(controller).trim(),
+                actionClass,
+                ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
+                ...(memo.trim() !== '' && { memo: memo.trim() }),
+            });
+            setBuiltAction({ action, params });
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action, params },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => messaging.advancedAction({
+                    walletId,
+                    chainId,
+                    from,
+                    action,
+                    params,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`);
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) {
@@ -215,6 +278,7 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
             }
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -434,6 +498,33 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
         );
     }
 
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={builtAction
+                    ? decoderLib.decodeAction({
+                        action: builtAction.action,
+                        params: builtAction.params,
+                        chainId: chainId || undefined,
+                        chainRegistry,
+                    })
+                    : null}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -550,9 +641,11 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !String(controller).trim()}
+                    block
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !String(controller).trim() || actionConfirm.composing}
                 >
-                    Preview
+                    {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
                 </Button>
             </div>
         </form>,

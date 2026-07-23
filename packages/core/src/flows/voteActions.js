@@ -39,6 +39,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -84,6 +85,7 @@ function submitVote(opts, builderName, buildInput, summary) {
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
+        prebuiltPsbt: opts.prebuiltPsbt,
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,

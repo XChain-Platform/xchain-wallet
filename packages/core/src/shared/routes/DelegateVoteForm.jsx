@@ -19,8 +19,10 @@ import {
     FeeSelector,
     AddressField,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -130,6 +132,60 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
+    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // host-side and confirms it on the shared confirm page; hardware +
+    // watcher keep the legacy Preview/review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    // The confirm page's password field writes `password` state; the approve
+    // callback reads the ref so it sees the latest keystrokes.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const wireParams = {
+            VERSION: '3', TICK: tick.trim(), DELEGATE_TO: isClear ? '' : delegateTo.trim(),
+            ...(memo.trim() && { MEMO: memo.trim() }),
+        };
+        const submitParams = isClear
+            ? { tick: tick.trim(), ...(memo.trim() && { memo: memo.trim() }) }
+            : { tick: tick.trim(), delegateTo: delegateTo.trim(), ...(memo.trim() && { memo: memo.trim() }) };
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'VOTE', params: wireParams },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => (isClear ? messaging.clearVoteDelegationAction : messaging.delegateVoteAction)({
+                    walletId,
+                    chainId,
+                    from,
+                    params: submitParams,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || (verb + ' failed.'));
+        }
+    }
+
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
@@ -170,6 +226,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
         if (!isClear && !delegateTo.trim()) { setFormError('Delegate-to address is required.'); return; }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -330,6 +387,31 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
         );
     }
 
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: 'VOTE',
+                    params: { VERSION: '3', TICK: tick.trim(), DELEGATE_TO: isClear ? '' : delegateTo.trim(), ...(memo.trim() && { MEMO: memo.trim() }) },
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -423,8 +505,8 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
 
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
             <div className={styles.actions}>
-                <Button type="submit" variant="primary" disabled={!fromAddress || !tick.trim() || (!isClear && !delegateTo.trim())}>
-                    Preview
+                <Button type="submit" variant="primary" block loading={actionConfirm.composing} disabled={!fromAddress || !tick.trim() || (!isClear && !delegateTo.trim()) || actionConfirm.composing}>
+                    {singleEncode ? verb : 'Preview'}
                 </Button>
             </div>
         </form>,

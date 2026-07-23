@@ -100,23 +100,37 @@ assert.ok(/setStage\('review'\)/.test(src),
     'SwapForm calls setStage(review) on form submit');
 assert.ok(/function handleReview\b/.test(src),
     'SwapForm has a handleReview handler that gates the review transition');
-// swapAction must only be reachable from handleSubmit, not from handleReview.
-// Verify: handleReview exists and sets stage to review; handleSubmit fires the flows.
-// The two calls must appear AFTER handleReview ends (i.e. inside handleSubmit).
+// Signing must never be reachable from handleReview.  gave the software
+// path a second signing lane: openConfirmScreen, whose swapAction call fires
+// only from the confirm page's Approve callback. Hardware + watcher still sign
+// from handleSubmit. Neither lane may be called by handleReview itself.
 {
     const reviewIdx = src.indexOf('function handleReview');
     const submitIdx = src.indexOf('function handleSubmit');
+    const confirmIdx = src.indexOf('function openConfirmScreen');
     assert.ok(reviewIdx !== -1, 'handleReview is present');
     assert.ok(submitIdx !== -1, 'handleSubmit is present');
+    assert.ok(confirmIdx !== -1, 'openConfirmScreen ( single-encode lane) is present');
     // handleReview must appear before handleSubmit in the file.
     assert.ok(reviewIdx < submitIdx, 'handleReview is defined before handleSubmit');
-    // The actual flow calls must appear inside handleSubmit (after it starts).
-    const swapActionIdx = src.indexOf('messaging.swapAction(');
+    // The software lane signs inside onApprove, never at review time.
+    assert.ok(/onApprove: \(prebuiltPsbt\) => messaging\.swapAction\(/.test(src),
+        'messaging.swapAction fires from the confirm page Approve callback');
+    assert.ok(/prebuiltPsbt,/.test(src),
+        'the approved PSBT is forwarded as prebuiltPsbt (single-encode)');
+    // Hardware still signs from handleSubmit.
     const swapActionHwIdx = src.indexOf('messaging.swapActionHw(');
-    assert.ok(swapActionIdx > submitIdx,
-        'messaging.swapAction is gated behind handleSubmit (after review)');
     assert.ok(swapActionHwIdx > submitIdx,
         'messaging.swapActionHw is gated behind handleSubmit (after review)');
+    // handleReview itself contains no signing call. Its body ends at whichever
+    // of the two signing lanes is declared next after it.
+    const nextAfterReview = [submitIdx, confirmIdx]
+        .filter((i) => i > reviewIdx)
+        .sort((a, b) => a - b)[0];
+    assert.ok(nextAfterReview !== undefined, 'a signing lane follows handleReview');
+    const reviewBody = src.slice(reviewIdx, nextAfterReview);
+    assert.ok(!/messaging\.swapAction(Hw)?\(/.test(reviewBody),
+        'handleReview never calls a signing flow directly');
 }
 // On submit error, stage returns to 'review' (not 'form'). The setStage('review')
 // call must appear inside handleSubmit (after its definition) and must not be

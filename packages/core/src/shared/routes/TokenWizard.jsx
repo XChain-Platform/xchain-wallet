@@ -22,6 +22,9 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import styles from './TokenWizard.module.css';
@@ -157,6 +160,18 @@ export function TokenWizard({ walletId, onBack }) {
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
+    //  ( §5.6 slice 2): the wizard is software-only, so the
+    // slice flag alone decides between the shared confirm page and the
+    // legacy preview + sign stages.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled;
+    // An already-unlocked wallet does not re-prompt on the confirm page.
+    const signerReady = useSignerReady(walletId);
+    // The confirm page's password field writes `password` state; the approve
+    // callback reads the ref so it sees the latest keystrokes.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
     // Compose ISSUE v0 params from the current form state. Dispatched
     // by template (see TEMPLATE_COMPOSERS); each picks the subset of
     // ISSUE v0 fields its template wants. The memo key intentionally
@@ -231,7 +246,48 @@ export function TokenWizard({ walletId, onBack }) {
             }
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('preview');
+    }
+
+    //  ( §5.6 slice 2): the wizard's details step goes straight
+    // to the shared confirm page, skipping its own preview + sign stages.
+    // Compose + tamper-check + pre-flight run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
+    async function openConfirmScreen() {
+        const from = fromAddress ? {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        } : null;
+        if (!from) { setFormError('No source address available.'); return; }
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'ISSUE', params: actionParams },
+                encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                onApprove: (prebuiltPsbt) => messaging.issueToken({
+                    walletId,
+                    chainId,
+                    from,
+                    params: actionParams,
+                    password: passwordValueRef.current,
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Issue failed.');
+        }
     }
 
     async function handleSign(event) {
@@ -298,6 +354,28 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<p className={styles.hint}>Loading…</p>);
     }
 
+    //  confirm page, rendered in place of the wizard step (the overlay
+    // modal didn't fit small/mobile viewports); wizard state stays intact.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: 'ISSUE',
+                    params: actionParams,
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (stage === 'template') {
         return wrap(renderTemplateStage({
             onPick: (t) => { setTemplate(t); setStage('chain'); },
@@ -336,6 +414,8 @@ export function TokenWizard({ walletId, onBack }) {
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
+            submitLabel: singleEncode ? 'Issue token' : 'Preview',
+            submitLoading: actionConfirm.composing,
         }));
     }
 
@@ -744,7 +824,7 @@ function renderDetailsStage({
     mintStartBlock, setMintStartBlock,
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
-    formError, onBack, onSubmit,
+    formError, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const show = TEMPLATE_FIELDS[template] || TEMPLATE_FIELDS.custom;
     const isEdition = template === 'edition';
@@ -904,7 +984,9 @@ function renderDetailsStage({
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
             <div className={styles.actions}>
-                <Button type="submit" variant="primary">Preview</Button>
+                <Button type="submit" variant="primary" block loading={submitLoading}>
+                    {submitLabel}
+                </Button>
             </div>
         </form>
     );

@@ -22,6 +22,8 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -214,15 +216,22 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         return p;
     }, [feedName, text, value, feedFee, includeTimestamp]);
 
+    //  ( §5.6 slice 2): software broadcasts go through the
+    // single-encode confirm page; hardware + watcher keep the legacy
+    // review stage. Declared before the `isHwSource`/`isWatcherMode`
+    // consts below only for readability: `singleEncode` is computed
+    // after them.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+
     const decoded = useMemo(() => {
-        if (stage !== 'review' && stage !== 'submitting') return null;
+        if (stage !== 'review' && stage !== 'submitting' && !actionConfirm.open) return null;
         return decoderLib.decodeAction({
             action: 'BROADCAST',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, actionParams, chainId]);
+    }, [stage, actionConfirm.open, actionParams, chainId]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -246,6 +255,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             }
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -261,6 +271,47 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
+
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT via broadcastAction.prebuiltPsbt.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'BROADCAST', params: actionParams },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => messaging.broadcastAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params: actionParams,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Broadcast failed.');
+        }
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -453,6 +504,26 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         );
     }
 
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -560,9 +631,11 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || (!feedName.trim() && !text.trim())}
+                    block
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || (!feedName.trim() && !text.trim()) || actionConfirm.composing}
                 >
-                    Preview
+                    {singleEncode ? 'Broadcast' : 'Preview'}
                 </Button>
             </div>
         </form>,

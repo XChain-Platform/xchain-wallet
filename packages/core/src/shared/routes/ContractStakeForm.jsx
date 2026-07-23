@@ -19,8 +19,10 @@ import {
     FeeSelector,
     AddressField,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -241,10 +243,64 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
             }
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
     const { isWatcherMode } = useWalletMode();
+
+    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // host-side and confirms it on the shared confirm page; hardware +
+    // watcher keep the legacy Preview/review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    // The confirm page's password field writes `password` state; the approve
+    // callback reads the ref so it sees the latest keystrokes.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const wireAction = mode === 'stake' ? 'STAKE' : mode === 'unstake' ? 'UNSTAKE' : 'DELEGATE';
+        const wireVersion = mode === 'stake' ? '3' : '1';
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: wireAction, params: { VERSION: wireVersion, ...actionParams } },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                // The flow builds its own wire params from mode + params, so
+                // the submit keeps the LEGACY shape; only the compose above
+                // needs the versioned wire form.
+                onApprove: (prebuiltPsbt) => messaging.contractStakeAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params: actionParams,
+                    mode,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || `${mode} failed.`);
+        }
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -469,6 +525,31 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
         );
     }
 
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: mode === 'stake' ? 'STAKE' : mode === 'unstake' ? 'UNSTAKE' : 'DELEGATE',
+                    params: { VERSION: mode === 'stake' ? '3' : '1', ...actionParams },
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -618,9 +699,11 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress}
+                    block
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
                 >
-                    Preview
+                    {singleEncode ? (mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate') : 'Preview'}
                 </Button>
             </div>
         </form>,

@@ -24,6 +24,8 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -419,8 +421,117 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // partial flow that strands the user mid-LIST.
     const { isWatcherMode } = useWalletMode();
 
+    //  ( §5.6 slice 2): AIRDROP is two signed transactions, so
+    // BOTH legs get their own single-encode confirm round. The recipient-list
+    // review stage stays: it is a data review (who gets what), not an encoded-
+    // action preview, and the confirm page is what gates each signature.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    // Which leg the confirm page is showing, so its decoded intent matches.
+    const [confirmLeg, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
+
+    function sourceDescriptor() {
+        return {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+    }
+
+    // Leg 1: the LIST that names the recipients. On Approve the prebuilt PSBT
+    // is signed and the pending-airdrop record is written before the wallet
+    // starts polling the indexer for the LIST's ACTION_INDEX.
+    async function openListConfirm() {
+        const from = sourceDescriptor();
+        setSubmitError(null);
+        setConfirmLeg('LIST');
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'LIST', params: listParams },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => messaging.createList({
+                    walletId,
+                    chainId,
+                    from,
+                    params: listParams,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (!txid) throw new Error('LIST broadcast did not return a txid.');
+            const record = schemasLib.createPendingAirdrop({
+                walletId,
+                chainId,
+                fromAddress: fromAddress.address,
+                token: token.trim().toUpperCase(),
+                amountPer: String(amountPer).trim(),
+                recipients: recipients.valid,
+                listTxid: txid,
+                memo: memo.trim() || undefined,
+            });
+            await messaging.savePendingAirdrop({ record });
+            setPendingId(record.id);
+            setListTxid(txid);
+            setPassword('');
+            setStage('wait-index');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setSubmitError(err?.message || 'LIST broadcast failed.');
+        }
+    }
+
+    // Leg 2: the AIRDROP that references the now-indexed LIST.
+    async function openAirdropConfirm() {
+        const from = sourceDescriptor();
+        setSubmitError(null);
+        setConfirmLeg('AIRDROP');
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'AIRDROP', params: airdropParams },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => messaging.airdropAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params: airdropParams,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (!txid) throw new Error('AIRDROP broadcast did not return a txid.');
+            setAirdropTxid(txid);
+            if (pendingId) {
+                try {
+                    await messaging.updatePendingAirdrop({
+                        id: pendingId,
+                        patch: { stage: 'done', airdropTxid: txid },
+                    });
+                } catch (_err) { /* non-fatal */ }
+            }
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setSubmitError(err?.message || 'AIRDROP broadcast failed.');
+        }
+    }
+
     async function handleSignList(event) {
         event.preventDefault();
+        if (singleEncode) { openListConfirm(); return; }
         if (submitting) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
@@ -479,6 +590,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     async function handleSignAirdrop(event) {
         event.preventDefault();
+        if (singleEncode) { openAirdropConfirm(); return; }
         if (submitting) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
@@ -587,6 +699,31 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         );
     }
 
+    //  confirm page, rendered in place of the review stage (the overlay
+    // modal didn't fit small/mobile viewports); flow state stays intact.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: confirmLeg,
+                    params: confirmLeg === 'LIST' ? listParams : airdropParams,
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (stage === 'done') {
         return wrap(
             <>
@@ -676,30 +813,38 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         ? 'You will confirm on your hardware device twice.'
                         : 'You will enter your password twice.'}
                 </p>
-                <SignCredentials
+                {/* : on the single-encode path the credentials live on
+                    the confirm page, so this stage stays a pure recipient
+                    review and the button opens that page. */}
+                {singleEncode ? null : (
+                    <SignCredentials
                         unlocked={signerReady}
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={submitting}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {hw && submitError ? (
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={submitting}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(hw || singleEncode) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
                         variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        block
+                        loading={submitting || actionConfirm.composing}
+                        disabled={singleEncode
+                            ? actionConfirm.composing
+                            : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                     >
                         {hw
                             ? `Sign LIST on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
@@ -757,22 +902,25 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     enough of {token.trim().toUpperCase() || 'the token'} +
                     fee tick to cover the full distribution.
                 </p>
-                <SignCredentials
+                {/* : credentials live on the confirm page for leg 2 too. */}
+                {singleEncode ? null : (
+                    <SignCredentials
                         unlocked={signerReady}
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={submitting}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {hw && submitError ? (
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={submitting}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(hw || singleEncode) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
                 <div className={styles.actions}>
@@ -782,10 +930,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     <Button
                         type="submit"
                         variant="primary"
-                        loading={submitting}
+                        loading={submitting || actionConfirm.composing}
                         disabled={
                             !listActionIndex
-                            || (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))
+                            || (singleEncode
+                                ? actionConfirm.composing
+                                : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
                         }
                     >
                         {hw
@@ -978,9 +1128,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <Button
                     type="submit"
                     variant="primary"
+                    block
                     disabled={!fromAddress || recipients.valid.length === 0 || !token || !amountPer}
                 >
-                    Preview list
+                    Review recipients
                 </Button>
             </div>
         </form>,

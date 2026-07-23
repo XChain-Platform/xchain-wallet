@@ -17,8 +17,10 @@ import {
     ChainBadge,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -234,6 +236,53 @@ export function StakeForm({ walletId, chainId, onBack }) {
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
+    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // host-side and confirms it on the shared confirm page; hardware +
+    // watcher keep the legacy Preview/review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    // The confirm page's password field writes `password` state; the approve
+    // callback reads the ref so it sees the latest keystrokes.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'STAKE', params: actionParams },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => messaging.stakeAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params: actionParams,
+                    password: passwordValueRef.current,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Stake failed.');
+        }
+    }
+
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
@@ -316,6 +365,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
             return;
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -503,6 +553,31 @@ export function StakeForm({ walletId, chainId, onBack }) {
         );
     }
 
+    //  confirm page, rendered in place of the form (the overlay modal
+    // didn't fit small/mobile viewports); form state stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: 'STAKE',
+                    params: actionParams,
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -668,9 +743,11 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !amount.trim() || !signingPubkey.trim()}
+                    block
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !amount.trim() || !signingPubkey.trim() || actionConfirm.composing}
                 >
-                    Preview
+                    {singleEncode ? 'Stake' : 'Preview'}
                 </Button>
             </div>
         </form>,
