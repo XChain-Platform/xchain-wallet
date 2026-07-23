@@ -71,6 +71,7 @@ function formatFiatAmount(value, currency) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onReceive]
  * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, the detail view exposes a "Secret" affordance for non-multisig rows with a record, handing that address back to the caller (shell wires it to <ViewPrivateKey>)
+ * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   picker mode only: caller-supplied rows rendered above the address list (e.g. Dispenser's "New dispenser address"); unaffected by search/filters
  */
 export function AddressList({
     walletId,
@@ -82,6 +83,7 @@ export function AddressList({
     tokenQuery = '',
     pickerMode = false,
     onPick,
+    pickerActions = [],
     title,
 }) {
     const { messaging, shell } = useMessaging();
@@ -843,6 +845,24 @@ export function AddressList({
             ) : null}
 
 
+            {pickerMode && pickerActions.length > 0 ? (
+                <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label="Picker options">
+                    {pickerActions.map((act) => (
+                        <li key={act.key}>
+                            <button type="button" className={local.addrRow} onClick={act.onSelect}>
+                                <div className={local.addrTopRow}>
+                                    <span className={local.addrLabel}>{act.label}</span>
+                                </div>
+                                {act.sublabel ? (
+                                    <div className={local.addrLine2}>
+                                        <span className={local.addrFiat}>{act.sublabel}</span>
+                                    </div>
+                                ) : null}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
             {rows.length === 0 ? (
                 <div className={local.emptyCard}>
                     No addresses match the current filter.

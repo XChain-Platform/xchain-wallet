@@ -98,6 +98,14 @@
     filter: brightness(0.92);
 }
 
+.success {
+    background: var(--xc-success);
+    color: #FFFFFF;
+}
+.success:hover:not(:disabled) {
+    filter: brightness(0.92);
+}
+
 .spinner {
     width: 12px;
     height: 12px;

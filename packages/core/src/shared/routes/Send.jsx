@@ -1241,6 +1241,51 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return wrap(<p className={styles.hint}>Loading…</p>);
     }
 
+    //  confirm page, rendered in place of the form (operator
+    // direction 2026-07-22: the overlay modal didn't fit small/mobile
+    // viewports). All other form state stays intact behind it.
+    if (confirmModalOpen) {
+        return (
+            <ConfirmActionModal
+                screenVariant={variant}
+                phase={confirmAction.phase}
+                composed={confirmAction.composed}
+                report={confirmAction.report}
+                reportLoading={confirmAction.phase === 'preflighting'}
+                acknowledged={confirmAction.acknowledged}
+                onAcknowledge={confirmAction.acknowledge}
+                canApprove={confirmAction.canApprove}
+                onApprove={confirmAction.approve}
+                onReject={confirmAction.reject}
+                decoded={modalDecoded}
+                simulation={null}
+                // §5.3.4: a bad password keeps the page open at `ready`
+                // with this set, so the user retypes and re-approves the
+                // SAME PSBT instead of the page tearing down.
+                error={confirmAction.error}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()
+                    : undefined}
+                credentialsReady={signerReady || password.length > 0}
+                credentials={signerReady ? (
+                    <p className={styles.hint}>
+                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                    </p>
+                ) : (
+                    <Input
+                        type="password"
+                        label="Password"
+                        hint="Required to sign."
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                    />
+                )}
+            />
+        );
+    }
+
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         const desc = chainId ? chainRegistry.get(chainId) : null;
@@ -1750,56 +1795,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 </StatusMessage>
             ) : null}
         </form>,
-        <>
-            <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
-                <Button
-                    type="submit"
-                    form="send-form"
-                    variant="primary"
-                    block
-                >
-                    Send
-                </Button>
-            </div>
-            {confirmModalOpen ? (
-                <ConfirmActionModal
-                    phase={confirmAction.phase}
-                    composed={confirmAction.composed}
-                    report={confirmAction.report}
-                    reportLoading={confirmAction.phase === 'preflighting'}
-                    acknowledged={confirmAction.acknowledged}
-                    onAcknowledge={confirmAction.acknowledge}
-                    canApprove={confirmAction.canApprove}
-                    onApprove={confirmAction.approve}
-                    onReject={confirmAction.reject}
-                    decoded={modalDecoded}
-                    simulation={null}
-                    // §5.3.4: a bad password keeps the modal open at `ready`
-                    // with this set, so the user retypes and re-approves the
-                    // SAME PSBT instead of the modal tearing down.
-                    error={confirmAction.error}
-                    chainLabel={descriptor?.displayName || chainId}
-                    feeText={feeEstimate?.coinAmount
-                        ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()
-                        : undefined}
-                    credentialsReady={signerReady || password.length > 0}
-                    credentials={signerReady ? (
-                        <p className={styles.hint}>
-                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                        </p>
-                    ) : (
-                        <Input
-                            type="password"
-                            label="Password"
-                            hint="Required to sign."
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            autoComplete="current-password"
-                        />
-                    )}
-                />
-            ) : null}
-        </>,
+        <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
+            <Button
+                type="submit"
+                form="send-form"
+                variant="primary"
+                block
+            >
+                Send
+            </Button>
+        </div>,
     );
 }
 

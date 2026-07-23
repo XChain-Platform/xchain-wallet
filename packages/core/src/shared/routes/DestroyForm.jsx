@@ -22,6 +22,14 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import {
+    isConfirmModalSliceEnabled,
+    resolvePreflightPrivacy,
+} from '../../schemas/settings.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -88,6 +96,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         isHwSource,
         hwStatus,
         onHwStatusChange,
+        buildFrom,
         submit,
     } = useActionForm({
         walletId,
@@ -156,6 +165,20 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    //  §5.6 slice 2 (actionForms): software destroys go through the
+    // single-encode confirm modal (compose + tamper + sdk.preflight all
+    // host-side); hardware + watcher keep the legacy review stage. The
+    // typed-DESTROY gate moves into the modal's credentials block.
+    const { settings } = useSettings();
+    const confirmAction = useConfirmAction();
+    const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms');
+    const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
+    const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
+    // The modal's password field writes `password` state; the approve
+    // callback reads the ref so it sees the latest keystrokes.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
     useEffect(() => {
         if (stage === 'review') {
             setTimeout(() => passwordRef.current?.focus(), 0);
@@ -169,14 +192,62 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     }), [ticker, amount]);
 
     const decoded = useMemo(() => {
-        if (stage !== 'review' && stage !== 'submitting') return null;
+        if (stage !== 'review' && stage !== 'submitting' && !confirmModalOpen) return null;
         return decoderLib.decodeAction({
             action: 'DESTROY',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, actionParams, chainId]);
+    }, [stage, confirmModalOpen, actionParams, chainId]);
+
+    // Single-encode confirm (mirrors Send slice 1): compose + tamper-check +
+    // pre-flight run HOST-side; Approve signs the byte-identical prebuilt
+    // PSBT via destroyToken.prebuiltPsbt. Reject is a calm no-op back to
+    // the form; real failures land in the form error banner.
+    async function openConfirmModal() {
+        const from = buildFrom();
+        if (!chainId || !from) return;
+        setSubmitError(null);
+        setTypedConfirm('');
+        try {
+            const res = await confirmAction.confirm({
+                chainId,
+                source: from.address,
+                preflightOpts: {
+                    mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
+                },
+                compose: () => messaging.composeForConfirm({
+                    walletId,
+                    chainId,
+                    from,
+                    actionData: { action: 'DESTROY', params: actionParams },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                }),
+                preflight: (o) => messaging.preflight({ chainId, ...o }),
+                onApprove: (_creds, composed) => submit({
+                    params: actionParams,
+                    password: passwordValueRef.current,
+                    extraBase: {
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt: {
+                            psbtHex: composed.psbt,
+                            encoding: composed.encoding,
+                            actionString: composed.actionString,
+                            version: composed.version,
+                        },
+                    },
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
+            console.error('Destroy (confirm) failed:', err); // eslint-disable-line no-console
+            setFormError(humanizeError(err, 'destroy').message);
+        }
+    }
 
     function handleReview(event) {
         event.preventDefault();
@@ -198,6 +269,13 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             return;
         }
         setFormError(null);
+        //  slice 2: with the flag on, software destroys go straight
+        // to the single-encode confirm modal instead of the legacy review
+        // stage. Hardware + watcher keep the legacy path for this slice.
+        if (singleEncode && !isWatcherMode && !isHwSource) {
+            openConfirmModal();
+            return;
+        }
         setStage('review');
     }
 
@@ -254,9 +332,10 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     : `Destroy${titleSuffix}`}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, footer = null) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}
+            {footer}
         </Screen>
     );
 
@@ -388,6 +467,60 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         );
     }
 
+    //  confirm page, rendered in place of the form (operator
+    // direction 2026-07-22: the overlay modal didn't fit small/mobile
+    // viewports). All other form state stays intact behind it; the
+    // typed-DESTROY gate rides in the credentials block.
+    if (confirmModalOpen) {
+        return (
+            <ConfirmActionModal
+                screenVariant={variant}
+                phase={confirmAction.phase}
+                composed={confirmAction.composed}
+                report={confirmAction.report}
+                reportLoading={confirmAction.phase === 'preflighting'}
+                acknowledged={confirmAction.acknowledged}
+                onAcknowledge={confirmAction.acknowledge}
+                canApprove={confirmAction.canApprove}
+                onApprove={confirmAction.approve}
+                onReject={confirmAction.reject}
+                decoded={decoded}
+                simulation={null}
+                error={confirmAction.error}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                credentialsReady={(signerReady || password.length > 0) && typedConfirmOk}
+                credentials={(
+                    <>
+                        <Input
+                            label='Type "DESTROY" to confirm'
+                            hint="Destroying tokens is irreversible."
+                            value={typedConfirm}
+                            onChange={(e) => setTypedConfirm(e.target.value)}
+                            autoComplete="off"
+                        />
+                        {signerReady ? (
+                            <p className={styles.hint}>
+                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                            </p>
+                        ) : (
+                            <Input
+                                type="password"
+                                label="Password"
+                                hint="Required to sign."
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                autoComplete="current-password"
+                            />
+                        )}
+                    </>
+                )}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -501,9 +634,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !ticker || !amount}
+                    block
+                    loading={confirmAction.composing}
+                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
                 >
-                    Preview
+                    {singleEncode && !isWatcherMode && !isHwSource ? 'Destroy' : 'Preview'}
                 </Button>
             </div>
         </form>,

@@ -118,16 +118,23 @@ for (const name of ['ConfirmActionModal', 'ActionIntentSummary', 'PreflightPanel
     assert.ok(css.length > 200, `${name}.module.css is present and non-empty`);
 }
 
-// §5.2.7 layout contract is a SAFETY property, not cosmetics: header and
-// footer pinned, body the only scroll region, so a long BATCH/AIRDROP
-// intent can never push Reject/Approve off-screen in the ~360x600 popup.
+// §5.2.7 reachability is a SAFETY property, not cosmetics: the user must
+// always be able to reach Reject. In the page form (operator direction
+// 2026-07-22: the overlay didn't fit small/mobile viewports) that holds
+// because this is an ordinary scrolling page whose action row flows
+// inline with the content, so nothing can trap the buttons behind a
+// fixed region. The overlay/panel markup must stay gone, and the footer
+// must NOT dock to the viewport (operator direction: no docked bar, no
+// banded panel above/below the buttons).
 const modalCss = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.module.css');
-assert.match(modalCss, /\.panel\s*\{[^}]*flex-direction:\s*column/s, 'panel is a flex column');
-assert.match(modalCss, /\.panel\s*\{[^}]*max-height/s, 'panel is capped to the viewport');
-assert.match(modalCss, /\.body\s*\{[^}]*overflow-y:\s*auto/s, 'body scrolls internally');
-assert.match(modalCss, /\.body\s*\{[^}]*min-height:\s*0/s, 'body can shrink (flex overflow needs min-height:0)');
-assert.match(modalCss, /\.header\s*\{[^}]*flex:\s*0 0 auto/s, 'header is pinned');
-assert.match(modalCss, /\.footer\s*\{[^}]*flex:\s*0 0 auto/s, 'footer is pinned');
-assert.match(modalCss, /prefers-reduced-motion/, 'entry animation respects reduced-motion');
+assert.match(modalCss, /\.page\s*\{[^}]*flex-direction:\s*column/s, 'page is a flex column');
+assert.match(modalCss, /\.footer\s*\{[^}]*margin-top/s, 'action row is spaced from the content above it');
+assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*position:\s*(sticky|fixed)/s, 'action row is not docked to the viewport');
+assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*background/s, 'action row has no panel background band');
+assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*border-top/s, 'action row has no divider rule above the buttons');
+assert.doesNotMatch(modalCss, /\.overlay\b/, 'no overlay backdrop remains');
+assert.match(modalSrc, /<Screen /, 'confirm surface renders as a Screen page');
+assert.match(modalSrc, /title="Confirm"/, 'page header reads Confirm');
+assert.match(modalSrc, /onBack=\{onReject\}/, 'header back arrow is Reject');
 
 console.log('confirm-modal-send-slice1.smoke.js OK');

@@ -1,58 +1,25 @@
-/* ConfirmActionModal ( §5.1-5.2).
-   Layout contract (§5.2.7, normative): the header and footer are PINNED and
-   the body is the only scroll region, so a long BATCH/AIRDROP intent can
-   never push Approve/Reject off-screen in the ~360x600 extension popup.
-   That is a safety property, not a cosmetic one: the user must always be
-   able to reach Reject. */
+/* ConfirmActionModal ( §5.1-5.2), page form.
+   Approve/Reject flow inline at the end of the content, like every other
+   form's action row, rather than docking to the viewport bottom. The
+   §5.2.7 reachability property still holds: this is an ordinary page, so
+   the buttons are always one scroll away and can never be trapped
+   behind a fixed region. */
 
-.overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background: rgba(15, 23, 42, 0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--xc-space-4);
-}
-
-.panel {
-    width: 100%;
-    max-width: 420px;
-    /* Cap to the viewport so the flex children can scroll internally
-       rather than the panel growing past the fold. */
-    max-height: calc(100vh - (2 * var(--xc-space-4)));
+.page {
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-    overflow: hidden;              /* keeps children inside the rounded corners */
-    animation: confirmPop 140ms ease-out;
 }
 
-@keyframes confirmPop {
-    from { transform: scale(0.96); opacity: 0.4; }
-    to   { transform: scale(1); opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .panel { animation: none; }
-}
-
-/* --- pinned header --- */
+/* --- intent header row (under the "Confirm" page header) --- */
 
 .header {
-    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding-bottom: var(--xc-space-3);
     border-bottom: 1px solid var(--xc-border);
+    margin-bottom: var(--xc-space-3);
 }
 
 .actionLabel {
@@ -72,14 +39,9 @@
     white-space: nowrap;
 }
 
-/* --- scrolling body (the ONLY scroll region) --- */
+/* --- body (the page scrolls; no inner scroll region) --- */
 
 .body {
-    flex: 1 1 auto;
-    min-height: 0;                 /* required for overflow inside a flex column */
-    overflow-y: auto;
-    overscroll-behavior: contain;  /* don't chain the scroll to the page behind */
-    padding: var(--xc-space-4);
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
@@ -90,7 +52,7 @@
     color: var(--xc-text-muted);
 }
 
-/* §5.3.4 in-modal error (e.g. a bad password), sitting directly above the
+/* §5.3.4 in-page error (e.g. a bad password), sitting directly above the
    credentials it refers to. */
 .error {
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -122,19 +84,16 @@
     color: var(--xc-text-muted);
 }
 
-/* --- pinned footer --- */
+/* --- action row (matches the forms' own .actions spacing) --- */
 
 .footer {
-    flex: 0 0 auto;
     display: flex;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    border-top: 1px solid var(--xc-border);
-    background: var(--xc-surface);
+    margin-top: var(--xc-space-4);
 }
 
-/* Reject / Approve share the width evenly; "Approve & Sign on Dogecoin" is
-   long, so the label wraps inside its button rather than overflowing. */
+/* Reject / Approve share the width evenly; a long label wraps inside its
+   button rather than overflowing. */
 .footer > * {
     flex: 1 1 0;
     min-width: 0;

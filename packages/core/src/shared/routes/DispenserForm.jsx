@@ -39,11 +39,9 @@ import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { contactsPickerStyles } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
-import segStyles from './AddressList.module.css';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -147,6 +145,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         /** @type {string | null} */ (null),
     );
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
+    // Picker's "New dispenser address" row: generates immediately (same
+    // flow as Add addresses with Purpose=Dispenser); guards double-taps.
+    const [pickerGenerating, setPickerGenerating] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     // Source (SOURCE) picker: the QR icon on the Source field opens the
     // wallet's own address list. A manual pick pins the source: the newest-receive /
@@ -270,8 +271,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (all.some((a) => a.id === fromAddressId)) return;
             manualSourceRef.current = false;
         }
+        // role='dispenser' excluded: a freshly generated dispenser address
+        // is the newest external index, and SOURCE must stay a personal
+        // funding address (matches the activeAddress.js convention).
         const addrs = all.filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            (a) => a.source === 'hd' && a.role !== 'dispenser'
+                && a.derivationPath?.split('/')?.[4] === '0',
         );
         if (addrs.length > 0) {
             const sorted = [...addrs].sort((a, b) => {
@@ -788,18 +793,53 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         );
     }
 
-    // Full-screen dispenser-address picker, rendered in place of the form
-    // (same pattern as Send's ContactsPickerScreen); all other form state
-    // stays intact behind it.
+    // Full-screen dispenser-address picker: the standard own-address
+    // selector (same screen as My Addresses / every From field), plus a
+    // "New dispenser address" action row that generates a role-tagged
+    // dispenser address on the spot (same flow as Add addresses with
+    // Purpose=Dispenser) and selects it. Picking the SOURCE address
+    // itself maps to mode 'current' (GET_ADDRESS omitted; protocol
+    // defaults to SOURCE); any other record maps to mode 'existing'.
+    // All other form state stays intact behind it.
     if (addressPickerOpen) {
         return (
-            <DispenserAddressPickerScreen
+            <OwnAddressPickerScreen
                 variant={variant}
-                currentAddress={fromAddress}
-                addresses={(chainId && addressesByChain && addressesByChain[chainId]) || []}
-                onPick={(pick) => {
-                    setAddressMode(pick.mode);
-                    setExistingAddressId(pick.mode === 'existing' ? pick.id : null);
+                title="Dispenser address"
+                walletId={walletId}
+                accountId={activeAccountId}
+                chainId={chainId}
+                pickerActions={[{
+                    key: 'new-dispenser-address',
+                    label: pickerGenerating ? 'Generating…' : 'New dispenser address',
+                    onSelect: async () => {
+                        if (pickerGenerating) return;
+                        setPickerGenerating(true);
+                        try {
+                            const rec = await messaging.generateDispenserAddress({
+                                walletId, chainId, accountId: activeAccountId,
+                            });
+                            const byChain = await messaging.getAddressesByChain(walletId, activeAccountId);
+                            setAddressesByChain(byChain);
+                            setAddressMode('existing');
+                            setExistingAddressId(rec.id);
+                            setAddressPickerOpen(false);
+                        } catch (err) {
+                            setFormError(err?.message || 'Could not generate a dispenser address.');
+                            setAddressPickerOpen(false);
+                        } finally {
+                            setPickerGenerating(false);
+                        }
+                    },
+                }]}
+                onPick={(a) => {
+                    if (fromAddress && a.id === fromAddress.id) {
+                        setAddressMode('current');
+                        setExistingAddressId(null);
+                    } else {
+                        setAddressMode('existing');
+                        setExistingAddressId(a.id);
+                    }
                     setAddressPickerOpen(false);
                 }}
                 onBack={() => setAddressPickerOpen(false)}
@@ -1050,92 +1090,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </Button>
             </div>
         </form>,
-    );
-}
-
-/**
- * Address picker for the dispenser's open target, rendered in place of
- * the form. The Addresses segment lists a fresh dispenser address, the
- * current/active address, and any imported (non-HD) addresses; the
- * Dispenser segment lists every role='dispenser' address the wallet has
- * generated. Reuses the ContactsPickerScreen list styling and the
- * AddressList segmented toggle.
- *
- * @param {object} props
- * @param {'small' | 'full'} props.variant
- * @param {any} props.currentAddress
- * @param {any[]} props.addresses      all wallet addresses on the active chain
- * @param {(pick: { mode: 'new' | 'current' | 'existing', id?: string }) => void} props.onPick
- * @param {() => void} props.onBack
- */
-function DispenserAddressPickerScreen({ variant, currentAddress, addresses, onPick, onBack }) {
-    const [segment, setSegment] = useState(/** @type {'addresses' | 'dispenser'} */ ('addresses'));
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            title="Dispenser address"
-            titleIcon={<Icon.AddressIcon />}
-        />
-    );
-    const ab = contactsPickerStyles;
-    const importedAddresses = addresses.filter(
-        (a) => a.source !== 'hd' && a.id !== currentAddress.id,
-    );
-    const dispenserAddresses = addresses.filter((a) => a.role === 'dispenser');
-    return (
-        <Screen variant={variant} header={header}>
-            <div className={segStyles.segmented} role="tablist" aria-label="Address kind">
-                {[['addresses', 'Addresses'], ['dispenser', 'Dispenser']].map(([key, label]) => (
-                    <button
-                        key={key}
-                        type="button"
-                        role="tab"
-                        aria-selected={segment === key}
-                        className={`${segStyles.segment} ${segment === key ? segStyles.segmentActive : ''}`}
-                        onClick={() => setSegment(/** @type {any} */ (key))}
-                    >
-                        {label}
-                    </button>
-                ))}
-            </div>
-            {segment === 'addresses' ? (
-                <ul className={ab.abList}>
-                    <li>
-                        <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'new' })}>
-                            <span className={ab.abName}>New dispenser address</span>
-                            <span className={ab.abAddr}>Generated fresh when you preview</span>
-                        </button>
-                    </li>
-                    <li>
-                        <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'current' })}>
-                            <span className={ab.abName}>Current address</span>
-                            <span className={ab.abAddr} title={currentAddress.address}>{currentAddress.address}</span>
-                        </button>
-                    </li>
-                    {importedAddresses.map((a) => (
-                        <li key={a.id}>
-                            <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'existing', id: a.id })}>
-                                <span className={ab.abName}>{a.label || 'Imported address'}</span>
-                                <span className={ab.abAddr} title={a.address}>{a.address}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            ) : dispenserAddresses.length === 0 ? (
-                <div className={ab.emptyCard}>No dispenser addresses yet</div>
-            ) : (
-                <ul className={ab.abList}>
-                    {dispenserAddresses.map((a) => (
-                        <li key={a.id}>
-                            <button type="button" className={ab.abRow} onClick={() => onPick({ mode: 'existing', id: a.id })}>
-                                <span className={ab.abName}>{a.label || 'Dispenser address'}</span>
-                                <span className={ab.abAddr} title={a.address}>{a.address}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </Screen>
     );
 }
 

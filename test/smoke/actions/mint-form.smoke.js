@@ -98,8 +98,41 @@ assert.ok(
     'MintForm maps the hardware-signer path to mintAssetHw',
 );
 assert.ok(
-    /submit\(\{\s*params:\s*actionParams,\s*password\s*\}\)/.test(src),
-    'MintForm submit stage calls the hook submit() with params + password',
+    /submit\(\{\s*params:\s*actionParams,\s*password,/.test(src),
+    'MintForm submit stage calls the hook submit() with params + password (+ fee opts)',
+);
+
+// --- 4b.  slice 2: single-encode confirm modal ------------------
+// Software mints default into the confirm pipeline: the action button
+// composes host-side, sdk.preflight streams into the modal, Approve
+// signs the byte-identical prebuilt PSBT. HW + watcher keep review.
+assert.ok(
+    /isConfirmModalSliceEnabled\(settings, 'actionForms'\)/.test(src),
+    'MintForm reads the actionForms slice flag with code default',
+);
+assert.ok(
+    /singleEncode && !isWatcherMode && !isHwSource/.test(src),
+    'confirm modal is software-only; hardware + watcher keep the legacy review stage',
+);
+assert.ok(
+    /messaging\.composeForConfirm\(\{/.test(src) && /action: 'MINT', params: actionParams/.test(src),
+    'compose runs host-side via composeForConfirm with the MINT actionData',
+);
+assert.ok(
+    /messaging\.preflight\(\{ chainId, \.\.\.o \}\)/.test(src),
+    'sdk.preflight runs host-side via messaging.preflight',
+);
+assert.ok(
+    /prebuiltPsbt:\s*\{\s*psbtHex: composed\.psbt/.test(src),
+    'Approve signs the byte-identical composed PSBT (prebuiltPsbt)',
+);
+assert.ok(
+    /<ConfirmActionModal/.test(src),
+    'MintForm renders the shared ConfirmActionModal',
+);
+assert.ok(
+    /\? 'Mint' : 'Preview'/.test(src),
+    'the primary button reads the action verb on the confirm path',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),

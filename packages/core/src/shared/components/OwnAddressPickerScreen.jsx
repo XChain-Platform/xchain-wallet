@@ -29,6 +29,7 @@ import { coinFromChainId } from './BalanceList.jsx';
  * @param {string} [props.title]
  * @param {(address: any) => void} props.onPick
  * @param {() => void} props.onBack
+ * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   extra rows above the list (see AddressList)
  * @param {'small' | 'full'} [props.variant]  legacy, unused (AddressList derives its own)
  * @param {any[]} [props.addresses]           legacy, unused
  */
@@ -39,6 +40,7 @@ export function OwnAddressPickerScreen({
     title = 'Choose address',
     onPick,
     onBack,
+    pickerActions,
 }) {
     return (
         <AddressList
@@ -48,6 +50,7 @@ export function OwnAddressPickerScreen({
             pickerMode
             title={title}
             onPick={onPick}
+            pickerActions={pickerActions}
             networkFilter={chainId ? coinFromChainId(chainId) : 'all'}
         />
     );

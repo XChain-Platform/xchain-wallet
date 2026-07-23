@@ -9,25 +9,29 @@
 // contact legal@dankest.llc.
 
 // ConfirmActionModal ( §5.1-5.2). The wallet's single standardized
-// confirmation surface: a TRUE modal with exactly two exits, Approve & Sign
-// or Reject. Built on the single-encode pipeline (the previewed PSBT is the
-// signed PSBT). Anatomy top-to-bottom (§5.2): header, intent, balance
-// deltas, pre-flight panel, fee section, credentials + HW note, footer.
+// confirmation surface. Originally an overlay modal; per operator
+// direction 2026-07-22 it renders as a full PAGE in the same frame as the
+// action forms (the overlay didn't fit small/mobile viewports), shown in
+// place of the form the way picker screens are. The exported name stays
+// `ConfirmActionModal` so the  slice wiring and its tests keep
+// their vocabulary. Built on the single-encode pipeline (the previewed
+// PSBT is the signed PSBT). Anatomy top-to-bottom (§5.2): "Confirm"
+// header, intent, balance deltas, pre-flight panel, fee section,
+// credentials + HW note, Approve/Reject footer.
 //
-// Interaction contract (§5.1): full-viewport backdrop, aria-modal, focus
-// trap, background inert; backdrop click is a NO-OP (a deliberate difference
-// from NoticeModal); Escape = Reject in preflighting/ready; once a signature
-// exists both exits lock until a terminal state. Approve disables
-// synchronously in the click handler's tick, before any await.
+// Interaction contract (§5.1, page form): exactly two exits, Approve or
+// Reject; the header back arrow is Reject. The footer is STICKY so
+// Approve/Reject stay reachable however long the intent is (§5.2.7 - a
+// safety property, not cosmetic). Once a signature exists both exits
+// lock until a terminal state. Approve disables synchronously in the
+// click handler's tick, before any await.
 
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
-import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { useState, useCallback } from 'react';
+import { Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import styles from './ConfirmActionModal.module.css';
 
-const PRE_SIGN_PHASES = new Set(['preflighting', 'ready']);
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 
 /**
@@ -46,17 +50,16 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  * @param {string} props.chainLabel
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
- * @param {boolean} [props.credentialsReady]                 whether credentials are complete (Enter/Approve enabled)
- * @param {Error|string|null} [props.error]                  §5.3.4 in-modal error (e.g. a credential failure that re-prompts)
+ * @param {'small'|'full'} [props.screenVariant]             Screen sizing, the caller's shell variant (defaults to 'small')
+ * @param {boolean} [props.credentialsReady]                 whether credentials are complete (Approve enabled)
+ * @param {Error|string|null} [props.error]                  §5.3.4 in-page error (e.g. a credential failure that re-prompts)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
     canApprove, onApprove, onReject, decoded, simulation, chainLabel,
-    credentials, credentialsReady = false, variant = 'action', feeText, error = null,
+    credentials, credentialsReady = false, variant = 'action',
+    screenVariant = 'small', feeText, error = null,
 }) {
-    const rootRef = useRef(null);
-    const panelRef = useRef(null);
-    const initialFocusRef = useRef(null);
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
@@ -66,22 +69,6 @@ export function ConfirmActionModal({
     // the signer has produced it. We approximate "signature exists" as any
     // non-pre-sign, non-terminal signing phase where reject is unsafe.
     const exitsLocked = signaturePhase && !terminal;
-
-    useFocusTrap(panelRef, { active: open, initialFocusRef });
-    useInertBackground(rootRef, { active: open });
-
-    // Escape = Reject, only in pre-sign phases (§5.1).
-    useEffect(() => {
-        if (!open) return undefined;
-        const onKey = (e) => {
-            if (e.key === 'Escape' && PRE_SIGN_PHASES.has(phase)) {
-                e.preventDefault();
-                onReject();
-            }
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [open, phase, onReject]);
 
     // Approve disables SYNCHRONOUSLY in the click handler's tick, before any
     // await (§5.1). The parent's onApprove runs the async signing.
@@ -94,30 +81,28 @@ export function ConfirmActionModal({
 
     if (!open) return null;
 
+    // Back = Reject; the chevron stays visible but inert while a
+    // signature is in flight (both exits locked).
+    const header = (
+        <PageHeader
+            onBack={onReject}
+            backDisabled={exitsLocked}
+            title="Confirm"
+        />
+    );
+
     return (
-        // The overlay is a presentational backdrop only: no onClick handler,
-        // so a backdrop click is a true no-op (a deliberate difference from
-        // NoticeModal, which dismisses on backdrop). The dialog semantics live
-        // on the panel, which is what the focus trap operates over.
-        <div
-            ref={rootRef}
-            className={styles.overlay}
-            data-testid="confirm-modal"
-        >
+        <Screen variant={screenVariant} header={header}>
             <div
-                ref={panelRef}
-                className={styles.panel}
-                role="dialog"
-                aria-modal="true"
+                className={styles.page}
+                data-testid="confirm-modal"
                 aria-label={`Confirm ${decoded?.summary || 'action'}`}
             >
-                {/* Header (pinned) */}
-                <header className={styles.header}>
+                <div className={styles.header}>
                     <span className={styles.actionLabel}>{decoded?.summary?.split('\n')[0]}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
-                </header>
+                </div>
 
-                {/* Body (scrolls) */}
                 <div className={styles.body}>
                     {variant !== 'message' && decoded ? (
                         <ActionIntentSummary decoded={decoded} simulation={simulation} />
@@ -136,7 +121,7 @@ export function ConfirmActionModal({
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
                     ) : null}
 
-                    {/* §5.3.4: a credential failure returns the modal to `ready`
+                    {/* §5.3.4: a credential failure returns the page to `ready`
                         with this error set, so the user retypes and re-approves
                         the SAME PSBT. Sits directly above the credentials block
                         so the message is adjacent to the field it refers to. */}
@@ -146,7 +131,7 @@ export function ConfirmActionModal({
                         </div>
                     ) : null}
 
-                    <div className={styles.credentials} ref={initialFocusRef}>
+                    <div className={styles.credentials}>
                         {credentials}
                     </div>
 
@@ -165,10 +150,11 @@ export function ConfirmActionModal({
                     ) : null}
                 </div>
 
-                {/* Footer (pinned) */}
+                {/* Sticky footer: Approve/Reject stay reachable (§5.2.7). */}
                 <footer className={styles.footer}>
                     <Button
-                        variant="secondary"
+                        variant="danger"
+                        icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
                         disabled={exitsLocked}
                         data-testid="confirm-reject"
@@ -176,15 +162,16 @@ export function ConfirmActionModal({
                         Reject
                     </Button>
                     <Button
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.ThumbsUpIcon />}
                         onClick={handleApprove}
                         disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady}
                         data-testid="confirm-approve"
                     >
-                        Approve &amp; Sign on {chainLabel}
+                        Approve
                     </Button>
                 </footer>
             </div>
-        </div>
+        </Screen>
     );
 }

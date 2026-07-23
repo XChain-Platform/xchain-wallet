@@ -22,7 +22,7 @@ function defaultIconFor(children) {
 
 /**
  * @param {object} props
- * @param {'primary' | 'secondary' | 'ghost' | 'danger'} [props.variant]
+ * @param {'primary' | 'secondary' | 'ghost' | 'danger' | 'success'} [props.variant]
  * @param {'sm' | 'md'} [props.size]
  * @param {boolean} [props.block]
  * @param {boolean} [props.loading]

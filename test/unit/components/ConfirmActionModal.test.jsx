@@ -36,7 +36,7 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('action-intent')).toBeTruthy();
         expect(screen.getByTestId('confirm-chain-badge').textContent).toBe('Bitcoin');
         expect(screen.getByTestId('preflight-panel')).toBeTruthy();
-        expect(screen.getByTestId('confirm-approve').textContent).toMatch(/Approve & Sign on Bitcoin/);
+        expect(screen.getByTestId('confirm-approve').textContent).toMatch(/Approve/);
     });
 
     it('renders no error region by default', () => {
@@ -61,24 +61,28 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
     });
 
-    it('backdrop click is a no-op (does NOT reject)', () => {
-        const onReject = vi.fn();
-        render(<ConfirmActionModal {...base({ onReject })} />);
-        fireEvent.click(screen.getByTestId('confirm-modal'));
-        expect(onReject).not.toHaveBeenCalled();
+    // Page form (operator direction 2026-07-22): the confirm surface
+    // renders as a full page with a "Confirm" header whose back arrow is
+    // Reject, in place of the old overlay modal.
+    it('renders as a page titled Confirm (no overlay dialog)', () => {
+        render(<ConfirmActionModal {...base()} />);
+        expect(screen.getByText('Confirm')).toBeTruthy();
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
 
-    it('Escape rejects in the ready phase', () => {
+    it('the header back arrow rejects in the ready phase', () => {
         const onReject = vi.fn();
         render(<ConfirmActionModal {...base({ onReject })} />);
-        fireEvent.keyDown(window, { key: 'Escape' });
+        fireEvent.click(screen.getByLabelText('Back'));
         expect(onReject).toHaveBeenCalledOnce();
     });
 
-    it('Escape does NOT reject once signing has begun', () => {
+    it('the header back arrow is inert once signing has begun', () => {
         const onReject = vi.fn();
         render(<ConfirmActionModal {...base({ onReject, phase: 'signing' })} />);
-        fireEvent.keyDown(window, { key: 'Escape' });
+        const back = screen.getByLabelText('Back');
+        expect(back.disabled).toBe(true);
+        fireEvent.click(back);
         expect(onReject).not.toHaveBeenCalled();
     });
 

@@ -32,6 +32,8 @@ import {
     ShieldCheck as LucideShieldCheck,
     Save as LucideSave,
     LayoutList as LucideLayoutList,
+    ThumbsUp as LucideThumbsUp,
+    ThumbsDown as LucideThumbsDown,
 } from 'lucide-react';
 
 const STROKE_PROPS = {
@@ -240,6 +242,14 @@ export function PrinterIcon() {
 
 export function SaveIcon() {
     return <LucideSave {...LUCIDE_PROPS} />;
+}
+
+export function ThumbsUpIcon() {
+    return <LucideThumbsUp {...LUCIDE_PROPS} />;
+}
+
+export function ThumbsDownIcon() {
+    return <LucideThumbsDown {...LUCIDE_PROPS} />;
 }
 
 export function HandshakeIcon() {

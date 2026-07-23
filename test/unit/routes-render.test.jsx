@@ -388,7 +388,7 @@ const HD_ADDRESS = Object.freeze({
 // make, capturing every dispatch in `calls`. Any other host call (privacy
 // gate, locale sync, signer status) falls through to a resolving no-op so
 // the render still settles.
-function recordingMessaging({ walletMode = 'full' } = {}) {
+function recordingMessaging({ walletMode = 'full', slices } = {}) {
     const calls = [];
     const record = (method) => (args) => {
         calls.push({ method, args });
@@ -403,13 +403,29 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ 'bitcoin-mainnet': [HD_ADDRESS] }),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode }),
+        getSettings: () => Promise.resolve({
+            walletMode,
+            ...(slices ? { confirmModalSlices: slices } : {}),
+        }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         mintToken: record('mintToken'),
         mintAssetHw: record('mintAssetHw'),
         destroyToken: record('destroyToken'),
         destroyAssetHw: record('destroyAssetHw'),
         buildActionPsbtRequest: record('buildActionPsbtRequest'),
+        //  single-encode confirm pipeline (the actionForms-slice
+        // default path): compose resolves a ComposedAction envelope, the
+        // preflight report is clean so Approve enables.
+        composeForConfirm: (args) => {
+            calls.push({ method: 'composeForConfirm', args });
+            return Promise.resolve({
+                psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
+            });
+        },
+        preflight: (args) => {
+            calls.push({ method: 'preflight', args });
+            return Promise.resolve({ verdict: 'pass', findings: [] });
+        },
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -420,28 +436,46 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
     return { messaging, calls };
 }
 
-// Drive a single-action form from mount to submit, returning the recorded
-// dispatches. `confirm` is the typed-confirmation string some forms gate
-// on (DestroyForm needs "DESTROY").
-async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
-    const { messaging, calls } = recordingMessaging({ walletMode });
+// Mount a single-action form with a locked token context (the ticker
+// input became a picker-driven TokenField in 0375b8f, so tests seed the
+// tick via initialChainId+initialTick) and fill the amount.
+async function mountActionForm(Form, { walletMode, slices } = {}) {
+    const { messaging, calls } = recordingMessaging({ walletMode, slices });
     let utils;
     await domAct(async () => {
         utils = render(
             React.createElement(
                 MessagingProvider,
                 { shell: 'web', messaging },
-                React.createElement(Form, { walletId: 'w', onBack() {} }),
+                React.createElement(Form, {
+                    walletId: 'w',
+                    onBack() {},
+                    initialChainId: 'bitcoin-mainnet',
+                    initialTick: 'JDOG',
+                }),
             ),
         );
         await drainMicrotasks();
     });
-
-    // Fill the composer fields.
     await domAct(async () => {
-        fireEvent.change(utils.getByLabelText('Ticker'), { target: { value: 'JDOG' } });
-        fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '10' } });
+        // AmountField suffixes the active unit into the label ("Amount
+        // (JDOG)"), so match on the prefix.
+        fireEvent.change(utils.getByLabelText(/^Amount/), { target: { value: '10' } });
         await drainMicrotasks();
+    });
+    return { utils, calls };
+}
+
+// Drive a single-action form through the LEGACY review stage to submit,
+// returning the recorded dispatches. Legacy is pinned via an explicit
+// actionForms:false slice override (watcher/HW always take this path;
+// the software default is the confirm modal, covered separately below).
+// `confirm` is the typed-confirmation string some forms gate on
+// (DestroyForm needs "DESTROY").
+async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
+    const { utils, calls } = await mountActionForm(Form, {
+        walletMode,
+        slices: { actionForms: false },
     });
 
     // Preview -> review stage.
@@ -468,6 +502,41 @@ async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
             .pop();
         if (!submitBtn) throw new Error('no enabled submit button in review stage');
         fireEvent.click(submitBtn);
+        await drainMicrotasks();
+    });
+
+    return calls;
+}
+
+// Drive a software form through the DEFAULT single-encode confirm modal
+// ( slice 2): action button -> composeForConfirm -> preflight ->
+// Approve signs the prebuilt PSBT via the software messaging method.
+async function driveActionFormThroughConfirmModal(Form, { actionLabel, confirm } = {}) {
+    const { utils, calls } = await mountActionForm(Form, { walletMode: 'full' });
+
+    // The full-width action button opens the confirm modal.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: actionLabel }));
+        await drainMicrotasks();
+    });
+
+    // Typed-confirmation gate inside the modal (DestroyForm).
+    if (confirm) {
+        const field = utils.queryByLabelText(/type .* to confirm/i);
+        if (field) {
+            await domAct(async () => {
+                fireEvent.change(field, { target: { value: confirm } });
+                await drainMicrotasks();
+            });
+        }
+    }
+
+    // Approve & Sign.
+    await domAct(async () => {
+        const approveBtn = Array.from(utils.container.querySelectorAll('button'))
+            .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
+        if (!approveBtn) throw new Error('no enabled Approve button in confirm modal');
+        fireEvent.click(approveBtn);
         await drainMicrotasks();
     });
 
@@ -531,5 +600,39 @@ describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => 
             action: 'DESTROY',
             params: { VERSION: '0', TICK: 'JDOG', AMOUNT: '10' },
         });
+    });
+
+    //  slice 2 default path: the action button composes the ONE
+    // PSBT host-side, preflight streams into the confirm modal, and
+    // Approve dispatches the software method with the prebuilt PSBT.
+    it('MintForm (software, default) confirms via the single-encode modal and signs the prebuilt PSBT', async () => {
+        const calls = await driveActionFormThroughConfirmModal(MintForm, { actionLabel: 'Mint' });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose, 'composeForConfirm was dispatched').toBeTruthy();
+        expect(compose.args.actionData).toEqual({
+            action: 'MINT',
+            params: { VERSION: '0', TICK: 'JDOG', AMOUNT: '10' },
+        });
+        expect(calls.some((c) => c.method === 'preflight')).toBe(true);
+        const mint = calls.find((c) => c.method === 'mintToken');
+        expect(mint, 'mintToken was dispatched on Approve').toBeTruthy();
+        expect(mint.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+        expect(mint.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
+    });
+
+    it('DestroyForm (software, default) gates the modal on typed DESTROY and signs the prebuilt PSBT', async () => {
+        const calls = await driveActionFormThroughConfirmModal(DestroyForm, {
+            actionLabel: 'Destroy',
+            confirm: 'DESTROY',
+        });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose, 'composeForConfirm was dispatched').toBeTruthy();
+        expect(compose.args.actionData).toEqual({
+            action: 'DESTROY',
+            params: { VERSION: '0', TICK: 'JDOG', AMOUNT: '10' },
+        });
+        const destroy = calls.find((c) => c.method === 'destroyToken');
+        expect(destroy, 'destroyToken was dispatched on Approve').toBeTruthy();
+        expect(destroy.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
     });
 });

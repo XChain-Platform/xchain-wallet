@@ -198,6 +198,14 @@
     border-top: none;
 }
 
+/* Picker-action rows (picker mode only): even space-2 breathing room on
+   both sides (pulling back part of the segmented toggle's space-3
+   margin above). */
+.pickerActionsList {
+    margin-top: calc(-1 * var(--xc-space-1));
+    margin-bottom: var(--xc-space-2);
+}
+
 .addrRow:hover {
     background: var(--xc-bg-muted);
 }

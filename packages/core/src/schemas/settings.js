@@ -65,8 +65,8 @@ export const ADS_DEFAULT_TRIGGER_SATS = 1000;
 // flag would freeze the rollout). Flip a value to `true` here to enable
 // the confirm modal for that slice fleet-wide without a schema change.
 export const CONFIRM_MODAL_SLICE_DEFAULTS = Object.freeze({
-    send: false,
-    actionForms: false,
+    send: true,
+    actionForms: true,
     bespokeFlows: false,
     extensionApproval: false,
 });
