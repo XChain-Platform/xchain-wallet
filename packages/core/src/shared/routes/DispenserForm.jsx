@@ -148,8 +148,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
-    // From (SOURCE) picker: the QR icon on the From field opens the wallet's
-    // own address list. A manual pick pins the source: the newest-receive /
+    // Source (SOURCE) picker: the QR icon on the Source field opens the
+    // wallet's own address list. A manual pick pins the source: the newest-receive /
     // best-token-holder auto-selection effects stand down until the chain
     // changes.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -360,7 +360,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [addressMode, existingAddress]);
 
     // Effective SOURCE for signing / balance checks / review display. The
-    // From field (own-address picker) writes fromAddressId directly, so the
+    // Source field (own-address picker) writes fromAddressId directly, so the
     // source can be any wallet address, including a dispenser address.
     const sourceAddress = fromAddress;
 
@@ -688,7 +688,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
+                    <dt className={styles.detailsLabel}>Source</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={sourceAddress.address} />
                     </dd>
@@ -825,12 +825,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         );
     }
 
-    // From (SOURCE) picker: the wallet's own addresses on the active chain.
+    // Source (SOURCE) picker: the wallet's own addresses on the active chain.
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="Source address"
                 walletId={walletId}
                 accountId={activeAccountId}
                 chainId={chainId}
@@ -889,9 +889,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             {fromAddress ? (
                 <>
-                    {/* Address: where the dispenser opens (GET_ADDRESS). */}
+                    {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
                     <AddressField
-                        label="Address"
+                        label="Dispenser address"
                         icon="addresses"
                         value={addressMode === 'new'
                             ? 'New dispenser address (generated at preview)'
@@ -904,9 +904,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         iconLabel="Change dispenser address"
                     />
 
-                    {/* From: which address funds and signs the action. */}
+                    {/* Source: which address funds and signs the action. */}
                     <AddressField
-                        label="From"
+                        label="Source"
                         icon="addresses"
                         value={fromAddress.address}
                         readOnly
@@ -1028,11 +1028,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             ) : null}
 
-            <NativeFeeToggle
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
-                coinTicker={coinTicker}
-            />
+            <div className={styles.feeToggleGap}>
+                <NativeFeeToggle
+                    checked={payFeeInNativeCoin}
+                    onChange={setPayFeeInNativeCoin}
+                    coinTicker={coinTicker}
+                />
+            </div>
 
             {formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
@@ -1041,9 +1043,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <Button
                     type="submit"
                     variant="primary"
+                    block
                     disabled={!fromAddress || derivingGetAddress || !ticker || !giveAmount || !escrow}
                 >
-                    {derivingGetAddress ? 'Preparing…' : 'Preview'}
+                    {derivingGetAddress ? 'Preparing…' : 'Create'}
                 </Button>
             </div>
         </form>,

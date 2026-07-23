@@ -107,6 +107,10 @@
     margin-top: var(--xc-space-4);
 }
 
+.feeToggleGap {
+    margin-top: var(--xc-space-3);
+}
+
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
