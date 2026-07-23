@@ -35,6 +35,7 @@ import { AmountFieldSection } from './sections/AmountFieldSection.jsx';
 import { AddressFieldSection } from './sections/AddressFieldSection.jsx';
 import { TokenFieldSection } from './sections/TokenFieldSection.jsx';
 import { ChainPickerSection } from './sections/ChainPickerSection.jsx';
+import { NetworkFieldSection } from './sections/NetworkFieldSection.jsx';
 import { FeeSelectorSection } from './sections/FeeSelectorSection.jsx';
 import { VoiceSection } from './sections/VoiceSection.jsx';
 import { StatesSection } from './sections/StatesSection.jsx';
@@ -64,6 +65,7 @@ const SECTIONS = [
     { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection },
     { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection },
     { id: 'chain-picker',          label: 'Chain picker',           Component: ChainPickerSection },
+    { id: 'network-field',         label: 'Network field',          Component: NetworkFieldSection },
     { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },
     { id: 'states',                label: 'Loading / empty / error',Component: StatesSection },

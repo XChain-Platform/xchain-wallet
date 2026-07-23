@@ -108,13 +108,13 @@ for (const [shell, msgPath] of [
         `${shell} messaging.js exports getBroadcastsForAddress`);
 }
 
-// --- StakingDashboard wires the new prop ---
+// --- StakeDetail wires the entry point (More ▸ Operator view) ---
 
-const dash = readFileSync(join(sharedRoutes, 'StakingDashboard.jsx'), 'utf8');
-assert.ok(/onOpenOperatorDashboard/.test(dash),
-    'StakingDashboard accepts onOpenOperatorDashboard prop');
-assert.ok(/Operator view/.test(dash),
-    'StakingDashboard renders the Operator view button');
+const detail = readFileSync(join(sharedRoutes, 'StakeDetail.jsx'), 'utf8');
+assert.ok(/onOpenOperatorDashboard/.test(detail),
+    'StakeDetail accepts onOpenOperatorDashboard prop');
+assert.ok(/Operator view/.test(detail),
+    'StakeDetail renders the Operator view action');
 
 // --- App.jsx wiring ---
 
@@ -128,12 +128,12 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports OperatorDashboard`);
     assert.ok(app.includes("'operator-dashboard'"),
         `${shell} tracks operator-dashboard sub-route`);
-    assert.ok(/onOpenOperatorDashboard=\{\(ref\)\s*=>\s*\{\s*setStakingRef\(ref\);\s*setUnlockedView\('operator-dashboard'\)/.test(app),
-        `${shell} wires StakingDashboard.onOpenOperatorDashboard → operator-dashboard with ref`);
+    assert.ok(/onOpenOperatorDashboard=\{\(\)\s*=>\s*setUnlockedView\('operator-dashboard'\)/.test(app),
+        `${shell} wires StakeDetail.onOpenOperatorDashboard → operator-dashboard`);
     assert.ok(/<OperatorDashboard\b[\s\S]*?address=\{stakingRef\.address\}/.test(app),
         `${shell} App.jsx passes the stakingRef.address through to OperatorDashboard`);
 }
 
 console.log(
-    'OK: operator dashboard smoke (OperatorDashboard 5-section read-only view + Publisher-mode v3 BROADCAST quick-compose with rapid value entry + broadcastsForAddress flow + bg handler + 3-shell messaging + StakingDashboard.onOpenOperatorDashboard prop + 3-shell App.jsx sub-route)',
+    'OK: operator dashboard smoke (OperatorDashboard 5-section read-only view + Publisher-mode v3 BROADCAST quick-compose with rapid value entry + broadcastsForAddress flow + bg handler + 3-shell messaging + StakeDetail.onOpenOperatorDashboard prop + 3-shell App.jsx sub-route)',
 );

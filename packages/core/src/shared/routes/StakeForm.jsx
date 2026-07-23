@@ -15,6 +15,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
@@ -79,7 +80,9 @@ const CAPABILITY_LABELS = {
  * @param {string} props.chainId
  * @param {() => void} props.onBack
  */
-export function StakeForm({ walletId, chainId, onBack }) {
+export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
+    // Seeded from the launching context; the Network field lets the user retarget.
+    const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -429,7 +432,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake on Bitcoin'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake XCHAIN'}
         />
     );
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
@@ -546,7 +549,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Stake on Bitcoin'}
+                                : 'Stake XCHAIN'}
                     </Button>
                 </div>
             </form>,
@@ -596,9 +599,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-            </div>
+            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"

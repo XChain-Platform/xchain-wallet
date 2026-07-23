@@ -15,6 +15,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
@@ -70,7 +71,9 @@ const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake'];
  * @param {string} [props.tick]    when present, defaults the target to this token
  * @param {() => void} props.onBack
  */
-export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
+export function ControllerBindForm({ walletId, chainId: initialChainId, tick, onBack }) {
+    // Seeded from the launching context; the Network field lets the user retarget.
+    const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -540,9 +543,7 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-            </div>
+            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"

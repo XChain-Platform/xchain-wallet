@@ -20,6 +20,7 @@ import {
     AddressField,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -74,9 +75,10 @@ const STAKE_COIN = 'bitcoin';
  * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string|number} props.contractActionIndex - target contract being staked TO
+ * @param {'stake'|'unstake'|'delegate'} [props.initialMode] - preselect the action radio (e.g. a staking position's Unstake quick action)
  * @param {() => void} props.onBack
  */
-export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBack }) {
+export function ContractStakeForm({ walletId, chainId, contractActionIndex, initialMode, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -91,8 +93,9 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
     // Contract metadata (cooldown + slash destination), fetched to surface in the UI
     const [contractMeta, setContractMeta] = useState(/** @type {{ cooldown: number|null, slashDestination: string|null, valid: boolean } | null} */ (null));
 
-    // Mode selection, defaults to stake (the most common operation)
-    const [mode, setMode] = useState(/** @type {'stake'|'unstake'|'delegate'} */ ('stake'));
+    // Mode selection; callers can preselect via initialMode (defaults to
+    // stake, the most common operation)
+    const [mode, setMode] = useState(/** @type {'stake'|'unstake'|'delegate'} */ (initialMode || 'stake'));
     const [amount, setAmount] = useState('');
     const [signingPubkey, setSigningPubkey] = useState('');
     const [tick, setTick] = useState('XCHAIN');
@@ -136,6 +139,17 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
 
     useEffect(() => {
         let cancelled = false;
+        // Demo wallets have no live indexer to serve deploy metadata; use
+        // the fixture so the demo contract positions stay actionable.
+        if (isDemoWallet(walletId)) {
+            const meta = synthesizeDemoContractMeta(chainId, contractActionIndex);
+            setContractMeta({
+                cooldown: meta ? Number(meta.cooldown_blocks) : null,
+                slashDestination: meta ? String(meta.slash_destination) : null,
+                valid: meta != null,
+            });
+            return () => { cancelled = true; };
+        }
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
@@ -157,7 +171,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 if (!cancelled) setLoadError(err?.message || 'Failed to load contract metadata.');
             });
         return () => { cancelled = true; };
-    }, [chainId, contractActionIndex, messaging]);
+    }, [walletId, chainId, contractActionIndex, messaging]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);

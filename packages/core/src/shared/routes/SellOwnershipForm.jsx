@@ -15,6 +15,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    NetworkField,
     AddressText,
     FeeSelector,
  Icon,} from '@xchain-wallet/core/ui';
@@ -66,7 +67,9 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} props.tick              the token whose ownership is for sale
  * @param {string} [props.initialFromAddress]   preferred signing address (issuer)
  */
-export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFromAddress }) {
+export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, tick, initialFromAddress }) {
+    // Seeded from the launching context; the Network field lets the user retarget.
+    const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -415,9 +418,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-            </div>
+            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>

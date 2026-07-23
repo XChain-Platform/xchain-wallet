@@ -58,7 +58,7 @@ const SHEET_PRIMARY = [
     { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'] },
     { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'] },
     { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon, group: ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'] },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresBtc: true },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresBtc: true },
     { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon, group: ['messaging', 'compose-message'] },
     { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon, group: ['contacts'] },
 ];

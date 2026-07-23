@@ -13,7 +13,7 @@ import {
     Screen,
     PageHeader,
     Button,
-    ChainBadge,
+    NetworkField,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -76,19 +76,21 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
+    const [governChains, setGovernChains] = useState(/** @type {string[]} */ ([]));
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
-    // Resolve which governance-capable chain to act on: the first VOTE-capable
-    // chain the wallet has an address on (registry order). A picker across
-    // multiple governance chains is a follow-up.
+    // Resolve which governance-capable chains the wallet can act on; the
+    // first (registry order) seeds the Network field, which lets the user
+    // retarget across the rest.
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                const resolved = GOVERNANCE_CHAIN_IDS.find((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
-                if (resolved) setChainId(resolved);
+                const avail = GOVERNANCE_CHAIN_IDS.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
+                setGovernChains(avail);
+                if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
@@ -106,7 +108,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const header = <PageHeader onBack={onBack} title="Governance" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
@@ -122,7 +123,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
 
     return wrap(
         <>
-            <div className={styles.chainLine}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}</div>
+            <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             <div className={styles.actions} style={{ gap: '0.5rem' }}>
                 <Button variant="primary" onClick={() => onCreate(chainId)}>Create poll</Button>

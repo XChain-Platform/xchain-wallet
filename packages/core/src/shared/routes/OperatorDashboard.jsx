@@ -44,7 +44,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * "Publisher mode" quick-compose for rapid PRICE-oracle BROADCAST
  * value updates (v3 feed-result shape).
  *
- * Reachable from StakingDashboard via the "Operator view" button,
+ * Reachable from StakeDetail via the "Operator view" action,
  * which is rendered only when there's an active stake on the chain.
  *
  * @param {object} props

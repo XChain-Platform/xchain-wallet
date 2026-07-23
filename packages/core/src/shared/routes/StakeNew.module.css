@@ -1,0 +1,125 @@
+/* New-stake chooser: two large option cards (validator staking vs
+   contract staking), plus an inline network list when the wallet has
+   addresses on more than one Bitcoin chain. Card styling follows the
+   surface/border tokens used by the detail-page info cards. */
+
+.wrapFull {
+    display: flex;
+    flex-direction: column;
+    max-width: 560px;
+    margin: var(--xc-space-6) auto 0;
+    padding: var(--xc-space-4);
+}
+
+.wrapPopup {
+    display: flex;
+    flex-direction: column;
+}
+
+.lede {
+    margin: 0 0 var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.option {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-4);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    font-family: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.option:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.option:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.optionIcon {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.optionBody {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.optionTitle {
+    font-weight: 600;
+    font-size: var(--xc-text-md);
+}
+
+.optionDesc {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+/* Inline network step (validator arm, >1 Bitcoin chain only). */
+.chainList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-3);
+}
+
+.chainBtn {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+}
+
+.chainBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.chainIcon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}

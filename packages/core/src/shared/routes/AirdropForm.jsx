@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+ NetworkField,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -650,8 +650,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         onBack();
     }
 
-    const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
-
         const header = (
         <PageHeader
             onBack={onBack}
@@ -659,7 +657,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     : stage === 'wait-index' ? 'Waiting for list to be indexed'
                         : stage === 'review-airdrop' ? 'Review airdrop'
                             : stage === 'done' ? 'Airdrop complete'
-                                : `Airdrop tokens${titleSuffix}`}
+                                : `Airdrop tokens`}
         />
     );
     const wrap = (children) => (
@@ -986,13 +984,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <LockedTokenContext chainId={chainId} tick={token} label="Token to drop" />
             ) : (
                 <>
-                    {chainsWithAddresses.length > 1 ? (
-                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-                    ) : descriptor ? (
-                        <div className={styles.chainLine}>
-                            <ChainBadge descriptor={descriptor} size="sm" />
-                        </div>
-                    ) : null}
+                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                 </>
             )}
 

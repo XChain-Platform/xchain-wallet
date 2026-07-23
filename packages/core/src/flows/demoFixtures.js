@@ -89,7 +89,11 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             // demo show a maxed-out token info surface.
             { tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000', fiatRate: 0.5, imageUrl: DEMO_TOKEN_ICONS.EXAMPLE }, // 100 EXAMPLE
             // Divisible tokens; appear in Tokens tab
-            { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
+            // XChain gas + staking token. Liquid 10,000 here; the staking
+            // dashboard demo (synthesizeDemoStaking) shows a further 50,000
+            // staked, so the two surfaces tell one consistent story.
+            { tick: 'XCHAIN', displayName: 'XChain', divisibility: 8, quantity: '1000000000000', fiatRate: 1.25 }, // 10,000 XCHAIN
+            { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '1000000000000', fiatRate: 30 }, // 10,000 XCP
             // PEPECASH carries an image, so it appears in BOTH Tokens (row) and NFTs (tile)
             { tick: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: DEMO_TOKEN_ICONS.PEPECASH },
             { tick: 'USDX', displayName: 'USD Stablecoin (demo)', divisibility: 8, quantity: '25000000000', fiatRate: 1 },
@@ -598,6 +602,174 @@ export function synthesizeDemoDefiPositions() {
             chain: 'DOGECOIN', chainId: 'dogecoin-regtest', tick: 'DOGE',
         },
     ];
+}
+
+// Validator (capability) staking positions for the §42.7.4 staking
+// surfaces (StakingList rows + the validator StakeDetail). The live
+// path fans out messaging.getStakes / getDelegations / getRewards per
+// address and merges them into one { stakes, delegations, rewards }
+// aggregate; the demo path drops this in instead. Only bitcoin-regtest
+// is populated: staking is BTC-only and the demo wallet holds BTC
+// addresses on regtest. The narrative matches the DeFi-tab
+// "XCHAIN stake delegated to demo-validator-7" position above.
+// Contract-flavored positions live in DEMO_CONTRACT_STAKES_BY_CHAIN
+// below; keeping them out of this lane avoids duplicate rows in the
+// unified staking list.
+const DEMO_STAKING_BY_CHAIN = {
+    'bitcoin-regtest': {
+        stakes: [
+            // The validator position: XCHAIN staked toward the cross-chain
+            // operator capability. This is stakes[0], so it drives the
+            // "Staked" headline and the Unstake/Delegate/Operator actions.
+            {
+                stake_id: 'demo-stake-validator',
+                asset: 'XCHAIN',
+                amount: '50000',
+                capability: 'cross_chain',
+                capability_label: 'Validator · cross-chain operator',
+                status: 'active',
+                block_index: 12_410,
+            },
+        ],
+        delegations: [
+            {
+                delegation_id: 'demo-delegation-validator-7',
+                signing_pubkey: '02a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f901',
+                status: 'active',
+                block_index: 12_412,
+            },
+        ],
+        // Two claimed + one pending; splitRewards() sums all three for
+        // "Lifetime" (80.25) and only the pending one for "Pending" (12.5).
+        rewards: [
+            { action_index: 'demo-reward-3', amount: 12.5, status: 'pending', block_index: 12_470 },
+            { action_index: 'demo-reward-2', amount: 40, status: 'claimed', block_index: 12_300 },
+            { action_index: 'demo-reward-1', amount: 27.75, status: 'claimed', block_index: 12_120 },
+        ],
+    },
+};
+
+/**
+ * Demo validator-staking data for the §42.7.4 staking surfaces, shaped like the
+ * { stakes, delegations, rewards } aggregate the staking list builds from
+ * the live per-address fan-out. Returns empty arrays for chains without
+ * a fixture. Fresh object copies each call so the list's in-place
+ * block-index sort can't mutate the module-level fixture.
+ *
+ * @param {string} chainId
+ * @returns {{ stakes: any[], delegations: any[], rewards: any[] }}
+ */
+export function synthesizeDemoStaking(chainId) {
+    const fixture = DEMO_STAKING_BY_CHAIN[chainId];
+    if (!fixture) return { stakes: [], delegations: [], rewards: [] };
+    return {
+        stakes: fixture.stakes.map((s) => ({ ...s })),
+        delegations: fixture.delegations.map((d) => ({ ...d })),
+        rewards: fixture.rewards.map((r) => ({ ...r })),
+    };
+}
+
+// Contract-targeted staking positions for the contract rows in
+// StakingList / StakeDetail. Distinct from the capability staking
+// above: here a token is locked into a specific contract, with a cooldown
+// on unstake and a slash destination. Only bitcoin-regtest is populated
+// (staking is BTC-only). The 1,000 EXAMPLE in contract #1024 matches the
+// DeFi-tab narrative, so the surfaces tell one story.
+const DEMO_CONTRACT_STAKES_BY_CHAIN = {
+    'bitcoin-regtest': {
+        stakes: [
+            {
+                action_index: 'demo-cstake-1024',
+                target_contract_index: '1024',
+                tick: 'EXAMPLE',
+                amount: '1000',
+                signing_pubkey: '02a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f901',
+            },
+            {
+                action_index: 'demo-cstake-2048',
+                target_contract_index: '2048',
+                tick: 'PEPECASH',
+                amount: '25000',
+                signing_pubkey: '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9',
+            },
+        ],
+        // A position mid-cooldown: slashable until cooldown_end_block.
+        unstakes: [
+            {
+                action_index: 'demo-custake-2048',
+                target_contract_index: '2048',
+                tick: 'PEPECASH',
+                amount: '5000',
+                cooldown_end_block: 12_650,
+            },
+        ],
+        slashEvents: [
+            {
+                action_index: 'demo-slash-2048',
+                target_contract_index: '2048',
+                tick: 'PEPECASH',
+                amount: '250',
+                block_index: 12_500,
+                destination_address: 'bcrt1qdemoslashdest0xchain0treasury0demo0addr',
+            },
+        ],
+    },
+};
+
+/**
+ * Demo contract-staking data for the staking surfaces, shaped like
+ * the { stakes, unstakes, slashEvents } aggregate the components
+ * builds from its per-address fan-out. Returns empty arrays for chains
+ * without a fixture. Fresh copies each call so downstream code can't
+ * mutate the module-level fixture.
+ *
+ * @param {string} chainId
+ * @returns {{ stakes: any[], unstakes: any[], slashEvents: any[] }}
+ */
+export function synthesizeDemoContractStakes(chainId) {
+    const fixture = DEMO_CONTRACT_STAKES_BY_CHAIN[chainId];
+    if (!fixture) return { stakes: [], unstakes: [], slashEvents: [] };
+    return {
+        stakes: fixture.stakes.map((s) => ({ ...s })),
+        unstakes: fixture.unstakes.map((u) => ({ ...u })),
+        slashEvents: fixture.slashEvents.map((e) => ({ ...e })),
+    };
+}
+
+// Deploy-time staking metadata for the demo contracts above, shaped like
+// the row `contracts.byActionIndex` returns. Without this, the demo
+// StakeDetail hero can't show cooldown/slash destination and
+// ContractStakeForm's stakeable gate (cooldown_blocks set at DEPLOY)
+// rejects the very contracts the demo says you hold positions in. The
+// slash destination matches the slash-event fixture so the #2048 story
+// stays coherent.
+const DEMO_CONTRACT_META_BY_CHAIN = {
+    'bitcoin-regtest': {
+        1024: {
+            contract_action_index: '1024',
+            cooldown_blocks: 144,
+            slash_destination: 'bcrt1qdemoslashdest0xchain0treasury0demo0addr',
+        },
+        2048: {
+            contract_action_index: '2048',
+            cooldown_blocks: 240,
+            slash_destination: 'bcrt1qdemoslashdest0xchain0treasury0demo0addr',
+        },
+    },
+};
+
+/**
+ * Demo contract deploy metadata (cooldown + slash destination) for one
+ * contract, or null for contracts/chains without a fixture. Fresh copy
+ * each call so downstream code can't mutate the module-level fixture.
+ *
+ * @param {string} chainId
+ * @param {string|number} contractActionIndex
+ * @returns {{ contract_action_index: string, cooldown_blocks: number, slash_destination: string } | null}
+ */
+export function synthesizeDemoContractMeta(chainId, contractActionIndex) {
+    const meta = DEMO_CONTRACT_META_BY_CHAIN[chainId]?.[String(contractActionIndex)];
+    return meta ? { ...meta } : null;
 }
 
 /**

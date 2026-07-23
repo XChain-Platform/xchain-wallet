@@ -1,0 +1,220 @@
+/* Staking positions: one flat card list across every network, following the
+   My-dispensers list anatomy (48px icon with the chain badge overlaid in the
+   lower-right corner, name/subtitle body, trailing status chip). */
+
+/* Page containers: a plain column so the toolbar's own margin is the only
+   space above the list. The full variant centers to the same width the
+   token selector uses. */
+.wrapFull {
+    display: flex;
+    flex-direction: column;
+    max-width: 560px;
+    margin: var(--xc-space-6) auto 0;
+    padding: var(--xc-space-4);
+}
+
+.wrapPopup {
+    display: flex;
+    flex-direction: column;
+}
+
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    /* Same tight toolbar-to-list gap as the messaging inbox. */
+    margin-bottom: calc(var(--xc-space-1) + 2px);
+}
+
+.search {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.search::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* Per-row unclaimed-reward indicator (§42.7.4: claimable rewards stay
+   visible on the staking root, on the validator rows they belong to). */
+.rewardChip {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-success, #2f9e63);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    border: none;
+    border-top: 1px solid var(--xc-border);
+    background: transparent;
+    width: 100%;
+    text-align: start;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.row:first-of-type {
+    border-top: none;
+}
+
+.row:hover {
+    background: var(--xc-bg-muted);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.iconWrap {
+    position: relative;
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+}
+
+.iconLetter {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-family: var(--xc-font-sans);
+    font-weight: 700;
+    font-size: var(--xc-text-md);
+}
+
+.chainOverlay {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    object-fit: cover;
+    display: block;
+}
+
+.body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.name {
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.subtitle {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* Right-hand column of the row: status chip on top, amount beneath it. */
+.trailing {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--xc-space-1);
+}
+
+/* Status chip on the row's trailing edge; tinted per state. */
+.status {
+    flex: 0 0 auto;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+}
+
+.status_active {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--xc-success, #22C55E);
+}
+
+.status_cooldown {
+    background: rgba(234, 179, 8, 0.15);
+    color: var(--xc-warning, #B45309);
+}
+
+.status_pending {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--xc-info, #2563EB);
+}
+
+.amount {
+    white-space: nowrap;
+    text-align: end;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+/* Circular header "+" button that opens the new-stake flow (same
+   affordance as the dispenser list / messaging inbox). */
+.addBtn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.addBtn:hover {
+    background: var(--xc-bg-muted);
+}

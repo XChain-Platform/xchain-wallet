@@ -154,7 +154,7 @@ export function buildCommands(ctx) {
     );
     if (ctx.hasBtcAddress) {
         list.push({ id: 'nav-contracts', category: 'Navigate', title: 'Contracts', subtitle: 'Smart contracts', keywords: ['vm', 'deploy', 'execute'], Icon: Icon.ContractIcon, run: go('contracts-list') });
-        list.push({ id: 'nav-staking', category: 'Navigate', title: 'Staking', subtitle: 'Capability staking dashboard', keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
+        list.push({ id: 'nav-staking', category: 'Navigate', title: 'Staking', subtitle: 'Your staking positions', keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
     }
     if (ctx.hasGovernanceAddress) {
         list.push({ id: 'nav-governance', category: 'Navigate', title: 'Governance', subtitle: 'Polls and voting', keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });

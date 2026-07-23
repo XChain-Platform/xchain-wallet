@@ -16,6 +16,7 @@ import {
     Input,
     Select,
     ChainBadge,
+    NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
@@ -609,10 +610,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                {' '}Contract #{contractActionIndex}
-            </div>
+            {/* The target contract pins the network, so the field is single-option. */}
+            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="Caller"

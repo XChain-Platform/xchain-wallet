@@ -15,7 +15,7 @@ import {
     Button,
     Input,
     ChainBadge,
-    ChainPicker,
+    NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
@@ -598,19 +598,12 @@ export function DeployContractForm({ walletId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {btcChainsWithAddresses.length > 1 ? (
-                <ChainPicker
-                    label="Chain"
-                    value={chainId}
-                    onChange={setChainId}
-                    chainIds={btcChainsWithAddresses}
-                    chainRegistry={chainRegistry}
-                />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            <NetworkField
+                value={chainId}
+                onChange={setChainId}
+                chainIds={btcChainsWithAddresses.length ? btcChainsWithAddresses : (chainId ? [chainId] : [])}
+                chainRegistry={chainRegistry}
+            />
 
             {fromAddress ? (
                 <AddressField

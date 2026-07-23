@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+ NetworkField,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -370,14 +370,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         setSubmitError(null);
         setStage('form');
     }
-
-    const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
         const header = (
         <PageHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${MODE_LABEL_LOWER[mode]}`
-                    : `${MODE_LABEL[mode]}${titleSuffix}`}
+                    : `${MODE_LABEL[mode]}`}
         />
     );
     const wrap = (children) => (
@@ -601,13 +599,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
                 <>
-                    {chainsWithAddresses.length > 1 ? (
-                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-                    ) : descriptor ? (
-                        <div className={styles.chainLine}>
-                            <ChainBadge descriptor={descriptor} size="sm" />
-                        </div>
-                    ) : null}
+                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                 </>
             )}
 

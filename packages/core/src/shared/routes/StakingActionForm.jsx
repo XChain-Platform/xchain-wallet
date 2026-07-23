@@ -14,11 +14,17 @@ import {
     PageHeader,
     Button,
     Input,
+    Select,
     ChainBadge,
+    NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { formatWithThousands } from '../utils/amountFormat.js';
+import { coinToFiat } from '../../flows/priceLookup.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -44,6 +50,15 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+// House convention: explorer reads answer as a bare array, {data} or {rows}.
+function extractRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp.data)) return resp.data;
+    if (Array.isArray(resp.rows)) return resp.rows;
+    return [];
+}
+
 /**
  * UNSTAKE + COLLECT combined form (§42.7.2 unstake-lane +
  * §42.7.3 collect-rewards).
@@ -67,7 +82,11 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} props.chainId
  * @param {() => void} props.onBack
  */
-export function StakingActionForm({ mode, walletId, chainId, onBack }) {
+export function StakingActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
+    // The launching position seeds the network; the standard Network
+    // picker lets the user retarget the action at any chain the wallet
+    // holds addresses on (the address + fee sections follow along).
+    const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -128,6 +147,112 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+
+    // Full claimable (pending rewards) or unstakeable (active stake)
+    // balance for the source address. Wire formats sweep the full
+    // amount today; the Amount field stays pinned to this total until
+    // the optional partial AMOUNT lands , then it unlocks.
+    const [positions, setPositions] = useState(
+        /** @type {{ stakes: any[], rewards: any[] } | null} */ (null),
+    );
+    useEffect(() => {
+        const address = fromAddress?.address;
+        if (!address) { setPositions(null); return undefined; }
+        let cancelled = false;
+        async function load() {
+            try {
+                let stakes = [];
+                let rewards = [];
+                if (isDemoWallet(walletId)) {
+                    const demo = synthesizeDemoStaking(chainId);
+                    // Demo stake rows carry no signing_pubkey; attribute them
+                    // to the demo delegation's key so key prefill works.
+                    const demoKey = demo.delegations[0]?.signing_pubkey;
+                    stakes = demo.stakes.map((s) => ({ signing_pubkey: demoKey, ...s }));
+                    rewards = demo.rewards;
+                } else if (isUnstake) {
+                    stakes = extractRows(await messaging.getStakesForAddress({ chainId, address }));
+                } else {
+                    rewards = extractRows(await messaging.getRewardsForAddress({ chainId, address }));
+                }
+                if (!cancelled) setPositions({ stakes, rewards });
+            } catch {
+                if (!cancelled) setPositions(null);
+            }
+        }
+        load();
+        return () => { cancelled = true; };
+    }, [walletId, chainId, fromAddress?.address, isUnstake, messaging]);
+
+    // Distinct signing keys this address has staked under. The protocol
+    // buckets stakes per (address, signing_pubkey), so the key selects
+    // WHICH bundle an UNSTAKE returns; the wallet already knows the
+    // candidates, so prefill instead of making the user paste hex.
+    const stakedKeys = useMemo(() => {
+        const keys = [];
+        for (const s of (positions?.stakes || [])) {
+            const k = s.signing_pubkey || s.SIGNING_PUBKEY;
+            if (k && !keys.includes(k)) keys.push(k);
+        }
+        return keys;
+    }, [positions]);
+
+    useEffect(() => {
+        if (isUnstake && !signingPubkey && stakedKeys.length > 0) {
+            setSigningPubkey(stakedKeys[0]);
+        }
+    }, [isUnstake, signingPubkey, stakedKeys]);
+
+    // Unstake: full balance for the selected key (all keys until one is
+    // chosen). Claim: pending rewards for the address.
+    const availableAmt = useMemo(() => {
+        if (!positions) return null;
+        let total = 0;
+        if (isUnstake) {
+            for (const s of positions.stakes) {
+                const key = s.signing_pubkey || s.SIGNING_PUBKEY;
+                if (signingPubkey && key && key !== signingPubkey) continue;
+                const n = Number(s.amount ?? s.AMOUNT ?? s.quantity ?? 0);
+                if (Number.isFinite(n)) total += n;
+            }
+        } else {
+            for (const r of positions.rewards) {
+                const status = String(r.status || '').toLowerCase();
+                if (status !== 'pending' && status !== 'unclaimed') continue;
+                const n = Number(r.amount ?? r.reward ?? 0);
+                if (Number.isFinite(n)) total += n;
+            }
+        }
+        return total;
+    }, [positions, isUnstake, signingPubkey]);
+
+    const [amount, setAmount] = useState('');
+    useEffect(() => {
+        setAmount(availableAmt != null ? String(availableAmt) : '');
+    }, [availableAmt]);
+
+    // §29.3 fiat preview + toggle, same wiring as Send. The canonical
+    // `amount` stays coin-scale; fiat mode only changes the display.
+    // The amount here is XCHAIN and the price plumbing only serves
+    // coin-family rates (no XCHAIN/USD source yet, ): converting
+    // XCHAIN at the BTC price shows absurd fiat values, so the rate
+    // stays null until a token-aware rate exists. AmountField hides
+    // the toggle and the ≈ preview when fiatRate is null.
+    const fiatRate = null;
+    const [amountInputMode, setAmountInputMode] = useState(/** @type {'coin' | 'fiat'} */ ('coin'));
+    const [fiatAmount, setFiatAmount] = useState('');
+    const toggleAmountInputMode = useCallback(() => {
+        if (!fiatRate) return;
+        setAmountInputMode((prev) => {
+            if (prev === 'coin') {
+                const fv = amount ? coinToFiat(amount, fiatRate) : null;
+                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                return 'fiat';
+            }
+            setFiatAmount('');
+            return 'coin';
+        });
+    }, [amount, fiatRate]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const hwSignerInfo = useSignerInfo({
@@ -469,9 +594,19 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+            <div role="status" className={styles.warnings}>
+                <p className={styles.warning}>
+                    {isUnstake
+                        ? 'Unstaking currently returns the full staked balance; choosing a partial amount is coming soon.'
+                        : 'Claiming currently sweeps all pending rewards; choosing a partial amount is coming soon.'}
+                </p>
             </div>
+            <NetworkField
+                value={chainId}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                chainRegistry={chainRegistry}
+            />
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -484,14 +619,44 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
                 />
             ) : null}
 
+            <AmountField
+                label="Amount"
+                amount={amount}
+                fiatAmount={fiatAmount}
+                tick="XCHAIN"
+                fiatRate={fiatRate}
+                amountInputMode={amountInputMode}
+                toggleAmountInputMode={toggleAmountInputMode}
+                onAmountFieldChange={() => {}}
+                onMax={() => setAmount(availableAmt != null ? String(availableAmt) : '')}
+                maxDisabled={availableAmt == null}
+                balanceText={availableAmt != null
+                    ? `${formatWithThousands(String(availableAmt))} XCHAIN available`
+                    : 'Loading…'}
+            />
+
             {isUnstake ? (
                 <>
                     <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                        Enter the signing public key to unstake. Returns the full active balance for that public key (original stake + any top-ups) after the cooldown. The protocol doesn't support partial unstakes.
+                        Unstaking returns the full active balance for the signing key below (original stake + any top-ups) after the cooldown.
                     </p>
+                    {stakedKeys.length > 1 ? (
+                        <Select
+                            label="Staked signing key"
+                            value={stakedKeys.includes(signingPubkey) ? signingPubkey : ''}
+                            onChange={(e) => setSigningPubkey(e.target.value)}
+                            hint="This address has stakes under more than one signing key; pick which one to unstake."
+                        >
+                            {stakedKeys.map((k) => (
+                                <option key={k} value={k}>{`${k.slice(0, 10)}…${k.slice(-8)}`}</option>
+                            ))}
+                        </Select>
+                    ) : null}
                     <Input
                         label="Signing public key"
-                        hint="64-character hex-encoded Ed25519 public key (the same one used to stake)."
+                        hint={stakedKeys.length > 0
+                            ? 'Filled in from your stake; edit only if you staked with a different key.'
+                            : '64-character hex-encoded Ed25519 public key (the same one used to stake).'}
                         value={signingPubkey}
                         onChange={(e) => setSigningPubkey(e.target.value)}
                         autoComplete="off"
@@ -502,7 +667,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
                 </>
             ) : (
                 <p style={{ fontSize: '0.9rem', color: 'var(--muted, #666)' }}>
-                    Claiming sweeps all pending staking rewards for this address into your balance. Rewards continue to accrue after the claim.
+                    Claimed rewards land in your balance, and rewards continue to accrue after the claim.
                 </p>
             )}
 

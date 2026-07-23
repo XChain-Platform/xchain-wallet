@@ -17,6 +17,7 @@ import {
     Select,
     Textarea,
     ChainBadge,
+    NetworkField,
     AddressText,
     FeeSelector,
     AddressField,
@@ -87,7 +88,9 @@ const WEIGHT_MODE_LABEL = {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onCreated]
  */
-export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreated }) {
+export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, onBack, onCreated }) {
+    // Seeded from the launching context; the Network field lets the user retarget.
+    const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -477,7 +480,7 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}</div>
+            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"

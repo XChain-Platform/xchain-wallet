@@ -145,10 +145,12 @@ for (const [shell, appPath] of [
         `${shell} tracks staking-unstake sub-route`);
     assert.ok(app.includes("'staking-claim'"),
         `${shell} tracks staking-claim sub-route`);
-    assert.ok(/onUnstake=\{\(ref\)\s*=>\s*\{\s*setStakingRef\(ref\);\s*setUnlockedView\('staking-unstake'\)/.test(app),
-        `${shell} wires StakingDashboard.onUnstake → staking-unstake with ref`);
-    assert.ok(/onClaimRewards=\{\(ref\)\s*=>\s*\{\s*setStakingRef\(ref\);\s*setUnlockedView\('staking-claim'\)/.test(app),
-        `${shell} wires StakingDashboard.onClaimRewards → staking-claim with ref`);
+    // Validator-kind quick actions on StakeDetail open the two form
+    // views; both forms return to the detail page they came from.
+    assert.ok(/:\s*\(\)\s*=>\s*setUnlockedView\('staking-unstake'\)\}/.test(app),
+        `${shell} wires StakeDetail.onUnstake (validator arm) → staking-unstake`);
+    assert.ok(/onClaimRewards=\{\(\)\s*=>\s*setUnlockedView\('staking-claim'\)\}/.test(app),
+        `${shell} wires StakeDetail.onClaimRewards → staking-claim`);
     assert.ok(/mode="unstake"/.test(app),
         `${shell} App.jsx passes mode="unstake" to StakingActionForm for the unstake route`);
     assert.ok(/mode="claim-rewards"/.test(app),
@@ -156,5 +158,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
+    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
 );

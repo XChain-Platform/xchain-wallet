@@ -399,14 +399,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         setSubmitError(null);
         setStage('form');
     }
-
-    const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
     const header = (
         <PageHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting'
                 ? 'Review swap'
-                : `Swap tokens${titleSuffix}`}
+                : `Swap tokens`}
         />
     );
     const wrap = (children) => (

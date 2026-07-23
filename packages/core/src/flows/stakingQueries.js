@@ -104,7 +104,7 @@ export async function capabilityThresholds({ sdkRegistry, chainId }) {
 
 /**
  * Contract-targeted staking queries, parallel to the capability staking ones above.
- * Backs the §42.7.x ContractStakedPositions dashboard surface.
+ * Backs the §42.7.x contract-stake rows in StakingList/StakeDetail.
  *
  * NOTE: These call sdk.getContractStakes / getContractUnstakes / getContractDelegations /
  * getSlashEvents. These methods need to be added to ExplorerClient in xchain-sdk + REST

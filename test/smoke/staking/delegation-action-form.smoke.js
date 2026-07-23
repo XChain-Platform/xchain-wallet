@@ -151,10 +151,12 @@ for (const [shell, appPath] of [
         `${shell} tracks staking-delegate sub-route`);
     assert.ok(app.includes("'staking-revoke'"),
         `${shell} tracks staking-revoke sub-route`);
-    assert.ok(/onDelegate=\{\(ref\)\s*=>\s*\{\s*setStakingRef\(ref\);\s*setUnlockedView\('staking-delegate'\)/.test(app),
-        `${shell} wires StakingDashboard.onDelegate → staking-delegate with ref`);
-    assert.ok(/onRevokeDelegation=\{\(ref\)\s*=>\s*\{\s*setStakingRef\(ref\);\s*setUnlockedView\('staking-revoke'\)/.test(app),
-        `${shell} wires StakingDashboard.onRevokeDelegation → staking-revoke with ref`);
+    // Validator-kind quick actions on StakeDetail open the two form
+    // views; both forms return to the detail page they came from.
+    assert.ok(/:\s*\(\)\s*=>\s*setUnlockedView\('staking-delegate'\)\}/.test(app),
+        `${shell} wires StakeDetail.onDelegate (validator arm) → staking-delegate`);
+    assert.ok(/onRevokeDelegation=\{\(\)\s*=>\s*setUnlockedView\('staking-revoke'\)\}/.test(app),
+        `${shell} wires StakeDetail.onRevokeDelegation → staking-revoke`);
     assert.ok(/mode="delegate"/.test(app),
         `${shell} App.jsx passes mode="delegate" to DelegationActionForm for the delegate route`);
     assert.ok(/mode="revoke"/.test(app),
@@ -162,5 +164,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: delegation action form smoke (DelegationActionForm mode=delegate|revoke + delegateAction/revokeDelegationAction flows with 64-hex Ed25519 validation + revoke auto-prefill via getDelegationsForAddress + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
+    'OK: delegation action form smoke (DelegationActionForm mode=delegate|revoke + delegateAction/revokeDelegationAction flows with 64-hex Ed25519 validation + revoke auto-prefill via getDelegationsForAddress + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
 );

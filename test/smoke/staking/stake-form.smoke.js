@@ -190,10 +190,10 @@ for (const [shell, appPath] of [
     assert.ok(app.includes("'stake-form'"), `${shell} tracks stake-form sub-route`);
     assert.ok(/stakingRef,\s*setStakingRef/.test(app),
         `${shell} declares stakingRef state`);
-    assert.ok(/onStake=\{\(ref\)\s*=>\s*\{\s*setStakingRef\(ref\);\s*setUnlockedView\('stake-form'\)/.test(app),
-        `${shell} wires StakingDashboard.onStake → stake-form with ref`);
+    assert.ok(/onPickValidator=\{\(chainId\)\s*=>\s*\{\s*setStakingRef\(\{ kind: 'validator', chainId, address: '' \}\);\s*setUnlockedView\('stake-form'\)/.test(app),
+        `${shell} wires StakeNew.onPickValidator → stake-form with a validator ref`);
 }
 
 console.log(
-    'OK: stake form smoke (capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + dashboard onStake wire-through)',
+    'OK: stake form smoke (capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + StakeNew onPickValidator wire-through)',
 );

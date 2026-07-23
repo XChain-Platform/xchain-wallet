@@ -18,7 +18,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+ NetworkField,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -644,13 +644,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     // stage === 'compose'
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField

@@ -85,12 +85,13 @@ import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx
 import { ContractsList } from '@xchain-wallet/core/shared/routes/ContractsList.jsx';
 import { ContractDetail } from '@xchain-wallet/core/shared/routes/ContractDetail.jsx';
 import { ContractStakeForm } from '@xchain-wallet/core/shared/routes/ContractStakeForm.jsx';
-import { ContractStakedPositions } from '@xchain-wallet/core/shared/routes/ContractStakedPositions.jsx';
 import { DeployContractForm } from '@xchain-wallet/core/shared/routes/DeployContractForm.jsx';
 import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx';
 import { ContractFundsForm } from '@xchain-wallet/core/shared/routes/ContractFundsForm.jsx';
 import { ControllerBindForm } from '@xchain-wallet/core/shared/routes/ControllerBindForm.jsx';
-import { StakingDashboard } from '@xchain-wallet/core/shared/routes/StakingDashboard.jsx';
+import { StakingList } from '@xchain-wallet/core/shared/routes/StakingList.jsx';
+import { StakeDetail } from '@xchain-wallet/core/shared/routes/StakeDetail.jsx';
+import { StakeNew } from '@xchain-wallet/core/shared/routes/StakeNew.jsx';
 import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
 import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
@@ -156,7 +157,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -299,14 +300,22 @@ function AppInner() {
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
+    // `origin` remembers which flow opened the contract-stake form so its
+    // back button returns there ('contracts-browse' when reached via normal
+    // contract browsing, 'stake-picker' from the new-stake chooser,
+    // 'stake-detail' from a staking position's Add stake / Unstake).
     const [contractRef, setContractRef] = useState(
-        /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, contractActionIndex: string, origin?: 'contracts-browse' | 'stake-picker' | 'stake-detail', initialMode?: 'stake' | 'unstake' | 'delegate' } | null} */ (null),
     );
+    // True while the new-stake chooser's "Contract staking" arm is browsing
+    // contracts, so the contract list's own back button returns to the
+    // chooser instead of home.
+    const [stakeContractPickerActive, setStakeContractPickerActive] = useState(false);
     const [governanceRef, setGovernanceRef] = useState(
         /** @type {{ chainId: string, pollIndex?: string | number } | null} */ (null),
     );
     const [stakingRef, setStakingRef] = useState(
-        /** @type {{ chainId: string, address: string } | null} */ (null),
+        /** @type {{ kind: 'validator' | 'contract', chainId: string, address: string, contractActionIndex?: string } | null} */ (null),
     );
     const [parallelPrefill, setParallelPrefill] = useState(
         /** @type {Array<{ chainId: string, action: string, params: Record<string, string>, note?: string }> | null} */ (null),
@@ -1100,11 +1109,21 @@ function AppInner() {
                     <ContractsList
                         walletId={activeWalletId}
                         onOpenContract={(cid, actionIndex) => {
-                            setContractRef({ chainId: cid, contractActionIndex: String(actionIndex) });
+                            setContractRef({
+                                chainId: cid,
+                                contractActionIndex: String(actionIndex),
+                                origin: stakeContractPickerActive ? 'stake-picker' : 'contracts-browse',
+                            });
                             setUnlockedView('contract-detail');
                         }}
                         onDeploy={() => setUnlockedView('contract-deploy')}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => {
+                            if (stakeContractPickerActive) {
+                                setStakeContractPickerActive(false);
+                                return setUnlockedView('stake-new');
+                            }
+                            return setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -1128,20 +1147,18 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
-                        onBack={() => setUnlockedView('contract-detail')}
-                    />
-                );
-            }
-            if (unlockedView === 'contract-staked-positions' && activeWalletId && contractRef) {
-                return (
-                    <ContractStakedPositions
-                        walletId={activeWalletId}
-                        chainId={contractRef.chainId}
-                        onStakeToContract={(ref) => {
-                            setContractRef(ref);
-                            setUnlockedView('contract-stake');
+                        initialMode={contractRef.initialMode}
+                        onBack={() => {
+                            // Return to whichever flow opened the form: the
+                            // staking list (new-stake picker), the position's
+                            // detail page, or plain contract browsing.
+                            if (contractRef.origin === 'stake-picker') {
+                                setStakeContractPickerActive(false);
+                                return setUnlockedView('staking-dashboard');
+                            }
+                            if (contractRef.origin === 'stake-detail') return setUnlockedView('stake-detail');
+                            return setUnlockedView('contract-detail');
                         }}
-                        onBack={() => setUnlockedView('contract-detail')}
                     />
                 );
             }
@@ -1187,33 +1204,89 @@ function AppInner() {
             }
             if (unlockedView === 'staking-dashboard' && activeWalletId) {
                 return (
-                    <StakingDashboard
+                    <StakingList
                         walletId={activeWalletId}
-                        onStake={(ref) => {
+                        activeAccountId={activeAccountId || undefined}
+                        onOpenStake={(ref) => {
                             setStakingRef(ref);
+                            setUnlockedView('stake-detail');
+                        }}
+                        onNewStake={() => setUnlockedView('stake-new')}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'stake-detail' && activeWalletId && stakingRef) {
+                return (
+                    <StakeDetail
+                        walletId={activeWalletId}
+                        kind={stakingRef.kind}
+                        chainId={stakingRef.chainId}
+                        address={stakingRef.address}
+                        contractActionIndex={stakingRef.contractActionIndex}
+                        onUnstake={stakingRef.kind === 'contract'
+                            ? () => {
+                                setContractRef({
+                                    chainId: stakingRef.chainId,
+                                    contractActionIndex: String(stakingRef.contractActionIndex),
+                                    origin: 'stake-detail',
+                                    initialMode: 'unstake',
+                                });
+                                setUnlockedView('contract-stake');
+                            }
+                            : () => setUnlockedView('staking-unstake')}
+                        onDelegate={stakingRef.kind === 'contract'
+                            ? () => {
+                                setContractRef({
+                                    chainId: stakingRef.chainId,
+                                    contractActionIndex: String(stakingRef.contractActionIndex),
+                                    origin: 'stake-detail',
+                                    initialMode: 'delegate',
+                                });
+                                setUnlockedView('contract-stake');
+                            }
+                            : () => setUnlockedView('staking-delegate')}
+                        onRevokeDelegation={() => setUnlockedView('staking-revoke')}
+                        onClaimRewards={() => setUnlockedView('staking-claim')}
+                        onOpenOperatorDashboard={() => setUnlockedView('operator-dashboard')}
+                        onStakeMore={stakingRef.kind === 'contract'
+                            ? () => {
+                                setContractRef({
+                                    chainId: stakingRef.chainId,
+                                    contractActionIndex: String(stakingRef.contractActionIndex),
+                                    origin: 'stake-detail',
+                                    initialMode: 'stake',
+                                });
+                                setUnlockedView('contract-stake');
+                            }
+                            : undefined}
+                        onOpenContract={stakingRef.kind === 'contract'
+                            ? () => {
+                                setContractRef({
+                                    chainId: stakingRef.chainId,
+                                    contractActionIndex: String(stakingRef.contractActionIndex),
+                                    origin: 'contracts-browse',
+                                });
+                                setUnlockedView('contract-detail');
+                            }
+                            : undefined}
+                        onBack={() => setUnlockedView('staking-dashboard')}
+                    />
+                );
+            }
+            if (unlockedView === 'stake-new' && activeWalletId) {
+                return (
+                    <StakeNew
+                        walletId={activeWalletId}
+                        onPickValidator={(chainId) => {
+                            setStakingRef({ kind: 'validator', chainId, address: '' });
                             setUnlockedView('stake-form');
                         }}
-                        onUnstake={(ref) => {
-                            setStakingRef(ref);
-                            setUnlockedView('staking-unstake');
+                        onPickContract={() => {
+                            setStakeContractPickerActive(true);
+                            setUnlockedView('contracts-list');
                         }}
-                        onClaimRewards={(ref) => {
-                            setStakingRef(ref);
-                            setUnlockedView('staking-claim');
-                        }}
-                        onDelegate={(ref) => {
-                            setStakingRef(ref);
-                            setUnlockedView('staking-delegate');
-                        }}
-                        onRevokeDelegation={(ref) => {
-                            setStakingRef(ref);
-                            setUnlockedView('staking-revoke');
-                        }}
-                        onOpenOperatorDashboard={(ref) => {
-                            setStakingRef(ref);
-                            setUnlockedView('operator-dashboard');
-                        }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('staking-dashboard')}
                     />
                 );
             }
@@ -1232,7 +1305,7 @@ function AppInner() {
                         mode="unstake"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
-                        onBack={() => setUnlockedView('staking-dashboard')}
+                        onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
             }
@@ -1242,7 +1315,7 @@ function AppInner() {
                         mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
-                        onBack={() => setUnlockedView('staking-dashboard')}
+                        onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
             }
@@ -1252,7 +1325,7 @@ function AppInner() {
                         mode="delegate"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
-                        onBack={() => setUnlockedView('staking-dashboard')}
+                        onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
             }
@@ -1262,7 +1335,7 @@ function AppInner() {
                         mode="revoke"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
-                        onBack={() => setUnlockedView('staking-dashboard')}
+                        onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
             }
@@ -1272,7 +1345,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
                         address={stakingRef.address}
-                        onBack={() => setUnlockedView('staking-dashboard')}
+                        onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
             }

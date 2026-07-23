@@ -390,6 +390,9 @@ export {
 } from './demoMode.js';
 export {
     synthesizeDemoBalances,
+    synthesizeDemoStaking,
+    synthesizeDemoContractStakes,
+    synthesizeDemoContractMeta,
     synthesizeDemoHistory,
     synthesizeDemoLinks,
     synthesizeDemoDefiPositions,

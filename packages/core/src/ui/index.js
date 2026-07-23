@@ -32,6 +32,7 @@ export { MultisigBadge } from './MultisigBadge.jsx';
 export { VerifiedBadge } from './VerifiedBadge.jsx';
 export { QrScanner } from './QrScanner.jsx';
 export { ChainPicker } from './ChainPicker.jsx';
+export { NetworkField } from './NetworkField.jsx';
 export { Skeleton } from './Skeleton.jsx';
 export { InfoTip } from './InfoTip.jsx';
 export * as Icon from './icons/index.jsx';

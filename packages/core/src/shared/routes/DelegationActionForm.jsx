@@ -15,6 +15,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
@@ -68,7 +69,9 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} props.chainId
  * @param {() => void} props.onBack
  */
-export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
+export function DelegationActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
+    // Seeded from the launching context; the Network field lets the user retarget.
+    const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -489,9 +492,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div className={styles.chainLine}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-            </div>
+            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"

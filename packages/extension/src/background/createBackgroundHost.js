@@ -2433,7 +2433,7 @@ export function createBackgroundHost(deps) {
     });
 
     // Contract-targeted staking: parallel to the capability staking passthroughs above.
-    // Backs ContractStakedPositions (reads) and ContractStakeForm (write).
+    // Backs StakingList/StakeDetail contract rows (reads) and ContractStakeForm (write).
 
     host.register('contract_stakes.forAddress', async (req, { sdkRegistry }) => {
         return contractStakesForAddress({ ...req, sdkRegistry });
