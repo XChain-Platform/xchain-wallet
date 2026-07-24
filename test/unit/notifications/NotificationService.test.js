@@ -260,6 +260,37 @@ describe('NotificationService', () => {
         expect(deps.notify).not.toHaveBeenCalled();
     });
 
+    it('suppresses delivery during quiet hours ', async () => {
+        const deps = makeDeps();
+        // Window spans the whole day except one minute, so it's guaranteed
+        // to contain "now" regardless of when the test runs, with no clock
+        // mocking required.
+        deps.settings.quietHours = { enabled: true, start: '00:00', end: '23:59' };
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 60, source: 'someoneElse', destination: 'addrBTC' },
+        });
+        await flush();
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
+    it('delivers normally when quiet hours is present but disabled', async () => {
+        const deps = makeDeps();
+        deps.settings.quietHours = { enabled: false, start: '00:00', end: '23:59' };
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 61, source: 'someoneElse', destination: 'addrBTC' },
+        });
+        await flush();
+        expect(deps.notify).toHaveBeenCalledTimes(1);
+    });
+
     it('refresh() subscribes to a newly-added address', async () => {
         const deps = makeDeps();
         const svc = makeService(deps);

@@ -552,4 +552,48 @@ describe('validateSettings', () => {
         const { customChains, ...without } = s;
         expect(validateSettings(without).ok).toBe(true);
     });
+
+    it('rejects non-boolean showFiatInHistory when present', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, showFiatInHistory: 'yes' }).ok).toBe(false);
+    });
+
+    it('accepts showFiatInHistory=true', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, showFiatInHistory: true }).ok).toBe(true);
+    });
+
+    it('accepts missing showFiatInHistory', () => {
+        const s = createDefaultSettings();
+        const { showFiatInHistory, ...without } = s;
+        expect(validateSettings(without).ok).toBe(true);
+    });
+
+    it('defaults showFiatInHistory to false', () => {
+        expect(createDefaultSettings().showFiatInHistory).toBe(false);
+    });
+
+    it('rejects malformed quietHours', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, quietHours: { enabled: true, start: '25:00', end: '08:00' } }).ok).toBe(false);
+        expect(validateSettings({ ...s, quietHours: { enabled: 'yes', start: '22:00', end: '08:00' } }).ok).toBe(false);
+        expect(validateSettings({ ...s, quietHours: { enabled: true, start: '22:00' } }).ok).toBe(false);
+    });
+
+    it('accepts valid quietHours', () => {
+        const s = createDefaultSettings();
+        const r = validateSettings({ ...s, quietHours: { enabled: true, start: '22:00', end: '08:00' } });
+        expect(r.ok).toBe(true);
+    });
+
+    it('accepts missing quietHours', () => {
+        const s = createDefaultSettings();
+        const { quietHours, ...without } = s;
+        expect(validateSettings(without).ok).toBe(true);
+    });
+
+    it('defaults quietHours to disabled 22:00-08:00', () => {
+        const s = createDefaultSettings();
+        expect(s.quietHours).toEqual({ enabled: false, start: '22:00', end: '08:00' });
+    });
 });

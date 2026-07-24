@@ -22,8 +22,11 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { formatFiat } from '../components/BalanceList.jsx';
+import { coinToFiat } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
@@ -460,6 +463,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const proofSettings = useSettings();
     const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
         && !flowsLib.isDemoWallet(walletId);
+    // : History-local fiat toggle, persisted on the Settings record
+    // (same nested-patch pattern as the other §35 settings writes) so the
+    // choice survives navigation and syncs across shells.
+    const showFiatInHistory = Boolean(proofSettings.settings?.showFiatInHistory);
+    const fiatCurrency = proofSettings.settings?.fiatCurrency || 'USD';
+    const toggleShowFiatInHistory = async () => {
+        try {
+            await proofSettings.update({ showFiatInHistory: !showFiatInHistory });
+        } catch {
+            // Best-effort; the toggle simply won't persist this time.
+        }
+    };
     const verifyItems = useMemo(
         () => visibleEntries
             .filter((e) => Number(e.blockIndex) > 0 && e.actionIndex != null && e.actionIndex !== '')
@@ -732,6 +747,15 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             ? <DoubleChevron direction="up" />
                             : <DoubleChevron direction="down" />}
                     </button>
+                    <button
+                        type="button"
+                        className={`${styles.filterDisclosure} ${showFiatInHistory ? styles.filterDisclosureActive : ''}`}
+                        aria-pressed={showFiatInHistory}
+                        onClick={toggleShowFiatInHistory}
+                        title="Show the fiat equivalent for native-coin amounts"
+                    >
+                        {showFiatInHistory ? `Fiat: ${fiatCurrency}` : 'Show fiat'}
+                    </button>
                     <div className={styles.segGroup} role="radiogroup" aria-label="Grouping mode">
                         <button
                             type="button"
@@ -931,6 +955,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
                                                     walletId={walletId}
                                                     verify={actionVerifyMap[entry.key]}
+                                                    showFiatInHistory={showFiatInHistory}
+                                                    fiatCurrency={fiatCurrency}
                                                 />
                                             ))}
                                         </ul>
@@ -953,6 +979,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
                             walletId={walletId}
                             verify={actionVerifyMap[entry.key]}
+                            showFiatInHistory={showFiatInHistory}
+                            fiatCurrency={fiatCurrency}
                         />
                     );
                 })}
@@ -965,10 +993,25 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency }) {
     const { messaging, shell } = useMessaging();
     const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
+
+    // : fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
+    // returns null for anything that isn't unambiguously a native-coin SEND
+    // (in particular, a token SEND carrying a non-native tick), so a token
+    // amount never gets priced against the coin's rate - the exact bug this
+    // deliberately avoids replicating ( in the old numbering).
+    const nativeAmount = showFiatInHistory ? nativeAmountFieldOf(entry) : null;
+    const entryCoin = coinOfChainId(entry?.chainId);
+    const fiatRate = useFiatRate({
+        chainCoin: nativeAmount != null ? entryCoin : null,
+        fiatCurrency: fiatCurrency || 'USD',
+    });
+    const nativeFiatValue = nativeAmount != null && fiatRate
+        ? coinToFiat(nativeAmount, fiatRate)
+        : null;
 
     // ───── More-menu / Save-as-contact state ─────
     // Contacts are fetched once so the "already a contact" check can run
@@ -1038,7 +1081,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         && isPending
         && typeof globalThis.xchainWalletWindow?.openDetached === 'function';
 
-    const detailRows = basicDetailRows(entry, chainTip);
+    const detailRows = basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden);
     const explorerButtons = explorerLinksFor(entry);
 
     const fullRows = fullDetailRows(entry, balancesHidden);
@@ -1441,7 +1484,7 @@ function capitalize(s) {
  * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
  * are skipped so the table only shows what's actually populated.
  */
-function basicDetailRows(entry, chainTip) {
+function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden) {
     if (!entry) return [];
     const rows = [];
 
@@ -1450,6 +1493,23 @@ function basicDetailRows(entry, chainTip) {
     rows.push(['Action', (
         <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
     )]);
+
+    // : fiat-display toggle. Only rendered when the caller resolved a
+    // native-coin amount for this entry (see nativeAmountFieldOf) - token
+    // amounts never reach here, so there's no coin-rate-on-token bug to
+    // replicate.
+    if (nativeAmount != null) {
+        rows.push(['Amount', (
+            <span>
+                {balancesHidden ? '•••••' : formatNumberWithCommas(nativeAmount)}
+                {nativeFiatValue != null ? (
+                    <span className={styles.rowRelativeTime}>
+                        {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue)})
+                    </span>
+                ) : null}
+            </span>
+        )]);
+    }
 
     // Status: second, so success / failure is visible immediately.
     const status = classifyEntryStatus(entry);
@@ -2064,11 +2124,45 @@ function coinOfChainId(chainId) {
     return coin || null;
 }
 
+// : coin family -> native ticker, used to gate the History fiat
+// toggle to genuinely native-coin amounts.
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
+
+/**
+ * Resolve a numeric native-coin amount for `entry`, or `null` when the
+ * amount can't be trusted to price against the chain's own coin rate.
+ *
+ * IMPORTANT ( / old-numbering ): a SEND action carries a
+ * `tick` for BOTH native-coin sends and token sends. Only a SEND whose
+ * `tick` is absent or matches the chain's own native ticker (BTC/DOGE/LTC)
+ * is a native-coin movement; a token SEND (tick = a protocol asset ticker)
+ * must never be priced with the coin's fiat rate, so this returns null for
+ * those. This is the deliberate fix for the known latent bug elsewhere in
+ * the app that conflates token amounts with the coin rate - don't
+ * replicate it here.
+ *
+ * @param {import('./History.jsx').HistoryEntry | null | undefined} entry
+ * @returns {number | null}
+ */
+function nativeAmountFieldOf(entry) {
+    if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    const coin = coinOfChainId(entry.chainId);
+    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    if (!nativeTicker) return null;
+    const raw = entry.raw || {};
+    const tick = raw.tick ?? raw.TICK ?? raw.token;
+    if (tick && String(tick).toUpperCase() !== nativeTicker) return null; // token movement
+    const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
+    if (amt == null) return null;
+    const n = typeof amt === 'number' ? amt : parseFloat(amt);
+    return Number.isFinite(n) ? n : null;
+}
+
 /**
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency }) {
     const d = chainRegistry.get(entry.chainId);
     return (
         <li data-history-key={entry.key}>
@@ -2128,7 +2222,16 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 </span>
             </button>
             {selected ? (
-                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} chainTip={chainTip} indexerWatermark={indexerWatermark} walletId={walletId} />
+                <DetailCard
+                    entry={entry}
+                    peerCache={peerCache}
+                    isFull={isFull}
+                    chainTip={chainTip}
+                    indexerWatermark={indexerWatermark}
+                    walletId={walletId}
+                    showFiatInHistory={showFiatInHistory}
+                    fiatCurrency={fiatCurrency}
+                />
             ) : null}
         </li>
     );

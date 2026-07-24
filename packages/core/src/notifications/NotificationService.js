@@ -32,6 +32,8 @@
 // gated by the `notifications.showAmounts` preference is a follow-up; bodies
 // stay generic for now.)
 
+import { isWithinQuietHours } from './quietHours.js';
+
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
 const SUB_WARN_THRESHOLD = 20; // explorer caps a connection at 25 subscriptions
@@ -270,6 +272,13 @@ export class NotificationService {
         }
 
         if (!plan) return;
+
+        //  quiet hours: suppress delivery (not queue/defer - the
+        // underlying explorer event isn't replayed) during the user's
+        // configured DND window. Checked last, after the per-kind flag,
+        // so quiet hours never masks a legitimately-off notification kind
+        // in tests/logs.
+        if (isWithinQuietHours(settings)) return;
 
         const ident = data.action_index != null
             ? String(data.action_index)

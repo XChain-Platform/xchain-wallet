@@ -28,6 +28,8 @@
 // With no armed alerts it never touches the network; an idle user with the
 // toggle on but no alerts set leaks nothing.
 
+import { isWithinQuietHours } from './quietHours.js';
+
 // Align with priceOracle's SPOT_TTL_MS so a poll usually hits the oracle's
 // in-memory cache rather than issuing a fresh CoinGecko request.
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
@@ -162,7 +164,7 @@ export class PriceAlertWatcher {
                         : null;
                     if (price == null) continue; // no price data for this chain (testnet/regtest/unmapped)
                     if (!this._isSatisfied(alert, price)) continue;
-                    await this._fire(alert, price);
+                    await this._fire(alert, price, settings);
                 }
             }
         } finally {
@@ -177,28 +179,39 @@ export class PriceAlertWatcher {
         return false;
     }
 
-    /** @param {import('../schemas/priceAlert.js').PriceAlert} alert @param {number} price */
-    async _fire(alert, price) {
+    /**
+     * @param {import('../schemas/priceAlert.js').PriceAlert} alert
+     * @param {number} price
+     * @param {import('../schemas/settings.js').Settings | null | undefined} [settings]
+     */
+    async _fire(alert, price, settings) {
         this._fired.add(alert.id); // guard before any await so a slow markTriggered can't double-fire
         const coin = coinDisplayName(alert.chainId);
         const target = formatTarget(alert.targetFiat, alert.fiatCurrency);
         const dir = alert.direction === 'above' ? 'rose above' : 'fell below';
-        try {
-            await this._notify({
-                kind: 'price-alert',
-                title: 'Price alert',
-                // Privacy-safe: coin + threshold only, no balances or keys.
-                body: `${coin} ${dir} ${target}.`,
-                data: {
-                    chainId: alert.chainId,
-                    direction: alert.direction,
-                    targetFiat: alert.targetFiat,
-                    fiatCurrency: alert.fiatCurrency,
-                    alertId: alert.id,
-                },
-            });
-        } catch (e) {
-            this._log.error('PriceAlertWatcher: notify adapter threw', e);
+        //  quiet hours: the threshold still fires and the alert is
+        // still marked triggered (one-shot semantics unchanged), but the
+        // OS/browser notification itself is suppressed during the DND
+        // window. Re-arming after quiet hours behaves exactly like
+        // re-arming any other triggered alert.
+        if (!isWithinQuietHours(settings)) {
+            try {
+                await this._notify({
+                    kind: 'price-alert',
+                    title: 'Price alert',
+                    // Privacy-safe: coin + threshold only, no balances or keys.
+                    body: `${coin} ${dir} ${target}.`,
+                    data: {
+                        chainId: alert.chainId,
+                        direction: alert.direction,
+                        targetFiat: alert.targetFiat,
+                        fiatCurrency: alert.fiatCurrency,
+                        alertId: alert.id,
+                    },
+                });
+            } catch (e) {
+                this._log.error('PriceAlertWatcher: notify adapter threw', e);
+            }
         }
         try {
             await this._markTriggered(alert.id);

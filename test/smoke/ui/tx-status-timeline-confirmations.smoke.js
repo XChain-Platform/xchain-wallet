@@ -79,9 +79,9 @@ assert.ok(/chainTip=\{chainTipByChainId\[entry\.chainId\]\}/.test(historySrc),
     'History.jsx threads chainTip into EntryRow');
 assert.ok(/function EntryRow\(\{[^}]*\bchainTip\b[^}]*\bindexerWatermark\b[^}]*\bwalletId\b[^}]*\}\)/.test(historySrc),
     'EntryRow declares the chainTip + indexerWatermark props');
-assert.ok(/<DetailCard entry=\{entry\} peerCache=\{peerCache\} isFull=\{isFull\} chainTip=\{chainTip\} indexerWatermark=\{indexerWatermark\} walletId=\{walletId\} \/>/.test(historySrc),
+assert.ok(/<DetailCard[\s\S]{0,300}?chainTip=\{chainTip\}[\s\S]{0,300}?indexerWatermark=\{indexerWatermark\}[\s\S]{0,300}?walletId=\{walletId\}[\s\S]{0,300}?\/>/.test(historySrc),
     'EntryRow forwards chainTip + indexerWatermark to DetailCard');
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark, walletId \}\)/.test(historySrc),
+assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark, walletId,?[^}]*\}\)/.test(historySrc),
     'DetailCard declares the chainTip + indexerWatermark props');
 assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} indexerWatermark=\{indexerWatermark\} \/>/.test(historySrc),
     'DetailCard forwards chainTip + indexerWatermark to TxStatusTimeline');

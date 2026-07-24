@@ -150,6 +150,35 @@ describe('PriceAlertWatcher', () => {
         expect(notify).toHaveBeenCalledTimes(2);
     });
 
+    it('suppresses the OS notification during quiet hours but still marks the alert triggered ', async () => {
+        const { watcher, notify, markTriggered } = makeWatcher({
+            price: 71000,
+            settings: {
+                privacy: { priceDataEnabled: true },
+                notifications: { priceAlerts: true },
+                // Whole-day window minus a minute so it reliably contains
+                // "now" without mocking the clock.
+                quietHours: { enabled: true, start: '00:00', end: '23:59' },
+            },
+        });
+        await watcher.pollOnce();
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).toHaveBeenCalledWith('a1');
+    });
+
+    it('delivers normally when quiet hours is present but disabled', async () => {
+        const { watcher, notify } = makeWatcher({
+            price: 71000,
+            settings: {
+                privacy: { priceDataEnabled: true },
+                notifications: { priceAlerts: true },
+                quietHours: { enabled: false, start: '00:00', end: '23:59' },
+            },
+        });
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+    });
+
     it('re-fires after the alert is re-armed (new watcher session)', async () => {
         const alerts = [armedAlert()];
         const { watcher, notify } = makeWatcher({ alerts, price: 71000 });

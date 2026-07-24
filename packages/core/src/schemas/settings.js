@@ -168,6 +168,8 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant: `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
  * @property {typeof NETWORKS[number]} [activeNetwork]                                                       v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
  * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
+ * @property {boolean} [showFiatInHistory]                                                                   v2-tolerant: . When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
+ * @property {{ enabled: boolean, start: string, end: string }} [quietHours]                                 v2-tolerant: . Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
  */
 
 // Form-draft retention (surfaced in Settings > Privacy, Cluster P FU 6).
@@ -209,6 +211,11 @@ export const SIGN_THROTTLE_BURST_MIN = 1;
 export const SIGN_THROTTLE_BURST_MAX = 1000;
 export const SIGN_THROTTLE_WINDOW_MS_MIN = 1_000;
 export const SIGN_THROTTLE_WINDOW_MS_MAX = 24 * 60 * 60 * 1000;
+
+// Quiet hours : 'HH:MM' 24h local-time strings only. Kept narrow
+// (no seconds, no timezone) since the UI is a plain <input type="time">.
+export const QUIET_HOURS_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const QUIET_HOURS_DEFAULT = Object.freeze({ enabled: false, start: '22:00', end: '08:00' });
 
 /** @returns {Settings} */
 export function createDefaultSettings() {
@@ -259,6 +266,8 @@ export function createDefaultSettings() {
         hiddenTokens: [],
         showPinAffordance: false,
         showHideAffordance: false,
+        showFiatInHistory: false,
+        quietHours: { ...QUIET_HOURS_DEFAULT },
         verifyProofs: true,
         keyboard: { bindings: {} },
         showVariantBadge: false,
@@ -564,6 +573,25 @@ export function validateSettings(record) {
             'activeNetwork',
             isOneOf(r.activeNetwork, NETWORKS),
             `must be one of ${NETWORKS.join(', ')}`,
+        );
+    }
+    if (r.showFiatInHistory !== undefined) {
+        check(
+            errors,
+            'showFiatInHistory',
+            isBoolean(r.showFiatInHistory),
+            'must be a boolean when present',
+        );
+    }
+    if (r.quietHours !== undefined) {
+        check(
+            errors,
+            'quietHours',
+            isPlainObject(r.quietHours)
+                && isBoolean(r.quietHours.enabled)
+                && QUIET_HOURS_TIME_RE.test(r.quietHours.start)
+                && QUIET_HOURS_TIME_RE.test(r.quietHours.end),
+            "must be { enabled: boolean, start: 'HH:MM', end: 'HH:MM' } when present",
         );
     }
     if (r.customChains !== undefined) {

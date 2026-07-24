@@ -69,4 +69,14 @@ assert.match(src, /priceDataEnabled === false/, 'gates on the price-data privacy
 assert.match(src, /Native coin price data/, 'surfaces the price-data dependency to the user');
 assert.match(src, /Re-arm/, 'offers re-arm on a triggered alert');
 
+// : quiet-hours (DND) scheduling block.
+assert.match(src, /import \{ QUIET_HOURS_DEFAULT \}/, 'imports the schema quiet-hours default');
+assert.match(src, /function QuietHoursRow/, 'defines a QuietHoursRow component');
+assert.match(src, /<QuietHoursRow settings=\{settings\} update=\{update\} \/>/, 'mounts QuietHoursRow under the flag list');
+assert.match(src, /Quiet hours/, 'labels the quiet-hours toggle');
+assert.match(src, /quietHours:\s*\{\s*\.\.\.qh,\s*enabled\s*\}/, 'writes the enabled flag through a nested quietHours patch');
+assert.match(src, /type="time"/, 'renders start/end time inputs');
+const schemaHasQuietHours = /quietHours\??:/.test(schemaSrc) || readFileSync(schemaPath, 'utf8').includes('quietHours');
+assert.ok(schemaHasQuietHours, 'schema documents/defines quietHours');
+
 console.log('settings-notifications smoke OK');

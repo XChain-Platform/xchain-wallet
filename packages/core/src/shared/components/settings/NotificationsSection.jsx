@@ -25,7 +25,18 @@ import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
+import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, ROW_HINT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+
+const TIME_INPUT = {
+    background: 'var(--xc-surface-2, transparent)',
+    color: 'var(--xc-text)',
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-space-1) var(--xc-space-2)',
+    fontFamily: 'inherit',
+    fontSize: 'var(--xc-text-sm)',
+};
 
 const PERMISSION_BUTTON = {
     background: 'var(--xc-accent, #3a7afe)',
@@ -165,6 +176,71 @@ export function NotificationsSection({ walletId } = {}) {
                     ) : null}
                 </div>
             ))}
+            <QuietHoursRow settings={settings} update={update} />
+        </div>
+    );
+}
+
+/**
+ * : Do-not-disturb window. When on, every notification kind above
+ * (including price alerts) is suppressed while the local clock is inside
+ * [start, end); an end before start wraps past midnight (e.g. 22:00-08:00).
+ * Delivery is dropped, not queued: nothing catches up once the window ends.
+ */
+function QuietHoursRow({ settings, update }) {
+    const qh = settings.quietHours || QUIET_HOURS_DEFAULT;
+
+    const onToggle = async (enabled) => {
+        try {
+            await update({ quietHours: { ...qh, enabled } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('notifications.quietHours update failed:', err);
+        }
+    };
+    const onTimeChange = async (field, value) => {
+        if (!value) return;
+        try {
+            await update({ quietHours: { ...qh, [field]: value } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('notifications.quietHours update failed:', err);
+        }
+    };
+
+    return (
+        <div style={STACK}>
+            <ToggleRow
+                label="Quiet hours"
+                hint="Pause all notifications, including price alerts, during a daily time window."
+                checked={qh.enabled === true}
+                onChange={onToggle}
+            />
+            {qh.enabled ? (
+                <div style={MANAGER}>
+                    <div style={ALERT_ROW}>
+                        <label htmlFor="quiet-hours-start">From</label>
+                        <input
+                            id="quiet-hours-start"
+                            type="time"
+                            style={TIME_INPUT}
+                            value={qh.start}
+                            onChange={(e) => onTimeChange('start', e.target.value)}
+                        />
+                        <label htmlFor="quiet-hours-end">To</label>
+                        <input
+                            id="quiet-hours-end"
+                            type="time"
+                            style={TIME_INPUT}
+                            value={qh.end}
+                            onChange={(e) => onTimeChange('end', e.target.value)}
+                        />
+                    </div>
+                    <span style={ROW_HINT}>
+                        {qh.start} to {qh.end} your device's local time, every day.
+                    </span>
+                </div>
+            ) : null}
         </div>
     );
 }
