@@ -59,9 +59,24 @@ assert.ok(/label="Signing public key"/.test(formSrc),
 assert.ok(/SIGNING_PUBKEY:\s*signingPubkey\.trim/.test(formSrc),
     'StakingActionForm passes SIGNING_PUBKEY in action params');
 
-// Protocol-correct copy: full balance returned (no partial unstake).
-assert.ok(/full active balance/.test(formSrc),
-    'StakingActionForm explains unstake returns the full active balance for the pubkey');
+//  partial claim/unstake: the Amount field is editable (real
+// change handler, not a pinned no-op) and a strict partial threads
+// AMOUNT into the action params; a full-balance submit keeps the
+// legacy absent-AMOUNT bytes.
+assert.ok(!formSrc.includes('onAmountFieldChange={() => {}}'),
+    'StakingActionForm Amount field is no longer a pinned no-op');
+assert.ok(/onAmountFieldChange=\{onAmountFieldChange\}/.test(formSrc),
+    'StakingActionForm wires a real onAmountFieldChange handler');
+assert.ok(/AMOUNT:\s*String\(amount\)/.test(formSrc),
+    'StakingActionForm threads AMOUNT into actionParams for a partial');
+assert.ok(/isPartial/.test(formSrc),
+    'StakingActionForm distinguishes partial vs full (legacy bytes) submits');
+assert.ok(/Amount must be greater than zero/.test(formSrc),
+    'StakingActionForm validates amount > 0');
+assert.ok(/Amount exceeds the/.test(formSrc),
+    'StakingActionForm validates amount <= available');
+assert.ok(!/coming soon/.test(formSrc),
+    'StakingActionForm no longer shows the pinned-amount banner');
 
 // Wiring of all four messaging helpers + shared chassis.
 for (const call of [
@@ -105,6 +120,46 @@ await assert.rejects(
     /collectAction: params is required/,
     'collectAction guards params',
 );
+
+//  optional AMOUNT guards: present => positive decimal.
+await assert.rejects(
+    async () => flows.unstakeAction({ params: { SIGNING_PUBKEY: 'a'.repeat(64), AMOUNT: '-1' } }),
+    /AMOUNT must be a positive decimal/,
+    'unstakeAction rejects a non-decimal AMOUNT',
+);
+await assert.rejects(
+    async () => flows.unstakeAction({ params: { SIGNING_PUBKEY: 'a'.repeat(64), AMOUNT: '0' } }),
+    /AMOUNT must be a positive decimal/,
+    'unstakeAction rejects AMOUNT of zero',
+);
+await assert.rejects(
+    async () => flows.collectAction({ params: { VERSION: '0', AMOUNT: '0' } }),
+    /AMOUNT must be a positive decimal/,
+    'collectAction rejects AMOUNT of zero',
+);
+await assert.rejects(
+    async () => flows.contractStakeAction({
+        mode: 'unstake',
+        params: {
+            SIGNING_PUBKEY: 'a'.repeat(64),
+            TARGET_CONTRACT_INDEX: '7',
+            TICK: 'XCHAIN',
+            AMOUNT: '0',
+        },
+    }),
+    /AMOUNT must be greater than 0/,
+    'contractStakeAction (unstake) rejects AMOUNT of zero',
+);
+
+// ContractStakeForm v1 lane: unstake mode renders the amount field and
+// threads the optional partial AMOUNT.
+const csfSrc = readFileSync(join(sharedRoutes, 'ContractStakeForm.jsx'), 'utf8');
+assert.ok(/mode === 'stake' \|\| mode === 'unstake' \?/.test(csfSrc),
+    'ContractStakeForm renders the Amount field for unstake mode too');
+assert.ok(/mode === 'unstake' && amount\.trim\(\) !== ''/.test(csfSrc),
+    'ContractStakeForm threads an optional partial AMOUNT for unstake');
+assert.ok(/stakedAvailable/.test(csfSrc),
+    'ContractStakeForm bounds the unstake amount by the staked balance');
 
 // --- Background host + shell messaging helpers ---
 
@@ -158,5 +213,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
+    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake +  partial amount editing/threading + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
 );

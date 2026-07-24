@@ -23,7 +23,7 @@ import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/c
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, countNonCommaBefore, indexAfterNonCommaCount } from '../utils/amountFormat.js';
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -68,13 +68,20 @@ function extractRows(resp) {
  * and diverge only in which field inputs appear, which messaging
  * helper is called, and the verb rendered on the submit button.
  *
- *   - `mode: 'unstake'`: VERSION|SIGNING_PUBKEY. Capability-staking
- *     model (capability-staking-model.md §3): UNSTAKE addresses a
- *     specific signing pubkey, returning the full active balance for
- *     that pubkey (sum of original v1 stake + any v2 top-ups).
- *     Partial unstake is not a protocol concept.
- *   - `mode: 'claim-rewards'`: VERSION only. No input fields; the
- *     form is a confirm-and-sign screen.
+ *   - `mode: 'unstake'`: VERSION|SIGNING_PUBKEY[|AMOUNT]. Capability-
+ *     staking model (capability-staking-model.md §3): UNSTAKE addresses
+ *     a specific signing pubkey. AMOUNT is the  optional partial:
+ *     absent = full sweep of the pubkey's active balance (original v1
+ *     stake + any v2 top-ups), present = only that much enters cooldown
+ *     and the residual stays staked.
+ *   - `mode: 'claim-rewards'`: VERSION[|AMOUNT]. AMOUNT absent = claim
+ *     all pending rewards, present = claim only that much.
+ *
+ * The wire form stays byte-identical to legacy when the user leaves
+ * the amount at the full balance: AMOUNT is emitted only for a strict
+ * partial (the indexer treats full-equals-absent as state-identical,
+ * but pre-flag-day layers IGNORE a present AMOUNT, so the legacy
+ * bytes are the safe encoding for a full sweep).
  *
  * @param {object} props
  * @param {'unstake' | 'claim-rewards'} props.mode
@@ -149,9 +156,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     }, [chainId, fromAddressId, addressesByChain]);
 
     // Full claimable (pending rewards) or unstakeable (active stake)
-    // balance for the source address. Wire formats sweep the full
-    // amount today; the Amount field stays pinned to this total until
-    // the optional partial AMOUNT lands , then it unlocks.
+    // balance for the source address; upper bound for the editable
+    // Amount field ( partial claim/unstake).
     const [positions, setPositions] = useState(
         /** @type {{ stakes: any[], rewards: any[] } | null} */ (null),
     );
@@ -226,10 +232,38 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         return total;
     }, [positions, isUnstake, signingPubkey]);
 
+    // Prefill with the full balance (the common case is still "take it
+    // all"), but stop overwriting once the user edits: a positions
+    // refresh or key switch must not clobber a typed partial amount.
     const [amount, setAmount] = useState('');
+    const amountTouchedRef = useRef(false);
     useEffect(() => {
+        if (amountTouchedRef.current) return;
         setAmount(availableAmt != null ? String(availableAmt) : '');
     }, [availableAmt]);
+
+    // Same comma/cursor handling as Send: commas are formatting only,
+    // strip before storing, then map the caret by "non-comma chars to
+    // the left" so typing across a thousands boundary doesn't fling it.
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        // Valid partial decimals only ("" / "." / "1." stay allowed).
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        amountTouchedRef.current = true;
+        setAmount(stripped);
+        if (typeof cursorPos === 'number' && amountInputRef.current) {
+            const formattedNew = formatWithThousands(stripped);
+            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
+            const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
+            const el = amountInputRef.current;
+            requestAnimationFrame(() => {
+                if (el && document.activeElement === el) {
+                    try { el.setSelectionRange(nextCursor, nextCursor); } catch { /* selection unavailable on some input types */ }
+                }
+            });
+        }
+    }, []);
 
     // §29.3 fiat preview + toggle, same wiring as Send. The canonical
     // `amount` stays coin-scale; fiat mode only changes the display.
@@ -337,12 +371,21 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
+    // Emit AMOUNT only for a strict partial; a full-balance (or
+    // unknown-balance) submit keeps the legacy absent-AMOUNT bytes
+    // (see the header note on the  wire policy).
+    const isPartial = useMemo(() => {
+        const n = Number(String(amount).replace(/,/g, ''));
+        return Number.isFinite(n) && n > 0 && availableAmt != null && n < availableAmt;
+    }, [amount, availableAmt]);
+
     const actionParams = useMemo(() => {
-        if (isUnstake) {
-            return { VERSION: '0', SIGNING_PUBKEY: signingPubkey.trim().toLowerCase() };
-        }
-        return { VERSION: '0' };
-    }, [isUnstake, signingPubkey]);
+        const base = isUnstake
+            ? { VERSION: '0', SIGNING_PUBKEY: signingPubkey.trim().toLowerCase() }
+            : { VERSION: '0' };
+        if (isPartial) return { ...base, AMOUNT: String(amount).replace(/,/g, '').trim() };
+        return base;
+    }, [isUnstake, signingPubkey, isPartial, amount]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -356,6 +399,15 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 setFormError('Signing pubkey must be exactly 64 hex characters.');
                 return;
             }
+        }
+        const amtN = Number(String(amount).replace(/,/g, ''));
+        if (!amount || !Number.isFinite(amtN) || amtN <= 0) {
+            setFormError('Amount must be greater than zero.');
+            return;
+        }
+        if (availableAmt != null && amtN > availableAmt) {
+            setFormError(`Amount exceeds the ${formatWithThousands(String(availableAmt))} XCHAIN available.`);
+            return;
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -478,10 +530,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
                     {isUnstake
-                        ? `Unstake signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}. The full active balance for this pubkey is returned after the cooldown.`
-                        : 'Claim all pending staking rewards for this address.'}
+                        ? (isPartial
+                            ? `Unstake ${formatWithThousands(actionParams.AMOUNT)} XCHAIN from signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}. The rest stays staked; the unstaked amount is returned after the cooldown.`
+                            : `Unstake signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}. The full active balance for this pubkey is returned after the cooldown.`)
+                        : (isPartial
+                            ? `Claim ${formatWithThousands(actionParams.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
+                            : 'Claim all pending staking rewards for this address.')}
                 </p>
                 <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Amount</dt>
+                    <dd className={styles.detailsValue}>
+                        {isPartial
+                            ? `${formatWithThousands(actionParams.AMOUNT)} XCHAIN`
+                            : `${availableAmt != null ? formatWithThousands(String(availableAmt)) : 'All'} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
+                    </dd>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
@@ -594,13 +656,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <div role="status" className={styles.warnings}>
-                <p className={styles.warning}>
-                    {isUnstake
-                        ? 'Unstaking currently returns the full staked balance; choosing a partial amount is coming soon.'
-                        : 'Claiming currently sweeps all pending rewards; choosing a partial amount is coming soon.'}
-                </p>
-            </div>
             <NetworkField
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -627,7 +682,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 fiatRate={fiatRate}
                 amountInputMode={amountInputMode}
                 toggleAmountInputMode={toggleAmountInputMode}
-                onAmountFieldChange={() => {}}
+                onAmountFieldChange={onAmountFieldChange}
+                inputRef={amountInputRef}
                 onMax={() => setAmount(availableAmt != null ? String(availableAmt) : '')}
                 maxDisabled={availableAmt == null}
                 balanceText={availableAmt != null
@@ -638,7 +694,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             {isUnstake ? (
                 <>
                     <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                        Unstaking returns the full active balance for the signing key below (original stake + any top-ups) after the cooldown.
+                        The amount you choose enters the cooldown and is returned after it; anything left stays staked under the signing key below.
                     </p>
                     {stakedKeys.length > 1 ? (
                         <Select
@@ -667,7 +723,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 </>
             ) : (
                 <p style={{ fontSize: '0.9rem', color: 'var(--muted, #666)' }}>
-                    Claimed rewards land in your balance, and rewards continue to accrue after the claim.
+                    Claimed rewards land in your balance, and rewards continue to accrue after the claim. Any amount you leave unclaimed stays pending.
                 </p>
             )}
 

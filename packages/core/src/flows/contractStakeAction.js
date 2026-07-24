@@ -16,7 +16,8 @@
 //
 // Three operations share the same composer, distinguished by `mode`:
 //   - 'stake'    → STAKE v3 (AMOUNT + SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
-//   - 'unstake'  → UNSTAKE v1 (SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
+//   - 'unstake'  → UNSTAKE v1 (SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK, optional
+//                  AMOUNT =  partial unstake; absent sweeps the full stake)
 //   - 'delegate' → DELEGATE v1 (NEW SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
 //
 // BTC-only (same gate as capability staking); the indexer rejects other chains.
@@ -82,17 +83,23 @@ export async function contractStakeAction(opts) {
         throw new Error('contractStakeAction: params.TICK is required');
     }
 
-    // STAKE v3 also needs AMOUNT
+    // STAKE v3 needs AMOUNT; UNSTAKE v1 takes it as the  optional
+    // partial (absent = full sweep of the (pubkey, contract, tick) stake).
     if (mode === 'stake') {
         if (!opts.params.AMOUNT) {
             throw new Error('contractStakeAction: params.AMOUNT is required for stake');
         }
+    }
+    if ((mode === 'stake' || mode === 'unstake') && opts.params.AMOUNT !== undefined) {
         if (!/^[0-9]+(\.[0-9]+)?$/.test(String(opts.params.AMOUNT))) {
             throw new Error('contractStakeAction: AMOUNT must be a positive decimal');
         }
         if (Number(opts.params.AMOUNT) <= 0) {
             throw new Error('contractStakeAction: AMOUNT must be greater than 0');
         }
+    }
+    if (mode === 'delegate' && opts.params.AMOUNT !== undefined) {
+        throw new Error('contractStakeAction: AMOUNT is not valid for delegate');
     }
 
     const source = normalizeSource(opts.from, 'contractStakeAction');
@@ -112,7 +119,9 @@ export async function contractStakeAction(opts) {
     if (mode === 'stake') {
         actionSummary = `${summaryVerb} ${params.AMOUNT} ${params.TICK} on contract #${params.TARGET_CONTRACT_INDEX}`;
     } else if (mode === 'unstake') {
-        actionSummary = `Unstake ${params.TICK} from contract #${params.TARGET_CONTRACT_INDEX}`;
+        actionSummary = params.AMOUNT !== undefined
+            ? `Unstake ${params.AMOUNT} ${params.TICK} from contract #${params.TARGET_CONTRACT_INDEX}`
+            : `Unstake ${params.TICK} from contract #${params.TARGET_CONTRACT_INDEX}`;
     } else {
         actionSummary = `Rotate signing key for contract #${params.TARGET_CONTRACT_INDEX} (${params.TICK})`;
     }

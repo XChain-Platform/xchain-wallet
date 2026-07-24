@@ -298,15 +298,27 @@ describe(': action forms confirm via the single-encode pipeline', () => {
     });
 
     it('StakingActionForm (unstake) composes UNSTAKE and signs the prebuilt PSBT', async () => {
+        // Seed one staked position so the  editable Amount field has
+        // an available balance; a partial entry must thread AMOUNT through.
         const { calls } = await driveThroughConfirm({
             Form: StakingActionForm,
-            props: { mode: 'unstake' },
+            props: {
+                mode: 'unstake',
+                messagingOverrides: {
+                    getStakesForAddress: () => Promise.resolve([
+                        { signing_pubkey: 'b'.repeat(64), amount: '1000' },
+                    ]),
+                },
+            },
             actionLabel: 'Unstake',
-            fill: (utils) => setValue(utils, 'Signing public key', 'b'.repeat(64)),
+            fill: (utils) => {
+                setValue(utils, 'Signing public key', 'b'.repeat(64));
+                setValue(utils, /^Amount/, '250');
+            },
         });
         expectSingleEncode(calls, {
             action: 'UNSTAKE',
-            params: { SIGNING_PUBKEY: 'b'.repeat(64) },
+            params: { SIGNING_PUBKEY: 'b'.repeat(64), AMOUNT: '250' },
             submitMethod: 'unstakeAction',
         });
     });

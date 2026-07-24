@@ -52,6 +52,15 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+// House convention: explorer reads answer as a bare array, {data} or {rows}.
+function extractRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp.data)) return resp.data;
+    if (Array.isArray(resp.rows)) return resp.rows;
+    return [];
+}
+
 // Contract-targeted staking is BTC-only at launch (mirrors capability staking's
 // indexer-side coin gate). All staking actions in this form go through STAKE v3 /
 // UNSTAKE v1 / DELEGATE v1; capability staking lives in the separate StakeForm.
@@ -192,6 +201,33 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
         tick: tick,
     });
 
+    // Unstake mode's "available" is the STAKED balance on this contract
+    // (per pubkey when one is entered), not the wallet token balance;
+    // it bounds the  optional partial amount.
+    const [stakedAvailable, setStakedAvailable] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        const address = fromAddress?.address;
+        if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
+        let cancelled = false;
+        messaging.getContractStakesForAddress({ chainId, address })
+            .then((r) => {
+                if (cancelled) return;
+                const rows = extractRows(r).filter((row) =>
+                    String(row.target_contract_index) === String(contractActionIndex)
+                    && (!tick || String(row.tick || '').toUpperCase() === tick.trim().toUpperCase())
+                    && (!signingPubkey.trim()
+                        || String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase() === signingPubkey.trim().toLowerCase()));
+                let total = 0;
+                for (const row of rows) {
+                    const n = Number(row.amount ?? row.AMOUNT ?? 0);
+                    if (Number.isFinite(n)) total += n;
+                }
+                setStakedAvailable(rows.length > 0 ? total : null);
+            })
+            .catch(() => { if (!cancelled) setStakedAvailable(null); });
+        return () => { cancelled = true; };
+    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging]);
+
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -229,8 +265,18 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             TICK: tick.trim(),
         };
         if (mode === 'stake') p.AMOUNT = amount.trim();
+        // : unstake AMOUNT is an optional strict partial. Empty
+        // field or the full staked balance keeps the legacy absent-AMOUNT
+        // bytes (full sweep); pre-flag-day layers IGNORE a present AMOUNT,
+        // so legacy bytes are the safe encoding for a full sweep.
+        if (mode === 'unstake' && amount.trim() !== '') {
+            const n = Number(amount.trim());
+            if (!(stakedAvailable != null && Number.isFinite(n) && n >= stakedAvailable)) {
+                p.AMOUNT = amount.trim();
+            }
+        }
         return p;
-    }, [mode, amount, signingPubkey, tick, contractActionIndex]);
+    }, [mode, amount, signingPubkey, tick, contractActionIndex, stakedAvailable]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -253,6 +299,17 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
         if (mode === 'stake') {
             if (!actionParams.AMOUNT || !/^[0-9]+(\.[0-9]+)?$/.test(actionParams.AMOUNT) || Number(actionParams.AMOUNT) <= 0) {
                 setFormError('Amount must be a positive decimal.');
+                return;
+            }
+        }
+        if (mode === 'unstake' && amount.trim() !== '') {
+            const amt = amount.trim();
+            if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || Number(amt) <= 0) {
+                setFormError('Amount must be a positive decimal (or leave it blank to unstake everything).');
+                return;
+            }
+            if (stakedAvailable != null && Number(amt) > stakedAvailable) {
+                setFormError(`Amount exceeds the ${formatWithThousands(String(stakedAvailable))} ${tick.trim().toUpperCase()} staked on this contract.`);
                 return;
             }
         }
@@ -453,7 +510,11 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
                     {verb}
-                    {mode === 'stake' ? ` ${actionParams.AMOUNT} ${actionParams.TICK}` : ` (${actionParams.TICK})`}
+                    {mode === 'stake'
+                        ? ` ${actionParams.AMOUNT} ${actionParams.TICK}`
+                        : mode === 'unstake' && actionParams.AMOUNT !== undefined
+                            ? ` ${actionParams.AMOUNT} ${actionParams.TICK}`
+                            : ` (${actionParams.TICK})`}
                     {' '}on contract #{contractActionIndex}.
                 </p>
                 <dl className={styles.detailsList}>
@@ -473,6 +534,16 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                         <>
                             <dt className={styles.detailsLabel}>Amount</dt>
                             <dd className={styles.detailsValue}>{actionParams.AMOUNT} {actionParams.TICK}</dd>
+                        </>
+                    ) : null}
+                    {mode === 'unstake' ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Amount</dt>
+                            <dd className={styles.detailsValue}>
+                                {actionParams.AMOUNT !== undefined
+                                    ? `${actionParams.AMOUNT} ${actionParams.TICK}`
+                                    : `Full staked balance${stakedAvailable != null ? ` (${formatWithThousands(String(stakedAvailable))} ${actionParams.TICK})` : ''}`}
+                            </dd>
                         </>
                     ) : null}
                     <dt className={styles.detailsLabel}>Cooldown</dt>
@@ -632,7 +703,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                         type="radio"
                         name="contract-stake-mode"
                         checked={mode === 'stake'}
-                        onChange={() => setMode('stake')}
+                        onChange={() => { setMode('stake'); setAmount(''); }}
                     /> Stake
                 </label>
                 <label style={{ marginRight: '1rem' }}>
@@ -640,7 +711,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                         type="radio"
                         name="contract-stake-mode"
                         checked={mode === 'unstake'}
-                        onChange={() => setMode('unstake')}
+                        onChange={() => { setMode('unstake'); setAmount(''); }}
                     /> Unstake
                 </label>
                 <label>
@@ -659,10 +730,12 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
 
-            {mode === 'stake' ? (
+            {mode === 'stake' || mode === 'unstake' ? (
                 <AmountField
                     label="Amount"
-                    hint="How much of the token to stake. Decimals must not exceed the token's precision."
+                    hint={mode === 'stake'
+                        ? "How much of the token to stake. Decimals must not exceed the token's precision."
+                        : 'How much to unstake. Leave blank (or use Max) to unstake the full staked balance; the rest stays staked.'}
                     amount={amount}
                     tick={tick}
                     onAmountFieldChange={(rawValue) => {
@@ -670,13 +743,21 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
-                    onMax={tickAmtBalance && Number(tickAmtBalance) > 0
-                        ? () => setAmount(tickAmtBalance)
-                        : undefined}
-                    maxDisabled={!tickAmtBalance}
-                    balanceText={tickAmtBalance != null && (tick)
-                        ? `${formatWithThousands(tickAmtBalance)} ${String(tick).toUpperCase()} available`
-                        : null}
+                    onMax={mode === 'stake'
+                        ? (tickAmtBalance && Number(tickAmtBalance) > 0
+                            ? () => setAmount(tickAmtBalance)
+                            : undefined)
+                        : (stakedAvailable != null && stakedAvailable > 0
+                            ? () => setAmount(String(stakedAvailable))
+                            : undefined)}
+                    maxDisabled={mode === 'stake' ? !tickAmtBalance : stakedAvailable == null}
+                    balanceText={mode === 'stake'
+                        ? (tickAmtBalance != null && (tick)
+                            ? `${formatWithThousands(tickAmtBalance)} ${String(tick).toUpperCase()} available`
+                            : null)
+                        : (stakedAvailable != null && (tick)
+                            ? `${formatWithThousands(String(stakedAvailable))} ${String(tick).toUpperCase()} staked`
+                            : null)}
                 />
             ) : null}
 
