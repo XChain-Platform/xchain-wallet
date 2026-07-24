@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Derivation-parity guard runs in CI with the SDK anchor wired, reserved-id descriptor integrity check, humanized action labels and error copy across forms, fiatToCoin never emits exponential notation.
+
 ### Added
 - Add addresses form gains a Purpose selector (Receive or Dispenser) that batch-generates role-tagged dispenser addresses, whose default labels are now coin-prefixed (e.g. "BTC Dispenser #1") like receive labels.
 - Send, Mint, and Destroy replace their Preview step with a confirmation page: the action button composes the transaction, runs an SDK pre-flight check, and shows the decoded action for approval before anything is signed.

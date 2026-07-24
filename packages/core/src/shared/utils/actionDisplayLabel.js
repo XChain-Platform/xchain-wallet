@@ -45,12 +45,17 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     SLEEP: 'Scheduled delay',
     COLLECT: 'Collect rewards',
     DELEGATE: 'Delegate',
-    DEPLOY: 'Deploy',
+    DEPLOY: 'Publish contract',
     DEPOSIT: 'Deposit',
     EXECUTE: 'Contract call',
     STAKE: 'Stake',
     UNSTAKE: 'Unstake',
     WITHDRAW: 'Withdraw',
+    // ADDRESS publishes a messaging encryption key (plumbing emitted by the
+    // messaging flows); VOTE is an authorable governance action. Both are
+    // reachable in user History, so map them rather than lean on the fallback.
+    ADDRESS: 'Messaging setup',
+    VOTE: 'Vote',
 });
 
 /**

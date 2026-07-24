@@ -341,5 +341,10 @@ export function fiatToCoin(fiatAmount, rate, decimals = 8) {
     const n = typeof fiatAmount === 'number' ? fiatAmount : parseFloat(fiatAmount);
     if (!Number.isFinite(n) || n < 0) return null;
     const coin = n / rate.rate;
-    return Number(coin.toFixed(decimals)).toString();
+    // Keep the value in fixed-notation string space and only trim insignificant
+    // trailing zeros. Round-tripping through Number(...).toString() re-introduces
+    // exponential notation below 1e-6 (e.g. "9e-8" for $0.01 at a 110k rate),
+    // which is the canonical SEND amount and is rejected by the consensus amount
+    // grammar /^[0-9]+(\.[0-9]+)?$/.
+    return coin.toFixed(decimals).replace(/\.?0+$/, '');
 }

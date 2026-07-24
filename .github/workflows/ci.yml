@@ -29,6 +29,44 @@ jobs:
       - name: Run test gate
         run: pnpm run ci
 
+  # Cross-repo derivation-parity drift guard. The wallet's HD descriptors pin
+  # their wifVersionByte / ADDRESS_PARAMS / coin-type slot against xchain-sdk,
+  # but per-repo CI cannot see sibling repos, so the parity suite skips (see the
+  # XCHAIN_REQUIRE_SIBLINGS gate in test/integration/hd/wallet-sdk-derivation-
+  # parity.test.js) in the single-repo `test` job. This job recreates the
+  # sibling layout (self + xchain-sdk side by side) and runs the suite for real
+  # with XCHAIN_REQUIRE_SIBLINGS=1, so a descriptor<->SDK drift fails CI.
+  # xchain-sdk is private pre-launch, so its checkout uses a read-only deploy
+  # key; drop the ssh-key line when the repos flip public at launch.
+  drift-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: xchain-wallet
+      - name: Check out xchain-sdk sibling
+        uses: actions/checkout@v4
+        with:
+          repository: XChain-Platform/xchain-sdk
+          ssh-key: ${{ secrets.XCHAIN_SDK_DEPLOY_KEY }}
+          path: xchain-sdk
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: xchain-wallet/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: xchain-wallet
+        run: pnpm install --frozen-lockfile
+      - name: Wallet<->SDK derivation-parity guard
+        working-directory: xchain-wallet
+        env:
+          XCHAIN_REQUIRE_SIBLINGS: "1"
+        run: pnpm exec vitest run --config test/vitest/integration.config.js test/integration/hd/wallet-sdk-derivation-parity.test.js
+
   # Build the shipped shells, then run the gates that can ONLY be checked against a
   # real build artifact. None of this can live in the `test` job: it has no dist/.
   build:

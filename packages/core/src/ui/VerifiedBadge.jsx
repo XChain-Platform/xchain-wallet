@@ -32,7 +32,8 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
     const spec = BADGE_SPEC[status];
     if (!spec) return null;
 
-    const title = spec.title + (reason ? ` (${humanizeReason(reason)})` : '');
+    const reasonPhrase = reason ? humanizeReason(reason) : null;
+    const title = spec.title + (reasonPhrase ? ` (${reasonPhrase})` : '');
     const padX = size === 'sm' ? '0.25rem' : '0.4rem';
     const padY = size === 'sm' ? '0.05rem' : '0.1rem';
     const fontSize = size === 'sm' ? '0.7rem' : '0.78rem';
@@ -95,7 +96,11 @@ const BADGE_SPEC = {
 };
 
 // Turn a few common light-client reason codes into a short plain phrase for
-// the tooltip; otherwise show the raw code (still useful to a power user).
+// the tooltip. An unmapped reason (including a raw transport/RPC message that
+// useProofVerification synthesizes from a thrown error) returns null so no
+// parenthetical is shown: the badge label already carries the verdict, and the
+// raw code stays for the log path only rather than leaking SCREAMING_SNAKE
+// jargon into the user-facing tooltip.
 const REASON_TEXT = {
     NOT_YET_CHECKPOINTED: 'this transaction is too new to verify yet',
     CHECKPOINT_PRE_COMMITMENT: 'the network does not publish proofs for this block yet',
@@ -105,5 +110,5 @@ const REASON_TEXT = {
 
 function humanizeReason(reason) {
     const key = String(reason || '');
-    return REASON_TEXT[key] || key;
+    return REASON_TEXT[key] || null;
 }

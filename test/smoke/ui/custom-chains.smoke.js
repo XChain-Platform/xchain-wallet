@@ -157,7 +157,7 @@ const VALID_DESCRIPTOR = {
     const collide = { ...VALID_DESCRIPTOR, id: 'bitcoin-mainnet' };
     await assert.rejects(
         () => addCustomChain({ vault, chainRegistry: registry, descriptor: collide }),
-        /already registered/i,
+        /already registered|reserved id/i,
         'bundled-chain id collision rejected',
     );
 }

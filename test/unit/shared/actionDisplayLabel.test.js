@@ -28,6 +28,12 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('crosschain')).toBe('Cross-chain');
     });
 
+    it('maps ADDRESS, VOTE, and DEPLOY to humanized phrases (not the bare opcode)', () => {
+        expect(actionDisplayLabel('ADDRESS')).toBe('Messaging setup');
+        expect(actionDisplayLabel('VOTE')).toBe('Vote');
+        expect(actionDisplayLabel('DEPLOY')).toBe('Publish contract');
+    });
+
     it('maps both LINK and CROSSCHAIN to the same cross-chain label', () => {
         expect(actionDisplayLabel('LINK')).toBe('Cross-chain');
         expect(actionDisplayLabel('CROSSCHAIN')).toBe('Cross-chain');

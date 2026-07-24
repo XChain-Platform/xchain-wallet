@@ -197,4 +197,22 @@ describe('flows/priceLookup', () => {
         expect(fiatToCoin('20000', rate)).toBe('0.5');
         expect(fiatToCoin('40000', { rate: 0 })).toBeNull();
     });
+
+    it('fiatToCoin emits grammar-valid fixed-notation amounts, never exponential', () => {
+        // Sub-1e-6 coin amounts previously round-tripped to "9e-8" via
+        // Number(...).toString(), which the consensus amount grammar rejects.
+        const rate = { rate: 110000 };
+        expect(fiatToCoin(0.01, rate)).toBe('0.00000009');
+        expect(fiatToCoin(110000, rate)).toBe('1');
+        expect(fiatToCoin(55000, rate)).toBe('0.5');
+        expect(fiatToCoin(0, rate)).toBe('0');
+
+        const grammar = /^[0-9]+(\.[0-9]+)?$/;
+        for (const fiat of [0.01, 0.001, 1, 55000, 110000, 999999]) {
+            const out = fiatToCoin(fiat, rate);
+            expect(out).not.toBeNull();
+            expect(out).not.toContain('e');
+            expect(grammar.test(out)).toBe(true);
+        }
+    });
 });

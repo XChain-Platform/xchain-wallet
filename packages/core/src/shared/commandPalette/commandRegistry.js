@@ -163,10 +163,10 @@ export function buildCommands(ctx) {
     // ---- Create: authoring forms that open free-entry (no ref needed) ---
     list.push(
         { id: 'create-token', category: 'Create', title: 'Create a token', subtitle: 'Guided issuance wizard', keywords: ['issue', 'new token', 'mint', 'launch'], Icon: Icon.PlusIcon, run: go('wizard') },
-        { id: 'create-issue', category: 'Create', title: 'Issue token', subtitle: 'Standalone ISSUE', keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
+        { id: 'create-issue', category: 'Create', title: 'Issue token', subtitle: 'Issue a token directly', keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
         { id: 'create-mint', category: 'Create', title: 'Mint supply', subtitle: 'Add to an existing token', keywords: ['mint', 'supply'], Icon: Icon.PlusIcon, run: go('mint') },
         { id: 'create-destroy', category: 'Create', title: 'Destroy tokens', subtitle: 'Burn supply', keywords: ['burn', 'destroy'], Icon: Icon.TrashIcon, run: go('destroy') },
-        { id: 'create-broadcast', category: 'Create', title: 'Broadcast a message', subtitle: 'On-chain BROADCAST', keywords: ['broadcast', 'announce'], Icon: Icon.BroadcastIcon, run: go('broadcast') },
+        { id: 'create-broadcast', category: 'Create', title: 'Broadcast a message', subtitle: 'Post a message on-chain', keywords: ['broadcast', 'announce'], Icon: Icon.BroadcastIcon, run: go('broadcast') },
         { id: 'create-dispenser', category: 'Create', title: 'Create dispenser', subtitle: 'Sell a token at a fixed rate', keywords: ['dispenser', 'vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispenser') },
         { id: 'create-dividend', category: 'Create', title: 'Pay a dividend', subtitle: 'Distribute to holders', keywords: ['dividend', 'distribute'], Icon: Icon.DollarIcon, run: go('dividend') },
         { id: 'create-airdrop', category: 'Create', title: 'Airdrop', subtitle: 'Send to many recipients', keywords: ['airdrop', 'distribute', 'bulk'], Icon: Icon.SendIcon, run: go('airdrop') },
@@ -176,7 +176,7 @@ export function buildCommands(ctx) {
     // ---- Trade: DEX / cross-chain flows ---------------------------------
     list.push(
         { id: 'trade-swap', category: 'Trade', title: 'Swap', subtitle: 'Place a DEX order', keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
-        { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order (COINPAY)', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
+        { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
         { id: 'trade-xchain-swap', category: 'Trade', title: 'Cross-chain swap', subtitle: 'Swap across chains', keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
         { id: 'trade-xchain-templates', category: 'Trade', title: 'Cross-chain templates', subtitle: 'Prebuilt cross-chain flows', keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
     );

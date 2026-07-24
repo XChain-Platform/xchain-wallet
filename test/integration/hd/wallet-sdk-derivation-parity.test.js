@@ -29,10 +29,11 @@
 // instead: this suite requires the xchain-sdk sibling to be present.
 //
 // Note: xchain-sdk's coin data (src/coins/*.js) carries no SLIP-44 /
-// coin-type field at all - only wif/bip32/pubKeyHash/etc network params -
-// so the coin-type leg below has nothing in the SDK to read from and stays
-// anchored to the SLIP-44 standard's well-known per-family constant
-// (MAINNET_SLOT), not a hand-copied guess.
+// coin-type field, but src/derivation.js exposes FAMILY_SLIP44 as the
+// backend-side coin-type anchor precisely so this suite has a real SDK value
+// to assert the wallet's FAMILY_MAINNET_COIN_TYPE_SLOT against (the coin-type
+// leg below binds the two across repos, rather than checking the wallet
+// constant against itself).
 
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
@@ -54,21 +55,46 @@ const MAINNET_SLOT = FAMILY_MAINNET_COIN_TYPE_SLOT;
 
 describe('wallet descriptors vs xchain-sdk network params', () => {
     if (!haveSdk) {
-        // Fail loud, never skip: a silently-skipping guard is indistinguishable
-        // from CI green when the descriptor/SDK values have actually drifted.
-        it('REQUIRES the xchain-sdk sibling checkout to run this parity guard', () => {
-            throw new Error(
-                `xchain-sdk sibling not found at ${sdkNetworksPath}. This suite guards ` +
-                'wallet descriptor wifVersionByte/coin-type parity against xchain-sdk and ' +
-                'must run with the sibling checked out (CI jobs must check out siblings); ' +
-                'it will not silently pass when the SDK is absent.'
-            );
+        // House convention (see test/unit/ActionManifestConformance.test.js and
+        // xchain-sync/.github/workflows/ci.yml): SKIP when the sibling is absent
+        // unless XCHAIN_REQUIRE_SIBLINGS=1, which only the drift-guards CI job
+        // (which actually checks out the sibling) sets. That job fails loud;
+        // ordinary single-repo checkouts skip instead of reddening every push.
+        it('parity guard requires the xchain-sdk sibling checkout', (ctx) => {
+            if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {
+                throw new Error(
+                    `xchain-sdk sibling not found at ${sdkNetworksPath}. This suite guards ` +
+                    'wallet descriptor wifVersionByte/coin-type parity against xchain-sdk and ' +
+                    'must run with the sibling checked out; XCHAIN_REQUIRE_SIBLINGS=1 was set ' +
+                    'but the SDK is absent.'
+                );
+            }
+            ctx.skip();
         });
         return;
     }
 
     const require = createRequire(import.meta.url);
     const { NETWORKS } = require(sdkNetworksPath);
+    // Backend-side coin-type anchor (SDK). FAMILY_SLIP44 is keyed by ticker with
+    // a numeric value ({ BTC: 0 }); COIN_FULL_NAME bridges ticker -> full coin
+    // name so it compares to the wallet's FAMILY_MAINNET_COIN_TYPE_SLOT (keyed
+    // by full name with a quoted-string value { bitcoin: "0'" }).
+    const sdkDerivationPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'derivation.js');
+    const sdkCoinsPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'coins', 'index.js');
+    const { FAMILY_SLIP44 } = require(sdkDerivationPath);
+    const { COIN_FULL_NAME } = require(sdkCoinsPath);
+
+    // Cross-repo coin-type parity: bind the wallet's per-family mainnet slot to
+    // the SDK's authoritative FAMILY_SLIP44 anchor, so a one-sided edit to
+    // either hand-copied constant fails CI (the anchor's whole reason to exist).
+    for (const [tick, slip44] of Object.entries(FAMILY_SLIP44)) {
+        it(`${tick}: wallet coin-type slot matches xchain-sdk FAMILY_SLIP44`, () => {
+            const fullName = COIN_FULL_NAME[tick];
+            expect(fullName, `xchain-sdk COIN_FULL_NAME has no entry for "${tick}"`).toBeTruthy();
+            expect(MAINNET_SLOT[fullName], `wallet FAMILY_MAINNET_COIN_TYPE_SLOT has no entry for "${fullName}"`).toBe(`${slip44}'`);
+        });
+    }
 
     for (const d of BUNDLED_DESCRIPTORS) {
         it(`${d.id}: wifVersionByte matches xchain-sdk net.wif`, () => {

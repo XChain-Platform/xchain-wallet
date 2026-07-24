@@ -107,6 +107,53 @@ describe('validateChainDescriptor: family coin-type slot parity', () => {
             }
         }
     });
+
+    // The per-template loops above `continue` when a bundled coin has no map
+    // entry, so a NEW bundled family added without registering it in the family
+    // maps would be pinned by nothing and still pass. This dedicated
+    // completeness check fails loud instead: every bundled coin MUST appear in
+    // both the coin-type slot map and the WIF-byte map. Genuinely custom /
+    // non-bundled chains stay intentionally unconstrained and are not checked.
+    // A reserved bundled id must not be overridable with a mismatched coin,
+    // which would dodge both coin-keyed parity pins.
+    it('rejects a reserved id (bitcoin-mainnet) carrying a mismatched coin', () => {
+        const res = validateChainDescriptor({ ...btcMainnet, coin: 'btc' });
+        expect(res.ok).toBe(false);
+        expect(res.errors.join(' ')).toMatch(/coin/);
+    });
+
+    it('leaves a genuinely custom id (forkcoin-mainnet) unconstrained on coin', () => {
+        const res = validateChainDescriptor({
+            ...btcMainnet,
+            id: 'forkcoin-mainnet',
+            coin: 'forkcoin',
+            addressTypes: ['p2pkh'],
+            defaultAddressType: 'p2pkh',
+            derivationPaths: { p2pkh: "m/44'/9999'/A'/C/I" },
+        });
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    it('accepts every bundled descriptor unchanged (reserved-id check is consistent)', () => {
+        for (const d of BUNDLED_DESCRIPTORS) {
+            const res = validateChainDescriptor(d);
+            expect(res.ok, `${d.id}: ${res.errors?.join('; ')}`).toBe(true);
+        }
+    });
+
+    it('every bundled coin family is registered in both family maps', () => {
+        const coins = [...new Set(BUNDLED_DESCRIPTORS.map((d) => d.coin))];
+        for (const coin of coins) {
+            expect(
+                FAMILY_MAINNET_COIN_TYPE_SLOT[coin],
+                `bundled family "${coin}" is missing from FAMILY_MAINNET_COIN_TYPE_SLOT`,
+            ).toBeTruthy();
+            expect(
+                FAMILY_NETWORK_WIF_BYTE[coin],
+                `bundled family "${coin}" is missing from FAMILY_NETWORK_WIF_BYTE`,
+            ).toBeTruthy();
+        }
+    });
 });
 
 describe('validateChainDescriptor: family WIF-version-byte parity', () => {

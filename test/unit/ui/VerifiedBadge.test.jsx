@@ -57,8 +57,12 @@ describe('<VerifiedBadge>', () => {
         }
     });
 
-    it('falls back to the raw reason code when not in the humanized map', () => {
+    it('shows NO parenthetical for an unmapped reason (raw code stays out of the tooltip)', () => {
         render(<VerifiedBadge status="failed" reason="LEAF_AMOUNT_MISMATCH" />);
-        expect(screen.getByTestId('verified-badge').getAttribute('title')).toContain('LEAF_AMOUNT_MISMATCH');
+        const title = screen.getByTestId('verified-badge').getAttribute('title');
+        // The badge label carries the verdict; an unrecognized SCREAMING_SNAKE
+        // code (or a raw transport message) must not leak into the tooltip.
+        expect(title).not.toContain('LEAF_AMOUNT_MISMATCH');
+        expect(title).not.toContain('(');
     });
 });

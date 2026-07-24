@@ -187,6 +187,27 @@ export function validateChainDescriptor(record) {
     check(errors, 'color', isNonEmptyString(r.color), 'must be a non-empty string');
     check(errors, 'icon', isString(r.icon), 'must be a string');
     check(errors, 'derivationPaths', isDerivationPaths(r.derivationPaths), 'malformed');
+    // Reserved-id integrity. Both parity pins below key off the free-form `coin`
+    // field, while the registry overrides entries by `id` (index.js) and every
+    // other seam (SDK NETWORKS[id], ADDRESS_PARAMS id.split('-')) keys off `id`.
+    // So a descriptor keeping a bundled id (e.g. `bitcoin-mainnet`) but a
+    // mismatched coin (`btc`) would override the bundled network yet escape both
+    // coin-keyed pins. When the id is an exact `${knownFamily}-${networkKind}`
+    // (prefix present in the family map), require coin/networkKind to match it,
+    // so `coin` is trustworthy for pinned families. Genuine custom chains whose
+    // id prefix is not a known family (e.g. `forkcoin-mainnet`, `bitcoin-cash-
+    // mainnet`) stay entirely unconstrained.
+    if (isNonEmptyString(r.id)) {
+        const idMatch = r.id.match(/^(.+)-([^-]+)$/);
+        const idFamily = idMatch && idMatch[1];
+        const idNetworkKind = idMatch && idMatch[2];
+        if (idMatch && Object.prototype.hasOwnProperty.call(FAMILY_MAINNET_COIN_TYPE_SLOT, idFamily)) {
+            check(errors, 'coin', r.coin === idFamily,
+                `must be "${idFamily}" to match the reserved id "${r.id}"`);
+            check(errors, 'networkKind', r.networkKind === idNetworkKind,
+                `must be "${idNetworkKind}" to match the reserved id "${r.id}"`);
+        }
+    }
     // For a known coin family, every template's coin-type slot must equal the
     // family's mainnet SLIP-44 slot. A remote/custom descriptor overriding a
     // bundled id with a drifted slot (e.g. the SLIP-44 1' "testnet fix" on

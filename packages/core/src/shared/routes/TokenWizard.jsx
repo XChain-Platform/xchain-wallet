@@ -695,7 +695,7 @@ const TEMPLATES = [
     {
         id: 'custom',
         name: 'Custom',
-        tagline: 'All ISSUE fields exposed.',
+        tagline: 'Every token field, fully editable.',
         interactive: true,
     },
 ];

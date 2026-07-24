@@ -262,11 +262,11 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             return;
         }
         if (!String(controller).trim()) {
-            setFormError('Guard contract is required (the action_index of a deployed contract).');
+            setFormError('Guard contract is required (the action number of a deployed contract).');
             return;
         }
         if (Number.isNaN(Number(controller)) || Number(controller) < 0 || !Number.isInteger(Number(controller))) {
-            setFormError('Guard contract must be a non-negative whole number (an action_index).');
+            setFormError('Guard contract must be a whole number that is zero or greater (the contract’s action number).');
             return;
         }
         if (!actionClass) {
@@ -570,7 +570,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
             <Input
                 label="Guard contract"
-                hint="Action_index of the deployed contract that will gate the selected actions."
+                hint="The action number of the deployed contract that will gate the selected actions."
                 inputMode="numeric"
                 value={controller}
                 onChange={(e) => setController(e.target.value)}

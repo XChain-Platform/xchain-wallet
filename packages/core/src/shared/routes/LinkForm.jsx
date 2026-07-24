@@ -30,6 +30,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -214,8 +216,8 @@ export function LinkForm({ walletId, onBack }) {
     const validationError = useMemo(() => {
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
-        if (!/^\d+$/.test(actionIndex1)) return 'Action index on chain A must be an integer.';
-        if (!/^\d+$/.test(actionIndex2)) return 'Action index on chain B must be an integer.';
+        if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
+        if (!/^\d+$/.test(actionIndex2)) return 'The action number on chain B must be a whole number.';
         if (ticker1 === ticker2 && actionIndex1 === actionIndex2) {
             return 'Cannot link an action to itself.';
         }
@@ -432,7 +434,7 @@ export function LinkForm({ walletId, onBack }) {
                         {preview1?.loading
                             ? 'Loading…'
                             : preview1?.error
-                                ? `Could not decode: ${preview1.error}`
+                                ? humanizeError(preview1.error, 'load that action').message
                                 : preview1?.action
                                     ? decodePreview(preview1.action)
                                     : '(preview not loaded)'}
@@ -442,7 +444,7 @@ export function LinkForm({ walletId, onBack }) {
                         {preview2?.loading
                             ? 'Loading…'
                             : preview2?.error
-                                ? `Could not decode: ${preview2.error}`
+                                ? humanizeError(preview2.error, 'load that action').message
                                 : preview2?.action
                                     ? decodePreview(preview2.action)
                                     : '(preview not loaded)'}
@@ -675,15 +677,15 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                 minHeight: '1.5rem',
             }}>
                 {actionIndex && !/^\d+$/.test(actionIndex)
-                    ? 'Action index must be an integer.'
+                    ? 'This must be a whole number.'
                     : preview?.loading
-                        ? 'Loading decoded ACTION…'
+                        ? 'Looking up that action…'
                         : preview?.error
-                            ? `Couldn't decode: ${preview.error}`
+                            ? humanizeError(preview.error, 'load that action').message
                             : preview?.action
-                                ? `Decoded: ${decodePreview(preview.action)}`
+                                ? `Preview: ${decodePreview(preview.action)}`
                                 : descriptor && actionIndex
-                                    ? 'Type a valid action_index to preview…'
+                                    ? 'Enter the action number from the explorer to see a preview…'
                                     : ''}
             </div>
         </fieldset>
@@ -694,19 +696,21 @@ function decodePreview(action) {
     if (!action) return '(empty)';
     const a = action.action || action.ACTION;
     if (!a) return JSON.stringify(action).slice(0, 80);
+    // Show the humanized action label, never the raw all-caps opcode.
+    const label = actionDisplayLabel(a);
     if (a === 'ISSUE') {
         const t = action.tick || action.TICK;
         const amt = action.amount || action.AMOUNT;
-        return `${a} ${t || ''}${amt ? ` (${amt})` : ''}`;
+        return `${label} ${t || ''}${amt ? ` (${amt})` : ''}`.trim();
     }
     if (a === 'SEND') {
         const t = action.tick || action.TICK;
         const amt = action.amount || action.AMOUNT;
-        return `${a} ${amt || ''} ${t || ''}`.trim();
+        return `${label} ${amt || ''} ${t || ''}`.trim();
     }
     if (a === 'BROADCAST') {
         const txt = action.text || action.TEXT || action.message;
-        return txt ? `${a} "${String(txt).slice(0, 40)}"` : a;
+        return txt ? `${label} "${String(txt).slice(0, 40)}"` : label;
     }
-    return a;
+    return label;
 }

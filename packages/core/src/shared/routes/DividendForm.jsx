@@ -732,7 +732,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                             : holders.rows ? `${preview?.eligibleCount ?? 0} eligible holder${(preview?.eligibleCount ?? 0) === 1 ? '' : 's'}`
                                 : ''}
                     {preview?.total !== null && preview?.total !== undefined
-                        ? ` · total distribution ~${preview.total} ${dividendTick.trim().toUpperCase() || 'DIVIDEND'}`
+                        ? ` · total distribution ~${preview.total} ${dividendTick.trim().toUpperCase() || 'tokens'}`
                         : ''}
                 </p>
             ) : null}
