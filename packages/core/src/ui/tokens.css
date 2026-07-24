@@ -39,9 +39,14 @@
     /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
     --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
-    /* Brand accent (sampled from branding/images/xchain-color-750.png) */
-    --xc-accent-primary: #1E90C7;
-    --xc-accent-primary-hover: #1A7BAC;
+    /* Brand accent (sampled from branding/images/xchain-color-750.png).
+     * : darkened one step from the sampled brand value to clear
+     * WCAG AA (4.5:1) as both a white-on-accent button label and as
+     * accent-on-white text. The operator ratified the accent hue family
+     * as brand ; this stays in that family, it is just the
+     * shade that was already doing hover duty one step darker. */
+    --xc-accent-primary: #1A7BAC;
+    --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
 
     /* Light theme - default */
@@ -52,16 +57,22 @@
     --xc-border: #E4E7EB;
     --xc-border-strong: #C7CCD4;
     --xc-text: #0F172A;
-    --xc-text-muted: #64748B;
+    /* : darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
+    --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
-    --xc-warning: #D97706;
+    /* : darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
+    --xc-warning: #A8500A;
     --xc-warning-bg: rgba(217, 119, 6, 0.10);
     --xc-warning-text: #6E520A;
-    --xc-success: #16A34A;
-    --xc-focus-ring: rgba(30, 144, 199, 0.45);
+    /* : darkened from #16A34A (2.81:1 on its own badge bg) to clear AA.
+     * #157A3A measured 4.44:1 against a real composited badge bg
+     * (--xc-success-bg over --xc-bg-muted, not pure white), just under
+     * 4.5:1, so it is darkened one more step here. */
+    --xc-success: #146F34;
+    --xc-focus-ring: rgba(26, 123, 172, 0.45);
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
 }

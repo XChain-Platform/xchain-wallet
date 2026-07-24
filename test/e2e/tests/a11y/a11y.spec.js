@@ -36,43 +36,14 @@ import {
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-// Known WCAG AA contrast debt in the design TOKENS . Both are
-// palette values rather than markup bugs, and both need a brand decision
-// we don't get to make here: the accent is operator-owned .
-//
-// They are quarantined, NOT disabled. Every other rule, and every other
-// low-contrast pair, still fails the build -- and `contrastDebt` below
-// fails the moment either pair is FIXED, so the exception cannot outlive
-// the defect it was granted for.
-// The debt is in the TOKENS themselves, not in any one screen, so it is
-// keyed by token colour rather than by (fg,bg) pair: which pair a given
-// screen paints depends on demo data (the Home change indicator is green
-// or red depending on the window), and enumerating pairs would flake.
-//
-// Every one of these is a semantic colour whose AA-compliant variant
-// already exists in tokens.css under the forced high-contrast block --
-// only the DEFAULT theme is non-compliant. Fixing that is a brand call
-// ( owns the accent), so it is quarantined here, not patched.
-const KNOWN_CONTRAST_DEBT = [
-    { color: '#1e90c7', what: 'accent (--xc-accent-primary): 3.57:1 as button label and as text' },
-    { color: '#16a34a', what: 'success (--xc-success): 3.29:1 on white, 2.81:1 on its own bg' },
-    { color: '#d97706', what: 'warning (--xc-warning): 2.74:1 on its own bg' },
-    { color: '#64748b', what: 'muted text on panel: 4.40:1' },
-];
-const DEBT_COLORS = new Set(KNOWN_CONTRAST_DEBT.map((d) => d.color));
-
-// Anchor for the self-retiring check below: deterministic, always painted
-// on the welcome screen's primary button.
-const ANCHOR_DEBT = { fg: '#ffffff', bg: '#1e90c7' };
+// : the accent/success/warning/muted-text contrast debt this suite
+// used to quarantine is fixed in tokens.css (default light theme darkened
+// to clear AA). No exceptions remain -- every color-contrast finding fails
+// the build now.
 
 function contrastPair(node) {
     const data = node.any?.[0]?.data || {};
     return { fg: data.fgColor, bg: data.bgColor, ratio: data.contrastRatio };
-}
-
-function isKnownDebt(node) {
-    const { fg, bg } = contrastPair(node);
-    return DEBT_COLORS.has(fg) || DEBT_COLORS.has(bg);
 }
 
 async function violationsFor(page) {
@@ -83,16 +54,7 @@ async function violationsFor(page) {
 }
 
 async function scan(page, label) {
-    const violations = await violationsFor(page);
-
-    // Drop only the quarantined contrast pairs; keep everything else.
-    const unexpected = violations
-        .map((v) =>
-            v.id === 'color-contrast'
-                ? { ...v, nodes: v.nodes.filter((n) => !isKnownDebt(n)) }
-                : v,
-        )
-        .filter((v) => v.nodes.length > 0);
+    const unexpected = await violationsFor(page);
 
     expect(
         unexpected,
@@ -213,38 +175,5 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await gotoSection(page, 'Send');
         await expect(page.getByLabel('To', { exact: true })).toBeVisible();
         await scan(page, 'Send form');
-    });
-});
-
-// The quarantine's expiry date. The anchor pair (white on the accent, the
-// welcome screen's primary button) is asserted to STILL be failing. When
-// the palette is fixed this test goes red, and whoever fixed the colour
-// deletes the exception above. Without this, the quarantine would quietly
-// outlive the defect and start hiding a regression instead of a known bug.
-//
-// Only the anchor is asserted: it is the one pair every run paints
-// deterministically. The other debt tokens depend on demo data (the Home
-// change indicator is green or red depending on the price window), so
-// asserting them per-run would flake.
-test.describe('known contrast debt ', () => {
-    test('is unchanged; delete the exception once the palette is fixed', async ({ page }) => {
-        await page.goto('/');
-        await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
-
-        const observed = new Set();
-        for (const v of await violationsFor(page)) {
-            if (v.id !== 'color-contrast') continue;
-            for (const node of v.nodes) {
-                const { fg, bg } = contrastPair(node);
-                observed.add(`${fg}|${bg}`);
-            }
-        }
-
-        expect(
-            observed,
-            `The accent contrast debt (${ANCHOR_DEBT.fg} on ${ANCHOR_DEBT.bg}) no longer ` +
-                'reproduces on the welcome screen. If the palette was fixed, delete ' +
-                'KNOWN_CONTRAST_DEBT in this file so every colour is gated again.',
-        ).toContain(`${ANCHOR_DEBT.fg}|${ANCHOR_DEBT.bg}`);
     });
 });

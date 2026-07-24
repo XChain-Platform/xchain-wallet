@@ -75,21 +75,17 @@ assert.ok(
     'scan helper expects an empty violations array',
 );
 
-// ...minus a bounded quarantine for the known palette contrast debt.
-// The quarantine is only legitimate while it is (a) narrow and (b) able
-// to expire, so pin both properties rather than the helper's variable
-// names, which are free to change.
+// The  palette contrast debt this suite used to quarantine is fixed
+// (tokens.css default light theme now clears AA), so the quarantine and its
+// self-retiring anchor test are gone. Guard against a silent regression
+// back to a wholesale rule bypass instead.
 assert.ok(
-    /KNOWN_CONTRAST_DEBT/.test(spec),
-    'contrast debt is declared explicitly, not silently disabled via axe rule config',
+    !/KNOWN_CONTRAST_DEBT/.test(spec),
+    'the  contrast quarantine was removed once the palette was fixed',
 );
 assert.ok(
     !/disableRules|withRules\(/.test(spec),
     'a11y spec does not switch off axe rules wholesale',
-);
-assert.ok(
-    /no longer\s*\n?\s*.{0,40}reproduces|delete the exception/i.test(spec),
-    'a self-retiring check fails once the debt is fixed, forcing the exception out',
 );
 
 // A scan racing a CSS fade reads blended colours and reports phantom
