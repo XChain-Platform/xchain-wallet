@@ -71,6 +71,42 @@ describe('composeActionForConfirm', () => {
         expect(composed.networkFeeSats).toBe(5900);
     });
 
+    // §5.2.3: deltas are computed host-side from the PARSED COMPOSED action, so
+    // every confirm surface gets them without wiring its own simulator (they
+    // all passed simulation={null}, leaving the section dead everywhere).
+    it('projects balance deltas from the parsed composed action', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }, { value: 1000 }] });
+        // The canonical source is the composed action string, not the caller's
+        // form params: parse() is what feeds the simulator.
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'SEND',
+            params: { TICK: 'JDOG', AMOUNT: '1', DESTINATION: 'dest' },
+        }));
+        h.sdk.getBalances = vi.fn(async () => ([{ tick: 'JDOG', quantity: '10', divisibility: 8 }]));
+        h.sdk.getAddress = vi.fn(async () => ({ balance: '100000000' }));
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(h.sdk.decoder.parse).toHaveBeenCalledWith('SEND|0|JDOG|1|addr');
+        expect(composed.simulation).toBeTruthy();
+    });
+
+    it('leaves the simulation null when it cannot be computed', async () => {
+        // A delta the wallet cannot compute must be ABSENT, never a zero that
+        // reads as "nothing changes". The harness has no balances source.
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({ ok: true, action: 'SEND', params: {} }));
+        h.sdk.getBalances = vi.fn(async () => { throw new Error('explorer down'); });
+        h.sdk.getAddress = vi.fn(async () => { throw new Error('explorer down'); });
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.simulation).toBe(null);
+        // The rest of the envelope still stands: a dead explorer must not
+        // block composing or signing.
+        expect(composed.tamperVerified).toBe(true);
+    });
+
     it('reports a null fee when the PSBT omits an input value', async () => {
         // Without every input value the difference is an underestimate, and a
         // too-small fee shown on a signing screen is worse than "unavailable".

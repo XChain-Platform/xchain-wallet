@@ -93,7 +93,10 @@ export function ActionConfirmScreen({
             onApprove={confirmAction.approve}
             onReject={confirmAction.reject}
             decoded={decoded}
-            simulation={simulation}
+            // §5.2.3: the host computes deltas from the PARSED COMPOSED action
+            // (one canonical source with the intent above). A caller-supplied
+            // simulation still wins, for surfaces that have a better one.
+            simulation={simulation || composed?.simulation || null}
             error={confirmAction.error}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}

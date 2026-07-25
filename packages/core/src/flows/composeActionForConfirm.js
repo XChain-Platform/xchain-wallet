@@ -29,6 +29,10 @@
 import { composeForConfirm } from './composeForConfirm.js';
 import { assertNoTamper } from './confirmChecks.js';
 import { exactNetworkFeeSats } from './psbtNetworkFee.js';
+import { satsToCoinDecimal } from './feeEstimate.js';
+import { addressBalances } from './balances.js';
+import { simulateAction } from '../decoder/txSimulator.js';
+import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 
 /**
  * @typedef {Object} ComposeActionForConfirmOpts
@@ -60,6 +64,16 @@ export async function composeActionForConfirm({
     if (!actionData?.action) throw new Error('composeActionForConfirm: actionData.action is required');
     if (!encoderOpts?.pubkey) throw new Error('composeActionForConfirm: encoderOpts.pubkey is required');
 
+    // Kick the balances read off CONCURRENTLY with the compose: the §5.2.3
+    // deltas below need it, but it depends only on (chain, source), so
+    // serializing it behind the encoder would add its round-trip to the
+    // pre-open compose of every single action for no reason. Pre-rejected to
+    // null so a dead explorer never fails the compose.
+    const balancesPromise = source
+        ? addressBalances({ sdkRegistry, chainRegistry, chainId, address: source })
+            .catch(() => null)
+        : Promise.resolve(null);
+
     const composed = await composeForConfirm({
         sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts, source, signal,
     });
@@ -86,6 +100,39 @@ export async function composeActionForConfirm({
         decodeActionFromPsbt: (hex) => sdk.decoder.decodeActionFromPsbt(hex),
     });
 
+    // §5.2.3 balance deltas. Computed HERE, not per-form, for the same reason
+    // the tamper check is: this is where the SDK, the balances and the canonical
+    // parse all live, so one implementation serves every confirm surface
+    // instead of ~24 forms each wiring their own simulator (they all passed
+    // `simulation={null}`, so the section was dead everywhere).
+    //
+    // Fed the PARSED COMPOSED action string, never the caller's form params
+    // (§5.2.3): intent and deltas must provably read one canonical source. Uses
+    // the exact fee from above, so the projected coin delta matches the fee the
+    // user is shown. Best-effort: any failure leaves `simulation` null and the
+    // section simply does not render, exactly as before.
+    let simulation = null;
+    try {
+        const parsed = sdk.decoder.parse(composed.actionString);
+        const sdkBalances = await balancesPromise;
+        if (parsed?.ok && sdkBalances) {
+            simulation = simulateAction({
+                action: parsed.action,
+                params: parsed.params,
+                balances: balancesFromSdk(sdkBalances),
+                feeEstimate: Number.isFinite(networkFeeSats)
+                    ? satsToCoinDecimal(networkFeeSats)
+                    : '0',
+                chainId,
+                chainRegistry,
+            });
+        }
+    } catch {
+        // Leave simulation null: a delta the wallet cannot compute must be
+        // absent, never a zero that reads as "nothing changes".
+        simulation = null;
+    }
+
     // Serializable envelope for the popup. `encoderOpts` (which carries the
     // ADS-folded customOutputs and is not needed client-side) is dropped;
     // everything returned here survives structured-clone / JSON transport.
@@ -106,6 +153,9 @@ export async function composeActionForConfirm({
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
         // does not carry every input value. Never a rate estimate.
         networkFeeSats,
+        // §5.2.3: projected balance deltas, or null when they could not be
+        // computed. Never a zero that would read as "nothing changes".
+        simulation,
         tamperVerified: true,
     };
 }
