@@ -45,7 +45,12 @@ export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, ad
 
 // The explorer has returned obligations under several envelope shapes over
 // time; accept them all rather than silently reading zero rows (which, in the
-// verifier below, would fail closed on a legitimate payment).
+// verifier below, would fail closed on a legitimate payment). Exported for
+// the PC-16 auto-pay engine, which reads the same endpoints.
+export function extractCoinpayRows(resp) {
+    return extractRows(resp);
+}
+
 function extractRows(resp) {
     if (!resp) return [];
     if (Array.isArray(resp)) return resp;

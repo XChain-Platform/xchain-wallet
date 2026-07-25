@@ -59,6 +59,38 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
 
+    // PC-16: auto-pay consent records for this wallet+chain, keyed by the
+    // order's action index (resolved from the placement txid host-side).
+    // The per-market open-order rows are the interim revocation surface
+    // until the PC-17 My Orders view ships.
+    const [autopayByIndex, setAutopayByIndex] = useState(
+        /** @type {Map<string, any>} */ (new Map()),
+    );
+    const loadAutopay = useCallback(async () => {
+        if (typeof messaging.listAutopayOrders !== 'function') return;
+        try {
+            if (typeof messaging.resolveAutopayIndexes === 'function') {
+                await messaging.resolveAutopayIndexes({ walletId }).catch(() => {});
+            }
+            const records = await messaging.listAutopayOrders({ walletId, chainId });
+            const map = new Map();
+            for (const r of records || []) {
+                if (r?.orderActionIndex != null) map.set(String(r.orderActionIndex), r);
+            }
+            setAutopayByIndex(map);
+        } catch { /* toggle simply not shown */ }
+    }, [messaging, walletId, chainId]);
+    useEffect(() => { loadAutopay(); }, [loadAutopay]);
+
+    async function handleAutopayToggle(record) {
+        try {
+            await messaging.setAutopayEnabled({ id: record.id, enabled: record.autopay !== true });
+            await loadAutopay();
+        } catch (err) {
+            setLoadError(err?.message || String(err));
+        }
+    }
+
     useEffect(() => {
         if (addresses.length === 0) return undefined;
         let cancelled = false;
@@ -200,6 +232,29 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         >
                             Cancel
                         </Button>
+                        {(() => {
+                            const consent = autopayByIndex.get(String(r.actionIndex));
+                            if (!consent) return null;
+                            const on = consent.autopay === true;
+                            return (
+                                <label style={{
+                                    gridColumn: '1 / -1',
+                                    display: 'flex',
+                                    gap: '0.35rem',
+                                    alignItems: 'center',
+                                    fontSize: '0.7rem',
+                                    color: 'var(--xc-text-muted)',
+                                    cursor: 'pointer',
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={on}
+                                        onChange={() => handleAutopayToggle(consent)}
+                                    />
+                                    CoinPay auto-pay {on ? 'on' : 'off (notify-only)'}
+                                </label>
+                            );
+                        })()}
                     </li>
                 ))}
             </ul>

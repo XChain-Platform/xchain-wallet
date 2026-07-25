@@ -84,7 +84,9 @@ import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
+import { SweepForm } from '@xchain-wallet/core/shared/routes/SweepForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
+import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
@@ -213,7 +215,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'mint-settings' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -269,6 +271,12 @@ function AppInner() {
         /** @type {{ id: string, name: string } | null} */ (null),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
+    // PC-34: SweepForm context. Free-entry sweeps leave it null (form
+    // defaults to the active wallet); the migrate lane prefills the
+    // legacy wallet + locked destination.
+    const [sweepCtx, setSweepCtx] = useState(
+        /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
+    );
     // Global header state: lifted up so the AppHeader in the layout
     // header slot can render the same filter + pancake the Home page
     // historically owned, and so flipping the filter on TokenDetail
@@ -903,9 +911,27 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'sweep' && (sweepCtx?.walletId || activeWalletId)) {
+                const fromMigrate = !!sweepCtx?.migrateTo;
+                return (
+                    <SweepForm
+                        walletId={sweepCtx?.walletId || activeWalletId}
+                        onBack={() => {
+                            setSweepCtx(null);
+                            if (fromMigrate) setUnlockedView('home');
+                            else formBack();
+                        }}
+                        initialChainId={sweepCtx?.chainId || prefillChainId}
+                        initialFromAddress={sweepCtx?.fromAddress || prefillFromAddress}
+                        initialDestination={sweepCtx?.destination}
+                        migrateTo={sweepCtx?.migrateTo || null}
+                    />
+                );
+            }
             if (
                 (unlockedView === 'lock'
                     || unlockedView === 'mint-settings'
+                    || unlockedView === 'callback-settings'
                     || unlockedView === 'description'
                     || unlockedView === 'transfer')
                 && activeWalletId
@@ -914,6 +940,17 @@ function AppInner() {
                     <TokenAdminForm
                         walletId={activeWalletId}
                         mode={unlockedView}
+                        onBack={formBack}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                    />
+                );
+            }
+            if (unlockedView === 'execute-callback' && activeWalletId) {
+                return (
+                    <CallbackForm
+                        walletId={activeWalletId}
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
@@ -1085,6 +1122,16 @@ function AppInner() {
                         onMigrated={() => {
                             setMigrateLegacyWalletId(null);
                             refresh();
+                        }}
+                        onSweepChain={(s) => {
+                            setSweepCtx({
+                                walletId: s.legacyWalletId,
+                                chainId: s.chainId,
+                                fromAddress: s.fromAddress,
+                                destination: s.toAddress,
+                                migrateTo: { walletId: s.newWalletId, address: s.toAddress, name: 'your new BIP39 wallet' },
+                            });
+                            setUnlockedView('sweep');
                         }}
                     />
                 );
@@ -1854,6 +1901,8 @@ function AppInner() {
                         onDestroy={() => openForm('destroy')}
                         onLock={() => openForm('lock')}
                         onMintSettings={() => openForm('mint-settings')}
+                        onCallbackSettings={() => openForm('callback-settings')}
+                        onExecuteCallback={() => openForm('execute-callback')}
                         onUpdateDescription={() => openForm('description')}
                         onAttachContent={() => openForm('attach-content')}
                         onGatedContent={() => openForm('gated-publish')}
@@ -1893,6 +1942,7 @@ function AppInner() {
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
+                            onSweep: () => { setSweepCtx(null); setUnlockedView('sweep'); },
                             onLock: () => setUnlockedView('lock'),
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
@@ -2159,6 +2209,7 @@ function AppInner() {
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
+                            onSweep: () => { setSweepCtx(null); setUnlockedView('sweep'); },
                             onLock: () => setUnlockedView('lock'),
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
@@ -2394,7 +2445,7 @@ function AppInner() {
  * land here as the standalone forms ship (MINT, DESTROY, admin, …).
  */
 function buildActionEntries({
-    onIssue, onMint, onDestroy,
+    onIssue, onMint, onDestroy, onSweep,
     onLock, onUpdateDescription, onTransferOwnership,
     onBroadcast,
     onCreateDispenser,
@@ -2438,6 +2489,12 @@ function buildActionEntries({
             label: 'Destroy',
             description: 'Burn part of your balance. This is irreversible.',
             onSelect: onDestroy,
+        },
+        {
+            id: 'sweep',
+            label: 'Sweep address',
+            description: 'Move every token balance and ownership from one address to a destination, optionally force-closing its open offers.',
+            onSelect: onSweep,
         },
         {
             id: 'lock',

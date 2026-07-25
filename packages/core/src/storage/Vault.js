@@ -49,6 +49,8 @@ import {
     migrateWatchlistEntry,
     migratePriceAlert,
     migrateGatedKey,
+    migrateAutopayOrder,
+    migrateAutopayLease,
 } from '../schemas/migrations.js';
 import { validateAccount } from '../schemas/account.js';
 import { validateAddress } from '../schemas/address.js';
@@ -63,6 +65,8 @@ import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
 import { validateWatchlistEntry } from '../schemas/watchlistEntry.js';
 import { validateGatedKey } from '../schemas/gatedKey.js';
+import { validateAutopayOrder } from '../schemas/autopayOrder.js';
+import { validateAutopayLease } from '../schemas/autopayLease.js';
 import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 
@@ -165,6 +169,21 @@ export class Vault {
             'gatedKeys',
             migrateGatedKey,
             validateGatedKey,
+        );
+        // PC-16 CoinPay auto-pay: per-order consent + terms (the trust
+        // anchor every auto-payment is capped against) and the
+        // single-active-payer lease. See schemas/autopayOrder.js.
+        this.autopayOrders = makeCollection(
+            this,
+            'autopayOrders',
+            migrateAutopayOrder,
+            validateAutopayOrder,
+        );
+        this.autopayLeases = makeCollection(
+            this,
+            'autopayLeases',
+            migrateAutopayLease,
+            validateAutopayLease,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

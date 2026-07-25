@@ -21,6 +21,7 @@
 
 import { submitAction } from './submitAction.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
+import { disableAutopayForAddress } from './autopayConsent.js';
 
 /**
  * @typedef {Object} SweepTokenOpts
@@ -42,6 +43,8 @@ import { assertValidDestination, normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the confirm page previewed + tamper-checked) instead of rebuilding.
+ * @property {{ releaseByAddress?: (chainId: string, address: string) => Promise<number> }} [reservationLedger]  PC-34 force-close interplay: when ORDERS=1 broadcasts, release this address's auto-pay holds (host passes its shared  ledger).
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -98,7 +101,7 @@ export async function sweepToken(opts) {
         actionSummary: `Sweep ${flags.join(' + ')} to ${opts.to}${memoTail}`,
     };
 
-    return submitAction({
+    const result = await submitAction({
         vault: opts.vault,
         walletId: opts.walletId,
         password: opts.password,
@@ -108,6 +111,7 @@ export async function sweepToken(opts) {
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
         actionData: { action: 'SWEEP', params },
+        prebuiltPsbt: opts.prebuiltPsbt,
         encoderOpts: {
             pubkey: source.publicKey,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -122,4 +126,33 @@ export async function sweepToken(opts) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
     });
+
+    // PC-34 force-close interplay: ORDERS=1 cancels every open ORDER
+    // from the source on this chain, so its auto-pay consents flip to
+    // notify-only and any address-tagged reservation holds release.
+    // Best-effort AFTER a confirmed broadcast: a cleanup failure must
+    // never fail (or roll back) a sweep the chain already accepted -
+    // the surviving consents only ever cause a manual-pay notification
+    // (the engine's caps re-verify against the match either way).
+    const broadcastTxid = result?.txid || result?.broadcast?.txid || null;
+    if (orders && broadcastTxid) {
+        const cleanup = { autopayDisabled: 0, holdsReleased: 0, error: null };
+        try {
+            const disabled = await disableAutopayForAddress({
+                vault: opts.vault,
+                walletId: opts.walletId,
+                chainId: opts.chainId,
+                sourceAddress: source.address,
+            });
+            cleanup.autopayDisabled = disabled.length;
+            if (opts.reservationLedger?.releaseByAddress) {
+                cleanup.holdsReleased = await opts.reservationLedger
+                    .releaseByAddress(opts.chainId, source.address) || 0;
+            }
+        } catch (e) {
+            cleanup.error = e?.message || String(e);
+        }
+        return { ...result, forceClose: cleanup };
+    }
+    return result;
 }

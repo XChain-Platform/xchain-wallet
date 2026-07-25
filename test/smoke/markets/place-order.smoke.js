@@ -33,9 +33,12 @@ assert.equal(typeof flows.cancelOrder, 'function', 'flows.cancelOrder exported')
 
 // --- 2. orderAction guard rails ---------------------------------
 
+// PC-16: an empty GIVE_TICK is the native-coin lane (auto-pay's arming
+// shape), so the guard is now the SDK's "at least one side has a TICK"
+// rule rather than a hard GIVE_TICK requirement.
 await assert.rejects(
     flows.orderAction({ params: {} }),
-    /GIVE_TICK is required/,
+    /at least one of params\.GIVE_TICK or params\.GET_TICK is required/,
 );
 await assert.rejects(
     flows.orderAction({ params: { GIVE_TICK: 'A' } }),

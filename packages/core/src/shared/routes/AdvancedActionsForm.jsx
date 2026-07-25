@@ -83,7 +83,7 @@ const AUTO_FIELDS = new Set(['VERSION']);
 const ACTIONS_WITH_DEDICATED_FORMS = new Set([
     'SEND', 'ISSUE', 'MINT', 'DESTROY',
     'BROADCAST', 'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
-    'LINK',
+    'LINK', 'SWEEP',
 ]);
 
 /**

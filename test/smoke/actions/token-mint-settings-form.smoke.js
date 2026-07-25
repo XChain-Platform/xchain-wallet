@@ -157,7 +157,10 @@ for (const [shell, appPath] of [
         `${shell} App.jsx routes the 'mint-settings' view to TokenAdminForm`,
     );
     assert.ok(
-        /'lock' \| 'mint-settings' \| 'description' \| 'transfer'/.test(app),
+        // PC-03 inserted 'callback-settings' | 'execute-callback' between
+        // 'mint-settings' and 'description'; the union still leads with
+        // 'lock' | 'mint-settings'.
+        /'lock' \| 'mint-settings' \|.*\| 'description' \| 'transfer'/.test(app),
         `${shell} App.jsx view-state type union includes 'mint-settings'`,
     );
 }

@@ -501,6 +501,59 @@ export async function recoverGatedKeysForTick({
 }
 
 /**
+ * PC-34 migrate gate, custody leg: re-scope the source wallet's stored
+ * gated keys to another wallet in the SAME vault. Vault rows are keyed
+ * by walletId, so after a BIP39 migration the new wallet cannot see
+ * keys recovered/published under the legacy wallet - and it can never
+ * re-derive them on-chain either (handoff MESSAGEs are ECIES-encrypted
+ * to the OLD addresses). Copying the rows is what actually makes the
+ * "keys survive migration" promise true for the new wallet.
+ *
+ * Pure vault operation (no password, no network): keyHex never leaves
+ * the background context. Rows already present under the target wallet
+ * are left untouched (never overwrite a key the target trusts); the
+ * original rows stay with the legacy wallet.
+ *
+ * @param {{
+ *   vault: import('../storage/Vault.js').Vault,
+ *   fromWalletId: string,
+ *   toWalletId: string,
+ *   chainId?: string,    optional scope; default = every chain's rows
+ * }} params
+ * @returns {Promise<{ copied: number, skipped: number }>}
+ */
+export async function copyGatedKeysToWallet({ vault, fromWalletId, toWalletId, chainId }) {
+    if (!vault) throw new Error('copyGatedKeysToWallet: vault is required');
+    if (!fromWalletId) throw new Error('copyGatedKeysToWallet: fromWalletId is required');
+    if (!toWalletId) throw new Error('copyGatedKeysToWallet: toWalletId is required');
+    if (fromWalletId === toWalletId) return { copied: 0, skipped: 0 };
+    const rows = (await vault.gatedKeys.list()).filter((r) => r.walletId === fromWalletId
+        && (!chainId || r.chainId === chainId));
+    let copied = 0;
+    let skipped = 0;
+    for (const row of rows) {
+        const targetId = gatedKeyId({
+            walletId: toWalletId,
+            chainId: row.chainId,
+            gateTicker: row.gateTicker,
+            keyHash: row.keyHash,
+        });
+        const existing = await vault.gatedKeys.get(targetId);
+        if (existing?.keyHex) { skipped += 1; continue; }
+        await vault.gatedKeys.put(createGatedKey({
+            walletId: toWalletId,
+            chainId: row.chainId,
+            gateTicker: row.gateTicker,
+            keyHash: row.keyHash,
+            keyHex: row.keyHex,
+            source: row.source,
+        }));
+        copied += 1;
+    }
+    return { copied, skipped };
+}
+
+/**
  * List the gated files for a token by querying the explorer's
  * `/api/files/{tick}/token` endpoint and filtering for rows with a
  * non-empty `gate_ticker`. Results are grouped by `key_hash` so the

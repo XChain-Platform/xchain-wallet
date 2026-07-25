@@ -54,6 +54,7 @@ import {
     storage as storageLib,
     flows as flowsLib,
     notifications as notificationsLib,
+    signers as signersLib,
 } from '../../core/src/index.js';
 import {
     dispatchPreHost,
@@ -83,6 +84,8 @@ import { createDesktopMessageHost } from './messageHost.js';
  *   notificationService: import('@xchain-wallet/core').notifications.NotificationService | null,
  *   priceAlertWatcher: import('@xchain-wallet/core').notifications.PriceAlertWatcher | null,
  *   governancePollWatcher: import('@xchain-wallet/core').notifications.GovernancePollWatcher | null,
+ *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
+ *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  * }} DesktopRuntime
  */
 
@@ -113,6 +116,14 @@ export function createRuntime(deps) {
         notificationService: null,
         priceAlertWatcher: null,
         governancePollWatcher: null,
+        coinpayAutopayWatcher: null,
+        // PC-16: pre-unlocked software signers, populated by the shared
+        // wallet.unlock handler while the password is in scope (wallet
+        // seeds have their own per-wallet KDF, so the keychain-cached
+        // master key alone cannot sign). A keychain auto-unlock leaves
+        // this pool empty: the wallet works with per-op passwords and
+        // auto-pay stays disarmed until one password unlock arms it.
+        signerPool: new signersLib.SignerPool(),
     };
 }
 
@@ -140,6 +151,7 @@ export async function ensureHost(runtime) {
             vault,
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
+            signerPool: runtime.signerPool,
             getDiagnosticContext: runtime.getDiagnosticContext,
         });
 
@@ -199,6 +211,26 @@ export async function ensureHost(runtime) {
             runtime.governancePollWatcher.start();
         }
 
+        // PC-16 CoinPay auto-pay engine. Desktop main is the spec's best
+        // fire-and-forget home (tray-capable, no worker eviction). Pays
+        // only when the signer pool holds the wallet's signer, i.e. after
+        // a password unlock; a keychain-only session is notify-only with
+        // the ObligationsView banner explaining how to arm.
+        if (runtime.notify && !runtime.coinpayAutopayWatcher) {
+            runtime.coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
+                vault,
+                sdkRegistry: runtime.sdkRegistry,
+                chainRegistry: runtime.chainRegistry,
+                getSigner: (walletId) => runtime.signerPool.get(walletId),
+                reservationLedger: runtime.host.host.reservationLedger,
+                notify: runtime.notify,
+                shellKind: 'desktop',
+                logger: console,
+            });
+            runtime.coinpayAutopayWatcher.start();
+            runtime.coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
+        }
+
         return runtime.host;
     } catch (err) {
         // Cached key doesn't decrypt the vault. Most likely the user
@@ -235,6 +267,14 @@ export function tearDownHost(runtime) {
         try { runtime.governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
         runtime.governancePollWatcher = null;
     }
+    if (runtime.coinpayAutopayWatcher) {
+        try { runtime.coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }
+        runtime.coinpayAutopayWatcher = null;
+    }
+    if (runtime.signerPool) {
+        try { runtime.signerPool.lockAll(); } catch (_err) { /* best-effort */ }
+        runtime.signerPool = new signersLib.SignerPool();
+    }
     if (runtime.vault) {
         try { runtime.vault.close(); } catch (_err) { /* already closed */ }
         runtime.vault = null;
@@ -266,6 +306,9 @@ export async function handleIpcMessage(runtime, message) {
                 unlockThrottleStore: runtime.unlockThrottleStore,
                 chainRegistry: runtime.chainRegistry,
                 sdkRegistry: runtime.sdkRegistry,
+                // PC-16: populate the desktop signer pool while the typed
+                // password is in scope, arming auto-pay for the session.
+                signerPool: runtime.signerPool,
                 onUnlocked: async () => {
                     try { await ensureHost(runtime); } catch (err) {
                         // Logged but not thrown: the unlock itself

@@ -27,6 +27,8 @@ export * as signer from './signer.js';
 export * as pendingAirdrop from './pendingAirdrop.js';
 export * as watchlistEntry from './watchlistEntry.js';
 export * as gatedKey from './gatedKey.js';
+export * as autopayOrder from './autopayOrder.js';
+export * as autopayLease from './autopayLease.js';
 export * as priceAlert from './priceAlert.js';
 export * as coSignerAccount from './coSignerAccount.js';
 export * as migrations from './migrations.js';

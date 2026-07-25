@@ -166,9 +166,111 @@ async function main() {
     console.log('\n=== SEND (compose/broadcast path) ===');
     await submit(sdk, 'SEND', 'SEND', { VERSION: '0', TICK: tick, AMOUNT: '100', DESTINATION: addrB }, signerA);
 
-    console.log('\nDONE. LIST round-trip + max-size FILE are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
+    // 5) SWEEP with a REAL moving balance (PC-34): XCHAIN is freely
+    // MINTable on regtest by any address (no ISSUE fee), so a MINT gives
+    // the sweeper an actual token balance AND the XCHAIN to pay the
+    // SWEEP's own fee. The sweep must index VALID, and the read-back
+    // must show the residual XCHAIN (mint minus the sweep fee) credited
+    // to the destination with the source emptied - the first leg in
+    // this driver where a token balance verifiably MOVES.
+    console.log('\n=== MINT XCHAIN + SWEEP (PC-34) ===');
+    const S = sdk.wallet.generateKeyPair();
+    const addrS = sdk.wallet.deriveAddress(S.publicKeyHex, { type: 'p2wpkh' });
+    const signerS = { wif: S.wif, pubkeyHex: S.publicKeyHex, address: addrS };
+    console.log('  sweep signer S:', addrS);
+    nodeRpc(['sendtoaddress', addrS, '5']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    await submit(sdk, 'MINT', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '100' }, signerS);
+    await sleep(3000);
+    const sweepRes = await submit(sdk, 'SWEEP', 'SWEEP', {
+        VERSION: '0', DESTINATION: addrB, BALANCES: '1', OWNERSHIPS: '1',
+        ORDERS: '0', SWAPS: '0', DISPENSERS: '0', MEMO: 'pc34 roundtrip',
+    }, signerS);
+    const sweepStatus = sweepRes.indexed && (sweepRes.indexed.status || sweepRes.indexed.state);
+    console.log(`  [SWEEP] indexed status=${sweepStatus}`);
+    await sleep(3000);
+    const balOf = async (addr) => {
+        const resp = await sdk.getBalances(addr).catch(() => null);
+        const rows = resp && Array.isArray(resp.data) ? resp.data : [];
+        const row = rows.find((r) => r.tick === 'XCHAIN');
+        return row ? String(row.quantity ?? row.amount ?? '0') : '0';
+    };
+    const balS = await balOf(addrS);
+    const balB = await balOf(addrB);
+    console.log(`  read-back: S XCHAIN=${balS} (want 0), B XCHAIN=${balB} (want >0 = mint minus sweep fee)`);
+    const sweepOk = sweepStatus === 'valid' && Number(balS) === 0 && Number(balB) > 0;
+
+    // 6) CALLBACK config (ISSUE v4) + execution (PC-03). Full chain, all
+    // funded by a free regtest XCHAIN MINT:
+    //   MINT XCHAIN -> ISSUE a token -> ISSUE v4 sets the callback config
+    //   while undistributed -> SEND distributes to a holder -> mine past
+    //   CALLBACK_BLOCK -> CALLBACK force-recalls all supply and pays the
+    //   holder CALLBACK_AMOUNT XCHAIN per unit.
+    // Proves BOTH new flows: the v4 config edit (read back via getToken)
+    // and the CALLBACK execution (holder loses the token, gains XCHAIN;
+    // owner's supply is restored).
+    console.log('\n=== CALLBACK config (ISSUE v4) + execution (PC-03) ===');
+    const C = sdk.wallet.generateKeyPair();
+    const addrC = sdk.wallet.deriveAddress(C.publicKeyHex, { type: 'p2wpkh' });
+    const signerC = { wif: C.wif, pubkeyHex: C.publicKeyHex, address: addrC };
+    const H = sdk.wallet.generateKeyPair();
+    const addrH = sdk.wallet.deriveAddress(H.publicKeyHex, { type: 'p2wpkh' });
+    console.log('  callback owner C:', addrC, '\n  holder H:', addrH);
+    nodeRpc(['sendtoaddress', addrC, '5']);
+    nodeRpc(['sendtoaddress', addrH, '2']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    // XCHAIN funds the ISSUE fee AND is the CALLBACK_TICK payout token.
+    await submit(sdk, 'MINT', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '1000' }, signerC);
+    await sleep(3000);
+    const cbTick = randTick('CB');
+    await submit(sdk, 'ISSUE', 'ISSUE',
+        { VERSION: '0', TICK: cbTick, MAX_SUPPLY: '1000', MINT_SUPPLY: '1000', DECIMALS: '0', DESCRIPTION: 'callback token' },
+        signerC);
+    await sleep(3000);
+    // Configure the callback while C is the sole holder (undistributed).
+    const tipInfo = JSON.parse(nodeRpc(['getblockchaininfo']));
+    const cbBlock = Number(tipInfo.blocks) + 2;
+    await submit(sdk, 'ISSUE v4', 'ISSUE',
+        { VERSION: '4', TICK: cbTick, CALLBACK_BLOCK: String(cbBlock), CALLBACK_TICK: 'XCHAIN', CALLBACK_AMOUNT: '1' },
+        signerC);
+    await sleep(3000);
+    const cbTokenInfo = await sdk.getToken(cbTick).catch(() => null);
+    const cbRow = Array.isArray(cbTokenInfo) ? cbTokenInfo[0] : cbTokenInfo;
+    const cbConfigOk = cbRow && cbRow.callback
+        && String(cbRow.callback.tick) === 'XCHAIN'
+        && String(cbRow.callback.amount) === '1'
+        && Number(cbRow.callback.block) === cbBlock;
+    console.log(`  v4 config read-back: tick=${cbRow?.callback?.tick} amount=${cbRow?.callback?.amount} block=${cbRow?.callback?.block} -> ${cbConfigOk ? 'OK' : 'MISMATCH'}`);
+    // Distribute: send 10 of the token to the holder.
+    await submit(sdk, 'SEND', 'SEND', { VERSION: '0', TICK: cbTick, AMOUNT: '10', DESTINATION: addrH }, signerC);
+    await sleep(3000);
+    // Mine past CALLBACK_BLOCK, then execute.
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    const cbRes = await submit(sdk, 'CALLBACK', 'CALLBACK', { VERSION: '0', TICK: cbTick, MEMO: 'pc03 roundtrip' }, signerC);
+    const cbStatus = cbRes.indexed && (cbRes.indexed.status || cbRes.indexed.state);
+    console.log(`  [CALLBACK] indexed status=${cbStatus}`);
+    await sleep(3000);
+    const tickBalOf = async (addr, tk) => {
+        const resp = await sdk.getBalances(addr).catch(() => null);
+        const rows = resp && Array.isArray(resp.data) ? resp.data : [];
+        const row = rows.find((r) => r.tick === tk);
+        return row ? String(row.quantity ?? row.amount ?? '0') : '0';
+    };
+    const hTokenAfter = await tickBalOf(addrH, cbTick);   // holder's token recalled -> 0
+    const hXchainAfter = await tickBalOf(addrH, 'XCHAIN'); // holder paid 10 XCHAIN
+    const cTokenAfter = await tickBalOf(addrC, cbTick);   // owner supply restored -> 1000
+    console.log(`  read-back: H ${cbTick}=${hTokenAfter} (want 0), H XCHAIN=${hXchainAfter} (want >=10), C ${cbTick}=${cTokenAfter} (want 1000)`);
+    const callbackOk = cbStatus === 'valid' && cbConfigOk
+        && Number(hTokenAfter) === 0 && Number(hXchainAfter) >= 10 && Number(cTokenAfter) === 1000;
+
+    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk ? 'RESULT: PASS (LIST valid + max-size FILE valid + over-ceiling rejected)' : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk
+        ? 'RESULT: PASS (LIST valid + max-size FILE valid + over-ceiling rejected + SWEEP moved a real balance + CALLBACK config+execution)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} cbConfigOk=${cbConfigOk} cbStatus=${cbStatus})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

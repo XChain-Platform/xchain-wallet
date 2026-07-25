@@ -428,6 +428,7 @@ let signerPool = null;
 let notificationService = null;
 let priceAlertWatcher = null;
 let governancePollWatcher = null;
+let coinpayAutopayWatcher = null;
 let priceOracleInstance = null;
 
 // Seen-state key for the governance-poll watcher (localStorage): notify-once
@@ -517,6 +518,25 @@ function startNotifications() {
         });
         governancePollWatcher.start();
     }
+
+    // PC-16 CoinPay auto-pay engine. Web caveat (stated in the order
+    // form's one-time acknowledgment): it only runs while this tab is
+    // open. The payer lease in the vault keeps two tabs from paying the
+    // same match twice.
+    if (!coinpayAutopayWatcher && host) {
+        coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
+            vault,
+            sdkRegistry,
+            chainRegistry,
+            getSigner: (walletId) => (signerPool ? signerPool.get(walletId) : null),
+            reservationLedger: host.reservationLedger,
+            notify: createWebNotifyAdapter(),
+            shellKind: 'web',
+            logger: console,
+        });
+        coinpayAutopayWatcher.start();
+        coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
+    }
 }
 
 function stopNotifications() {
@@ -531,6 +551,10 @@ function stopNotifications() {
     if (governancePollWatcher) {
         try { governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
         governancePollWatcher = null;
+    }
+    if (coinpayAutopayWatcher) {
+        try { coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }
+        coinpayAutopayWatcher = null;
     }
 }
 

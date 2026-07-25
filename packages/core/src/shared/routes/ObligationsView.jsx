@@ -61,9 +61,30 @@ const PROTOCOL_COIN_TICKER = {
  * @param {() => void} props.onBack
  */
 export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
-    const { shell } = useMessaging();
+    const { shell, messaging } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+
+    // PC-16: auto-pay armed/disarmed summary. "Disarmed" = consented
+    // orders exist but no pre-unlocked signer can pay them (locked
+    // session, HW/watch-only wallet, or a desktop session opened by the
+    // OS keychain alone - wallet seeds carry their own KDF, so arming
+    // needs one password unlock). The startup re-arm prompt of the spec
+    // is this banner plus the matching engine notification.
+    const [autopayStatus, setAutopayStatus] = useState(
+        /** @type {{ armed: number, unsignableWalletIds: string[] } | null} */ (null),
+    );
+    useEffect(() => {
+        if (typeof messaging?.getAutopayStatus !== 'function') return;
+        let cancelled = false;
+        messaging.getAutopayStatus({ walletId })
+            .then((s) => { if (!cancelled) setAutopayStatus(s || null); })
+            .catch(() => { if (!cancelled) setAutopayStatus(null); });
+        return () => { cancelled = true; };
+    }, [messaging, walletId]);
+    const autopayDisarmed = Boolean(autopayStatus && autopayStatus.armed > 0 &&
+        autopayStatus.unsignableWalletIds?.includes?.(walletId));
+    const autopayArmed = Boolean(autopayStatus && autopayStatus.armed > 0 && !autopayDisarmed);
 
     // Faster poll than the app-level badge: this screen is the user
     // actively watching deadlines.
@@ -109,6 +130,19 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     return (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.wrapFull : styles.wrapPopup}>
+                {autopayArmed ? (
+                    <p className={styles.hint}>
+                        CoinPay auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
+                        confirmed matches are paid automatically while the wallet stays unlocked.
+                    </p>
+                ) : null}
+                {autopayDisarmed ? (
+                    <p role="alert" className={styles.hint}>
+                        Auto-pay is disarmed: this wallet has auto-pay orders but cannot sign
+                        right now. Unlock the wallet with your password to re-arm it, or pay
+                        matches manually from this queue.
+                    </p>
+                ) : null}
                 {scanning && obligations.length === 0 ? (
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}

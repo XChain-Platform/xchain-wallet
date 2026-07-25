@@ -324,6 +324,55 @@ export function destroyToken(opts) {
     return /** @type {any} */ (sendMessage('action.destroy', opts));
 }
 
+/**
+ * Build, sign, and broadcast a CALLBACK action (PC-03): the token owner
+ * force-recalls all supply, paying holders CALLBACK_AMOUNT of
+ * CALLBACK_TICK per unit. Owner-only; only valid after CALLBACK_BLOCK.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function callbackAction(opts) {
+    return /** @type {any} */ (sendMessage('action.callback', opts));
+}
+
+/** @param {object} opts hardware-signer CALLBACK */
+export function callbackActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.callback.hw', opts));
+}
+
+/** @param {{ chainId: string, tick: string, owner?: string|null, callbackAmount?: string|null, callbackDecimals?: number }} req PC-03: holder distribution summary (count + isDistributed + CALLBACK payout) */
+export function tokenHolderSummary(req) {
+    return /** @type {any} */ (sendMessage('token.holderSummary', req));
+}
+
+/**
+ * Build, sign, and broadcast a SWEEP action (PC-34): move token
+ * balances / ownerships and optionally force-close open offers,
+ * routing escrow to the destination. Software-signer path.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function sweepToken(opts) {
+    return /** @type {any} */ (sendMessage('action.sweep', opts));
+}
+
+/** @param {object} opts hardware-signer SWEEP */
+export function sweepTokenHw(opts) {
+    return /** @type {any} */ (sendMessage('action.sweep.hw', opts));
+}
+
+/** @param {{ chainId: string, address: string }} req PC-34: indicative preview of what a SWEEP would move */
+export function sweepPreview(req) {
+    return /** @type {any} */ (sendMessage('sweep.preview', req));
+}
+
+/** @param {{ fromWalletId: string, toWalletId: string, chainId?: string }} req PC-34 migrate gate: re-scope stored gated keys to the target wallet (counts only) */
+export function copyGatedKeysToWallet(req) {
+    return /** @type {any} */ (sendMessage('gatedKeys.copyToWallet', req));
+}
+
 /** @param {object} opts */
 export function broadcastAction(opts) {
     return /** @type {any} */ (sendMessage('action.broadcast', opts));
@@ -940,6 +989,17 @@ export function buildCoinpayPsbtRequest(opts) { return /** @type {any} */ (sendM
 export function getCoinpayObligationsForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.obligationsForAddress', req)); }
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getCoinpaysForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.forAddress', req)); }
+// PC-16 CoinPay auto-pay: consent records, exposure, armed/disarmed status.
+/** @param {{ walletId?: string, chainId?: string }} req */
+export function listAutopayOrders(req) { return /** @type {any} */ (sendMessage('autopay.list', req)); }
+/** @param {{ id?: string, chainId?: string, txid?: string, enabled: boolean }} req */
+export function setAutopayEnabled(req) { return /** @type {any} */ (sendMessage('autopay.setEnabled', req)); }
+/** @param {{ walletId?: string }} req */
+export function getAutopayExposure(req) { return /** @type {any} */ (sendMessage('autopay.exposure', req)); }
+/** @param {{ walletId?: string }} req */
+export function resolveAutopayIndexes(req) { return /** @type {any} */ (sendMessage('autopay.resolveIndexes', req)); }
+/** @param {{ walletId?: string }} req */
+export function getAutopayStatus(req) { return /** @type {any} */ (sendMessage('autopay.status', req)); }
 
 // §41.5 SWAP
 /** @param {object} opts */

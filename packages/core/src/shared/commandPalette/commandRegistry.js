@@ -168,6 +168,7 @@ export function buildCommands(ctx) {
         { id: 'create-issue', category: 'Create', title: 'Issue token', subtitle: 'Issue a token directly', keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
         { id: 'create-mint', category: 'Create', title: 'Mint supply', subtitle: 'Add to an existing token', keywords: ['mint', 'supply'], Icon: Icon.PlusIcon, run: go('mint') },
         { id: 'create-destroy', category: 'Create', title: 'Destroy tokens', subtitle: 'Burn supply', keywords: ['burn', 'destroy'], Icon: Icon.TrashIcon, run: go('destroy') },
+        { id: 'create-sweep', category: 'Create', title: 'Sweep address', subtitle: 'Move balances, ownerships, and escrow to one destination', keywords: ['sweep', 'migrate', 'move', 'consolidate'], Icon: Icon.SendIcon, run: go('sweep') },
         { id: 'create-broadcast', category: 'Create', title: 'Broadcast a message', subtitle: 'Post a message on-chain', keywords: ['broadcast', 'announce'], Icon: Icon.BroadcastIcon, run: go('broadcast') },
         { id: 'create-dispenser', category: 'Create', title: 'Create dispenser', subtitle: 'Sell a token at a fixed rate', keywords: ['dispenser', 'vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispenser') },
         { id: 'create-dividend', category: 'Create', title: 'Pay a dividend', subtitle: 'Distribute to holders', keywords: ['dividend', 'distribute'], Icon: Icon.DollarIcon, run: go('dividend') },

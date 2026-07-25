@@ -41,24 +41,24 @@ const MIN_PASSWORD_LENGTH = 8;
  * Migrate-to-BIP39 wizard (§40.13).
  *
  * Creates a new BIP39 wallet alongside an existing
- * counterwallet-legacy wallet, then hands the user back to the
- * balances view with the addresses they need to sweep balances
- * through the normal Send flow.
+ * counterwallet-legacy wallet, then offers a per-chain sweep step:
+ * each legacy address row deep-links into the dedicated SweepForm
+ * (PC-34) prefilled with the matching new-wallet destination, which
+ * also runs the gated-content key gate (unlock keys must be secured
+ * in the vault before the sweep; on-chain handoffs are encrypted to
+ * the OLD addresses, so post-migration recovery from the new seed
+ * alone is impossible).
  *
- * Phase 2 scope deliberately stops short of an automated one-shot
- * sweep; that requires a dedicated SweepForm surface that doesn't
- * exist yet. The wizard instead lists each legacy address with its
- * matching new-wallet destination so the user can sweep manually
- * once the flow is complete.
- *
- * Stage machine: explain → create → done.
+ * Stage machine: explain → create → done (with per-chain sweep links).
  *
  * @param {object} props
  * @param {string} props.legacyWalletId       source wallet (counterwallet-legacy)
  * @param {() => void} props.onBack
  * @param {(newWalletId: string) => void} [props.onMigrated]  refreshes App.jsx
+ * @param {(sweep: { legacyWalletId: string, newWalletId: string, chainId: string, fromAddress: string, toAddress: string }) => void} [props.onSweepChain]
+ *        Opens the SweepForm for one chain row (App wires the view + props).
  */
-export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
+export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChain }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -199,10 +199,11 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                 <h2 className={styles.successTitle}>New BIP39 wallet ready</h2>
                 <p className={styles.hint}>
                     Your legacy wallet is untouched. To complete the migration,
-                    sweep balances from each legacy address below to the
-                    matching new-wallet address. Use Send, or the advanced
-                    Sweep action, on each chain. Your legacy
-                    wallet stays available as long as you want.
+                    sweep each legacy address below to its matching new-wallet
+                    address. The Sweep step moves balances and ownerships in one
+                    transaction, and checks gated-content unlock keys are safe
+                    in the vault first. Your legacy wallet stays available as
+                    long as you want.
                 </p>
                 <dl className={styles.detailsList}>
                     {perChainPairs.map((row) => {
@@ -225,6 +226,20 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                                                     ? <AddressText address={row.next} />
                                                     : <em>generating…</em>}
                                             </div>
+                                            {row.next && onSweepChain && newWalletId ? (
+                                                <Button
+                                                    variant="secondary"
+                                                    onClick={() => onSweepChain({
+                                                        legacyWalletId,
+                                                        newWalletId,
+                                                        chainId: row.chainId,
+                                                        fromAddress: row.legacy,
+                                                        toAddress: row.next,
+                                                    })}
+                                                >
+                                                    Sweep this chain
+                                                </Button>
+                                            ) : null}
                                         </>
                                     ) : (
                                         <em>No legacy address on this chain.</em>

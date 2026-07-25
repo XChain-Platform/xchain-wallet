@@ -62,6 +62,8 @@ const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'descri
  * @param {() => void} [props.onDestroy]
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onMintSettings]         edit ISSUE v2 mint-configuration fields: MAX_MINT, MINT_SUPPLY, TRANSFER_SUPPLY, MINT_ADDRESS_MAX, MINT_START_BLOCK, MINT_STOP_BLOCK (PC-01)
+ * @param {() => void} [props.onCallbackSettings]     edit ISSUE v4 callback config: CALLBACK_BLOCK / CALLBACK_TICK / CALLBACK_AMOUNT (PC-03; editable only pre-distribution)
+ * @param {() => void} [props.onExecuteCallback]      force-recall all supply via CALLBACK (PC-03; owner-only, after CALLBACK_BLOCK)
  * @param {() => void} [props.onUpdateDescription]
  * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
  * @param {() => void} [props.onGatedContent]        publish token-gated encrypted files (PC-25; atomic BATCH(FILE, MESSAGE-to-self))
@@ -88,6 +90,8 @@ export function ManageToken({
     onDestroy,
     onLock,
     onMintSettings,
+    onCallbackSettings,
+    onExecuteCallback,
     onUpdateDescription,
     onAttachContent,
     onGatedContent,
@@ -430,6 +434,14 @@ export function ManageToken({
         { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },
         { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
         { id: 'bind-controller', label: 'Controller', Icon: Icon.LockIcon, onSelect: blockIssuerActions ? undefined : onBindController },
+        // PC-03 callback config (ISSUE v4). Owner-only; stays reachable
+        // regardless of the coarse `locked` flag (LOCK_CALLBACK and the
+        // pre-distribution gate are enforced inside the form).
+        { id: 'callback-settings', label: 'Callback settings', Icon: Icon.GearIcon, onSelect: blockIssuerActions ? undefined : onCallbackSettings },
+        // PC-03 CALLBACK execution (danger): only offered once a callback
+        // is actually configured (callbackTick set). The after-CALLBACK_BLOCK
+        // timing gate + holder-payout preview live inside the form.
+        { id: 'execute-callback', label: 'Execute callback', Icon: Icon.TrashIcon, onSelect: (blockIssuerActions || !assetInfo?.callbackTick) ? undefined : onExecuteCallback, danger: true },
         { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (allLocksSet || blockIssuerActions) ? undefined : onLock },
         { id: 'destroy', label: 'Destroy', Icon: Icon.TrashIcon, onSelect: onDestroy, danger: true },
     ];

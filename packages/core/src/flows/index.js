@@ -34,12 +34,25 @@ export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { createReservationLedger } from './reservationLedger.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
 export { sweepToken } from './sweepToken.js';
+export { sweepPreview } from './sweepPreview.js';
 export { issueToken } from './issueToken.js';
 export { mintToken } from './mintToken.js';
 export { destroyToken } from './destroyToken.js';
+export { callbackAction } from './callbackAction.js';
+export { tokenHolderSummary, mulFloorDecimal, addDecimal } from './tokenHolders.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';
+export {
+    isNativeGiveOrder,
+    recordAutopayConsent,
+    listAutopayOrders,
+    setAutopayEnabled,
+    autopayExposureBase,
+    resolveOrderActionIndexes,
+    recordAutopayPayment,
+    disableAutopayForAddress,
+} from './autopayConsent.js';
 export { buildCoinpayPsbtRequest, coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
@@ -68,6 +81,7 @@ export {
     getCachedGatedKey,
     clearGatedContentCaches,
     recoverGatedKeysForTick,
+    copyGatedKeysToWallet,
 } from './gatedContent.js';
 export {
     prepareGatedSend,

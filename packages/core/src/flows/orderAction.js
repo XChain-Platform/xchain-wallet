@@ -23,6 +23,7 @@
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { isNativeGiveOrder, recordAutopayConsent } from './autopayConsent.js';
 
 /**
  * @typedef {Object} OrderActionOpts
@@ -43,6 +44,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
  * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {{ enabled: boolean }} [autopay]  PC-16: arm CoinPay auto-pay for this order. Only meaningful on a native-coin GIVE; the consent + terms record is written after a successful broadcast.
  */
 
 /**
@@ -56,13 +58,20 @@ export async function orderAction(opts) {
     // Amounts drop out of the required set when the matching side trades
     // ownership (selling a token name escrows the ownership record, not a
     // balance, so GIVE_AMOUNT is empty); the SDK validator additionally enforces
-    // they're empty. GET_TICK is not required; native-coin orders leave it
-    // empty (the coin is GET_COIN). Field order preserved so the surfaced
-    // error matches the SDK validator's. GIVE_TICK stays required: every
-    // wallet-composed order names the token it's giving.
+    // they're empty. Either TICK may be empty - an empty tick side is the
+    // native coin (ORDER.md: GIVE_TICK empty = offering native coin, the
+    // COINPAY-settled buy lane PC-16 arms auto-pay on) - but not both,
+    // matching the SDK validator's "at least one of GIVE_TICK or GET_TICK"
+    // rule (coin-for-coin is protocol-invalid). Field order preserved so
+    // the surfaced error matches the SDK validator's.
     const giveOwn = Number(opts.params.GIVE_OWNERSHIP || 0) === 1;
     const getOwn = Number(opts.params.GET_OWNERSHIP || 0) === 1;
-    const required = ['GIVE_TICK'];
+    const hasGiveTick = typeof opts.params.GIVE_TICK === 'string' && opts.params.GIVE_TICK.length > 0;
+    const hasGetTick = typeof opts.params.GET_TICK === 'string' && opts.params.GET_TICK.length > 0;
+    if (!hasGiveTick && !hasGetTick) {
+        throw new Error('orderAction: at least one of params.GIVE_TICK or params.GET_TICK is required');
+    }
+    const required = [];
     if (!giveOwn) required.push('GIVE_AMOUNT');
     if (!getOwn) required.push('GET_AMOUNT');
     for (const field of required) {
@@ -76,9 +85,10 @@ export async function orderAction(opts) {
     const giveAmount = opts.params.GIVE_AMOUNT;
     const getTick = opts.params.GET_TICK;
     const getAmount = opts.params.GET_AMOUNT;
-    // Native-coin get side leaves GET_TICK empty; show the coin instead.
+    // A native-coin side leaves its TICK empty; show the coin instead.
     const getLabel = getTick || opts.params.GET_COIN || '';
-    const giveDesc = giveOwn ? `ownership of ${giveTick}` : `${giveAmount} ${giveTick}`;
+    const giveLabel = giveTick || opts.params.GIVE_COIN || '';
+    const giveDesc = giveOwn ? `ownership of ${giveTick}` : `${giveAmount} ${giveLabel}`.trim();
     const getDesc = getOwn ? `ownership of ${getTick}` : `${getAmount} ${getLabel}`.trim();
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -86,7 +96,7 @@ export async function orderAction(opts) {
         actionSummary: `Place order: give ${giveDesc}, get ${getDesc}`,
     };
 
-    return submitAction({
+    const result = await submitAction({
         vault: opts.vault,
         walletId: opts.walletId,
         password: opts.password,
@@ -112,6 +122,39 @@ export async function orderAction(opts) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
     });
+
+    // PC-16: persist the auto-pay consent + terms record once the order
+    // is broadcast (the txid is the record key; the terms are the exact
+    // params that were signed). Only a native-coin GIVE can arm. The
+    // order itself has already succeeded here, so a failed consent
+    // write must not fail the flow: it is surfaced on the result
+    // instead, and the engine simply never arms (nothing can pay
+    // without the record) - the caller shows "auto-pay could not be
+    // armed" rather than a false "order failed".
+    if (opts.autopay?.enabled && isNativeGiveOrder(opts.params)) {
+        const txid = result?.txid || result?.broadcast?.txid;
+        if (txid) {
+            try {
+                await recordAutopayConsent({
+                    vault: opts.vault,
+                    walletId: opts.walletId,
+                    chainId: opts.chainId,
+                    sourceAddress: source.address,
+                    txid,
+                    params: opts.params,
+                });
+                result.autopayArmed = true;
+            } catch (err) {
+                result.autopayArmed = false;
+                result.autopayConsentError = err?.message || String(err);
+            }
+        } else {
+            result.autopayArmed = false;
+            result.autopayConsentError = 'no txid on broadcast result';
+        }
+    }
+
+    return result;
 }
 
 /**

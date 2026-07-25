@@ -25,6 +25,8 @@
 //     watchlistEntries: WatchlistEntry[],
 //     priceAlerts: PriceAlert[],
 //     gatedKeys: GatedKey[],
+//     autopayOrders: AutopayOrder[],
+//     autopayLeases: AutopayLease[],
 //     settings: Settings | null,      // singleton slot
 //   }
 //
@@ -53,6 +55,8 @@ export function emptyDocument() {
         multisigSigningSessions: [],
         coSignerAccounts: [],
         gatedKeys: [],
+        autopayOrders: [],
+        autopayLeases: [],
         settings: null,
     };
 }
@@ -73,6 +77,8 @@ export function emptyDocument() {
  * @property {import('../schemas/multisigSigningSession.js').MultisigSigningSession[]} multisigSigningSessions
  * @property {import('../schemas/coSignerAccount.js').CoSignerAccount[]} coSignerAccounts
  * @property {import('../schemas/gatedKey.js').GatedKey[]} gatedKeys
+ * @property {import('../schemas/autopayOrder.js').AutopayOrder[]} autopayOrders
+ * @property {import('../schemas/autopayLease.js').AutopayLease[]} autopayLeases
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
 
@@ -139,6 +145,8 @@ export async function decodeDocument(masterKey, blob, aad) {
         multisigSigningSessions: parsed.multisigSigningSessions ?? empty.multisigSigningSessions,
         coSignerAccounts: parsed.coSignerAccounts ?? empty.coSignerAccounts,
         gatedKeys: parsed.gatedKeys ?? empty.gatedKeys,
+        autopayOrders: parsed.autopayOrders ?? empty.autopayOrders,
+        autopayLeases: parsed.autopayLeases ?? empty.autopayLeases,
         settings: parsed.settings ?? empty.settings,
     };
 }

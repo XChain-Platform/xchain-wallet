@@ -145,7 +145,7 @@ const LOCK_FLAGS = [
  * prop: `initialTicker` so Token detail can prefill. Every mode uses
  * `messaging.issueToken` (no new background handlers or core flows).
  *
- * @typedef {'lock' | 'description' | 'transfer' | 'mint-settings'} AdminMode
+ * @typedef {'lock' | 'description' | 'transfer' | 'mint-settings' | 'callback-settings'} AdminMode
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -182,6 +182,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [mintStopBlock, setMintStopBlock] = useState('');
     const [mintSupply, setMintSupply] = useState('');
     const [transferSupply, setTransferSupply] = useState('');
+    // Callback settings (mode === 'callback-settings', PC-03, ISSUE v4):
+    // the three CALLBACK config fields, prefilled from the current token
+    // record. Editable only while supply is undistributed and while
+    // LOCK_CALLBACK is unset.
+    const [callbackBlock, setCallbackBlock] = useState('');
+    const [callbackTick, setCallbackTick] = useState('');
+    const [callbackAmount, setCallbackAmount] = useState('');
     const [password, setPassword] = useState('');
     // Lock-mode typed-confirmation gate. Locking is irreversible, so
     // the review stage requires the user to type LOCK before the Sign
@@ -271,8 +278,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // for the life of the form; `'lock'` can also be reached from the
     // free Actions menu, where `ticker` changes as the owner picks a
     // token and this hook simply refetches.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' });
+    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' });
     const tokenLocks = assetInfo?.locks || {};
+    // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
+    // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
+    // undistributed (issue.js). LOCK_CALLBACK reads straight off the lock
+    // map; distribution needs a holder read (below).
+    const callbackLocked = !!tokenLocks.callback;
     // LOCK_MAX_MINT: MAX_MINT itself can't change (issue.js "MAX_MINT (locked)").
     const maxMintLocked = !!tokenLocks.max_mint;
     // LOCK_MINT: the MINT command is permanently dead (mint.js "LOCK_MINT").
@@ -314,12 +326,49 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         setMintPrefilled(true);
     }, [mode, assetInfo, mintPrefilled]);
 
+    // Prefill the three callback-config fields once from the token record
+    // (PC-03). Same once-only guard as the mint prefill so a re-fetch (or
+    // the owner clearing a field) doesn't clobber an in-progress edit.
+    const [callbackPrefilled, setCallbackPrefilled] = useState(false);
+    useEffect(() => {
+        if (mode !== 'callback-settings' || !assetInfo || callbackPrefilled) return;
+        setCallbackBlock(assetInfo.callbackBlock || '');
+        setCallbackTick(assetInfo.callbackTick || '');
+        setCallbackAmount(assetInfo.callbackAmount || '');
+        setCallbackPrefilled(true);
+    }, [mode, assetInfo, callbackPrefilled]);
+
+    // Distribution gate (PC-03): CALLBACK config is only editable while
+    // supply is undistributed (indexer isDistributed = >1 holder or one
+    // non-owner holder). Read the live holder summary so the form can
+    // disable the fields with an honest reason. Null while loading /
+    // when the read fails: fail toward ALLOWING the edit (the indexer is
+    // the real gate; a false "distributed" would wrongly block a valid
+    // config change), and let the on-chain validation reject if wrong.
+    const [distribution, setDistribution] = useState(/** @type {{ isDistributed: boolean, holderCount: number } | null} */ (null));
+    useEffect(() => {
+        if (mode !== 'callback-settings' || !chainId || !ticker) { setDistribution(null); return undefined; }
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (typeof messaging?.tokenHolderSummary !== 'function') return undefined;
+        let cancelled = false;
+        const owner = assetInfo?.creator || null;
+        messaging.tokenHolderSummary({ chainId, tick: ticker, owner })
+            .then((s) => { if (!cancelled) setDistribution(s ? { isDistributed: !!s.isDistributed, holderCount: Number(s.holderCount) || 0 } : null); })
+            .catch(() => { if (!cancelled) setDistribution(null); });
+        return () => { cancelled = true; };
+    }, [mode, chainId, ticker, messaging, walletId, assetInfo?.creator]);
+    const callbackDistributed = distribution?.isDistributed === true;
+    // Fields lock when LOCK_CALLBACK is set (permanent) or supply is
+    // already distributed (config frozen once holders exist).
+    const callbackFieldsDisabled = callbackLocked || callbackDistributed;
+
     // Current indexed block height (same read as History's Indexed-stage
     // timeline, messaging.getIndexerWatermark) so the block-height inputs
     // can caption themselves with an estimated date (blockDateEstimate.js).
     const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
     useEffect(() => {
-        if (mode !== 'mint-settings' || !chainId) return undefined;
+        if (mode !== 'mint-settings' && mode !== 'callback-settings') return undefined;
+        if (!chainId) return undefined;
         if (flowsLib.isDemoWallet(walletId)) return undefined;
         if (typeof messaging?.getIndexerWatermark !== 'function') return undefined;
         let cancelled = false;
@@ -330,6 +379,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }, [mode, chainId, messaging, walletId]);
     const mintStartEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: mintStartBlock });
     const mintStopEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: mintStopBlock });
+    const callbackBlockEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: callbackBlock });
+    const hasAnyCallbackField = !!(callbackBlock || callbackTick || callbackAmount);
     const hasAnyMintField = !!(maxMint || mintAddressMax || mintStartBlock || mintStopBlock || mintSupply || transferSupply);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
@@ -376,9 +427,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             mintSupply,
             transferSupply,
             lockChecks,
+            callbackBlock,
+            callbackTick,
+            callbackAmount,
         }),
         [mode, ticker, description, transferTo, maxMint, mintAddressMax,
-         mintStartBlock, mintStopBlock, mintSupply, transferSupply, lockChecks],
+         mintStartBlock, mintStopBlock, mintSupply, transferSupply, lockChecks,
+         callbackBlock, callbackTick, callbackAmount],
     );
 
     const decoded = useMemo(() => {
@@ -428,6 +483,43 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
+        }
+        if (mode === 'callback-settings') {
+            if (callbackLocked) {
+                setFormError('Callback settings are permanently locked for this token (LOCK_CALLBACK).');
+                return;
+            }
+            if (callbackDistributed) {
+                setFormError('Callback settings can only be changed before any supply is distributed. This token already has holders.');
+                return;
+            }
+            if (!hasAnyCallbackField) {
+                setFormError('Enter at least one callback field to update.');
+                return;
+            }
+            if (callbackBlock && (!/^\d+$/.test(String(callbackBlock).trim()) || (currentHeight != null && Number(callbackBlock) < currentHeight))) {
+                setFormError('Callback block must be a whole block height at or after the current block.');
+                return;
+            }
+            if (callbackTick && !/^[A-Za-z0-9.]+$/.test(String(callbackTick).trim())) {
+                setFormError('Callback token must be a valid ticker.');
+                return;
+            }
+            if (callbackAmount && !(Number(callbackAmount) > 0)) {
+                setFormError('Callback amount must be a positive number.');
+                return;
+            }
+            // A usable callback needs all three set (block + tick + amount);
+            // warn if the owner is leaving the config half-built. This is a
+            // soft guard: a partial edit is protocol-valid (blank = keep),
+            // but a token with e.g. a block and no tick can never fire.
+            const effTick = callbackTick || assetInfo?.callbackTick;
+            const effAmount = callbackAmount || assetInfo?.callbackAmount;
+            const effBlock = callbackBlock || assetInfo?.callbackBlock;
+            if ((effBlock || effTick || effAmount) && !(effBlock && effTick && effAmount)) {
+                setFormError('A working callback needs a block, a payout token, and a payout amount. Fill all three (values you leave blank keep their current setting).');
                 return;
             }
         }
@@ -994,6 +1086,72 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 </>
             ) : null}
 
+            {mode === 'callback-settings' ? (
+                <>
+                    <p className={styles.hint}>
+                        A callback lets you later recall <strong>all</strong> of {ticker || 'this token'}
+                        {' '}back to your address in one action, paying every holder a set amount of
+                        another token per unit they held. Configure it here; it can only be edited
+                        before any supply is distributed.
+                    </p>
+                    {callbackLocked ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                Callback settings are permanently locked for {ticker} (LOCK_CALLBACK).
+                                They can no longer be changed.
+                            </p>
+                        </div>
+                    ) : callbackDistributed ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                {ticker} already has holders
+                                {distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''},
+                                so its callback settings are frozen. They can only be set before any
+                                supply leaves your address.
+                            </p>
+                        </div>
+                    ) : null}
+                    <Input
+                        label="Callback token"
+                        hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
+                        value={callbackTick}
+                        onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
+                        autoComplete="off"
+                        disabled={callbackFieldsDisabled}
+                    />
+                    <Input
+                        label="Payout per unit"
+                        hint="How much of the callback token each holder receives per unit of this token they hold."
+                        inputMode="decimal"
+                        value={callbackAmount}
+                        onChange={(e) => setCallbackAmount(e.target.value)}
+                        autoComplete="off"
+                        disabled={callbackFieldsDisabled}
+                    />
+                    <Input
+                        label="Callback allowed from block"
+                        hint={callbackBlockEstimate
+                            ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
+                            : 'The earliest block height you can trigger the callback. Must be a future block.'}
+                        inputMode="decimal"
+                        value={callbackBlock}
+                        onChange={(e) => setCallbackBlock(e.target.value)}
+                        autoComplete="off"
+                        disabled={callbackFieldsDisabled}
+                    />
+                    {currentHeight != null ? (
+                        <p className={styles.hint}>
+                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Date above is a rough estimate; real block times vary.
+                        </p>
+                    ) : null}
+                    <p className={styles.hint}>
+                        Values you leave blank keep their current setting. A working callback
+                        needs all three fields set.
+                    </p>
+                </>
+            ) : null}
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
@@ -1018,6 +1176,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'description' && !description)
                         || (mode === 'transfer' && !transferTo)
                         || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
+                        || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
                         || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
                         || actionConfirm.composing}
                 >
@@ -1077,6 +1236,17 @@ function composeAdminParams(mode, form) {
         if (form.mintStopBlock) p.MINT_STOP_BLOCK = String(form.mintStopBlock).trim();
         return p;
     }
+    if (mode === 'callback-settings') {
+        // ISSUE v4 (PC-03): only the callback fields the owner filled in.
+        // Blank is OMITTED, never sent as empty: the indexer treats an
+        // omitted v4 field as "leave unchanged" (issue.js populates it
+        // from the current record), never "clear to zero".
+        const p = { VERSION: '4', TICK };
+        if (form.callbackBlock) p.CALLBACK_BLOCK = String(form.callbackBlock).trim();
+        if (form.callbackTick) p.CALLBACK_TICK = String(form.callbackTick).trim().toUpperCase();
+        if (form.callbackAmount) p.CALLBACK_AMOUNT = String(form.callbackAmount).trim();
+        return p;
+    }
     // mode === 'transfer'
     return {
         VERSION: '0',
@@ -1090,6 +1260,7 @@ const MODE_LABEL = {
     description: 'Update description',
     transfer: 'Transfer ownership',
     'mint-settings': 'Mint settings',
+    'callback-settings': 'Callback settings',
 };
 
 const MODE_LABEL_LOWER = {
@@ -1097,6 +1268,7 @@ const MODE_LABEL_LOWER = {
     description: 'description update',
     transfer: 'ownership transfer',
     'mint-settings': 'mint settings update',
+    'callback-settings': 'callback settings update',
 };
 
 const MODE_DONE_TITLE = {
@@ -1104,6 +1276,7 @@ const MODE_DONE_TITLE = {
     description: 'Description updated',
     transfer: 'Ownership transferred',
     'mint-settings': 'Mint settings updated',
+    'callback-settings': 'Callback settings updated',
 };
 
 function DetailRow({ label, value }) {

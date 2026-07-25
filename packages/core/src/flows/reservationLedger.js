@@ -30,7 +30,13 @@
 //                    adapter satisfying the { load, save } contract.
 
 /**
- * @typedef {{ id: string, chainId: string, tick: string, amount: string }} Reservation
+ * @typedef {{ id: string, chainId: string, tick: string, amount: string, address?: string }} Reservation
+ *
+ * `address` (optional) tags the reservation with the funds' source
+ * address so PC-34's force-close path can release exactly the holds
+ * belonging to a swept address (releaseByAddress). Untagged entries are
+ * never matched by that path - holds from older sessions err toward
+ * staying reserved, the conservative direction.
  */
 
 /**
@@ -75,7 +81,13 @@ export function createReservationLedger({ store } = {}) {
             if (!entry || !entry.id || !entry.chainId || !entry.tick) return;
             // Idempotent on id (re-reserve after a rehydrate must not double).
             mem = mem.filter((r) => r.id !== entry.id);
-            mem.push({ id: entry.id, chainId: entry.chainId, tick: entry.tick, amount: String(entry.amount) });
+            mem.push({
+                id: entry.id,
+                chainId: entry.chainId,
+                tick: entry.tick,
+                amount: String(entry.amount),
+                ...(entry.address ? { address: entry.address } : {}),
+            });
             await persist();
         },
 
@@ -88,6 +100,24 @@ export function createReservationLedger({ store } = {}) {
             const before = mem.length;
             mem = mem.filter((r) => r.id !== id);
             if (mem.length !== before) await persist();
+        },
+
+        /**
+         * Release every hold tagged with this (chainId, address) pair
+         * (PC-34: a SWEEP force-closing the address's orders makes its
+         * auto-pay holds moot). Only address-TAGGED entries match;
+         * untagged holds stay put. Returns how many were released.
+         * @param {string} chainId
+         * @param {string} address
+         */
+        async releaseByAddress(chainId, address) {
+            await ensureHydrated();
+            if (!chainId || !address) return 0;
+            const before = mem.length;
+            mem = mem.filter((r) => !(r.chainId === chainId && r.address === address));
+            const released = before - mem.length;
+            if (released > 0) await persist();
+            return released;
         },
 
         /**

@@ -170,6 +170,7 @@ let priceAlertWatcher = null;
 // cold-restart semantics. Seen-state persists in chrome.storage.local so an
 // MV3 worker eviction doesn't re-baseline and drop pending announcements.
 let governancePollWatcher = null;
+let coinpayAutopayWatcher = null;
 const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 
 // §46 delivery adapter for the extension: chrome.notifications works with the
@@ -344,6 +345,26 @@ async function ensureHost() {
         governancePollWatcher.start();
     }
 
+    // PC-16: start the CoinPay auto-pay engine. Signs with the pool's
+    // pre-unlocked signers only (unlocked session = armed); shares the
+    // host's reservation ledger so its funds holds and the confirm
+    // surface net in one domain. The MV3 keepalive alarm keeps the
+    // worker (and this interval) alive like the other watchers.
+    if (!coinpayAutopayWatcher) {
+        coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
+            vault,
+            sdkRegistry,
+            chainRegistry,
+            getSigner: (walletId) => signerPool.get(walletId),
+            reservationLedger: host.reservationLedger,
+            notify: chromeNotify,
+            shellKind: 'extension',
+            logger: console,
+        });
+        coinpayAutopayWatcher.start();
+        coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
+    }
+
     return host;
 }
 
@@ -364,6 +385,10 @@ function tearDownHost() {
     if (governancePollWatcher) {
         try { governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
         governancePollWatcher = null;
+    }
+    if (coinpayAutopayWatcher) {
+        try { coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }
+        coinpayAutopayWatcher = null;
     }
     if (detachHost) {
         try { detachHost(); } catch (_err) { /* best-effort */ }

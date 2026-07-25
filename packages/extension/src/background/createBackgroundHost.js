@@ -60,9 +60,12 @@ const {
     buildActionPsbt,
     buildCoinpayPsbtRequest,
     sweepToken,
+    sweepPreview,
     issueToken,
     mintToken,
     destroyToken,
+    callbackAction,
+    tokenHolderSummary,
     broadcastAction,
     dispenserAction,
     orderAction,
@@ -76,11 +79,16 @@ const {
     getProjectForTick,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
+    listAutopayOrders,
+    setAutopayEnabled,
+    autopayExposureBase,
+    resolveOrderActionIndexes,
     getMessagingInbox,
     getMessagingInboxSweep,
     unlockGatedFileForAddress,
     listGatedFiles,
     recoverGatedKeysForTick,
+    copyGatedKeysToWallet,
     prepareGatedSend,
     gatedSendReadiness,
     messageAction,
@@ -2221,14 +2229,19 @@ export function createBackgroundHost(deps) {
             const onBroadcastFailure = walletId
                 ? async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }
                 : undefined;
-            return flow({ ...rest, ...deps, signer, onBroadcastFailure });
+            // reservationLedger rides along for flows with post-broadcast
+            // cleanup (sweepToken's PC-34 force-close leg); other flows
+            // ignore the extra option.
+            return flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure });
         });
     }
 
     registerHwHandler('action.send.hw', sendToken);
+    registerHwHandler('action.sweep.hw', sweepToken);
     registerHwHandler('action.issue.hw', issueToken);
     registerHwHandler('action.mint.hw', mintToken);
     registerHwHandler('action.destroy.hw', destroyToken);
+    registerHwHandler('action.callback.hw', callbackAction);
     registerHwHandler('action.broadcast.hw', broadcastAction);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
@@ -2286,7 +2299,15 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        // reservationLedger: PC-34 force-close interplay (ORDERS=1 releases
+        // the swept address's auto-pay holds alongside its consents).
+        return sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, reservationLedger });
+    });
+
+    // PC-34: API-derived indicative preview of what a SWEEP would move
+    // (balances / ownerships / open offers + escrow / gated ticks).
+    host.register('sweep.preview', async (req, { sdkRegistry }) => {
+        return sweepPreview({ sdkRegistry, chainId: req.chainId, address: req.address });
     });
 
     host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -2299,6 +2320,24 @@ export function createBackgroundHost(deps) {
 
     host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return destroyToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-03: CALLBACK force-recall (owner-only, after CALLBACK_BLOCK).
+    host.register('action.callback', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return callbackAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-03: token holder distribution summary (backs the ISSUE v4
+    // callback-config editability gate + the CALLBACK payout preview).
+    host.register('token.holderSummary', async (req, { sdkRegistry }) => {
+        return tokenHolderSummary({
+            sdkRegistry,
+            chainId: req.chainId,
+            tick: req.tick,
+            owner: req.owner,
+            callbackAmount: req.callbackAmount,
+            callbackDecimals: req.callbackDecimals,
+        });
     });
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -2333,6 +2372,44 @@ export function createBackgroundHost(deps) {
     });
     host.register('coinpays.forAddress', async (req, { sdkRegistry }) => {
         return getCoinpaysForAddress({ ...req, sdkRegistry });
+    });
+
+    // PC-16 CoinPay auto-pay: consent records + status. The engine
+    // itself (CoinpayAutopayWatcher) runs shell-side next to the other
+    // watchers; these handlers back the UI surfaces (order-row toggle,
+    // exposure line, ObligationsView armed/disarmed banner). Secrets
+    // never appear in these records.
+    host.register('autopay.list', async (req, { vault }) => {
+        return listAutopayOrders({ vault, walletId: req?.walletId, chainId: req?.chainId });
+    });
+    host.register('autopay.setEnabled', async (req, { vault }) => {
+        return setAutopayEnabled({
+            vault, id: req?.id, chainId: req?.chainId, txid: req?.txid, enabled: req?.enabled,
+        });
+    });
+    host.register('autopay.exposure', async (req, { vault }) => {
+        return autopayExposureBase({ vault, walletId: req?.walletId });
+    });
+    host.register('autopay.resolveIndexes', async (req, { vault, sdkRegistry }) => {
+        return { resolved: await resolveOrderActionIndexes({ vault, sdkRegistry, walletId: req?.walletId }) };
+    });
+    // Armed/disarmed summary: a wallet with enabled consent records that
+    // has no pre-unlocked signer (locked session, HW/watch-only, desktop
+    // keychain-only unlock) cannot auto-pay; the UI shows the re-arm
+    // banner off this. `signerPool` is absent on shells without one, in
+    // which case every armed wallet reports unsignable - which is the
+    // truth there.
+    host.register('autopay.status', async (req, { vault, signerPool }) => {
+        const records = (await listAutopayOrders({ vault, walletId: req?.walletId }))
+            .filter((r) => r.autopay === true);
+        const walletIds = Array.from(new Set(records.map((r) => r.walletId)));
+        const unsignableWalletIds = walletIds.filter(
+            (id) => !(signerPool && typeof signerPool.get === 'function' && signerPool.get(id)));
+        return {
+            armed: records.length,
+            unsignableWalletIds,
+            exposureBase: await autopayExposureBase({ vault, walletId: req?.walletId }),
+        };
     });
 
     // §41.5 SWAP: atomic token-pair swap (no COINPAY follow-up).
@@ -2398,6 +2475,18 @@ export function createBackgroundHost(deps) {
     });
     host.register('gatedContent.unlock', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return unlockGatedFileForAddress({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-34 migrate gate, custody leg: re-scope stored gated keys to the
+    // migration-target wallet (same vault, no password, no network; the
+    // key bytes never leave the background context). Returns counts only.
+    host.register('gatedKeys.copyToWallet', async (req, { vault }) => {
+        return copyGatedKeysToWallet({
+            vault,
+            fromWalletId: req.fromWalletId,
+            toWalletId: req.toWalletId,
+            chainId: req.chainId,
+        });
     });
 
     // PC-26: pre-submit readiness for the Send form. Secret-free report
@@ -3105,6 +3194,13 @@ export function createBackgroundHost(deps) {
     }
 
     registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle, getAssetUrl });
+
+    // PC-16: the auto-pay engine runs shell-side (next to the other
+    // watchers) but must place its funds holds in THIS host's ledger so
+    // they share one netting domain with the confirm-surface
+    // reservations. Exposed as a property, not a handler: the ledger
+    // never crosses a message boundary.
+    host.reservationLedger = reservationLedger;
 
     return host;
 }

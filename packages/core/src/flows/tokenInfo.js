@@ -97,6 +97,9 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
  * @property {string | null} mintAddressMax               ISSUE v2 `MINT_ADDRESS_MAX`: cumulative cap per minting address, null when unset
  * @property {string | null} mintStartBlock               ISSUE v2 `MINT_START_BLOCK`: block height public minting opens, null when unset
  * @property {string | null} mintStopBlock                ISSUE v2 `MINT_STOP_BLOCK`: block height public minting closes, null when unset
+ * @property {string | null} callbackTick                 ISSUE v4 `CALLBACK_TICK`: the tick holders are paid in when the owner force-recalls (CALLBACK), null when unset
+ * @property {string | null} callbackAmount               ISSUE v4 `CALLBACK_AMOUNT`: units of CALLBACK_TICK paid per unit of this tick held, null when unset
+ * @property {string | null} callbackBlock                ISSUE v4 `CALLBACK_BLOCK`: earliest block CALLBACK may fire, null when unset (PC-03)
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
@@ -600,6 +603,18 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     const mintAddressMax = mintsRaw.address_max ? String(mintsRaw.address_max) : null;
     const mintStartBlock = mintsRaw.start_block ? String(mintsRaw.start_block) : null;
     const mintStopBlock = mintsRaw.stop_block ? String(mintsRaw.stop_block) : null;
+    // PC-03 callback config (ISSUE v4): xchain-explorer's getToken groups
+    // these under a `callback` object { tick, price, block, amount }. Unlike
+    // the mint fields (which run every column through Number(), collapsing 0
+    // and NULL), the explorer leaves callback tick/block/amount as raw values,
+    // so we can distinguish "unset" (null/empty) from a real 0. `amount` is
+    // already bcformat'd to the CALLBACK_TICK's decimals server-side.
+    const callbackRaw = row?.callback && typeof row.callback === 'object' ? row.callback : {};
+    const callbackTick = callbackRaw.tick ? String(callbackRaw.tick) : null;
+    const callbackAmount = (callbackRaw.amount != null && String(callbackRaw.amount) !== '')
+        ? String(callbackRaw.amount) : null;
+    const callbackBlock = (callbackRaw.block != null && String(callbackRaw.block) !== '')
+        ? String(callbackRaw.block) : null;
     const marketPrice = isFiniteNum(row?.market?.price) ? row.market.price : null;
     const marketFloor = isFiniteNum(row?.market?.floor) ? row.market.floor : null;
     // Divisibility lives at the top of the indexer row (or, in legacy
@@ -663,6 +678,9 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         mintAddressMax,
         mintStartBlock,
         mintStopBlock,
+        callbackTick,
+        callbackAmount,
+        callbackBlock,
         marketPrice,
         marketFloor,
         divisibility,

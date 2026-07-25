@@ -55,6 +55,7 @@ import { verifyCoinpayObligation } from './coinpayQueries.js';
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
+ * @property {string} [actionSummary]  Override for the PendingTx History label (PC-16 auto-pay)
  */
 
 /**
@@ -202,10 +203,13 @@ export async function coinpayAction(opts) {
         source, actionIndex, payeeAddress, coinAmount, params,
     } = await prepareCoinpay(opts, 'coinpayAction');
 
+    // PC-16: the auto-pay engine labels its payments distinctly so the
+    // History annotation reads "Auto-paid match for order #N" instead of
+    // the manual-pay wording; the summary is display-only metadata.
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: payeeAddress,
-        actionSummary:
+        actionSummary: opts.actionSummary ||
             `Pay COINPAY: ${coinAmount} (base units) for ORDER_MATCH #${actionIndex}`,
     };
 

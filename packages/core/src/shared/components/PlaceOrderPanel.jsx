@@ -42,6 +42,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
+import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -92,6 +93,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+
+    // PC-16 CoinPay auto-pay consent. Checked by default (operator-ratified):
+    // a coin-GIVE order that is not auto-paid is not fire-and-forget.
+    const [autopayEnabled, setAutopayEnabled] = useState(true);
+    const [keepOpenAck, setKeepOpenAck] = useState(false);
+    const [exposure, setExposure] = useState(/** @type {Record<string, string> | null} */ (null));
 
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -161,6 +168,34 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
 
+    // PC-16: the GIVE side is the chain's native coin - the (only) shape
+    // that settles via CoinPay and can arm auto-pay. Buy gives tick2,
+    // sell gives tick1.
+    const giveIsNative = Boolean(coinTicker) &&
+        (side === 'buy' ? tick2 : tick1).toUpperCase() === coinTicker;
+    // Software signers only: HW and watch-only can never sign unattended,
+    // so they stay notify-only (checkbox hidden, copy explains).
+    const { isWatcherMode } = useWalletMode();
+    const autopayEligible = giveIsNative && !isWatcherMode && !isHwSource(fromAddress);
+    const autopayArm = autopayEligible && autopayEnabled;
+    // Web SPA has no background watcher: a one-time per-shell "keep the
+    // wallet open" acknowledgment gates first use of the checkbox.
+    const ackKey = 'xchain-wallet:autopay-keep-open-ack';
+    const ackDone = shell === 'web'
+        ? (() => { try { return globalThis.localStorage?.getItem(ackKey) === '1'; } catch { return false; } })()
+        : true;
+    const ackRequired = shell === 'web' && autopayArm && !ackDone;
+
+    // Aggregate outstanding auto-pay exposure (the bound the user accepts).
+    useEffect(() => {
+        if (!autopayArm || typeof messaging.getAutopayExposure !== 'function') return;
+        let cancelled = false;
+        messaging.getAutopayExposure({ walletId })
+            .then((e) => { if (!cancelled) setExposure(e || {}); })
+            .catch(() => { if (!cancelled) setExposure(null); });
+        return () => { cancelled = true; };
+    }, [messaging, walletId, autopayArm]);
+
     // Exact price × size as a plain-decimal string (never a float
     // artifact or scientific notation). This is both what the review
     // screen shows and what serialises into GIVE_AMOUNT / GET_AMOUNT, so
@@ -190,7 +225,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const sizeStr = String(size).trim();
         const totalStr = total == null ? '' : String(total);
         /** @type {Record<string, string>} */
-        const p = { VERSION: '0' };
+        // GIVE_COIN / GET_COIN are required by the indexer (order.js
+        // rejects a missing COIN network as invalid); same-chain orders
+        // always carry the panel's own chain, matching SwapForm.
+        const p = { VERSION: '0', GIVE_COIN: coinTicker, GET_COIN: coinTicker };
         if (side === 'buy') {
             p.GIVE_TICK = tick2;
             p.GIVE_AMOUNT = totalStr;
@@ -202,6 +240,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             p.GET_TICK = tick2;
             p.GET_AMOUNT = totalStr;
         }
+        // Native lane (PC-16): the wire encodes a native-coin side as an
+        // EMPTY tick (ORDER.md; the indexer treats a coin-named tick as an
+        // unknown TOKEN and rejects the order). A market pair that includes
+        // the chain's own coin composes with that side blanked.
+        if (coinTicker && p.GIVE_TICK.toUpperCase() === coinTicker) p.GIVE_TICK = '';
+        if (coinTicker && p.GET_TICK.toUpperCase() === coinTicker) p.GET_TICK = '';
         if (expirationBlocks != null) p.EXPIRATION = String(expirationBlocks);
         return p;
     }
@@ -209,7 +253,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     //  §5.6 slice 3: software orders compose ONE PSBT host-side and
     // confirm it on the shared confirm page; hardware + watcher keep the
     // legacy review stage (they need their own signing gates).
-    const { isWatcherMode } = useWalletMode();
+    // (isWatcherMode is read above for the auto-pay eligibility gate.)
     const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
     const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
@@ -250,6 +294,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     from,
                     params,
                     payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    autopay: autopayArm ? { enabled: true } : undefined,
                     prebuiltPsbt,
                 }),
             });
@@ -286,6 +331,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setFormError('Expiration must be a non-negative integer (blocks).');
             return;
         }
+        if (ackRequired && !keepOpenAck) {
+            setFormError('Acknowledge the auto-pay requirement (or turn auto-pay off) to continue.');
+            return;
+        }
+        if (shell === 'web' && autopayArm && !ackDone && keepOpenAck) {
+            try { globalThis.localStorage?.setItem(ackKey, '1'); } catch { /* per-shell nicety only */ }
+        }
         setFormError(null);
         setSubmitError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -317,6 +369,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 },
                 params: buildParams(),
                 payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                autopay: autopayArm ? { enabled: true } : undefined,
             };
             const res = hw
                 ? await messaging.orderActionHw({ ...base, signerId: fromAddress.signerId })
@@ -369,6 +422,16 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 {txid ? (
                     <p style={{ margin: 0, fontSize: '0.75rem' }}>
                         <code>{txid}</code>
+                    </p>
+                ) : null}
+                {result?.autopayArmed === true ? (
+                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                        CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.
+                    </p>
+                ) : result?.autopayArmed === false ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#ef5350' }}>
+                        The order was placed, but auto-pay could not be armed
+                        {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}. Matches will need manual payment from Payments due.
                     </p>
                 ) : null}
                 <div style={{ marginTop: '0.5rem' }}>
@@ -704,6 +767,82 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     {gatedTickWarningCopy(side === 'sell' ? tick1 : tick2, 'the order counterparty')}
                 </p>
+            ) : null}
+            {giveIsNative ? (
+                <div style={{
+                    margin: '0.5rem 0 0',
+                    padding: 'var(--xc-space-2) var(--xc-space-3)',
+                    background: 'var(--xc-bg-muted)',
+                    border: '1px solid var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-sm)',
+                    fontSize: '0.75rem',
+                }}>
+                    <p style={{ margin: 0, color: 'var(--xc-text-muted)' }}>
+                        This order gives {coinTicker}, so each match settles via CoinPay:
+                        the {coinTicker} payment must be sent within the payment window
+                        (about 2 hours) or the match expires.
+                    </p>
+                    {autopayEligible ? (
+                        <>
+                            <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={autopayEnabled}
+                                    onChange={(e) => setAutopayEnabled(e.target.checked)}
+                                    style={{ marginTop: 2 }}
+                                />
+                                <span>
+                                    <strong>Enable CoinPay auto-pay</strong>
+                                    <br />
+                                    We monitor for matches on your orders and send payment for them automatically.
+                                </span>
+                            </label>
+                            {(() => {
+                                // The GIVE side is the coin, so this order's own
+                                // exposure is its GIVE amount: price×size when
+                                // buying (giving tick2), size when selling tick1.
+                                const thisOrderGive = side === 'buy'
+                                    ? (total != null ? String(total) : '')
+                                    : String(size).trim();
+                                if (autopayArm && exposure && exposure[chainId]) {
+                                    return (
+                                        <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
+                                            Outstanding auto-pay exposure on this chain:{' '}
+                                            {baseUnitsToCoinText(exposure[chainId]) ?? exposure[chainId]} {coinTicker}
+                                            {thisOrderGive ? ` (+ ${thisOrderGive} ${coinTicker} from this order)` : ''}. Under full
+                                            indexer compromise this bound is the most auto-pay could send.
+                                        </p>
+                                    );
+                                }
+                                if (autopayArm && thisOrderGive) {
+                                    return (
+                                        <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
+                                            Auto-pay exposure from this order: up to {thisOrderGive} {coinTicker}.
+                                        </p>
+                                    );
+                                }
+                                return null;
+                            })()}
+                            {ackRequired ? (
+                                <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={keepOpenAck}
+                                        onChange={(e) => setKeepOpenAck(e.target.checked)}
+                                        style={{ marginTop: 2 }}
+                                    />
+                                    <span>I understand the wallet must stay open for auto-pay to work.</span>
+                                </label>
+                            ) : null}
+                        </>
+                    ) : (
+                        <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
+                            {isWatcherMode
+                                ? 'Auto-pay is unavailable in watch-only mode; you will be notified when a match needs payment.'
+                                : 'Auto-pay is unavailable for hardware signers (unattended signing needs a software key); you will be notified when a match needs payment.'}
+                        </p>
+                    )}
+                </div>
             ) : null}
             {formError ? (
                 <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.8rem' }}>

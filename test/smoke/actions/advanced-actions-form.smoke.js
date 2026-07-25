@@ -110,7 +110,7 @@ assert.ok(
     /ACTIONS_WITH_DEDICATED_FORMS\b/.test(src),
     'AdvancedActionsForm carries a dedicated-form set',
 );
-for (const dedicated of ['AIRDROP', 'DIVIDEND', 'DISPENSER', 'BROADCAST', 'ISSUE', 'MINT', 'DESTROY', 'SEND']) {
+for (const dedicated of ['AIRDROP', 'DIVIDEND', 'DISPENSER', 'BROADCAST', 'ISSUE', 'MINT', 'DESTROY', 'SEND', 'SWEEP']) {
     assert.ok(
         src.includes(`'${dedicated}'`),
         `dedicated-form set names ${dedicated}`,

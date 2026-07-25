@@ -65,6 +65,7 @@ import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
+import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
@@ -78,6 +79,7 @@ import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx
 import { AirdropForm } from '@xchain-wallet/core/shared/routes/AirdropForm.jsx';
 import { AdvancedActionsForm } from '@xchain-wallet/core/shared/routes/AdvancedActionsForm.jsx';
 import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39.jsx';
+import { SweepForm } from '@xchain-wallet/core/shared/routes/SweepForm.jsx';
 import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
@@ -165,7 +167,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'mint-settings' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -176,6 +178,12 @@ function AppInner() {
         /** @type {{ id: string, name: string } | null} */ (null),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
+    // PC-34: SweepForm context. Free-entry sweeps leave it null (form
+    // defaults to the active wallet); the migrate lane prefills the
+    // legacy wallet + locked destination.
+    const [sweepCtx, setSweepCtx] = useState(
+        /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
+    );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -675,9 +683,27 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'sweep' && (sweepCtx?.walletId || activeWalletId)) {
+                const fromMigrate = !!sweepCtx?.migrateTo;
+                return (
+                    <SweepForm
+                        walletId={sweepCtx?.walletId || activeWalletId}
+                        onBack={() => {
+                            setSweepCtx(null);
+                            if (fromMigrate) setUnlockedView('home');
+                            else formBack();
+                        }}
+                        initialChainId={sweepCtx?.chainId || prefillChainId}
+                        initialFromAddress={sweepCtx?.fromAddress || prefillFromAddress}
+                        initialDestination={sweepCtx?.destination}
+                        migrateTo={sweepCtx?.migrateTo || null}
+                    />
+                );
+            }
             if (
                 (unlockedView === 'lock'
                     || unlockedView === 'mint-settings'
+                    || unlockedView === 'callback-settings'
                     || unlockedView === 'description'
                     || unlockedView === 'transfer')
                 && activeWalletId
@@ -690,6 +716,17 @@ function AppInner() {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'execute-callback' && activeWalletId) {
+                return (
+                    <CallbackForm
+                        walletId={activeWalletId}
+                        onBack={formBack}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -857,6 +894,16 @@ function AppInner() {
                         onMigrated={() => {
                             setMigrateLegacyWalletId(null);
                             refresh();
+                        }}
+                        onSweepChain={(s) => {
+                            setSweepCtx({
+                                walletId: s.legacyWalletId,
+                                chainId: s.chainId,
+                                fromAddress: s.fromAddress,
+                                destination: s.toAddress,
+                                migrateTo: { walletId: s.newWalletId, address: s.toAddress, name: 'your new BIP39 wallet' },
+                            });
+                            setUnlockedView('sweep');
                         }}
                     />
                 );
@@ -1557,6 +1604,8 @@ function AppInner() {
                         onDestroy={() => openForm('destroy')}
                         onLock={() => openForm('lock')}
                         onMintSettings={() => openForm('mint-settings')}
+                        onCallbackSettings={() => openForm('callback-settings')}
+                        onExecuteCallback={() => openForm('execute-callback')}
                         onUpdateDescription={() => openForm('description')}
                         onAttachContent={() => openForm('attach-content')}
                         onGatedContent={() => openForm('gated-publish')}
@@ -1588,6 +1637,7 @@ function AppInner() {
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
+                            onSweep: () => { setSweepCtx(null); setUnlockedView('sweep'); },
                             onLock: () => setUnlockedView('lock'),
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
@@ -1985,7 +2035,7 @@ function parseInitialRoute() {
 }
 
 function buildActionEntries({
-    onIssue, onMint, onDestroy,
+    onIssue, onMint, onDestroy, onSweep,
     onLock, onUpdateDescription, onTransferOwnership,
     onBroadcast,
     onCreateDispenser,
@@ -2026,6 +2076,12 @@ function buildActionEntries({
             label: 'Destroy',
             description: 'Burn part of your balance. Irreversible.',
             onSelect: onDestroy,
+        },
+        {
+            id: 'sweep',
+            label: 'Sweep address',
+            description: 'Move every token balance and ownership from one address to a destination, optionally force-closing its open offers.',
+            onSelect: onSweep,
         },
         {
             id: 'lock',

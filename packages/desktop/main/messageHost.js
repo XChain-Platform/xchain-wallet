@@ -29,6 +29,7 @@ import { createBackgroundHost } from '../../extension/src/background/createBackg
  * @property {import('@xchain-wallet/core').storage.Vault} vault
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
+ * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]  PC-16: pre-unlocked signers so session flows + auto-pay can sign without a per-op password
  * @property {import('@xchain-wallet/extension/src/bridge/Approvals.js').Approvals} [approvals]
  *
  * @typedef {{ type: string, request?: unknown }} IpcMessage
