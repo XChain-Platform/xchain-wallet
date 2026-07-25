@@ -17,7 +17,7 @@
 //   sdk.getContract(contractActionIndex)      contract metadata
 //   sdk.getContractState(idx, key?)           key/value state
 //   sdk.getContractBalance(idx, tick?)        per-token balances
-//   sdk.getExecutions(contractActionIndex, opts?)
+//   sdk.getExecutions(contractActionIndex, 'contract', opts?)
 //                                             paginated call history
 //
 // The detail page also needs the underlying DEPLOY action (for NAME,
@@ -99,7 +99,12 @@ export async function executionsForContract({ sdkRegistry, chainId, contractActi
     if (!chainId) throw new Error('executionsForContract: chainId is required');
     if (!contractActionIndex) throw new Error('executionsForContract: contractActionIndex is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getExecutions(contractActionIndex, opts);
+    // getExecutions is (query, type, opts): the explorer route is
+    // /executions/{QUERY}/{TYPE} and the type segment is REQUIRED, so it must be
+    // passed explicitly. Listing a contract's calls by its action index is
+    // type 'contract'. Passing `opts` in the type slot (the old 2-arg
+    // assumption) sent "[object Object]" as the type and 404'd every load.
+    return sdk.getExecutions(contractActionIndex, 'contract', opts);
 }
 
 /**

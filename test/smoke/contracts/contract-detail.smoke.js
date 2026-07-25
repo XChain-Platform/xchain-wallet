@@ -192,7 +192,10 @@ await assert.rejects(
         sdkRegistry: { get: () => fakeSdk },
         chainId: 'bitcoin-mainnet', contractActionIndex: '42', opts: { page: 3 },
     });
-    assert.deepEqual(called, ['42', { page: 3 }]);
+    // getExecutions is (query, type, opts): the explorer route /executions/{QUERY}/{TYPE}
+    // REQUIRES the type segment, so a contract's calls must pass 'contract' explicitly.
+    // (Passing opts in the type slot sent "[object Object]" and 404'd every load.)
+    assert.deepEqual(called, ['42', 'contract', { page: 3 }]);
 }
 
 // --- 6. Background host + shell messaging helpers ---------------------
