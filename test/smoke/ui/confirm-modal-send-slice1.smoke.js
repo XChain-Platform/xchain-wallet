@@ -49,7 +49,7 @@ assert.match(hostSrc, /reservationLedger\.localDeltas\(chainId/, 'preflight nets
 const flowSrc = read('packages', 'core', 'src', 'flows', 'composeActionForConfirm.js');
 assert.match(flowSrc, /assertNoTamper\(/, 'flow runs the tamper check host-side');
 assert.match(flowSrc, /decomposePsbt:\s*\(hex\)\s*=>\s*sdk\.wallet\.decomposePsbt/, 'tamper uses host decomposePsbt');
-assert.match(flowSrc, /decodeActionFromPsbt:\s*\(hex\)\s*=>\s*sdk\.decoder\.decodeActionFromPsbt/, 'tamper uses host decodeActionFromPsbt');
+assert.match(flowSrc, /decodeActionFromPsbt:\s*\(hex\)\s*=>\s*sdk\.decoder\.decodeActionStringFromPsbt/, 'tamper byte-match uses the policy-free raw extractor (decodeActionStringFromPsbt), not the co-signer decodeActionFromPsbt');
 assert.match(flowSrc, /tamperVerified:\s*true/, 'returns a tamper-verified envelope');
 
 // --- messaging methods, all three shells ----------------------------

@@ -11,8 +11,9 @@ import { composeActionForConfirm } from '../../../packages/core/src/flows/compos
 import { TamperDetectedError } from '../../../packages/core/src/flows/confirmChecks.js';
 
 // Harness: an SDK with encoder/actions (for compose) plus wallet.decomposePsbt
-// and decoder.decodeActionFromPsbt (for the tamper check). `outputs` and
-// `decoded` control what the tamper check sees.
+// and decoder.decodeActionStringFromPsbt (the raw self-sign byte-match uses the
+// policy-free extractor, not the co-signer's decodeActionFromPsbt). `outputs`
+// and `decoded` control what the tamper check sees.
 function makeHarness({ outputs, decoded, inputs } = {}) {
     const sdk = {
         encoder: { createTx: vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN' })) },
@@ -27,7 +28,7 @@ function makeHarness({ outputs, decoded, inputs } = {}) {
             })),
         },
         decoder: {
-            decodeActionFromPsbt: vi.fn(() => decoded || { ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
+            decodeActionStringFromPsbt: vi.fn(() => decoded || { ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
         },
     };
     const sdkRegistry = { get: () => sdk };
@@ -56,7 +57,7 @@ describe('composeActionForConfirm', () => {
         // No encoderOpts leaks over the wire (dropped from the envelope).
         expect(composed.encoderOpts).toBeUndefined();
         expect(h.sdk.wallet.decomposePsbt).toHaveBeenCalled();
-        expect(h.sdk.decoder.decodeActionFromPsbt).toHaveBeenCalled();
+        expect(h.sdk.decoder.decodeActionStringFromPsbt).toHaveBeenCalled();
         // The chain travels with the envelope so display code can resolve
         // chain-scoped formatting without every call site threading it.
         expect(composed.chainId).toBe('btc');

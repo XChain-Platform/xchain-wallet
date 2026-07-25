@@ -97,7 +97,13 @@ export async function composeActionForConfirm({
         ownAddresses: [...own],
         decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
         actionString: composed.actionString,
-        decodeActionFromPsbt: (hex) => sdk.decoder.decodeActionFromPsbt(hex),
+        // Self-sign byte-match: we already hold the intended action string and
+        // only need to prove the PSBT's OP_RETURN encodes exactly those bytes,
+        // so use the raw string extractor - NOT decodeActionFromPsbt, whose
+        // fail-closed rest/multi-leg refusals are a CO-SIGNER policy concern and
+        // would wrongly flag rest-field actions (EXECUTE, LIST) as tampered even
+        // when the bytes are correct.
+        decodeActionFromPsbt: (hex) => sdk.decoder.decodeActionStringFromPsbt(hex),
     });
 
     // §5.2.3 balance deltas. Computed HERE, not per-form, for the same reason
