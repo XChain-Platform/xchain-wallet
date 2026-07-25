@@ -48,6 +48,7 @@ import {
     migrateWallet,
     migrateWatchlistEntry,
     migratePriceAlert,
+    migrateGatedKey,
 } from '../schemas/migrations.js';
 import { validateAccount } from '../schemas/account.js';
 import { validateAddress } from '../schemas/address.js';
@@ -61,6 +62,7 @@ import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
 import { validateWatchlistEntry } from '../schemas/watchlistEntry.js';
+import { validateGatedKey } from '../schemas/gatedKey.js';
 import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 
@@ -154,6 +156,15 @@ export class Vault {
             'coSignerAccounts',
             migrateCoSignerAccount,
             validateCoSignerAccount,
+        );
+        // PC-25 gated pack keys. Secret-bearing (see schemas/gatedKey.js):
+        // rows carry the raw AES key and must never cross out of the
+        // background context with keyHex intact.
+        this.gatedKeys = makeCollection(
+            this,
+            'gatedKeys',
+            migrateGatedKey,
+            validateGatedKey,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

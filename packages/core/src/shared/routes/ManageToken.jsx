@@ -64,6 +64,7 @@ const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'descri
  * @param {() => void} [props.onMintSettings]         edit ISSUE v2 mint-configuration fields: MAX_MINT, MINT_SUPPLY, TRANSFER_SUPPLY, MINT_ADDRESS_MAX, MINT_START_BLOCK, MINT_STOP_BLOCK (PC-01)
  * @param {() => void} [props.onUpdateDescription]
  * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
+ * @param {() => void} [props.onGatedContent]        publish token-gated encrypted files (PC-25; atomic BATCH(FILE, MESSAGE-to-self))
  * @param {() => void} [props.onManageRoster]        publish/edit the project's official-token list (LIST + owner LINK)
  * @param {() => void} [props.onTransferOwnership]
  * @param {() => void} [props.onSellOwnership]       list this token's ownership (name) for sale via an ownership SWAP
@@ -89,6 +90,7 @@ export function ManageToken({
     onMintSettings,
     onUpdateDescription,
     onAttachContent,
+    onGatedContent,
     onManageRoster,
     onTransferOwnership,
     onSellOwnership,
@@ -420,6 +422,9 @@ export function ManageToken({
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
         { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
         { id: 'attach-content', label: 'Artwork', Icon: Icon.DocumentIcon, onSelect: blockIssuerActions ? undefined : onAttachContent },
+        // PC-25: token-gated encrypted publishing. Owner-only by protocol
+        // (the indexer rejects gated FILEs from non-owners, FILE.md).
+        { id: 'gated-content', label: 'Gated content', Icon: Icon.KeyIcon, onSelect: blockIssuerActions ? undefined : onGatedContent },
         { id: 'manage-roster', label: 'Official list', Icon: Icon.BookIcon, onSelect: blockIssuerActions ? undefined : onManageRoster },
         { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: blockIssuerActions ? undefined : onTransferOwnership },
         { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },

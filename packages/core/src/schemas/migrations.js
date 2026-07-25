@@ -28,6 +28,7 @@ import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js'
 import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
 import { CURRENT_VERSION as PRICE_ALERT_VERSION } from './priceAlert.js';
 import { CURRENT_VERSION as COSIGNER_ACCOUNT_VERSION } from './coSignerAccount.js';
+import { CURRENT_VERSION as GATED_KEY_VERSION } from './gatedKey.js';
 import { randomUUID } from '../util/uuid.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 
@@ -187,6 +188,10 @@ export const priceAlertMigrations = {};
 // CoSignerAccount (§22, P4) is a base-v1 schema; no upgrade steps yet.
 export const coSignerAccountMigrations = {};
 
+// GatedKey (PC-25) is a base-v1 schema; no upgrade steps yet.
+/** @type {MigrationMap} */
+export const gatedKeyMigrations = {};
+
 /**
  * Walk `record` forward through `migrations` until it reaches `target`.
  * Throws if a step is missing; the caller must fall back to read-only
@@ -247,3 +252,5 @@ export const migratePriceAlert = (r) =>
     migrate(r, priceAlertMigrations, PRICE_ALERT_VERSION);
 export const migrateCoSignerAccount = (r) =>
     migrate(r, coSignerAccountMigrations, COSIGNER_ACCOUNT_VERSION);
+export const migrateGatedKey = (r) =>
+    migrate(r, gatedKeyMigrations, GATED_KEY_VERSION);

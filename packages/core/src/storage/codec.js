@@ -24,6 +24,7 @@
 //     pendingAirdrops: PendingAirdrop[],
 //     watchlistEntries: WatchlistEntry[],
 //     priceAlerts: PriceAlert[],
+//     gatedKeys: GatedKey[],
 //     settings: Settings | null,      // singleton slot
 //   }
 //
@@ -51,6 +52,7 @@ export function emptyDocument() {
         priceAlerts: [],
         multisigSigningSessions: [],
         coSignerAccounts: [],
+        gatedKeys: [],
         settings: null,
     };
 }
@@ -70,6 +72,7 @@ export function emptyDocument() {
  * @property {import('../schemas/priceAlert.js').PriceAlert[]} priceAlerts
  * @property {import('../schemas/multisigSigningSession.js').MultisigSigningSession[]} multisigSigningSessions
  * @property {import('../schemas/coSignerAccount.js').CoSignerAccount[]} coSignerAccounts
+ * @property {import('../schemas/gatedKey.js').GatedKey[]} gatedKeys
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
 
@@ -135,6 +138,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         priceAlerts: parsed.priceAlerts ?? empty.priceAlerts,
         multisigSigningSessions: parsed.multisigSigningSessions ?? empty.multisigSigningSessions,
         coSignerAccounts: parsed.coSignerAccounts ?? empty.coSignerAccounts,
+        gatedKeys: parsed.gatedKeys ?? empty.gatedKeys,
         settings: parsed.settings ?? empty.settings,
     };
 }

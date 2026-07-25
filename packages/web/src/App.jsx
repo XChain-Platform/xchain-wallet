@@ -44,6 +44,7 @@ import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWallet
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
+import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
@@ -100,6 +101,7 @@ import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39
 import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
+import { ObligationsView } from '@xchain-wallet/core/shared/routes/ObligationsView.jsx';
 import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { SellOwnershipForm } from '@xchain-wallet/core/shared/routes/SellOwnershipForm.jsx';
 import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
@@ -128,6 +130,7 @@ import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { AttachContentForm } from '@xchain-wallet/core/shared/routes/AttachContentForm.jsx';
+import { GatedPublishForm } from '@xchain-wallet/core/shared/routes/GatedPublishForm.jsx';
 import { ProjectRosterForm } from '@xchain-wallet/core/shared/routes/ProjectRosterForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
 import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
@@ -209,7 +212,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'mint-settings' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'mint-settings' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -300,7 +303,7 @@ function AppInner() {
         /** @type {string | null} */ (null),
     );
     const [resumeCoinpay, setResumeCoinpay] = useState(
-        /** @type {{ chainId: string, address: string, orderMatchActionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, address: string, orderMatchActionIndex: string, from?: 'obligations' } | null} */ (null),
     );
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
@@ -328,6 +331,8 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    // PC-15: pending-COINPAY scan backing the "Payments due" nav badge.
+    const { payableCount: obligationsDue } = useCoinpayObligations(activeWalletId, activeAccountId);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. The global shortcut is inert unless the wallet is unlocked
     // (nothing to navigate to on the Locked / onboarding screens).
@@ -1149,6 +1154,19 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'obligations' && activeWalletId) {
+                return (
+                    <ObligationsView
+                        walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
+                        onBack={() => setUnlockedView('home')}
+                        onPay={(ref) => {
+                            setResumeCoinpay({ ...ref, from: 'obligations' });
+                            setUnlockedView('coinpay');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'coinpay' && activeWalletId) {
                 return (
                     <CoinpayForm
@@ -1157,9 +1175,12 @@ function AppInner() {
                         address={resumeCoinpay?.address}
                         orderMatchActionIndex={resumeCoinpay?.orderMatchActionIndex}
                         onBack={() => {
+                            const from = resumeCoinpay?.from;
                             const cameFromResume = resumeCoinpay !== null;
                             setResumeCoinpay(null);
-                            setUnlockedView(cameFromResume ? 'home' : 'actions');
+                            setUnlockedView(from === 'obligations'
+                                ? 'obligations'
+                                : (cameFromResume ? 'home' : 'actions'));
                         }}
                     />
                 );
@@ -1194,6 +1215,17 @@ function AppInner() {
             if (unlockedView === 'attach-content' && activeWalletId && tokenDetailRef) {
                 return (
                     <AttachContentForm
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        tick={tokenDetailRef.tick}
+                        issuerAddress={tokenDetailRef.issuer || null}
+                        onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'gated-publish' && activeWalletId && tokenDetailRef) {
+                return (
+                    <GatedPublishForm
                         walletId={activeWalletId}
                         chainId={tokenDetailRef.chainId}
                         tick={tokenDetailRef.tick}
@@ -1815,6 +1847,7 @@ function AppInner() {
                         onMintSettings={() => openForm('mint-settings')}
                         onUpdateDescription={() => openForm('description')}
                         onAttachContent={() => openForm('attach-content')}
+                        onGatedContent={() => openForm('gated-publish')}
                         onManageRoster={() => openForm('project-roster')}
                         onTransferOwnership={() => openForm('transfer')}
                         onSellOwnership={() => {
@@ -2228,7 +2261,7 @@ function AppInner() {
                                 onOpenSettings={handleOpenSettings}
                                 walletName={activeWalletName}
                                 hasBtcAddress={hasBtcAddress}
-                                badges={{ messaging: messagingUnread }}
+                                badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                             />
                         ) : null
                     }
@@ -2241,7 +2274,7 @@ function AppInner() {
                                 onOpenWalletPicker={handleOpenWalletPicker}
                                 onOpenSettings={handleOpenSettings}
                                 hasBtcAddress={hasBtcAddress}
-                                badges={{ messaging: messagingUnread }}
+                                badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                             />
                         ) : null
                     }
