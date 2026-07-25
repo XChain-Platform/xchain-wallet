@@ -117,6 +117,16 @@ export async function swapAction(opts) {
         actionData: { action: 'SWAP', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Select funding UTXOs BY ADDRESS and return change to the spender.
+            // Without these the encoder selects by `pubkey` and the utxo-tracker
+            // rejects it with "has no matching Script" (the D-7 failure). Same-
+            // chain SWAP dodges this because the ConfirmActionModal supplies a
+            // prebuiltPsbt (createTx skipped); the cross-chain SWAP form calls
+            // this flow with NO prebuiltPsbt, so it builds live and must pass
+            // them itself (mirrors advancedAction.js / composeForConfirm.js).
+            // Inert on the prebuiltPsbt path, which skips createTx entirely.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
