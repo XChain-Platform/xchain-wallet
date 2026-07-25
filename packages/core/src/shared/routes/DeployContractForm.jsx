@@ -118,6 +118,7 @@ export function DeployContractForm({ walletId, onBack }) {
         /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
     );
     const [suggestedGas, setSuggestedGas] = useState(/** @type {number | null} */ (null));
+    const [suggestedRationale, setSuggestedRationale] = useState(/** @type {string | null} */ (null));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -255,8 +256,11 @@ export function DeployContractForm({ walletId, onBack }) {
     async function handleSuggestGas() {
         if (!chainId) return;
         try {
-            const suggested = await messaging.suggestContractGasLimit({ chainId, code });
+            // sdk.contracts.suggestGasLimit returns { suggested, rationale };
+            // pull the scalar out (rendering the object crashed the form).
+            const { suggested, rationale } = await messaging.suggestContractGasLimit({ chainId, code });
             setSuggestedGas(suggested);
+            setSuggestedRationale(rationale || null);
             if (!gasLimit) setGasLimit(String(suggested));
         } catch (e) {
             setFormError(e?.message || 'Gas suggestion failed.');
@@ -708,6 +712,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 <p className={styles.summary}>
                     Suggested gas limit: {suggestedGas}
                     {gasLimit !== String(suggestedGas) ? ' (applied)' : ''}
+                    {suggestedRationale ? ` (${suggestedRationale})` : ''}
                 </p>
             ) : null}
 

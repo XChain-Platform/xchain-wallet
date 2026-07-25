@@ -71,10 +71,15 @@ describe('flows/contractUtilities contractCheckCodeSize', () => {
 });
 
 describe('flows/contractUtilities contractSuggestGasLimit', () => {
-    it('forwards to sdk.contracts.suggestGasLimit and returns the number', async () => {
-        const contracts = { suggestGasLimit: vi.fn(async () => 12345) };
+    it('forwards to sdk.contracts.suggestGasLimit and passes through its { suggested, rationale } shape', async () => {
+        // D-20: the real SDK returns an OBJECT, not a scalar; the passthrough
+        // must surface it unchanged so the Deploy form can read .suggested
+        // (rendering the whole object as a React child white-screened the form).
+        const shape = { suggested: 70000, rationale: '159 bytes, 1 functions, 0 loops' };
+        const contracts = { suggestGasLimit: vi.fn(async () => shape) };
         const res = await contractSuggestGasLimit({ sdkRegistry: mkRegistry(contracts), chainId: 'c', code: 'abc' });
-        expect(res).toBe(12345);
+        expect(res).toEqual(shape);
+        expect(res.suggested).toBe(70000);
         expect(contracts.suggestGasLimit).toHaveBeenCalledWith('abc');
     });
 
