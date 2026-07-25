@@ -95,6 +95,10 @@ export class NotImplementedError extends Error {
  * @property {string} psbtHex
  * @property {string} chainId
  * @property {SigningPathEntry[]} signingPaths
+ * @property {boolean} [reveal]   : phase-2 P2SH/P2WSH reveal tx. Its inputs are
+ *                                the chunk-lane data-carrier outputs, which need the SDK's
+ *                                reveal finalizer (not the default single-sig one). Software
+ *                                signer only; two-phase P2SH is rejected for HW/remote signers.
  */
 
 /**

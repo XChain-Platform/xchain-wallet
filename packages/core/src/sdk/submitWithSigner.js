@@ -308,6 +308,11 @@ export async function submitWithSigner({
             psbtHex: spendResult.psbt,
             chainId,
             signingPaths: expandSigningPaths(spendResult.psbt),
+            // : the reveal spends non-standard P2SH/P2WSH data-carrier outputs
+            // that need the SDK's reveal finalizer, not the default single-sig one
+            // (otherwise "Can not finalize input #0"). signingPaths still resolves the
+            // signing key; the software signer signs+custom-finalizes every input.
+            reveal: true,
         });
         try {
             await encoder.broadcastTx(phase2Signed.txHex);

@@ -325,7 +325,7 @@ export class SoftwareSigner extends Signer {
      * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
      */
-    async signPsbt({ psbtHex, chainId, signingPaths }) {
+    async signPsbt({ psbtHex, chainId, signingPaths, reveal }) {
         this._assertUnlocked();
         this._assertSdkRegistry('signPsbt');
         if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
@@ -344,7 +344,15 @@ export class SoftwareSigner extends Signer {
         if (!inputIndices.every(i => Number.isInteger(i) && i >= 0)) {
             throw new Error('SoftwareSigner.signPsbt: every signingPaths entry must carry a non-negative integer inputIndex');
         }
-        const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif, { inputIndices });
+        // : a P2SH/P2WSH two-phase REVEAL tx spends the chunk-lane data-carrier
+        // outputs, whose redeem script is a custom "<data> OP_DROP <P2PKH gate>" that
+        // the default single-sig finalizer can't finalize ("Can not finalize input
+        // #0"). The reveal's only inputs are those chunk outputs (all the caller's own
+        // key, one source), so sign every input and finalize with the SDK's reveal
+        // finalizer, exactly as sdk.submitAction's lifecycleManager does for phase 2.
+        const { txHex, txid, psbtHex: signedPsbtHex } = reveal
+            ? sdk.wallet.signRevealPsbt(psbtHex, wif)
+            : sdk.wallet.signPsbt(psbtHex, wif, { inputIndices });
         logConsole.record({
             source: 'signer:software',
             level: 'info',
