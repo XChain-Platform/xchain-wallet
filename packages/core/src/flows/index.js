@@ -44,7 +44,7 @@ export { sleepAction } from './sleepAction.js';
 export { sleepStateFor, interpretSleep } from './sleepQueries.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
-export { orderAction, cancelOrder } from './orderAction.js';
+export { orderAction, cancelOrder, editOrder } from './orderAction.js';
 export {
     isNativeGiveOrder,
     recordAutopayConsent,
@@ -260,6 +260,9 @@ export {
     getMarketOrders,
     getOrderbook,
     ordersForToken,
+    ordersForAddress,
+    orderCancelsForAddress,
+    orderDetail,
     swapsForToken,
     historyForToken,
     genesisForToken,

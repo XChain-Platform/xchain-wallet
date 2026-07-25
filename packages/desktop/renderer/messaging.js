@@ -855,6 +855,18 @@ export function getOrdersForToken(req) {
     return /** @type {any} */ (sendMessage('orders.forToken', req));
 }
 
+export function getOrdersForAddress(req) {
+    return /** @type {any} */ (sendMessage('orders.forAddress', req));
+}
+
+export function getOrderCancelsForAddress(req) {
+    return /** @type {any} */ (sendMessage('orders.cancelsForAddress', req));
+}
+
+export function getOrderDetail(req) {
+    return /** @type {any} */ (sendMessage('orders.detail', req));
+}
+
 /** @param {{ chainId: string, tick: string, opts?: object }} req */
 export function getSwapsForToken(req) {
     return /** @type {any} */ (sendMessage('swaps.forToken', req));
@@ -996,6 +1008,10 @@ export function orderActionHw(opts) { return /** @type {any} */ (sendMessage('ac
 export function cancelOrder(opts) { return /** @type {any} */ (sendMessage('action.cancelOrder', opts)); }
 /** @param {object} opts */
 export function cancelOrderHw(opts) { return /** @type {any} */ (sendMessage('action.cancelOrder.hw', opts)); }
+
+export function editOrder(opts) { return /** @type {any} */ (sendMessage('action.editOrder', opts)); }
+
+export function editOrderHw(opts) { return /** @type {any} */ (sendMessage('action.editOrder.hw', opts)); }
 
 // §41.4 COINPAY
 /** @param {object} opts */

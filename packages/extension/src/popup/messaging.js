@@ -1508,6 +1508,21 @@ export function getOrdersForToken(req) {
     return /** @type {any} */ (sendMessage('orders.forToken', req));
 }
 
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getOrdersForAddress(req) {
+    return /** @type {any} */ (sendMessage('orders.forAddress', req));
+}
+
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getOrderCancelsForAddress(req) {
+    return /** @type {any} */ (sendMessage('orders.cancelsForAddress', req));
+}
+
+/** @param {{ chainId: string, actionIndex: string }} req */
+export function getOrderDetail(req) {
+    return /** @type {any} */ (sendMessage('orders.detail', req));
+}
+
 /** @param {{ chainId: string, tick: string, opts?: object }} req */
 export function getSwapsForToken(req) {
     return /** @type {any} */ (sendMessage('swaps.forToken', req));
@@ -1783,6 +1798,12 @@ export function cancelOrder(opts) {
 }
 export function cancelOrderHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelOrder.hw', opts));
+}
+export function editOrder(opts) {
+    return /** @type {any} */ (sendMessage('action.editOrder', opts));
+}
+export function editOrderHw(opts) {
+    return /** @type {any} */ (sendMessage('action.editOrder.hw', opts));
 }
 
 // §41.4 COINPAY : settle a native-coin obligation from a matched order.

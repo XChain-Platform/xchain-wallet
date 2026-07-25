@@ -315,11 +315,91 @@ async function main() {
     console.log(`  [SLEEP resume] state resume_block=${resumedRb} (want 0)`);
     const sleepOk = pauseStatus === 'valid' && pausedRb === -1 && resumedRb === 0;
 
-    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
+    // 9) ORDER v0 create / v2 edit / v1 cancel (PC-17). Funded by a free
+    // XCHAIN MINT, which both provides the escrowed GIVE balance and pays
+    // the order fees. Two corrections this leg proves against the live
+    // indexer (both were latent wallet bugs the dev-mock SDK hid):
+    //   - EXPIRATION is a wall-clock Unix timestamp, NOT a block count.
+    //     Create AND edit set a real FUTURE Unix timestamp; a block count
+    //     (e.g. 144) is < BLOCK_TIME and would index invalid "EXPIRATION
+    //     (past)". Both indexing valid is the direct regression guard.
+    //   - Cancel is ORDER VERSION 1 (ORDER_ACTION_INDEX), NOT a separate
+    //     CANCEL action with OFFER_ACTION_INDEX (which the real SDK rejects
+    //     UNKNOWN_ACTION). The v1 cancel indexing valid + flipping
+    //     current_status to 'cancelled' proves the corrected wire.
+    // GET side is native BTC (empty GET_TICK) - also exercises the native
+    // COINPay-settled lane; we never match it, so it just stays open.
+    console.log('\n=== ORDER v0 create / v2 edit / v1 cancel (PC-17) ===');
+    const O = sdk.wallet.generateKeyPair();
+    const addrO = sdk.wallet.deriveAddress(O.publicKeyHex, { type: 'p2wpkh' });
+    const signerO = { wif: O.wif, pubkeyHex: O.publicKeyHex, address: addrO };
+    console.log('  order signer O:', addrO);
+    nodeRpc(['sendtoaddress', addrO, '5']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    await submit(sdk, 'MINT for ORDER', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '500' }, signerO);
+    await sleep(3000);
+    // Future Unix timestamps derived from the node's own clock (regtest
+    // block time tracks wall clock; mediantime is the safe lower bound the
+    // indexer compares against).
+    const chainNow = Number(JSON.parse(nodeRpc(['getblockchaininfo'])).mediantime);
+    const createExp = String(chainNow + 30 * 86400);   // ~30 days out
+    const editExp = String(chainNow + 7 * 86400);      // shortened to ~7 days
+    const orderRes = await submit(sdk, 'ORDER v0 create', 'ORDER', {
+        VERSION: '0', GIVE_COIN: 'BTC', GIVE_TICK: 'XCHAIN', GIVE_AMOUNT: '100', GIVE_OWNERSHIP: '0',
+        GET_COIN: 'BTC', GET_TICK: '', GET_AMOUNT: '0.00100000', GET_OWNERSHIP: '0',
+        GET_ADDRESS: addrO, EXPIRATION: createExp, ALLOW_LIST: '', BLOCK_LIST: '', MEMO: 'pc17 roundtrip',
+    }, signerO);
+    const createStatus = orderRes.indexed && (orderRes.indexed.status || orderRes.indexed.state);
+    console.log(`  [ORDER v0] indexed status=${createStatus} (want valid; a block-count EXPIRATION would be "past")`);
+    await sleep(3000);
+    const findMyOrder = async () => {
+        const resp = await sdk.getOrders(addrO, 'address').catch(() => null);
+        const rows = resp && Array.isArray(resp.data) ? resp.data : (Array.isArray(resp) ? resp : []);
+        const sorted = rows.slice().sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
+        return sorted.length ? String(sorted[0].action_index) : null;
+    };
+    const orderIdx = await findMyOrder();
+    // getAction(idx).state.status is the lifecycle field, but it does NOT
+    // promptly reflect a cancel (the order_statuses 'cancelled' row lags /
+    // is not read by that path). The order_edits / order_cancels tables ARE
+    // immediate and authoritative, so the edit/cancel proof (and the wallet's
+    // My Orders status derivation) keys off those, not state.status.
+    const detail = orderIdx ? await sdk.getAction(String(orderIdx)).catch(() => null) : null;
+    const openStatus = detail && detail.state ? detail.state.status : null;
+    console.log(`  read-back order idx=${orderIdx} state.status=${openStatus} give_remaining=${detail?.state?.give_remaining} (want index + open + full escrow)`);
+
+    let editStatus = null; let cancelStatus = null; let editRowExp = null; let cancelRowFound = false;
+    if (orderIdx) {
+        // v2 edit: shorten EXPIRATION to another FUTURE Unix timestamp.
+        const editRes = await submit(sdk, 'ORDER v2 edit', 'ORDER',
+            { VERSION: '2', ORDER_ACTION_INDEX: orderIdx, EXPIRATION: editExp, MEMO: 'pc17 edit' }, signerO);
+        editStatus = editRes.indexed && (editRes.indexed.status || editRes.indexed.state);
+        await sleep(3000);
+        const edits = await sdk.getOrderEdits(addrO, 'address').catch(() => null);
+        const editRow = (edits && Array.isArray(edits.data) ? edits.data : [])
+            .find((r) => String(r.order_action_index) === orderIdx);
+        editRowExp = editRow ? String(editRow.expiration) : null;
+        console.log(`  [ORDER v2 edit] indexed status=${editStatus}; order_edits.expiration=${editRowExp} (want valid + ${editExp})`);
+        // v1 cancel: ORDER_ACTION_INDEX, not a CANCEL action.
+        const cancelRes = await submit(sdk, 'ORDER v1 cancel', 'ORDER',
+            { VERSION: '1', ORDER_ACTION_INDEX: orderIdx, MEMO: 'pc17 cancel' }, signerO);
+        cancelStatus = cancelRes.indexed && (cancelRes.indexed.status || cancelRes.indexed.state);
+        await sleep(3000);
+        const cancels = await sdk.getOrderCancels(addrO, 'address').catch(() => null);
+        cancelRowFound = (cancels && Array.isArray(cancels.data) ? cancels.data : [])
+            .some((r) => String(r.order_action_index) === orderIdx && String(r.status || 'valid') === 'valid');
+        console.log(`  [ORDER v1 cancel] indexed status=${cancelStatus}; order_cancels row for #${orderIdx}=${cancelRowFound} (want valid + true)`);
+    }
+    const orderOk = createStatus === 'valid' && orderIdx != null && openStatus === 'open'
+        && editStatus === 'valid' && editRowExp === editExp
+        && cancelStatus === 'valid' && cancelRowFound === true;
+
+    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk
-        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} pausedRb=${pausedRb} resumedRb=${resumedRb})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} createStatus=${createStatus} openStatus=${openStatus} editStatus=${editStatus} editRowExp=${editRowExp} cancelStatus=${cancelStatus} cancelRowFound=${cancelRowFound})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

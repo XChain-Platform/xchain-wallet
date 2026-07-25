@@ -72,6 +72,7 @@ const {
     dispenserAction,
     orderAction,
     cancelOrder,
+    editOrder,
     coinpayAction,
     swapAction,
     linkAction,
@@ -201,6 +202,9 @@ const {
     getMarketOrders,
     getOrderbook,
     ordersForToken,
+    ordersForAddress,
+    orderCancelsForAddress,
+    orderDetail,
     swapsForToken,
     historyForToken,
     genesisForToken,
@@ -2253,6 +2257,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.advanced.hw', advancedAction);
     registerHwHandler('action.order.hw', orderAction);
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
+    registerHwHandler('action.editOrder.hw', editOrder);
     registerHwHandler('action.coinpay.hw', coinpayAction);
     registerHwHandler('action.swap.hw', swapAction);
     registerHwHandler('action.link.hw', linkAction);
@@ -2367,6 +2372,10 @@ export function createBackgroundHost(deps) {
     });
     host.register('action.cancelOrder', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return cancelOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+    // §41.3.5 ORDER v2 edit (EXPIRATION / ALLOW_LIST / BLOCK_LIST).
+    host.register('action.editOrder', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return editOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §41.4 COINPAY: buyer-side settlement for token/native-coin matches.
@@ -3004,6 +3013,16 @@ export function createBackgroundHost(deps) {
     });
     host.register('orders.forToken', async (req, { sdkRegistry }) => {
         return ordersForToken({ ...req, sdkRegistry });
+    });
+    // PC-17 My Orders: every order an address placed, across all pairs.
+    host.register('orders.forAddress', async (req, { sdkRegistry }) => {
+        return ordersForAddress({ ...req, sdkRegistry });
+    });
+    host.register('orders.cancelsForAddress', async (req, { sdkRegistry }) => {
+        return orderCancelsForAddress({ ...req, sdkRegistry });
+    });
+    host.register('orders.detail', async (req, { sdkRegistry }) => {
+        return orderDetail({ ...req, sdkRegistry });
     });
     host.register('swaps.forToken', async (req, { sdkRegistry }) => {
         return swapsForToken({ ...req, sdkRegistry });

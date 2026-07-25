@@ -80,8 +80,13 @@ assert.ok(/messaging\.orderAction\(/.test(src)
     'PlaceOrderPanel branches between orderAction and orderActionHw on isHwSource');
 assert.ok(/SignCredentials/.test(src) && /isHwSource/.test(src),
     'PlaceOrderPanel uses the shared SignCredentials + isHwSource helpers');
-assert.ok(/EXPIRATION_PRESETS/.test(src) && /EXPIRATION/.test(src),
-    'PlaceOrderPanel exposes expiration presets + writes EXPIRATION in blocks');
+// PC-17: EXPIRATION is a wall-clock Unix timestamp, NOT a block height
+// (block counts index invalid as "past"); presets are durations converted
+// to a future Unix timestamp, 'default' omits the field.
+assert.ok(/EXPIRATION_PRESETS/.test(src) && /expirationUnix/.test(src),
+    'PlaceOrderPanel exposes expiration presets + writes EXPIRATION as a Unix timestamp');
+assert.ok(!/blocks: \d+/.test(src) && !/expirationBlocks/.test(src),
+    'PlaceOrderPanel no longer emits block-count expirations');
 assert.ok(/side === 'buy'/.test(src)
     && /Buy \{tick1\}/.test(src)
     && /Sell \{tick1\}/.test(src),

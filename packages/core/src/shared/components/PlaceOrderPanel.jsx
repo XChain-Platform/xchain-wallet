@@ -48,11 +48,18 @@ const chainRegistry = registryLib.defaultRegistry();
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+// ORDER EXPIRATION is a wall-clock Unix timestamp, NOT a block height:
+// the indexer rejects `EXPIRATION <= BLOCK_TIME` as "past", so the old
+// block-count presets (144/1008/…) were all < BLOCK_TIME and made every
+// timed order index invalid. Presets are now durations converted to a
+// future Unix timestamp at submit; `days: null` = the default window
+// (omit EXPIRATION, since an empty field yields the protocol default,
+// not "never" - there is no on-wire perpetual expiration).
 const EXPIRATION_PRESETS = [
-    { id: '1d', label: '1 day', blocks: 144 },
-    { id: '1w', label: '1 week', blocks: 1008 },
-    { id: '1m', label: '1 month', blocks: 4320 },
-    { id: 'never', label: 'Never', blocks: 0 },
+    { id: '1d', label: '1 day', days: 1 },
+    { id: '1w', label: '1 week', days: 7 },
+    { id: '1m', label: '1 month', days: 30 },
+    { id: 'default', label: 'Default window', days: null },
 ];
 
 /**
@@ -203,14 +210,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // positive plain-decimal number.
     const total = useMemo(() => multiplyAmounts(price, size), [price, size]);
 
-    const expirationBlocks = useMemo(() => {
+    // The chosen expiration as a Unix timestamp (seconds). `null` = the
+    // default window (omit EXPIRATION); `undefined` = an invalid custom
+    // entry (blocked in the guard); a number is emitted verbatim.
+    const expirationUnix = useMemo(() => {
         if (expirationId === 'custom') {
-            const n = Number(customExpiration);
-            if (!Number.isFinite(n) || n < 0) return null;
-            return Math.floor(n);
+            const ms = Date.parse(customExpiration);
+            if (!Number.isFinite(ms)) return undefined;
+            return Math.floor(ms / 1000);
         }
         const preset = EXPIRATION_PRESETS.find((e) => e.id === expirationId);
-        return preset ? preset.blocks : null;
+        if (!preset) return undefined;
+        if (preset.days == null) return null;
+        return Math.floor(Date.now() / 1000) + preset.days * 86400;
     }, [expirationId, customExpiration]);
 
     const summary = useMemo(() => {
@@ -246,7 +258,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // the chain's own coin composes with that side blanked.
         if (coinTicker && p.GIVE_TICK.toUpperCase() === coinTicker) p.GIVE_TICK = '';
         if (coinTicker && p.GET_TICK.toUpperCase() === coinTicker) p.GET_TICK = '';
-        if (expirationBlocks != null) p.EXPIRATION = String(expirationBlocks);
+        if (typeof expirationUnix === 'number') p.EXPIRATION = String(expirationUnix);
         return p;
     }
 
@@ -327,8 +339,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setFormError('Price and size must be positive numbers.');
             return;
         }
-        if (expirationBlocks === null) {
-            setFormError('Expiration must be a non-negative integer (blocks).');
+        if (expirationUnix === undefined) {
+            setFormError('Pick a valid expiration date and time.');
+            return;
+        }
+        if (typeof expirationUnix === 'number' && expirationUnix <= Math.floor(Date.now() / 1000)) {
+            setFormError('Expiration must be in the future.');
             return;
         }
         if (ackRequired && !keepOpenAck) {
@@ -455,11 +471,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // Review stage: show order summary, collect credentials, then sign.
     // The user returns to the form (with inputs intact) via "Edit order".
     if (stage === 'review' || stage === 'submitting') {
-        const expirationLabel = expirationId === 'never'
-            ? 'Never (perpetual)'
-            : expirationId === 'custom'
-                ? `${expirationBlocks} blocks`
-                : (EXPIRATION_PRESETS.find((e) => e.id === expirationId)?.label ?? expirationId);
+        const expirationLabel = expirationId === 'default'
+            ? 'Default window'
+            : (typeof expirationUnix === 'number'
+                ? new Date(expirationUnix * 1000).toLocaleString()
+                : (EXPIRATION_PRESETS.find((e) => e.id === expirationId)?.label ?? expirationId));
 
         const giveTick = side === 'buy' ? tick2 : tick1;
         const giveAmt = side === 'buy' ? (total != null ? String(total) : '') : size;
@@ -738,10 +754,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             </div>
             {expirationId === 'custom' ? (
                 <Input
-                    label="Custom expiration (blocks)"
+                    label="Custom expiration"
+                    type="datetime-local"
                     value={customExpiration}
                     onChange={(e) => setCustomExpiration(e.target.value)}
-                    inputMode="numeric"
                     autoComplete="off"
                 />
             ) : null}

@@ -158,26 +158,33 @@ export async function orderAction(opts) {
 }
 
 /**
- * cancelOrder: wrapper for the CANCEL action (§41.3.5). Cancels an
- * open ORDER by its action index. Signs a tx from the order's source
- * address.
+ * cancelOrder: cancel an open ORDER by its action index. This is
+ * ORDER VERSION 1 (`VERSION|ORDER_ACTION_INDEX|MEMO`), signed from the
+ * order's source address. There is NO separate CANCEL action in the
+ * protocol: an earlier draft here emitted `action:'CANCEL'` with
+ * `OFFER_ACTION_INDEX`, which the real SDK rejects with UNKNOWN_ACTION
+ * before broadcast (only the web dev-mock SDK let it through) and the
+ * indexer never defines. Verified against xchain-sdk formats.js
+ * (`ORDER` format 1 = `VERSION|ORDER_ACTION_INDEX|MEMO`) and
+ * xchain-indexer actions/order.js (owner + still-open checks). The
+ * indexer validates the caller owns the order and it is still open;
+ * cancelling an order with pending COINPay obligations sets it to
+ * `cancelling` until those resolve (ORDER.md).
  *
- * CANCEL format (v0): OFFER_ACTION_INDEX referencing the order to
- * cancel. The indexer validates the caller is the order's owner.
- *
- * @param {OrderActionOpts & { orderActionIndex: string }} opts
+ * @param {OrderActionOpts & { orderActionIndex: string, memo?: string }} opts
  */
 export async function cancelOrder(opts) {
     if (!opts) throw new Error('cancelOrder: opts is required');
-    const actionIndex = opts.orderActionIndex || opts.params?.OFFER_ACTION_INDEX;
+    const actionIndex = opts.orderActionIndex || opts.params?.ORDER_ACTION_INDEX;
     if (typeof actionIndex !== 'string' || actionIndex.length === 0) {
         throw new Error('cancelOrder: orderActionIndex is required');
     }
     const source = normalizeSource(opts.from, 'cancelOrder');
+    const memo = opts.memo ?? opts.params?.MEMO;
     const params = {
-        VERSION: '0',
-        OFFER_ACTION_INDEX: String(actionIndex),
-        ...(opts.params || {}),
+        VERSION: '1',
+        ORDER_ACTION_INDEX: String(actionIndex),
+        ...(typeof memo === 'string' && memo.length > 0 ? { MEMO: memo } : {}),
     };
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -194,7 +201,7 @@ export async function cancelOrder(opts) {
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
-        actionData: { action: 'CANCEL', params },
+        actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -206,6 +213,83 @@ export async function cancelOrder(opts) {
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
         pendingTxMeta,
+        prebuiltPsbt: opts.prebuiltPsbt,
+        waitForTxid: opts.waitForTxid,
+        waitOpts: opts.waitOpts,
+        onProgress: opts.onProgress,
+    });
+}
+
+/**
+ * editOrder: edit an open ORDER's EXPIRATION / ALLOW_LIST / BLOCK_LIST
+ * via ORDER VERSION 2 (`VERSION|ORDER_ACTION_INDEX|EXPIRATION|ALLOW_LIST|BLOCK_LIST|MEMO`).
+ * A blank field leaves that property unchanged (indexer getOrderEdits
+ * overlays only truthy edit values), so the caller OMITS a field it
+ * does not mean to touch - it never clears one. Two protocol facts the
+ * form copy must reflect (both verified against xchain-indexer order.js):
+ *   - EXPIRATION is a wall-clock Unix timestamp, not a block height; it
+ *     must be strictly in the future (`EXPIRATION > BLOCK_TIME`) or the
+ *     edit indexes invalid as `EXPIRATION (past)`.
+ *   - There is no null-clear for the lists: passing `0` is numeric but
+ *     resolves to no LIST (`ALLOW_LIST (unknown)`); a bound list can be
+ *     replaced but not removed (lift a restriction by pointing at an
+ *     empty address list, same as ISSUE v5).
+ * An edit re-charges the expiration fee.
+ *
+ * @param {OrderActionOpts & { orderActionIndex: string }} opts  params carries the fields to change (EXPIRATION as a future Unix timestamp string, ALLOW_LIST/BLOCK_LIST as LIST action indexes, optional MEMO). VERSION + ORDER_ACTION_INDEX are set here.
+ */
+export async function editOrder(opts) {
+    if (!opts) throw new Error('editOrder: opts is required');
+    const actionIndex = opts.orderActionIndex || opts.params?.ORDER_ACTION_INDEX;
+    if (typeof actionIndex !== 'string' || actionIndex.length === 0) {
+        throw new Error('editOrder: orderActionIndex is required');
+    }
+    // At least one editable field must be present - an all-blank edit is
+    // a fee-burning no-op the UI should never submit.
+    const editable = ['EXPIRATION', 'ALLOW_LIST', 'BLOCK_LIST'];
+    const src = opts.params || {};
+    const hasEdit = editable.some((f) => typeof src[f] === 'string' && src[f].length > 0);
+    if (!hasEdit) {
+        throw new Error('editOrder: at least one of EXPIRATION, ALLOW_LIST, BLOCK_LIST is required');
+    }
+    const source = normalizeSource(opts.from, 'editOrder');
+    // Build only the fields the caller set; blank = leave-unchanged, so a
+    // missing field is never emitted (an empty positional field is what the
+    // wire encodes as "unchanged").
+    const params = { VERSION: '2', ORDER_ACTION_INDEX: String(actionIndex) };
+    for (const f of editable) {
+        if (typeof src[f] === 'string' && src[f].length > 0) params[f] = src[f];
+    }
+    if (typeof src.MEMO === 'string' && src.MEMO.length > 0) params.MEMO = src.MEMO;
+
+    const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
+        fromAddress: source.address,
+        toAddress: null,
+        actionSummary: `Edit order #${actionIndex}`,
+    };
+
+    return submitAction({
+        vault: opts.vault,
+        walletId: opts.walletId,
+        password: opts.password,
+        signer: opts.signer,
+        bip39Passphrase: opts.bip39Passphrase,
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        actionData: { action: 'ORDER', params },
+        encoderOpts: {
+            pubkey: source.publicKey,
+            ...(opts.fee !== undefined && { fee: opts.fee }),
+            ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+            ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
+        },
+        signingPaths: [source.derivationPath
+            ? { inputIndex: 0, path: source.derivationPath }
+            : { inputIndex: 0, addressId: source.addressId }],
+        pendingTxMeta,
+        prebuiltPsbt: opts.prebuiltPsbt,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
