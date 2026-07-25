@@ -65,8 +65,11 @@ export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
 // Protocol-accepted on every chain, form-less by design (see header note 2).
 // ADDRESS publishes a messaging encryption pubkey; it is emitted as plumbing
 // by the messaging flows, never authored from a menu.
+// BET  is mid-rollout: encoder/SDK accept it (userEncodable) but the
+// wallet form is package P7, which moves BET out of this list when it lands.
 export const PROTOCOL_ONLY_ACTIONS = /** @type {const} */ ([
     'ADDRESS',
+    'BET',
 ]);
 
 export const BITCOIN_ACTIONS = [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS, ...PROTOCOL_ONLY_ACTIONS]
