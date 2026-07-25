@@ -55,6 +55,28 @@ function tokensFromBalances(balResp) {
         .filter((t) => t.tick);
 }
 
+// D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger
+// (/balances/) and the NATIVE coin (/address/) together. Both reads run in
+// parallel and degrade independently (native survives a token-endpoint hiccup
+// and vice versa). Throws only when BOTH reads fail, so the caller can surface
+// a single error. Shared by addressBalances (single-address, Send preview +
+// Max) and walletBalances (Home aggregator) so the two never diverge.
+async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
+    const [balResp, addrResp] = await Promise.all([
+        sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
+        sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
+    ]);
+    const balOk = !(balResp instanceof Error);
+    const addrOk = !(addrResp instanceof Error);
+    if (!balOk && !addrOk) {
+        throw balResp instanceof Error ? balResp : new Error(String(balResp));
+    }
+    return {
+        native: addrOk ? nativeFromAddress(addrResp, nativeTicker) : null,
+        tokens: balOk ? tokensFromBalances(balResp) : [],
+    };
+}
+
 /**
  * @typedef {Object} AddressBalancesEntry
  * @property {string} address
@@ -68,23 +90,30 @@ function tokensFromBalances(balResp) {
 /**
  * @typedef {Object} AddressBalancesOpts
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]  resolves the chain's native ticker; when absent the native side degrades to null
  * @property {string} chainId
  * @property {string} address
  * @property {object} [opts]                  passed through to `sdk.getBalances`
  */
 
 /**
- * Single-address balance read. Direct pass-through to the SDK.
+ * Single-address balance read. Returns the `{ native, tokens }` shape the
+ * simulator / Send preview / Max button expect (via `balancesFromSdk`), NOT
+ * the raw explorer `/balances/` token-ledger list. D-6: the token ledger omits
+ * the chain's native coin, which lives at `/address/`; a raw pass-through left
+ * the Send form showing "0 BTC available" and disabled Max on a funded wallet.
  *
  * @param {AddressBalancesOpts} params
  * @returns {Promise<unknown>}
  */
-export async function addressBalances({ sdkRegistry, chainId, address, opts }) {
+export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, opts }) {
     if (!sdkRegistry) throw new Error('addressBalances: sdkRegistry is required');
     if (!chainId) throw new Error('addressBalances: chainId is required');
     if (!address) throw new Error('addressBalances: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getBalances(address, opts);
+    const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
+    const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
+    return fetchAddressShape({ sdk, address, nativeTicker, opts });
 }
 
 /**
@@ -269,23 +298,16 @@ export async function walletBalances({
                         error: null,
                     };
                     // D-6: fetch the TOKEN ledger (/balances/) and the NATIVE coin
-                    // balance (/address/) together, and hand the UI the
-                    // { native, tokens } shape it reads. Either call failing alone
-                    // still yields a partial result (native survives a token-endpoint
-                    // hiccup and vice versa); only a double failure surfaces `error`.
-                    const [balResp, addrResp] = await Promise.all([
-                        sdk.getBalances(addr.address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
-                        sdk.getAddress(addr.address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
-                    ]);
-                    const balOk = !(balResp instanceof Error);
-                    const addrOk = !(addrResp instanceof Error);
-                    if (!balOk && !addrOk) {
-                        base.error = balResp && balResp.message ? String(balResp.message) : String(balResp);
-                    } else {
-                        base.balances = {
-                            native: addrOk ? nativeFromAddress(addrResp, nativeTicker) : null,
-                            tokens: balOk ? tokensFromBalances(balResp) : [],
-                        };
+                    // balance (/address/) together (shared with addressBalances via
+                    // fetchAddressShape), and hand the UI the { native, tokens } shape
+                    // it reads. Either call failing alone still yields a partial result;
+                    // only a double failure (the helper throws) surfaces `error`.
+                    try {
+                        base.balances = await fetchAddressShape({
+                            sdk, address: addr.address, nativeTicker, opts,
+                        });
+                    } catch (e) {
+                        base.error = e && e.message ? String(e.message) : String(e);
                     }
                     return base;
                 }),

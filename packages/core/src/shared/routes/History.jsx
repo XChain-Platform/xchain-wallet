@@ -291,22 +291,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
-                    ]).then(([history, links]) => {
-                        // TEMP visual-design preview; fall back to
-                        // the demo-mode synthesizer when a real wallet
-                        // has zero history for this address, so the
-                        // populated UI can be evaluated. Remove once
-                        // the empty state has been reviewed.
-                        if (history.length === 0) {
-                            return {
-                                chainId: cid,
-                                address: a.address,
-                                history: flowsLib.synthesizeDemoHistory(cid, a.address),
-                                links: flowsLib.synthesizeDemoLinks(),
-                            };
-                        }
-                        return { chainId: cid, address: a.address, history, links };
-                    }),
+                    ]).then(([history, links]) => (
+                        { chainId: cid, address: a.address, history, links }
+                    )),
                 );
             }
         }

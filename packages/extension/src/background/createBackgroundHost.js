@@ -2755,8 +2755,8 @@ export function createBackgroundHost(deps) {
         return walletBalances({ ...req, vault, chainRegistry, sdkRegistry, activeNetwork });
     });
 
-    host.register('balances.address', async (req, { sdkRegistry }) => {
-        return addressBalances({ ...req, sdkRegistry });
+    host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
+        return addressBalances({ ...req, sdkRegistry, chainRegistry });
     });
 
     host.register('history.address', async (req, { sdkRegistry }) => {

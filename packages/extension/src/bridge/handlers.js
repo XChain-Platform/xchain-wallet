@@ -336,6 +336,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!ok) throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
         return addressBalances({
             sdkRegistry: deps.sdkRegistry,
+            chainRegistry: deps.chainRegistry,
             chainId: req.chainId,
             address: req.address,
         });
