@@ -20,7 +20,7 @@ import {
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -191,15 +191,26 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const { isWatcherMode } = useWalletMode();
 
     //  ( §5.6 slice 2): the software path composes ONE PSBT
-    // host-side and confirms it on the shared confirm page; hardware +
-    // watcher keep the legacy Preview/review stage. Unlike the other action
+    // host-side and confirms it on the shared confirm page, hardware
+    // included . Watcher mode still branches: it encodes, it
+    // never signs. Unlike the other action
     // forms the wire action/params are built HOST-side (the SDK's controller
     // helper lives there), so the built pair is stashed for the confirm
     // page's decoded intent.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    // : hardware signs the SAME prebuilt PSBT through the same host
+    // flow, with the device standing in for the password.
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: isHwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'advancedAction',
+        hardware: 'advancedActionHw',
+    });
     const [builtAction, setBuiltAction] = useState(
         /** @type {{ action: string, params: object } | null} */ (null),
     );
@@ -231,13 +242,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 from,
                 actionData: { action, params },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.advancedAction({
+                onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     action,
                     params,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -524,6 +534,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }

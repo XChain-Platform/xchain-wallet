@@ -41,6 +41,36 @@ export function isUserRejection(err) {
 }
 
 /**
+ * : the Approve dispatcher for a form whose hardware and software
+ * lanes are the SAME host flow with a different credential - a typed
+ * password, or a paired device reached through the signer bridge
+ * (`registerHwHandler` spreads the request straight through, so the `.hw`
+ * route signs the prebuilt PSBT byte-identically).
+ *
+ * Every migrated form needs this branch, and 20 hand-written copies of it
+ * is the drift this module exists to prevent: one that forgets `signerId`,
+ * or leaks a password onto the HW lane, is a bug no reviewer would catch by
+ * eye. Mirrors `useActionForm`'s `submitMethods`, the same convention the
+ * legacy review stages already dispatch on.
+ *
+ * @param {object} args
+ * @param {any} args.messaging
+ * @param {boolean} args.isHw                   source address is a trezor/ledger
+ * @param {string} [args.signerId]              the HW signer record id
+ * @param {{ current: string }} args.passwordRef  live password ref (a ref, so
+ *   Approve reads the latest keystrokes rather than a stale closure)
+ * @param {string} args.software                messaging method for the software lane
+ * @param {string} args.hardware                messaging method for the HW lane
+ * @returns {(base: object) => Promise<any>}    call with the shared request body
+ */
+export function useConfirmSubmit({ messaging, isHw, signerId, passwordRef, software, hardware }) {
+    return useCallback((base) => (isHw
+        ? messaging[hardware]({ ...base, signerId })
+        : messaging[software]({ ...base, password: passwordRef.current })
+    ), [messaging, isHw, signerId, software, hardware, passwordRef]);
+}
+
+/**
  * @param {object} args
  * @param {any} args.messaging                 the shell's messaging client (host boundary)
  * @param {string} args.walletId

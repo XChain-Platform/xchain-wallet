@@ -102,17 +102,23 @@ assert.ok(
     'MintForm submit stage calls the hook submit() with params + password (+ fee opts)',
 );
 
-// --- 4b.  slice 2: single-encode confirm modal ------------------
-// Software mints default into the confirm pipeline: the action button
-// composes host-side, sdk.preflight streams into the modal, Approve
-// signs the byte-identical prebuilt PSBT. HW + watcher keep review.
+// --- 4b.  slice 2: single-encode confirm page -------------------
+// Mints default into the confirm pipeline: the action button composes
+// host-side, sdk.preflight streams into the confirm page, Approve signs the
+// byte-identical prebuilt PSBT.  brought hardware onto it (the device
+// block replaces the password field); watcher still keeps review, because it
+// encodes and never signs.
 assert.ok(
     /isConfirmModalSliceEnabled\(settings, 'actionForms'\)/.test(src),
     'MintForm reads the actionForms slice flag with code default',
 );
 assert.ok(
-    /singleEncode && !isWatcherMode && !isHwSource/.test(src),
-    'confirm modal is software-only; hardware + watcher keep the legacy review stage',
+    /singleEncode && !isWatcherMode\b(?! && !isHwSource)/.test(src),
+    'the confirm page covers hardware too ; only watcher branches',
+);
+assert.ok(
+    /hwSource=\{isHwSource \? fromAddress : null\}/.test(src),
+    'a HW source hands the confirm page its device block (§5.1)',
 );
 assert.ok(
     /messaging\.composeForConfirm\(\{/.test(src) && /action: 'MINT', params: actionParams/.test(src),
@@ -127,8 +133,8 @@ assert.ok(
     'Approve signs the byte-identical composed PSBT (prebuiltPsbt)',
 );
 assert.ok(
-    /<ConfirmActionModal/.test(src),
-    'MintForm renders the shared ConfirmActionModal',
+    /<ActionConfirmScreen/.test(src),
+    'MintForm renders the SHARED confirm screen (the adapter that carries the §5.2.5 exact fee and §5.2.3 deltas), not its own modal copy',
 );
 assert.ok(
     /\? 'Mint' : 'Preview'/.test(src),

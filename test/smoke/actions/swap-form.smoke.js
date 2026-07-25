@@ -113,9 +113,13 @@ assert.ok(/function handleReview\b/.test(src),
     assert.ok(confirmIdx !== -1, 'openConfirmScreen ( single-encode lane) is present');
     // handleReview must appear before handleSubmit in the file.
     assert.ok(reviewIdx < submitIdx, 'handleReview is defined before handleSubmit');
-    // The software lane signs inside onApprove, never at review time.
-    assert.ok(/onApprove: \(prebuiltPsbt\) => messaging\.swapAction\(/.test(src),
-        'messaging.swapAction fires from the confirm page Approve callback');
+    // Signing happens inside onApprove, never at review time.  routed
+    // it through useConfirmSubmit, which picks swapAction / swapActionHw from
+    // the source instead of hard-coding the software lane.
+    assert.ok(/onApprove: \(prebuiltPsbt\) => submitConfirmed\(/.test(src),
+        'the Approve callback dispatches through useConfirmSubmit');
+    assert.ok(/software: 'swapAction',\s*\n\s*hardware: 'swapActionHw',/.test(src),
+        'useConfirmSubmit is wired to the swap lanes (software + hardware)');
     assert.ok(/prebuiltPsbt,/.test(src),
         'the approved PSBT is forwarded as prebuiltPsbt (single-encode)');
     // Hardware still signs from handleSubmit.

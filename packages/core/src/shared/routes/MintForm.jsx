@@ -24,7 +24,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
-import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
@@ -174,9 +174,10 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    //  §5.6 slice 2 (actionForms): software mints go through the
-    // single-encode confirm modal (compose + tamper + sdk.preflight all
-    // host-side); hardware + watcher keep the legacy review stage.
+    //  §5.6 slice 2 (actionForms): mints go through the single-encode
+    // confirm page (compose + tamper + sdk.preflight all host-side), hardware
+    // included . Watcher mode keeps the legacy review stage: it
+    // encodes, it never signs.
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
     const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms');
@@ -281,10 +282,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             return;
         }
         setFormError(null);
-        //  slice 2: with the flag on, software mints go straight to
-        // the single-encode confirm modal instead of the legacy review
-        // stage. Hardware + watcher keep the legacy path for this slice.
-        if (singleEncode && !isWatcherMode && !isHwSource) {
+        //  slice 2: with the flag on, mints go straight to the
+        // single-encode confirm page instead of the legacy review stage.
+        if (singleEncode && !isWatcherMode) {
             openConfirmModal();
             return;
         }
@@ -463,39 +463,26 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // viewports). All other form state stays intact behind it.
     if (confirmModalOpen) {
         return (
-            <ConfirmActionModal
+            <ActionConfirmScreen
+                confirmAction={confirmAction}
                 screenVariant={variant}
-                phase={confirmAction.phase}
-                composed={confirmAction.composed}
-                report={confirmAction.report}
-                reportLoading={confirmAction.phase === 'preflighting'}
-                acknowledged={confirmAction.acknowledged}
-                onAcknowledge={confirmAction.acknowledge}
-                canApprove={confirmAction.canApprove}
-                onApprove={confirmAction.approve}
-                onReject={confirmAction.reject}
                 decoded={decoded}
-                simulation={null}
-                error={confirmAction.error}
                 chainLabel={descriptor?.displayName || chainId}
+                // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
-                credentialsReady={signerReady || password.length > 0}
-                credentials={signerReady ? (
-                    <p className={styles.hint}>
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                    </p>
-                ) : (
-                    <Input
-                        type="password"
-                        label="Password"
-                        hint="Required to sign."
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                    />
-                )}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }
@@ -627,7 +614,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     loading={confirmAction.composing}
                     disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
                 >
-                    {singleEncode && !isWatcherMode && !isHwSource ? 'Mint' : 'Preview'}
+                    {singleEncode && !isWatcherMode ? 'Mint' : 'Preview'}
                 </Button>
             </div>
         </form>,

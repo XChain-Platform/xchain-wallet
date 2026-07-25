@@ -23,7 +23,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -449,14 +449,25 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const { isWatcherMode } = useWalletMode();
 
     //  ( §5.6 slice 2): the software path composes ONE PSBT
-    // host-side and confirms it on the shared confirm page; hardware +
-    // watcher keep the legacy Preview/review stage.
+    // host-side and confirms it on the shared confirm page, hardware
+    // included . Watcher mode still branches: it encodes, it
+    // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     // The confirm page's password field writes `password` state; the approve
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    // : hardware signs the SAME prebuilt PSBT through the same host
+    // flow, with the device standing in for the password.
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: isHwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'issueToken',
+        hardware: 'issueTokenHw',
+    });
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
@@ -476,12 +487,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 from,
                 actionData: { action: 'ISSUE', params: actionParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.issueToken({
+                onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: actionParams,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -718,6 +728,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                hwSignerInfo={hwSignerInfo}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }

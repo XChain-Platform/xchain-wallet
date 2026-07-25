@@ -49,6 +49,9 @@ import { HwSignBlock } from './HwSignBlock.jsx';
  * @param {(opts: { signerId: string, chainId?: string }) => Promise<any>} [props.getSignerStatus]
  * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata passed through to HwSignBlock so the firmware-update warning banner renders. Optional: when omitted, no banner shows (callers that haven't yet looked up the SignerRecord render gracefully).
  * @param {boolean} [props.unlocked]   when true for a software wallet, the password input is hidden; the unlocked session signs without it ("password only at unlock"). HW signing is unaffected (still confirms on-device).
+ * @param {boolean} [props.requireExplicitConfirm]   §18.5 cross-check: the risk classifier wants the user to tick "I verified this on the device" before signing. Passed through to HwSignBlock; software paths ignore it.
+ * @param {string|null} [props.requireExplicitConfirmReason]
+ * @param {(confirmed: boolean) => void} [props.onConfirmedChange]
  */
 export function SignCredentials({
     fromAddress,
@@ -62,6 +65,9 @@ export function SignCredentials({
     getSignerStatus,
     signerInfo,
     unlocked,
+    requireExplicitConfirm,
+    requireExplicitConfirmReason,
+    onConfirmedChange,
 }) {
     const src = fromAddress?.source;
     const isHw = src === 'trezor' || src === 'ledger';
@@ -82,6 +88,9 @@ export function SignCredentials({
                     : null}
                 onStatusChange={onStatusChange}
                 signerInfo={signerInfo}
+                requireExplicitConfirm={requireExplicitConfirm}
+                requireExplicitConfirmReason={requireExplicitConfirmReason}
+                onConfirmedChange={onConfirmedChange}
             />
         );
     }

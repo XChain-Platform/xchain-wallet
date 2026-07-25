@@ -26,7 +26,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
@@ -658,10 +658,23 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // BOTH legs get their own single-encode confirm round. The recipient-list
     // review stage stays: it is a data review (who gets what), not an encoded-
     // action preview, and the confirm page is what gates each signature.
+    // : hardware comes through here too, on both legs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    const hwDispatch = {
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+    };
+    const submitListConfirmed = useConfirmSubmit({
+        ...hwDispatch, software: 'createList', hardware: 'createListHw',
+    });
+    const submitAirdropConfirmed = useConfirmSubmit({
+        ...hwDispatch, software: 'airdropAction', hardware: 'airdropActionHw',
+    });
     // Which leg the confirm page is showing, so its decoded intent matches.
     const [confirmLeg, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
 
@@ -689,12 +702,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 from,
                 actionData: { action: 'LIST', params: listParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.createList({
+                onApprove: (prebuiltPsbt) => submitListConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: listParams,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -734,12 +746,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 from,
                 actionData: { action: 'AIRDROP', params: airdropParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.airdropAction({
+                onApprove: (prebuiltPsbt) => submitAirdropConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: airdropParams,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -953,6 +964,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }

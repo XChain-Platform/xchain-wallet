@@ -24,7 +24,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -227,13 +227,23 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         ...(pollParams.deposit && { DEPOSIT: pollParams.deposit }),
     }), [pollParams, cleanOptions]);
 
-    //  ( §5.6 slice 2): software polls go through the
-    // single-encode confirm page; hardware + watcher keep the legacy
-    // review stage.
+    //  ( §5.6 slice 2): polls go through the single-encode
+    // confirm page, hardware included . Watcher mode still
+    // branches: it encodes, it never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    // : hardware signs the SAME prebuilt PSBT through the same host
+    // flow, with the device standing in for the password.
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: isHwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'createPollAction',
+        hardware: 'createPollActionHw',
+    });
 
     const decoded = useMemo(() => {
         if (!actionConfirm.open) return null;
@@ -260,12 +270,11 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 from,
                 actionData: { action: 'VOTE', params: wireParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.createPollAction({
+                onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: pollParams,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -448,6 +457,13 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }

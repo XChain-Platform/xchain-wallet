@@ -39,7 +39,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
-import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
@@ -214,9 +214,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const haptic = useHaptic();
 
     //  §5.6 slice 1: the single-encode confirm modal. Flag-gated
-    // (read with code defaults, never vault-stamped) and scoped to the
-    // software-signer path for this slice; hardware + watcher sends stay on
-    // the legacy review->submit stage machine below until later slices.
+    // (read with code defaults, never vault-stamped).  brought
+    // hardware onto it; watcher sends stay on the legacy review->submit
+    // stage machine below (they encode, they never sign).
     const confirmAction = useConfirmAction();
     const singleEncodeSend = isConfirmModalSliceEnabled(settings, 'send');
 
@@ -1037,10 +1037,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             return;
         }
         setFormError(null);
-        //  slice 1: with the flag on, software sends go straight to the
+        //  slice 1: with the flag on, sends go straight to the
         // single-encode confirm modal instead of the legacy review stage.
-        // Hardware + watcher keep the legacy path for this slice.
-        if (singleEncodeSend && !isWatcherMode && !isHwSource) {
+        //  brought hardware in with them; watcher still branches.
+        if (singleEncodeSend && !isWatcherMode) {
             openConfirmModal();
             return;
         }
@@ -1171,16 +1171,23 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 reserve: { tick: tick.trim(), amount: String(amount).trim() },
                 compose: () => messaging.composeForConfirm(sendBase),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
-                onApprove: (_creds, composed) => messaging.sendToken({
-                    ...sendBase,
-                    password: passwordValueRef.current,
-                    prebuiltPsbt: {
+                // : the HW route runs the SAME send flow with a remote
+                // signer, so it signs the prebuilt PSBT byte-identically.
+                onApprove: (_creds, composed) => {
+                    const prebuiltPsbt = {
                         psbtHex: composed.psbt,
                         encoding: composed.encoding,
                         actionString: composed.actionString,
                         version: composed.version,
-                    },
-                }),
+                    };
+                    return isHwSource
+                        ? messaging.sendAssetHw({
+                            ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
+                        })
+                        : messaging.sendToken({
+                            ...sendBase, password: passwordValueRef.current, prebuiltPsbt,
+                        });
+                },
             });
             setResult(res);
             setPassword('');
@@ -1205,6 +1212,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     }, [
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfEnabled,
         feePerKb, password, settings, messaging, confirmAction, draft, haptic,
+        isHwSource,
     ]);
 
     async function handleSubmit(event) {
@@ -1327,44 +1335,43 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     //  confirm page, rendered in place of the form (operator
     // direction 2026-07-22: the overlay modal didn't fit small/mobile
     // viewports). All other form state stays intact behind it.
+    //
+    // This renders through the SHARED <ActionConfirmScreen>, not a hand-rolled
+    // <ConfirmActionModal>. Send piloted the pipeline before that adapter
+    // existed, and the copy it kept had quietly fallen behind: the adapter is
+    // where §5.2.5's exact-fee-from-the-composed-PSBT and §5.2.3's balance
+    // deltas live, so the most-used form in the wallet was showing a rate
+    // ESTIMATE and no deltas while ~24 slice-2 forms showed both.
     if (confirmModalOpen) {
         return (
-            <ConfirmActionModal
+            <ActionConfirmScreen
+                confirmAction={confirmAction}
                 screenVariant={variant}
-                phase={confirmAction.phase}
-                composed={confirmAction.composed}
-                report={confirmAction.report}
-                reportLoading={confirmAction.phase === 'preflighting'}
-                acknowledged={confirmAction.acknowledged}
-                onAcknowledge={confirmAction.acknowledge}
-                canApprove={confirmAction.canApprove}
-                onApprove={confirmAction.approve}
-                onReject={confirmAction.reject}
                 decoded={modalDecoded}
-                simulation={null}
-                // §5.3.4: a bad password keeps the page open at `ready`
-                // with this set, so the user retypes and re-approves the
-                // SAME PSBT instead of the page tearing down.
-                error={confirmAction.error}
                 chainLabel={descriptor?.displayName || chainId}
+                // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()
                     : undefined}
-                credentialsReady={signerReady || password.length > 0}
-                credentials={signerReady ? (
-                    <p className={styles.hint}>
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                    </p>
-                ) : (
-                    <Input
-                        type="password"
-                        label="Password"
-                        hint="Required to sign."
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                    />
-                )}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+                // : hardware swaps the password field for the device
+                // block, and Approve additionally waits on the §18.5
+                // cross-check when the risk classifier demands one. Dropping
+                // that gate here would have quietly removed a control the
+                // legacy review stage enforced.
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                hwSignerInfo={hwSignerInfo}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
+                hwRequireExplicitConfirmReason={signRisk.reason}
+                onHwConfirmedChange={setHwExplicitConfirmed}
+                hwExplicitConfirmed={hwExplicitConfirmed}
             />
         );
     }

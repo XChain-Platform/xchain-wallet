@@ -67,6 +67,12 @@ const HD_ADDRESS = Object.freeze({
     signerId: 'signer-1',
 });
 
+// : the same address, paired to a device. Hardware signers used to be
+// excluded from the confirm pipeline, which handed the users most likely to
+// care about verification the legacy rebuild-on-Approve path with no
+// output-set tamper check.
+const HW_ADDRESS = Object.freeze({ ...HD_ADDRESS, source: 'trezor', signerId: 'signer-hw' });
+
 const COMPOSED = Object.freeze({
     psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
 });
@@ -161,16 +167,31 @@ async function drainMicrotasks(rounds = 12) {
  * @param {(utils: any) => void} [spec.fill]
  * @param {Array<(utils: any) => void>} [spec.steps]   extra interactions, each flushed on its own (picker screens need a render between clicks)
  */
-async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [] }) {
+async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false }) {
     const { messagingOverrides, ...formProps } = props;
-    const { messaging, calls } = recordingMessaging(messagingOverrides);
+    // : the same drive, sourced from a paired device instead of an HD
+    // key. Auto-select only picks `source === 'hd'`, so the hardware address
+    // is named explicitly, as a user would via the source picker, and the
+    // device reports ready - that, not a typed password, is what gates
+    // Approve on this path.
+    const { messaging, calls } = recordingMessaging(hw ? {
+        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HW_ADDRESS] }),
+        getSignerStatus: () => Promise.resolve({ status: 'available' }),
+        ...messagingOverrides,
+    } : messagingOverrides);
     let utils;
     await domAct(async () => {
         utils = render(
             React.createElement(
                 MessagingProvider,
                 { shell: 'web', messaging },
-                React.createElement(Form, { walletId: 'w', chainId: CHAIN, onBack() {}, ...formProps }),
+                React.createElement(Form, {
+                    walletId: 'w',
+                    chainId: CHAIN,
+                    onBack() {},
+                    ...(hw ? { initialFromAddress: HW_ADDRESS.address } : {}),
+                    ...formProps,
+                }),
             ),
         );
         await drainMicrotasks();
@@ -605,7 +626,6 @@ describe(': action forms confirm via the single-encode pipeline', () => {
     // is verified (the device can only show native outputs). This pins that a
     // HW source reaches the confirm page and signs the SAME prebuilt PSBT.
     it('BroadcastForm confirms a HARDWARE source and signs the prebuilt PSBT', async () => {
-        const HW_ADDRESS = { ...HD_ADDRESS, source: 'trezor', signerId: 'signer-hw' };
         const { messaging, calls } = recordingMessaging({
             getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HW_ADDRESS] }),
             // The device reports ready, which is what gates Approve in place of
@@ -691,6 +711,89 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         // rebuild on Approve would be a different order.
         expect(submit.args.params).toMatchObject({ GIVE_AMOUNT: '10', GET_AMOUNT: '5' });
     });
+});
+
+// : the same spec, driven from a paired device.
+//
+// Every migrated form gated its confirm path on `!isHwSource`, so hardware
+// users fell back to the LEGACY review stage where submitWithSigner REBUILDS
+// the PSBT on Approve: no output-set tamper check, no action-byte cross-check,
+// no exact fee, no pre-flight panel, no reservation - while the confirm page's
+// own hardware note tells them precisely that screen is where action intent
+// gets verified, because the device can only show native outputs and
+// destinations. The users with the most to verify had the least verification.
+//
+// Each case pins three things a regression would break: the confirm page opens
+// for a HW source, it shows NO password field (readiness is the device), and
+// Approve dispatches the `.hw` lane carrying the SAME prebuilt PSBT - never the
+// software lane, which would try to sign with a password that was never typed.
+describe(': hardware signers confirm on the single-encode surface', () => {
+    /** Forms whose source can be named at mount, so a device can be the payer. */
+    const HW_CASES = [
+        {
+            name: 'DividendForm',
+            Form: DividendForm,
+            props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+            actionLabel: 'Pay dividend',
+            steps: [openTokenField('Dividend token'), pickToken('XCHAIN')],
+            fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
+            software: 'dividendAction',
+            hardware: 'dividendActionHw',
+        },
+        {
+            name: 'TokenAdminForm',
+            Form: TokenAdminForm,
+            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG' },
+            actionLabel: 'Update token',
+            fill: (utils) => setValue(utils, 'New description', 'a better token'),
+            software: 'issueToken',
+            hardware: 'issueTokenHw',
+        },
+        {
+            name: 'DispenserForm',
+            Form: DispenserForm,
+            props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+            actionLabel: 'Create',
+            fill: (utils) => {
+                setValue(utils, /^Give amount/, '10');
+                setValue(utils, /^Escrow amount/, '100');
+                setValue(utils, /^Trigger price/, '0.001');
+            },
+            software: 'dispenserAction',
+            hardware: 'dispenserActionHw',
+        },
+    ];
+
+    for (const c of HW_CASES) {
+        it(`${c.name} confirms a HARDWARE source and signs the prebuilt PSBT`, async () => {
+            const { calls, utils } = await driveThroughConfirm({
+                Form: c.Form,
+                props: c.props,
+                actionLabel: c.actionLabel,
+                steps: c.steps,
+                fill: c.fill,
+                hw: true,
+            });
+
+            // No password field: a device is not unlocked by typing here.
+            expect(utils.queryByLabelText('Password')).toBe(null);
+
+            const compose = calls.find((x) => x.method === 'composeForConfirm');
+            expect(compose, 'composed host-side for the HW source too').toBeTruthy();
+            expect(compose.args.from.address).toBe(HW_ADDRESS.address);
+
+            const submit = calls.find((x) => x.method === c.hardware);
+            expect(submit, `${c.hardware} dispatched on Approve`).toBeTruthy();
+            // The load-bearing assertion: the device signs the bytes the user
+            // saw checked, not a rebuild.
+            expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+            expect(submit.args.signerId).toBe('signer-hw');
+            // No password may ride the HW lane, and the software lane must
+            // never fire: it would sign with an empty password.
+            expect(submit.args.password).toBe(undefined);
+            expect(calls.some((x) => x.method === c.software)).toBe(false);
+        });
+    }
 });
 
 // ComposeMessage is the one action whose wire params cannot be built

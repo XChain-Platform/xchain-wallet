@@ -24,7 +24,7 @@ import { registry as registryLib, flows as flowsLib, decoder as decoderLib } fro
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
@@ -345,20 +345,30 @@ export function ComposeMessage({
         setEncryptionChoice(value);
     }
 
-    //  §5.6 slice 3: software sends compose ONE PSBT host-side and confirm
-    // it on the shared confirm page. Three carve-outs stay on the legacy review
-    // stage: hardware signers (their own signing gate), the demo wallet (its
-    // send is faked, there is nothing to compose), and a LOCKED wallet sending
-    // ECDH - that method needs our own private key to derive the shared secret
-    // at COMPOSE time, and on this path the password isn't collected until the
-    // confirm page. ECIES and plaintext compose fine while locked.
+    //  §5.6 slice 3: sends compose ONE PSBT host-side and confirm it on
+    // the shared confirm page. Two carve-outs stay on the legacy review stage:
+    // the demo wallet (its send is faked, there is nothing to compose), and a
+    // LOCKED wallet sending ECDH - that method needs our own private key to
+    // derive the shared secret at COMPOSE time, and on this path the password
+    // isn't collected until the confirm page. ECIES and plaintext compose fine
+    // while locked. : hardware is NOT a carve-out here - ECDH is not even
+    // offered to a HW source (the dropdown omits it), so every method a device
+    // can send composes without a private key.
     const isDemo = flowsLib.isDemoWallet(walletId);
     const needsKeyToCompose = !sendUnencrypted && encryptionChoice === 'ecdh' && !hw;
     const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
-    const singleEncode = actionConfirm.enabled && !hw && !isDemo
+    const singleEncode = actionConfirm.enabled && !isDemo
         && (!needsKeyToCompose || signerReady);
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'messageAction',
+        hardware: 'messageActionHw',
+    });
 
     // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
     // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
@@ -392,9 +402,8 @@ export function ComposeMessage({
                 chainId,
                 from,
                 compose: () => messaging.composeMessageForConfirm(base),
-                onApprove: (prebuiltPsbt, composed) => messaging.messageAction({
+                onApprove: (prebuiltPsbt, composed) => submitConfirmed({
                     ...base,
-                    password: passwordValueRef.current,
                     prebuiltParams: composed.messageParams,
                     prebuiltPsbt,
                 }),
@@ -700,6 +709,14 @@ export function ComposeMessage({
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                hwSignerInfo={hwSignerInfo}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }

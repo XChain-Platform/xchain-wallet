@@ -60,6 +60,12 @@ function nativeTickerFor(chainId) {
  * @param {object|null} [props.hwSignerInfo]
  * @param {string} [props.chainId]
  * @param {(opts: object) => Promise<any>} [props.getSignerStatus]
+ * @param {boolean} [props.hwRequireExplicitConfirm]   §18.5: the sign-risk
+ *   classifier wants an explicit "I checked the device screen" tick before
+ *   Approve enables. Send is the surface that uses it today.
+ * @param {string|null} [props.hwRequireExplicitConfirmReason]
+ * @param {(confirmed: boolean) => void} [props.onHwConfirmedChange]
+ * @param {boolean} [props.hwExplicitConfirmed]        the caller's tick state
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -81,14 +87,20 @@ export function ActionConfirmScreen({
     hwSignerInfo = null,
     chainId,
     getSignerStatus,
+    hwRequireExplicitConfirm = false,
+    hwRequireExplicitConfirmReason = null,
+    onHwConfirmedChange,
+    hwExplicitConfirmed = false,
 }) {
     // A hardware signer has no password to type: readiness is the device being
-    // connected, unlocked and on the right app. Approve stays disabled until
+    // connected, unlocked and on the right app - plus the §18.5 cross-check
+    // tick when the risk classifier demands one. Approve stays disabled until
     // then, exactly as the legacy review stage gated its Sign button.
     const credsComplete = credentialsReady !== undefined
         ? credentialsReady
         : hwSource
-            ? hwStatus === 'available'
+            ? (hwStatus === 'available'
+                && (!hwRequireExplicitConfirm || hwExplicitConfirmed))
             : (signerReady || password.length > 0);
 
     // §5.2.5: prefer the fee the composed PSBT actually pays. The caller's
@@ -137,6 +149,9 @@ export function ActionConfirmScreen({
                             onStatusChange={onHwStatusChange}
                             getSignerStatus={getSignerStatus}
                             signerInfo={hwSignerInfo}
+                            requireExplicitConfirm={hwRequireExplicitConfirm}
+                            requireExplicitConfirmReason={hwRequireExplicitConfirmReason}
+                            onConfirmedChange={onHwConfirmedChange}
                         />
                     ) : signerReady ? (
                         <p className={hintClassName}>

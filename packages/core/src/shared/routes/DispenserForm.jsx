@@ -23,7 +23,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     estimateNativeSendFee,
@@ -572,11 +572,21 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // host-side and confirms it on the shared confirm page; hardware +
     // watcher keep the legacy review stage.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     // The confirm page's password field writes `password` state; the approve
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    // : hardware signs the SAME prebuilt PSBT through the same host
+    // flow, with the device standing in for the password.
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: sourceAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'dispenserAction',
+        hardware: 'dispenserActionHw',
+    });
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
@@ -599,13 +609,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 },
-                onApprove: (prebuiltPsbt) => messaging.dispenserAction({
+                onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: actionParams,
                     payFeeInNativeCoin: payFeeInNativeCoin || undefined,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -945,6 +954,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={hw ? sourceAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
             />
         );

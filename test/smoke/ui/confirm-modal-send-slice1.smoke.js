@@ -85,14 +85,19 @@ assert.match(permanenceSrc, /export function broadcastFailureKindFromError/, 'pe
 // --- Send.jsx flag-gated modal path ---------------------------------
 
 const sendSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');
-assert.match(sendSrc, /import \{ ConfirmActionModal \}/, 'imports the modal');
+assert.match(sendSrc, /import \{ ActionConfirmScreen \}/, 'renders through the SHARED confirm screen, not a hand-rolled modal copy: that adapter is where the §5.2.5 exact fee and §5.2.3 deltas live');
 assert.match(sendSrc, /useConfirmAction\(\)/, 'uses the confirm hook');
 assert.match(sendSrc, /isConfirmModalSliceEnabled\(settings, 'send'\)/, 'reads the send slice flag with code default');
 assert.match(sendSrc, /messaging\.composeForConfirm\(/, 'compose() calls the host compose route');
 assert.match(sendSrc, /messaging\.preflight\(/, 'preflight streams from the host route');
-assert.match(sendSrc, /prebuiltPsbt:\s*\{/, 'Approve signs the prebuilt PSBT via sendToken');
-// Hardware + watcher stay on the legacy path for this slice.
-assert.match(sendSrc, /singleEncodeSend && !isWatcherMode && !isHwSource/, 'modal path scoped to software sends');
+assert.match(sendSrc, /const prebuiltPsbt = \{/, 'Approve signs the prebuilt PSBT via sendToken / sendAssetHw');
+// : hardware confirms here too; watcher still branches (it encodes,
+// it never signs). The §18.5 cross-check has to survive the move onto the
+// shared screen, or a HW gate would be silently dropped.
+assert.match(sendSrc, /singleEncodeSend && !isWatcherMode\b(?! && !isHwSource)/, 'confirm path covers hardware');
+assert.match(sendSrc, /hwSource=\{isHwSource \? fromAddress : null\}/, 'HW source hands the confirm screen its device block');
+assert.match(sendSrc, /hwRequireExplicitConfirm=\{signRisk\.requireExplicitConfirm\}/, '§18.5 cross-check reaches the confirm screen');
+assert.match(sendSrc, /messaging\.sendAssetHw\(\{/, 'the HW lane signs the prebuilt PSBT through the same send flow');
 // The onApprove password is read from a live ref, not a stale closure.
 assert.match(sendSrc, /password:\s*passwordValueRef\.current/, 'onApprove reads the live password ref');
 // §4.7 reservation wired through messaging (host-shared ledger).
@@ -100,7 +105,8 @@ assert.match(sendSrc, /reserve:\s*\(e\)\s*=>\s*messaging\.reserve\(e\)/, 'Send r
 assert.match(sendSrc, /reserve:\s*\{\s*tick:/, 'Send passes the reserve amount');
 // §5.3.4 credential re-prompt: the hook returns to `ready` with an error and
 // the modal renders it, so a bad password does not tear the modal down.
-assert.match(sendSrc, /error=\{confirmAction\.error\}/, 'Send passes the confirm error into the modal');
+const confirmScreenSrc = read('packages', 'core', 'src', 'shared', 'components', 'ActionConfirmScreen.jsx');
+assert.match(confirmScreenSrc, /error=\{confirmAction\.error\}/, 'the shared confirm screen passes the confirm error through, so a bad password re-prompts instead of tearing the page down');
 const hookSrc = read('packages', 'core', 'src', 'shared', 'hooks', 'useConfirmAction.js');
 assert.match(hookSrc, /isCredentialFailure\(err\)/, 'hook classifies credential failures');
 assert.match(hookSrc, /reason:\s*'bad-credentials'/, 'credential failure re-prompts instead of settling');

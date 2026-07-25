@@ -22,7 +22,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -226,9 +226,19 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // page; hardware + watcher keep the legacy review stage (same split
     // as CreatePollForm / AirdropForm).
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    // : hardware signs the SAME prebuilt PSBT through the same host
+    // flow, with the device standing in for the password.
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'createList',
+        hardware: 'createListHw',
+    });
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && !actionConfirm.open) return null;
@@ -244,12 +254,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 from,
                 actionData: { action: 'LIST', params: wireParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.createList({
+                onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: wireParams,
-                    password: passwordValueRef.current,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -392,6 +401,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
             />
         );

@@ -30,7 +30,7 @@ import { Button, Input } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
-import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -211,9 +211,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // legacy review stage (they need their own signing gates).
     const { isWatcherMode } = useWalletMode();
     const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
+    // : hardware signs the SAME prebuilt PSBT through the same host
+    // flow, with the device standing in for the password.
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'orderAction',
+        hardware: 'orderActionHw',
+    });
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
@@ -234,13 +244,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 from,
                 actionData: { action: 'ORDER', params },
                 encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
-                onApprove: (prebuiltPsbt) => messaging.orderAction({
+                onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params,
                     payFeeInNativeCoin: payFeeInNativeCoin || undefined,
-                    password: passwordValueRef.current,
                     prebuiltPsbt,
                 }),
             });
@@ -521,6 +530,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }
