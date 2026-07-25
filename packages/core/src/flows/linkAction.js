@@ -109,6 +109,13 @@ export async function linkAction(opts) {
         actionData: { action: 'LINK', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Select funding UTXOs BY ADDRESS and return change to the spender.
+            // LinkForm calls this flow live (no prebuiltPsbt), so without these
+            // the encoder selects by `pubkey` and the utxo-tracker rejects it
+            // with "has no matching Script" (the D-7 failure). Mirrors
+            // advancedAction.js / swapAction.js / composeForConfirm.js.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
