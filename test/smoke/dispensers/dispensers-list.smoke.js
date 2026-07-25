@@ -122,10 +122,14 @@ assert.ok(
     /messaging\.getDispenses/.test(detailSrc),
     'DispenserDetail fetches recent dispense events',
 );
+// Re-anchored for PC-19: the detail page now renders live status /
+// expiration / lists / dispenses-this-fill, and the one remaining
+// deferred counter is refills-remaining (explorer row exposes neither
+// refill_count nor per-edit give_escrow), stated as policy copy.
 assert.ok(
-    /remaining-fills counts are deferred/.test(detailSrc)
-        && /indexer surface doesn't expose them yet/.test(detailSrc),
-    'DispenserDetail acknowledges the deferred indexer data (live escrow / dispense count)',
+    /one deferred counter/.test(detailSrc)
+        && /exposes neither a[\s*]+refill_count/.test(detailSrc),
+    'DispenserDetail acknowledges the deferred refill counter honestly',
 );
 
 // --- 4. Cancel flow ---------------------------------------------------

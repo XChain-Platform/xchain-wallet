@@ -64,12 +64,20 @@ const ADDRESS_CELL_STYLE = {
  *     explorer doesn't yet have a by-dispenser-action-index dispense
  *     query).
  *   - For owners (source address is one of the wallet's addresses),
- *     a "Cancel dispenser" button that runs Step 21's v1 lane via
- *     `messaging.dispenserAction` with a password re-prompt.
+ *     owner actions via `messaging.dispenserAction` with a password
+ *     re-prompt (HW via `dispenserActionHw`): Close (v1 cancel),
+ *     Refill (v2 edit topping up GIVE_ESCROW), and Edit (v2 edit of
+ *     EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All owner actions
+ *     gate on the live status (open only).
+ *   - State display: current expiration + allow/block lists, dispenses
+ *     this fill against the 1,000 cap, and a close-window banner while
+ *     the dispenser sits in its 1-hour "cancelling" state.
  *
- * Live escrow balance + remaining-fills counts are deferred; the
- * indexer surface doesn't expose them yet (see xchain-explorer/src/
- * db.js getDispensers TODO).
+ * Refills-remaining (of the 5-refill / 6,000-lifetime ceiling) is the
+ * one deferred counter: the explorer's dispenser row exposes neither a
+ * refill_count nor per-edit give_escrow (getDispenserEdits omits it), so
+ * the wallet states the cap as policy copy on the refill form instead of
+ * a live count until that field lands (see xchain-explorer/src/db.js).
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -109,6 +117,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [refillBalance, setRefillBalance] = useState(
         /** @type {string | null} */ (null),
     );
+
+    // Edit (DISPENSER v2: reschedule EXPIRATION / update ALLOW_LIST /
+    // BLOCK_LIST). Blank = leave unchanged (the indexer treats a null
+    // field as "keep current"), so the form shows current values as
+    // read-only context and only sends the fields the owner fills in.
+    const [editStage, setEditStage] = useState(
+        /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
+    );
+    const [editExpiration, setEditExpiration] = useState('');
+    const [editAllowList, setEditAllowList] = useState('');
+    const [editBlockList, setEditBlockList] = useState('');
+    const [editError, setEditError] = useState(/** @type {string | null} */ (null));
+    const [editResult, setEditResult] = useState(/** @type {any | null} */ (null));
+    // Which fields the last submitted edit actually changed, so the done
+    // screen can tailor its 1-hour-list-delay note.
+    const [editedLists, setEditedLists] = useState(false);
     // Quick-action "More" popover.
     const [moreOpen, setMoreOpen] = useState(false);
     const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -343,6 +367,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const giveTick = dispenser?.give_tick;
     const giveAmount = dispenser?.give_amount;
     const dispAddr = dispenser?.address;
+    // Live status: `current_status` reflects post-create transitions (the
+    // 1-hour "cancelling" close window, expiry, sold-out), falling back to
+    // the create `status` for demo fixtures that carry only that field.
+    const liveStatus = String(dispenser?.current_status || dispenser?.status || '');
+    const isOpen = liveStatus === 'open';
+    const isClosing = liveStatus === 'cancelling';
+    const currentExpiration = dispenser?.expiration;
+    const currentAllowList = dispenser?.allow_list;
+    const currentBlockList = dispenser?.block_list;
     // Fills this dispenser can still pay out, shown as a bubble next to the
     // dispense count. Needs both the live escrow and the per-fill give amount.
     const remainingFills = useMemo(
@@ -499,6 +532,93 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }
 
+    async function handleEdit(event) {
+        event.preventDefault();
+        if (editStage === 'submitting' || !ownerAddress) return;
+        if (!cancelHw && (!signerReady && password.length === 0)) return;
+        if (cancelHw && cancelHwStatus !== 'available') return;
+
+        // Assemble only the fields the owner filled in; a blank field is
+        // left unchanged (indexer null = keep current). Refill lives in its
+        // own flow, so GIVE_ESCROW is never touched here.
+        const params = { VERSION: '2', DISPENSER_ACTION_INDEX: String(actionIndex) };
+        let changedLists = false;
+
+        const expTrim = editExpiration.trim();
+        if (expTrim) {
+            const unix = localInputToUnix(expTrim);
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (!unix || unix <= nowSec) {
+                setEditError('Expiration must be a future date and time.');
+                return;
+            }
+            params.EXPIRATION = String(unix);
+        }
+        const alTrim = editAllowList.trim();
+        if (alTrim) {
+            if (!/^\d+$/.test(alTrim)) { setEditError('Allow list must be a LIST action index (digits only).'); return; }
+            params.ALLOW_LIST = alTrim;
+            changedLists = true;
+        }
+        const blTrim = editBlockList.trim();
+        if (blTrim) {
+            if (!/^\d+$/.test(blTrim)) { setEditError('Block list must be a LIST action index (digits only).'); return; }
+            params.BLOCK_LIST = blTrim;
+            changedLists = true;
+        }
+        if (params.EXPIRATION === undefined && params.ALLOW_LIST === undefined && params.BLOCK_LIST === undefined) {
+            setEditError('Change at least one field to submit an edit.');
+            return;
+        }
+
+        setEditStage('submitting');
+        setEditError(null);
+        // Demo wallet: fabricated dispensers can't broadcast; simulate.
+        if (flowsLib.isDemoWallet(walletId)) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            setEditResult({ txid: null });
+            setEditedLists(changedLists);
+            setPassword('');
+            setEditStage('done');
+            return;
+        }
+        try {
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: ownerAddress.address,
+                    publicKey: ownerAddress.publicKey,
+                    derivationPath: ownerAddress.derivationPath,
+                    addressId: ownerAddress.id,
+                    source: ownerAddress.source,
+                    signerId: ownerAddress.signerId,
+                },
+                params,
+                ...(feePerKb != null ? { feePerKb } : {}),
+            };
+            const res = cancelHw
+                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
+                : await messaging.dispenserAction({ ...base, password });
+            setEditResult(res);
+            setEditedLists(changedLists);
+            setPassword('');
+            setEditStage('done');
+        } catch (err) {
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            setEditError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : err?.message || 'Edit failed.',
+            );
+            setEditStage('confirm');
+            if (!cancelHw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
+        }
+    }
+
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
@@ -559,9 +679,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     ? 'Confirm close'
                     : refillStage === 'confirm' || refillStage === 'submitting'
                         ? 'Refill dispenser'
-                        : buyStage === 'confirm' || buyStage === 'submitting'
-                            ? 'Review buy'
-                            : 'Dispenser detail'}
+                        : editStage === 'confirm' || editStage === 'submitting'
+                            ? 'Edit dispenser'
+                            : buyStage === 'confirm' || buyStage === 'submitting'
+                                ? 'Review buy'
+                                : 'Dispenser detail'}
         />
     );
     const wrap = (children) => (
@@ -623,6 +745,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <p className={styles.summary}>
                     Refill dispenser #{actionIndex}: add {giveTick} to escrow.
                 </p>
+                <p className={styles.hint}>
+                    A refill resets the per-fill dispense counter (1,000 dispenses per
+                    fill). A dispenser allows up to 5 refills (6,000 lifetime dispenses);
+                    a 6th refill is rejected.
+                </p>
                 <AmountField
                     label="Refill amount"
                     amount={refillAmount}
@@ -673,6 +800,114 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         {cancelHw
                             ? `Sign refill on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                             : 'Sign refill'}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
+    if (editStage === 'done') {
+        const txid = editResult?.txid || editResult?.broadcast?.txid;
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Edit submitted</h2>
+                <p className={styles.hint}>
+                    {editedLists
+                        ? 'Allow/block list changes take effect about 1 hour after this transaction confirms; any expiration change applies on confirmation.'
+                        : 'The change applies when this transaction confirms.'}
+                </p>
+                {txid ? (
+                    <>
+                        <p className={styles.successLabel}>Transaction ID</p>
+                        <code className={styles.txid}>{txid}</code>
+                    </>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button
+                        variant="primary"
+                        onClick={() => {
+                            setEditStage('idle');
+                            setEditExpiration('');
+                            setEditAllowList('');
+                            setEditBlockList('');
+                        }}
+                    >
+                        Done
+                    </Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (editStage === 'confirm' || editStage === 'submitting') {
+        const anyListFilled = Boolean(editAllowList.trim() || editBlockList.trim());
+        return wrap(
+            <form onSubmit={handleEdit} noValidate>
+                <p className={styles.summary}>
+                    Edit dispenser #{actionIndex}: reschedule its close time or update its
+                    allow/block lists. Leave a field blank to keep it unchanged.
+                </p>
+                <Input
+                    type="datetime-local"
+                    label="New expiration"
+                    hint={currentExpiration
+                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close.`
+                        : 'No expiration set. Enter a date to schedule an automatic close.'}
+                    value={editExpiration}
+                    onChange={(e) => { setEditExpiration(e.target.value); if (editError) setEditError(null); }}
+                    autoComplete="off"
+                />
+                <Input
+                    label="Allow list"
+                    inputMode="numeric"
+                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a LIST action index to limit who can trigger this dispenser.`}
+                    value={editAllowList}
+                    onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
+                    autoComplete="off"
+                />
+                <Input
+                    label="Block list"
+                    inputMode="numeric"
+                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a LIST action index to bar addresses from triggering it.`}
+                    value={editBlockList}
+                    onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
+                    autoComplete="off"
+                />
+                {anyListFilled ? (
+                    <p className={styles.hint}>
+                        Allow/block list changes take effect about 1 hour after this
+                        transaction confirms, per the dispenser list-edit delay.
+                    </p>
+                ) : null}
+                {feeSelector}
+                <SignCredentials
+                    unlocked={signerReady}
+                    fromAddress={ownerAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
+                        if (editError) setEditError(null);
+                    }}
+                    onStatusChange={onCancelHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={editError}
+                    disabled={editStage === 'submitting'}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+                {cancelHw && editError ? (
+                    <div role="alert" className={styles.error}>{editError}</div>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={editStage === 'submitting'}
+                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {cancelHw
+                            ? `Sign edit on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Sign edit'}
                     </Button>
                 </div>
             </form>,
@@ -834,6 +1069,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     return wrap(
         <>
+            {isClosing ? (
+                <p className={local.closeWindowNote} role="status">
+                    Closing: this dispenser is in its 1-hour close window. Remaining escrow
+                    returns to the owner when the window ends; dispenses that confirm before
+                    then are still honored.
+                </p>
+            ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
@@ -859,7 +1101,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <>
                         <dt className={styles.detailsLabel}>Dispenses</dt>
                         <dd className={styles.detailsValue}>
-                            {formatNum(dispenser.dispense_count)}
+                            {formatNum(dispenser.dispense_count)} of 1,000 this fill
                             {remainingFills != null ? (
                                 <span
                                     className={`${local.remainingPill} ${remainingFills > 0n ? local.remainingOk : local.remainingEmpty}`}
@@ -889,7 +1131,27 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </>
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
-                <dd className={styles.detailsValue}>{String(dispenser?.status || 'unknown')}</dd>
+                <dd className={styles.detailsValue}>
+                    {isClosing ? 'closing (1-hour window)' : (liveStatus || 'unknown')}
+                </dd>
+                {currentExpiration ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Expires</dt>
+                        <dd className={styles.detailsValue}>{formatUnixDate(currentExpiration)}</dd>
+                    </>
+                ) : null}
+                {currentAllowList ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Allow list</dt>
+                        <dd className={styles.detailsValue}>#{currentAllowList}</dd>
+                    </>
+                ) : null}
+                {currentBlockList ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Block list</dt>
+                        <dd className={styles.detailsValue}>#{currentBlockList}</dd>
+                    </>
+                ) : null}
                 {dispenser?.memo ? (
                     <>
                         <dt className={styles.detailsLabel}>Memo</dt>
@@ -903,9 +1165,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     type="button"
                     className={local.quickAction}
                     onClick={() => setCancelStage('confirm')}
-                    disabled={!ownerAddress || String(dispenser?.status) !== 'open'}
+                    disabled={!ownerAddress || !isOpen}
                     title={!ownerAddress ? 'Only the owner can close'
-                        : String(dispenser?.status) !== 'open' ? 'Dispenser is not open'
+                        : !isOpen ? 'Dispenser is not open'
                         : 'Close this dispenser'}
                 >
                     <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
@@ -915,13 +1177,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     type="button"
                     className={local.quickAction}
                     onClick={() => setRefillStage('confirm')}
-                    disabled={!ownerAddress || String(dispenser?.status) !== 'open'}
+                    disabled={!ownerAddress || !isOpen}
                     title={!ownerAddress ? 'Only the owner can refill'
-                        : String(dispenser?.status) !== 'open' ? 'Dispenser is not open'
+                        : !isOpen ? 'Dispenser is not open'
                         : 'Add escrow to this dispenser'}
                 >
                     <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                     <span>Refill</span>
+                </button>
+                <button
+                    type="button"
+                    className={local.quickAction}
+                    onClick={() => setEditStage('confirm')}
+                    disabled={!ownerAddress || !isOpen}
+                    title={!ownerAddress ? 'Only the owner can edit'
+                        : !isOpen ? 'Dispenser is not open'
+                        : 'Change expiration or allow/block lists'}
+                >
+                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
+                    <span>Edit</span>
                 </button>
                 <button
                     type="button"
@@ -1147,6 +1421,30 @@ function relativeTime(ts) {
     if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
     const year = Math.floor(day / 365);
     return `${year} year${year === 1 ? '' : 's'} ago`;
+}
+
+// Format a Unix timestamp (seconds; tolerates ms) as a short local
+// date-time. '' for unparseable input so callers can omit the row.
+function formatUnixDate(ts) {
+    const n = Number(ts);
+    if (!n || !Number.isFinite(n)) return '';
+    const ms = n < 1e12 ? n * 1000 : n;
+    try {
+        return new Date(ms).toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+    } catch {
+        return new Date(ms).toISOString();
+    }
+}
+
+// Convert a datetime-local input value ('2026-07-24T15:30', interpreted in
+// the user's local zone) to Unix seconds. null on unparseable input.
+function localInputToUnix(localStr) {
+    const ms = Date.parse(String(localStr));
+    if (!Number.isFinite(ms)) return null;
+    return Math.floor(ms / 1000);
 }
 
 function DetailRow({ label, value }) {

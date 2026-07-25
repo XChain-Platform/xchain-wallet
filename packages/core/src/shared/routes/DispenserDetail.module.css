@@ -4,7 +4,10 @@
 
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* Flows 4-5 across on wide shells and wraps gracefully on the narrow
+       extension popup, so owner-only actions (Refill, Edit) can join the
+       row without a fixed column count clipping them. */
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
     gap: var(--xc-space-2);
     /* Pull up against .detailsList's space-4 bottom margin so the grid
        sits tight under the stats card. */
@@ -220,4 +223,15 @@
 .remainingEmpty {
     background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
     color: var(--xc-danger);
+}
+
+/* Close-window banner: shown while a dispenser sits in its 1-hour
+   "cancelling" window before escrow is released. */
+.closeWindowNote {
+    margin: 0 0 var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-md, 8px);
+    background: color-mix(in srgb, var(--xc-warning, #b8860b) 12%, transparent);
+    color: var(--xc-warning, #b8860b);
+    font-size: var(--xc-text-sm);
 }
