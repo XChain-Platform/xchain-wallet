@@ -29,6 +29,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
+import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { PsbtIntentPanel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
 import { psbtRefusalReason } from '../../../packages/core/src/shared/components/PsbtConfirmScreen.jsx';
 import { isUnreadableActionReason } from '../../../packages/core/src/shared/components/psbtDecodeReasons.js';
@@ -223,6 +224,56 @@ describe('§5.5 fail-closed refusal rule', () => {
         ]) {
             expect(isUnreadableActionReason(reason), reason).toBe(true);
         }
+    });
+});
+
+// §5.2.5: the fee section shows what the composed PSBT actually pays. The
+// caller's feeText is a rate-table estimate and must lose to the exact value.
+describe('§5.2.5 exact fee beats the caller estimate', () => {
+    function screenProps(composed) {
+        return {
+            confirmAction: {
+                phase: 'ready',
+                composed,
+                report: null,
+                acknowledged: new Set(),
+                acknowledge() {},
+                canApprove: true,
+                approve() {},
+                reject() {},
+                error: null,
+            },
+            decoded: { summary: 'Send 1 JDOG', details: [], warnings: [] },
+            chainLabel: 'Bitcoin',
+            signerReady: true,
+            password: '',
+            onPasswordChange() {},
+        };
+    }
+
+    it('renders the PSBT fee, converted from sats, with the chain ticker', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({ networkFeeSats: 5900, chainId: 'bitcoin-mainnet' }),
+            feeText: 'Network fee: 0.00042 BTC (estimate)',
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.000059 BTC');
+        // The estimate must not also appear; two fee numbers is worse than one.
+        expect(utils.container.textContent).not.toContain('0.00042');
+    });
+
+    it('falls back to the caller estimate when the exact fee is unknowable', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
+            feeText: 'Network fee: 0.00042 BTC',
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC');
+    });
+
+    it('resolves the ticker from the envelope chain, not the caller', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({ networkFeeSats: 100000000, chainId: 'dogecoin-mainnet' }),
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 1 DOGE');
     });
 });
 

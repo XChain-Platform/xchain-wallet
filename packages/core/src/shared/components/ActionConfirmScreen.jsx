@@ -18,7 +18,20 @@
 // `actionConfirm.open` is true, exactly like a picker screen.
 
 import { Input } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
+import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
+
+const chainRegistry = registryLib.defaultRegistry();
+
+// Native ticker for the §5.2.5 exact-fee line, resolved from the composed
+// envelope's own chainId so no call site has to pass it.
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+function nativeTickerFor(chainId) {
+    const coin = chainId ? chainRegistry.get(chainId)?.coin : null;
+    if (!coin) return '';
+    return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
+}
 
 /**
  * @param {object} props
@@ -26,7 +39,9 @@ import { ConfirmActionModal } from './ConfirmActionModal.jsx';
  * @param {'small'|'full'} [props.screenVariant]
  * @param {object|null} props.decoded            decodeAction output for the composed action
  * @param {string} props.chainLabel
- * @param {string} [props.feeText]
+ * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
+ *   fallback: when the composed PSBT knows its own fee (§5.2.5) that exact value wins
+ * @param {string} [props.coinTicker]            ticker for the exact-fee line
  * @param {boolean} props.signerReady            wallet already unlocked (no password needed)
  * @param {string} props.password
  * @param {(value: string) => void} props.onPasswordChange
@@ -48,10 +63,23 @@ export function ActionConfirmScreen({
     extraCredentials = null,
     hintClassName,
     simulation = null,
+    coinTicker = '',
 }) {
     const credsComplete = credentialsReady !== undefined
         ? credentialsReady
         : (signerReady || password.length > 0);
+
+    // §5.2.5: prefer the fee the composed PSBT actually pays. The caller's
+    // `feeText` is a rate-table estimate and is only shown when the exact fee
+    // is unknowable (an input value missing from the PSBT), in which case it
+    // stays labelled as an estimate rather than passing for the real thing.
+    const composed = confirmAction.composed;
+    const exactSats = composed?.networkFeeSats;
+    const ticker = coinTicker || nativeTickerFor(composed?.chainId);
+    const exactFeeText = Number.isFinite(exactSats)
+        ? `Network fee: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
+        : null;
+
     return (
         <ConfirmActionModal
             screenVariant={screenVariant}
@@ -68,7 +96,7 @@ export function ActionConfirmScreen({
             simulation={simulation}
             error={confirmAction.error}
             chainLabel={chainLabel}
-            feeText={feeText}
+            feeText={exactFeeText || feeText}
             credentialsReady={credsComplete}
             credentials={(
                 <>

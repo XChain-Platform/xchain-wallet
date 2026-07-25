@@ -28,6 +28,7 @@
 
 import { composeForConfirm } from './composeForConfirm.js';
 import { assertNoTamper } from './confirmChecks.js';
+import { exactNetworkFeeSats } from './psbtNetworkFee.js';
 
 /**
  * @typedef {Object} ComposeActionForConfirmOpts
@@ -70,6 +71,12 @@ export async function composeActionForConfirm({
     const sdk = sdkRegistry.get(chainId);
     const own = new Set(Array.isArray(ownAddresses) ? ownAddresses : []);
     if (source) own.add(source);
+    // §5.2.5: the EXACT fee of the PSBT that will broadcast, taken from the
+    // built bytes rather than a rate estimate. Decomposed once here and reused
+    // for the fee; null when an input value is missing from the PSBT, in which
+    // case the UI falls back to its estimate and says so.
+    const decomposed = sdk.wallet.decomposePsbt(composed.psbt);
+    const networkFeeSats = exactNetworkFeeSats(decomposed);
     assertNoTamper({
         psbtHex: composed.psbt,
         expected: composed.expectedOutputs,
@@ -86,11 +93,19 @@ export async function composeActionForConfirm({
         actionString: composed.actionString,
         action: composed.action,
         version: composed.version,
+        // The chain these bytes were built for. Carried so display code can
+        // resolve chain-scoped formatting (the native ticker for the §5.2.5 fee
+        // line) from the envelope itself, instead of every one of the ~24
+        // confirm call sites having to thread it separately.
+        chainId,
         psbt: composed.psbt,
         encoding: composed.encoding,
         quote: composed.quote,
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
+        // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
+        // does not carry every input value. Never a rate estimate.
+        networkFeeSats,
         tamperVerified: true,
     };
 }
