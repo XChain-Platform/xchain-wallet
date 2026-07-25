@@ -24,6 +24,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -126,6 +127,16 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     const [version, setVersion] = useState('');
     const [fields, setFields] = useState(/** @type {string[]} */ ([]));
     const [values, setValues] = useState(/** @type {Record<string, string>} */ ({}));
+    // PC-26: raw SEND/BATCH composition is deliberately NOT rewritten by
+    // the gated-send guard (this form is the escape hatch and the indexer
+    // rejects an unpaired gated send anyway), so it warns loudly instead.
+    // Live-detects the SEND TICK field; BATCH gets the static warning only
+    // (its COMMAND is freeform).
+    const gatedRawNotice = useGatedTickNotice({
+        messaging,
+        chainId,
+        tick: action === 'SEND' ? (values.TICK || '') : null,
+    });
     const [validation, setValidation] = useState(
         /** @type {{ valid: boolean, errors: any[] } | null} */ (null),
     );
@@ -680,6 +691,25 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     ))}
                 </select>
             </label>
+
+            {action === 'SEND' || action === 'BATCH' ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        Token-gated content rule: a SEND of a tick with active gated files is
+                        REJECTED by the network unless it rides in a BATCH with a MESSAGE v2
+                        handing the unlock key to the same destination. This raw form composes
+                        exactly what you type and does not add that pairing; use the Send form
+                        for gated tokens unless you are building the BATCH yourself.
+                    </p>
+                    {gatedRawNotice.gated ? (
+                        <p className={styles.warning}>
+                            {String(values.TICK || '').trim().toUpperCase()} HAS active gated
+                            content ({gatedRawNotice.packCount} pack{gatedRawNotice.packCount === 1 ? '' : 's'}):
+                            a bare SEND of it will be rejected.
+                        </p>
+                    ) : null}
+                </div>
+            ) : null}
 
             {action && formats && Object.keys(formats).length > 1 ? (
                 <label className={styles.pickerLabel}>

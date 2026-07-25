@@ -22,6 +22,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
@@ -93,6 +94,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     const [tick, setTick] = useState((initialTick || '').toUpperCase());
     const [dividendTick, setDividendTick] = useState('');
+    // PC-26: dividends carry no gated-key handoff; warn when the
+    // distributed token has gated content.
+    const gatedDividendNotice = useGatedTickNotice({ messaging, chainId, tick: dividendTick });
     const [amount, setAmount] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
@@ -724,6 +728,13 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
+            {gatedDividendNotice.gated ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
+                    </p>
+                </div>
+            ) : null}
 
             {tick.trim() ? (
                 <p className={styles.hint}>

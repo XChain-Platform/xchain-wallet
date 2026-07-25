@@ -44,6 +44,11 @@ export { buildCoinpayPsbtRequest, coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
 export { fileAction } from './fileAction.js';
+export {
+    gatedPublishAction,
+    buildGatedPublishPsbtRequest,
+    MAX_GATED_PLAINTEXT_BYTES,
+} from './gatedPublishAction.js';
 export { getProjectForTick } from './projectQueries.js';
 export { getMessagingInbox, getMessagingInboxSweep } from './messagingInbox.js';
 export {
@@ -55,7 +60,17 @@ export {
     buildKeyHandoffPayload,
     getCachedGatedKey,
     clearGatedContentCaches,
+    recoverGatedKeysForTick,
 } from './gatedContent.js';
+export {
+    prepareGatedSend,
+    gatedSendReadiness,
+    getGatedGroupsForSend,
+    resolveGatedSendKeys,
+    clearGatedGroupsCache,
+    GatedSendKeysMissingError,
+    GatedRecipientPubkeyMissingError,
+} from './gatedSendGuard.js';
 export {
     messageAction,
     buildMessageParams,

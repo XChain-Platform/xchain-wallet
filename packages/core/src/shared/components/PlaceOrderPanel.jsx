@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -67,6 +68,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const [side, setSide] = useState(/** @type {'buy' | 'sell'} */ ('buy'));
+    // PC-26: order settlement carries no gated-key handoff; warn when the
+    // give-side token (sell → tick1, buy → tick2) has gated content.
+    const gatedGiveNotice = useGatedTickNotice({
+        messaging, chainId, tick: side === 'sell' ? tick1 : tick2,
+    });
     const [price, setPrice] = useState('');
     const [size, setSize] = useState('');
     const [expirationId, setExpirationId] = useState('1w');
@@ -676,6 +682,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
                 >
                     {NATIVE_FEE_WARNING}
+                </p>
+            ) : null}
+            {gatedGiveNotice.gated ? (
+                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                    {gatedTickWarningCopy(side === 'sell' ? tick1 : tick2, 'the order counterparty')}
                 </p>
             ) : null}
             {formError ? (

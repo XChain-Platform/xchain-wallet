@@ -22,6 +22,7 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -108,6 +109,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         /** @type {string | null} */ (null),
     );
     const [giveTick, setGiveTick] = useState((initialGiveTick || '').toUpperCase());
+    // PC-26: swap settlement carries no gated-key handoff; warn when the
+    // give-side token has gated content.
+    const gatedGiveNotice = useGatedTickNotice({ messaging, chainId, tick: giveTick });
     const [giveAmount, setGiveAmount] = useState('');
     const [giveOwnership, setGiveOwnership] = useState(!!initialGiveOwnership);
     const [getTick, setGetTick] = useState('');
@@ -657,6 +661,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 value={giveTick && chainId ? { chainId, tick: giveTick } : null}
                 onOpenPicker={() => setGivePickerOpen(true)}
             />
+            {gatedGiveNotice.gated && !giveOwnership ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                    </p>
+                </div>
+            ) : null}
             {giveOwnership ? null : (
                 <AmountField
                     label="Give amount"

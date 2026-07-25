@@ -25,6 +25,7 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -136,6 +137,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     );
 
     const [token, setToken] = useState((initialTick || '').toUpperCase());
+    // PC-26: airdrops carry no gated-key handoff; warn when the dropped
+    // token has gated content.
+    const gatedDropNotice = useGatedTickNotice({ messaging, chainId, tick: token });
     const [amountPer, setAmountPer] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
@@ -1330,6 +1334,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
+            {gatedDropNotice.gated ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        {gatedTickWarningCopy(token, 'airdrop recipients')}
+                    </p>
+                </div>
+            ) : null}
             <AmountField
                 label="Per-recipient amount"
                 hint="Amount sent to each address (or, for a token-holder list, each holder)."

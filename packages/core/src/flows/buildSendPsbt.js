@@ -31,11 +31,14 @@
 
 import { normalizeSource } from './sendToken.js';
 import { nativePaymentOutput } from './nativePayment.js';
+import { prepareGatedSend } from './gatedSendGuard.js';
 
 /**
  * @typedef {Object} BuildSendPsbtOpts
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @property {import('../storage/Vault.js').Vault} [vault]     PC-26: source of gatedKeys rows; a watcher CAN compose a gated send when it holds the pack key (e.g. it published the pack), since ECIES needs no private key
+ * @property {string} [walletId]
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} to
@@ -95,7 +98,26 @@ export async function buildSendPsbt(opts) {
     };
     if (opts.memo !== undefined) params.MEMO = opts.memo;
 
-    const createResult = sdk.actions.createAction({ action: 'SEND', params });
+    // PC-26: rewrite a gated tick's SEND into BATCH(SEND, MESSAGE) so the
+    // watcher-built PSBT is one the indexer will accept. Same guard and
+    // typed errors as sendToken; key source is the vault (a watcher has no
+    // in-session scan cache).
+    let actionData = { action: 'SEND', params };
+    const gatedPlan = await prepareGatedSend({
+        sdkRegistry: opts.sdkRegistry,
+        chainRegistry: opts.chainRegistry,
+        vault: opts.vault || null,
+        walletId: opts.walletId || null,
+        chainId: opts.chainId,
+        source,
+        to: opts.to,
+        tick: opts.tick,
+        amount: opts.amount,
+        memo: opts.memo,
+    });
+    if (gatedPlan) actionData = gatedPlan.actionData;
+
+    const createResult = sdk.actions.createAction(actionData);
 
     // D-9: a native-coin send must pay the recipient a real output; the SEND
     // OP_RETURN alone moves no value. Token sends return null and are unchanged.

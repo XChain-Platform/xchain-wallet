@@ -69,7 +69,12 @@ const sendSrc = readFileSync(
 // ─── 1. flows/buildSendPsbt.js ------------------------------------
 
 assert.match(flowSrc, /export async function buildSendPsbt\(opts\)/, 'flow exports buildSendPsbt');
-assert.match(flowSrc, /sdk\.actions\.createAction\(\{ action: 'SEND', params \}\)/, 'creates SEND action string');
+// PC-26: the SEND actionData first passes the gated-send guard, which
+// rewrites a gated tick's send into BATCH(SEND, MESSAGE); createAction
+// then serializes whichever shape survived.
+assert.match(flowSrc, /let actionData = \{ action: 'SEND', params \}/, 'builds SEND action data');
+assert.match(flowSrc, /prepareGatedSend\(\{/, 'runs the gated-send guard (PC-26)');
+assert.match(flowSrc, /sdk\.actions\.createAction\(actionData\)/, 'creates the action string from the guarded actionData');
 assert.match(flowSrc, /encoder\.createTx\(\{/, 'calls encoder.createTx');
 assert.match(flowSrc, /psbtHex: encoded\.psbt,/, 'returns psbtHex');
 // Watcher mode never broadcasts. Guard against accidental signing / broadcast.
@@ -92,9 +97,13 @@ assert.match(hostSrc, /\n\s*buildSendPsbt,\n/, 'host destructures buildSendPsbt 
 const handlerIdx = hostSrc.indexOf("host.register('action.send.psbt'");
 assert.notEqual(handlerIdx, -1, 'action.send.psbt handler registered');
 const handlerBlock = hostSrc.slice(handlerIdx, handlerIdx + 320);
-assert.match(handlerBlock, /chainRegistry, sdkRegistry/, 'handler uses chainRegistry + sdkRegistry deps only');
-assert.match(handlerBlock, /buildSendPsbt\(\{ \.\.\.req, chainRegistry, sdkRegistry \}\)/, 'handler forwards to buildSendPsbt');
-assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault (no unlock)');
+// PC-26: the handler also passes the vault - read-only gatedKeys access
+// for the send guard. Still no unlock, no signer, no broadcast.
+assert.match(handlerBlock, /vault, chainRegistry, sdkRegistry/, 'handler uses vault (gatedKeys read) + chainRegistry + sdkRegistry deps');
+assert.match(handlerBlock, /buildSendPsbt\(\{ \.\.\.req, vault, chainRegistry, sdkRegistry \}\)/, 'handler forwards to buildSendPsbt');
+// The old "no vault at all" guard became "vault but no unlock": the
+// watcher path must still never unlock, sign, or broadcast.
+assert.doesNotMatch(handlerBlock, /unlockWallet|sessionSigner|signerPool/, 'handler never unlocks or signs');
 
 // ─── 4. Three messaging shims -----------------------------------
 

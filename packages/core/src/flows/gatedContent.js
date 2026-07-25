@@ -22,6 +22,7 @@
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
 import { exportPrivateKey } from './exportPrivateKey.js';
+import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import {
     getDemoGatedGroupsForTick,
     getDemoGatedPlaintextBase64,
@@ -40,7 +41,11 @@ const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
 function keyKey(address, keyHash) { return address + '|' + String(keyHash).toLowerCase(); }
 function ptKey(address, actionIndex) { return address + '|' + String(actionIndex); }
 function sha256Hex(buf) {
-    const digest = sha256(buf);
+    // Copy into the ambient Uint8Array class before hashing: @noble/hashes
+    // type-checks its input against it, and a Buffer is not a subclass of
+    // it in dual-realm hosts (vitest's jsdom; any embedder with a foreign
+    // Buffer polyfill).
+    const digest = sha256(Uint8Array.from(buf));
     let out = '';
     for (let i = 0; i < digest.length; i += 1) {
         out += digest[i].toString(16).padStart(2, '0');
@@ -304,6 +309,113 @@ export async function unlockGatedFileForAddress({
         actionIndex: String(actionIndex),
         plaintextBase64: Buffer.from(plaintext).toString('base64'),
         byteLength: plaintext.length,
+    };
+}
+
+/**
+ * PC-26 key-recovery scan, vault-persisted. Runs the ECIES MESSAGE scan
+ * across the wallet's software-signable addresses on a chain and writes
+ * every key that matches one of `tick`'s active gated packs into the
+ * vault's gatedKeys collection (source 'recovered'), so recovered keys
+ * survive lock/restart and back both the send guard and the PC-34
+ * migrate gate. Keys found for OTHER ticks stay in the in-memory scan
+ * cache only (they cannot be attributed to a gateTicker without
+ * enumerating every tick's files; a later scan for that tick will
+ * persist them).
+ *
+ * Software signers only: the scan decrypts with each address's private
+ * key. HW / watch-only addresses are skipped (their key source is a
+ * vault row written at publish time).
+ *
+ * @param {{
+ *   vault: import('../storage/Vault.js').Vault,
+ *   walletId: string,
+ *   password: string,
+ *   bip39Passphrase?: string,
+ *   chainRegistry: import('../registry/index.js').ChainRegistry,
+ *   sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry,
+ *   chainId: string,
+ *   tick: string,
+ *   addresses: Array<import('../schemas/address.js').Address>,   wallet addresses on chainId (caller enumerates; the host has the byChain helper)
+ * }} params
+ * @returns {Promise<{ recoveredKeyHashes: string[], stillMissingKeyHashes: string[], scannedAddresses: number }>}
+ */
+export async function recoverGatedKeysForTick({
+    vault, walletId, password, bip39Passphrase, chainRegistry, sdkRegistry, chainId, tick, addresses,
+}) {
+    if (!vault) throw new Error('recoverGatedKeysForTick: vault is required');
+    if (!walletId) throw new Error('recoverGatedKeysForTick: walletId is required');
+    if (!tick) throw new Error('recoverGatedKeysForTick: tick is required');
+    const sdk = sdkRegistry.get(chainId);
+    const tickUpper = String(tick).trim().toUpperCase();
+
+    // Target hashes: the tick's active real (non-demo) packs.
+    const groups = (await listGatedFiles({ sdk, tick: tickUpper })).filter((g) => {
+        const files = Array.isArray(g?.files) ? g.files : [];
+        return files.length > 0 && !files.every((f) => isDemoGatedActionIndex(f.actionIndex));
+    });
+    const wanted = new Set(groups.map((g) => String(g.keyHash).toLowerCase()));
+    if (wanted.size === 0) {
+        return { recoveredKeyHashes: [], stillMissingKeyHashes: [], scannedAddresses: 0 };
+    }
+
+    // Already in the vault? Don't rescan for those.
+    for (const hash of [...wanted]) {
+        const row = await vault.gatedKeys.get(gatedKeyId({
+            walletId, chainId, gateTicker: tickUpper, keyHash: hash,
+        }));
+        if (row?.keyHex && sdk.gatedFile.verifyKey(Buffer.from(row.keyHex, 'hex'), hash)) {
+            wanted.delete(hash);
+        }
+    }
+
+    const recovered = /** @type {string[]} */ ([]);
+    let scanned = 0;
+    const scannable = (Array.isArray(addresses) ? addresses : []).filter((a) => a
+        && a.source !== 'watch-only' && a.source !== 'trezor' && a.source !== 'ledger');
+    for (const addr of scannable) {
+        if (wanted.size === 0) break;
+        let wif;
+        let address;
+        try {
+            ({ wif, address } = await exportPrivateKey({
+                vault, walletId, password, bip39Passphrase,
+                chainRegistry, sdkRegistry, addressId: addr.id,
+            }));
+        } catch (err) {
+            // A wrong password must surface (retrying every address under
+            // bad creds hammers the KDF and hides the real problem); an
+            // address the signer cannot export is just skipped.
+            if (err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError') throw err;
+            continue;
+        }
+        scanned += 1;
+        let found;
+        try {
+            found = await scanGatedKeyHandoffs({ sdk, address, wif });
+        } catch (_e) {
+            continue;
+        }
+        for (const [hash, key] of Object.entries(found)) {
+            const lower = String(hash).toLowerCase();
+            if (!wanted.has(lower)) continue;
+            if (!sdk.gatedFile.verifyKey(key, lower)) continue;
+            await vault.gatedKeys.put(createGatedKey({
+                walletId,
+                chainId,
+                gateTicker: tickUpper,
+                keyHash: lower,
+                keyHex: key.toString('hex'),
+                source: 'recovered',
+            }));
+            wanted.delete(lower);
+            recovered.push(lower);
+        }
+    }
+    return {
+        recoveredKeyHashes: recovered,
+        stillMissingKeyHashes: [...wanted],
+        scannedAddresses: scanned,
     };
 }
 

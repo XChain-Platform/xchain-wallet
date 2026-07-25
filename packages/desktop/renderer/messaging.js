@@ -815,6 +815,36 @@ export function unlockGatedContent(req) {
     return /** @type {any} */ (sendMessage('gatedContent.unlock', req));
 }
 
+/** @param {{ walletId: string, chainId: string, tick: string, sourceAddress?: string }} req PC-26: secret-free gated-send readiness (state + per-pack haveKey) */
+export function gatedSendReadiness(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.sendReadiness', req));
+}
+
+/** @param {{ walletId: string, password: string, bip39Passphrase?: string, chainId: string, tick: string }} req PC-26: key-recovery scan, vault-persisted */
+export function gatedContentScan(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.scan', req));
+}
+
+/** @param {object} opts PC-25: publish gated file, atomic BATCH(FILE, MESSAGE-to-self) */
+export function gatedPublishAction(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish', opts));
+}
+
+/** @param {object} opts */
+export function gatedPublishActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.hw', opts));
+}
+
+/** @param {object} opts watcher-mode encode-only gated publish */
+export function buildGatedPublishPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.psbt', opts));
+}
+
+/** @param {{ walletId: string, chainId?: string, gateTicker?: string }} req  metadata only, never the key */
+export function listGatedKeys(req) {
+    return /** @type {any} */ (sendMessage('gatedKeys.list', req));
+}
+
 /** @param {object} opts */
 export function createList(opts) {
     return /** @type {any} */ (sendMessage('action.createList', opts));

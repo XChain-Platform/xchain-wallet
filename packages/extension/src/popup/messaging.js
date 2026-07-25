@@ -1489,6 +1489,47 @@ export function unlockGatedContent(req) {
 }
 
 /**
+ * PC-26: secret-free gated-send readiness for the Send form (is the
+ * tick gated; which pack keys does the wallet hold).
+ *
+ * @param {{ walletId: string, chainId: string, tick: string, sourceAddress?: string }} req
+ */
+export function gatedSendReadiness(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.sendReadiness', req));
+}
+
+/**
+ * PC-26: on-demand key-recovery scan across the wallet's software
+ * addresses, persisting recovered pack keys to the vault. Password-
+ * gated. Returns metadata only (recovered / still-missing hashes).
+ *
+ * @param {{ walletId: string, password: string, bip39Passphrase?: string, chainId: string, tick: string }} req
+ */
+export function gatedContentScan(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.scan', req));
+}
+
+/** @param {object} opts PC-25: publish gated file, atomic BATCH(FILE, MESSAGE-to-self) */
+export function gatedPublishAction(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish', opts));
+}
+
+/** @param {object} opts */
+export function gatedPublishActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.hw', opts));
+}
+
+/** @param {object} opts watcher-mode encode-only gated publish */
+export function buildGatedPublishPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.psbt', opts));
+}
+
+/** @param {{ walletId: string, chainId?: string, gateTicker?: string }} req  metadata only, never the key */
+export function listGatedKeys(req) {
+    return /** @type {any} */ (sendMessage('gatedKeys.list', req));
+}
+
+/**
  * Build, sign, and broadcast a LIST action (§40.9 stage 3). The
  * §40.9 AIRDROP authoring flow signs LIST first, waits for it to be
  * indexed, then signs an AIRDROP referencing the assigned

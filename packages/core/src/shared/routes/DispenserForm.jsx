@@ -22,6 +22,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
@@ -119,6 +120,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    // PC-26: dispenses carry no gated-key handoff; warn when the
+    // dispensed token has gated content.
+    const gatedGiveNotice = useGatedTickNotice({ messaging, chainId, tick: ticker });
     const [giveAmount, setGiveAmount] = useState('');
     const [escrow, setEscrow] = useState('');
     const [triggerPrice, setTriggerPrice] = useState('');
@@ -1043,6 +1047,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
+            {gatedGiveNotice.gated ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
+                    </p>
+                </div>
+            ) : null}
             <AmountField
                 label="Give amount (per fill)"
                 hint="Tokens sent to the buyer every time the dispenser is triggered."

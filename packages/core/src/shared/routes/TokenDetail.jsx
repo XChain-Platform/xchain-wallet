@@ -1445,6 +1445,15 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     }
     return (
         <div className={styles.infoCard}>
+            {/* PC-26: the send-side constraints, stated where holders learn
+                the token is gated. Key handoff is Send-only and needs the
+                recipient's on-chain pubkey. */}
+            <p className={styles.muted}>
+                Sending {tick} hands the unlock key to the recipient automatically,
+                but only through a direct Send, and only to addresses that have made
+                at least one transaction. Tokens received via airdrops, dispensers,
+                trades, or dividends arrive without the key.
+            </p>
             {groups.map((g) => {
                 const isPack = g.files.length > 1;
                 const tisMeta = packsMeta && g.files[0]?.packId ? packsMeta[g.files[0].packId] : null;

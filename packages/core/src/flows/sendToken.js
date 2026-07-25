@@ -19,6 +19,7 @@
 import { submitAction } from './submitAction.js';
 import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
 import { nativePaymentOutput } from './nativePayment.js';
+import { prepareGatedSend } from './gatedSendGuard.js';
 
 /**
  * Fail closed on a destination that isn't a valid address for the chain this
@@ -101,11 +102,36 @@ export async function sendToken(opts) {
     };
     if (opts.memo !== undefined) params.MEMO = opts.memo;
 
+    // PC-26: a tick with active gated content must send as
+    // BATCH(SEND, MESSAGE-with-key) or the indexer rejects it. The guard
+    // rewrites actionData when it applies and throws typed errors when the
+    // send cannot be composed validly (no keys / recipient has no pubkey).
+    // Skipped on the prebuilt path: the  confirm pipeline already ran
+    // it at compose time and these bytes must not be rebuilt.
+    let actionData = { action: 'SEND', params };
+    let gatedPlan = null;
+    if (!opts.prebuiltPsbt) {
+        gatedPlan = await prepareGatedSend({
+            sdkRegistry: opts.sdkRegistry,
+            chainRegistry: opts.chainRegistry,
+            vault: opts.vault,
+            walletId: opts.walletId,
+            chainId: opts.chainId,
+            source,
+            to: opts.to,
+            tick: opts.tick,
+            amount: opts.amount,
+            memo: opts.memo,
+        });
+        if (gatedPlan) actionData = gatedPlan.actionData;
+    }
+
     const memoTail = opts.memo ? ` (memo: "${opts.memo}")` : '';
+    const gatedTail = gatedPlan ? ' + gated unlock key handoff' : '';
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: opts.to,
-        actionSummary: `Send ${opts.amount} ${opts.tick} to ${opts.to}${memoTail}`,
+        actionSummary: `Send ${opts.amount} ${opts.tick} to ${opts.to}${memoTail}${gatedTail}`,
     };
 
     // D-9: a native-coin send must pay the recipient a real output; the SEND
@@ -128,7 +154,7 @@ export async function sendToken(opts) {
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
-        actionData: { action: 'SEND', params },
+        actionData,
         encoderOpts: {
             pubkey: source.publicKey,
             // D-7 (atomic/HW path parity): the spender address is both the change

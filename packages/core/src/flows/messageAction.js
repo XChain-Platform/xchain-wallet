@@ -86,7 +86,7 @@ const VERIFIABLE_ADDRESS_TYPES = ['p2pkh', 'p2wpkh', 'p2sh-p2wpkh'];
  * @param {object} descriptor    chain descriptor (addressTypes)
  * @returns {boolean}            true = verified match, false = mismatch (reject)
  */
-function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descriptor) {
+export function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descriptor) {
     if (typeof pubkeyHex !== 'string' || !/^[0-9a-fA-F]+$/.test(pubkeyHex)) {
         return false;
     }

@@ -752,6 +752,79 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return () => { cancelled = true; };
     }, [stage, chainId, fromAddress, messaging]);
 
+    // PC-26 gated-send readiness. A tick with active gated content can
+    // only be sent as BATCH(SEND, MESSAGE-with-key); the host guard
+    // enforces that at compose time, and this probe mirrors its key
+    // resolution (secret-free) so the form can explain BEFORE submit:
+    // ready = keys attach silently, partial = warn (recipient can't open
+    // the missing packs), blocked = no keys held, submit disabled and a
+    // recovery scan offered (software signers only; the scan decrypts
+    // with the address keys, which HW/watch-only cannot do - §5).
+    const [gatedInfo, setGatedInfo] = useState(
+        /** @type {{ state: 'ungated' | 'ready' | 'partial' | 'blocked', groups: any[] } | null} */ (null),
+    );
+    const [gatedScanPassword, setGatedScanPassword] = useState('');
+    const [gatedScanBusy, setGatedScanBusy] = useState(false);
+    const [gatedScanError, setGatedScanError] = useState(/** @type {string | null} */ (null));
+    const gatedProbeSeq = useRef(0);
+    useEffect(() => {
+        setGatedInfo(null);
+        setGatedScanError(null);
+        if (!walletId || !chainId || !tick.trim()) return undefined;
+        if (typeof messaging.gatedSendReadiness !== 'function') return undefined; // older host build
+        const seq = gatedProbeSeq.current + 1;
+        gatedProbeSeq.current = seq;
+        // Debounced: `tick` changes per keystroke when typed by hand.
+        const timer = setTimeout(() => {
+            messaging.gatedSendReadiness({
+                walletId,
+                chainId,
+                tick: tick.trim(),
+                sourceAddress: fromAddress?.address,
+            })
+                .then((resp) => {
+                    if (gatedProbeSeq.current === seq && resp && resp.state !== 'ungated') setGatedInfo(resp);
+                })
+                .catch(() => {
+                    // Detection failure degrades to no banner; the compose-time
+                    // guard (and ultimately the indexer) still protects the send.
+                });
+        }, 400);
+        return () => { clearTimeout(timer); };
+    }, [walletId, chainId, tick, fromAddress?.address, messaging]);
+
+    async function handleGatedScan(event) {
+        event.preventDefault();
+        if (gatedScanBusy || gatedScanPassword.length === 0) return;
+        setGatedScanBusy(true);
+        setGatedScanError(null);
+        try {
+            const res = await messaging.gatedContentScan({
+                walletId,
+                password: gatedScanPassword,
+                chainId,
+                tick: tick.trim(),
+            });
+            setGatedScanPassword('');
+            if (!res || res.recoveredKeyHashes?.length === 0) {
+                setGatedScanError(
+                    'No unlock keys found on any of this wallet\'s addresses. '
+                    + 'Keys arrive with the token when it is sent to you directly; ask the sender to re-send it.',
+                );
+            }
+            // Re-probe either way so the banner reflects the vault state.
+            const resp = await messaging.gatedSendReadiness({
+                walletId, chainId, tick: tick.trim(), sourceAddress: fromAddress?.address,
+            });
+            setGatedInfo(resp && resp.state !== 'ungated' ? resp : null);
+        } catch (err) {
+            const bad = err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError';
+            setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Key recovery scan failed.'));
+        } finally {
+            setGatedScanBusy(false);
+        }
+    }
+
     // §44.2 user-selectable fee tiers. Selector backs both the §21.2
     // simulator's fee row + the §29.2 Max button. Default tier is
     // 'normal'; user picks via FeeSelector. Custom mode accepts a
@@ -951,6 +1024,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
         if (/[|;]/.test(memo)) {
             setFormError('Memo cannot contain | or ; characters.');
+            return;
+        }
+        // PC-26: no unlock key held for a gated tick = the network would
+        // reject the send anyway; stop it here with the recovery path
+        // visible instead of surfacing a compose error later.
+        if (gatedInfo?.state === 'blocked') {
+            setFormError(
+                `${tick.trim().toUpperCase()} has token-gated content and this wallet holds none of its unlock keys. `
+                + 'Recover the keys below before sending.',
+            );
             return;
         }
         setFormError(null);
@@ -1731,6 +1814,69 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                                 : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()
                 }
             />
+            {gatedInfo && gatedInfo.state === 'ready' ? (
+                <StatusMessage variant="status">
+                    This token has gated content. The unlock key will be securely attached
+                    to this send so the recipient can open it. Gated tokens can only be sent
+                    to addresses that have made at least one transaction.
+                </StatusMessage>
+            ) : null}
+            {gatedInfo && gatedInfo.state === 'partial' ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        This token has {gatedInfo.groups.length} gated content packs and this wallet
+                        holds keys for only {gatedInfo.groups.filter((g) => g.haveKey).length} of them.
+                        The recipient will NOT be able to open the missing pack(s):{' '}
+                        {gatedInfo.groups.filter((g) => !g.haveKey).map((g) => g.keyHash.slice(0, 12)).join(', ')}…
+                        You can still send, or recover the missing keys first (unlock the content
+                        once from the address that received it).
+                    </p>
+                </div>
+            ) : null}
+            {gatedInfo && gatedInfo.state === 'blocked' ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        This token has gated content, and this wallet holds none of its unlock
+                        keys. Sending without the key attached would be rejected by the network,
+                        and the recipient could never open the content.
+                    </p>
+                    {(isWatcherMode || isHwSource) ? (
+                        <p className={styles.warning}>
+                            Key recovery needs a software signer (the scan decrypts messages with
+                            the address&apos;s private key, which this signer cannot do). If this
+                            wallet published the content, the key is already stored and this
+                            notice will not appear; otherwise recover the key from a software
+                            wallet holding this address.
+                        </p>
+                    ) : (
+                        <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                            <Input
+                                type="password"
+                                label="Wallet password (scan for keys)"
+                                hint="Scans messages sent to your addresses for the unlock key and stores it in this wallet."
+                                value={gatedScanPassword}
+                                onChange={(e) => {
+                                    setGatedScanPassword(e.target.value);
+                                    if (gatedScanError) setGatedScanError(null);
+                                }}
+                                autoComplete="current-password"
+                            />
+                            {gatedScanError ? (
+                                <p role="alert" className={styles.warning}>{gatedScanError}</p>
+                            ) : null}
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                loading={gatedScanBusy}
+                                disabled={gatedScanBusy || gatedScanPassword.length === 0}
+                                onClick={handleGatedScan}
+                            >
+                                Recover keys
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            ) : null}
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"

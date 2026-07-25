@@ -70,6 +70,8 @@ const {
     swapAction,
     linkAction,
     fileAction,
+    gatedPublishAction,
+    buildGatedPublishPsbtRequest,
     getProjectForTick,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
@@ -77,6 +79,9 @@ const {
     getMessagingInboxSweep,
     unlockGatedFileForAddress,
     listGatedFiles,
+    recoverGatedKeysForTick,
+    prepareGatedSend,
+    gatedSendReadiness,
     messageAction,
     buildMessageParams,
     handshakeAction,
@@ -1423,9 +1428,11 @@ export function createBackgroundHost(deps) {
 
     // §20 / G040: watcher-mode helper: encode-only path that returns
     // an unsigned PSBT for transport to a Signer-mode wallet. No vault
-    // unlock, no signer, no broadcast.
-    host.register('action.send.psbt', async (req, { chainRegistry, sdkRegistry }) => {
-        return buildSendPsbt({ ...req, chainRegistry, sdkRegistry });
+    // unlock, no signer, no broadcast. The vault ref is read-only
+    // gatedKeys access (PC-26): the send guard needs the pack key to
+    // compose a valid gated send; no unlock or signing happens here.
+    host.register('action.send.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return buildSendPsbt({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // §20 / Cluster W FOLLOWUP 5: generic watcher-mode helper for the
@@ -1472,6 +1479,19 @@ export function createBackgroundHost(deps) {
             const params = { TICK: req.tick, AMOUNT: String(req.amount), DESTINATION: req.to };
             if (req.memo !== undefined) params.MEMO = req.memo;
             actionData = { action: 'SEND', params };
+            // PC-26: a gated tick's SEND composes as BATCH(SEND, MESSAGE)
+            // HERE, at the single-encode step, so the PSBT the modal
+            // previews IS the guarded one and Approve signs it
+            // byte-identically (sendToken skips its own guard on the
+            // prebuilt path). Typed guard errors reject the confirm()
+            // promise unwrapped, like any compose failure.
+            const gatedPlan = await prepareGatedSend({
+                sdkRegistry, chainRegistry, vault,
+                walletId: req.walletId,
+                chainId, source,
+                to: req.to, tick: req.tick, amount: req.amount, memo: req.memo,
+            });
+            if (gatedPlan) actionData = gatedPlan.actionData;
             encoderOpts = {
                 pubkey: source.publicKey,
                 ...(req.fee !== undefined && { fee: req.fee }),
@@ -2130,6 +2150,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.swap.hw', swapAction);
     registerHwHandler('action.link.hw', linkAction);
     registerHwHandler('action.file.hw', fileAction);
+    registerHwHandler('action.gatedPublish.hw', gatedPublishAction);
     registerHwHandler('action.message.hw', messageAction);
     registerHwHandler('messaging.handshake.hw', handshakeAction);
     registerHwHandler('action.deploy.hw', deployAction);
@@ -2262,8 +2283,58 @@ export function createBackgroundHost(deps) {
         const sdk = sdkRegistry.get(req.chainId);
         return listGatedFiles({ sdk, tick: req.tick });
     });
+
+    // PC-25 gated publish: atomic BATCH(FILE, MESSAGE-to-self). The
+    // encode-only variant backs watcher mode; composition is shared so
+    // the two paths cannot drift (flows/gatedPublishAction.js).
+    host.register('action.gatedPublish', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return gatedPublishAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+    host.register('action.gatedPublish.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return buildGatedPublishPsbtRequest({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-25 pack listing for the publish form: METADATA ONLY. The raw
+    // key (keyHex) never crosses out of the background context; the
+    // schema helper strips it (schemas/gatedKey.js).
+    host.register('gatedKeys.list', async (req, { vault }) => {
+        const rows = await vault.gatedKeys.list();
+        return rows
+            .filter((r) => r.walletId === req.walletId
+                && (!req.chainId || r.chainId === req.chainId)
+                && (!req.gateTicker || r.gateTicker === String(req.gateTicker).toUpperCase()))
+            .map((r) => schemas.gatedKey.gatedKeyMetadata(r));
+    });
     host.register('gatedContent.unlock', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return unlockGatedFileForAddress({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-26: pre-submit readiness for the Send form. Secret-free report
+    // (pack hashes + booleans): is the tick gated, which keys are held.
+    host.register('gatedContent.sendReadiness', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return gatedSendReadiness({
+            sdkRegistry, chainRegistry, vault,
+            walletId: req.walletId,
+            chainId: req.chainId,
+            tick: req.tick,
+            sourceAddress: req.sourceAddress,
+        });
+    });
+
+    // PC-26: on-demand key-recovery scan, vault-persisted (source
+    // 'recovered'). Password-gated: the scan ECIES-decrypts with each
+    // software address's private key. Returns metadata only.
+    host.register('gatedContent.scan', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const byChain = await addressesByChain(req, { vault, chainRegistry });
+        return recoverGatedKeysForTick({
+            vault, chainRegistry, sdkRegistry,
+            walletId: req.walletId,
+            password: req.password,
+            bip39Passphrase: req.bip39Passphrase,
+            chainId: req.chainId,
+            tick: req.tick,
+            addresses: byChain?.[req.chainId] || [],
+        });
     });
 
     // §41.7.3 Compose: MESSAGE action signing + recipient pubkey lookup.
