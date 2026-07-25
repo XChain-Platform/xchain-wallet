@@ -872,6 +872,18 @@ export function getSwapsForToken(req) {
     return /** @type {any} */ (sendMessage('swaps.forToken', req));
 }
 
+export function getSwapsForAddress(req) {
+    return /** @type {any} */ (sendMessage('swaps.forAddress', req));
+}
+
+export function getSwapCancelsForAddress(req) {
+    return /** @type {any} */ (sendMessage('swaps.cancelsForAddress', req));
+}
+
+export function getSwapDetail(req) {
+    return /** @type {any} */ (sendMessage('swaps.detail', req));
+}
+
 /** @param {{ chainId: string, tick: string, opts?: object }} req */
 export function getHistoryForToken(req) {
     return /** @type {any} */ (sendMessage('history.forToken', req));

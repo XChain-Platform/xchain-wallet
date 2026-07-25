@@ -109,7 +109,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [giveAmount, setGiveAmount] = useState('');
     const [getTick, setGetTick] = useState('');
     const [getAmount, setGetAmount] = useState('');
-    const [expirationBlocks, setExpirationBlocks] = useState('1000');
+    // PC-18: EXPIRATION is a wall-clock Unix timestamp, NOT a block count
+    // (the indexer rejects EXPIRATION <= BLOCK_TIME as "past", so the old
+    // block-count value indexed every cross-chain swap invalid).
+    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
+    const [expInput, setExpInput] = useState('');
+    const [giveOwnership, setGiveOwnership] = useState(false);
+    const [getOwnership, setGetOwnership] = useState(false);
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
     const [givePickerOpen, setGivePickerOpen] = useState(false);
@@ -246,11 +252,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (getTick && getTick.toUpperCase() === getCoinTicker) {
             return `${actionDisplayLabel('SWAP')} cannot get ${getCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
-        if (expirationBlocks && !/^\d+$/.test(expirationBlocks)) {
-            return 'Expiration must be a positive integer.';
+        if (expMode === 'custom' && expInput.trim()) {
+            const ms = Date.parse(expInput.trim());
+            if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
+            if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
         }
         return null;
-    }, [giveCoinTicker, getCoinTicker, giveTick, getTick, expirationBlocks]);
+    }, [giveCoinTicker, getCoinTicker, giveTick, getTick, expMode, expInput]);
 
     // Network fee for the give chain (the chain that pays the on-chain fee):
     // Low / Normal / Fast / Custom, editable via FeeSelector on the form
@@ -293,8 +301,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         event.preventDefault();
         if (!fromAddress || !giveChainId || !getChainId) return;
         if (validationError) return;
-        if (!giveTick || !giveAmount || !getTick || !getAmount) {
-            setFormError('Fill give/get tickers and amounts before reviewing.');
+        if (!giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount)) {
+            setFormError('Fill give/get tickers and amounts (or select ownership) before reviewing.');
             return;
         }
         if (!getAddress) {
@@ -320,12 +328,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 VERSION: '0',
                 GIVE_COIN: giveCoinTicker,
                 GIVE_TICK: giveTick.trim(),
-                GIVE_AMOUNT: String(giveAmount).trim(),
+                ...(giveOwnership ? { GIVE_OWNERSHIP: '1' } : { GIVE_AMOUNT: String(giveAmount).trim() }),
                 GET_COIN: getCoinTicker,
                 GET_TICK: getTick.trim(),
-                GET_AMOUNT: String(getAmount).trim(),
+                ...(getOwnership ? { GET_OWNERSHIP: '1' } : { GET_AMOUNT: String(getAmount).trim() }),
                 GET_ADDRESS: getAddress.trim(),
-                ...(expirationBlocks.trim() ? { EXPIRATION: expirationBlocks.trim() } : {}),
+                ...((() => {
+                    if (expMode !== 'custom' || !expInput.trim()) return {};
+                    const ms = Date.parse(expInput.trim());
+                    return Number.isFinite(ms) ? { EXPIRATION: String(Math.floor(ms / 1000)) } : {};
+                })()),
                 ...(memo.trim() ? { MEMO: memo.trim() } : {}),
             };
             const base = {
@@ -469,8 +481,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         label="Receive at"
                         value={<AddressText address={getAddress} />}
                     />
-                    {expirationBlocks ? (
-                        <DetailRow label="Expiration" value={`${expirationBlocks} blocks`} />
+                    <DetailRow
+                        label="Expiration"
+                        value={expMode === 'custom' && expInput.trim() ? new Date(expInput).toLocaleString() : 'Default window'}
+                    />
+                    {giveOwnership || getOwnership ? (
+                        <DetailRow label="Ownership" value={[giveOwnership ? 'give' : null, getOwnership ? 'get' : null].filter(Boolean).join(' + ')} />
                     ) : null}
                     {memo ? (
                         <DetailRow label="Memo" value={memo} />
@@ -611,23 +627,29 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
                         onOpenPicker={() => setGivePickerOpen(true)}
                     />
-                    <AmountField
-                        label="Give amount"
-                        amount={giveAmount}
-                        tick={giveTick}
-                        onAmountFieldChange={(rawValue) => {
-                            const stripped = String(rawValue).replace(/,/g, '');
-                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                            setGiveAmount(stripped);
-                        }}
-                        onMax={giveBalance && Number(giveBalance) > 0
-                            ? () => setGiveAmount(giveBalance)
-                            : undefined}
-                        maxDisabled={!giveBalance}
-                        balanceText={giveBalance != null && giveTick.trim()
-                            ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
-                            : null}
-                    />
+                    <label style={{ display: 'block', margin: '0.25rem 0' }}>
+                        <input type="checkbox" checked={giveOwnership} onChange={(e) => setGiveOwnership(e.target.checked)} />
+                        {' '}Give this token&apos;s ownership (not a balance)
+                    </label>
+                    {!giveOwnership ? (
+                        <AmountField
+                            label="Give amount"
+                            amount={giveAmount}
+                            tick={giveTick}
+                            onAmountFieldChange={(rawValue) => {
+                                const stripped = String(rawValue).replace(/,/g, '');
+                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                                setGiveAmount(stripped);
+                            }}
+                            onMax={giveBalance && Number(giveBalance) > 0
+                                ? () => setGiveAmount(giveBalance)
+                                : undefined}
+                            maxDisabled={!giveBalance}
+                            balanceText={giveBalance != null && giveTick.trim()
+                                ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
+                                : null}
+                        />
+                    ) : null}
                 </fieldset>
 
                 <fieldset style={fieldsetStyle}>
@@ -656,25 +678,42 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
                         onOpenPicker={() => setGetPickerOpen(true)}
                     />
-                    <AmountField
-                        label="Get amount"
-                        amount={getAmount}
-                        tick={getTick}
-                        onAmountFieldChange={(rawValue) => {
-                            const stripped = String(rawValue).replace(/,/g, '');
-                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                            setGetAmount(stripped);
-                        }}
-                    />
+                    <label style={{ display: 'block', margin: '0.25rem 0' }}>
+                        <input type="checkbox" checked={getOwnership} onChange={(e) => setGetOwnership(e.target.checked)} />
+                        {' '}Require the matcher to give that token&apos;s ownership
+                    </label>
+                    {!getOwnership ? (
+                        <AmountField
+                            label="Get amount"
+                            amount={getAmount}
+                            tick={getTick}
+                            onAmountFieldChange={(rawValue) => {
+                                const stripped = String(rawValue).replace(/,/g, '');
+                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                                setGetAmount(stripped);
+                            }}
+                        />
+                    ) : null}
                 </fieldset>
             </div>
 
-            <Input
-                label="Expiration (blocks)"
-                value={expirationBlocks}
-                onChange={(e) => setExpirationBlocks(e.target.value.replace(/\D/g, ''))}
-                inputMode="numeric"
-            />
+            <label style={{ display: 'block', margin: '0.5rem 0 0.25rem', fontWeight: 600 }}>Expiration</label>
+            <label style={{ display: 'block' }}>
+                <input type="radio" name="xswap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
+                {' '}Default window
+            </label>
+            <label style={{ display: 'block' }}>
+                <input type="radio" name="xswap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
+                {' '}Expire at a specific time
+            </label>
+            {expMode === 'custom' ? (
+                <Input
+                    label="Expires"
+                    type="datetime-local"
+                    value={expInput}
+                    onChange={(e) => setExpInput(e.target.value)}
+                />
+            ) : null}
 
             <Input
                 label="Memo (optional)"
@@ -707,7 +746,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     variant="primary"
                     disabled={!!validationError
                         || !fromAddress
-                        || !giveTick || !giveAmount || !getTick || !getAmount || !getAddress}
+                        || !giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount) || !getAddress}
                 >
                     Review
                 </Button>

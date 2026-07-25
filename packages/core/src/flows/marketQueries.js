@@ -186,6 +186,54 @@ export async function swapsForToken({ sdkRegistry, chainId, tick, opts }) {
 }
 
 /**
+ * Every SWAP an address placed, across all pairs (PC-18 "My swaps").
+ * Same shape + caveat as ordersForAddress: cross-pair per-owner feed
+ * whose rows carry action-validity status, not the live lifecycle
+ * status; the caller enriches via swapDetail and derives cancelled from
+ * swapCancelsForAddress (the immediate, authoritative signal - a single
+ * swap's getAction state.status lags a cancel, same as ORDER).
+ *
+ * @param {SdkCtx & { address: string, opts?: object }} params
+ */
+export async function swapsForAddress({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('swapsForAddress: sdkRegistry is required');
+    if (!chainId) throw new Error('swapsForAddress: chainId is required');
+    if (!address) throw new Error('swapsForAddress: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getSwaps(address, 'address', opts);
+}
+
+/**
+ * Every SWAP cancel (SWAP v1) an address submitted - the authoritative,
+ * immediate "no longer open" signal My Swaps keys off.
+ *
+ * @param {SdkCtx & { address: string, opts?: object }} params
+ */
+export async function swapCancelsForAddress({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('swapCancelsForAddress: sdkRegistry is required');
+    if (!chainId) throw new Error('swapCancelsForAddress: chainId is required');
+    if (!address) throw new Error('swapCancelsForAddress: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getSwapCancels(address, 'address', opts);
+}
+
+/**
+ * A single SWAP's detail by action index (state.status/remaining/current
+ * expiration + lists). Generic action-detail endpoint.
+ *
+ * @param {SdkCtx & { actionIndex: string }} params
+ */
+export async function swapDetail({ sdkRegistry, chainId, actionIndex }) {
+    if (!sdkRegistry) throw new Error('swapDetail: sdkRegistry is required');
+    if (!chainId) throw new Error('swapDetail: chainId is required');
+    if (actionIndex == null || String(actionIndex).length === 0) {
+        throw new Error('swapDetail: actionIndex is required');
+    }
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getAction(String(actionIndex));
+}
+
+/**
  * Recent on-chain history for a token: every action that mentions
  * the tick. Powers §40.5 ManageToken's Activity tab.
  *

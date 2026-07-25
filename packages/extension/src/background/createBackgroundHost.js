@@ -206,6 +206,9 @@ const {
     orderCancelsForAddress,
     orderDetail,
     swapsForToken,
+    swapsForAddress,
+    swapCancelsForAddress,
+    swapDetail,
     historyForToken,
     genesisForToken,
     subtokensForTick,
@@ -3026,6 +3029,16 @@ export function createBackgroundHost(deps) {
     });
     host.register('swaps.forToken', async (req, { sdkRegistry }) => {
         return swapsForToken({ ...req, sdkRegistry });
+    });
+    // PC-18 My Swaps: cross-pair swaps + authoritative cancel signal + detail.
+    host.register('swaps.forAddress', async (req, { sdkRegistry }) => {
+        return swapsForAddress({ ...req, sdkRegistry });
+    });
+    host.register('swaps.cancelsForAddress', async (req, { sdkRegistry }) => {
+        return swapCancelsForAddress({ ...req, sdkRegistry });
+    });
+    host.register('swaps.detail', async (req, { sdkRegistry }) => {
+        return swapDetail({ ...req, sdkRegistry });
     });
     host.register('history.forToken', async (req, { sdkRegistry }) => {
         return historyForToken({ ...req, sdkRegistry });

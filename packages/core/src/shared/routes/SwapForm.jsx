@@ -32,6 +32,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -118,6 +119,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [getAmount, setGetAmount] = useState('');
     const [getOwnership, setGetOwnership] = useState(false);
     const [memo, setMemo] = useState('');
+    // PC-18: the rest of the SWAP v0 field set the same-chain form was missing.
+    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
+    const [expInput, setExpInput] = useState('');
+    const [allowListIdx, setAllowListIdx] = useState('');
+    const [blockListIdx, setBlockListIdx] = useState('');
+    const [getAddress, setGetAddress] = useState('');
+    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
     const [password, setPassword] = useState('');
     const [givePickerOpen, setGivePickerOpen] = useState(false);
@@ -201,6 +210,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         signerId: hw ? fromAddress?.signerId : null,
     });
 
+    const expError = useMemo(() => {
+        if (expMode !== 'custom' || !expInput.trim()) return null;
+        const ms = Date.parse(expInput.trim());
+        if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
+        if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
+        return null;
+    }, [expMode, expInput]);
+
     const validationError = useMemo(() => {
         if (!giveTick) return null;
         if (!getTick) return null;
@@ -261,8 +278,18 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ...(getOwnership
             ? { GET_OWNERSHIP: '1' }
             : { GET_AMOUNT: String(getAmount).trim() }),
+        ...(getAddress.trim() ? { GET_ADDRESS: getAddress.trim() } : {}),
+        // EXPIRATION is a wall-clock Unix timestamp (not blocks); 'default'
+        // omits it so the indexer applies its standard window.
+        ...((() => {
+            if (expMode !== 'custom' || !expInput.trim()) return {};
+            const ms = Date.parse(expInput.trim());
+            return Number.isFinite(ms) ? { EXPIRATION: String(Math.floor(ms / 1000)) } : {};
+        })()),
+        ...(allowListIdx ? { ALLOW_LIST: allowListIdx } : {}),
+        ...(blockListIdx ? { BLOCK_LIST: blockListIdx } : {}),
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-    }), [coinTicker, giveTick, giveOwnership, giveAmount, getTick, getOwnership, getAmount, memo]);
+    }), [coinTicker, giveTick, giveOwnership, giveAmount, getTick, getOwnership, getAmount, getAddress, expMode, expInput, allowListIdx, blockListIdx, memo]);
 
     //  ( §5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page; hardware +
@@ -328,7 +355,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress || !chainId) return;
-        if (validationError) return;
+        if (validationError || expError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
             || (!getOwnership && !getAmount)) {
@@ -344,7 +371,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId) return;
-        if (validationError) return;
+        if (validationError || expError) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
@@ -619,6 +646,24 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         );
     }
 
+    if (listPickerFor) {
+        return (
+            <ListPickerScreen
+                variant={variant}
+                messaging={messaging}
+                chainId={chainId}
+                addresses={addressesByChain?.[chainId] || []}
+                filterType="2"
+                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                onSelect={(row) => {
+                    if (listPickerFor === 'allow') setAllowListIdx(row.actionIndex); else setBlockListIdx(row.actionIndex);
+                    setListPickerFor(null);
+                }}
+                onBack={() => setListPickerFor(null)}
+            />
+        );
+    }
+
     if (givePickerOpen) {
         return (
             <TokenPicker
@@ -749,6 +794,59 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 </p>
             ) : null}
 
+            <p className={styles.successLabel}>Expiration</p>
+            <label className={styles.checkRow}>
+                <input type="radio" name="swap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
+                {' '}Default window
+            </label>
+            <label className={styles.checkRow}>
+                <input type="radio" name="swap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
+                {' '}Expire at a specific time
+            </label>
+            {expMode === 'custom' ? (
+                <Input
+                    label="Expires"
+                    type="datetime-local"
+                    hint="Wall-clock time the swap offer is valid until. Must be in the future."
+                    value={expInput}
+                    onChange={(e) => setExpInput(e.target.value)}
+                />
+            ) : null}
+            {expError ? <div role="alert" className={styles.error}>{expError}</div> : null}
+
+            <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent, #6ea8fe)', cursor: 'pointer', font: 'inherit' }}
+            >
+                {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
+            </button>
+            {showAdvanced ? (
+                <>
+                    <Input
+                        label="Receive at (optional)"
+                        hint="Address to receive the GET side on. Defaults to your source address."
+                        value={getAddress}
+                        onChange={(e) => setGetAddress(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                    <p className={styles.successLabel}>Restrict who can match (optional)</p>
+                    <div className={styles.actions}>
+                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                            {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                        </Button>
+                        {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                            {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                        </Button>
+                        {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                    </div>
+                    <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
+                </>
+            ) : null}
+
             <Input
                 label="Memo (optional)"
                 value={memo}
@@ -790,7 +888,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!!validationError
+                    disabled={!!validationError || !!expError
                         || !fromAddress
                         || !giveTick || !getTick
                         || (!giveOwnership && !giveAmount)

@@ -395,11 +395,78 @@ async function main() {
         && editStatus === 'valid' && editRowExp === editExp
         && cancelStatus === 'valid' && cancelRowFound === true;
 
+    // 10) SWAP v0 create / v2 edit / v1 cancel (PC-18). SWAP is token-for-
+    // token (no native coin), so the signer MINTs free XCHAIN (the GIVE
+    // side + the ISSUE/SWAP fees) and ISSUEs a token to name on the GET
+    // side; we never match it, so the swap just sits open. Proves the same
+    // EXPIRATION-is-Unix + cancel-is-v1/edit-is-v2 semantics as ORDER, on
+    // the SWAP action's own tables (swap_edits / swap_cancels).
+    console.log('\n=== SWAP v0 create / v2 edit / v1 cancel (PC-18) ===');
+    const W = sdk.wallet.generateKeyPair();
+    const addrW = sdk.wallet.deriveAddress(W.publicKeyHex, { type: 'p2wpkh' });
+    const signerW = { wif: W.wif, pubkeyHex: W.publicKeyHex, address: addrW };
+    console.log('  swap signer W:', addrW);
+    nodeRpc(['sendtoaddress', addrW, '5']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    await submit(sdk, 'MINT for SWAP', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '500' }, signerW);
+    await sleep(3000);
+    const swTick = randTick('SW');
+    await submit(sdk, 'ISSUE swap-get', 'ISSUE',
+        { VERSION: '0', TICK: swTick, MAX_SUPPLY: '1000', MINT_SUPPLY: '1000', DECIMALS: '0', DESCRIPTION: 'swap get token' },
+        signerW);
+    await sleep(3000);
+    const swNow = Number(JSON.parse(nodeRpc(['getblockchaininfo'])).mediantime);
+    const swCreateExp = String(swNow + 30 * 86400);
+    const swEditExp = String(swNow + 7 * 86400);
+    const swapRes = await submit(sdk, 'SWAP v0 create', 'SWAP', {
+        VERSION: '0', GIVE_COIN: 'BTC', GIVE_TICK: 'XCHAIN', GIVE_AMOUNT: '100', GIVE_OWNERSHIP: '0',
+        GET_COIN: 'BTC', GET_TICK: swTick, GET_AMOUNT: '50', GET_OWNERSHIP: '0',
+        GET_ADDRESS: addrW, EXPIRATION: swCreateExp, ALLOW_LIST: '', BLOCK_LIST: '', MEMO: 'pc18 roundtrip',
+    }, signerW);
+    const swCreateStatus = swapRes.indexed && (swapRes.indexed.status || swapRes.indexed.state);
+    console.log(`  [SWAP v0] indexed status=${swCreateStatus} (want valid; a block-count EXPIRATION would be "past")`);
+    await sleep(3000);
+    const findMySwap = async () => {
+        const resp = await sdk.getSwaps(addrW, 'address').catch(() => null);
+        const rows = resp && Array.isArray(resp.data) ? resp.data : (Array.isArray(resp) ? resp : []);
+        const sorted = rows.slice().sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
+        return sorted.length ? String(sorted[0].action_index) : null;
+    };
+    const swapIdx = await findMySwap();
+    const swDetail = swapIdx ? await sdk.getAction(String(swapIdx)).catch(() => null) : null;
+    const swOpenStatus = swDetail && swDetail.state ? swDetail.state.status : null;
+    console.log(`  read-back swap idx=${swapIdx} state.status=${swOpenStatus} (want index + open)`);
+
+    let swEditStatus = null; let swEditRowExp = null; let swCancelStatus = null; let swCancelRowFound = false;
+    if (swapIdx) {
+        const swEditRes = await submit(sdk, 'SWAP v2 edit', 'SWAP',
+            { VERSION: '2', SWAP_ACTION_INDEX: swapIdx, EXPIRATION: swEditExp, MEMO: 'pc18 edit' }, signerW);
+        swEditStatus = swEditRes.indexed && (swEditRes.indexed.status || swEditRes.indexed.state);
+        await sleep(3000);
+        const swEdits = await sdk.getSwapEdits(addrW, 'address').catch(() => null);
+        const swEditRow = (swEdits && Array.isArray(swEdits.data) ? swEdits.data : [])
+            .find((r) => String(r.swap_action_index) === swapIdx);
+        swEditRowExp = swEditRow ? String(swEditRow.expiration) : null;
+        console.log(`  [SWAP v2 edit] indexed status=${swEditStatus}; swap_edits.expiration=${swEditRowExp} (want valid + ${swEditExp})`);
+        const swCancelRes = await submit(sdk, 'SWAP v1 cancel', 'SWAP',
+            { VERSION: '1', SWAP_ACTION_INDEX: swapIdx, MEMO: 'pc18 cancel' }, signerW);
+        swCancelStatus = swCancelRes.indexed && (swCancelRes.indexed.status || swCancelRes.indexed.state);
+        await sleep(3000);
+        const swCancels = await sdk.getSwapCancels(addrW, 'address').catch(() => null);
+        swCancelRowFound = (swCancels && Array.isArray(swCancels.data) ? swCancels.data : [])
+            .some((r) => String(r.swap_action_index) === swapIdx && String(r.status || 'valid') === 'valid');
+        console.log(`  [SWAP v1 cancel] indexed status=${swCancelStatus}; swap_cancels row for #${swapIdx}=${swCancelRowFound} (want valid + true)`);
+    }
+    const swapOk = swCreateStatus === 'valid' && swapIdx != null && swOpenStatus === 'open'
+        && swEditStatus === 'valid' && swEditRowExp === swEditExp
+        && swCancelStatus === 'valid' && swCancelRowFound === true;
+
     console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk
-        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} createStatus=${createStatus} openStatus=${openStatus} editStatus=${editStatus} editRowExp=${editRowExp} cancelStatus=${cancelStatus} cancelRowFound=${cancelRowFound})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} swCreateStatus=${swCreateStatus} swOpenStatus=${swOpenStatus} swEditStatus=${swEditStatus} swEditRowExp=${swEditRowExp} swCancelStatus=${swCancelStatus} swCancelRowFound=${swCancelRowFound})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

@@ -85,6 +85,7 @@ import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
 import { CreateOrderForm } from '@xchain-wallet/core/shared/routes/CreateOrderForm.jsx';
 import { MyOrdersView } from '@xchain-wallet/core/shared/routes/MyOrdersView.jsx';
+import { MySwapsView } from '@xchain-wallet/core/shared/routes/MySwapsView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
 import { ObligationsView } from '@xchain-wallet/core/shared/routes/ObligationsView.jsx';
 import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
@@ -170,7 +171,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -1053,6 +1054,16 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'my-swaps' && activeWalletId) {
+                return (
+                    <MySwapsView
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        onBack={() => setUnlockedView('actions')}
+                        onCreateSwap={() => setUnlockedView('swap')}
+                    />
+                );
+            }
             if (unlockedView === 'sell-name' && activeWalletId && sellNameRef) {
                 return (
                     <SellOwnershipForm
@@ -1706,6 +1717,7 @@ function AppInner() {
                             onSwap: () => setUnlockedView('swap'),
                             onCreateOrder: () => setUnlockedView('create-order'),
                             onMyOrders: () => setUnlockedView('my-orders'),
+                            onMySwaps: () => setUnlockedView('my-swaps'),
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
@@ -2099,6 +2111,7 @@ function buildActionEntries({
     onSwap,
     onCreateOrder,
     onMyOrders,
+    onMySwaps,
     onPublishFile,
     onLink,
     onParallel,
@@ -2212,6 +2225,12 @@ function buildActionEntries({
             label: 'My orders',
             description: 'View, edit, and cancel your open orders across every pair.',
             onSelect: onMyOrders,
+        },
+        {
+            id: 'my-swaps',
+            label: 'My swaps',
+            description: 'View, edit, and cancel your open atomic swaps across every pair.',
+            onSelect: onMySwaps,
         },
         {
             id: 'publish-file',
