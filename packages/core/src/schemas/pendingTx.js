@@ -120,7 +120,11 @@ export function validatePendingTx(record) {
     check(errors, 'chain', isNonEmptyString(r.chain), 'must be a non-empty string');
     check(errors, 'network', isOneOf(r.network, NETWORKS), `must be one of ${NETWORKS.join(', ')}`);
     check(errors, 'fromAddress', isNonEmptyString(r.fromAddress), 'must be a non-empty string');
-    check(errors, 'toAddress', isNonEmptyString(r.toAddress), 'must be a non-empty string');
+    // toAddress is null for data-only actions with no recipient (ISSUE, DESTROY,
+    // STAKE, VOTE, AIRDROP, LINK, advancedAction, contract funds, ...); every
+    // such flow passes `toAddress: null`. Only recipient-bearing actions (SEND,
+    // sweep, coinpay) carry an address. Allow null; still reject empty string.
+    check(errors, 'toAddress', isNullableNonEmptyString(r.toAddress), 'must be null or a non-empty string');
     check(errors, 'action', isNonEmptyString(r.action), 'must be a non-empty string');
     check(errors, 'actionSummary', isString(r.actionSummary), 'must be a string');
     check(errors, 'psbtHex', isString(r.psbtHex), 'must be a string');

@@ -120,6 +120,11 @@ describe('validatePendingTx', () => {
         expect(validatePendingTx({ ...tx, toAddress: '' }).ok).toBe(false);
     });
 
+    it('accepts null toAddress (data-only actions have no recipient)', () => {
+        const tx = createPendingTx({ ...BASE_INPUT, toAddress: null });
+        expect(validatePendingTx(tx).ok).toBe(true);
+    });
+
     it('rejects empty action', () => {
         const tx = createPendingTx(BASE_INPUT);
         expect(validatePendingTx({ ...tx, action: '' }).ok).toBe(false);
