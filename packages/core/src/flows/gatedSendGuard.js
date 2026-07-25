@@ -48,6 +48,8 @@ import {
 } from './messageAction.js';
 import { gatedKeyId } from '../schemas/gatedKey.js';
 import { isDemoGatedActionIndex } from './demoGatedContent.js';
+import { indexerWatermark } from './balances.js';
+import { resolveGateMinAmountActive } from './protocolActivations.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -102,6 +104,124 @@ const GROUPS_CACHE = new Map();
 
 export function clearGatedGroupsCache() {
     GROUPS_CACHE.clear();
+}
+
+// ---------------------------------------------------------------------------
+// PC-29 unlock-threshold lane (GATE_MIN_AMOUNT; inert until the 
+// flag day pins activation heights). Post-activation SEND rule: a pack's
+// key-handoff MESSAGE is required only when the destination's POST-SEND
+// balance of the gate tick meets the pack's threshold; below it, a plain
+// SEND is valid and deliberately carries no key (the publisher chose the
+// threshold; handing the key to a below-threshold recipient would defeat
+// it). Exact decimal math throughout - platform amounts are decimal
+// strings up to 8dp, so everything is compared as BigInt at a fixed
+// 18-digit fractional scale.
+
+const THRESHOLD_SCALE = 18;
+
+/** @param {string} s @returns {{ int: string, frac: string } | null} */
+function parseDecimal(s) {
+    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(s ?? '').trim());
+    if (!m) return null;
+    return { int: m[1], frac: (m[2] || '').replace(/0+$/, '') };
+}
+
+/** @param {string} s @returns {bigint | null} value at THRESHOLD_SCALE */
+function decimalToScaled(s) {
+    const p = parseDecimal(s);
+    if (!p || p.frac.length > THRESHOLD_SCALE) return null;
+    return BigInt(p.int) * 10n ** BigInt(THRESHOLD_SCALE)
+        + BigInt(p.frac.padEnd(THRESHOLD_SCALE, '0') || '0');
+}
+
+/**
+ * Effective unlock threshold for a gated group: the minimum across its
+ * files, where a file WITHOUT a threshold makes the whole pack
+ * unconditional (that file's handoff rule always applies, and the pack
+ * shares one key). Returns null for "no effective threshold".
+ *
+ * @param {any} group
+ * @returns {string | null}
+ */
+export function gatedGroupThreshold(group) {
+    const files = Array.isArray(group?.files) ? group.files : [];
+    if (files.length === 0) return null;
+    let min = null;
+    let minScaled = null;
+    for (const f of files) {
+        const t = f?.gateMinAmount;
+        if (t == null || String(t).trim() === '') return null;
+        const scaled = decimalToScaled(t);
+        if (scaled === null || scaled <= 0n) return null;
+        if (minScaled === null || scaled < minScaled) { min = String(t).trim(); minScaled = scaled; }
+    }
+    return min;
+}
+
+/**
+ * Split a tick's gated groups into the packs whose key handoff the send
+ * MUST carry and the packs the destination's post-send balance does not
+ * qualify for. Pre-activation (every chain until the  train pins
+ * heights) this returns all groups as required with zero network calls.
+ * Failure policy while active: an unreadable destination balance treats
+ * every pack as required - that direction always composes a VALID send
+ * (an extra handoff never invalidates one), whereas guessing "below
+ * threshold" could compose a plain SEND the indexer rejects.
+ *
+ * @param {{
+ *   sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry,
+ *   chainId: string,
+ *   sdk: object,
+ *   to: string,
+ *   tick: string,
+ *   amount: string | number,
+ *   groups: any[],
+ *   heights?: Record<string, number | null>,   test-only activation override
+ * }} params
+ * @returns {Promise<{ requiredGroups: any[], belowThresholdKeyHashes: string[] }>}
+ */
+export async function splitGroupsByThreshold({ sdkRegistry, chainId, sdk, to, tick, amount, groups, heights }) {
+    const allRequired = { requiredGroups: groups, belowThresholdKeyHashes: [] };
+    const thresholds = groups.map((g) => gatedGroupThreshold(g));
+    if (!thresholds.some((t) => t !== null)) return allRequired;
+
+    const active = await resolveGateMinAmountActive({
+        chainId,
+        heights,
+        getBlockHeight: async () => {
+            const { watermark } = await indexerWatermark({ sdkRegistry, chainId });
+            return watermark;
+        },
+    });
+    if (!active) return allRequired;
+
+    const amountScaled = decimalToScaled(String(amount));
+    if (amountScaled === null) return allRequired;
+
+    let postSendScaled = null;
+    try {
+        const resp = await sdk.getBalances(to);
+        const rows = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.data) ? resp.data : []);
+        const tickUpper = String(tick).toUpperCase();
+        const row = rows.find((r) => String(r?.tick || '').toUpperCase() === tickUpper);
+        // No row = zero balance (a first-time recipient), which is a real
+        // answer, not a failure.
+        const div = Number(row?.divisibility ?? row?.decimals ?? 0);
+        const qty = BigInt(String(row?.quantity ?? row?.amount ?? '0'));
+        if (!Number.isInteger(div) || div < 0 || div > THRESHOLD_SCALE) throw new Error('bad divisibility');
+        postSendScaled = qty * 10n ** BigInt(THRESHOLD_SCALE - div) + amountScaled;
+    } catch (_e) {
+        return allRequired;
+    }
+
+    const requiredGroups = [];
+    const belowThresholdKeyHashes = [];
+    groups.forEach((g, i) => {
+        const t = thresholds[i] === null ? null : decimalToScaled(thresholds[i]);
+        if (t === null || postSendScaled >= t) requiredGroups.push(g);
+        else belowThresholdKeyHashes.push(String(g.keyHash).toLowerCase());
+    });
+    return { requiredGroups, belowThresholdKeyHashes };
 }
 
 /**
@@ -201,11 +321,13 @@ export async function resolveGatedSendKeys({ sdk, vault, walletId, chainId, tick
  *   tick: string,
  *   amount: string | number,
  *   memo?: string,
+ *   _activationHeights?: Record<string, number | null>,   test-only PC-29 override
  * }} params
  * @returns {Promise<GatedSendPlan | null>}
  */
 export async function prepareGatedSend({
     sdkRegistry, chainRegistry, vault, walletId, chainId, source, to, tick, amount, memo,
+    _activationHeights,
 }) {
     const descriptor = chainRegistry?.get?.(chainId);
     const coin = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : null;
@@ -221,7 +343,18 @@ export async function prepareGatedSend({
     const sdk = sdkRegistry.get(chainId);
     if (!sdk?.gatedFile || !sdk?.messaging) return null;
 
-    const groups = await getGatedGroupsForSend({ sdk, chainId, tick: tickUpper });
+    const allGroups = await getGatedGroupsForSend({ sdk, chainId, tick: tickUpper });
+    if (allGroups.length === 0) return null;
+
+    // PC-29 threshold lane: packs the destination's post-send balance
+    // does not qualify for are dropped from the handoff set (their key
+    // deliberately stays with the sender). If NO pack qualifies, the
+    // whole send goes out as a plain SEND - post-activation that is the
+    // protocol's below-threshold lane. Inert until the flag day.
+    const { requiredGroups: groups, belowThresholdKeyHashes } = await splitGroupsByThreshold({
+        sdkRegistry, chainId, sdk, to, tick: tickUpper, amount, groups: allGroups,
+        heights: _activationHeights,
+    });
     if (groups.length === 0) return null;
 
     // The BATCH COMMAND is ';'-joined; a separator inside MEMO would
@@ -280,6 +413,14 @@ export async function prepareGatedSend({
                 + `the recipient will not be able to open the pack(s) ${missingKeyHashes.join(', ')}.`,
         }]
         : [];
+    if (belowThresholdKeyHashes.length > 0) {
+        warnings.push({
+            code: 'GATED_SEND_BELOW_THRESHOLD',
+            message: `The recipient's ${tickUpper} balance after this send stays below the unlock `
+                + `threshold for ${belowThresholdKeyHashes.length} pack(s); per the publisher's setting, `
+                + 'those keys are not attached.',
+        });
+    }
 
     return {
         actionData: { action: 'BATCH', params: { VERSION: '0', COMMAND: `${sendCmd};${messageCmd}` } },
@@ -306,14 +447,19 @@ export async function prepareGatedSend({
  *   chainId: string,
  *   tick: string,
  *   sourceAddress?: string | null,
+ *   to?: string | null,                    destination, for the PC-29 threshold lane
+ *   amount?: string | number | null,       send amount, for the PC-29 threshold lane
+ *   _activationHeights?: Record<string, number | null>,   test-only PC-29 override
  * }} params
  * @returns {Promise<{
  *   state: 'ungated' | 'ready' | 'partial' | 'blocked',
  *   groups: Array<{ keyHash: string, fileCount: number, haveKey: boolean }>,
+ *   belowThresholdCount?: number,
  * }>}
  */
 export async function gatedSendReadiness({
-    sdkRegistry, chainRegistry, vault, walletId, chainId, tick, sourceAddress,
+    sdkRegistry, chainRegistry, vault, walletId, chainId, tick, sourceAddress, to, amount,
+    _activationHeights,
 }) {
     const ungated = { state: /** @type {const} */ ('ungated'), groups: [] };
     const descriptor = chainRegistry?.get?.(chainId);
@@ -323,8 +469,23 @@ export async function gatedSendReadiness({
     const sdk = sdkRegistry.get(chainId);
     if (!sdk?.gatedFile) return ungated;
 
-    const groups = await getGatedGroupsForSend({ sdk, chainId, tick: tickUpper });
-    if (groups.length === 0) return ungated;
+    const allGroups = await getGatedGroupsForSend({ sdk, chainId, tick: tickUpper });
+    if (allGroups.length === 0) return ungated;
+
+    // Mirror the compose-time threshold lane when the caller supplied a
+    // destination + amount; without them the probe conservatively treats
+    // every pack as required (pre-activation this is a no-op anyway).
+    let groups = allGroups;
+    let belowThresholdCount = 0;
+    if (to && amount != null && String(amount).trim() !== '') {
+        const split = await splitGroupsByThreshold({
+            sdkRegistry, chainId, sdk, to, tick: tickUpper, amount, groups: allGroups,
+            heights: _activationHeights,
+        });
+        groups = split.requiredGroups;
+        belowThresholdCount = split.belowThresholdKeyHashes.length;
+        if (groups.length === 0) return { ...ungated, belowThresholdCount };
+    }
 
     const { keysByHash } = await resolveGatedSendKeys({
         sdk, vault, walletId, chainId, tick: tickUpper, sourceAddress, groups,
@@ -336,5 +497,5 @@ export async function gatedSendReadiness({
     }));
     const held = rows.filter((r) => r.haveKey).length;
     const state = held === rows.length ? 'ready' : (held === 0 ? 'blocked' : 'partial');
-    return { state, groups: rows };
+    return { state, groups: rows, ...(belowThresholdCount > 0 ? { belowThresholdCount } : {}) };
 }

@@ -63,9 +63,16 @@ function randTick(prefix) {
 }
 
 async function submit(sdk, label, action, params, signer) {
+    // Explicit funding set: the tracker cannot resolve a raw pubkey to a
+    // script, and since xchain-sdk 5b57555 the SDK no longer falls back
+    // to `change` for address-based selection. sdk.submitAction forwards
+    // `utxos` (but not `sourceAddress`) to create_tx, so fetch the
+    // spender's set by address here, per leg (each prior leg's change is
+    // confirmed by its waitForIndexer before the next fetch).
+    const utxos = await sdk.getUTXOs(signer.address);
     const res = await sdk.submitAction(
         { action, params },
-        { pubkey: signer.pubkeyHex, change: signer.address },
+        { pubkey: signer.pubkeyHex, change: signer.address, utxos },
         { wif: signer.wif, waitForIndexer: true, requireValid: false, timeout: 120000, pollInterval: 2000 },
     );
     console.log(`  [${label}] txid=${res.txid} broadcast+confirmed`);
@@ -96,7 +103,58 @@ async function main() {
     const listOk = lists && lists.data && lists.data.some((r) => r.status === 'valid');
     console.log('  read-back getLists(A) valid row:', listOk ? 'YES' : JSON.stringify(lists).slice(0, 200));
 
-    // 2) ISSUE - composes/broadcasts; indexes invalid without the XCHAIN fee (see LIMITATION).
+    // 2) FILE at the PC-28 computed ceiling - proves the encoding-aware
+    // size math end-to-end: the encoder must ACCEPT a payload at exactly
+    // maxPublicFileBytes (old flat cap was 7000), the decoder must not
+    // drop the near-8192 compiled push, and the indexer must record the
+    // action. The +1 control must be rejected AT ENCODE TIME (RangeError,
+    // no funds spent) - that encode-side refusal is the failure mode the
+    // wallet's picker/review checks exist to pre-empt.
+    //
+    // ENCODER CONSTRAINT (discovered live 2026-07-25, PC-28): the
+    // P2SH/P2WSH chunk lane resolves the caller identity with
+    // bitcoin.address.fromBase58Check(pubKey), so any payload past the
+    // OP_RETURN lane composes ONLY when `pubkey` is a base58 LEGACY
+    // address; the raw compressed pubkey the SDK/wallet flows pass (and
+    // any bech32 source) crashes create_tx with "Non-base58 character"
+    // -> "Internal encoder error". Until the encoder learns
+    // bech32/raw-pubkey identities, this leg runs from a dedicated
+    // legacy signer with the ADDRESS as the identity param.
+    console.log('\n=== FILE at computed max (PC-28) ===');
+    const { maxPublicFileBytes } = await import(
+        path.resolve(__dirname, '../../packages/core/src/flows/fileSizeLimits.js')
+    );
+    const F = sdk.wallet.generateKeyPair();
+    const addrF = sdk.wallet.deriveAddress(F.publicKeyHex, { type: 'p2pkh' });
+    console.log('  legacy FILE signer:', addrF);
+    nodeRpc(['sendtoaddress', addrF, '10']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    const fileMeta = { name: 'pc28.bin', type: 'application/octet-stream' };
+    const fileCap = maxPublicFileBytes(fileMeta);
+    console.log(`  computed max for ${fileMeta.name}: ${fileCap} bytes`);
+    const fileParams = { VERSION: '0', NAME: fileMeta.name, TYPE: fileMeta.type };
+    const fileRes = await sdk.submitAction(
+        { action: 'FILE', params: fileParams },
+        { pubkey: addrF, change: addrF, utxos: await sdk.getUTXOs(addrF), rawData: 'A'.repeat(fileCap) },
+        { wif: F.wif, waitForIndexer: true, requireValid: false, timeout: 120000, pollInterval: 2000 },
+    );
+    const fileStatus = fileRes.indexed && (fileRes.indexed.status || fileRes.indexed.state);
+    console.log(`  [FILE] txid=${fileRes.txid} encoding=${fileRes.encoding} indexed status=${fileStatus}`);
+    let fileRejectOk = false;
+    try {
+        await sdk.submitAction(
+            { action: 'FILE', params: fileParams },
+            { pubkey: addrF, change: addrF, utxos: await sdk.getUTXOs(addrF), rawData: 'A'.repeat(fileCap + 1) },
+            { wif: F.wif, waitForIndexer: false },
+        );
+        console.log('  [FILE+1] UNEXPECTED: encoder accepted an over-ceiling payload');
+    } catch (e) {
+        fileRejectOk = /too large|exceeds maximum/i.test(e && e.message || '');
+        console.log(`  [FILE+1] rejected at encode time: ${fileRejectOk ? 'YES' : `UNEXPECTED (${e.message})`}`);
+    }
+
+    // 3) ISSUE - composes/broadcasts; indexes invalid without the XCHAIN fee (see LIMITATION).
     console.log('\n=== ISSUE (compose/broadcast path) ===');
     const tick = randTick('RT');
     await submit(sdk, 'ISSUE', 'ISSUE',
@@ -104,12 +162,13 @@ async function main() {
         signerA);
     // TODO(native-fee): premine to A via nativeFeePreflight to make this valid and enable a real token SEND.
 
-    // 3) SEND - composes/broadcasts through the shared buildSendPsbt/encoder path.
+    // 4) SEND - composes/broadcasts through the shared buildSendPsbt/encoder path.
     console.log('\n=== SEND (compose/broadcast path) ===');
     await submit(sdk, 'SEND', 'SEND', { VERSION: '0', TICK: tick, AMOUNT: '100', DESTINATION: addrB }, signerA);
 
-    console.log('\nDONE. LIST round-trip is the valid-indexed proof; ISSUE/SEND prove compose+broadcast.');
-    console.log(listOk ? 'RESULT: PASS (LIST round-trip valid)' : 'RESULT: CHECK (LIST not valid - inspect stack)');
+    console.log('\nDONE. LIST round-trip + max-size FILE are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
+    const fileOk = fileStatus === 'valid' && fileRejectOk;
+    console.log(listOk && fileOk ? 'RESULT: PASS (LIST valid + max-size FILE valid + over-ceiling rejected)' : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

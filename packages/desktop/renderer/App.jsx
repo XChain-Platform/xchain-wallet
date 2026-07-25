@@ -110,6 +110,7 @@ import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { AttachContentForm } from '@xchain-wallet/core/shared/routes/AttachContentForm.jsx';
 import { GatedPublishForm } from '@xchain-wallet/core/shared/routes/GatedPublishForm.jsx';
+import { PublishFileForm } from '@xchain-wallet/core/shared/routes/PublishFileForm.jsx';
 import { ProjectRosterForm } from '@xchain-wallet/core/shared/routes/ProjectRosterForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
@@ -164,7 +165,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'mint-settings' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'mint-settings' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -1002,6 +1003,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'publish-file' && activeWalletId) {
+                return (
+                    <PublishFileForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'project-roster' && activeWalletId && tokenDetailRef) {
                 return (
                     <ProjectRosterForm
@@ -1598,6 +1607,7 @@ function AppInner() {
                                 setUnlockedView('coinpay');
                             },
                             onSwap: () => setUnlockedView('swap'),
+                            onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
@@ -1987,6 +1997,7 @@ function buildActionEntries({
     onPairSigner,
     onPayCoinpay,
     onSwap,
+    onPublishFile,
     onLink,
     onParallel,
     onCrossChainSwap,
@@ -2081,6 +2092,12 @@ function buildActionEntries({
             label: 'Swap tokens',
             description: 'Swap one token directly for another, with no coin payment step.',
             onSelect: onSwap,
+        },
+        {
+            id: 'publish-file',
+            label: 'Publish file',
+            description: 'Store a file on the chain: public, or encrypted so only holders of your token can open it.',
+            onSelect: onPublishFile,
         },
         {
             id: 'link',

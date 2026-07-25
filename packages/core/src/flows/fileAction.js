@@ -54,6 +54,24 @@ import { normalizeSource } from './sendToken.js';
  */
 
 /**
+ * The FILE v0 params object for a public upload. Shared by fileAction
+ * and the PublishFileForm watcher (encode-only) branch so the signed
+ * and unsigned compositions cannot drift (PC-28).
+ *
+ * @param {{ name: string, type: string, title?: string, memo?: string }} meta
+ * @returns {{ VERSION: string, NAME: string, TYPE: string, TITLE: string, MEMO: string }}
+ */
+export function fileActionParams({ name, type, title, memo }) {
+    return {
+        VERSION: '0',
+        NAME: String(name ?? '').trim(),
+        TYPE: String(type ?? '').trim(),
+        TITLE: typeof title === 'string' ? title.trim() : '',
+        MEMO: typeof memo === 'string' ? memo : '',
+    };
+}
+
+/**
  * @param {FileActionOpts} opts
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
  */
@@ -76,13 +94,7 @@ export async function fileAction(opts) {
 
     const source = normalizeSource(opts.from, 'fileAction');
 
-    const params = {
-        VERSION: '0',
-        NAME: opts.name.trim(),
-        TYPE: opts.type.trim(),
-        TITLE: typeof opts.title === 'string' ? opts.title.trim() : '',
-        MEMO: typeof opts.memo === 'string' ? opts.memo : '',
-    };
+    const params = fileActionParams(opts);
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,

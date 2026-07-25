@@ -173,6 +173,7 @@ export function buildCommands(ctx) {
         { id: 'create-dividend', category: 'Create', title: 'Pay a dividend', subtitle: 'Distribute to holders', keywords: ['dividend', 'distribute'], Icon: Icon.DollarIcon, run: go('dividend') },
         { id: 'create-airdrop', category: 'Create', title: 'Airdrop', subtitle: 'Send to many recipients', keywords: ['airdrop', 'distribute', 'bulk'], Icon: Icon.SendIcon, run: go('airdrop') },
         { id: 'create-list', category: 'Create', title: 'Create a list', subtitle: 'Publish an address or token list', keywords: ['list', 'roster', 'allowlist'], Icon: Icon.TokenListIcon, run: go('list-create') },
+        { id: 'create-publish-file', category: 'Create', title: 'Publish file', subtitle: 'Public or token-gated on-chain file', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'], Icon: Icon.UploadIcon, run: go('publish-file') },
         { id: 'create-advanced', category: 'Create', title: 'Advanced action', subtitle: 'Author any action by hand', keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
     );
 

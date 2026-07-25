@@ -1538,8 +1538,13 @@ function GatedGroupCard({
     async function handleFileClick(file) {
         setAccessError(null);
         if (!ownsToken) {
+            // PC-29: a file may declare an unlock threshold (GATE_MIN_AMOUNT);
+            // name it in the copy so the requirement is honest. The real
+            // enforcement is the key handoff itself - like the gate, a
+            // threshold is a first-access lock, not a balance check here.
+            const need = file.gateMinAmount ? `at least ${file.gateMinAmount}` : 'at least 1';
             setAccessError(
-                `You need to hold at least 1 ${tokenLabel} to view this content. Pick one up on a marketplace, or import a wallet that already holds one.`,
+                `You need to hold ${need} ${tokenLabel} to view this content. Pick one up on a marketplace, or import a wallet that already holds one.`,
             );
             return;
         }
@@ -1787,6 +1792,11 @@ function GatedGroupCard({
                                 <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
                                 {f.type ? (
                                     <span className={styles.fileLinkType}>{f.type}</span>
+                                ) : null}
+                                {f.gateMinAmount ? (
+                                    <span className={styles.fileLinkType}>
+                                        hold ≥ {f.gateMinAmount} {tick} to unlock
+                                    </span>
                                 ) : null}
                             </button>
                         </li>

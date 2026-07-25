@@ -43,12 +43,19 @@ export { orderAction, cancelOrder } from './orderAction.js';
 export { buildCoinpayPsbtRequest, coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
-export { fileAction } from './fileAction.js';
+export { fileAction, fileActionParams } from './fileAction.js';
 export {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
     MAX_GATED_PLAINTEXT_BYTES,
 } from './gatedPublishAction.js';
+export {
+    MAX_COMPILED_ACTION_BYTES,
+    maxPublicFileBytes,
+    maxGatedPlaintextBytes,
+    publicFileActionString,
+    gatedBatchActionString,
+} from './fileSizeLimits.js';
 export { getProjectForTick } from './projectQueries.js';
 export { getMessagingInbox, getMessagingInboxSweep } from './messagingInbox.js';
 export {
@@ -68,9 +75,17 @@ export {
     getGatedGroupsForSend,
     resolveGatedSendKeys,
     clearGatedGroupsCache,
+    gatedGroupThreshold,
+    splitGroupsByThreshold,
     GatedSendKeysMissingError,
     GatedRecipientPubkeyMissingError,
 } from './gatedSendGuard.js';
+export {
+    GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS,
+    gateMinAmountScheduledHeight,
+    isGateMinAmountActive,
+    resolveGateMinAmountActive,
+} from './protocolActivations.js';
 export {
     messageAction,
     buildMessageParams,

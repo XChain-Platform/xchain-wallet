@@ -62,7 +62,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : '';
 
-    const MAX_BYTES = flowsLib.MAX_GATED_PLAINTEXT_BYTES;
+    // Metadata-free floor; the real encoding-aware ceiling is computed
+    // per pick/review below once the file and signing address are known
+    // (PC-28, flows/fileSizeLimits.js).
+    const MAX_BYTES_FLOOR = flowsLib.MAX_GATED_PLAINTEXT_BYTES;
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -75,6 +78,31 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const [memo, setMemo] = useState('');
     const [packs, setPacks] = useState(/** @type {any[]} */ ([]));
     const [packChoice, setPackChoice] = useState('new');
+    // PC-29 unlock threshold (GATE_MIN_AMOUNT). The field only renders
+    // once the extension is ACTIVE on this chain: scheduled height from
+    // the flows activation map (null everywhere until the  train
+    // is assembled, so the pre-train fast path costs nothing), then the
+    // live indexer watermark decides. The flow re-checks activation at
+    // compose time either way.
+    const [gateMinAmount, setGateMinAmount] = useState('');
+    const [thresholdActive, setThresholdActive] = useState(false);
+    const thresholdScheduledHeight = typeof flowsLib.gateMinAmountScheduledHeight === 'function'
+        ? flowsLib.gateMinAmountScheduledHeight(chainId)
+        : null;
+    useEffect(() => {
+        setThresholdActive(false);
+        if (thresholdScheduledHeight === null) return undefined;
+        if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getIndexerWatermark({ chainId })
+            .then((r) => {
+                if (cancelled) return;
+                const h = Number(r?.watermark);
+                setThresholdActive(Number.isFinite(h) && h >= thresholdScheduledHeight);
+            })
+            .catch(() => { /* stays inactive; the flow gate is authoritative */ });
+        return () => { cancelled = true; };
+    }, [chainId, thresholdScheduledHeight, messaging]);
     const [ackForever, setAckForever] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
@@ -142,13 +170,29 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
 
+    // Encoding-aware ceiling for the CURRENT metadata: exact once the
+    // signing address is known, the conservative floor until then.
+    const plainCapFor = (name, type) => (fromAddress
+        ? flowsLib.maxGatedPlaintextBytes({
+            name,
+            type,
+            title,
+            memo,
+            gateTicker: tick,
+            coin: coinTicker,
+            address: fromAddress.address,
+            gateMinAmount: thresholdActive && gateMinAmount.trim() ? gateMinAmount.trim() : null,
+        })
+        : MAX_BYTES_FLOOR);
+
     function handlePickFile(event) {
         const file = event.target.files && event.target.files[0];
         setFormError(null);
         if (!file) return;
-        if (file.size > MAX_BYTES) {
+        const cap = plainCapFor(file.name, file.type || 'application/octet-stream');
+        if (file.size > cap) {
             setFileMeta(null);
-            setFormError(`That file is ${file.size.toLocaleString()} bytes; this publish lane supports up to ${MAX_BYTES.toLocaleString()}.`);
+            setFormError(`That file is ${file.size.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
             return;
         }
         const reader = new FileReader();
@@ -175,6 +219,22 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
+            return;
+        }
+        if (thresholdActive && gateMinAmount.trim()
+            && (!/^\d+(\.\d+)?$/.test(gateMinAmount.trim()) || Number(gateMinAmount.trim()) <= 0)) {
+            setFormError('The unlock threshold must be a positive amount (or leave it blank for no threshold).');
+            return;
+        }
+        // Re-check the ceiling with the FINAL metadata: title/memo typed
+        // after the pick shrink the budget, and the flow enforces the
+        // same computed cap at compose time.
+        const reviewCap = plainCapFor(fileMeta.name, fileMeta.type);
+        if (fileMeta.bytes.length > reviewCap) {
+            setFormError(
+                `With this title/memo the on-chain ceiling is ${reviewCap.toLocaleString()} bytes `
+                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
+            );
             return;
         }
         if (!ackForever) {
@@ -218,6 +278,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 memo: memo.trim() || undefined,
                 plainData,
                 ...(packChoice !== 'new' ? { existingKeyHash: packChoice } : {}),
+                ...(thresholdActive && gateMinAmount.trim()
+                    ? { gateMinAmount: gateMinAmount.trim() }
+                    : {}),
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let r;
@@ -322,6 +385,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     </dd>
                     <dt className={styles.detailsLabel}>Pack</dt>
                     <dd className={styles.detailsValue}>{packLabel}</dd>
+                    {thresholdActive && gateMinAmount.trim() ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Unlock threshold</dt>
+                            <dd className={styles.detailsValue}>
+                                hold ≥ {gateMinAmount.trim()} {tick} to receive the key
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Publishing from</dt>
                     <dd className={styles.detailsValue}>
                         {fromAddress ? <AddressText address={fromAddress.address} /> : null}
@@ -398,7 +469,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             ) : null}
 
             <label className={styles.pickerLabel}>
-                File (up to {MAX_BYTES.toLocaleString()} bytes)
+                File (up to about {plainCapFor(fileMeta?.name || 'file.bin', fileMeta?.type || 'application/octet-stream').toLocaleString()} bytes)
                 <input type="file" aria-label="File to publish" onChange={handlePickFile} disabled={ownerMissing} />
             </label>
             {fileMeta ? (
@@ -429,6 +500,27 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     disabled={ownerMissing}
                 />
             </label>
+
+            {thresholdActive ? (
+                <label className={styles.pickerLabel}>
+                    Unlock threshold (optional)
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        aria-label="Unlock threshold"
+                        placeholder="No threshold"
+                        value={gateMinAmount}
+                        onChange={(e) => setGateMinAmount(e.target.value)}
+                        disabled={ownerMissing}
+                    />
+                    <span className={styles.hint}>
+                        Holders need at least this many {tick} after a send to
+                        receive the unlock key. This is a first-access lock, not
+                        copy protection: anyone who ever got the key keeps it,
+                        even if they later hold less.
+                    </span>
+                </label>
+            ) : null}
 
             <fieldset style={{ border: 0, padding: 0, margin: "0 0 var(--xc-space-3)" }} disabled={ownerMissing}>
                 <legend>Pack</legend>

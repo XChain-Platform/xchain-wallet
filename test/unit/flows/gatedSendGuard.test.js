@@ -23,6 +23,7 @@ import {
     gatedSendReadiness,
     resolveGatedSendKeys,
     clearGatedGroupsCache,
+    gatedGroupThreshold,
     GatedSendKeysMissingError,
     GatedRecipientPubkeyMissingError,
 } from '../../../packages/core/src/flows/gatedSendGuard.js';
@@ -322,5 +323,156 @@ describe('gatedSendReadiness', () => {
         seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
         const report = await gatedSendReadiness(makeArgs({ vault }));
         expect(JSON.stringify(report)).not.toMatch(KEY_A.toString('hex'));
+    });
+});
+
+// --- PC-29 unlock-threshold lane (GATE_MIN_AMOUNT) --------------------
+// Inert until the  flag-day train pins activation heights; these
+// tests force activation through the test-only `_activationHeights`
+// override. Post-activation SEND rule: a pack's key handoff is required
+// only when the destination's POST-SEND balance meets the pack's
+// threshold; below it the send goes out plain and carries no key.
+describe('PC-29 unlock-threshold lane', () => {
+    const ACTIVE = { 'btc-regtest': 100 };
+
+    function thresholdRow(keyHash, actionIndex, gateMin) {
+        return { ...gatedRow(keyHash, actionIndex), gate_min_amount: gateMin };
+    }
+
+    // Watermark 500 (>= scheduled 100); destination holds 2.0 GATED
+    // (quantity 20 at 1 decimal), so a '5' send makes post-send 7.0.
+    function thresholdSdk(overrides = {}) {
+        return makeSdk({
+            getStatus: vi.fn(async () => ({ last_block: { RBTC: 500 } })),
+            getBalances: vi.fn(async () => ({ data: [{ tick: 'GATED', quantity: '20', decimals: 1 }] })),
+            ...overrides,
+        });
+    }
+
+    it('is fully inert while no activation height is scheduled (frozen map)', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', '1000000')]),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+        // No _activationHeights override: production map, all-null. The
+        // absurd threshold must be ignored and the key attached as today.
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault }));
+        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
+        expect(sdk.getBalances).not.toHaveBeenCalled();
+    });
+
+    it('composes a plain SEND (null) when every pack is below threshold', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', '100')]),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }));
+        expect(plan).toBeNull();
+        // Plain sends need no recipient pubkey; the rail must not fire.
+        expect(sdk.getPublicKey).not.toHaveBeenCalled();
+    });
+
+    it('drops below-threshold packs, attaches the rest, and warns', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [
+                thresholdRow(HASH_A, '100', '5'),     // post-send 7.0 >= 5: required
+                thresholdRow(HASH_B, '200', '100'),   // 7.0 < 100: dropped
+            ]),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+        seedVaultKey(vault, HASH_B, KEY_B.toString('hex'));
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }));
+        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
+        expect(plan.missingKeyHashes).toEqual([]);
+        expect(plan.warnings).toHaveLength(1);
+        expect(plan.warnings[0].code).toBe('GATED_SEND_BELOW_THRESHOLD');
+        // The handoff payload carries ONLY the required pack's key: the
+        // publisher's threshold decides who gets KEY_B, not the sender.
+        const [payload] = sdk.messaging.eciesEncryptBytes.mock.calls[0];
+        expect(payload).toEqual(Buffer.concat([Buffer.from([0x01]), KEY_A]));
+    });
+
+    it('a pack containing any threshold-less file stays unconditional', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [
+                thresholdRow(HASH_A, '100', '100'),
+                gatedRow(HASH_A, '101'),   // same pack, no threshold
+            ]),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }));
+        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
+        expect(plan.warnings).toEqual([]);
+    });
+
+    it('treats an unreadable destination balance as all-required', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', '100')]),
+            getBalances: vi.fn(async () => { throw new Error('explorer down'); }),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+        // Attaching anyway always composes a VALID send; guessing "below"
+        // could compose a plain SEND the indexer rejects.
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }));
+        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
+        expect(plan.warnings).toEqual([]);
+    });
+
+    it('no balance row = zero balance; threshold boundary is inclusive', async () => {
+        // Post-send balance is exactly the amount ('5').
+        const mkSdk = (thr) => thresholdSdk({
+            getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', thr)]),
+            getBalances: vi.fn(async () => ({ data: [] })),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+
+        const met = await prepareGatedSend(makeArgs({ sdk: mkSdk('5'), vault, _activationHeights: ACTIVE }));
+        expect(met.attachedKeyHashes).toEqual([HASH_A]);
+
+        clearGatedGroupsCache();
+        const unmet = await prepareGatedSend(makeArgs({ sdk: mkSdk('5.00000001'), vault, _activationHeights: ACTIVE }));
+        expect(unmet).toBeNull();
+    });
+
+    it('hard-blocks only on missing keys for REQUIRED packs', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [
+                thresholdRow(HASH_A, '100', '5'),     // required, key NOT held
+                thresholdRow(HASH_B, '200', '100'),   // below threshold
+            ]),
+        });
+        const err = await prepareGatedSend(makeArgs({ sdk, vault: makeVault(), _activationHeights: ACTIVE }))
+            .catch((e) => e);
+        expect(err).toBeInstanceOf(GatedSendKeysMissingError);
+        expect(err.missingKeyHashes).toEqual([HASH_A]);
+    });
+
+    it('readiness mirrors the compose lane when to+amount are supplied', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', '100')]),
+        });
+        const base = makeArgs({ sdk, vault: makeVault(), _activationHeights: ACTIVE });
+
+        // Without destination context the probe stays conservative.
+        const conservative = await gatedSendReadiness({ ...base, to: null, amount: null });
+        expect(conservative.state).toBe('blocked');
+
+        const mirrored = await gatedSendReadiness(base);
+        expect(mirrored.state).toBe('ungated');
+        expect(mirrored.belowThresholdCount).toBe(1);
+    });
+
+    it('gatedGroupThreshold picks the pack minimum and rejects garbage', () => {
+        const grp = (files) => ({ keyHash: HASH_A, files });
+        expect(gatedGroupThreshold(grp([{ gateMinAmount: '5' }, { gateMinAmount: '2.5' }]))).toBe('2.5');
+        expect(gatedGroupThreshold(grp([{ gateMinAmount: '5' }, { gateMinAmount: null }]))).toBeNull();
+        expect(gatedGroupThreshold(grp([{ gateMinAmount: 'abc' }]))).toBeNull();
+        expect(gatedGroupThreshold(grp([]))).toBeNull();
     });
 });

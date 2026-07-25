@@ -781,6 +781,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 chainId,
                 tick: tick.trim(),
                 sourceAddress: fromAddress?.address,
+                // PC-29: destination + amount feed the unlock-threshold
+                // lane host-side (inert until the GATE_MIN_AMOUNT flag
+                // day), keeping this banner in agreement with compose.
+                to: toAddress.trim() || undefined,
+                amount: amount || undefined,
             })
                 .then((resp) => {
                     if (gatedProbeSeq.current === seq && resp && resp.state !== 'ungated') setGatedInfo(resp);
@@ -791,7 +796,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 });
         }, 400);
         return () => { clearTimeout(timer); };
-    }, [walletId, chainId, tick, fromAddress?.address, messaging]);
+    }, [walletId, chainId, tick, toAddress, amount, fromAddress?.address, messaging]);
 
     async function handleGatedScan(event) {
         event.preventDefault();
@@ -815,6 +820,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             // Re-probe either way so the banner reflects the vault state.
             const resp = await messaging.gatedSendReadiness({
                 walletId, chainId, tick: tick.trim(), sourceAddress: fromAddress?.address,
+                to: toAddress.trim() || undefined, amount: amount || undefined,
             });
             setGatedInfo(resp && resp.state !== 'ungated' ? resp : null);
         } catch (err) {

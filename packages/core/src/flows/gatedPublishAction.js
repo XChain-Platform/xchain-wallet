@@ -39,6 +39,9 @@ import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
+import { maxGatedPlaintextBytes } from './fileSizeLimits.js';
+import { indexerWatermark } from './balances.js';
+import { resolveGateMinAmountActive } from './protocolActivations.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -47,11 +50,11 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 /**
- * Hard ceiling on plaintext size for this lane. The encoder rejects
- * compiled pushes past 8192 bytes; ciphertext adds 28 bytes, and the
- * BATCH string carries the ~230-char ECIES handoff. PC-28 owns the
- * encoding-aware general limits; until then this stays conservative
- * (matches AttachContentForm's 7000-byte artwork cap minus overhead).
+ * Metadata-free floor on plaintext size for this lane, kept for callers
+ * that need a limit before the signing address is known. The enforced
+ * ceiling is the PC-28 encoding-aware computation (fileSizeLimits.js:
+ * 8192-byte compiled push minus the actual BATCH string and AES-GCM
+ * envelope), which for realistic metadata lands well above this floor.
  */
 export const MAX_GATED_PLAINTEXT_BYTES = 6500;
 
@@ -75,6 +78,13 @@ export const MAX_GATED_PLAINTEXT_BYTES = 6500;
  *                                    (same transport contract as fileAction.rawData)
  * @property {string} [existingKeyHash]  reuse the stored pack key with this hash
  *                                    instead of generating a fresh K
+ * @property {string} [gateMinAmount] PC-29 unlock threshold: minimum post-send
+ *                                    holding of gateTicker a recipient needs to
+ *                                    receive the key handoff. Only accepted
+ *                                    once GATE_MIN_AMOUNT is ACTIVE on this
+ *                                    chain ( flag-day train); the flow
+ *                                    re-checks activation itself and refuses
+ *                                    to emit the field early.
  * @property {number} [feePerKb]
  * @property {boolean} [trackPendingTx]
  */
@@ -102,11 +112,6 @@ async function prepareGatedPublish(opts, caller) {
     if (typeof opts.plainData !== 'string' || opts.plainData.length === 0) {
         throw new Error(`${caller}: plainData (file bytes) is required`);
     }
-    if (opts.plainData.length > MAX_GATED_PLAINTEXT_BYTES) {
-        throw new Error(
-            `${caller}: file is ${opts.plainData.length} bytes; this lane supports up to ${MAX_GATED_PLAINTEXT_BYTES}`,
-        );
-    }
     const gate = opts.gateTicker.trim().toUpperCase();
     for (const [field, value] of [['gateTicker', gate], ['name', opts.name], ['type', opts.type], ['title', opts.title], ['memo', opts.memo]]) {
         if (typeof value === 'string' && /[|;]/.test(value)) {
@@ -125,6 +130,61 @@ async function prepareGatedPublish(opts, caller) {
     const descriptor = opts.chainRegistry?.get?.(opts.chainId);
     const coin = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : null;
     if (!coin) throw new Error(`${caller}: cannot resolve protocol coin ticker for ${opts.chainId}`);
+
+    // PC-29 unlock threshold. Emission is hard-gated on the chain's
+    // GATE_MIN_AMOUNT activation height, and this check is the ONLY
+    // real protection: the wire is trailing-tolerant (pre-activation
+    // SDK/encoder/indexer all silently DROP an unknown ninth field), so
+    // an early emission would not be rejected - it would publish an
+    // immutable FILE whose threshold is silently unenforced forever
+    // while the UI claimed one. The check lives HERE, not just in the
+    // form, so no caller can emit early. `_activationHeights` is a
+    // test-only override; production always reads the frozen map.
+    let gateMinAmount = null;
+    if (opts.gateMinAmount != null && String(opts.gateMinAmount).trim() !== '') {
+        const raw = String(opts.gateMinAmount).trim();
+        if (!/^\d+(\.\d+)?$/.test(raw) || Number(raw) <= 0) {
+            throw new Error(`${caller}: gateMinAmount must be a positive decimal amount`);
+        }
+        const active = await resolveGateMinAmountActive({
+            chainId: opts.chainId,
+            heights: opts._activationHeights,
+            getBlockHeight: async () => {
+                const { watermark } = await indexerWatermark({
+                    sdkRegistry: opts.sdkRegistry, chainId: opts.chainId,
+                });
+                return watermark;
+            },
+        });
+        if (!active) {
+            throw new Error(
+                `${caller}: unlock thresholds (GATE_MIN_AMOUNT) are not active on this chain yet; `
+                + 'the field ships with a coordinated flag-day activation',
+            );
+        }
+        gateMinAmount = raw;
+    }
+
+    // Encoding-aware ceiling (PC-28): the exact plaintext budget left
+    // under the 8192-byte compiled push once THIS publish's BATCH
+    // string and the AES-GCM envelope are counted. plainData is a
+    // Latin-1 binary string, so .length is the byte length.
+    const plainCap = maxGatedPlaintextBytes({
+        name: opts.name,
+        type: opts.type,
+        title: opts.title,
+        memo: opts.memo,
+        gateTicker: gate,
+        coin,
+        address: source.address,
+        gateMinAmount,
+    });
+    if (opts.plainData.length > plainCap) {
+        throw new Error(
+            `${caller}: file is ${opts.plainData.length} bytes; with this metadata the `
+            + `on-chain ceiling is ${plainCap} bytes`,
+        );
+    }
 
     // --- Resolve the pack key -------------------------------------------
     let key;      // Buffer(32)
@@ -174,6 +234,8 @@ async function prepareGatedPublish(opts, caller) {
     }));
 
     // --- Compose the atomic BATCH ----------------------------------------
+    // GATE_MIN_AMOUNT rides as an optional ninth field (PC-29); absent =
+    // no threshold, keeping the pre-flag-day 8-field form byte-identical.
     const fileCmd = [
         'FILE', '0',
         opts.name.trim(),
@@ -183,6 +245,7 @@ async function prepareGatedPublish(opts, caller) {
         gate,
         '1', // ENCRYPTION_METHOD: AES-256-GCM (the only accepted value, indexer file.js)
         keyHash,
+        ...(gateMinAmount !== null ? [gateMinAmount] : []),
     ].join('|');
     const messageCmd = ['MESSAGE', '2', coin, source.address, handoff.ciphertext].join('|');
 

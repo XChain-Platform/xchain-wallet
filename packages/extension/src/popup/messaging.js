@@ -1492,7 +1492,7 @@ export function unlockGatedContent(req) {
  * PC-26: secret-free gated-send readiness for the Send form (is the
  * tick gated; which pack keys does the wallet hold).
  *
- * @param {{ walletId: string, chainId: string, tick: string, sourceAddress?: string }} req
+ * @param {{ walletId: string, chainId: string, tick: string, sourceAddress?: string, to?: string, amount?: string }} req
  */
 export function gatedSendReadiness(req) {
     return /** @type {any} */ (sendMessage('gatedContent.sendReadiness', req));

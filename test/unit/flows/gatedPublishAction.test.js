@@ -29,6 +29,7 @@ import {
     buildGatedPublishPsbtRequest,
     MAX_GATED_PLAINTEXT_BYTES,
 } from '../../../packages/core/src/flows/gatedPublishAction.js';
+import { maxGatedPlaintextBytes, gatedBatchActionString } from '../../../packages/core/src/flows/fileSizeLimits.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { buildActionPsbt } from '../../../packages/core/src/flows/buildActionPsbt.js';
 
@@ -105,9 +106,25 @@ describe('gatedPublishAction validation', () => {
         await expect(gatedPublishAction(makeOpts({ gateTicker: 'TI|CK' }))).rejects.toThrow(/cannot contain/);
     });
 
-    it('rejects plaintext past the lane cap', async () => {
-        const big = 'x'.repeat(MAX_GATED_PLAINTEXT_BYTES + 1);
-        await expect(gatedPublishAction(makeOpts({ plainData: big }))).rejects.toThrow(/supports up to/);
+    it('rejects plaintext past the encoding-aware ceiling (PC-28)', async () => {
+        // The computed ceiling for this metadata sits between the legacy
+        // 6500-byte floor and the 8192-byte compiled push: a payload at
+        // the old floor+1 now FITS, one past the compiled push never can.
+        const cap = maxGatedPlaintextBytes({
+            name: 'album.zip',
+            type: 'application/zip',
+            title: 'Album',
+            memo: '',
+            gateTicker: 'MYTOKEN',
+            coin: 'BTC',
+            address: 'bcrt1qissuer',
+        });
+        expect(cap).toBeGreaterThan(MAX_GATED_PLAINTEXT_BYTES);
+        expect(cap).toBeLessThan(8192);
+        await expect(gatedPublishAction(makeOpts({ plainData: 'x'.repeat(cap) })))
+            .resolves.toBeTruthy();
+        await expect(gatedPublishAction(makeOpts({ plainData: 'x'.repeat(cap + 1) })))
+            .rejects.toThrow(/ceiling is \d+ bytes/);
     });
 });
 
@@ -131,6 +148,29 @@ describe('gatedPublishAction composition', () => {
             Buffer.concat([Buffer.from('IV__________TAG_____________'), Buffer.from('PLAINTEXT-BYTES')]).toString('binary'),
         );
         expect(call.encoderOpts.pubkey).toBe(opts.from.publicKey);
+    });
+
+    it('composes a BATCH string whose length matches the fileSizeLimits mirror (PC-28 drift guard)', async () => {
+        // Realistic-width crypto artifacts: 64-hex keyHash (already the
+        // fixture) and a 190-hex ECIES handoff, the widths the mirror's
+        // placeholders assume. Any change to the compose shape on either
+        // side breaks the byte-length equality.
+        const sdk = makeSdk();
+        sdk.messaging.eciesEncryptBytes.mockReturnValue({ ciphertext: 'e'.repeat(190) });
+        await gatedPublishAction(makeOpts({ sdk }));
+        const call = vi.mocked(submitAction).mock.calls[0][0];
+        const actual = `BATCH|0|${call.actionData.params.COMMAND}`;
+        const mirror = gatedBatchActionString({
+            name: 'album.zip',
+            type: 'application/zip',
+            title: 'Album',
+            memo: '',
+            gateTicker: 'MYTOKEN',
+            coin: 'BTC',
+            address: 'bcrt1qissuer',
+        });
+        expect(new TextEncoder().encode(actual).length)
+            .toBe(new TextEncoder().encode(mirror).length);
     });
 
     it('ECIES-encrypts the 0x01||K handoff to the ISSUER pubkey', async () => {
@@ -218,5 +258,85 @@ describe('buildGatedPublishPsbtRequest (watcher path)', () => {
         expect(call.actionData.action).toBe('BATCH');
         expect(call.actionData.params.COMMAND).toMatch(/^FILE\|0\|.*;MESSAGE\|2\|BTC\|/);
         expect(vi.mocked(submitAction)).not.toHaveBeenCalled();
+    });
+});
+
+// --- PC-29: unlock threshold emission gate ----------------------------
+// GATE_MIN_AMOUNT may only ride the FILE sub-command once the chain's
+// activation height ( train) is live; the flow enforces that
+// itself so no caller can emit early. Activation is forced in tests via
+// the `_activationHeights` override plus a getStatus watermark.
+describe('gateMinAmount (PC-29)', () => {
+    const ACTIVE = { 'btc-regtest': 100 };
+
+    function activeSdk() {
+        const sdk = makeSdk();
+        sdk.getStatus = vi.fn(async () => ({ last_block: { RBTC: 500 } }));
+        return sdk;
+    }
+
+    it('refuses to emit while the chain has no live activation (shipped map)', async () => {
+        const sdk = activeSdk();
+        const vault = makeVault();
+        await expect(gatedPublishAction(makeOpts({ sdk, vault, gateMinAmount: '5' })))
+            .rejects.toThrow(/not active on this chain/);
+        // Refused BEFORE any key was generated or persisted.
+        expect(sdk.gatedFile.generateKey).not.toHaveBeenCalled();
+        expect(vault.gatedKeys.put).not.toHaveBeenCalled();
+        expect(submitAction).not.toHaveBeenCalled();
+    });
+
+    it('refuses below the scheduled height even with the override', async () => {
+        const sdk = makeSdk();
+        sdk.getStatus = vi.fn(async () => ({ last_block: { RBTC: 99 } }));
+        await expect(gatedPublishAction(makeOpts({ sdk, gateMinAmount: '5', _activationHeights: ACTIVE })))
+            .rejects.toThrow(/not active on this chain/);
+    });
+
+    it('rejects a malformed threshold before touching activation', async () => {
+        await expect(gatedPublishAction(makeOpts({ gateMinAmount: 'abc' })))
+            .rejects.toThrow(/positive decimal/);
+        await expect(gatedPublishAction(makeOpts({ gateMinAmount: '0' })))
+            .rejects.toThrow(/positive decimal/);
+    });
+
+    it('emits the ninth FILE field byte-exactly when active', async () => {
+        const sdk = activeSdk();
+        await gatedPublishAction(makeOpts({ sdk, gateMinAmount: '2.5', _activationHeights: ACTIVE }));
+        const { actionData } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(actionData.action).toBe('BATCH');
+        expect(actionData.params.COMMAND).toBe(
+            `FILE|0|album.zip|application/zip|Album||MYTOKEN|1|${FIXED_KEY_HASH}|2.5`
+            + ';MESSAGE|2|BTC|bcrt1qissuer|ec1e5c1pher',
+        );
+    });
+
+    it('stays byte-identical to the 8-field form when no threshold is given', async () => {
+        const sdk = activeSdk();
+        await gatedPublishAction(makeOpts({ sdk, _activationHeights: ACTIVE }));
+        const { actionData } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(actionData.params.COMMAND).toBe(
+            `FILE|0|album.zip|application/zip|Album||MYTOKEN|1|${FIXED_KEY_HASH}`
+            + ';MESSAGE|2|BTC|bcrt1qissuer|ec1e5c1pher',
+        );
+    });
+
+    it('counts the threshold field against the plaintext ceiling', async () => {
+        const sdk = activeSdk();
+        const meta = {
+            name: 'album.zip', type: 'application/zip', title: 'Album', memo: '',
+            gateTicker: 'MYTOKEN', coin: 'BTC', address: 'bcrt1qissuer',
+        };
+        const cap = maxGatedPlaintextBytes({ ...meta, gateMinAmount: '2.5' });
+        // Exactly at the threshold-adjusted cap: composes.
+        await gatedPublishAction(makeOpts({
+            sdk, gateMinAmount: '2.5', _activationHeights: ACTIVE,
+            plainData: 'x'.repeat(cap),
+        }));
+        // One byte past it: refused with the computed ceiling named.
+        await expect(gatedPublishAction(makeOpts({
+            sdk: activeSdk(), gateMinAmount: '2.5', _activationHeights: ACTIVE,
+            plainData: 'x'.repeat(cap + 1),
+        }))).rejects.toThrow(new RegExp(`ceiling is ${cap} bytes`));
     });
 });

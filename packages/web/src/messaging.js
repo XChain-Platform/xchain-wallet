@@ -1018,7 +1018,7 @@ export function unlockGatedContent(req) {
     return /** @type {any} */ (sendMessage('gatedContent.unlock', req));
 }
 
-/** @param {{ walletId: string, chainId: string, tick: string, sourceAddress?: string }} req PC-26: secret-free gated-send readiness (state + per-pack haveKey) */
+/** @param {{ walletId: string, chainId: string, tick: string, sourceAddress?: string, to?: string, amount?: string }} req PC-26: secret-free gated-send readiness (state + per-pack haveKey); to+amount feed the PC-29 threshold lane */
 export function gatedSendReadiness(req) {
     return /** @type {any} */ (sendMessage('gatedContent.sendReadiness', req));
 }

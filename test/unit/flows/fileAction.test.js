@@ -14,7 +14,7 @@
 // fail early instead of mid-sign.
 
 import { describe, it, expect } from 'vitest';
-import { fileAction } from '../../../packages/core/src/flows/fileAction.js';
+import { fileAction, fileActionParams } from '../../../packages/core/src/flows/fileAction.js';
 
 const VALID = {
     name: 'art.png',
@@ -50,5 +50,16 @@ describe('fileAction input validation', () => {
     it('rejects a missing source address', async () => {
         // Passes the field gate, then normalizeSource throws on `from`.
         await expect(fileAction({ ...VALID })).rejects.toThrow(/from/);
+    });
+});
+
+describe('fileActionParams (PC-28 shared composition helper)', () => {
+    it('builds the FILE v0 params fileAction submits: NAME/TYPE/TITLE trimmed, MEMO verbatim', () => {
+        expect(fileActionParams({ name: ' a.png ', type: ' image/png ', title: ' T ', memo: ' m ' }))
+            .toEqual({ VERSION: '0', NAME: 'a.png', TYPE: 'image/png', TITLE: 'T', MEMO: ' m ' });
+    });
+    it('defaults absent title/memo to empty strings', () => {
+        expect(fileActionParams({ name: 'a.png', type: 'image/png' }))
+            .toEqual({ VERSION: '0', NAME: 'a.png', TYPE: 'image/png', TITLE: '', MEMO: '' });
     });
 });

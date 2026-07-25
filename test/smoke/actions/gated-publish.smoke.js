@@ -38,7 +38,9 @@ assert.ok(flow.indexOf('vault.gatedKeys.put') < flow.indexOf('return { source, a
     'K persisted before composition returns (vault-first custody)');
 assert.match(flow, /verifyKey\(key, keyHash\)/, 'stored pack key re-verified against its hash before reuse');
 assert.match(flow, /export async function buildGatedPublishPsbtRequest/, 'watcher encode-only path exists');
-assert.match(flow, /MAX_GATED_PLAINTEXT_BYTES/, 'plaintext lane cap enforced');
+assert.match(flow, /maxGatedPlaintextBytes\(/, 'encoding-aware plaintext ceiling enforced (PC-28)');
+assert.ok(flow.indexOf('maxGatedPlaintextBytes({') < flow.indexOf('encryptWithKey'),
+    'ceiling checked before any encryption/compose work');
 
 // ---- Vault: schema + registration + codec ------------------------------
 const schema = read('packages', 'core', 'src', 'schemas', 'gatedKey.js');

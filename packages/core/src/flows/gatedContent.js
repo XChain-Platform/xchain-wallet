@@ -522,6 +522,9 @@ export async function recoverGatedKeysForTick({
  *     type: string | null,
  *     title: string | null,
  *     status: string | null,
+ *     gateMinAmount: string | null,   PC-29 unlock threshold; null until the
+ *                                     GATE_MIN_AMOUNT flag day lands and the
+ *                                     explorer starts serving the column
  *   }>,
  * }>>}
  */
@@ -561,6 +564,14 @@ export async function listGatedFiles({ sdk, tick }) {
             type: row.type ? String(row.type) : null,
             title: row.title ? String(row.title) : null,
             status: row.status ? String(row.status) : null,
+            // PC-29: tolerate both snake and camel spellings; absent or
+            // non-positive reads as "no threshold".
+            gateMinAmount: (() => {
+                const v = row.gate_min_amount ?? row.gateMinAmount;
+                if (v == null || String(v).trim() === '') return null;
+                const s = String(v).trim();
+                return /^\d+(\.\d+)?$/.test(s) && Number(s) > 0 ? s : null;
+            })(),
         });
     }
     return [...demoGroups, ...Array.from(byKeyHash.values())];

@@ -306,7 +306,7 @@ const LABEL_MAP = [
     [/^connect\b|^pair\b/, UsbIcon],
     [/^disconnect\b|^unpair\b/, UnlinkIcon],
     [/^link\b/, LinkIcon],
-    [/^import\b|^upload\b|^deposit\b/, UploadIcon],
+    [/^import\b|^upload\b|^deposit\b|^publish\b/, UploadIcon],
     [/^export\b|^download\b|^withdraw\b/, DownloadIcon],
     [/^pause\b/, PauseIcon],
     [/^play\b|^resume\b|^start\b/, PlayIcon],

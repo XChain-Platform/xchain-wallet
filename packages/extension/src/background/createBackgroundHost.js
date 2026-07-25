@@ -2381,6 +2381,10 @@ export function createBackgroundHost(deps) {
             chainId: req.chainId,
             tick: req.tick,
             sourceAddress: req.sourceAddress,
+            // PC-29: destination + amount feed the unlock-threshold lane
+            // (inert until the GATE_MIN_AMOUNT flag day).
+            to: req.to,
+            amount: req.amount,
         });
     });
 
