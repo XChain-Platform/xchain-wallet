@@ -150,6 +150,7 @@ export function buildCommands(ctx) {
         { id: 'nav-my-tokens', category: 'Navigate', title: 'My Tokens', subtitle: 'Tokens you issued', keywords: ['issued', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
         { id: 'nav-messaging', category: 'Navigate', title: 'Messaging', subtitle: 'Encrypted inbox', keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
         { id: 'nav-addresses', category: 'Navigate', title: 'Addresses', subtitle: 'Manage your addresses', keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
+        { id: 'nav-lists', category: 'Navigate', title: 'My Lists', subtitle: 'Address and token lists', keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
         { id: 'nav-actions', category: 'Navigate', title: 'All actions', subtitle: 'Every action form', keywords: ['more', 'menu', 'catalogue'], Icon: Icon.MoreIcon, run: go('actions') },
     );
     if (ctx.hasBtcAddress) {
@@ -170,6 +171,7 @@ export function buildCommands(ctx) {
         { id: 'create-dispenser', category: 'Create', title: 'Create dispenser', subtitle: 'Sell a token at a fixed rate', keywords: ['dispenser', 'vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispenser') },
         { id: 'create-dividend', category: 'Create', title: 'Pay a dividend', subtitle: 'Distribute to holders', keywords: ['dividend', 'distribute'], Icon: Icon.DollarIcon, run: go('dividend') },
         { id: 'create-airdrop', category: 'Create', title: 'Airdrop', subtitle: 'Send to many recipients', keywords: ['airdrop', 'distribute', 'bulk'], Icon: Icon.SendIcon, run: go('airdrop') },
+        { id: 'create-list', category: 'Create', title: 'Create a list', subtitle: 'Publish an address or token list', keywords: ['list', 'roster', 'allowlist'], Icon: Icon.TokenListIcon, run: go('list-create') },
         { id: 'create-advanced', category: 'Create', title: 'Advanced action', subtitle: 'Author any action by hand', keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
     );
 

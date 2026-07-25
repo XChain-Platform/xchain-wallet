@@ -1038,6 +1038,11 @@ export function getListByActionIndex(req) {
     return /** @type {any} */ (sendMessage('lists.byActionIndex', req));
 }
 
+/** @param {{ chainId: string, address: string }} req */
+export function getListsForSource(req) {
+    return /** @type {any} */ (sendMessage('lists.forSource', req));
+}
+
 /** @param {object} req */
 export function savePendingAirdrop(req) {
     return /** @type {any} */ (sendMessage('pendingAirdrops.save', req));

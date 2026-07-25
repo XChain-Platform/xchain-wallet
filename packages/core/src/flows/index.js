@@ -198,7 +198,7 @@ export {
 export { dividendAction, holdersFor } from './dividendAction.js';
 export { createList } from './createList.js';
 export { airdropAction } from './airdropAction.js';
-export { actionByTxid, listByActionIndex } from './listQueries.js';
+export { actionByTxid, listByActionIndex, listsForSource } from './listQueries.js';
 export {
     savePendingAirdrop,
     listPendingAirdropsForWallet,

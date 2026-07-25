@@ -1553,6 +1553,15 @@ export function getListByActionIndex(req) {
 }
 
 /**
+ * PC-10 "My Lists": find the LIST actions authored by an address.
+ *
+ * @param {{ chainId: string, address: string }} req
+ */
+export function getListsForSource(req) {
+    return /** @type {any} */ (sendMessage('lists.forSource', req));
+}
+
+/**
  * Persist a pending-airdrop record after the LIST tx is broadcast.
  * AirdropForm writes here at the stage-3 → stage-4 transition so a
  * crash or close mid-wait is resumable.

@@ -34,6 +34,7 @@ import styles from './LeftNav.module.css';
  *   - 'contract-*' / 'staking-*' / 'operator-dashboard' / 'stake-form'
  *     highlight Contracts.
  *   - 'market' highlights DEX.
+ *   - 'list-detail' / 'list-create' / 'list-fork' highlight Lists.
  */
 
 const VIEW_GROUPS = {
@@ -47,6 +48,7 @@ const VIEW_GROUPS = {
     'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
     messaging: ['messaging', 'compose-message'],
     contacts: ['contacts'],
+    lists: ['lists', 'list-detail', 'list-create', 'list-fork'],
     settings: ['settings', 'connected-sites'],
 };
 
@@ -100,6 +102,7 @@ export function LeftNav({
 
     const secondary = [
         { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
+        { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
     ];
 
     return (

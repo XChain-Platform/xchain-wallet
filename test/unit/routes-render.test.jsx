@@ -158,6 +158,7 @@ const props = {
     onClose() {},
     onNavigate() {},
     onSelect() {},
+    onFork() {},
     tick: 'JDOG',
     tick1: 'A',
     tick2: 'B',

@@ -34,6 +34,7 @@ import menuStyles from '../components/HeaderActionMenu.module.css';
  * @param {() => void} [props.onMessaging]
  * @param {() => void} [props.onCrossChain]
  * @param {() => void} [props.onContacts]
+ * @param {() => void} [props.onLists]
  * @param {() => void} [props.onAddresses]
  * @param {() => void} [props.onContracts]
  * @param {() => void} [props.onStaking]
@@ -54,6 +55,7 @@ export function MenuRoute({
     onMessaging,
     onCrossChain,
     onContacts,
+    onLists,
     onAddresses,
     onContracts,
     onStaking,
@@ -77,6 +79,7 @@ export function MenuRoute({
         { id: 'messaging',    label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
         { id: 'cross-chain', label: 'Cross-chain', Icon: Icon.LinkIcon,     handler: onCrossChain },
         { id: 'contacts',    label: 'Contacts',    Icon: Icon.UsersIcon,    handler: onContacts },
+        { id: 'lists',       label: 'My Lists',    Icon: Icon.TokenListIcon, handler: onLists },
         { id: 'addresses',   label: 'Addresses',   Icon: Icon.ScanIcon,     handler: onAddresses },
         { id: 'contracts',   label: 'Contracts',   Icon: Icon.ContractIcon, handler: onContracts },
         { id: 'staking',     label: 'Staking',     Icon: Icon.StakeIcon,    handler: onStaking },

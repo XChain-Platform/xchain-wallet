@@ -150,6 +150,7 @@ const {
     airdropAction,
     actionByTxid,
     listByActionIndex,
+    listsForSource,
     savePendingAirdrop,
     listPendingAirdropsForWallet,
     updatePendingAirdrop,
@@ -2592,6 +2593,11 @@ export function createBackgroundHost(deps) {
 
     host.register('lists.byActionIndex', async (req, { sdkRegistry }) => {
         return listByActionIndex({ ...req, sdkRegistry });
+    });
+
+    // PC-10 "My Lists": which LIST actions has this address authored.
+    host.register('lists.forSource', async (req, { sdkRegistry }) => {
+        return listsForSource({ ...req, sdkRegistry });
     });
 
     // Pending-airdrop CRUD: crash-safe state for the §40.9 stage
