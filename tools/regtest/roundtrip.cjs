@@ -266,11 +266,37 @@ async function main() {
     const callbackOk = cbStatus === 'valid' && cbConfigOk
         && Number(hTokenAfter) === 0 && Number(hXchainAfter) >= 10 && Number(cTokenAfter) === 1000;
 
-    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
+    // 7) Access lists (ISSUE v5, PC-04): publish a TYPE=2 address LIST, then
+    // bind it as the token's ALLOW_LIST via ISSUE v5, and read the binding
+    // back off getToken. Reuses owner C (still holds the token + XCHAIN for
+    // the fee after the callback).
+    console.log('\n=== Access lists (ISSUE v5, PC-04) ===');
+    await submit(sdk, 'LIST', 'LIST', { VERSION: '0', TYPE: '2', ITEM: [addrH] }, signerC);
+    await sleep(3000);
+    const cLists = await sdk.getLists(addrC, 'address').catch(() => null);
+    const cListRows = cLists && Array.isArray(cLists.data) ? cLists.data : (Array.isArray(cLists) ? cLists : []);
+    const addrListRow = cListRows
+        .filter((r) => String(r.type) === '2' && String(r.status || 'valid') === 'valid')
+        .sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0))[0];
+    const allowListIdx = addrListRow ? String(addrListRow.action_index) : null;
+    console.log(`  published TYPE=2 address list #${allowListIdx}`);
+    let accessListOk = false;
+    if (allowListIdx) {
+        await submit(sdk, 'ISSUE v5', 'ISSUE', { VERSION: '5', TICK: cbTick, ALLOW_LIST: allowListIdx }, signerC);
+        await sleep(3000);
+        const alTokenInfo = await sdk.getToken(cbTick).catch(() => null);
+        const alRow = Array.isArray(alTokenInfo) ? alTokenInfo[0] : alTokenInfo;
+        accessListOk = alRow && alRow.lists && String(alRow.lists.allow) === allowListIdx;
+        console.log(`  ISSUE v5 read-back: lists.allow=${alRow?.lists?.allow} (want ${allowListIdx}) -> ${accessListOk ? 'OK' : 'MISMATCH'}`);
+    } else {
+        console.log('  could not resolve the published list action_index; skipping v5 bind');
+    }
+
+    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk
-        ? 'RESULT: PASS (LIST valid + max-size FILE valid + over-ceiling rejected + SWEEP moved a real balance + CALLBACK config+execution)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} cbConfigOk=${cbConfigOk} cbStatus=${cbStatus})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk
+        ? 'RESULT: PASS (LIST valid + max-size FILE valid + over-ceiling rejected + SWEEP moved a real balance + CALLBACK config+execution + ISSUE v5 access-list bind)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} cbConfigOk=${cbConfigOk} cbStatus=${cbStatus} accessListOk=${accessListOk})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

@@ -61,3 +61,18 @@ describe('normalizeTokenInfo callback-configuration fields', () => {
         expect(info.locks.callback).toBe(true);
     });
 });
+
+describe('normalizeTokenInfo access-list fields (PC-04, ISSUE v5)', () => {
+    it('extracts lists.allow / lists.block as action-index strings', () => {
+        const info = normalizeTokenInfo('bitcoin-mainnet', 'JDOG', {
+            lists: { allow: 5123, block: 5124 },
+        });
+        expect(info.allowList).toBe('5123');
+        expect(info.blockList).toBe('5124');
+    });
+
+    it('defaults to null when unset or the lists object is absent', () => {
+        expect(normalizeTokenInfo('bitcoin-mainnet', 'JDOG', { lists: { allow: null, block: null } }).allowList).toBeNull();
+        expect(normalizeTokenInfo('bitcoin-mainnet', 'JDOG', { info: {} }).blockList).toBeNull();
+    });
+});

@@ -36,6 +36,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -145,7 +146,7 @@ const LOCK_FLAGS = [
  * prop: `initialTicker` so Token detail can prefill. Every mode uses
  * `messaging.issueToken` (no new background handlers or core flows).
  *
- * @typedef {'lock' | 'description' | 'transfer' | 'mint-settings' | 'callback-settings'} AdminMode
+ * @typedef {'lock' | 'description' | 'transfer' | 'mint-settings' | 'callback-settings' | 'access-lists'} AdminMode
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -189,6 +190,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [callbackBlock, setCallbackBlock] = useState('');
     const [callbackTick, setCallbackTick] = useState('');
     const [callbackAmount, setCallbackAmount] = useState('');
+    // Access lists (mode === 'access-lists', PC-04, ISSUE v5): the ALLOW_LIST
+    // / BLOCK_LIST address-list action indexes, prefilled from the token
+    // record. `null` = unset; the picker sets a new action index. Member
+    // counts are display-only.
+    const [allowListIdx, setAllowListIdx] = useState(/** @type {string | null} */ (null));
+    const [blockListIdx, setBlockListIdx] = useState(/** @type {string | null} */ (null));
+    const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
+    const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     const [password, setPassword] = useState('');
     // Lock-mode typed-confirmation gate. Locking is irreversible, so
     // the review stage requires the user to type LOCK before the Sign
@@ -278,7 +288,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // for the life of the form; `'lock'` can also be reached from the
     // free Actions menu, where `ticker` changes as the owner picks a
     // token and this hook simply refetches.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' });
+    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' });
     const tokenLocks = assetInfo?.locks || {};
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
@@ -337,6 +347,44 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         setCallbackAmount(assetInfo.callbackAmount || '');
         setCallbackPrefilled(true);
     }, [mode, assetInfo, callbackPrefilled]);
+
+    // Prefill the current allow/block list action indexes once (PC-04).
+    const [listsPrefilled, setListsPrefilled] = useState(false);
+    useEffect(() => {
+        if (mode !== 'access-lists' || !assetInfo || listsPrefilled) return;
+        setAllowListIdx(assetInfo.allowList || null);
+        setBlockListIdx(assetInfo.blockList || null);
+        setListsPrefilled(true);
+    }, [mode, assetInfo, listsPrefilled]);
+
+    // Member counts for whichever allow/block lists are currently set
+    // (display only; one detail read each, tolerant of failure).
+    useEffect(() => {
+        if (mode !== 'access-lists' || !chainId || !allowListIdx) { setAllowListCount(null); return undefined; }
+        if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getListByActionIndex({ chainId, actionIndex: allowListIdx })
+            .then((d) => { if (!cancelled) setAllowListCount(listMemberCount(d)); })
+            .catch(() => { if (!cancelled) setAllowListCount(null); });
+        return () => { cancelled = true; };
+    }, [mode, chainId, allowListIdx, messaging]);
+    useEffect(() => {
+        if (mode !== 'access-lists' || !chainId || !blockListIdx) { setBlockListCount(null); return undefined; }
+        if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getListByActionIndex({ chainId, actionIndex: blockListIdx })
+            .then((d) => { if (!cancelled) setBlockListCount(listMemberCount(d)); })
+            .catch(() => { if (!cancelled) setBlockListCount(null); });
+        return () => { cancelled = true; };
+    }, [mode, chainId, blockListIdx, messaging]);
+
+    // A v5 edit is meaningful only when at least one list changed from the
+    // token's current binding (blank = leave-unchanged, so re-submitting
+    // the same indexes is a no-op the form shouldn't allow through).
+    const listsChanged = mode === 'access-lists' && assetInfo != null && (
+        (allowListIdx || null) !== (assetInfo.allowList || null)
+        || (blockListIdx || null) !== (assetInfo.blockList || null)
+    );
 
     // Distribution gate (PC-03): CALLBACK config is only editable while
     // supply is undistributed (indexer isDistributed = >1 holder or one
@@ -430,10 +478,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             callbackBlock,
             callbackTick,
             callbackAmount,
+            allowListIdx,
+            blockListIdx,
+            currentAllowList: assetInfo?.allowList || null,
+            currentBlockList: assetInfo?.blockList || null,
         }),
         [mode, ticker, description, transferTo, maxMint, mintAddressMax,
          mintStartBlock, mintStopBlock, mintSupply, transferSupply, lockChecks,
-         callbackBlock, callbackTick, callbackAmount],
+         callbackBlock, callbackTick, callbackAmount,
+         allowListIdx, blockListIdx, assetInfo?.allowList, assetInfo?.blockList],
     );
 
     const decoded = useMemo(() => {
@@ -520,6 +573,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             const effBlock = callbackBlock || assetInfo?.callbackBlock;
             if ((effBlock || effTick || effAmount) && !(effBlock && effTick && effAmount)) {
                 setFormError('A working callback needs a block, a payout token, and a payout amount. Fill all three (values you leave blank keep their current setting).');
+                return;
+            }
+        }
+        if (mode === 'access-lists') {
+            if (!listsChanged) {
+                setFormError('Pick a different allow-list or block-list to apply. Leaving both unchanged does nothing.');
                 return;
             }
         }
@@ -878,6 +937,33 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
+    // PC-04: address-list picker for the allow/block-list fields. Only
+    // TYPE=2 (address) lists are valid ALLOW_LIST/BLOCK_LIST targets
+    // (issue.js isValidList(x, 2)), so filter to them.
+    if (listPickerFor) {
+        return (
+            <ListPickerScreen
+                variant={variant}
+                messaging={messaging}
+                chainId={chainId}
+                addresses={addressesByChain?.[chainId] || []}
+                filterType="2"
+                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                onSelect={(row) => {
+                    if (listPickerFor === 'allow') {
+                        setAllowListIdx(row.actionIndex);
+                        setAllowListCount(row.memberCount);
+                    } else {
+                        setBlockListIdx(row.actionIndex);
+                        setBlockListCount(row.memberCount);
+                    }
+                    setListPickerFor(null);
+                }}
+                onBack={() => setListPickerFor(null)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {lockedToken && chainId ? (
@@ -1152,6 +1238,48 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 </>
             ) : null}
 
+            {mode === 'access-lists' ? (
+                <>
+                    <p className={styles.hint}>
+                        Restrict who can interact with {ticker || 'this token'} by pointing it
+                        at address lists you've published. An allow-list permits only its
+                        members; a block-list denies its members. Both reference an address
+                        list (create one in My Lists first).
+                    </p>
+                    <div className={styles.detailsList}>
+                        <div className={styles.fromLine}>
+                            <span className={styles.detailsLabel}>Allow-list</span>
+                            <span className={styles.detailsValue}>
+                                {allowListIdx
+                                    ? `List #${allowListIdx}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                    : 'None (anyone may interact)'}
+                            </span>
+                        </div>
+                        <Button type="button" variant="ghost" onClick={() => setListPickerFor('allow')}>
+                            {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
+                        </Button>
+                    </div>
+                    <div className={styles.detailsList}>
+                        <div className={styles.fromLine}>
+                            <span className={styles.detailsLabel}>Block-list</span>
+                            <span className={styles.detailsValue}>
+                                {blockListIdx
+                                    ? `List #${blockListIdx}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    : 'None'}
+                            </span>
+                        </div>
+                        <Button type="button" variant="ghost" onClick={() => setListPickerFor('block')}>
+                            {blockListIdx ? 'Change block-list' : 'Choose block-list'}
+                        </Button>
+                    </div>
+                    <p className={styles.hint}>
+                        A list can be replaced but not removed: the protocol has no
+                        "clear" for a bound list. To lift a restriction, point it at an
+                        empty address list. Blank entries keep the current binding.
+                    </p>
+                </>
+            ) : null}
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
@@ -1177,6 +1305,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'transfer' && !transferTo)
                         || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
                         || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
+                        || (mode === 'access-lists' && !listsChanged)
                         || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
                         || actionConfirm.composing}
                 >
@@ -1247,6 +1376,18 @@ function composeAdminParams(mode, form) {
         if (form.callbackAmount) p.CALLBACK_AMOUNT = String(form.callbackAmount).trim();
         return p;
     }
+    if (mode === 'access-lists') {
+        // ISSUE v5 (PC-04): emit only the access list(s) that CHANGED from
+        // the token's current binding. An omitted field is "leave
+        // unchanged" (issue.js isNull), so re-sending an unchanged index
+        // is a harmless no-op we skip to keep the decoded summary clean.
+        // There is no null-clear in the protocol (0 fails isValidList), so
+        // the picker never produces an empty value here.
+        const p = { VERSION: '5', TICK };
+        if (form.allowListIdx && form.allowListIdx !== form.currentAllowList) p.ALLOW_LIST = String(form.allowListIdx).trim();
+        if (form.blockListIdx && form.blockListIdx !== form.currentBlockList) p.BLOCK_LIST = String(form.blockListIdx).trim();
+        return p;
+    }
     // mode === 'transfer'
     return {
         VERSION: '0',
@@ -1261,6 +1402,7 @@ const MODE_LABEL = {
     transfer: 'Transfer ownership',
     'mint-settings': 'Mint settings',
     'callback-settings': 'Callback settings',
+    'access-lists': 'Access lists',
 };
 
 const MODE_LABEL_LOWER = {
@@ -1269,6 +1411,7 @@ const MODE_LABEL_LOWER = {
     transfer: 'ownership transfer',
     'mint-settings': 'mint settings update',
     'callback-settings': 'callback settings update',
+    'access-lists': 'access lists update',
 };
 
 const MODE_DONE_TITLE = {
@@ -1277,7 +1420,15 @@ const MODE_DONE_TITLE = {
     transfer: 'Ownership transferred',
     'mint-settings': 'Mint settings updated',
     'callback-settings': 'Callback settings updated',
+    'access-lists': 'Access lists updated',
 };
+
+// PC-04: current-member count of a LIST detail row (getListByActionIndex).
+// The explorer exposes members as `list`; tolerate a couple of aliases.
+function listMemberCount(detail) {
+    const members = detail?.list ?? detail?.items ?? detail?.members;
+    return Array.isArray(members) ? members.length : null;
+}
 
 function DetailRow({ label, value }) {
     return (

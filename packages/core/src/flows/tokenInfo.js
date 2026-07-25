@@ -100,6 +100,8 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
  * @property {string | null} callbackTick                 ISSUE v4 `CALLBACK_TICK`: the tick holders are paid in when the owner force-recalls (CALLBACK), null when unset
  * @property {string | null} callbackAmount               ISSUE v4 `CALLBACK_AMOUNT`: units of CALLBACK_TICK paid per unit of this tick held, null when unset
  * @property {string | null} callbackBlock                ISSUE v4 `CALLBACK_BLOCK`: earliest block CALLBACK may fire, null when unset (PC-03)
+ * @property {string | null} allowList                    ISSUE v5 `ALLOW_LIST`: LIST action index of the address allow-list gating this tick, null when unset (PC-04)
+ * @property {string | null} blockList                    ISSUE v5 `BLOCK_LIST`: LIST action index of the address block-list gating this tick, null when unset (PC-04)
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
@@ -615,6 +617,14 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         ? String(callbackRaw.amount) : null;
     const callbackBlock = (callbackRaw.block != null && String(callbackRaw.block) !== '')
         ? String(callbackRaw.block) : null;
+    // PC-04 access lists (ISSUE v5): xchain-explorer's getToken groups these
+    // under `lists: { allow, block }` as LIST action indexes (numeric) or
+    // null. Surface each as a string action-index (or null when unset).
+    const listsRaw = row?.lists && typeof row.lists === 'object' ? row.lists : {};
+    const allowList = (listsRaw.allow != null && String(listsRaw.allow) !== '')
+        ? String(listsRaw.allow) : null;
+    const blockList = (listsRaw.block != null && String(listsRaw.block) !== '')
+        ? String(listsRaw.block) : null;
     const marketPrice = isFiniteNum(row?.market?.price) ? row.market.price : null;
     const marketFloor = isFiniteNum(row?.market?.floor) ? row.market.floor : null;
     // Divisibility lives at the top of the indexer row (or, in legacy
@@ -681,6 +691,8 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         callbackTick,
         callbackAmount,
         callbackBlock,
+        allowList,
+        blockList,
         marketPrice,
         marketFloor,
         divisibility,
