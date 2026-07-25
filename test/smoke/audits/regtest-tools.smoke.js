@@ -71,16 +71,24 @@ assert.ok(/^#!\/usr\/bin\/env bash/.test(bootstrap), 'bootstrap.sh has bash sheb
 assert.ok(/set -euo pipefail/.test(bootstrap), 'bootstrap.sh has strict-mode guard');
 assert.ok(/XCHAIN_REGTEST_BASE_URL/.test(bootstrap),
     'bootstrap.sh reads the canonical base-URL env var');
-// All seven services from the README's Inputs table appear in the
-// SERVICES array; keeping these in lockstep matters because the
-// wallet's tests depend on every one being up.
+// The service classes the wallet SDK actually talks to appear in the
+// probe: one explorer, one encoder per chain, one hub. The wallet does
+// NOT hit the nodes/decoders/indexers directly (they sit upstream of the
+// explorer), so those are not probed; the explorer's status endpoint is
+// what surfaces decoder wiring. Kept in lockstep with the README's
+// Inputs table and the chain descriptors (explorer 18080, encoders
+// 3023/3123/3223, hub 10000).
 for (const svc of [
-    'bitcoin-regtest', 'dogecoin-regtest', 'litecoin-regtest',
-    'xchain-decoder', 'xchain-indexer', 'xchain-explorer', 'xchain-hub',
+    'xchain-explorer', 'xchain-encoder-btc', 'xchain-encoder-doge',
+    'xchain-encoder-ltc', 'xchain-hub',
 ]) {
     assert.ok(bootstrap.includes(svc),
         `bootstrap.sh probes ${svc}`);
 }
+// The explorer probe additionally content-checks decoder wiring (the
+// reachable-but-unwired failure mode from G163/).
+assert.ok(/decoder_health/.test(bootstrap),
+    'bootstrap.sh asserts the explorer decoder-wiring status, not just reachability');
 assert.ok(/xchain-node\.sh start/.test(bootstrap),
     'bootstrap.sh diagnostic points at the upstream start command');
 
