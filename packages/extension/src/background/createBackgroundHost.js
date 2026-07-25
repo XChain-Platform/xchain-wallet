@@ -74,6 +74,7 @@ const {
     unlockGatedFileForAddress,
     listGatedFiles,
     messageAction,
+    buildMessageParams,
     handshakeAction,
     getRecipientPubkey,
     listContacts,
@@ -1874,7 +1875,37 @@ export function createBackgroundHost(deps) {
             throw new Error(`psbt.parse: SDK for "${chainId}" lacks wallet.decomposePsbt`);
         }
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
-        return { decomposed };
+
+        //  §5.5: also decode the XChain action carried inside, so the
+        // PSBT confirm variant can show intent alongside the output set. This
+        // is strictly ADDITIVE and best-effort: decodeActionFromPsbt fails
+        // closed on the documented punts (P2SH/P2WSH, multi-leg, rest-fields),
+        // and a punt is a state to RENDER (loud "could not read the action"),
+        // never a reason to fail the parse. The output set is what a hostile
+        // PSBT steals with, and it decomposed fine.
+        let action = null;
+        let actionDecodeReason = null;
+        try {
+            const decoded = sdk.decoder && typeof sdk.decoder.decodeActionFromPsbt === 'function'
+                ? sdk.decoder.decodeActionFromPsbt(psbtHex)
+                : null;
+            if (decoded && decoded.ok) {
+                const described = sdk.decoder.parse
+                    ? sdk.decoder.parse(decoded.actionString)
+                    : null;
+                action = {
+                    actionString: decoded.actionString,
+                    action: described?.action || decoded.action || null,
+                    version: described?.version ?? null,
+                    params: described?.params || null,
+                };
+            } else {
+                actionDecodeReason = (decoded && decoded.reason) || 'DECODE_FAILED';
+            }
+        } catch (err) {
+            actionDecodeReason = err?.message || 'DECODE_FAILED';
+        }
+        return { decomposed, action, actionDecodeReason };
     });
 
     // §22 / P4: read-only preview for the co-sign approval screen. Decodes the
@@ -2223,6 +2254,55 @@ export function createBackgroundHost(deps) {
     // §41.7.3 Compose: MESSAGE action signing + recipient pubkey lookup.
     host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    //  §5.6 slice 3: compose-for-confirm for MESSAGE. MESSAGE is the one
+    // action whose wire params cannot be built client-side: the body is
+    // ENCRYPTED host-side (recipient pubkey lookup + address binding, and for
+    // ECDH the sender's own key). So this route encrypts FIRST, then composes
+    // the single PSBT over the resulting ciphertext, and returns the params
+    // alongside it. The form hands those exact params back on Approve
+    // (`prebuiltParams`) because encryption is non-deterministic - re-encrypting
+    // would yield a different action string than the one the user approved.
+    host.register('action.message.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const built = await buildMessageParams({
+            ...req,
+            signer: await sessionSigner(req, vault, signerPool),
+            vault,
+            chainRegistry,
+            sdkRegistry,
+        });
+        const { params, broadcastChainId, source } = built;
+
+        let ownAddresses = [source.address];
+        try {
+            const byChain = await addressesByChain(req, { vault, chainRegistry });
+            const rows = byChain?.[broadcastChainId] || [];
+            ownAddresses = rows.map((r) => r.address).filter(Boolean);
+            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
+        } catch {
+            // fall through to [source.address]
+        }
+
+        const composed = await composeActionForConfirm({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            // The tx is funded, signed and broadcast on the DELIVERY chain,
+            // which is not necessarily the recipient's chain (that one only
+            // sets COIN and resolves their key).
+            chainId: broadcastChainId,
+            actionData: { action: 'MESSAGE', params },
+            encoderOpts: {
+                pubkey: source.publicKey,
+                ...(req?.fee !== undefined && { fee: req.fee }),
+                ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+                ...(req?.rbf !== undefined && { rbf: req.rbf }),
+            },
+            source: source.address,
+            ownAddresses,
+        });
+        return { ...composed, messageParams: params };
     });
     host.register('messaging.handshake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return handshakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });

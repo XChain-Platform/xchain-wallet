@@ -57,6 +57,20 @@
     margin-top: var(--xc-space-1);
 }
 
+/*  §5.5 fail-closed refusal. Danger, not warning: unlike the
+   `.warnings` above there is no override and Approve is disabled, so it
+   must not read as one more advisory the user can click past. */
+.refusal {
+    margin: var(--xc-space-2) 0 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-danger-bg);
+    border: 1px solid var(--xc-danger);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-danger-text);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
 /* §21.3 Source block - distinct from the wallet chrome so the user
    sees clearly which dApp is asking. Origin reads in mono so trailing
    ports / paths are scannable; appName below as a plain label. */

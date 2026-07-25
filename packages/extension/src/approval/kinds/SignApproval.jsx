@@ -13,9 +13,22 @@ import { Screen, Button, Input, ChainBadge } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
+    schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
+//  §5.6 slice 4: the confirm surface's building blocks, reused here.
+// The whole <ConfirmActionModal> deliberately is NOT reused: this window is
+// already a confirm surface with its own Screen, origin block, always-allow
+// toggle and Approve/Reject footer, so nesting the modal would mean two
+// Screens and two footers. §5.5 exports the panels separately for exactly
+// this case - the parts that verify intent are shared, the approval chrome
+// stays the approval window's.
+import { PsbtIntentPanel } from '@xchain-wallet/core/shared/components/PsbtIntentPanel.jsx';
+import { PreflightPanel } from '@xchain-wallet/core/shared/components/PreflightPanel.jsx';
+import { ActionIntentSummary } from '@xchain-wallet/core/shared/components/ActionIntentSummary.jsx';
+import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtConfirmScreen.jsx';
+import { canApproveWithReport } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import {
@@ -26,6 +39,7 @@ import {
     getSettings,
     parsePsbt,
     parseCoSign,
+    preflight,
     getTokenInfo,
 } from '../messaging.js';
 import shared from '../approval.module.css';
@@ -115,12 +129,20 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // raw view (consistent with the spec's "developer mode hidden by
     // default" stance).
     const [developerMode, setDeveloperMode] = useState(false);
+    //  §5.6 slice 4 flag, read from the SAME settings fetch (a second
+    // round trip for one boolean would be waste). Defaults to the code default
+    // via isConfirmModalSliceEnabled, so a release flipping that default flips
+    // existing users too - the flag is never stamped into the vault.
+    const [confirmSlice, setConfirmSlice] = useState(
+        () => schemasLib.settings.isConfirmModalSliceEnabled(null, 'extensionApproval'),
+    );
     useEffect(() => {
         let cancelled = false;
         getSettings()
             .then((s) => {
                 if (cancelled) return;
                 setDeveloperMode(Boolean(s?.developerMode));
+                setConfirmSlice(schemasLib.settings.isConfirmModalSliceEnabled(s, 'extensionApproval'));
             })
             .catch(() => { /* keep developerMode false on failure */ });
         return () => { cancelled = true; };
@@ -221,8 +243,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // to the opaque hex.
     const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
     const [psbtIntent, setPsbtIntent] = useState(
-        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string> }} */
-        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set() }),
+        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null }} */
+        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null }),
     );
     useEffect(() => {
         if (kind !== 'signPsbt') return undefined;
@@ -232,11 +254,16 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 error: !chainId ? 'No chain specified. Cannot decode this transaction.' : null,
                 decomposed: null,
                 ownAddresses: new Set(),
+                action: null,
+                actionDecodeReason: null,
             });
             return undefined;
         }
         let cancelled = false;
-        setPsbtIntent({ loading: true, error: null, decomposed: null, ownAddresses: new Set() });
+        setPsbtIntent({
+            loading: true, error: null, decomposed: null, ownAddresses: new Set(),
+            action: null, actionDecodeReason: null,
+        });
         async function loadIntent() {
             try {
                 // Own-address set is best-effort: it only labels change vs
@@ -258,6 +285,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     error: null,
                     decomposed: res?.decomposed || null,
                     ownAddresses,
+                    //  §5.5: the XChain action carried inside, when it
+                    // decodes. A punt is a state to render, not a parse failure.
+                    action: res?.action || null,
+                    actionDecodeReason: res?.actionDecodeReason || null,
                 });
             } catch (err) {
                 if (cancelled) return;
@@ -266,12 +297,57 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     error: err?.message || 'Failed to decode transaction.',
                     decomposed: null,
                     ownAddresses: new Set(),
+                    action: null,
+                    actionDecodeReason: null,
                 });
             }
         }
         loadIntent();
         return () => { cancelled = true; };
     }, [kind, chainId, psbtHexForSign, walletId]);
+
+    //  §5.6 slice 4 / §6 "dApp-supplied action string": run pre-flight for
+    // the requested action and render the same <PreflightPanel> the in-wallet
+    // confirm page uses, so a dApp request gets the indexer's own verdict before
+    // the password is entered rather than only a balance-delta guess.
+    //
+    // ONE report per approval request (§4.8): the window is created per request
+    // and this runs once for it. The report stays in this window; the dApp only
+    // ever learns approve or reject.
+    const [preflightState, setPreflightState] = useState(
+        /** @type {{ loading: boolean, report: any | null }} */
+        ({ loading: false, report: null }),
+    );
+    const [acknowledged, setAcknowledged] = useState(() => new Set());
+    const acknowledge = (code) => setAcknowledged((prev) => {
+        const next = new Set(prev);
+        next.add(code);
+        return next;
+    });
+    useEffect(() => {
+        if (!confirmSlice || kind !== 'signAction' || !chainId) return undefined;
+        // The action string the dApp supplied IS the payload for this kind, so
+        // it is what gets checked (never a re-serialization of form state).
+        const actionString = payload?.payload?.actionString || payload?.actionString || null;
+        if (typeof actionString !== 'string' || !actionString) return undefined;
+        let cancelled = false;
+        setPreflightState({ loading: true, report: null });
+        preflight({
+            chainId,
+            actionString,
+            source: previewBalances.fromAddress || undefined,
+            mode: 'report',
+        })
+            .then((report) => {
+                if (!cancelled) setPreflightState({ loading: false, report: report || null });
+            })
+            .catch(() => {
+                // Best-effort (§4.2): a dead explorer must not block approval.
+                // A null report reads as "no findings" and Approve stays live.
+                if (!cancelled) setPreflightState({ loading: false, report: null });
+            });
+        return () => { cancelled = true; };
+    }, [confirmSlice, kind, chainId, payload, previewBalances.fromAddress]);
 
     // §22 / P4 co-sign preview: decode the action the agent wants co-signed and
     // dry-run the account policy, so the user approves a legible request (which
@@ -362,7 +438,37 @@ export function SignApproval({ id, kind, payload, onReject }) {
             !coSignPreview.preview.decodeOk ||
             !coSignPreview.preview.policyOk);
 
-    const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked;
+    //  §5.5 refusal, layered ON TOP of the gates above (never replacing
+    // them): a PSBT that decomposed fine but whose ACTION data will not decode,
+    // while spending our own inputs, is the user authorizing bytes nobody can
+    // read. Developer mode is the documented inspect-and-sign escape hatch.
+    // Distinct from psbtDecodeFailed, which is "we cannot even show the
+    // outputs" and blocks unconditionally.
+    const psbtSpendsOwnInputs = kind === 'signPsbt'
+        && Array.isArray(psbtIntent.decomposed?.inputs)
+        && psbtIntent.decomposed.inputs.some(
+            (i) => i.address && psbtIntent.ownAddresses.has(i.address),
+        );
+    const psbtRefusal = confirmSlice && kind === 'signPsbt' && !psbtIntent.loading
+        ? psbtRefusalReason({
+            spendsOwnInputs: psbtSpendsOwnInputs,
+            actionDecoded: !!psbtIntent.action,
+            // Keys on the REASON: a dApp asking us to sign an ordinary payment
+            // (NO_OP_RETURN) is not hiding anything and must not be refused.
+            decodeReason: psbtIntent.actionDecodeReason,
+            developerMode,
+        })
+        : null;
+
+    // §4.2 pre-flight gate, using the SAME predicate the in-wallet confirm page
+    // uses: a locally-provable error hard-blocks, a network-sourced one blocks
+    // until the user acknowledges that specific finding.
+    const preflightBlocked = confirmSlice
+        && kind === 'signAction'
+        && !canApproveWithReport(preflightState.report, acknowledged);
+
+    const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
+        || !!psbtRefusal || preflightBlocked;
 
     async function handleApprove(event) {
         event.preventDefault();
@@ -438,29 +544,83 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
             <SignSummary kind={kind} payload={resolvedPayload} />
 
+            {/*  §5.6 slice 4: the shared PSBT panel enumerates every
+                input AND output (the local summary showed outputs + totals
+                only), marks which input this wallet signs, and states a failed
+                action-decode loudly. Legacy summary stays as the flag-off path
+                for one release per §5.6. */}
             {kind === 'signPsbt' ? (
-                <PsbtIntentSummary
-                    loading={psbtIntent.loading}
-                    error={psbtIntent.error}
-                    decomposed={psbtIntent.decomposed}
-                    ownAddresses={psbtIntent.ownAddresses}
-                />
+                confirmSlice ? (
+                    <PsbtIntentPanel
+                        loading={psbtIntent.loading}
+                        decomposed={psbtIntent.error ? null : psbtIntent.decomposed}
+                        ownAddresses={psbtIntent.ownAddresses}
+                        decodedAction={psbtIntent.action
+                            ? { ...psbtIntent.action, summary: psbtActionSummary(psbtIntent.action) }
+                            : null}
+                        decodeError={psbtIntent.error || psbtIntent.actionDecodeReason}
+                    />
+                ) : (
+                    <PsbtIntentSummary
+                        loading={psbtIntent.loading}
+                        error={psbtIntent.error}
+                        decomposed={psbtIntent.decomposed}
+                        ownAddresses={psbtIntent.ownAddresses}
+                    />
+                )
+            ) : null}
+
+            {/* §5.5 fail-closed refusal: Approve is already disabled by
+                `approvalBlocked`; this says why, in the same words the
+                in-wallet PSBT confirm page uses. */}
+            {psbtRefusal ? (
+                <p className={styles.refusal} role="alert" data-testid="approval-refusal">
+                    {psbtRefusal}
+                </p>
             ) : null}
 
             {kind === 'coSign' ? (
-                <CoSignIntentSummary
-                    loading={coSignPreview.loading}
-                    error={coSignPreview.error}
-                    preview={coSignPreview.preview}
-                />
+                <>
+                    {/* The policy verdict and account context stay the
+                        co-signer's own; the ACTION intent now renders through
+                        the shared summary so an agent request and a hand-signed
+                        one describe themselves identically. */}
+                    {confirmSlice && coSignPreview.preview?.decodeOk ? (
+                        <ActionIntentSummary
+                            decoded={decoderLib.decodeAction({
+                                action: coSignPreview.preview.action,
+                                params: coSignPreview.preview.params || {},
+                                chainId: chainId || undefined,
+                                chainRegistry,
+                            })}
+                        />
+                    ) : null}
+                    <CoSignIntentSummary
+                        loading={coSignPreview.loading}
+                        error={coSignPreview.error}
+                        preview={coSignPreview.preview}
+                    />
+                </>
             ) : null}
 
             {kind === 'signAction' ? (
-                <BalanceChanges
-                    result={previewResult}
-                    loading={previewBalances.loading}
-                    error={previewBalances.error}
-                />
+                <>
+                    {/* The indexer's own verdict for the dApp's action, on the
+                        same panel the in-wallet confirm page renders. */}
+                    {confirmSlice ? (
+                        <PreflightPanel
+                            report={preflightState.report}
+                            loading={preflightState.loading}
+                            acknowledged={acknowledged}
+                            onAcknowledge={acknowledge}
+                        />
+                    ) : null}
+                    <BalanceChanges
+                        result={previewResult}
+                        loading={previewBalances.loading}
+                        error={previewBalances.error}
+                    />
+                </>
             ) : null}
 
             <RawPsbtViewer
@@ -775,6 +935,17 @@ function PsbtIntentSummary({ loading, error, decomposed, ownAddresses }) {
             </dl>
         </div>
     );
+}
+
+// One-line intent for an action decoded OUT of a PSBT ( §5.5). Mirrors
+// PsbtSignForm's wording: on this variant the output set is what gets verified,
+// so a decoded action is context and is not dressed up as more than that.
+function psbtActionSummary(parsed) {
+    const label = parsed?.action || 'Unknown action';
+    const version = parsed?.version ?? null;
+    return version != null
+        ? `Carries an XChain ${label} action (v${version})`
+        : `Carries an XChain ${label} action`;
 }
 
 function formatSats(value) {

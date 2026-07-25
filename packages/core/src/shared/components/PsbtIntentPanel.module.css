@@ -1,0 +1,116 @@
+/* PsbtIntentPanel ( §5.5, PSBT variant).
+   The input/output enumeration is the FOREGROUNDED content on this
+   variant: the theft in a hostile PSBT is the output set, not the action
+   data, so WHO gets paid must be readable at a glance and can never be
+   conveyed by colour alone. */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.sectionLabel {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+}
+
+/* One input / output row. Wraps rather than truncating: an address the
+   user cannot read is an address they cannot verify. */
+.row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    flex-wrap: wrap;
+    padding: var(--xc-space-1) 0;
+    border-bottom: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+}
+
+.row:last-child {
+    border-bottom: none;
+}
+
+/* Role tag ("Recipient" / "Change" / "Signs with your key"). Text carries
+   the meaning; weight is a secondary cue only. */
+.tag {
+    flex: 0 0 auto;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tagMuted {
+    flex: 0 0 auto;
+    font-weight: 400;
+    color: var(--xc-text-muted);
+    white-space: nowrap;
+}
+
+.addr {
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+}
+
+.dataOutput {
+    color: var(--xc-text-muted);
+    font-style: italic;
+}
+
+.value {
+    margin-inline-start: auto;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.totals {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: var(--xc-space-3);
+    row-gap: 2px;
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-xs);
+}
+
+.totalsLabel {
+    color: var(--xc-text-muted);
+}
+
+.totalsValue {
+    margin: 0;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Loud partial/failed decode. Not a soft hint: an undecodable
+   transaction is exactly when the user most needs to be cautious. */
+.undecoded {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-warning);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+}
+
+.actionIntent {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+}

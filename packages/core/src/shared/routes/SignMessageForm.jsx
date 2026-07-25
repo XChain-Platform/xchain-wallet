@@ -40,6 +40,10 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
+import { isConfirmModalSliceEnabled } from '../../schemas/settings.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -155,6 +159,50 @@ export function SignMessageForm({ walletId, onBack }) {
         [addressOptions, addressId],
     );
 
+    //  §5.6 slice 3 / §5.5 message variant: signing goes through the
+    // shared confirm page. Nothing is composed - the signed bytes ARE the
+    // message - so `compose` just carries the text into the state machine,
+    // which then supplies the same contract every other confirm surface has
+    // (sync Approve disable, exits locked once a signature exists, credential
+    // re-prompt on a bad password, terminal states).
+    const confirmAction = useConfirmAction();
+    const useConfirmPage = isConfirmModalSliceEnabled(settings, 'bespokeFlows');
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    function applySigned(result) {
+        setSignature(result?.signature || '');
+        setSignedMessage(message);
+        setSignedAddress(selectedAddress?.address || '');
+        setPassword('');
+        draft.clear();
+        setDraftPending(false);
+    }
+
+    async function openConfirmScreen() {
+        try {
+            const result = await confirmAction.confirm({
+                chainId,
+                source: selectedAddress?.address,
+                compose: async () => ({ message, actionString: null, encoding: 'message' }),
+                onApprove: () => messaging.signMessageRequest({
+                    walletId,
+                    addressId,
+                    password: passwordValueRef.current,
+                    message,
+                }),
+            });
+            applySigned(result);
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setError(
+                err?.name === 'InvalidPasswordError'
+                    ? 'Incorrect password.'
+                    : err?.message || 'Signing failed.',
+            );
+        }
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (busy) return;
@@ -162,11 +210,17 @@ export function SignMessageForm({ walletId, onBack }) {
         if (!chainId) { setError('Pick a chain.'); return; }
         if (!addressId) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
-        if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
             setError('messaging.signMessageRequest is not available in this shell.');
             return;
         }
+        if (useConfirmPage) {
+            // The password is collected ON the confirm page, so the credential
+            // guard below must not gate getting there.
+            openConfirmScreen();
+            return;
+        }
+        if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
         setBusy(true);
         try {
             const result = await messaging.signMessageRequest({
@@ -175,12 +229,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 password,
                 message,
             });
-            setSignature(result?.signature || '');
-            setSignedMessage(message);
-            setSignedAddress(selectedAddress?.address || '');
-            setPassword('');
-            draft.clear();
-            setDraftPending(false);
+            applySigned(result);
         } catch (err) {
             const msg = err?.name === 'InvalidPasswordError'
                 ? 'Incorrect password.'
@@ -213,7 +262,11 @@ export function SignMessageForm({ walletId, onBack }) {
                         Signed by
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <ChainBadge chainId={chainId || ''} />
+                        {/* ChainBadge takes a descriptor, not an id: passing an
+                            id crashed this screen on every successful signing. */}
+                        {chainRegistry.get(chainId)
+                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" />
+                            : <span>{chainId}</span>}
                         <AddressText address={signedAddress} />
                     </div>
                 </div>
@@ -375,7 +428,14 @@ export function SignMessageForm({ walletId, onBack }) {
                     }}
                 />
             </div>
-            {signerReady ? (
+            {/* On the confirm-page path the password lives on that page, so the
+                form does not ask for it twice. Errors still surface here (the
+                page is gone by the time we render them). */}
+            {useConfirmPage ? (
+                error ? (
+                    <p role="alert" className={styles.error}>{error}</p>
+                ) : null
+            ) : signerReady ? (
                 <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
                     <span aria-hidden="true">🔓</span> Wallet unlocked, no password needed.
                 </p>
@@ -394,12 +454,33 @@ export function SignMessageForm({ walletId, onBack }) {
                 variant="primary"
                 block
                 loading={busy}
-                disabled={busy || message.length === 0 || (!signerReady && password.length === 0) || !addressId}
+                disabled={busy
+                    || message.length === 0
+                    || !addressId
+                    || (useConfirmPage ? false : (!signerReady && password.length === 0))}
             >
                 Sign message
             </Button>
         </form>
     );
+
+    //  §5.5 confirm page (message variant), rendered in place of the
+    // form; the draft stays intact behind it so Reject loses nothing.
+    if (isConfirmOpenPhase(confirmAction.phase)) {
+        return (
+            <MessageConfirmScreen
+                confirmAction={confirmAction}
+                screenVariant={variant}
+                message={message}
+                chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
+                signingAddress={selectedAddress?.address}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
 
     return (
         <Screen variant={variant} header={header}>

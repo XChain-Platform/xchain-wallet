@@ -20,10 +20,12 @@ import {
     ChainBadge,
     AddressText,
  Icon, AddressField,} from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -343,6 +345,75 @@ export function ComposeMessage({
         setEncryptionChoice(value);
     }
 
+    //  §5.6 slice 3: software sends compose ONE PSBT host-side and confirm
+    // it on the shared confirm page. Three carve-outs stay on the legacy review
+    // stage: hardware signers (their own signing gate), the demo wallet (its
+    // send is faked, there is nothing to compose), and a LOCKED wallet sending
+    // ECDH - that method needs our own private key to derive the shared secret
+    // at COMPOSE time, and on this path the password isn't collected until the
+    // confirm page. ECIES and plaintext compose fine while locked.
+    const isDemo = flowsLib.isDemoWallet(walletId);
+    const needsKeyToCompose = !sendUnencrypted && encryptionChoice === 'ecdh' && !hw;
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
+    const singleEncode = actionConfirm.enabled && !hw && !isDemo
+        && (!needsKeyToCompose || signerReady);
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
+    // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
+    // back as `prebuiltParams`, since re-encrypting would change the bytes).
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        // chainId = the recipient's chain (sets COIN, resolves their key);
+        // broadcastChainId = the delivery network that funds + pays the fee.
+        const base = {
+            walletId,
+            chainId: destChainId,
+            broadcastChainId: chainId,
+            from,
+            destination: toAddress.trim(),
+            message,
+            method: sendUnencrypted ? null : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
+            ...(feePerKb != null ? { feePerKb } : {}),
+        };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                // Pre-flight and the signing lane both belong to the DELIVERY
+                // network: that is the chain the transaction lands on.
+                chainId,
+                from,
+                compose: () => messaging.composeMessageForConfirm(base),
+                onApprove: (prebuiltPsbt, composed) => messaging.messageAction({
+                    ...base,
+                    password: passwordValueRef.current,
+                    prebuiltParams: composed.messageParams,
+                    prebuiltPsbt,
+                }),
+            });
+            setPassword('');
+            if (onSent) { onSent(res); return; }
+            setResult(res);
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            if (err?.name === 'PubkeyNotFoundError') {
+                setPubkeyState('missing');
+                setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
+                return;
+            }
+            setSubmitError(err?.message || 'Send failed.');
+        }
+    }
+
     // Form submit: run the same guards that gate a real send, then move to the
     // review stage. No signing or broadcast happens here; the message is only
     // sent once the user confirms on the review screen via handleSubmit.
@@ -354,9 +425,13 @@ export function ComposeMessage({
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
         if (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking')) return;
+        setSubmitError(null);
+        // On the confirm-page path the password is collected IN the modal, so
+        // the credential guards below (which the legacy review stage relies on)
+        // must not gate getting there.
+        if (singleEncode) { openConfirmScreen(); return; }
         if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitError(null);
         setStage('review');
     }
 
@@ -595,6 +670,40 @@ export function ComposeMessage({
         );
     }
 
+    //  confirm page, rendered in place of the form; form state stays
+    // intact behind it, so Reject returns the user to their draft. The intent
+    // is decoded from the params the HOST actually composed (the encrypted
+    // body), never from form state - §1: confirm what will broadcast.
+    if (actionConfirm.open) {
+        const composedParams = actionConfirm.confirmAction.composed?.messageParams;
+        const fee = selectedFeeEstimate;
+        const ticker = descriptor?.coin
+            ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
+            : '';
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={composedParams
+                    ? decoderLib.decodeAction({
+                        action: 'MESSAGE',
+                        params: composedParams,
+                        chainId: destChainId || undefined,
+                        chainRegistry,
+                    })
+                    : null}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={fee?.coinAmount
+                    ? `Network fee: ${fee.coinAmount} ${ticker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     // Address-book picker: rendered in place of the form when the user taps
     // the contacts icon in the Address field. Selecting a row fills the field
     // and returns to the form with all other state intact.
@@ -715,10 +824,12 @@ export function ComposeMessage({
                     variant="primary"
                     block
                     icon={<Icon.SendIcon />}
+                    loading={actionConfirm.composing}
                     disabled={!fromAddress
                         || !toAddress.trim()
                         || addressInvalid
                         || !message.trim()
+                        || actionConfirm.composing
                         || (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking'))}
                 >
                     Send message

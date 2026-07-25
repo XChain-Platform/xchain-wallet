@@ -111,10 +111,26 @@ export function getSettings() {
  * swap for a drain transaction.
  *
  * @param {{ chainId: string, psbtHex: string }} opts
- * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt, action: object | null, actionDecodeReason: string | null }>}
  */
 export function parsePsbt(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));
+}
+
+/**
+ * Run sdk.preflight for a dApp-supplied action, HOST-side ( §5.6 slice 4).
+ *
+ * §4.8: pre-flight is NOT a bridge method - a dApp that could call it directly
+ * could binary-search the user's balances. It runs only inside an approval
+ * context, one report per request, and the report is rendered in THIS window
+ * (the wallet's own UI). The dApp never sees it; it only ever learns approve
+ * or reject.
+ *
+ * @param {{ chainId: string, actionString: string, source?: string, mode?: string }} opts
+ * @returns {Promise<import('xchain-sdk').PreflightReport>}
+ */
+export function preflight(opts) {
+    return /** @type {any} */ (sendMessage('action.preflight', opts));
 }
 
 /**

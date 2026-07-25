@@ -24,17 +24,11 @@
 
 import { useCallback } from 'react';
 import { useSettings } from './useSettings.js';
-import { useConfirmAction } from './useConfirmAction.js';
+import { useConfirmAction, isConfirmOpenPhase } from './useConfirmAction.js';
 import {
     isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
-
-// Phases during which the confirm PAGE is on screen in place of the form.
-// `composing` runs PRE-OPEN (the action button shows a spinner) and the
-// terminal phases are settled by the confirm() promise, so neither one
-// belongs here.
-const OPEN_PHASES = Object.freeze(['preflighting', 'ready', 'signing', 'rechecking']);
 
 /**
  * True for the calm "user pressed Reject" exit, which every form
@@ -56,7 +50,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
     const enabled = isConfirmModalSliceEnabled(settings, slice);
-    const open = OPEN_PHASES.includes(confirmAction.phase);
+    const open = isConfirmOpenPhase(confirmAction.phase);
 
     /**
      * Compose host-side, stream pre-flight into the confirm page, then sign
@@ -65,26 +59,32 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      * @param {object} args
      * @param {string} args.chainId
      * @param {{ address: string, publicKey?: string, derivationPath?: string, addressId?: string, source?: string, signerId?: string }} args.from
-     * @param {{ action: string, params: object }} args.actionData   WIRE-format params (what the encoder will see)
+     * @param {{ action: string, params: object }} [args.actionData]   WIRE-format params (what the encoder will see)
      * @param {object} [args.encoderOpts]      extra encoder options (feePerKb, ...)
+     * @param {() => Promise<object>} [args.compose]   host compose override, for the
+     *   actions whose wire params cannot be built client-side. MESSAGE is the
+     *   case that needs it: its body is encrypted host-side, so the params only
+     *   exist once the host has built them (see `action.message.composeForConfirm`).
+     *   Must resolve with the same tamper-verified envelope
+     *   `action.composeForConfirm` returns. Defaults to the generic route.
      * @param {(prebuiltPsbt: { psbtHex: string, encoding: string, actionString: string, version: any }, composed: object) => Promise<any>} args.onApprove
      * @returns {Promise<any>}   resolves with onApprove's return value; rejects with the
      *   documented reasons from useConfirmAction (`busy`, `user-rejected`).
      */
-    const run = useCallback(({ chainId, from, actionData, encoderOpts, onApprove }) => (
+    const run = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove }) => (
         confirmAction.confirm({
             chainId,
             source: from?.address,
             preflightOpts: {
                 mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
             },
-            compose: () => messaging.composeForConfirm({
+            compose: compose || (() => messaging.composeForConfirm({
                 walletId,
                 chainId,
                 from,
                 actionData,
                 ...(encoderOpts && Object.keys(encoderOpts).length > 0 ? { encoderOpts } : {}),
-            }),
+            })),
             preflight: (o) => messaging.preflight({ chainId, ...o }),
             onApprove: (_creds, composed) => onApprove({
                 psbtHex: composed.psbt,

@@ -42,7 +42,7 @@
 // until the SHA-256-verified payload is reassembled; BBQr / hex /
 // base64 frames pass straight through to the paste pipeline.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -61,6 +61,11 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
+import { isConfirmModalSliceEnabled } from '../../schemas/settings.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { decodeBbqrPsbt } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
@@ -175,6 +180,11 @@ export function PsbtSignForm({ walletId, onBack }) {
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [parseError, setParseError] = useState(/** @type {string | null} */ (null));
     const [parsing, setParsing] = useState(false);
+    //  §5.5: the XChain action decoded from the pasted PSBT (best-effort;
+    // `null` + a reason is a state the confirm page renders loudly, and it is
+    // what the fail-closed refusal rule keys on).
+    const [parsedAction, setParsedAction] = useState(/** @type {any | null} */ (null));
+    const [parsedActionReason, setParsedActionReason] = useState(/** @type {string | null} */ (null));
     const [decomposed, setDecomposed] = useState(
         /** @type {import('../../signers/types').DecomposedPsbt | null} */ (null),
     );
@@ -393,10 +403,18 @@ export function PsbtSignForm({ walletId, onBack }) {
             .then((res) => {
                 if (cancelled) return;
                 setDecomposed(res?.decomposed || null);
+                //  §5.5: the action carried inside, when it decodes.
+                // Additive on the host side, so an older shell simply reports
+                // no action and the confirm page renders its loud
+                // "could not read the action" state.
+                setParsedAction(res?.action || null);
+                setParsedActionReason(res?.actionDecodeReason || null);
             })
             .catch((err) => {
                 if (cancelled) return;
                 setDecomposed(null);
+                setParsedAction(null);
+                setParsedActionReason(null);
                 setParseError(err?.message || 'Failed to parse transaction.');
             })
             .finally(() => { if (!cancelled) setParsing(false); });
@@ -475,6 +493,61 @@ export function PsbtSignForm({ walletId, onBack }) {
         [addressOptions],
     );
 
+    //  §5.6 slice 3: software signing goes through the shared confirm
+    // page in its PSBT variant (§5.5). Hardware keeps the legacy inline flow -
+    // <HwSignBlock> is its own signing gate and device-dependent.
+    //
+    // Nothing is composed here: the PSBT already exists, so `compose` just
+    // hands the parsed bytes to the state machine. That reuses the whole
+    // contract (sync Approve disable, exits locked once a signature exists,
+    // credential re-prompt, terminal states) without a second implementation.
+    const { settings } = useSettings();
+    const developerMode = Boolean(settings?.developerMode);
+    const confirmAction = useConfirmAction();
+    const useConfirmPage = isConfirmModalSliceEnabled(settings, 'bespokeFlows') && !isHwSource;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    async function openConfirmScreen() {
+        try {
+            const result = await confirmAction.confirm({
+                chainId,
+                source: selectedAddress?.address,
+                compose: async () => ({
+                    psbt: psbtHex,
+                    actionString: parsedAction?.actionString || null,
+                    action: parsedAction?.action || null,
+                    version: parsedAction?.version ?? null,
+                    encoding: 'psbt',
+                }),
+                // Report-only (§5.5), and only when there is an action string to
+                // check at all: a plain payment PSBT has nothing to pre-flight.
+                ...(parsedAction?.actionString
+                    ? { preflight: (o) => messaging.preflight({ chainId, ...o }) }
+                    : {}),
+                onApprove: () => messaging.signPsbtUserInitiated({
+                    walletId,
+                    addressId,
+                    password: passwordValueRef.current,
+                    psbtHex,
+                }),
+            });
+            setSignedPsbtHex(result?.signedPsbtHex || '');
+            setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
+            setBroadcastState('idle');
+            setBroadcastTxid('');
+            setBroadcastError(null);
+            setPassword('');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setError(
+                err?.name === 'InvalidPasswordError'
+                    ? 'Incorrect password.'
+                    : err?.message || 'Signing failed.',
+            );
+        }
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (busy) return;
@@ -487,6 +560,16 @@ export function PsbtSignForm({ walletId, onBack }) {
             setError(
                 `The chosen address signs none of this transaction's inputs. Pick a different address or transaction.`,
             );
+            return;
+        }
+        if (useConfirmPage) {
+            if (typeof messaging.signPsbtUserInitiated !== 'function') {
+                setError('messaging.signPsbtUserInitiated is not available in this shell.');
+                return;
+            }
+            // The password is collected ON the confirm page, so the credential
+            // guard below must not gate getting there.
+            openConfirmScreen();
             return;
         }
         if (isHwSource) {
@@ -558,7 +641,11 @@ export function PsbtSignForm({ walletId, onBack }) {
                         Signed by
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <ChainBadge chainId={chainId || ''} />
+                        {/* ChainBadge takes a descriptor, not an id: passing an
+                            id crashed this screen on every successful signing. */}
+                        {chainRegistry.get(chainId)
+                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" />
+                            : <span>{chainId}</span>}
                         <AddressText address={selectedAddress?.address || ''} />
                     </div>
                 </div>
@@ -926,7 +1013,11 @@ export function PsbtSignForm({ walletId, onBack }) {
                     || !decomposed
                     || ownedInputCount === 0
                     || !addressId
-                    || (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0))
+                    // On the confirm-page path the password is typed there, so
+                    // it must not gate the button that opens it.
+                    || (useConfirmPage
+                        ? false
+                        : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
                 }
             >
                 {isHwSource && selectedAddress
@@ -936,9 +1027,49 @@ export function PsbtSignForm({ walletId, onBack }) {
         </form>
     );
 
+    //  §5.5 confirm page (PSBT variant), rendered in place of the form.
+    // The pasted blob and every picker stay intact behind it, so Reject drops
+    // the user back exactly where they were.
+    if (isConfirmOpenPhase(confirmAction.phase)) {
+        return (
+            <PsbtConfirmScreen
+                confirmAction={confirmAction}
+                screenVariant={variant}
+                decomposed={decomposed}
+                ownAddresses={ownAddressSet}
+                signingAddress={selectedAddress?.address}
+                decodedAction={parsedAction
+                    ? { ...parsedAction, summary: psbtActionSummary(parsedAction) }
+                    : null}
+                decodeError={parsedActionReason}
+                // The refusal keys on the REASON, not merely on "no action":
+                // an ordinary payment (NO_OP_RETURN) must sign normally.
+                spendsOwnInputs={ownedInputCount > 0}
+                developerMode={developerMode}
+                chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     return (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
         </Screen>
     );
+}
+
+// One-line intent for an action decoded OUT of a PSBT. Deliberately terse:
+// on this variant the output set is the thing being verified, and a decoded
+// action is context, so this states what the action IS without dressing up
+// params the wallet did not compose and cannot cross-check.
+function psbtActionSummary(parsed) {
+    const label = parsed?.action || 'Unknown action';
+    const version = parsed?.version ?? null;
+    return version != null
+        ? `Carries an XChain ${label} action (v${version})`
+        : `Carries an XChain ${label} action`;
 }

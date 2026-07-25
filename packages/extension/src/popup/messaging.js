@@ -1741,6 +1741,11 @@ export function signerReady(opts) {
 export function messageAction(opts) {
     return /** @type {any} */ (sendMessage('action.message', opts));
 }
+//  §5.6 slice 3: encrypt host-side, then compose the one PSBT over that
+// ciphertext (MESSAGE params cannot be built client-side).
+export function composeMessageForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.message.composeForConfirm', opts));
+}
 export function messageActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.message.hw', opts));
 }

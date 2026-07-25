@@ -27,8 +27,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@xchain-wallet/core/ui';
-import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
-import { useMessaging } from '../useMessaging.js';
+import { flows as flowsLib, registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -59,7 +63,9 @@ const EXPIRATION_PRESETS = [
  * @param {() => void} [props.onOrderPlaced]         refresh parent after placement
  */
 export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, onOrderPlaced }) {
-    const { messaging } = useMessaging();
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const signerReady = useSignerReady(walletId);
     const [side, setSide] = useState(/** @type {'buy' | 'sell'} */ ('buy'));
     const [price, setPrice] = useState('');
     const [size, setSize] = useState('');
@@ -194,6 +200,54 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         return p;
     }
 
+    //  §5.6 slice 3: software orders compose ONE PSBT host-side and
+    // confirm it on the shared confirm page; hardware + watcher keep the
+    // legacy review stage (they need their own signing gates).
+    const { isWatcherMode } = useWalletMode();
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode && !hw;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        const params = buildParams();
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'ORDER', params },
+                encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                onApprove: (prebuiltPsbt) => messaging.orderAction({
+                    walletId,
+                    chainId,
+                    from,
+                    params,
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    password: passwordValueRef.current,
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+            onOrderPlaced?.();
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Order placement failed.');
+        }
+    }
+
     // Validate form fields and advance to the review stage. No signing
     // happens here; the user sees a summary and confirms before we touch
     // the key material.
@@ -219,6 +273,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         }
         setFormError(null);
         setSubmitError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
         // Focus the password field on the review screen so the user
         // can immediately start typing without an extra click.
@@ -439,6 +494,31 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         );
     }
 
+    //  confirm page, rendered in place of the panel (the same
+    // substitution the review stage above already does); form state stays
+    // intact behind it, so Reject returns the user to their filled-in order.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={decoderLib.decodeAction({
+                    action: 'ORDER',
+                    params: buildParams(),
+                    chainId: chainId || undefined,
+                    chainRegistry,
+                })}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+            />
+        );
+    }
+
     return (
         <form
             onSubmit={handleReview}
@@ -608,9 +688,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     type="submit"
                     variant="primary"
                     block
-                    disabled={!fromAddress || !price || !size}
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !price || !size || actionConfirm.composing}
                 >
-                    Review
+                    {singleEncode ? `Place ${side} order` : 'Review'}
                 </Button>
             </div>
         </form>

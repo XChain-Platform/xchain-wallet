@@ -51,6 +51,8 @@ import { TokenWizard } from '../../packages/core/src/shared/routes/TokenWizard.j
 import { AirdropForm } from '../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { DispenserForm } from '../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { SwapForm } from '../../packages/core/src/shared/routes/SwapForm.jsx';
+import { PlaceOrderPanel } from '../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
+import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMessage.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 
@@ -594,5 +596,120 @@ describe(': action forms confirm via the single-encode pipeline', () => {
             params: { VERSION: '0', MESSAGE: 'hello chain' },
             submitMethod: 'broadcastAction',
         });
+    });
+
+    // ---  §5.6 slice 3 (bespoke flows) --------------------------------
+
+    it('PlaceOrderPanel composes ORDER and signs the prebuilt PSBT', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: PlaceOrderPanel,
+            props: { tick1: 'JDOG', tick2: 'XCHAIN' },
+            // The software path carries the action verb, never "Review".
+            actionLabel: 'Place buy order',
+            fill: (utils) => {
+                setValue(utils, /^Price/, '2');
+                setValue(utils, /^Size/, '5');
+            },
+        });
+        const submit = expectSingleEncode(calls, {
+            action: 'ORDER',
+            params: {
+                VERSION: '0',
+                // Buy tick1 with tick2: give price x size of tick2, get size of tick1.
+                GIVE_TICK: 'XCHAIN', GIVE_AMOUNT: '10',
+                GET_TICK: 'JDOG', GET_AMOUNT: '5',
+            },
+            submitMethod: 'orderAction',
+        });
+        // The exact params that were composed are the params submitted: a
+        // rebuild on Approve would be a different order.
+        expect(submit.args.params).toMatchObject({ GIVE_AMOUNT: '10', GET_AMOUNT: '5' });
+    });
+});
+
+// ComposeMessage is the one action whose wire params cannot be built
+// client-side: the body is ENCRYPTED host-side, so it composes through the
+// dedicated `action.message.composeForConfirm` route and hands the resulting
+// ciphertext params back on Approve. Re-encrypting on Approve would sign
+// different bytes than the ones previewed, so that passthrough IS the
+// single-encode guarantee here and is what this spec pins.
+describe(' §5.6 slice 3: ComposeMessage confirms the encrypted MESSAGE', () => {
+    const ENCRYPTED_PARAMS = Object.freeze({
+        VERSION: '2',
+        COIN: 'BTC',
+        // `devmock` addresses are the validator's sanctioned test placeholder
+        // (addressValidation.looksLikeDevMock), so this exercises the real
+        // MESSAGE any-network recipient rule without pinning a live address.
+        DESTINATION: 'bc1qdevmockrecipient',
+        ENCRYPTED_MESSAGE: 'deadbeefciphertext',
+    });
+
+    async function driveComposeMessage() {
+        const { messaging, calls } = recordingMessaging({
+            getRecipientPubkey: () => Promise.resolve('02aabbcc'),
+            listContacts: () => Promise.resolve([]),
+            composeMessageForConfirm: (args) => {
+                calls.push({ method: 'composeMessageForConfirm', args });
+                return Promise.resolve({ ...COMPOSED, messageParams: { ...ENCRYPTED_PARAMS } });
+            },
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                React.createElement(
+                    MessagingProvider,
+                    { shell: 'web', messaging },
+                    React.createElement(ComposeMessage, {
+                        walletId: 'w', chainId: CHAIN, onBack() {},
+                    }),
+                ),
+            );
+            await drainMicrotasks();
+        });
+
+        await domAct(async () => {
+            setValue(utils, 'Address', ENCRYPTED_PARAMS.DESTINATION);
+            setValue(utils, 'Message', 'hello there');
+            await drainMicrotasks();
+        });
+        // The recipient-pubkey lookup is debounced; without it the encrypted
+        // path stays gated on `checking`.
+        await domAct(async () => {
+            vi.advanceTimersByTime(500);
+            await drainMicrotasks();
+        });
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Send message' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            const approve = Array.from(utils.container.querySelectorAll('button'))
+                .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
+            if (!approve) throw new Error('no enabled Approve button on the confirm page');
+            fireEvent.click(approve);
+            await drainMicrotasks();
+        });
+        return { calls, utils };
+    }
+
+    it('encrypts host-side, then signs that exact ciphertext', async () => {
+        const { calls } = await driveComposeMessage();
+
+        const compose = calls.find((c) => c.method === 'composeMessageForConfirm');
+        expect(compose, 'composeMessageForConfirm was dispatched').toBeTruthy();
+        // The delivery network funds + broadcasts; the destination chain only
+        // sets COIN and resolves the recipient's key.
+        expect(compose.args.broadcastChainId).toBe(CHAIN);
+        expect(compose.args.destination).toBe(ENCRYPTED_PARAMS.DESTINATION);
+        expect(compose.args.message).toBe('hello there');
+        // The generic compose route must NOT be used: it cannot encrypt.
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+
+        const submit = calls.find((c) => c.method === 'messageAction');
+        expect(submit, 'messageAction was dispatched on Approve').toBeTruthy();
+        expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+        // The load-bearing assertion: the SAME ciphertext, carried through.
+        expect(submit.args.prebuiltParams).toEqual(ENCRYPTED_PARAMS);
     });
 });

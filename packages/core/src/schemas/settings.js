@@ -67,8 +67,14 @@ export const ADS_DEFAULT_TRIGGER_SATS = 1000;
 export const CONFIRM_MODAL_SLICE_DEFAULTS = Object.freeze({
     send: true,
     actionForms: true,
-    bespokeFlows: false,
-    extensionApproval: false,
+    // Slice 3 ( §5.6): PlaceOrderPanel + ComposeMessage on the
+    // single-encode pipeline, and the two §5.5 non-action variants
+    // (PsbtSignForm -> PSBT variant, SignMessageForm -> message variant).
+    bespokeFlows: true,
+    // Slice 4 ( §5.6): the extension's dApp-approval window and the
+    // co-signer preview reuse the confirm surface's panels (§5.5 exports them
+    // separately precisely so this window can keep its own approval chrome).
+    extensionApproval: true,
 });
 export const CONFIRM_MODAL_SLICE_KEYS = Object.freeze(Object.keys(CONFIRM_MODAL_SLICE_DEFAULTS));
 

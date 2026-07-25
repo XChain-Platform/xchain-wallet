@@ -42,6 +42,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  */
 
 /**
@@ -106,6 +107,7 @@ export async function orderAction(opts) {
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
         pendingTxMeta,
+        prebuiltPsbt: opts.prebuiltPsbt,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,

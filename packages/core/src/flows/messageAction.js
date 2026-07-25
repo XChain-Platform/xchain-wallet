@@ -133,19 +133,32 @@ function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descriptor) {
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
+ * @property {Record<string, string>} [prebuiltParams]    §5.6 slice 3: MESSAGE
+ *   params already built (and ENCRYPTED) by buildMessageParams at confirm time.
+ *   Encryption is non-deterministic (fresh nonce / ephemeral key per call), so
+ *   re-encrypting here would produce a DIFFERENT action string than the one the
+ *   user previewed. Supplying them skips the pubkey lookup + encrypt entirely.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  */
 
 /**
+ * Resolve the MESSAGE wire params for a send, doing the encryption half only:
+ * validate the chains, look up + address-bind the recipient's pubkey, and
+ * encrypt per method. Split out of messageAction so the  confirm
+ * pipeline can build the params ONCE at compose time (the ciphertext is what
+ * gets encoded into the previewed PSBT) and hand the exact same params back on
+ * Approve via `prebuiltParams`.
+ *
  * @param {MessageActionOpts} opts
- * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
+ * @returns {Promise<{ params: Record<string, string>, method: 1 | 2 | null, broadcastChainId: string, source: import('./sendToken.js').SourceRef }>}
  */
-export async function messageAction(opts) {
-    if (!opts) throw new Error('messageAction: opts is required');
+export async function buildMessageParams(opts) {
+    if (!opts) throw new Error('buildMessageParams: opts is required');
     if (typeof opts.destination !== 'string' || opts.destination.length === 0) {
-        throw new Error('messageAction: destination is required');
+        throw new Error('buildMessageParams: destination is required');
     }
     if (typeof opts.message !== 'string' || opts.message.length === 0) {
-        throw new Error('messageAction: message is required');
+        throw new Error('buildMessageParams: message is required');
     }
 
     // The MESSAGE wire format separates the destination's network (COIN) from
@@ -246,6 +259,32 @@ export async function messageAction(opts) {
         };
     }
 
+    return { params, method, broadcastChainId, source };
+}
+
+/**
+ * @param {MessageActionOpts} opts
+ * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
+ */
+export async function messageAction(opts) {
+    if (!opts) throw new Error('messageAction: opts is required');
+
+    let params;
+    let method;
+    let broadcastChainId;
+    let source;
+    if (opts.prebuiltParams) {
+        // Confirm-pipeline path: the ciphertext the user previewed is already
+        // encoded into the prebuilt PSBT, so re-deriving it here is not just
+        // wasted work - a fresh encryption would not match those bytes.
+        params = opts.prebuiltParams;
+        method = params.VERSION === '3' ? null : 1;
+        broadcastChainId = opts.broadcastChainId || opts.chainId;
+        source = normalizeSource(opts.from, 'messageAction');
+    } else {
+        ({ params, method, broadcastChainId, source } = await buildMessageParams(opts));
+    }
+
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: opts.destination,
@@ -274,6 +313,7 @@ export async function messageAction(opts) {
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
         pendingTxMeta,
+        prebuiltPsbt: opts.prebuiltPsbt,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,

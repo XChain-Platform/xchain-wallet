@@ -53,13 +53,29 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  * @param {'small'|'full'} [props.screenVariant]             Screen sizing, the caller's shell variant (defaults to 'small')
  * @param {boolean} [props.credentialsReady]                 whether credentials are complete (Approve enabled)
  * @param {Error|string|null} [props.error]                  §5.3.4 in-page error (e.g. a credential failure that re-prompts)
+ * @param {import('react').ReactNode} [props.psbtPanel]      §5.5 PSBT variant: the input/output
+ *   enumeration, which IS the foregrounded content on that variant (the theft in a
+ *   hostile PSBT is the output set, not the action data)
+ * @param {string} [props.messageText]                       §5.5 message variant: the full
+ *   message text being signed, shown verbatim
+ * @param {string} [props.headline]                          header line; defaults to the
+ *   decoded summary. The psbt/message variants set it explicitly, since neither
+ *   renders a composed action's intent as its headline.
+ * @param {string|null} [props.refusal]                      fail-closed refusal (§5.5): renders a
+ *   blocking alert INSTEAD of the credentials + Approve, for requests the wallet
+ *   will not sign at all. Distinct from a pre-flight error, which the user may
+ *   acknowledge; a refusal has no override.
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
     canApprove, onApprove, onReject, decoded, simulation, chainLabel,
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
+    psbtPanel = null, messageText, refusal = null, headline,
 }) {
+    const headlineText = headline !== undefined
+        ? headline
+        : decoded?.summary?.split('\n')[0];
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
@@ -74,10 +90,10 @@ export function ConfirmActionModal({
     // await (§5.1). The parent's onApprove runs the async signing.
     const handleApprove = useCallback((e) => {
         if (e) e.preventDefault();
-        if (approveDisabled || !canApprove || !credentialsReady) return;
+        if (approveDisabled || !canApprove || !credentialsReady || refusal) return;
         setApproveDisabled(true);      // sync, this tick
         Promise.resolve(onApprove({})).catch(() => {}).finally(() => setApproveDisabled(false));
-    }, [approveDisabled, canApprove, credentialsReady, onApprove]);
+    }, [approveDisabled, canApprove, credentialsReady, refusal, onApprove]);
 
     if (!open) return null;
 
@@ -96,19 +112,35 @@ export function ConfirmActionModal({
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
-                aria-label={`Confirm ${decoded?.summary || 'action'}`}
+                aria-label={`Confirm ${headlineText || 'action'}`}
             >
                 <div className={styles.header}>
-                    <span className={styles.actionLabel}>{decoded?.summary?.split('\n')[0]}</span>
+                    <span className={styles.actionLabel}>{headlineText}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
                 </div>
 
                 <div className={styles.body}>
-                    {variant !== 'message' && decoded ? (
+                    {/* §5.5 PSBT variant: the input/output enumeration is the
+                        foregrounded content, ABOVE any action-data intent. */}
+                    {variant === 'psbt' ? psbtPanel : null}
+
+                    {/* §5.5 message variant: the full text, verbatim and
+                        never truncated - it is the whole thing being signed. */}
+                    {variant === 'message' && messageText !== undefined ? (
+                        <pre className={styles.messageText} data-testid="confirm-message-text">
+                            {messageText}
+                        </pre>
+                    ) : null}
+
+                    {variant === 'action' && decoded ? (
                         <ActionIntentSummary decoded={decoded} simulation={simulation} />
                     ) : null}
 
-                    {variant === 'action' ? (
+                    {/* Pre-flight on the PSBT variant is REPORT-ONLY (§5.5): the
+                        wallet cannot rebuild a caller's PSBT, so findings inform
+                        but never block. The caller controls `canApprove`; this
+                        renders the panel either way so the user still sees them. */}
+                    {variant === 'action' || variant === 'psbt' ? (
                         <PreflightPanel
                             report={report}
                             loading={reportLoading}
@@ -121,6 +153,15 @@ export function ConfirmActionModal({
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
                     ) : null}
 
+                    {/* Fail-closed refusal (§5.5): no credentials, no Approve,
+                        no override. Rendered where the credentials would be so
+                        the user sees WHY there is nothing to sign with. */}
+                    {refusal ? (
+                        <p className={styles.refusal} role="alert" data-testid="confirm-refusal">
+                            {refusal}
+                        </p>
+                    ) : null}
+
                     {/* §5.3.4: a credential failure returns the page to `ready`
                         with this error set, so the user retypes and re-approves
                         the SAME PSBT. Sits directly above the credentials block
@@ -131,14 +172,21 @@ export function ConfirmActionModal({
                         </div>
                     ) : null}
 
-                    <div className={styles.credentials}>
-                        {credentials}
-                    </div>
+                    {refusal ? null : (
+                        <div className={styles.credentials}>
+                            {credentials}
+                        </div>
+                    )}
 
-                    <p className={styles.hwNote}>
-                        A hardware device verifies native outputs and destinations only; the action
-                        data is obfuscated on-chain, so this screen is where you verify the action intent.
-                    </p>
+                    {/* Transaction-signing caveat only. Message signing moves no
+                        coins and has no outputs, so this note would be nonsense
+                        on that variant. */}
+                    {variant === 'message' ? null : (
+                        <p className={styles.hwNote}>
+                            A hardware device verifies native outputs and destinations only; the action
+                            data is obfuscated on-chain, so this screen is where you verify the action intent.
+                        </p>
+                    )}
 
                     {phase === 'rechecking' ? (
                         <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
@@ -165,7 +213,7 @@ export function ConfirmActionModal({
                         variant="success"
                         icon={<Icon.ThumbsUpIcon />}
                         onClick={handleApprove}
-                        disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady}
+                        disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                         data-testid="confirm-approve"
                     >
                         Approve

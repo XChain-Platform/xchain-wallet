@@ -44,6 +44,21 @@ export class UserRejectedError extends Error {
 
 const STALENESS_MS = 30000;
 
+// Phases during which the confirm PAGE is on screen in place of the form.
+// `composing` runs PRE-OPEN (the form's own button spins) and the terminal
+// phases are settled by the confirm() promise, so neither belongs here.
+const OPEN_PHASES = Object.freeze(['preflighting', 'ready', 'signing', 'rechecking']);
+
+/**
+ * Is the confirm page currently rendered in place of the invoking form?
+ * Single source of the phase list for every surface that swaps itself out.
+ *
+ * @param {ConfirmPhase | string | null | undefined} phase
+ */
+export function isConfirmOpenPhase(phase) {
+    return OPEN_PHASES.includes(/** @type {string} */ (phase));
+}
+
 export function useConfirmAction() {
     const instanceId = useRef(Symbol('confirm-action')).current;
     const abortRef = useRef(null);
@@ -303,7 +318,7 @@ export function useConfirmAction() {
         phase, composing, composed, report, error, acknowledged,
         // Approve is allowed when every non-overridable error is absent AND
         // every overridable error the report carries has been acknowledged.
-        canApprove: computeCanApprove(report, acknowledged),
+        canApprove: canApproveWithReport(report, acknowledged),
     };
 }
 
@@ -333,7 +348,23 @@ export function isCredentialFailure(err) {
     return /incorrect password|invalid password|bad password/i.test(String(err.message || ''));
 }
 
-function computeCanApprove(report, acknowledged) {
+/**
+ * The §4.2 Approve gate, as a pure function: a locally-provable
+ * (`overridable: false`) error hard-blocks, a network-sourced one blocks until
+ * the user explicitly acknowledges that specific finding, and no report at all
+ * (best-effort, timed out, or pre-flight skipped) allows.
+ *
+ * Exported because the extension's approval window is a SEPARATE React root
+ * that renders <PreflightPanel> without running this hook's state machine
+ * ( §5.6 slice 4). Two implementations of "may the user sign this" is
+ * exactly the drift that would let one surface honour an override rule the
+ * other ignores, so both read this one.
+ *
+ * @param {import('xchain-sdk').PreflightReport | null} report
+ * @param {Set<string>} acknowledged
+ * @returns {boolean}
+ */
+export function canApproveWithReport(report, acknowledged) {
     if (!report) return true; // no report (best-effort / timed out): allow
     for (const f of report.findings) {
         if (f.severity !== 'error') continue;

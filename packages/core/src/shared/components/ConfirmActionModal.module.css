@@ -70,6 +70,34 @@
     gap: var(--xc-space-2);
 }
 
+/* §5.5 message variant: the full signed text, verbatim. Wraps (never
+   truncates or scrolls sideways) - the user is authorizing these exact
+   bytes, so every one of them has to be readable. */
+.messageText {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* §5.5 fail-closed refusal: the wallet will not sign this at all. Styled
+   as danger (not warning) because there is no override. */
+.refusal {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-danger);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+}
+
 .hwNote {
     margin: 0;
     font-size: var(--xc-text-xs);

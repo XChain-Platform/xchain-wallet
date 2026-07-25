@@ -58,6 +58,7 @@ export {
 } from './gatedContent.js';
 export {
     messageAction,
+    buildMessageParams,
     handshakeAction,
     getRecipientPubkey,
     PubkeyNotFoundError,
