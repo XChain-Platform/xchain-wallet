@@ -53,13 +53,77 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+// PC-02 lock matrix: the seven independent ISSUE v3 lock flags
+// (ISSUE.md "Version 3 - Edit LOCK PARAMS"). `key` matches the
+// `locks` field name getToken returns (xchain-explorer db.js "Group
+// LOCK fields"); `field` is the ISSUE wire param. Every flag is
+// one-way: issue.js's `isValidLock` only ever allows 0->1 or a
+// no-op re-affirm of the current value, never 1->0, so once a flag
+// is set on the token record it can never be cleared again.
+const LOCK_FLAGS = [
+    {
+        key: 'max_supply',
+        field: 'LOCK_MAX_SUPPLY',
+        label: 'Max supply',
+        hint: 'Freezes MAX_SUPPLY. The cap can never be raised again.',
+    },
+    {
+        key: 'max_mint',
+        field: 'LOCK_MAX_MINT',
+        label: 'Max mint per transaction',
+        hint: 'Freezes MAX_MINT. The per-transaction mint cap can never change again.',
+    },
+    {
+        key: 'mint',
+        field: 'LOCK_MINT',
+        label: 'Minting',
+        hint: 'Permanently disables the MINT command. No one will ever be able to mint this token again.',
+    },
+    {
+        key: 'mint_supply',
+        field: 'LOCK_MINT_SUPPLY',
+        label: 'Mint supply now',
+        hint: 'Permanently disables MINT_SUPPLY (mint-now via a token update). The owner can never mint additional supply that way again.',
+    },
+    {
+        key: 'description',
+        field: 'LOCK_DESCRIPTION',
+        label: 'Description',
+        hint: 'Freezes DESCRIPTION. The token metadata can never be edited again.',
+    },
+    {
+        key: 'sleep',
+        field: 'LOCK_SLEEP',
+        label: 'Sleep',
+        hint: 'Permanently disables the SLEEP command for this token.',
+    },
+    {
+        key: 'callback',
+        field: 'LOCK_CALLBACK',
+        label: 'Callback',
+        hint: 'Freezes the callback configuration (block, token, and amount). It can never change again.',
+    },
+];
+
 /**
  * Token admin surfaces (§40.5).
  *
  * Thin forms on top of the ISSUE mechanism, selected via `mode`:
  *
- *   - `'lock'`:          permanently locks supply + minting
- *                         (ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT).
+ *   - `'lock'`:          granular lock matrix (PC-02) over the seven
+ *                         independent, one-way ISSUE v3 flags
+ *                         (LOCK_MAX_SUPPLY, LOCK_MAX_MINT, LOCK_MINT,
+ *                         LOCK_MINT_SUPPLY, LOCK_DESCRIPTION, LOCK_SLEEP,
+ *                         LOCK_CALLBACK). Current state is read from
+ *                         `getToken` via `useTokenInfo` (same read
+ *                         `'mint-settings'` uses): a flag already set on
+ *                         the token renders checked and disabled (locks
+ *                         cannot be unset - issue.js `isValidLock` only
+ *                         allows 0→1 or no-op, never 1→0), everything
+ *                         else is check-to-lock. Only the newly-checked
+ *                         flags are sent; an omitted v3 field is a no-op
+ *                         (issue.js repopulates it from the existing
+ *                         token record), never a clear.
  *   - `'description'`:   updates the on-chain DESCRIPTION
  *                         (ISSUE v1 with a single DESCRIPTION field).
  *   - `'transfer'`:      transfers token ownership to another address
@@ -198,29 +262,41 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // Mint settings (PC-01): current on-chain values + lock flags, read
-    // via the same useTokenInfo hook ManageToken uses. `mint-settings` is
-    // only ever launched from ManageToken with a concrete (chainId, tick)
-    // pair (lockedToken is always true for this mode), so `ticker` is
-    // stable for the life of the form.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' });
-    const mintLocks = assetInfo?.locks || {};
+    // Current on-chain lock state, read via the same useTokenInfo hook
+    // ManageToken uses. Shared by `'mint-settings'` (PC-01, four of the
+    // seven flags gate its own fields) and `'lock'` (PC-02, all seven
+    // drive the lock matrix below). `'mint-settings'` is only ever
+    // launched from ManageToken with a concrete (chainId, tick) pair
+    // (lockedToken is always true for that mode), so `ticker` is stable
+    // for the life of the form; `'lock'` can also be reached from the
+    // free Actions menu, where `ticker` changes as the owner picks a
+    // token and this hook simply refetches.
+    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' });
+    const tokenLocks = assetInfo?.locks || {};
     // LOCK_MAX_MINT: MAX_MINT itself can't change (issue.js "MAX_MINT (locked)").
-    const maxMintLocked = !!mintLocks.max_mint;
+    const maxMintLocked = !!tokenLocks.max_mint;
     // LOCK_MINT: the MINT command is permanently dead (mint.js "LOCK_MINT").
     // Not a protocol restriction on MINT_ADDRESS_MAX / the mint window, but
     // editing them has no effect once minting itself can never happen again,
     // so the UI disables them here as a courtesy rather than protocol law.
-    const mintDeadLocked = !!mintLocks.mint;
+    const mintDeadLocked = !!tokenLocks.mint;
     // LOCK_MINT_SUPPLY: MINT_SUPPLY (mint-now) is blocked (issue.js "MINT_SUPPLY (locked)").
-    const mintSupplyLocked = !!mintLocks.mint_supply;
+    const mintSupplyLocked = !!tokenLocks.mint_supply;
     // LOCK_MAX_SUPPLY doesn't gate any ISSUE v2 field (MAX_SUPPLY itself is
     // only editable via v0); surfaced as read-only context, nothing to disable.
-    const maxSupplyLockedInfo = !!mintLocks.max_supply;
+    const maxSupplyLockedInfo = !!tokenLocks.max_supply;
     const maxMintFieldDisabled = maxMintLocked || mintDeadLocked;
     const mintWindowFieldsDisabled = mintDeadLocked;
     const mintNowFieldsDisabled = mintSupplyLocked;
     const nothingMintEditable = maxMintFieldDisabled && mintWindowFieldsDisabled && mintNowFieldsDisabled;
+
+    // Lock matrix (PC-02): the seven independent, one-way ISSUE v3 locks.
+    // `lockChecks` holds only flags the owner has newly checked THIS
+    // session; a flag already set on the token (tokenLocks[key]) is never
+    // written here; it renders checked-and-disabled straight off tokenLocks.
+    const [lockChecks, setLockChecks] = useState(/** @type {Record<string, boolean>} */ ({}));
+    const hasAnyNewLock = LOCK_FLAGS.some((f) => lockChecks[f.key] && !tokenLocks[f.key]);
+    const allLocksSet = LOCK_FLAGS.every((f) => !!tokenLocks[f.key]);
 
     // Prefill the four persisted mint-config fields from the token's
     // current record, once, so re-fetches (or the user editing a field
@@ -299,9 +375,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             mintStopBlock,
             mintSupply,
             transferSupply,
+            lockChecks,
         }),
         [mode, ticker, description, transferTo, maxMint, mintAddressMax,
-         mintStartBlock, mintStopBlock, mintSupply, transferSupply],
+         mintStartBlock, mintStopBlock, mintSupply, transferSupply, lockChecks],
     );
 
     const decoded = useMemo(() => {
@@ -334,6 +411,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'transfer' && !transferTo.trim()) {
             setFormError('New owner address is required.');
+            return;
+        }
+        if (mode === 'lock' && !hasAnyNewLock) {
+            setFormError('Select at least one lock to apply.');
             return;
         }
         if (mode === 'mint-settings') {
@@ -582,7 +663,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 {mode === 'lock' ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint="Locking is permanent. Supply and minting freeze forever."
+                        hint="Locking is permanent. Every flag checked below can never be unlocked."
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -689,14 +770,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {mode === 'lock' ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        <strong>Locking is permanent.</strong> Once locked, the token's supply and minting are frozen forever.
-                    </p>
-                </div>
-            ) : null}
-
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
@@ -749,6 +822,47 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     onChange={(e) => setTransferTo(e.target.value)}
                     onIconClick={() => setContactsPickerOpen(true)}
                 />
+            ) : null}
+
+            {mode === 'lock' ? (
+                <>
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            <strong>Locking is permanent.</strong> Each flag below is a
+                            one-way switch: once checked and submitted, it can never be
+                            unlocked or reversed.
+                        </p>
+                    </div>
+                    {allLocksSet ? (
+                        <p className={styles.hint}>
+                            Every lock is already permanently set for {ticker}.
+                            There is nothing left to lock.
+                        </p>
+                    ) : (
+                        <div role="group" aria-label="Lock flags">
+                            {LOCK_FLAGS.map((f) => {
+                                const isLocked = !!tokenLocks[f.key];
+                                return (
+                                    <div key={f.key} className={styles.lockFlagRow}>
+                                        <label className={styles.checkRow}>
+                                            <input
+                                                type="checkbox"
+                                                checked={isLocked || !!lockChecks[f.key]}
+                                                disabled={isLocked}
+                                                onChange={(e) => setLockChecks((prev) => ({
+                                                    ...prev,
+                                                    [f.key]: e.target.checked,
+                                                }))}
+                                            />
+                                            <span>{f.label}{isLocked ? ' (already locked)' : ''}</span>
+                                        </label>
+                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </>
             ) : null}
 
             {mode === 'mint-settings' ? (
@@ -886,6 +1000,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'description' && !description)
                         || (mode === 'transfer' && !transferTo)
                         || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
+                        || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
                         || actionConfirm.composing}
                 >
                     {singleEncode ? 'Update token' : 'Preview'}
@@ -900,8 +1015,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
  * protocol ISSUE version that yields the cleanest decoded summary
  * (see action-decoder.smoke.js cases 2b–2d).
  *
- * - **lock**: ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT ("pure lock"
- *   on an existing token). Decoded as "Lock TICK max supply, minting…".
+ * - **lock**: ISSUE v3 (PC-02 lock matrix) with one LOCK_* field per
+ *   flag the owner newly checked (`form.lockChecks`); a flag already
+ *   set on the token is never re-sent. Decoded as "Lock TICK (max
+ *   supply, minting…)" listing only the newly-checked flags, since
+ *   collectLockFlags reads straight off the params sent.
  * - **description**: ISSUE v1 with only DESCRIPTION set, decoded as
  *   "Update description of TICK…".
  * - **transfer**: ISSUE v0 with only TRANSFER set, decoded as
@@ -917,12 +1035,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 function composeAdminParams(mode, form) {
     const TICK = (form.ticker || '').trim().toUpperCase();
     if (mode === 'lock') {
-        return {
-            VERSION: '3',
-            TICK,
-            LOCK_MAX_SUPPLY: '1',
-            LOCK_MINT: '1',
-        };
+        const p = { VERSION: '3', TICK };
+        const checks = form.lockChecks || {};
+        for (const f of LOCK_FLAGS) {
+            if (checks[f.key]) p[f.field] = '1';
+        }
+        return p;
     }
     if (mode === 'description') {
         return {
@@ -950,7 +1068,7 @@ function composeAdminParams(mode, form) {
 }
 
 const MODE_LABEL = {
-    lock: 'Lock supply',
+    lock: 'Lock token',
     description: 'Update description',
     transfer: 'Transfer ownership',
     'mint-settings': 'Mint settings',

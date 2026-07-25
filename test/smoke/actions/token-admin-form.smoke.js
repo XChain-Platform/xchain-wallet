@@ -15,7 +15,9 @@
 //      IssueTokenForm.module.css.
 //   2. Two-stage state machine (form → review/submitting → done).
 //   3. `mode` prop drives which ISSUE-variant composer runs:
-//        - 'lock'        → VERSION='3', LOCK_MAX_SUPPLY + LOCK_MINT
+//        - 'lock'        → VERSION='3', one LOCK_* field per newly-checked
+//                          flag (PC-02 lock matrix; see
+//                          token-lock-matrix-form.smoke.js for full coverage)
 //        - 'description' → VERSION='1', DESCRIPTION only
 //        - 'transfer'    → VERSION='0', TRANSFER only
 //   4. Form stage renders the permanence warning only on 'lock' mode.
@@ -65,8 +67,8 @@ assert.ok(composerBlock, 'composeAdminParams function found');
 const composer = composerBlock[0];
 assert.ok(/mode\s*===\s*'lock'/.test(composer), 'composer branches on lock mode');
 assert.ok(
-    /VERSION:\s*'3'[\s\S]*LOCK_MAX_SUPPLY:\s*'1'[\s\S]*LOCK_MINT:\s*'1'/.test(composer),
-    'lock composer sets VERSION=3 + LOCK_MAX_SUPPLY=1 + LOCK_MINT=1',
+    /VERSION:\s*'3',\s*TICK\s*\}/.test(composer),
+    'lock composer sets VERSION=3 (PC-02 matrix; see token-lock-matrix-form.smoke.js for per-flag coverage)',
 );
 assert.ok(/mode\s*===\s*'description'/.test(composer), 'composer branches on description mode');
 assert.ok(

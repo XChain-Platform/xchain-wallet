@@ -24,6 +24,11 @@ import styles from './ManageToken.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// PC-02: the seven independent ISSUE v3 lock flags (mirrors
+// TokenAdminForm's LOCK_FLAGS keys; see ISSUE.md "Version 3 - Edit
+// LOCK PARAMS"). Used only to gate the Lock action's visibility here.
+const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'description', 'sleep', 'callback'];
+
 /**
  * §40.5 Manage Token. Issuer-side detail page driven from the My
  * Tokens list. Distinct from §27.6 TokenDetail (which is the holder
@@ -104,6 +109,14 @@ export function ManageToken({
     const assetInfo = useTokenInfo({ chainId, tick });
 
     const locked = !!assetInfo?.locked;
+    // PC-02 lock matrix: the Lock action itself stays reachable as long
+    // as at least one of the seven independent ISSUE v3 locks is still
+    // open, unlike the coarse `locked` flag above (a subset of four,
+    // used only for the hero pill / Mint's hiding). Every flag is
+    // one-way (see TokenAdminForm's LOCK_FLAGS), so once all seven are
+    // set there is nothing left for the Lock form to offer.
+    const tokenLocks = assetInfo?.locks || {};
+    const allLocksSet = LOCK_FLAG_KEYS.every((k) => !!tokenLocks[k]);
     const totalSupply = assetInfo?.totalSupply ?? null;
     const maxSupply = assetInfo?.maxSupply ?? null;
     const description = assetInfo?.description || null;
@@ -412,7 +425,7 @@ export function ManageToken({
         { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },
         { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
         { id: 'bind-controller', label: 'Controller', Icon: Icon.LockIcon, onSelect: blockIssuerActions ? undefined : onBindController },
-        { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (locked || blockIssuerActions) ? undefined : onLock },
+        { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (allLocksSet || blockIssuerActions) ? undefined : onLock },
         { id: 'destroy', label: 'Destroy', Icon: Icon.TrashIcon, onSelect: onDestroy, danger: true },
     ];
 

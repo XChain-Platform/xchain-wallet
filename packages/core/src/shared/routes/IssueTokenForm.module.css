@@ -84,6 +84,22 @@
     margin: var(--xc-space-2) 0;
 }
 
+/* PC-02 lock matrix: one row per ISSUE v3 lock flag (checkbox + label
+   via .checkRow, then a per-flag permanence hint underneath it). */
+.lockFlagRow {
+    padding: var(--xc-space-2) 0;
+    border-bottom: 1px solid var(--xc-border);
+}
+.lockFlagRow:last-child {
+    border-bottom: none;
+}
+
+.lockFlagHint {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin: 0 0 0 calc(1rem + var(--xc-space-2));
+}
+
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);

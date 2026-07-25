@@ -1985,8 +1985,8 @@ function buildActionEntries({
         },
         {
             id: 'lock',
-            label: 'Lock supply',
-            description: 'Freeze supply + minting for a token you own. Permanent.',
+            label: 'Lock',
+            description: 'Permanently lock one or more settings on a token you own (supply, minting, description, and more).',
             onSelect: onLock,
         },
         {

@@ -93,10 +93,13 @@ assert.ok(/assetInfo\.mintStopBlock/.test(src), 'prefills MINT_STOP_BLOCK from a
 
 // --- 4. Lock-flag-aware field disabling ----------------------------------
 
-assert.ok(/mintLocks\.max_mint/.test(src), 'reads locks.max_mint (LOCK_MAX_MINT)');
-assert.ok(/mintLocks\.mint\b/.test(src), 'reads locks.mint (LOCK_MINT)');
-assert.ok(/mintLocks\.mint_supply/.test(src), 'reads locks.mint_supply (LOCK_MINT_SUPPLY)');
-assert.ok(/mintLocks\.max_supply/.test(src), 'reads locks.max_supply (LOCK_MAX_SUPPLY, informational)');
+// PC-02 renamed the shared current-locks variable from `mintLocks` to
+// `tokenLocks` (it now also backs the 'lock' mode matrix); assert the
+// same underlying reads under its new name.
+assert.ok(/tokenLocks\.max_mint/.test(src), 'reads locks.max_mint (LOCK_MAX_MINT)');
+assert.ok(/tokenLocks\.mint\b/.test(src), 'reads locks.mint (LOCK_MINT)');
+assert.ok(/tokenLocks\.mint_supply/.test(src), 'reads locks.mint_supply (LOCK_MINT_SUPPLY)');
+assert.ok(/tokenLocks\.max_supply/.test(src), 'reads locks.max_supply (LOCK_MAX_SUPPLY, informational)');
 assert.ok(/maxMintFieldDisabled/.test(src), 'MAX_MINT field disable flag present');
 assert.ok(/mintWindowFieldsDisabled/.test(src), 'mint-window fields (address max / start / stop block) disable flag present');
 assert.ok(/mintNowFieldsDisabled/.test(src), 'mint-now fields (MINT_SUPPLY / TRANSFER_SUPPLY) disable flag present');
