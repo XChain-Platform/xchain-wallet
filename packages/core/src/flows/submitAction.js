@@ -196,6 +196,7 @@ export async function submitAction({
         try {
             result = await submitWithSigner({
                 sdkRegistry,
+                chainRegistry,
                 chainId,
                 actionData,
                 // : when a prebuilt PSBT is supplied, submitWithSigner

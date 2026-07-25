@@ -176,6 +176,13 @@ export function useConfirmAction() {
                 // it lands. Best-effort: any failure (or no preflight backend)
                 // goes ready with a null report so the user can still proceed.
                 if (typeof args.preflight !== 'function') { setPhase('ready'); return; }
+                // : a bare native-coin payment has no XChain action, so
+                // there is nothing to pre-flight. Asking anyway is not merely
+                // wasteful - the indexer would be handed a SEND for a tick it
+                // has no ledger for and would rightly call it invalid, which is
+                // how a perfectly good payment came to be reported as one that
+                // "Will likely fail".
+                if (built.bareNativePayment) { setPhase('ready'); return; }
                 try {
                     const localDeltas = await gatherLocalDeltas(args);
                     const rpt = await args.preflight({

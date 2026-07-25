@@ -50,6 +50,47 @@ function satsStringFromDecimal(raw) {
  * @param {{ coin?: string } | null | undefined} args.descriptor   chain descriptor
  * @returns {{ address: string, value: string } | null}
  */
+/**
+ * Is this compose request a plain native-coin payment with no XChain content?
+ *
+ * . Such a send is an ordinary BTC/LTC/DOGE payment: the value moves in a
+ * real output, and the SEND action that used to ride along with it carried
+ * nothing the chain would accept. The indexer rejects any TICK absent from the
+ * ticks table and there is no native token, so every one of those actions was
+ * recorded `invalid: TICK (unknown)` - and once the pre-flight dry-run became
+ * reachable it reported exactly that, disabling Approve behind a "Sign anyway"
+ * override on the most common operation in the wallet.
+ *
+ * A MEMO makes this false, and that is why the Send form no longer offers one
+ * for a native tick: the memo only ever existed as a field of the rejected
+ * action, so it was never queryable on-chain. Anything else that adds real
+ * XChain content (a gated-send BATCH, a rest-field, any non-SEND action) also
+ * makes this false and keeps the action.
+ *
+ * @param {{ action?: string, params?: Record<string, any>, rest?: any[] } | null} actionData
+ * @param {{ coin?: string } | null} descriptor
+ * @returns {boolean}
+ */
+export function isBareNativePayment(actionData, descriptor) {
+    if (!actionData || !descriptor?.coin) return false;
+    if (String(actionData.action || '').toUpperCase() !== 'SEND') return false;
+    if (Array.isArray(actionData.rest) && actionData.rest.length) return false;
+
+    const params = actionData.params || {};
+    const nativeTicker = tickerForCoin(descriptor.coin);
+    if (!nativeTicker) return false;
+    if (String(params.TICK || '').trim().toUpperCase() !== nativeTicker) return false;
+
+    // A memo is content, and content needs a carrier.
+    if (params.MEMO !== undefined && params.MEMO !== null && String(params.MEMO) !== '') return false;
+
+    // The payment output has to be constructible, or dropping the action would
+    // leave a transaction that says nothing AND pays no one.
+    return nativePaymentOutput({
+        tick: params.TICK, amount: params.AMOUNT, destination: params.DESTINATION, descriptor,
+    }) !== null;
+}
+
 export function nativePaymentOutput({ tick, amount, destination, descriptor }) {
     if (!descriptor?.coin || !tick || !destination) return null;
     const nativeTicker = tickerForCoin(descriptor.coin);

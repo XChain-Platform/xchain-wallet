@@ -68,16 +68,22 @@ test.describe('send form', () => {
         await expect(page.getByRole('alert').first()).toContainText(/positive/i);
     });
 
-    test('protocol-forbidden memo characters are rejected', async ({ page }) => {
+    // : a native-coin send has no memo to reject. The field only ever
+    // existed as part of an XChain SEND action, and the chain rejects that
+    // action outright for a native tick (there is no BTC ledger), so the memo
+    // was never recorded or queryable - an input that silently did nothing.
+    // Native sends are now plain payments with no action, so the field is gone.
+    // The delimiter rule still applies to token sends, where a memo is real;
+    // that is covered by the validator's own unit tests.
+    test('a native-coin send offers no memo field', async ({ page }) => {
         await toField(page).fill(VALID_BTC);
         await amountField(page).fill('0.01');
         await openAdvanced(page);
-        await page.getByRole('textbox', { name: 'Memo' }).fill('a|b');
-        await mainButton(page, 'Send').click();
 
-        await expect(page.getByRole('alert').first()).toContainText(
-            /cannot contain \| or ; characters/i,
-        );
+        await expect(page.getByRole('textbox', { name: 'Memo' })).toHaveCount(0);
+        // The disclosure really did open, or this would pass on a collapsed
+        // panel that simply renders nothing.
+        await expect(page.getByText('Replace-by-fee')).toBeVisible();
     });
 
     // : with the `send` slice flag on (it now defaults true), Send goes

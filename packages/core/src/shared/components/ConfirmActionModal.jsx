@@ -95,6 +95,11 @@ export function ConfirmActionModal({
     const defaultApproveLabel = variant === 'message'
         ? 'Approve'
         : (chainLabel ? `Approve & Sign on ${chainLabel}` : 'Approve & Sign');
+    // . Read off the composed envelope rather than taken as a prop, for
+    // the same reason as the label above: a rule every adapter has to remember
+    // is a rule one of them will forget, and the one that forgets shows a
+    // "pre-flight unavailable" warning on an ordinary payment.
+    const preflightNotApplicable = !!composed?.bareNativePayment;
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
@@ -159,7 +164,13 @@ export function ConfirmActionModal({
                         wallet cannot rebuild a caller's PSBT, so findings inform
                         but never block. The caller controls `canApprove`; this
                         renders the panel either way so the user still sees them. */}
-                    {variant === 'action' || variant === 'psbt' ? (
+                    {/* : a plain native-coin payment has no XChain action,
+                        so pre-flight does not apply to it. Rendering the panel's
+                        null-report state here would tell the user "Pre-flight
+                        unavailable; proceeding is at your discretion" on an
+                        ordinary payment - alarming, and false: nothing failed
+                        and nothing is missing. Not applicable means not shown. */}
+                    {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
                         <PreflightPanel
                             report={report}
                             loading={reportLoading}

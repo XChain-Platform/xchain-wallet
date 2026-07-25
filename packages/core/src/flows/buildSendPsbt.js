@@ -30,7 +30,7 @@
 // → signer → watcher round-trip is symmetrical at the wire format.
 
 import { normalizeSource } from './sendToken.js';
-import { nativePaymentOutput } from './nativePayment.js';
+import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { prepareGatedSend } from './gatedSendGuard.js';
 
 /**
@@ -117,7 +117,12 @@ export async function buildSendPsbt(opts) {
     });
     if (gatedPlan) actionData = gatedPlan.actionData;
 
-    const createResult = sdk.actions.createAction(actionData);
+    // : a plain native-coin payment carries no XChain action. The watcher
+    // path builds the same bytes the signer will sign, so it has to make the
+    // same choice as the confirm path or the two would disagree about what the
+    // transaction is.
+    const bareNativePayment = isBareNativePayment(actionData, descriptor);
+    const createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
 
     // D-9: a native-coin send must pay the recipient a real output; the SEND
     // OP_RETURN alone moves no value. Token sends return null and are unchanged.
@@ -129,7 +134,7 @@ export async function buildSendPsbt(opts) {
     });
 
     const encoded = await encoder.createTx({
-        data: createResult.actionString,
+        ...(bareNativePayment ? {} : { data: createResult.actionString }),
         pubkey: source.publicKey,
         // D-7: give the encoder the funding/change address explicitly.
         //  - `sourceAddress` (SDK-side only, not on the wire) makes the SDK select
@@ -150,7 +155,7 @@ export async function buildSendPsbt(opts) {
     return {
         psbtHex: encoded.psbt,
         encoding: encoded.encoding,
-        actionString: createResult.actionString,
+        actionString: bareNativePayment ? null : createResult.actionString,
         action: createResult.action,
         version: createResult.version,
         chainId: opts.chainId,

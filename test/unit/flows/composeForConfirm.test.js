@@ -71,3 +71,64 @@ describe('composeForConfirm', () => {
         await expect(composeForConfirm(BASE_ARGS(h))).rejects.toThrow(/encoder not initialized/);
     });
 });
+
+// : a plain native-coin payment carries no XChain action.
+//
+// It used to compose `SEND|0|BTC|...`, which the indexer rejects outright (it
+// has no native-coin ledger, so the TICK is unknown). That cost an output on
+// every send and, once the pre-flight dry-run became reachable, surfaced as a
+// "Will likely fail" verdict that disabled Approve on the wallet's most common
+// operation. A payment with nothing to say is now just a payment.
+describe('composeForConfirm bare native payments ', () => {
+    const NATIVE_ARGS = (h, params = {}) => ({
+        ...BASE_ARGS(h),
+        actionData: {
+            action: 'SEND',
+            params: { TICK: 'BTC', AMOUNT: '0.01', DESTINATION: 'bcrt1qdest', ...params },
+        },
+    });
+
+    it('composes NO action and sends no data to the encoder', async () => {
+        const h = makeHarness();
+        const composed = await composeForConfirm(NATIVE_ARGS(h));
+
+        expect(h.createAction).not.toHaveBeenCalled();
+        expect(h.createTx.mock.calls[0][0].data).toBeUndefined();
+        expect(composed.bareNativePayment).toBe(true);
+        // Null, not '': callers must branch, not be handed an empty action that
+        // looks parseable.
+        expect(composed.actionString).toBeNull();
+    });
+
+    it('expects NO carrier output, so a stray OP_RETURN would be tamper', async () => {
+        // The encoder still reports encoding 'OP_RETURN' (downstream single-tx
+        // branches key off it). Passing that through would let the output-set
+        // matcher wave through exactly the output this transaction must not have.
+        const h = makeHarness();
+        const composed = await composeForConfirm(NATIVE_ARGS(h));
+        expect(composed.expectedOutputs.encoding).toBe('');
+    });
+
+    it('still pays the recipient', async () => {
+        const h = makeHarness();
+        await composeForConfirm(NATIVE_ARGS(h));
+        const outs = h.createTx.mock.calls[0][0].customOutputs || [];
+        expect(outs.some((o) => o.address === 'bcrt1qdest' && String(o.value) === '1000000')).toBe(true);
+    });
+
+    it('keeps the action when a MEMO is present: a memo needs a carrier', async () => {
+        const h = makeHarness();
+        const composed = await composeForConfirm(NATIVE_ARGS(h, { MEMO: 'hello' }));
+        expect(composed.bareNativePayment).toBe(false);
+        expect(h.createAction).toHaveBeenCalledOnce();
+        expect(h.createTx.mock.calls[0][0].data).toBe('SEND|0|JDOG|1|addr');
+    });
+
+    it('leaves token sends completely alone', async () => {
+        const h = makeHarness();
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(composed.bareNativePayment).toBe(false);
+        expect(composed.actionString).toBe('SEND|0|JDOG|1|addr');
+        expect(composed.expectedOutputs.encoding).toBe('OP_RETURN');
+    });
+});

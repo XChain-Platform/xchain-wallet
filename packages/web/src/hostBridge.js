@@ -284,8 +284,17 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 const changeAddr = change
                     || sdkLib.mockDeriveAddress(chainId, 'p2wpkh', pubkey);
                 const outputs = [
-                    // Inline OP_RETURN action carrier (zero value).
-                    { address: null, scriptPubKeyHex: '6a00', scriptType: 'unknown', value: 0 },
+                    // Inline OP_RETURN action carrier (zero value) - but ONLY
+                    // when there is an action. : a plain native-coin
+                    // payment carries none, and the real encoder now emits no
+                    // nulldata output for it. A mock that kept emitting one
+                    // would fail the output-set tamper check (which expects no
+                    // carrier) and the confirm modal would never open in the
+                    // dev shell - a divergence that says nothing about the
+                    // product, which is the worst kind of mock behaviour.
+                    ...(data
+                        ? [{ address: null, scriptPubKeyHex: '6a00', scriptType: 'unknown', value: 0 }]
+                        : []),
                     // Any caller custom outputs (native-fee dest / ADS donation).
                     ...(Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
                         address: String(o.address), scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: Number(o.value),

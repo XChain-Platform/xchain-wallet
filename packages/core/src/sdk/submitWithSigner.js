@@ -30,6 +30,7 @@
 import { assertSigningAllowed } from '../flows/panicMode.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
+import { isBareNativePayment } from '../flows/nativePayment.js';
 
 /**
  * Thrown when a transaction was signed successfully but the broadcast
@@ -134,6 +135,7 @@ export class BroadcastFailedError extends Error {
 export async function submitWithSigner({
     sdkRegistry,
     chainId,
+    chainRegistry,
     actionData,
     encoderOpts,
     signer,
@@ -171,6 +173,7 @@ export async function submitWithSigner({
     // identically. The atomic createAction->createTx->sign path below is the
     // legacy behaviour; both converge at Step 3.
     let createResult, effectiveEncoderOpts, encoded, preflight;
+    let bareNativePayment = false;
     if (prebuiltPsbt) {
         // Preserve the phase events submitAction's lifecycle tracker consumes,
         // but do NO rebuild: the PSBT is the one the user approved.
@@ -189,7 +192,11 @@ export async function submitWithSigner({
     } else {
         // Step 1: create action string (no network call, just formatting).
         onProgress('creating', { action: actionData.action });
-        createResult = sdk.actions.createAction(actionData);
+        // : a plain native-coin payment has no XChain action to create.
+        // This atomic path must agree with composeForConfirm, or the same send
+        // would produce different bytes depending on which route built it.
+        bareNativePayment = isBareNativePayment(actionData, chainRegistry?.get(chainId));
+        createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
 
         // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
         // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
@@ -215,9 +222,9 @@ export async function submitWithSigner({
         effectiveEncoderOpts = oraclePreflight.encoderOpts;
 
         // Step 2: encode to PSBT via the encoder service.
-        onProgress('encoding', { actionString: createResult.actionString });
+        onProgress('encoding', { actionString: bareNativePayment ? null : createResult.actionString });
         encoded = await encoder.createTx({
-            data: createResult.actionString,
+            ...(bareNativePayment ? {} : { data: createResult.actionString }),
             ...effectiveEncoderOpts,
         });
     }

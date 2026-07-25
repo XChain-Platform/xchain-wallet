@@ -113,7 +113,14 @@ export async function composeActionForConfirm({
     // section simply does not render, exactly as before.
     let simulation = null;
     try {
-        const parsed = sdk.decoder.parse(composed.actionString);
+        // : a bare native payment has no action string to parse. Its
+        // canonical source is the payment output itself, and the output-set
+        // tamper check above has already proven the PSBT matches exactly the
+        // outputs these params produced - so they are as canonical here as a
+        // re-parse would be, and there is nothing else to read.
+        const parsed = composed.bareNativePayment
+            ? { ok: true, action: actionData.action, params: actionData.params }
+            : sdk.decoder.parse(composed.actionString);
         const sdkBalances = await balancesPromise;
         if (parsed?.ok && sdkBalances) {
             simulation = simulateAction({
@@ -140,6 +147,9 @@ export async function composeActionForConfirm({
         actionString: composed.actionString,
         action: composed.action,
         version: composed.version,
+        // Lets the confirm surface describe the payment directly and skip
+        // pre-flight: there is no XChain action here to dry-run.
+        bareNativePayment: !!composed.bareNativePayment,
         // The chain these bytes were built for. Carried so display code can
         // resolve chain-scoped formatting (the native ticker for the §5.2.5 fee
         // line) from the envelope itself, instead of every one of the ~24

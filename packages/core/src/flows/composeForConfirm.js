@@ -33,7 +33,7 @@ import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
-import { nativePaymentOutput } from './nativePayment.js';
+import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 
 /**
  * @typedef {Object} ComposedAction
@@ -70,8 +70,15 @@ export async function composeForConfirm({
         throw new Error('composeForConfirm: SDK encoder not initialized; call sdkRegistry.initActive([chainId]) first');
     }
 
-    // 1. Action string (pure formatting, no network).
-    const createResult = sdk.actions.createAction(actionData);
+    // : a plain native-coin payment carries no XChain action at all, so
+    // there is nothing to format, encode or cross-check. It used to compose a
+    // SEND the indexer could only ever reject (no native token exists), which
+    // cost an output on every send and, once the pre-flight dry-run became
+    // reachable, blocked Approve behind a "Sign anyway" override.
+    const bareNativePayment = isBareNativePayment(actionData, descriptor);
+
+    // 1. Action string (pure formatting, no network). None for a bare payment.
+    const createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
 
     // 2. Native-coin fee pre-flight (folds the FEE_DESTINATION output into
     // customOutputs when payFeeInNativeCoin is set; throws NativeFeeForfeitError
@@ -122,7 +129,7 @@ export async function composeForConfirm({
     //    rather than burn the change as fee). An explicit change in encoderOpts wins
     //    (the spread below overrides this default).
     const encoded = await sdk.encoder.createTx({
-        data: createResult.actionString,
+        ...(bareNativePayment ? {} : { data: createResult.actionString }),
         ...(source ? { sourceAddress: source, change: source } : {}),
         ...finalEncoderOpts,
     });
@@ -130,18 +137,26 @@ export async function composeForConfirm({
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
         : null;
+    // A bare payment expects NO carrier leg. The encoder still reports
+    // 'OP_RETURN' as its encoding (every downstream single-tx branch keys off
+    // that), so the encoding is deliberately not taken from the response here:
+    // passing it through would let the matcher wave through one OP_RETURN
+    // output that this transaction must not contain. Null tightens the check.
     const expectedOutputs = buildExpectedOutputs({
         customOutputs: finalEncoderOpts.customOutputs,
-        encoding: encoded.encoding,
+        encoding: bareNativePayment ? null : encoded.encoding,
         adsOutput,
     });
 
     return {
-        actionString: createResult.actionString,
-        action: createResult.action,
-        version: createResult.version,
+        // Null on the bare-payment path: there is no action, and callers must
+        // branch rather than be handed a plausible-looking empty string.
+        actionString: bareNativePayment ? null : createResult.actionString,
+        action: bareNativePayment ? null : createResult.action,
+        version: bareNativePayment ? null : createResult.version,
+        bareNativePayment,
         psbt: encoded.psbt,
-        encoding: encoded.encoding,
+        encoding: bareNativePayment ? null : encoded.encoding,
         quote: feePreflight.quote,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,

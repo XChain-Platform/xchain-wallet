@@ -1153,7 +1153,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             to: toAddress.trim(),
             tick: tick.trim(),
             amount: String(amount).trim(),
-            memo: memo.trim() || undefined,
+            memo: isNativeSend ? undefined : (memo.trim() || undefined),
             rbf: rbfEnabled,
             ...(feePerKb != null ? { feePerKb } : {}),
         };
@@ -1251,7 +1251,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 to: toAddress.trim(),
                 tick: tick.trim(),
                 amount: String(amount).trim(),
-                memo: memo.trim() || undefined,
+                memo: isNativeSend ? undefined : (memo.trim() || undefined),
                 rbf: rbfEnabled,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
@@ -1911,13 +1911,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 style={{ marginTop: 'var(--xc-space-6)' }}
             >
                 <summary className={styles.detailsToggle}>Advanced</summary>
-                <Input
-                    label="Memo"
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
-                    error={/[|;]/.test(memo) ? 'Cannot contain | or ; characters.' : undefined}
-                />
+                {/* : no memo on a native-coin send. It only ever existed
+                    as a field of an XChain SEND action, and the chain rejects
+                    that action outright for a native tick (there is no BTC
+                    ledger), so the memo was never recorded or queryable - it
+                    was an input that silently did nothing. A native send is now
+                    a plain payment with no action at all, so there is nowhere
+                    left to put one. Token sends keep it. */}
+                {isNativeSend ? null : (
+                    <Input
+                        label="Memo"
+                        value={memo}
+                        onChange={(e) => setMemo(e.target.value)}
+                        autoComplete="off"
+                        error={/[|;]/.test(memo) ? 'Cannot contain | or ; characters.' : undefined}
+                    />
+                )}
                 {/* §44.3 per-send RBF toggle. Default seeds from
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
