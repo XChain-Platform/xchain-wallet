@@ -32,6 +32,7 @@
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
+import { nativePaymentOutput } from './nativePayment.js';
 
 /**
  * @typedef {Object} ComposedAction
@@ -85,17 +86,42 @@ export async function composeForConfirm({
     const { encoderOpts: encoderOptsWithAds, adsPlan } = applyAdsPlanToEncoderOpts(
         settingsSnapshot, chainId, chainRegistry, feePreflight.encoderOpts);
 
+    // 3b. D-9: a native-coin SEND ("SEND BTC ...") writes only an OP_RETURN, which
+    // moves no value (the indexer has no native-coin ledger to credit). Append a
+    // real destination payment output so the recipient is actually paid; the
+    // encoder folds its value into the change math. Token sends return null here
+    // and are unchanged. The output is added to the SAME customOutputs the tamper
+    // matcher reads below, so the built PSBT and the expected set stay in sync.
+    const nativeOut = nativePaymentOutput({
+        tick: actionData?.params?.TICK,
+        amount: actionData?.params?.AMOUNT,
+        destination: actionData?.params?.DESTINATION,
+        descriptor,
+    });
+    const finalEncoderOpts = nativeOut
+        ? { ...encoderOptsWithAds, customOutputs: [ ...(encoderOptsWithAds.customOutputs || []), nativeOut ] }
+        : encoderOptsWithAds;
+
     // 4. Encode to the ONE PSBT the modal previews and the signer signs.
+    // D-7: give the encoder the spender address so it can build the tx:
+    //  - `sourceAddress` (SDK-side only, not on the wire) makes the SDK select the
+    //    funding UTXOs BY ADDRESS. Without it the encoder selects by `pubkey`, which
+    //    the utxo-tracker cannot resolve to a script ("has no matching Script").
+    //  - `change` is the address the leftover value returns to; the spender is the
+    //    change sink. Without it the encoder refuses to build ("CHANGE_ADDRESS_REQUIRED"
+    //    rather than burn the change as fee). An explicit change in encoderOpts wins
+    //    (the spread below overrides this default).
     const encoded = await sdk.encoder.createTx({
         data: createResult.actionString,
-        ...encoderOptsWithAds,
+        ...(source ? { sourceAddress: source, change: source } : {}),
+        ...finalEncoderOpts,
     });
 
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
         : null;
     const expectedOutputs = buildExpectedOutputs({
-        customOutputs: encoderOptsWithAds.customOutputs,
+        customOutputs: finalEncoderOpts.customOutputs,
         encoding: encoded.encoding,
         adsOutput,
     });
@@ -109,6 +135,6 @@ export async function composeForConfirm({
         quote: feePreflight.quote,
         adsPlan,
         expectedOutputs,
-        encoderOpts: encoderOptsWithAds,
+        encoderOpts: finalEncoderOpts,
     };
 }

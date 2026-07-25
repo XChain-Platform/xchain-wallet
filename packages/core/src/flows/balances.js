@@ -18,6 +18,43 @@
 // `error` instead of `balances`, so UIs can render retry affordances
 // for the failing rows.
 
+import { tickerForCoin } from '../registry/coinTicker.js';
+
+// D-6: the explorer `/balances/` endpoint is the XChain TOKEN ledger only; it
+// never carries the chain's NATIVE coin (BTC/LTC/DOGE) balance, which lives at
+// `/address/` (sourced from the utxo-tracker). The wallet UI (BalanceList /
+// HomeTabs) reads `balances.native` and `balances.tokens`, so the aggregator
+// below builds BOTH: `native` from `/address/` (getAddress) and `tokens` from
+// `/balances/` (getBalances). Without this a funded wallet shows "No coins yet".
+
+// `/address/` returns balances.confirmed as a plain decimal string; convert to
+// a base-unit (satoshi) integer string at 8-decimal native scale, BigInt-exact.
+function nativeFromAddress(addrResp, nativeTicker) {
+    const confirmed = addrResp && addrResp.balances && addrResp.balances.confirmed;
+    if (confirmed == null || !nativeTicker) return null;
+    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(confirmed).trim());
+    if (!m) return null;
+    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
+    const sats = (BigInt(m[1]) * 100000000n + BigInt(frac)).toString();
+    return { tick: nativeTicker, quantity: sats, divisibility: 8 };
+}
+
+// `/balances/` returns { data: [...token rows], total }. Map the rows to the
+// { tick, quantity, divisibility, displayName, imageUrl } shape the UI expects,
+// tolerant of column-name variants. A native-only address yields [].
+function tokensFromBalances(balResp) {
+    const rows = balResp && Array.isArray(balResp.data) ? balResp.data : [];
+    return rows
+        .map((r) => ({
+            tick: r.tick,
+            quantity: String(r.quantity != null ? r.quantity : (r.amount != null ? r.amount : '0')),
+            divisibility: Number(r.divisibility != null ? r.divisibility : 8),
+            displayName: r.displayName || r.display_name || r.tick,
+            imageUrl: r.imageUrl || r.image || null,
+        }))
+        .filter((t) => t.tick);
+}
+
 /**
  * @typedef {Object} AddressBalancesEntry
  * @property {string} address
@@ -218,6 +255,8 @@ export async function walletBalances({
     await Promise.all(
         Object.entries(byChain).map(async ([cid, addrs]) => {
             const sdk = sdkRegistry.get(cid);
+            const descriptor = chainRegistry.descriptorFor(cid);
+            const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
             const entries = await Promise.all(
                 addrs.map(async (addr) => {
                     /** @type {AddressBalancesEntry} */
@@ -229,10 +268,24 @@ export async function walletBalances({
                         balances: null,
                         error: null,
                     };
-                    try {
-                        base.balances = await sdk.getBalances(addr.address, opts);
-                    } catch (e) {
-                        base.error = e && e.message ? String(e.message) : String(e);
+                    // D-6: fetch the TOKEN ledger (/balances/) and the NATIVE coin
+                    // balance (/address/) together, and hand the UI the
+                    // { native, tokens } shape it reads. Either call failing alone
+                    // still yields a partial result (native survives a token-endpoint
+                    // hiccup and vice versa); only a double failure surfaces `error`.
+                    const [balResp, addrResp] = await Promise.all([
+                        sdk.getBalances(addr.address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
+                        sdk.getAddress(addr.address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
+                    ]);
+                    const balOk = !(balResp instanceof Error);
+                    const addrOk = !(addrResp instanceof Error);
+                    if (!balOk && !addrOk) {
+                        base.error = balResp && balResp.message ? String(balResp.message) : String(balResp);
+                    } else {
+                        base.balances = {
+                            native: addrOk ? nativeFromAddress(addrResp, nativeTicker) : null,
+                            tokens: balOk ? tokensFromBalances(balResp) : [],
+                        };
                     }
                     return base;
                 }),

@@ -30,6 +30,7 @@
 // → signer → watcher round-trip is symmetrical at the wire format.
 
 import { normalizeSource } from './sendToken.js';
+import { nativePaymentOutput } from './nativePayment.js';
 
 /**
  * @typedef {Object} BuildSendPsbtOpts
@@ -96,9 +97,29 @@ export async function buildSendPsbt(opts) {
 
     const createResult = sdk.actions.createAction({ action: 'SEND', params });
 
+    // D-9: a native-coin send must pay the recipient a real output; the SEND
+    // OP_RETURN alone moves no value. Token sends return null and are unchanged.
+    const nativeOut = nativePaymentOutput({
+        tick: opts.tick,
+        amount: opts.amount,
+        destination: opts.to,
+        descriptor,
+    });
+
     const encoded = await encoder.createTx({
         data: createResult.actionString,
         pubkey: source.publicKey,
+        // D-7: give the encoder the funding/change address explicitly.
+        //  - `sourceAddress` (SDK-side only, not on the wire) makes the SDK select
+        //    UTXOs BY ADDRESS; without it the encoder selects by `pubkey`, which the
+        //    utxo-tracker cannot resolve to a script ("has no matching Script").
+        //  - `change` is the address the leftover value returns to. The wallet's
+        //    own source address is the change sink for a self-send; without it the
+        //    encoder refuses to build ("CHANGE_ADDRESS_REQUIRED": it will not burn
+        //    the change as fee).
+        sourceAddress: source.address,
+        change: source.address,
+        ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
         ...(opts.fee !== undefined && { fee: opts.fee }),
         ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
         ...(opts.rbf !== undefined && { rbf: opts.rbf }),

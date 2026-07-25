@@ -18,6 +18,7 @@
 
 import { submitAction } from './submitAction.js';
 import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
+import { nativePaymentOutput } from './nativePayment.js';
 
 /**
  * Fail closed on a destination that isn't a valid address for the chain this
@@ -107,6 +108,18 @@ export async function sendToken(opts) {
         actionSummary: `Send ${opts.amount} ${opts.tick} to ${opts.to}${memoTail}`,
     };
 
+    // D-9: a native-coin send must pay the recipient a real output; the SEND
+    // OP_RETURN alone moves no value. Append the destination payment to
+    // customOutputs (submitAction's ADS fold appends the donation after, so this
+    // survives). Token sends return null and are unchanged. This is the atomic
+    // (non-prebuilt) path; the confirm-modal path handles it in composeForConfirm.
+    const nativeOut = nativePaymentOutput({
+        tick: opts.tick,
+        amount: opts.amount,
+        destination: opts.to,
+        descriptor: opts.chainRegistry?.get(opts.chainId),
+    });
+
     return submitAction({
         vault: opts.vault,
         walletId: opts.walletId,
@@ -118,6 +131,13 @@ export async function sendToken(opts) {
         actionData: { action: 'SEND', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // D-7 (atomic/HW path parity): the spender address is both the change
+            // sink and the funding source. Passing `change` supplies the change
+            // output AND lets the SDK pre-select UTXOs by address (createTx falls
+            // back to `change` when no `sourceAddress` is given), so this path does
+            // not hit "has no matching Script" / "CHANGE_ADDRESS_REQUIRED".
+            change: source.address,
+            ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
