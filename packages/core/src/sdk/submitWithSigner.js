@@ -29,6 +29,7 @@
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
+import { applyOracleFeePreflight } from './oracleFeePreflight.js';
 
 /**
  * Thrown when a transaction was signed successfully but the broadcast
@@ -201,7 +202,17 @@ export async function submitWithSigner({
             source: encoderOpts.change,
             onProgress,
         });
-        effectiveEncoderOpts = preflight.encoderOpts;
+        // Step 1c: PRICE v1 oracle usage fee. A Mode B dispenser must pay its oracle
+        // operator up front as a real output or the indexer rejects the create, so this
+        // sizes that output from the indexer's own quote and refuses one it cannot price.
+        // No-op for Mode A and for every non-DISPENSER action.
+        const oraclePreflight = await applyOracleFeePreflight({
+            sdk,
+            actionData,
+            encoderOpts: preflight.encoderOpts,
+            onProgress,
+        });
+        effectiveEncoderOpts = oraclePreflight.encoderOpts;
 
         // Step 2: encode to PSBT via the encoder service.
         onProgress('encoding', { actionString: createResult.actionString });

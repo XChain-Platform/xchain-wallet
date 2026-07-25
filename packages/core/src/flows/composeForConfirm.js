@@ -30,6 +30,7 @@
 // rendering works unmodified (§5.6 migration keystone).
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
+import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
 import { nativePaymentOutput } from './nativePayment.js';
@@ -79,12 +80,21 @@ export async function composeForConfirm({
         sdk, actionData, encoderOpts, source, signal,
     });
 
+    // 2b. PRICE v1 oracle usage fee : a Mode B dispenser pays its oracle
+    // operator up front as a real output, and the indexer rejects the create when
+    // that output is absent or short. Folded in BEFORE the tamper matcher below so
+    // it is inside the previewed and signed PSBT like every other output. No-op for
+    // Mode A, for a zero/dust fee, and for every non-DISPENSER action.
+    const oraclePreflight = await applyOracleFeePreflight({
+        sdk, actionData, encoderOpts: feePreflight.encoderOpts, signal,
+    });
+
     // 3. ADS plan resolution, side-effect-free: fold the donation output
     // into customOutputs now (pre-modal) so it is inside the previewed and
     // signed PSBT. The accumulator advances only on broadcast success.
     const settingsSnapshot = await vault.settings.get();
     const { encoderOpts: encoderOptsWithAds, adsPlan } = applyAdsPlanToEncoderOpts(
-        settingsSnapshot, chainId, chainRegistry, feePreflight.encoderOpts);
+        settingsSnapshot, chainId, chainRegistry, oraclePreflight.encoderOpts);
 
     // 3b. D-9: a native-coin SEND ("SEND BTC ...") writes only an OP_RETURN, which
     // moves no value (the indexer has no native-coin ledger to credit). Append a
@@ -133,6 +143,7 @@ export async function composeForConfirm({
         psbt: encoded.psbt,
         encoding: encoded.encoding,
         quote: feePreflight.quote,
+        oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,
         encoderOpts: finalEncoderOpts,

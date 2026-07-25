@@ -33,6 +33,7 @@
 import { normalizeSource } from './sendToken.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
+import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 
 /**
  * @typedef {Object} BuildActionPsbtOpts
@@ -99,7 +100,14 @@ export async function buildActionPsbt(opts) {
         encoderOpts: opts.encoderOpts || {},
         source: source.address,
     });
-    const encoderOpts = preflight.encoderOpts;
+    // Oracle usage fee : the watcher/unsigned path composes the same output the
+    // signing path does, so an air-gapped Mode B dispenser is not silently unpayable.
+    const oraclePreflight = await applyOracleFeePreflight({
+        sdk,
+        actionData: opts.actionData,
+        encoderOpts: preflight.encoderOpts,
+    });
+    const encoderOpts = oraclePreflight.encoderOpts;
 
     logConsole.record({
         source: 'encoder',

@@ -412,7 +412,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const per = giveAmount.trim() || '?';
         const esc = escrow.trim() || '?';
         if (oracleAddress.trim() && fiatCode) {
-            return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} at the oracle-priced ${fiatCode} rate.`;
+            // The oracle's usage fee, if it charges one, is a real payment leaving this
+            // transaction , so say so here rather than letting it appear only as
+            // an unexplained output on the confirm screen.
+            return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} at the oracle-priced ${fiatCode} rate. If this oracle charges a usage fee, you pay it once, now, from this transaction.`;
         }
         if (fiatAmount.trim() && fiatCode) {
             return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} when someone pays ${fiatAmount} ${fiatCode}.`;
@@ -1148,7 +1151,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                     <Input
                         label="Oracle address (optional)"
-                        hint="User-oracle (PRICE v1) address for fiat pricing. Requires a fiat currency."
+                        hint="User-oracle (PRICE v1) address for fiat pricing. Requires a fiat currency. If the oracle charges a usage fee you pay it once, now, from this transaction; the amount scales with the escrow you lock. Paste the full address, not a ^id reference."
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"
