@@ -42,13 +42,18 @@ function nativeFromAddress(addrResp, nativeTicker) {
 // `/balances/` returns { data: [...token rows], total }. Map the rows to the
 // { tick, quantity, divisibility, displayName, imageUrl } shape the UI expects,
 // tolerant of column-name variants. A native-only address yields [].
-function tokensFromBalances(balResp) {
+// D-14: the explorer row carries the token's scale as `decimals` (its `amount`
+// is already at that scale, i.e. whole units when decimals=0), NOT `divisibility`.
+// Read both names and default to 0 (no scaling) when absent, matching the sibling
+// flows (listOwnedTokens/tokenInfo). The old hardcoded default of 8 scaled every
+// token balance down by 1e8 (99 XCHAIN shown as 0.00000099).
+export function tokensFromBalances(balResp) {
     const rows = balResp && Array.isArray(balResp.data) ? balResp.data : [];
     return rows
         .map((r) => ({
             tick: r.tick,
             quantity: String(r.quantity != null ? r.quantity : (r.amount != null ? r.amount : '0')),
-            divisibility: Number(r.divisibility != null ? r.divisibility : 8),
+            divisibility: Number(r.divisibility ?? r.decimals ?? 0),
             displayName: r.displayName || r.display_name || r.tick,
             imageUrl: r.imageUrl || r.image || null,
         }))

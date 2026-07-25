@@ -607,7 +607,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     // this field; `bcformat` runs server-side so supply values come
     // back pre-formatted. We surface whatever's present so dev / future
     // explorer-exposure consumers can read a single field.
-    const divisibilityRaw = row?.divisibility ?? row?.decimals ?? null;
+    const divisibilityRaw = row?.divisibility ?? row?.decimals ?? row?.info?.decimals ?? null;
     const divisibility = (divisibilityRaw != null && Number.isFinite(Number(divisibilityRaw)))
         ? Number(divisibilityRaw)
         : null;
