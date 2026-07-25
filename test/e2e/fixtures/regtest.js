@@ -192,6 +192,47 @@ export async function waitForConfirmedUtxo(address, txid, timeoutMs = 90_000) {
 }
 
 /**
+ * Makes the next broadcast fail, with a chosen node reject reason.
+ *
+ * §8.6 scenarios 3 and 4 hinge on the wallet CLASSIFYING a post-sign
+ * broadcast failure correctly: a transient one keeps the signed
+ * transaction recoverable and queued, a permanent one marks it failed and
+ * demands a re-compose. Getting a real node to produce each reason on
+ * demand is not something a test can do reliably - a doomed transaction
+ * needs its inputs spent out from under it by someone else - so the
+ * reject string is injected at the encoder's `broadcast_tx` boundary
+ * instead.
+ *
+ * What is simulated is only the node's ANSWER. Everything before it is
+ * real: a real compose, a real tamper check, a real signature over the
+ * real PSBT, and the wallet's real classification path. The strings used
+ * are the node's own (`bad-txns-inputs-missingorspent`, ECONNREFUSED).
+ *
+ * Only `broadcast_tx` is intercepted - `create_tx` and `get_utxos` share
+ * this endpoint and must keep working, or the send would never get far
+ * enough to broadcast at all.
+ */
+export async function failBroadcast(page, kind) {
+    const reason = kind === 'permanent'
+        ? 'bad-txns-inputs-missingorspent'
+        : 'connect ECONNREFUSED 127.0.0.1:3023';
+
+    await page.route(`${ENCODER_URL}/**`, async (route) => {
+        const body = route.request().postData() || '';
+        if (!body.includes('"broadcast_tx"')) return route.continue();
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                error: { code: -32010, message: reason, data: { reason } },
+            }),
+        });
+    });
+}
+
+/**
  * Asserts the chain recorded NO XChain action for `txid`.
  *
  * : a plain native-coin payment must be an ordinary payment. It used

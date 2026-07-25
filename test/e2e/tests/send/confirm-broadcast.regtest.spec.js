@@ -31,6 +31,7 @@ import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtu
 import {
     REGTEST_DESTINATION,
     assertNoActionRecorded,
+    failBroadcast,
     fundAddress,
     readReceiveAddress,
     switchToRegtest,
@@ -198,5 +199,66 @@ test.describe('confirm -> broadcast on regtest', () => {
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
         await expect(page.getByText(/Will likely fail/i)).toHaveCount(0);
+    });
+});
+
+// §8.6 scenarios 3 and 4: what happens AFTER a good signature, when the
+// broadcast fails.
+//
+// This is the branch §5.3.4 cares most about, because both outcomes look
+// like "it didn't send" to a user while meaning opposite things. A
+// transient failure leaves a valid signed transaction that WILL confirm on
+// retry - telling the user to send again would double-spend their intent.
+// A permanent one leaves a transaction that can never confirm, and telling
+// the user to wait would strand them forever.
+//
+// The reject string is injected at the encoder boundary (see failBroadcast);
+// the signature, the PSBT and the classification path are all real.
+test.describe('broadcast permanence on regtest', () => {
+    test.beforeEach(async ({ page }) => {
+        await createWallet(page, { password: PASSWORD });
+        await switchToRegtest(page, PASSWORD);
+        const own = await readReceiveAddress(page);
+        await fundAddress(own, FUNDING_BTC);
+        await page.reload();
+        await unlockAfterReload(page, PASSWORD);
+        await gotoSection(page, 'Send');
+    });
+
+    async function approveSend(page) {
+        await toField(page).fill(REGTEST_DESTINATION);
+        await amountField(page).fill(SEND_BTC);
+        await mainButton(page, 'Send').click();
+        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+        await page.getByTestId('confirm-approve').click();
+    }
+
+    test('a transient failure ends in "signed, will retry" and refuses to re-send', async ({ page }) => {
+        await failBroadcast(page, 'transient');
+        await approveSend(page);
+
+        await expect(page.getByRole('heading', { name: 'Signed. Broadcast will retry.' }))
+            .toBeVisible({ timeout: 120_000 });
+
+        // The signed copy is queued, so offering "Send another" here is the
+        // double-broadcast trap §5.3.4 forbids: the user would authorise a
+        // second payment for an intent the first one still satisfies.
+        await expect(page.getByRole('button', { name: 'Send another' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
+
+        // And it must NOT be reported as a plain success.
+        await expect(page.getByRole('heading', { name: 'Broadcast pending' })).toHaveCount(0);
+    });
+
+    test('a permanent rejection is an error, never a queued retry', async ({ page }) => {
+        await failBroadcast(page, 'permanent');
+        await approveSend(page);
+
+        // Inputs spent or missing: this signed transaction can never confirm,
+        // so it must not be presented as queued. Queuing it would retry a
+        // doomed transaction forever and tell the user to keep waiting.
+        await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 120_000 });
+        await expect(page.getByText('Signed. Broadcast will retry.')).toHaveCount(0);
+        await expect(page.getByRole('heading', { name: 'Broadcast pending' })).toHaveCount(0);
     });
 });
