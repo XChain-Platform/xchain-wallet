@@ -62,6 +62,8 @@ const SHEET_PRIMARY = [
     { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon, group: ['messaging', 'compose-message'] },
     { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon, group: ['contacts'] },
     { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon, group: ['lists', 'list-detail', 'list-create', 'list-fork'] },
+    // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
+    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
 function isActive(view, group) {

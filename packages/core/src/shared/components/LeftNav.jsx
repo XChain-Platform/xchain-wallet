@@ -49,6 +49,7 @@ const VIEW_GROUPS = {
     messaging: ['messaging', 'compose-message'],
     contacts: ['contacts'],
     lists: ['lists', 'list-detail', 'list-create', 'list-fork'],
+    obligations: ['obligations'],
     settings: ['settings', 'connected-sites'],
 };
 
@@ -103,6 +104,8 @@ export function LeftNav({
     const secondary = [
         { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
         { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+        // PC-15: COINPAY obligations queue; badge = payable pending count.
+        { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
     ];
 
     return (
@@ -164,6 +167,11 @@ export function LeftNav({
                                     <item.Icon />
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
+                                {badges[item.id] > 0 ? (
+                                    <span className={styles.badge} aria-label={`${badges[item.id]} pending`}>
+                                        {formatBadgeCount(badges[item.id])}
+                                    </span>
+                                ) : null}
                             </button>
                         </li>
                     );

@@ -30,6 +30,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
+import { classifyObligation } from '../../market/obligationStatus.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -39,6 +40,14 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+// Shown when an obligation's wall-clock deadline has passed (PC-15).
+// Expiry only settles at the next block past the deadline, so the row
+// can still read `pending_coinpay`; paying in that gap risks a
+// confirm-after-expiry, which sends the coin with no token settlement.
+const EXPIRED_ERROR = 'This payment window has expired. Do not pay: a payment '
+    + 'confirming after the deadline sends your coin without receiving the '
+    + 'tokens. The escrowed tokens return to the seller.';
 
 /**
  * §41.4 COINPAY authoring surface. Settles a pending coinpay
@@ -228,6 +237,10 @@ export function CoinpayForm({
             setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
             return;
         }
+        if (classifyObligation(summary.expiration).state === 'expired') {
+            setSubmitError(EXPIRED_ERROR);
+            return;
+        }
         setSubmitError(null);
         setStage('review');
     }
@@ -239,6 +252,14 @@ export function CoinpayForm({
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+            return;
+        }
+        // PC-15 funds-safety re-check at sign time: the deadline can pass
+        // while the user sits on the review screen, and a COINPAY that
+        // confirms after expiry burns the coin with no token settlement.
+        if (classifyObligation(summary.expiration).state === 'expired') {
+            setSubmitError(EXPIRED_ERROR);
+            setStage('review');
             return;
         }
         setStage('submitting');
@@ -516,6 +537,9 @@ export function CoinpayForm({
                                             From <AddressText address={row.address} />
                                             {coinpayExpiryText(row.obligation.expiration) ? (
                                                 <> · expires {coinpayExpiryText(row.obligation.expiration)}</>
+                                            ) : null}
+                                            {classifyObligation(row.obligation.expiration).state === 'expired' ? (
+                                                <strong style={{ color: 'var(--xc-danger)' }}> · EXPIRED, do not pay</strong>
                                             ) : null}
                                         </div>
                                     </button>
