@@ -272,7 +272,13 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    const singleEncode = actionConfirm.enabled && !isWatcherMode && !isHwSource;
+    //  pilot: hardware signers now go through the confirm page too. They
+    // were excluded, which meant the users most likely to care about
+    // verification got the LEGACY rebuild-on-Approve path with no output-set
+    // tamper check - and the modal's own hardware note tells them this screen is
+    // where action intent gets verified, since the device can only show native
+    // outputs. Watcher mode still branches (it encodes, it never signs).
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
 
@@ -294,15 +300,28 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 from,
                 actionData: { action: 'BROADCAST', params: actionParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => messaging.broadcastAction({
-                    walletId,
-                    chainId,
-                    from,
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                    prebuiltPsbt,
-                }),
+                onApprove: (prebuiltPsbt) => (isHwSource
+                    // The HW route runs the SAME broadcastAction flow with a
+                    // remote signer, so it signs the prebuilt PSBT byte-
+                    // identically just like the software lane.
+                    ? messaging.broadcastActionHw({
+                        walletId,
+                        chainId,
+                        from,
+                        params: actionParams,
+                        signerId: fromAddress.signerId,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    })
+                    : messaging.broadcastAction({
+                        walletId,
+                        chainId,
+                        from,
+                        params: actionParams,
+                        password: passwordValueRef.current,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    })),
             });
             setResult(res);
             setPassword('');
@@ -518,6 +537,14 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                hwSignerInfo={hwSignerInfo}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
             />
         );
     }

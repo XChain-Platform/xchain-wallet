@@ -598,6 +598,72 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // : hardware signers were excluded from the confirm pipeline, so the
+    // users most likely to care about verification got the legacy
+    // rebuild-on-Approve path with no output-set tamper check - while the
+    // modal's own hardware note tells them this screen is where action intent
+    // is verified (the device can only show native outputs). This pins that a
+    // HW source reaches the confirm page and signs the SAME prebuilt PSBT.
+    it('BroadcastForm confirms a HARDWARE source and signs the prebuilt PSBT', async () => {
+        const HW_ADDRESS = { ...HD_ADDRESS, source: 'trezor', signerId: 'signer-hw' };
+        const { messaging, calls } = recordingMessaging({
+            getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HW_ADDRESS] }),
+            // The device reports ready, which is what gates Approve in place of
+            // a typed password.
+            getSignerStatus: () => Promise.resolve({ status: 'available' }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                React.createElement(
+                    MessagingProvider,
+                    { shell: 'web', messaging },
+                    // Auto-select only picks `source === 'hd'`, so a hardware
+                    // address is chosen explicitly, as a user would via the
+                    // source picker.
+                    React.createElement(BroadcastForm, {
+                        walletId: 'w',
+                        chainId: CHAIN,
+                        initialFromAddress: HW_ADDRESS.address,
+                        onBack() {},
+                    }),
+                ),
+            );
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            setValue(utils, 'Message', 'hello from hardware');
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Broadcast' }));
+            await drainMicrotasks();
+        });
+
+        // The confirm page opened for a HW source, and there is no password
+        // field on it: readiness is the device, not a typed secret.
+        expect(utils.getByTestId('confirm-modal')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBe(null);
+
+        await domAct(async () => {
+            vi.advanceTimersByTime(1000);
+            await drainMicrotasks();
+        });
+        const approve = utils.getByTestId('confirm-approve');
+        expect(approve.disabled, 'Approve enabled once the device is available').toBe(false);
+        await domAct(async () => {
+            fireEvent.click(approve);
+            await drainMicrotasks();
+        });
+
+        // The HW lane, not the software one, and carrying the same bytes.
+        const submit = calls.find((c) => c.method === 'broadcastActionHw');
+        expect(submit, 'broadcastActionHw dispatched').toBeTruthy();
+        expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+        expect(submit.args.signerId).toBe('signer-hw');
+        expect(calls.some((c) => c.method === 'broadcastAction')).toBe(false);
+    });
+
     // ---  §5.6 slice 3 (bespoke flows) --------------------------------
 
     it('PlaceOrderPanel composes ORDER and signs the prebuilt PSBT', async () => {

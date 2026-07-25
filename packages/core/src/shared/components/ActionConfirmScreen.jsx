@@ -20,6 +20,7 @@
 import { Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
+import { SignCredentials } from './SignCredentials.jsx';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -49,6 +50,16 @@ function nativeTickerFor(chainId) {
  * @param {import('react').ReactNode} [props.extraCredentials]   form-specific gate rendered above the password
  * @param {string} [props.hintClassName]
  * @param {object|null} [props.simulation]
+ * @param {object} [props.hwSource]      : the source address record when it is a
+ *   HARDWARE signer. Supplying it swaps the password field for <HwSignBlock> (§5.1) and
+ *   gates Approve on the device being available, so hardware signers get the same
+ *   single-encode surface (and its output-set tamper check) as software ones instead of
+ *   falling back to the legacy rebuild-on-Approve review stage.
+ * @param {(state: { status: string }) => void} [props.onHwStatusChange]
+ * @param {string} [props.hwStatus]      the parent's latest device status
+ * @param {object|null} [props.hwSignerInfo]
+ * @param {string} [props.chainId]
+ * @param {(opts: object) => Promise<any>} [props.getSignerStatus]
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -64,10 +75,21 @@ export function ActionConfirmScreen({
     hintClassName,
     simulation = null,
     coinTicker = '',
+    hwSource = null,
+    onHwStatusChange,
+    hwStatus,
+    hwSignerInfo = null,
+    chainId,
+    getSignerStatus,
 }) {
+    // A hardware signer has no password to type: readiness is the device being
+    // connected, unlocked and on the right app. Approve stays disabled until
+    // then, exactly as the legacy review stage gated its Sign button.
     const credsComplete = credentialsReady !== undefined
         ? credentialsReady
-        : (signerReady || password.length > 0);
+        : hwSource
+            ? hwStatus === 'available'
+            : (signerReady || password.length > 0);
 
     // §5.2.5: prefer the fee the composed PSBT actually pays. The caller's
     // `feeText` is a rate-table estimate and is only shown when the exact fee
@@ -104,7 +126,19 @@ export function ActionConfirmScreen({
             credentials={(
                 <>
                     {extraCredentials}
-                    {signerReady ? (
+                    {hwSource ? (
+                        // §5.1: the device block replaces the password field.
+                        // SignCredentials already dispatches on fromAddress.source,
+                        // so this is the same HW surface every legacy review stage
+                        // rendered, not a second implementation of it.
+                        <SignCredentials
+                            fromAddress={hwSource}
+                            chainId={chainId}
+                            onStatusChange={onHwStatusChange}
+                            getSignerStatus={getSignerStatus}
+                            signerInfo={hwSignerInfo}
+                        />
+                    ) : signerReady ? (
                         <p className={hintClassName}>
                             <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
                         </p>
