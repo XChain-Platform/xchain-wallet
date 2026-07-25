@@ -50,32 +50,60 @@ this row in `claude/reports/xchain-wallet/SPEC_GAPS.md`.
 
 ## Inputs
 
-The upstream stack exposes these endpoints (defaults; overridable
-via `xchain-node` config):
+The wallet SDK talks to exactly three service classes: one shared
+explorer, one encoder per chain, one shared hub. It does NOT hit the
+nodes / decoders / indexers directly - those sit upstream of the
+explorer, and the explorer's status endpoint is what surfaces decoder
+wiring. These are the endpoints `bootstrap.sh` probes, matching the
+bundled regtest descriptors:
 
 | Service | Default URL | What the wallet uses |
 |---|---|---|
-| Bitcoin regtest RPC | `http://localhost:18443` | Send / Sign / fee market |
-| Dogecoin regtest RPC | `http://localhost:18332` | Cross-chain LINK |
-| Litecoin regtest RPC | `http://localhost:18444` | Cross-chain LINK |
-| `xchain-decoder` | `http://localhost:8101/api/decoder` | Mempool transparency |
-| `xchain-indexer` | `http://localhost:8102/api/indexer` | Balances / history / orders |
-| `xchain-explorer` | `http://localhost:18000` | History route data source |
-| `xchain-hub` | `http://localhost:18001` | Hub fetches (G007 / G127) |
-| `xchain-regtest-miner` | side-car | Auto-mines pending mempool txs |
+| `xchain-explorer` | `http://localhost:18080` | Balances / history / orders / decoder-wiring status |
+| `xchain-encoder` (BTC) | `http://localhost:3023` | Compose / sign / broadcast |
+| `xchain-encoder` (DOGE) | `http://localhost:3123` | Compose / sign / broadcast |
+| `xchain-encoder` (LTC) | `http://localhost:3223` | Compose / sign / broadcast |
+| `xchain-hub` | `http://localhost:10000` | Hub fetches (G007 / G127) |
 
-Wallet configures these via `settings.sdkEndpoints[chainId]` - Settings
-→ Network & Endpoints panel. The bundled regtest descriptors
+Upstream-only (not probed; reached through the explorer): the
+bitcoin / dogecoin / litecoin regtest nodes, `xchain-decoder`,
+`xchain-indexer`, and the `xchain-regtest-miner` side-car that
+auto-mines pending mempool txs.
+
+Wallet configures the three service classes via
+`settings.sdkEndpoints[chainId]` - Settings → Network & Endpoints
+panel. The bundled regtest descriptors
 (`packages/core/src/registry/descriptors/{bitcoin,dogecoin,litecoin}.js`)
-already pin the localhost defaults.
+already pin these localhost defaults.
+
+### Pointing at the devhost stack over SSH
+
+The shared regtest stack runs on **devhost**, not on the Mac. The
+descriptors use `localhost`, so forward the five ports over SSH before
+running any regtest-backed test from the Mac:
+
+```bash
+ssh -N \
+  -L 18080:localhost:18080 \
+  -L 3023:localhost:3023 \
+  -L 3123:localhost:3123 \
+  -L 3223:localhost:3223 \
+  -L 10000:localhost:10000 \
+  devhost
+```
+
+With the tunnel up, `bash tools/regtest/bootstrap.sh` reports green and
+the e2e round-trip targets the live stack. Alternatively run the tests
+on devhost itself (localhost resolves natively there).
 
 ## Scripts
 
 | Script | Purpose | Status |
 |---|---|---|
-| `bootstrap.sh` | Probe the upstream stack; print a readiness report; exit 0 when every service responds. | Scaffolding - runnable today. |
+| `bootstrap.sh` | Probe explorer + per-chain encoders + hub; print a readiness report; exit 0 when every service responds AND the explorer's status shows its decoders wired (not just a live socket). | Runnable today; validated against the live devhost stack 2026-07-24. |
 | `down.sh` | Wrapper around `xchain-node stop` - exists so wallet test runners don't depend on the platform repo's exact stop command. | Scaffolding - runnable today. |
 | `wait-ready.sh` | Block until every required service responds within a timeout; used by `pnpm test:integration` to bring the stack up before running tests. | Scaffolding - runnable today. |
+| `roundtrip.cjs` | Reusable funded-signer round-trip driver ( / spec §14): funds a fresh key from the node wallet, then runs each action through create -> encode -> sign -> broadcast -> confirm -> read-back via the SDK, against the live indexer. Run after the tunnel is up. | Runnable; validated 2026-07-24 (LIST round-trip indexes valid). |
 
 All three exit 0 on success and a non-zero code with a structured
 diagnostic on failure. They never start a stack themselves - that
