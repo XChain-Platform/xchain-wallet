@@ -67,6 +67,21 @@ describe('createPendingAirdrop', () => {
         expect(p.memo).toBe('Happy airdrop');
     });
 
+    it('defaults listType to "2" (address list)', () => {
+        const p = createPendingAirdrop(BASE_INPUT);
+        expect(p.listType).toBe('2');
+    });
+
+    it('accepts listType "1" for a token list', () => {
+        const p = createPendingAirdrop({ ...BASE_INPUT, listType: '1' });
+        expect(p.listType).toBe('1');
+    });
+
+    it('falls back to "2" for an unrecognized listType', () => {
+        const p = createPendingAirdrop({ ...BASE_INPUT, listType: 'bogus' });
+        expect(p.listType).toBe('2');
+    });
+
     it('defaults memo to null', () => {
         const p = createPendingAirdrop(BASE_INPUT);
         expect(p.memo).toBeNull();
@@ -143,6 +158,25 @@ describe('validatePendingAirdrop', () => {
     it('rejects empty listTxid', () => {
         const p = createPendingAirdrop(BASE_INPUT);
         expect(validatePendingAirdrop({ ...p, listTxid: '' }).ok).toBe(false);
+    });
+
+    it('accepts a record with no listType (pre-PC-11 records)', () => {
+        const p = createPendingAirdrop(BASE_INPUT);
+        const { listType, ...withoutListType } = p;
+        expect(validatePendingAirdrop(withoutListType).ok).toBe(true);
+    });
+
+    it('accepts listType "1" or "2"', () => {
+        const p = createPendingAirdrop(BASE_INPUT);
+        expect(validatePendingAirdrop({ ...p, listType: '1' }).ok).toBe(true);
+        expect(validatePendingAirdrop({ ...p, listType: '2' }).ok).toBe(true);
+    });
+
+    it('rejects an invalid listType', () => {
+        const p = createPendingAirdrop(BASE_INPUT);
+        const r = validatePendingAirdrop({ ...p, listType: '3' });
+        expect(r.ok).toBe(false);
+        expect(r.errors.some((e) => e.includes('listType'))).toBe(true);
     });
 
     it('accepts null listActionIndex', () => {

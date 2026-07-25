@@ -22,8 +22,15 @@
 //                               'done' records and may clear on read.
 //
 // Recipients is stored verbatim (the already-de-duped, already-
-// validated list the user pasted), so the stage-5 review is
-// reproducible after a restart without re-parsing.
+// validated ITEM list used to build the LIST: addresses for a TYPE=2
+// list, ticks for a TYPE=1 one - see `listType`), so the stage-5
+// review is reproducible after a restart without re-parsing.
+//
+// PC-11: `listType` records which LIST TYPE this record's ITEM array
+// built ('2' ADDRESS or '1' TICK), so a resumed AirdropForm knows
+// whether the recipient count it shows is a deterministic address
+// count or a holder-snapshot preview. Optional + defaults to '2' for
+// backward compatibility with records written before PC-11.
 
 import {
     check,
@@ -56,6 +63,7 @@ export const PENDING_AIRDROP_STAGES = /** @type {const} */ ([
  * @property {string} amountPer
  * @property {string[]} recipients
  * @property {string} listTxid
+ * @property {'1' | '2'} listType
  * @property {string | null} listActionIndex
  * @property {string | null} airdropTxid
  * @property {typeof PENDING_AIRDROP_STAGES[number]} stage
@@ -72,6 +80,7 @@ export const PENDING_AIRDROP_STAGES = /** @type {const} */ ([
  * @param {string} input.amountPer
  * @param {string[]} input.recipients
  * @param {string} input.listTxid
+ * @param {'1' | '2'} [input.listType]   defaults to '2' (ADDRESS list)
  * @param {string} [input.memo]
  * @returns {PendingAirdrop}
  */
@@ -86,6 +95,7 @@ export function createPendingAirdrop(input) {
         amountPer: input.amountPer,
         recipients: [...input.recipients],
         listTxid: input.listTxid,
+        listType: input.listType === '1' ? '1' : '2',
         listActionIndex: null,
         airdropTxid: null,
         stage: 'waiting-index',
@@ -116,6 +126,8 @@ export function validatePendingAirdrop(record) {
         'must be a non-empty array of non-empty strings',
     );
     check(errors, 'listTxid', isNonEmptyString(r.listTxid), 'must be a non-empty string');
+    // Optional: absent on records written before PC-11 added it.
+    check(errors, 'listType', r.listType === undefined || isOneOf(r.listType, ['1', '2']), "must be '1' or '2' when present");
     check(errors, 'listActionIndex', isNullableNonEmptyString(r.listActionIndex), 'must be null or a non-empty string');
     check(errors, 'airdropTxid', isNullableNonEmptyString(r.airdropTxid), 'must be null or a non-empty string');
     check(errors, 'stage', isOneOf(r.stage, PENDING_AIRDROP_STAGES), `must be one of ${PENDING_AIRDROP_STAGES.join(', ')}`);
