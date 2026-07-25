@@ -80,7 +80,7 @@ const AUTO_FIELDS = new Set(['VERSION']);
 // but the dropdown decorates them with "(dedicated form available)"
 // so the user doesn't reach for Advanced when a curated UX exists.
 const ACTIONS_WITH_DEDICATED_FORMS = new Set([
-    'SEND', 'SWEEP', 'ISSUE', 'MINT', 'DESTROY',
+    'SEND', 'ISSUE', 'MINT', 'DESTROY',
     'BROADCAST', 'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
     'LINK',
 ]);
