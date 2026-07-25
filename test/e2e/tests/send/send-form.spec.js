@@ -80,18 +80,55 @@ test.describe('send form', () => {
         );
     });
 
-    test('confirm stage summarizes the payment before signing', async ({ page }) => {
+    // : with the `send` slice flag on (it now defaults true), Send goes
+    // to the single-encode CONFIRM page rather than the legacy review stage.
+    // This is the first coverage that drives that page in a real browser; the
+    // unit suites mount it, but only here does the composed envelope, the
+    // pre-flight round trip and the rendered copy meet each other.
+    test('the confirm page states the action, the chain and the exact fee', async ({ page }) => {
         await toField(page).fill(VALID_BTC);
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
+        const confirm = page.getByTestId('confirm-modal');
+        await expect(confirm).toBeVisible();
         // What the user is about to authorize: amount, chain, destination.
-        await expect(page.getByRole('main')).toContainText(`Send 0.01 BTC on Bitcoin to ${VALID_BTC}`);
-        // ...and what it costs them.
-        await expect(page.getByRole('region', { name: 'Balance changes' })).toContainText(
-            /Network fee/i,
-        );
-        await expect(page.getByRole('button', { name: /Sign on Bitcoin/ })).toBeVisible();
+        await expect(confirm).toContainText(`Send 0.01 BTC on Bitcoin to ${VALID_BTC}`);
+        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
+        // §5.2.5: the fee comes from the composed PSBT, so it is an exact
+        // amount, not the form's rate estimate.
+        await expect(confirm).toContainText(/Network fee: [\d.]+ BTC/);
+        // §5.2.6: the hardware note names this screen as the intent surface.
+        await expect(confirm).toContainText(/hardware device verifies native outputs/i);
+    });
+
+    // §1.7 / wallet spec §21.7. The chain on the signing button is the last
+    // place the user sees WHICH network is about to move their money, and the
+    // confirm page is reached several screens after the chain was picked. This
+    // shipped as a bare "Approve" and only a browser caught it: the copy was
+    // internally consistent, so every unit test agreed with it.
+    test('the signing button names the chain it will sign on', async ({ page }) => {
+        await toField(page).fill(VALID_BTC);
+        await amountField(page).fill('0.01');
+        await mainButton(page, 'Send').click();
+
+        await expect(page.getByTestId('confirm-approve')).toHaveText(/Approve & Sign on Bitcoin/);
+    });
+
+    // §5.1: exactly two exits. Reject returns to the form with its values
+    // intact - a confirmation the user backs out of must not cost them the
+    // payment they just typed.
+    test('Reject returns to the form with the entered values intact', async ({ page }) => {
+        await toField(page).fill(VALID_BTC);
+        await amountField(page).fill('0.01');
+        await mainButton(page, 'Send').click();
+        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+
+        await page.getByTestId('confirm-reject').click();
+
+        await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+        await expect(toField(page)).toHaveValue(VALID_BTC);
+        await expect(amountField(page)).toHaveValue('0.01');
     });
 
     test('a failed signing attempt surfaces an error ', async ({ page }) => {
@@ -109,7 +146,7 @@ test.describe('send form', () => {
         await amountField(page).fill('0.001');
         await mainButton(page, 'Send').click();
 
-        await page.getByRole('button', { name: /Sign on Bitcoin/ }).click();
+        await page.getByTestId('confirm-approve').click();
 
         await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 20_000 });
     });

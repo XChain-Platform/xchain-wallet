@@ -74,6 +74,53 @@ assert.match(
     'button renders the derived approveLabel, not a hardcoded string',
 );
 
+// --- 1b. the SAME rule on the in-wallet confirm surface -----------------
+//
+//  gave the wallet a second signing surface, and every action form now
+// routes through it. It shipped with a bare "Approve": the button that commits
+// the signature never said which chain it was committing on, while the dApp
+// window a few files away got it right. Found by finally driving the page in a
+// browser (Playwright), not by any unit test - the copy was internally
+// consistent, just wrong.
+//
+// Derived from `variant` inside the component rather than passed by each of the
+// three adapters, because three adapters each remembering the rule is three
+// chances to forget it.
+{
+    const confirmSrc = readFileSync(
+        join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
+        'utf8',
+    );
+    assert.match(
+        confirmSrc,
+        /Approve & Sign on \$\{chainLabel\}/,
+        'confirm surface: the value-committing label carries the chain name',
+    );
+    assert.match(
+        confirmSrc,
+        /variant === 'message'\s*\n?\s*\? 'Approve'/,
+        'confirm surface: the message variant keeps a bare "Approve" (no balance commits)',
+    );
+    assert.match(
+        confirmSrc,
+        /'Approve & Sign'/,
+        'confirm surface: falls back to bare "Approve & Sign" when no chain is known',
+    );
+    assert.match(
+        confirmSrc,
+        /\{approveLabel \|\| defaultApproveLabel\}/,
+        'confirm surface: the footer button renders the derived label',
+    );
+    // The regression this guards: a hardcoded verb in the footer.
+    const footerIdx = confirmSrc.indexOf('data-testid="confirm-approve"');
+    assert.ok(footerIdx !== -1, 'confirm surface: the Approve button is testid-tagged');
+    const footer = confirmSrc.slice(footerIdx, footerIdx + 400);
+    assert.ok(
+        !/>\s*Approve\s*</.test(footer),
+        'confirm surface: the footer verb is not hardcoded back to a bare "Approve"',
+    );
+}
+
 // --- 2. dApp Source block (SignApproval) --------------------------------
 
 assert.match(

@@ -48,6 +48,12 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  * @param {{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }} props.decoded
  * @param {object|null} [props.simulation]
  * @param {string} props.chainLabel
+ * @param {string} [props.approveLabel]   overrides the footer verb. Defaults to the
+ *   §21.7 balance-committing form, "Approve & Sign on <chain>": the chain name on
+ *   the signing button is the last place a user sees WHICH network is about to
+ *   move their money, and every form reaches this page several screens after the
+ *   chain was picked. The message variant passes a bare "Approve" - no signature
+ *   there commits balance, so the chain suffix would mislead.
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
  * @param {'small'|'full'} [props.screenVariant]             Screen sizing, the caller's shell variant (defaults to 'small')
@@ -69,6 +75,7 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
     canApprove, onApprove, onReject, decoded, simulation, chainLabel,
+    approveLabel,
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, refusal = null, headline,
@@ -76,6 +83,18 @@ export function ConfirmActionModal({
     const headlineText = headline !== undefined
         ? headline
         : decoded?.summary?.split('\n')[0];
+    // §21.7 button-label convention, the same rule the dApp approval window
+    // applies (SignApproval.jsx): a signature that commits balance names the
+    // chain, because the confirm page is reached several screens after the
+    // chain was picked and this is the last place the user sees which network
+    // is about to move their money. The message variant commits no balance, so
+    // the chain suffix would mislead. Derived from `variant` rather than passed
+    // per adapter: three adapters each remembering the rule is three chances to
+    // forget it, and the one that forgets ships a signing button that never
+    // says what it signs.
+    const defaultApproveLabel = variant === 'message'
+        ? 'Approve'
+        : (chainLabel ? `Approve & Sign on ${chainLabel}` : 'Approve & Sign');
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
@@ -215,8 +234,13 @@ export function ConfirmActionModal({
                         onClick={handleApprove}
                         disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                         data-testid="confirm-approve"
+                        // The visible label is an expression, so name the button
+                        // explicitly: it matches the visible text exactly (the
+                        // accessible name must contain it), and a screen-reader
+                        // user gets the same "on <chain>" that a sighted one does.
+                        aria-label={approveLabel || defaultApproveLabel}
                     >
-                        Approve
+                        {approveLabel || defaultApproveLabel}
                     </Button>
                 </footer>
             </div>
