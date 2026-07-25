@@ -1180,6 +1180,12 @@ export function messageAction(opts) { return /** @type {any} */ (sendMessage('ac
 // : compose a VOTE through the SDK's own sdk.voting.*Params builder
 // host-side, so the confirm page previews the wire params the encoder will
 // actually see instead of a client-side mirror of that encoding.
+// : switch network AND derive the first address on each of its chains,
+// so a switch cannot leave the wallet with no addresses and no way to make one.
+export function setActiveNetwork(opts) {
+    return /** @type {any} */ (sendMessage('settings.setActiveNetwork', opts));
+}
+
 export function composeVoteForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.vote.composeForConfirm', opts));
 }

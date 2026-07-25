@@ -282,6 +282,9 @@ export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
 export { getSettings, updateSettings } from './settings.js';
 export { removeWallet } from './removeWallet.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
+// : derive the first address per chain when the active network changes,
+// so switching networks cannot strand a wallet with no addresses.
+export { ensureNetworkAddresses } from './ensureNetworkAddresses.js';
 export {
     verifyReceiveAddress,
     HardwareAddressMismatchError,

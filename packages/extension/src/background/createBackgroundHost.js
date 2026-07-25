@@ -47,6 +47,7 @@ const {
     importMnemonic,
     unlockWallet,
     receiveAddress,
+    ensureNetworkAddresses,
     verifyReceiveAddress,
     dispenserAddress,
     resolveActiveAddresses,
@@ -850,6 +851,33 @@ export function createBackgroundHost(deps) {
         // mounts.
         void seedCustomChainsFromVault(vault, chainRegistry);
         return getSettings(vault);
+    });
+
+    // : switch the active network AND make sure the wallet actually has
+    // addresses on it. `settings.update` alone only flips a filter, which is
+    // how a network switch used to strand a wallet with no addresses and no UI
+    // path to create one. Address derivation is best-effort and reported, never
+    // thrown: the setting is already persisted by the time it runs, so failing
+    // loudly here would leave the user in exactly the state this prevents.
+    host.register('settings.setActiveNetwork', async (req, deps) => {
+        const { vault, chainRegistry, sdkRegistry, signerPool } = deps;
+        const network = req?.network;
+        if (typeof network !== 'string' || !network) {
+            throw new Error('settings.setActiveNetwork: network is required');
+        }
+        const settings = await updateSettings(vault, { activeNetwork: network });
+
+        let addresses = { created: [], existing: [], failed: [], skipped: 'no-wallet' };
+        const walletId = req?.walletId;
+        if (typeof walletId === 'string' && walletId.length > 0) {
+            const signer = await pickSignerFromRequest({
+                vault, walletId, signerId: req?.signerId, signerPool,
+            }).catch(() => null);
+            addresses = await ensureNetworkAddresses({
+                vault, chainRegistry, sdkRegistry, walletId, network, signer: signer || undefined,
+            });
+        }
+        return { settings, addresses };
     });
 
     host.register('settings.update', async (req, { vault }) => {

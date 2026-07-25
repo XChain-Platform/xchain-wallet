@@ -203,6 +203,9 @@ export function Settings({
                 : 'network mainnet testnet active filter chain switch mode',
             kind: 'panel',
             Component: NetworkSection,
+            // : the section needs the wallet so the switch can derive
+            // that wallet's first address on each chain of the new network.
+            props: { activeWallet },
         },
         {
             id: 'network-endpoints',

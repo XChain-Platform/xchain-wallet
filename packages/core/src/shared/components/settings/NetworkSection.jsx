@@ -22,6 +22,7 @@
 // the cheapest robust path to a fully consistent post-switch UI.
 
 import { useSettings } from '../../hooks/useSettings.js';
+import { useMessaging } from '../../useMessaging.js';
 import { NETWORKS, NETWORK_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, SELECT, Status } from './_settingsPrimitives.jsx';
 
@@ -31,8 +32,10 @@ const NETWORK_OPTIONS = /** @type {const} */ ([
     { value: 'regtest', label: 'Regtest' },
 ]);
 
-export function NetworkSection() {
+export function NetworkSection({ activeWallet } = {}) {
     const { settings, loading, error, update } = useSettings();
+    const { messaging } = useMessaging();
+    const walletId = activeWallet?.id;
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
@@ -55,7 +58,17 @@ export function NetworkSection() {
         if (!NETWORKS.includes(next)) return;
         if (next === current) return;
         try {
-            await update({ activeNetwork: next });
+            // : prefer the host route that ALSO derives the first
+            // address on each chain of the network being switched to.
+            // Flipping the setting alone only changes a filter, which is how
+            // this control used to strand a wallet with no addresses and no UI
+            // path to create one. Falls back to the plain settings write for a
+            // shell that predates the route, so the switch itself never breaks.
+            if (typeof messaging?.setActiveNetwork === 'function' && walletId) {
+                await messaging.setActiveNetwork({ walletId, network: next });
+            } else {
+                await update({ activeNetwork: next });
+            }
             if (typeof window !== 'undefined') window.location.reload();
         } catch (err) {
             // eslint-disable-next-line no-console
