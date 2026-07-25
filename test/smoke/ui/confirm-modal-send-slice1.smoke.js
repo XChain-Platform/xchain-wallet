@@ -35,7 +35,11 @@ assert.match(hostSrc, /sdk\.preflight\(/, 'preflight route calls sdk.preflight h
 assert.match(hostSrc, /addressesByChain\(/, 'compose route resolves ownAddresses from the vault');
 // §4.7 two-window race: a host-shared reservation ledger + reserve/release
 // routes, and preflight nets the reservations into localDeltas.
-assert.match(hostSrc, /const reservationLedger = createReservationLedger\(\)/, 'host-shared reservation ledger');
+// One ledger, shared across every approval window. §5.4 later gave it a
+// chrome.storage.session store so an MV3 worker kill cannot drop the
+// reservations (see confirm-reservation-sw-persistence.smoke.js); this
+// assertion only cares that exactly one host-shared ledger exists.
+assert.match(hostSrc, /const reservationLedger = createReservationLedger\(/, 'host-shared reservation ledger');
 assert.match(hostSrc, /host\.register\('action\.reserve'/, 'reserve route registered');
 assert.match(hostSrc, /host\.register\('action\.releaseReservation'/, 'release route registered');
 assert.match(hostSrc, /reservationLedger\.localDeltas\(chainId/, 'preflight nets reservations into localDeltas');

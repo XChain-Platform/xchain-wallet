@@ -32,6 +32,10 @@ import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
+import {
+    createConfirmActionSessionStorage,
+    reservationStoreFrom,
+} from './confirmActionSessionStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 
 const {
@@ -541,9 +545,20 @@ export function createBackgroundHost(deps) {
     // approval window. A single background SW serves all popup windows, so
     // an in-memory ledger already closes the two-window same-balance race
     // (both windows' preflights net each other's approved-but-unbroadcast
-    // amounts). Persisting it to chrome.storage.session (to also survive an
-    // SW kill mid-modal, §5.4) is a follow-up: pass that store adapter here.
-    const reservationLedger = createReservationLedger();
+    // amounts).
+    //
+    // §5.4: in-memory alone is not enough on MV3. Chrome may kill this worker
+    // after ~30s of perceived idle - well inside the window where a user is
+    // reading warnings, typing a password or waking a hardware device - and a
+    // kill would silently drop every reservation, so a second window would
+    // then see the full balance again and the race would be back. Backing the
+    // ledger with chrome.storage.session makes the reservations survive that
+    // restart; the store returns null outside an extension (Node tests, web
+    // and desktop shells), where the ledger stays in-memory.
+    const confirmSessionStorage = createConfirmActionSessionStorage();
+    const reservationLedger = createReservationLedger(
+        confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
+    );
 
     // Cluster Q FOLLOWUP 5: hydrate + start mirroring as early as
     // possible so a worker crash mid-boot still leaves the next session
