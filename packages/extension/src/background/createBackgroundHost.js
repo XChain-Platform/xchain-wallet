@@ -66,6 +66,8 @@ const {
     destroyToken,
     callbackAction,
     tokenHolderSummary,
+    sleepAction,
+    sleepStateFor,
     broadcastAction,
     dispenserAction,
     orderAction,
@@ -2242,6 +2244,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.mint.hw', mintToken);
     registerHwHandler('action.destroy.hw', destroyToken);
     registerHwHandler('action.callback.hw', callbackAction);
+    registerHwHandler('action.sleep.hw', sleepAction);
     registerHwHandler('action.broadcast.hw', broadcastAction);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
@@ -2338,6 +2341,16 @@ export function createBackgroundHost(deps) {
             callbackAmount: req.callbackAmount,
             callbackDecimals: req.callbackDecimals,
         });
+    });
+
+    // PC-05: SLEEP (pause a tick / self-lock an address).
+    host.register('action.sleep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return sleepAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-05: current pause state of a tick or address (latest SLEEP row).
+    host.register('sleep.state', async (req, { sdkRegistry }) => {
+        return sleepStateFor({ sdkRegistry, chainId: req.chainId, query: req.query, type: req.type });
     });
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {

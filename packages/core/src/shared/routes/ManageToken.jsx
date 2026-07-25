@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -65,6 +65,7 @@ const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'descri
  * @param {() => void} [props.onCallbackSettings]     edit ISSUE v4 callback config: CALLBACK_BLOCK / CALLBACK_TICK / CALLBACK_AMOUNT (PC-03; editable only pre-distribution)
  * @param {() => void} [props.onExecuteCallback]      force-recall all supply via CALLBACK (PC-03; owner-only, after CALLBACK_BLOCK)
  * @param {() => void} [props.onAccessLists]          set ISSUE v5 ALLOW_LIST / BLOCK_LIST access lists (PC-04)
+ * @param {() => void} [props.onPauseToken]           pause/resume the token via SLEEP v1 (PC-05)
  * @param {() => void} [props.onUpdateDescription]
  * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
  * @param {() => void} [props.onGatedContent]        publish token-gated encrypted files (PC-25; atomic BATCH(FILE, MESSAGE-to-self))
@@ -94,6 +95,7 @@ export function ManageToken({
     onCallbackSettings,
     onExecuteCallback,
     onAccessLists,
+    onPauseToken,
     onUpdateDescription,
     onAttachContent,
     onGatedContent,
@@ -126,6 +128,28 @@ export function ManageToken({
     const tokenLocks = assetInfo?.locks || {};
     const allLocksSet = LOCK_FLAG_KEYS.every((k) => !!tokenLocks[k]);
     const totalSupply = assetInfo?.totalSupply ?? null;
+
+    // PC-05: current pause state of this tick (latest SLEEP row vs tip),
+    // for the hero "Paused" badge and to label the Pause/Resume action.
+    const [sleepRow, setSleepRow] = useState(/** @type {any | null} */ (null));
+    const [sleepHeight, setSleepHeight] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        if (!chainId || !tick) { setSleepRow(null); return undefined; }
+        if (typeof messaging?.sleepState !== 'function') return undefined;
+        let cancelled = false;
+        Promise.all([
+            messaging.sleepState({ chainId, query: tick, type: 'token' }).catch(() => null),
+            typeof messaging.getIndexerWatermark === 'function'
+                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                : Promise.resolve(null),
+        ]).then(([s, w]) => {
+            if (cancelled) return;
+            setSleepRow(s || null);
+            setSleepHeight(w && w.watermark != null ? Number(w.watermark) : null);
+        });
+        return () => { cancelled = true; };
+    }, [chainId, tick, messaging]);
+    const sleepState = flowsLib.interpretSleep(sleepRow ? sleepRow.resumeBlock : null, sleepHeight);
     const maxSupply = assetInfo?.maxSupply ?? null;
     const description = assetInfo?.description || null;
     const owner = assetInfo?.creator || null;
@@ -443,6 +467,9 @@ export function ManageToken({
         // PC-04 access lists (ISSUE v5). Owner-only; sets ALLOW_LIST /
         // BLOCK_LIST to published address lists.
         { id: 'access-lists', label: 'Access lists', Icon: Icon.TokenListIcon, onSelect: blockIssuerActions ? undefined : onAccessLists },
+        // PC-05: pause/resume the token (SLEEP v1). Owner-only; the form
+        // handles LOCK_SLEEP + the resume path. Label follows current state.
+        { id: 'pause-token', label: sleepState.paused ? 'Resume token' : 'Pause token', Icon: Icon.ClockIcon, onSelect: blockIssuerActions ? undefined : onPauseToken },
         // PC-03 CALLBACK execution (danger): only offered once a callback
         // is actually configured (callbackTick set). The after-CALLBACK_BLOCK
         // timing gate + holder-payout preview live inside the form.
@@ -505,6 +532,11 @@ export function ManageToken({
                             <Icon.UnlockIcon />Unlocked
                         </span>
                     )}
+                    {sleepState.paused ? (
+                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? 'Paused indefinitely' : (sleepState.resumeBlock ? `Paused until block ${sleepState.resumeBlock}` : 'Paused')}>
+                            <Icon.LockIcon />Paused
+                        </span>
+                    ) : null}
                     <div className={styles.heroIconWrap}>
                         <TickerIcon chainId={chainId} tick={tick} size={64} />
                     </div>

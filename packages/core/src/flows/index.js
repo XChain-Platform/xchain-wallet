@@ -40,6 +40,8 @@ export { mintToken } from './mintToken.js';
 export { destroyToken } from './destroyToken.js';
 export { callbackAction } from './callbackAction.js';
 export { tokenHolderSummary, mulFloorDecimal, addDecimal } from './tokenHolders.js';
+export { sleepAction } from './sleepAction.js';
+export { sleepStateFor, interpretSleep } from './sleepQueries.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';

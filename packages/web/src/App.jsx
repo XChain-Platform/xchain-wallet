@@ -87,6 +87,7 @@ import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { SweepForm } from '@xchain-wallet/core/shared/routes/SweepForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
 import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
+import { SleepForm } from '@xchain-wallet/core/shared/routes/SleepForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
@@ -215,7 +216,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -956,6 +957,27 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                    />
+                );
+            }
+            if (unlockedView === 'pause-token' && activeWalletId) {
+                return (
+                    <SleepForm
+                        walletId={activeWalletId}
+                        mode="tick"
+                        onBack={formBack}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                    />
+                );
+            }
+            if (unlockedView === 'lock-address' && activeWalletId) {
+                return (
+                    <SleepForm
+                        walletId={activeWalletId}
+                        mode="address"
+                        onBack={formBack}
                     />
                 );
             }
@@ -1905,6 +1927,7 @@ function AppInner() {
                         onCallbackSettings={() => openForm('callback-settings')}
                         onExecuteCallback={() => openForm('execute-callback')}
                         onAccessLists={() => openForm('access-lists')}
+                        onPauseToken={() => openForm('pause-token')}
                         onUpdateDescription={() => openForm('description')}
                         onAttachContent={() => openForm('attach-content')}
                         onGatedContent={() => openForm('gated-publish')}
@@ -1958,6 +1981,7 @@ function AppInner() {
                                 setUnlockedView('airdrop');
                             },
                             onAdvanced: () => setUnlockedView('advanced'),
+                            onLockAddress: () => setUnlockedView('lock-address'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                             onPayCoinpay: () => {
                                 setResumeCoinpay(null);
@@ -2225,6 +2249,7 @@ function AppInner() {
                                 setUnlockedView('airdrop');
                             },
                             onAdvanced: () => setUnlockedView('advanced'),
+                            onLockAddress: () => setUnlockedView('lock-address'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                             onPayCoinpay: () => {
                                 setResumeCoinpay(null);
@@ -2456,6 +2481,7 @@ function buildActionEntries({
     onPayDividend,
     onAirdrop,
     onAdvanced,
+    onLockAddress,
     onPairSigner,
     onPayCoinpay,
     onSwap,
@@ -2647,6 +2673,12 @@ function buildActionEntries({
             label: 'Advanced action',
             description: 'Power-user form for submitting any supported on-chain action type.',
             onSelect: onAdvanced,
+        },
+        {
+            id: 'lock-address',
+            label: 'Lock this address',
+            description: 'Safety freeze: block all actions from this address until a chosen block. One-way until it unlocks.',
+            onSelect: onLockAddress,
         },
         {
             id: 'pair-signer',

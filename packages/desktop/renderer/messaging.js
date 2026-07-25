@@ -336,6 +336,27 @@ export function callbackAction(opts) {
     return /** @type {any} */ (sendMessage('action.callback', opts));
 }
 
+/**
+ * Build, sign, and broadcast a SLEEP action (PC-05): pause a tick (v1,
+ * owner-only) or self-lock the source address (v0). Software-signer path.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function sleepAction(opts) {
+    return /** @type {any} */ (sendMessage('action.sleep', opts));
+}
+
+/** @param {object} opts hardware-signer SLEEP */
+export function sleepActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.sleep.hw', opts));
+}
+
+/** @param {{ chainId: string, query: string, type: 'token' | 'address' }} req PC-05: current pause state (latest SLEEP row) */
+export function sleepState(req) {
+    return /** @type {any} */ (sendMessage('sleep.state', req));
+}
+
 /** @param {object} opts hardware-signer CALLBACK */
 export function callbackActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.callback.hw', opts));

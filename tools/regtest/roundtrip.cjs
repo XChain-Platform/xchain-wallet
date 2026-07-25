@@ -292,11 +292,34 @@ async function main() {
         console.log('  could not resolve the published list action_index; skipping v5 bind');
     }
 
-    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
+    // 8) Pause / SLEEP (v1 tick, PC-05): owner C pauses cbTick indefinitely,
+    // then resumes it. SLEEP is owner-gated (not allow-list-gated), and a
+    // tick owner may always SLEEP again to resume. Reads the state back off
+    // getSleeps between each step.
+    console.log('\n=== Pause / SLEEP (v1 tick, PC-05) ===');
+    const sleepStateOf = async () => {
+        const resp = await sdk.getSleeps(cbTick, 'token').catch(() => null);
+        const rows = (resp && Array.isArray(resp.data) ? resp.data : [])
+            .filter((r) => String(r.status || 'valid') === 'valid')
+            .sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
+        return rows.length ? Number(rows[0].resume_block) : null;
+    };
+    const pauseRes = await submit(sdk, 'SLEEP pause', 'SLEEP', { VERSION: '1', RESUME_BLOCK: '-1', TICK: cbTick, MEMO: 'pause pc05' }, signerC);
+    const pauseStatus = pauseRes.indexed && (pauseRes.indexed.status || pauseRes.indexed.state);
+    await sleep(3000);
+    const pausedRb = await sleepStateOf();
+    console.log(`  [SLEEP pause] status=${pauseStatus}; state resume_block=${pausedRb} (want -1)`);
+    await submit(sdk, 'SLEEP resume', 'SLEEP', { VERSION: '1', RESUME_BLOCK: '0', TICK: cbTick, MEMO: 'resume pc05' }, signerC);
+    await sleep(3000);
+    const resumedRb = await sleepStateOf();
+    console.log(`  [SLEEP resume] state resume_block=${resumedRb} (want 0)`);
+    const sleepOk = pauseStatus === 'valid' && pausedRb === -1 && resumedRb === 0;
+
+    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk
-        ? 'RESULT: PASS (LIST valid + max-size FILE valid + over-ceiling rejected + SWEEP moved a real balance + CALLBACK config+execution + ISSUE v5 access-list bind)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} cbConfigOk=${cbConfigOk} cbStatus=${cbStatus} accessListOk=${accessListOk})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} pausedRb=${pausedRb} resumedRb=${resumedRb})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });
