@@ -165,6 +165,94 @@ describe('useConfirmAction', () => {
         expect(reserve).toHaveBeenCalledTimes(1);
     });
 
+    // : a form that does not declare what it spends still gets §4.7
+    // protection, derived from the compose envelope's projected balances.
+    it('derives the reservation from the simulation when the caller names none', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        const reserve = vi.fn(async () => {});
+        const release = vi.fn(async () => {});
+        let p;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => ({
+                    ...COMPOSED,
+                    simulation: {
+                        deltas: [
+                            { tick: 'BTC', before: '1', after: '0.9999', isCoin: true },
+                            { tick: 'JDOG', before: '10', after: '7.5' },
+                        ],
+                    },
+                }),
+                onApprove: async () => 'ok',
+                chainId: 'btc',
+                preflight: preflightWith(),
+                reservationLedger: { reserve, release },
+                // No `reserve` descriptor: this is the ~24-form case.
+            });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        await act(async () => { await result.current.approve({}); });
+        await p;
+        expect(reserve).toHaveBeenCalledTimes(1);
+        // The token debit, exactly; the coin/fee row is not what a concurrent
+        // token spend races on.
+        expect(reserve.mock.calls[0][0]).toMatchObject({
+            chainId: 'btc', tick: 'JDOG', amount: '2.5',
+        });
+    });
+
+    it('an explicit caller reserve still wins over the derived one', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        const reserve = vi.fn(async () => {});
+        let p;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => ({
+                    ...COMPOSED,
+                    simulation: { deltas: [{ tick: 'JDOG', before: '10', after: '7.5' }] },
+                }),
+                onApprove: async () => 'ok',
+                chainId: 'btc',
+                preflight: preflightWith(),
+                reservationLedger: { reserve, release: async () => {} },
+                reserve: { tick: 'PEPE', amount: '42' },
+            });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        await act(async () => { await result.current.approve({}); });
+        await p;
+        expect(reserve.mock.calls[0][0]).toMatchObject({ tick: 'PEPE', amount: '42' });
+    });
+
+    it('reserves nothing when the simulation debits two ticks', async () => {
+        // One reservation cannot express a two-tick spend; reserving one leg
+        // would imply full coverage while providing half.
+        const { result } = renderHook(() => useConfirmAction());
+        const reserve = vi.fn(async () => {});
+        let p;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => ({
+                    ...COMPOSED,
+                    simulation: {
+                        deltas: [
+                            { tick: 'JDOG', before: '10', after: '5' },
+                            { tick: 'PEPE', before: '8', after: '1' },
+                        ],
+                    },
+                }),
+                onApprove: async () => 'ok',
+                chainId: 'btc',
+                preflight: preflightWith(),
+                reservationLedger: { reserve, release: async () => {} },
+            });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        await act(async () => { await result.current.approve({}); });
+        await p;
+        expect(reserve).not.toHaveBeenCalled();
+    });
+
     it('§5.3.4 TRANSIENT broadcast failure RESOLVES as queued (not an error) and ends signed-not-broadcast', async () => {
         // The tx is signed and handed to the rebroadcast queue host-side, so
         // the user must NOT see a failure. Permanence crosses the messaging

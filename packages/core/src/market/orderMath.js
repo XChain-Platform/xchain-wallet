@@ -76,3 +76,45 @@ export function multiplyAmounts(a, b) {
     const fracPart = digits.slice(cut).replace(/0+$/, '');
     return fracPart ? `${intPart}.${fracPart}` : intPart;
 }
+
+/**
+ * Exact decimal difference `a - b` as a plain fixed-notation string.
+ *
+ * Added for : deriving how much of a token an action spends from the
+ * confirm surface's projected balances, which arrive as decimal strings at the
+ * tick's own DECIMALS. §4.5 rule 1 is explicit that native JS numbers WILL
+ * produce false verdicts here, and this value gates a balance reservation, so
+ * the subtraction has to be exact at any precision.
+ *
+ * Returns null on non-decimal input, and null when the result would be
+ * negative or zero: callers want "how much was debited", so a credit or a
+ * no-op is not a smaller number, it is the absence of a debit.
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {string | null}
+ */
+export function subtractAmounts(a, b) {
+    const pa = parseDecimal(a);
+    const pb = parseDecimal(b);
+    if (!pa || !pb) return null;
+
+    // Align both operands on the wider fraction before subtracting, so
+    // "1" - "0.00000001" is exact rather than a float artifact.
+    const scale = Math.max(pa.frac.length, pb.frac.length);
+    const scaled = (p) => BigInt(
+        `${p.int || '0'}${p.frac.padEnd(scale, '0')}`.replace(/^0+(?=\d)/, '') || '0',
+    );
+    const diff = scaled(pa) - scaled(pb);
+    if (diff <= 0n) return null;
+
+    let digits = diff.toString();
+    if (scale === 0) return digits;
+    if (digits.length <= scale) {
+        digits = '0'.repeat(scale - digits.length + 1) + digits;
+    }
+    const cut = digits.length - scale;
+    const intPart = digits.slice(0, cut);
+    const fracPart = digits.slice(cut).replace(/0+$/, '');
+    return fracPart ? `${intPart}.${fracPart}` : intPart;
+}

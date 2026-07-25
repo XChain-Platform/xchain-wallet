@@ -29,6 +29,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -239,12 +240,20 @@ export function useConfirmAction() {
         // approve() again for the SAME composed PSBT, and re-reserving would
         // both double-count the amount and orphan the first id (teardown only
         // releases the last one).
-        if (args.reservationLedger && args.reserve && args.reserve.tick && !optsRef.current.reservationId) {
+        // : when the caller did not name what it spends, derive it from
+        // the projected balances the compose envelope already carries. That
+        // gives every form migrated via useActionConfirmFlow the same
+        // two-window protection Send has, without 24 forms each declaring a
+        // reserve descriptor by hand.
+        const reserve = args.reserve && args.reserve.tick
+            ? args.reserve
+            : reserveFromSimulation(built.simulation);
+        if (args.reservationLedger && reserve && reserve.tick && !optsRef.current.reservationId) {
             const rid = built.actionString + ':' + String(instanceId).slice(0, 8) + ':' + Date.now();
             optsRef.current.reservationId = rid;
             try {
                 await args.reservationLedger.reserve({
-                    id: rid, chainId: args.chainId, tick: args.reserve.tick, amount: String(args.reserve.amount),
+                    id: rid, chainId: args.chainId, tick: reserve.tick, amount: String(reserve.amount),
                 });
             } catch { /* best-effort */ }
         }

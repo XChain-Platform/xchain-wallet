@@ -86,6 +86,16 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 ...(encoderOpts && Object.keys(encoderOpts).length > 0 ? { encoderOpts } : {}),
             })),
             preflight: (o) => messaging.preflight({ chainId, ...o }),
+            //  / §4.7: the host-shared reservation ledger, passed for
+            // EVERY migrated form. What to reserve is derived from the compose
+            // envelope's projected balances (useConfirmAction), so a form does
+            // not have to declare it; one background host serves all popup
+            // windows, so this is what stops two windows from both spending the
+            // same token balance.
+            reservationLedger: {
+                reserve: (e) => messaging.reserve(e),
+                release: (id) => messaging.releaseReservation({ id }),
+            },
             onApprove: (_creds, composed) => onApprove({
                 psbtHex: composed.psbt,
                 encoding: composed.encoding,
