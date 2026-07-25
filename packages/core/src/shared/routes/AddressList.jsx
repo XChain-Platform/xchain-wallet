@@ -25,6 +25,8 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -88,6 +90,7 @@ export function AddressList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const confirmDialog = useConfirmModal();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
@@ -659,7 +662,12 @@ export function AddressList({
         };
         const removeAddress = async () => {
             if (!selected.record?.id) return;
-            if (!confirm('Delete this address? An imported key is gone unless you have a separate backup.')) return;
+            if (!(await confirmDialog.confirm({
+                title: 'Delete this address?',
+                message: 'An imported key is gone unless you have a separate backup.',
+                confirmLabel: 'Delete',
+                danger: true,
+            }))) return;
             try {
                 await messaging.deleteAddress(selected.record.id);
                 setSelected(null);
@@ -783,6 +791,13 @@ export function AddressList({
                         ))}
                     </div>
                 </div>
+                {confirmDialog.request ? (
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                ) : null}
             </Screen>
         );
     }

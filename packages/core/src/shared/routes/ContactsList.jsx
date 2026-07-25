@@ -20,6 +20,9 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { isValidAddressAnyNetwork } from '../utils/addressValidation.js';
 import { ScanRoute } from './ScanRoute.jsx';
 import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
@@ -68,6 +71,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { showToast } = useToast();
+    const confirmDialog = useConfirmModal();
 
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -254,6 +258,16 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setSubmitError('At least one address entry is required.');
             return;
         }
+        // D-4: validate the address is real (checksum / bech32) before saving, so
+        // a garbage string isn't stored as a "Network: Unknown" contact that only
+        // fails later when picked in Send. isValidAddressAnyNetwork is the Send
+        // form's own validator; it accepts a valid-but-coin-ambiguous testnet/
+        // regtest address (chain stays 'unknown') but rejects non-addresses.
+        const badEntry = cleanedEntries.find((e) => !isValidAddressAnyNetwork(e.address));
+        if (badEntry) {
+            setSubmitError(`"${badEntry.address}" is not a valid Bitcoin, Litecoin, or Dogecoin address.`);
+            return;
+        }
         setSubmitting(true);
         setSubmitError(null);
         try {
@@ -276,7 +290,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     }
 
     async function handleDelete(id) {
-        if (!confirm('Delete this contact?')) return;
+        if (!(await confirmDialog.confirm({ title: 'Delete this contact?', confirmLabel: 'Delete', danger: true }))) return;
         // Snapshot the full record before deletion so the §37.2 Undo
         // toast can re-create it via saveContact. We freeze the
         // displayed name here so the toast text doesn't change if the
@@ -311,7 +325,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // confirmation that mirrors the delete-contact prompt.
     async function handleDeleteAddress(index) {
         if (!active) return;
-        if (!confirm('Delete this address?')) return;
+        if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) return;
         const nextEntries = active.entries.filter((_, i) => i !== index);
         try {
             await messaging.saveContact({ record: { ...active, entries: nextEntries } });
@@ -328,6 +342,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         const address = addAddrValue.trim();
         if (!address) {
             setAddAddrError('Address is required.');
+            return;
+        }
+        // D-4: reject a non-address here rather than saving it as "Network: Unknown".
+        if (!isValidAddressAnyNetwork(address)) {
+            setAddAddrError('This is not a valid Bitcoin, Litecoin, or Dogecoin address.');
             return;
         }
         setAddAddrSaving(true);
@@ -386,6 +405,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const wrap = (children, { card = true } = {}) => (
         <Screen variant={variant} header={header}>
             {isFull && card ? <div className={styles.card}>{children}</div> : children}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </Screen>
     );
 
