@@ -28,6 +28,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
     testDir: './tests',
+    // `*.regtest.spec.js` belongs to `playwright.regtest.config.js`, which
+    // serves a PRODUCTION build against a live chain. Those specs sign and
+    // broadcast; this dev server serves the dev-mock SDK and cannot. Running
+    // them here would fail for an unrelated reason and teach nothing.
+    testIgnore: '**/*.regtest.spec.js',
     outputDir: './test-results',
     fullyParallel: false,
     forbidOnly: !!process.env.CI,

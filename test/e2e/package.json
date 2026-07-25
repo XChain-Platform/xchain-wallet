@@ -7,6 +7,8 @@
     "scripts": {
         "test": "playwright test --config playwright.config.js",
         "test:headed": "playwright test --config playwright.config.js --headed",
+        "test:regtest": "playwright test --config playwright.regtest.config.js",
+        "test:regtest:headed": "playwright test --config playwright.regtest.config.js --headed",
         "install:browsers": "playwright install --with-deps chromium"
     },
     "devDependencies": {
