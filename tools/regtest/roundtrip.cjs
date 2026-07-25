@@ -111,22 +111,22 @@ async function main() {
     // no funds spent) - that encode-side refusal is the failure mode the
     // wallet's picker/review checks exist to pre-empt.
     //
-    // ENCODER CONSTRAINT (discovered live 2026-07-25, PC-28): the
-    // P2SH/P2WSH chunk lane resolves the caller identity with
-    // bitcoin.address.fromBase58Check(pubKey), so any payload past the
-    // OP_RETURN lane composes ONLY when `pubkey` is a base58 LEGACY
-    // address; the raw compressed pubkey the SDK/wallet flows pass (and
-    // any bech32 source) crashes create_tx with "Non-base58 character"
-    // -> "Internal encoder error". Until the encoder learns
-    // bech32/raw-pubkey identities, this leg runs from a dedicated
-    // legacy signer with the ADDRESS as the identity param.
-    console.log('\n=== FILE at computed max (PC-28) ===');
+    // ENCODER IDENTITY (, FIXED 2026-07-25): the P2SH/P2WSH chunk
+    // lane used to resolve the caller with bitcoin.address.fromBase58Check(
+    // pubKey), so any payload past the OP_RETURN lane composed ONLY from a
+    // base58 LEGACY address; the raw compressed pubkey the SDK/wallet flows
+    // pass (and any bech32 source) crashed create_tx with "Non-base58
+    // character". The encoder now resolves the gate HASH160 from a base58
+    // address, a raw pubkey hex, OR a v0 bech32 P2WPKH address, so this leg
+    // runs from a BECH32 signer with the RAW PUBKEY as identity - byte-for-byte
+    // the wallet's own path, and the direct  regression guard.
+    console.log('\n=== FILE at computed max (PC-28, bech32 signer / ) ===');
     const { maxPublicFileBytes } = await import(
         path.resolve(__dirname, '../../packages/core/src/flows/fileSizeLimits.js')
     );
     const F = sdk.wallet.generateKeyPair();
-    const addrF = sdk.wallet.deriveAddress(F.publicKeyHex, { type: 'p2pkh' });
-    console.log('  legacy FILE signer:', addrF);
+    const addrF = sdk.wallet.deriveAddress(F.publicKeyHex, { type: 'p2wpkh' });
+    console.log('  bech32 FILE signer:', addrF, '(identity = raw pubkey hex)');
     nodeRpc(['sendtoaddress', addrF, '10']);
     nodeRpc(['-generate', '3']);
     await sleep(6000);
@@ -136,7 +136,7 @@ async function main() {
     const fileParams = { VERSION: '0', NAME: fileMeta.name, TYPE: fileMeta.type };
     const fileRes = await sdk.submitAction(
         { action: 'FILE', params: fileParams },
-        { pubkey: addrF, change: addrF, utxos: await sdk.getUTXOs(addrF), rawData: 'A'.repeat(fileCap) },
+        { pubkey: F.publicKeyHex, change: addrF, utxos: await sdk.getUTXOs(addrF), rawData: 'A'.repeat(fileCap) },
         { wif: F.wif, waitForIndexer: true, requireValid: false, timeout: 120000, pollInterval: 2000 },
     );
     const fileStatus = fileRes.indexed && (fileRes.indexed.status || fileRes.indexed.state);
@@ -145,7 +145,7 @@ async function main() {
     try {
         await sdk.submitAction(
             { action: 'FILE', params: fileParams },
-            { pubkey: addrF, change: addrF, utxos: await sdk.getUTXOs(addrF), rawData: 'A'.repeat(fileCap + 1) },
+            { pubkey: F.publicKeyHex, change: addrF, utxos: await sdk.getUTXOs(addrF), rawData: 'A'.repeat(fileCap + 1) },
             { wif: F.wif, waitForIndexer: false },
         );
         console.log('  [FILE+1] UNEXPECTED: encoder accepted an over-ceiling payload');
