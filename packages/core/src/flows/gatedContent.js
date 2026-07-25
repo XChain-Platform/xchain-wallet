@@ -232,24 +232,38 @@ export function buildKeyHandoffPayload({ sdk, keysByHash }) {
 }
 
 /**
- * High-level wrapper used by the IPC handler. Exports the WIF for the
- * caller's address (password-gated), resolves the SDK for the address's
- * chain, then decrypts the gated file via `unlockGatedFile`. Returns
- * the plaintext as a base64 string so it can cross the IPC boundary
- * safely (Uint8Array doesn't structuredClone cleanly into the popup).
+ * High-level wrapper used by the IPC handler. Resolution order (PC-27):
+ *
+ *   1. Demo fixtures (no crypto).
+ *   2. Vault gatedKeys row for (walletId, chainId, gateTicker, keyHash),
+ *      when the caller supplies `gateTicker` + `chainId`: decryption is
+ *      pure AES with the stored K, so no password, no WIF export, and
+ *      no MESSAGE scan. This is what makes unlock durable across
+ *      lock/restart and reachable for keys that arrived at publish
+ *      time (HW issuers) or from a prior recovery scan.
+ *   3. Password-gated WIF export + ECIES MESSAGE scan (software
+ *      signers only). On success the recovered key is persisted back
+ *      into the vault (source 'recovered') so step 2 serves the next
+ *      unlock.
+ *
+ * Returns the plaintext as a base64 string so it can cross the IPC
+ * boundary safely (Uint8Array doesn't structuredClone cleanly into
+ * the popup).
  *
  * @param {{
  *   vault: import('../storage/Vault.js').Vault,
  *   walletId: string,
- *   password: string,
+ *   password?: string,
  *   bip39Passphrase?: string,
  *   chainRegistry: import('../registry/index.js').ChainRegistry,
  *   sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry,
- *   addressId: string,
+ *   addressId?: string,
  *   actionIndex: number | string,
  *   keyHash: string,
+ *   gateTicker?: string,   enables the vault key cache (read + write-back)
+ *   chainId?: string,      required alongside gateTicker for the vault path
  * }} params
- * @returns {Promise<{ address: string, chainId: string, actionIndex: string, plaintextBase64: string, byteLength: number }>}
+ * @returns {Promise<{ address: string | null, chainId: string, actionIndex: string, plaintextBase64: string, byteLength: number }>}
  */
 export async function unlockGatedFileForAddress({
     vault,
@@ -261,6 +275,8 @@ export async function unlockGatedFileForAddress({
     addressId,
     actionIndex,
     keyHash,
+    gateTicker,
+    chainId,
 }) {
     if (!actionIndex) throw new Error('unlockGatedFileForAddress: actionIndex is required');
     if (!keyHash) throw new Error('unlockGatedFileForAddress: keyHash is required');
@@ -284,7 +300,43 @@ export async function unlockGatedFileForAddress({
     if (!vault) throw new Error('unlockGatedFileForAddress: vault is required');
     if (!sdkRegistry) throw new Error('unlockGatedFileForAddress: sdkRegistry is required');
 
-    const { wif, address, chainId } = await exportPrivateKey({
+    const keyHashLower = String(keyHash).toLowerCase();
+
+    // Step 2: durable vault key cache. Re-verified against KEY_HASH so
+    // a corrupted row can never decrypt-and-serve the wrong bytes.
+    if (walletId && gateTicker && chainId && vault.gatedKeys) {
+        const row = await vault.gatedKeys.get(gatedKeyId({
+            walletId, chainId, gateTicker, keyHash: keyHashLower,
+        }));
+        if (row?.keyHex) {
+            const key = Buffer.from(row.keyHex, 'hex');
+            const sdk = sdkRegistry.get(chainId);
+            if (sdk.gatedFile.verifyKey(key, keyHashLower)) {
+                const cacheAddr = `vault:${walletId}`;
+                let plaintext = PT_CACHE.get(ptKey(cacheAddr, actionIndex));
+                if (!plaintext) {
+                    const ciphertext = await sdk.getGatedFileRaw(actionIndex);
+                    if (!ciphertext || !Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
+                        const err = new Error('Gated file ciphertext not available from explorer.');
+                        err.code = 'GATED_FILE_NOT_FOUND';
+                        throw err;
+                    }
+                    plaintext = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+                    PT_CACHE.set(ptKey(cacheAddr, actionIndex), plaintext);
+                }
+                return {
+                    address: null,
+                    chainId,
+                    actionIndex: String(actionIndex),
+                    plaintextBase64: Buffer.from(plaintext).toString('base64'),
+                    byteLength: plaintext.length,
+                };
+            }
+        }
+    }
+
+    // Step 3: password-gated WIF export + MESSAGE scan.
+    const { wif, address, chainId: addrChainId } = await exportPrivateKey({
         vault,
         walletId,
         password,
@@ -294,7 +346,7 @@ export async function unlockGatedFileForAddress({
         addressId,
     });
 
-    const sdk = sdkRegistry.get(chainId);
+    const sdk = sdkRegistry.get(addrChainId);
     const plaintext = await unlockGatedFile({
         sdk,
         address,
@@ -303,9 +355,38 @@ export async function unlockGatedFileForAddress({
         keyHash,
     });
 
+    // Write-back: the scan just proved this address holds K for the
+    // pack; persist it so the next unlock (and the PC-26 send guard /
+    // PC-34 migrate gate) reads the vault instead of re-scanning. A
+    // failed cache write must not fail an unlock that already
+    // succeeded, so persistence errors are swallowed.
+    if (walletId && gateTicker && vault.gatedKeys) {
+        try {
+            const key = getCachedGatedKey(address, keyHashLower);
+            if (key && sdk.gatedFile.verifyKey(key, keyHashLower)) {
+                const id = gatedKeyId({
+                    walletId, chainId: addrChainId, gateTicker, keyHash: keyHashLower,
+                });
+                const existing = await vault.gatedKeys.get(id);
+                if (!existing?.keyHex) {
+                    await vault.gatedKeys.put(createGatedKey({
+                        walletId,
+                        chainId: addrChainId,
+                        gateTicker,
+                        keyHash: keyHashLower,
+                        keyHex: key.toString('hex'),
+                        source: 'recovered',
+                    }));
+                }
+            }
+        } catch (_e) {
+            // Cache-persist only; the unlock result stands.
+        }
+    }
+
     return {
         address,
-        chainId,
+        chainId: addrChainId,
         actionIndex: String(actionIndex),
         plaintextBase64: Buffer.from(plaintext).toString('base64'),
         byteLength: plaintext.length,

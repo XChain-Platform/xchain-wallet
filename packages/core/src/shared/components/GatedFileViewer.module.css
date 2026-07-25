@@ -1,0 +1,102 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--xc-space-4);
+}
+
+.panel {
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    padding: var(--xc-space-4);
+    animation: pop 140ms ease-out;
+}
+
+@keyframes pop {
+    from { transform: scale(0.96); opacity: 0.4; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel { animation: none; }
+}
+
+.title {
+    margin: 0 0 var(--xc-space-1);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.meta {
+    margin: 0 0 var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    margin-bottom: var(--xc-space-3);
+}
+
+.image {
+    display: block;
+    max-width: 100%;
+    margin: 0 auto;
+    /* Blob-backed <img>; pixelated upscaling beats blur for tiny
+       on-chain images. */
+    image-rendering: auto;
+}
+
+.text {
+    margin: 0;
+    padding: var(--xc-space-3);
+    font-family: var(--xc-font-mono, ui-monospace, monospace);
+    font-size: var(--xc-text-xs);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.notice {
+    margin: 0;
+    padding: var(--xc-space-4);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    text-align: center;
+}
+
+.mismatch {
+    margin: 0 0 var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+    border: 1px dashed var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    line-height: 1.4;
+}
+
+.actions {
+    display: flex;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+}

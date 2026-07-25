@@ -15,6 +15,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
+import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
@@ -1470,6 +1471,8 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                         heading={heading}
                         description={meta?.description}
                         walletId={walletId}
+                        chainId={chainId}
+                        tick={tick}
                         messaging={messaging}
                         addresses={addresses}
                         addressesError={addressesError}
@@ -1489,6 +1492,8 @@ function GatedGroupCard({
     heading,
     description,
     walletId,
+    chainId,
+    tick,
     messaging,
     addresses,
     addressesError,
@@ -1505,6 +1510,8 @@ function GatedGroupCard({
     const [unlocked, setUnlocked] = useState(() => new Map());
     /** @type {[any | null, Function]} */
     const [pendingFile, setPendingFile] = useState(null);
+    /** @type {[{ name: string, declaredType: string | null, plaintextBase64: string } | null, Function]} */
+    const [viewer, setViewer] = useState(null);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const passwordOpen = pendingFile !== null;
@@ -1515,39 +1522,17 @@ function GatedGroupCard({
         }
     }, [passwordOpen, submitting]);
 
+    // PC-27: unlocked plaintext is attacker-controlled bytes, so it never
+    // leaves this page as a document. The GatedFileViewer modal sniffs
+    // the bytes and renders only through script-inert surfaces; the
+    // declared file.type is passed for labeling/mismatch-warning only.
     function openFile(plain, file) {
         if (!plain) return;
-        try {
-            const bin = typeof atob === 'function'
-                ? atob(plain.plaintextBase64)
-                : Buffer.from(plain.plaintextBase64, 'base64').toString('binary');
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-            const mime = String(file.type || '').toLowerCase();
-            const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const isInlineRenderable = mime.startsWith('image/')
-                || mime.startsWith('text/')
-                || mime === 'application/json'
-                || mime.endsWith('+json')
-                || mime === 'application/pdf';
-            if (isInlineRenderable) {
-                window.open(url, '_blank', 'noopener,noreferrer');
-            } else {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = file.name || 'unlocked-file';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            }
-            // Give the new tab / download time to grab the blob before
-            // revoking. 60s is generous but cheap.
-            setTimeout(() => URL.revokeObjectURL(url), 60_000);
-        } catch (_e) {
-            // Decoding failures are silent; the file row stays clickable
-            // so the user can try again.
-        }
+        setViewer({
+            name: file.name || `Action #${file.actionIndex}`,
+            declaredType: file.type || null,
+            plaintextBase64: plain.plaintextBase64,
+        });
     }
 
     async function handleFileClick(file) {
@@ -1596,10 +1581,55 @@ function GatedGroupCard({
             }
             return;
         }
-        // Real content: open password prompt. The holding address is
-        // discovered automatically on submit (handleUnlock iterates the
-        // user's addresses to find whichever one received the seller's
-        // key handoff for this group's KEY_HASH).
+        // Real content, vault-first (PC-27): a pack key persisted at
+        // publish time or by a prior recovery scan unlocks with no
+        // password prompt - decryption is pure AES host-side, and the
+        // gatedKeys row is only readable while the wallet session is
+        // unlocked. Any failure here falls through to the password flow.
+        if (typeof messaging.listGatedKeys === 'function') {
+            let vaultHeld = false;
+            try {
+                const rows = await messaging.listGatedKeys({ walletId, chainId, gateTicker: tick });
+                const want = String(group.keyHash).toLowerCase();
+                vaultHeld = Array.isArray(rows)
+                    && rows.some((r) => String(r?.keyHash || '').toLowerCase() === want);
+            } catch (_e) {
+                vaultHeld = false;
+            }
+            if (vaultHeld && !submitting) {
+                setSubmitting(true);
+                try {
+                    const results = new Map(unlocked);
+                    for (const f of group.files) {
+                        if (results.has(String(f.actionIndex))) continue;
+                        const resp = await messaging.unlockGatedContent({
+                            walletId,
+                            actionIndex: f.actionIndex,
+                            keyHash: group.keyHash,
+                            gateTicker: tick,
+                            chainId,
+                        });
+                        results.set(String(f.actionIndex), {
+                            plaintextBase64: resp.plaintextBase64,
+                            byteLength: resp.byteLength,
+                        });
+                    }
+                    setUnlocked(results);
+                    const target = results.get(String(file.actionIndex));
+                    if (target) openFile(target, file);
+                    return;
+                } catch (_e) {
+                    // Vault row unusable (stale, explorer down, ...):
+                    // fall through to the password-gated scan path.
+                } finally {
+                    setSubmitting(false);
+                }
+            }
+        }
+        // Password prompt path. The holding address is discovered
+        // automatically on submit (handleUnlock iterates the user's
+        // addresses to find whichever one received the seller's key
+        // handoff for this group's KEY_HASH).
         onRequestAddresses();
         setUnlockError(null);
         setPendingFile(file);
@@ -1639,6 +1669,11 @@ function GatedGroupCard({
                             addressId: a.id,
                             actionIndex: firstFile.actionIndex,
                             keyHash: group.keyHash,
+                            // PC-27: lets the host persist the scan-recovered
+                            // key into the vault, so the next unlock skips
+                            // the password entirely.
+                            gateTicker: tick,
+                            chainId,
                         });
                         workingAddrId = a.id;
                         break;
@@ -1671,6 +1706,8 @@ function GatedGroupCard({
                         addressId: workingAddrId,
                         actionIndex: file.actionIndex,
                         keyHash: group.keyHash,
+                        gateTicker: tick,
+                        chainId,
                     });
                     results.set(String(file.actionIndex), {
                         plaintextBase64: resp.plaintextBase64,
@@ -1722,7 +1759,7 @@ function GatedGroupCard({
                                 <UnlockedFileLink
                                     name={f.name || `Action #${f.actionIndex}`}
                                     type={f.type}
-                                    plaintextBase64={plain.plaintextBase64}
+                                    onOpen={() => openFile(plain, f)}
                                 />
                             </li>
                         );
@@ -1822,53 +1859,37 @@ function GatedGroupCard({
                     </div>
                 </form>
             ) : null}
+            {viewer ? (
+                <GatedFileViewer
+                    name={viewer.name}
+                    declaredType={viewer.declaredType}
+                    plaintextBase64={viewer.plaintextBase64}
+                    onClose={() => setViewer(null)}
+                />
+            ) : null}
         </div>
     );
 }
 
 // Unlocked file rendered as the same colored full-width button used in
-// the Media → Files section. Click opens the file: browser-renderable
-// MIME types (image/*, text/*, application/json, application/pdf) open
-// inline in a new tab; everything else downloads via the `download`
-// attribute. The plaintext bytes live entirely in-memory via a Blob
-// URL. No network round-trip and no on-disk artifact unless the user
-// chooses to save the download.
-function UnlockedFileLink({ name, type, plaintextBase64 }) {
-    const mime = String(type || '').toLowerCase();
-    const isInlineRenderable = mime.startsWith('image/')
-        || mime.startsWith('text/')
-        || mime === 'application/json'
-        || mime.endsWith('+json')
-        || mime === 'application/pdf';
-
-    const blobUrl = useMemo(() => {
-        try {
-            const bin = typeof atob === 'function'
-                ? atob(plaintextBase64)
-                : Buffer.from(plaintextBase64, 'base64').toString('binary');
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-            const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
-            return URL.createObjectURL(blob);
-        } catch (_e) {
-            return null;
-        }
-    }, [mime, plaintextBase64]);
-
-    useEffect(() => {
-        if (!blobUrl) return undefined;
-        return () => URL.revokeObjectURL(blobUrl);
-    }, [blobUrl]);
-
-    if (!blobUrl) return null;
-
+// the Media → Files section. Click opens the GatedFileViewer modal
+// (PC-27): the plaintext is attacker-controlled, so it is never exposed
+// as a blob href or new-tab document from here - the viewer sniffs the
+// bytes and renders through script-inert surfaces only, with download
+// as the fallback. The declared `type` is cosmetic (icon + chip).
+function UnlockedFileLink({ name, type, onOpen }) {
     return (
-        <a
-            href={blobUrl}
+        <button
+            type="button"
+            onClick={onOpen}
             className={styles.fileLink}
-            target={isInlineRenderable ? '_blank' : undefined}
-            rel="noreferrer noopener"
-            download={isInlineRenderable ? undefined : (name || 'unlocked-file')}
+            style={{
+                cursor: 'pointer',
+                font: 'inherit',
+                width: '100%',
+                textAlign: 'left',
+            }}
+            aria-label={`Open unlocked file ${name}`}
         >
             <span className={styles.fileLinkIcon} aria-hidden="true">
                 <Icon.FileTypeIcon type={type} />
@@ -1877,7 +1898,7 @@ function UnlockedFileLink({ name, type, plaintextBase64 }) {
             {type ? (
                 <span className={styles.fileLinkType}>{type}</span>
             ) : null}
-        </a>
+        </button>
     );
 }
 
