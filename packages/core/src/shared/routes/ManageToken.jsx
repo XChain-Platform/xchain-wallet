@@ -31,6 +31,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * surface every capability §40.5 grants the issuer:
  *
  *   - Mint additional supply              (hidden when supply is locked)
+ *   - Mint settings                       (edit ISSUE v2 mint-config fields; PC-01)
  *   - Destroy supply (burn)
  *   - Lock supply                         (hidden when already locked)
  *   - Update description
@@ -55,6 +56,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onMint]
  * @param {() => void} [props.onDestroy]
  * @param {() => void} [props.onLock]
+ * @param {() => void} [props.onMintSettings]         edit ISSUE v2 mint-configuration fields: MAX_MINT, MINT_SUPPLY, TRANSFER_SUPPLY, MINT_ADDRESS_MAX, MINT_START_BLOCK, MINT_STOP_BLOCK (PC-01)
  * @param {() => void} [props.onUpdateDescription]
  * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
  * @param {() => void} [props.onManageRoster]        publish/edit the project's official-token list (LIST + owner LINK)
@@ -79,6 +81,7 @@ export function ManageToken({
     onMint,
     onDestroy,
     onLock,
+    onMintSettings,
     onUpdateDescription,
     onAttachContent,
     onManageRoster,
@@ -390,6 +393,15 @@ export function ManageToken({
     /** @type {Array<{ id: string, label: string, Icon: any, onSelect: (() => void) | undefined, danger?: boolean }>} */
     const actions = [
         { id: 'mint', label: 'Mint', Icon: Icon.PrinterIcon, onSelect: (locked || blockIssuerActions) ? undefined : onMint },
+        // Unlike Mint (which submits a MINT command and is hidden once
+        // supply is locked), Mint settings edits ISSUE v2's own config
+        // fields and stays reachable regardless of the coarse `locked`
+        // flag: even a fully-locked token can still have an un-touched
+        // MINT_ADDRESS_MAX / window pair worth reviewing, and the panel
+        // itself explains + disables whichever fields their specific
+        // lock flags (LOCK_MAX_MINT / LOCK_MINT / LOCK_MINT_SUPPLY)
+        // actually cover (PC-01).
+        { id: 'mint-settings', label: 'Mint settings', Icon: Icon.GearIcon, onSelect: blockIssuerActions ? undefined : onMintSettings },
         { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
         { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
@@ -591,8 +603,9 @@ export function ManageToken({
                 {isOwner === false ? (
                     <p className={styles.ownerWarning} role="status">
                         This wallet doesn't hold the token's issuer address.
-                        Mint, Lock, Description, Artwork, Transfer,
-                        Broadcast, and Dividend require signing from {shortAddress(owner)}.
+                        Mint, Mint settings, Lock, Description, Artwork,
+                        Transfer, Broadcast, and Dividend require signing
+                        from {shortAddress(owner)}.
                     </p>
                 ) : null}
 

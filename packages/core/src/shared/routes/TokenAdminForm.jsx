@@ -20,6 +20,7 @@ import {
 import {
     registry as registryLib,
     decoder as decoderLib,
+    flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -30,6 +31,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -40,6 +42,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -53,22 +56,32 @@ const PROTOCOL_COIN_TICKER = {
 /**
  * Token admin surfaces (§40.5).
  *
- * Three thin one-field forms on top of the ISSUE mechanism, selected
- * via `mode`:
+ * Thin forms on top of the ISSUE mechanism, selected via `mode`:
  *
- *   - `'lock'`:        permanently locks supply + minting
- *                       (ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT).
- *   - `'description'`: updates the on-chain DESCRIPTION
- *                       (ISSUE v1 with a single DESCRIPTION field).
- *   - `'transfer'`:    transfers token ownership to another address
- *                       (ISSUE v0 with the TRANSFER field set).
+ *   - `'lock'`:          permanently locks supply + minting
+ *                         (ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT).
+ *   - `'description'`:   updates the on-chain DESCRIPTION
+ *                         (ISSUE v1 with a single DESCRIPTION field).
+ *   - `'transfer'`:      transfers token ownership to another address
+ *                         (ISSUE v0 with the TRANSFER field set).
+ *   - `'mint-settings'`: edits the ISSUE v2 mint-configuration fields
+ *                         (MAX_MINT, MINT_SUPPLY, TRANSFER_SUPPLY,
+ *                         MINT_ADDRESS_MAX, MINT_START_BLOCK,
+ *                         MINT_STOP_BLOCK). Current values are read
+ *                         from `getToken` via `useTokenInfo` and
+ *                         prefilled; a field locked by LOCK_MAX_MINT /
+ *                         LOCK_MINT / LOCK_MINT_SUPPLY is disabled with
+ *                         an explanatory warning (PC-01). Always
+ *                         launched from ManageToken (never the free
+ *                         Actions menu), since it needs a real token's
+ *                         current values to edit.
  *
- * Until the Token detail page (§40.5 home) exists, the ticker is
- * user-entered. Future prop: `initialTicker` so Token detail can
- * prefill. All three modes use `messaging.issueToken` (no new
- * background handlers or core flows).
+ * Until the Token detail page (§40.5 home) exists, `'lock'` /
+ * `'description'` / `'transfer'` accept a user-entered ticker. Future
+ * prop: `initialTicker` so Token detail can prefill. Every mode uses
+ * `messaging.issueToken` (no new background handlers or core flows).
  *
- * @typedef {'lock' | 'description' | 'transfer'} AdminMode
+ * @typedef {'lock' | 'description' | 'transfer' | 'mint-settings'} AdminMode
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -95,6 +108,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [description, setDescription] = useState('');
     const [transferTo, setTransferTo] = useState('');
+    // Mint settings (mode === 'mint-settings', PC-01): the four ISSUE v2
+    // config fields (prefilled from the current token record) plus the
+    // two "mint additional supply now" fields, which have no current
+    // value to prefill (they're a one-shot action, not persisted state).
+    const [maxMint, setMaxMint] = useState('');
+    const [mintAddressMax, setMintAddressMax] = useState('');
+    const [mintStartBlock, setMintStartBlock] = useState('');
+    const [mintStopBlock, setMintStopBlock] = useState('');
+    const [mintSupply, setMintSupply] = useState('');
+    const [transferSupply, setTransferSupply] = useState('');
     const [password, setPassword] = useState('');
     // Lock-mode typed-confirmation gate. Locking is irreversible, so
     // the review stage requires the user to type LOCK before the Sign
@@ -175,6 +198,64 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
+    // Mint settings (PC-01): current on-chain values + lock flags, read
+    // via the same useTokenInfo hook ManageToken uses. `mint-settings` is
+    // only ever launched from ManageToken with a concrete (chainId, tick)
+    // pair (lockedToken is always true for this mode), so `ticker` is
+    // stable for the life of the form.
+    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' });
+    const mintLocks = assetInfo?.locks || {};
+    // LOCK_MAX_MINT: MAX_MINT itself can't change (issue.js "MAX_MINT (locked)").
+    const maxMintLocked = !!mintLocks.max_mint;
+    // LOCK_MINT: the MINT command is permanently dead (mint.js "LOCK_MINT").
+    // Not a protocol restriction on MINT_ADDRESS_MAX / the mint window, but
+    // editing them has no effect once minting itself can never happen again,
+    // so the UI disables them here as a courtesy rather than protocol law.
+    const mintDeadLocked = !!mintLocks.mint;
+    // LOCK_MINT_SUPPLY: MINT_SUPPLY (mint-now) is blocked (issue.js "MINT_SUPPLY (locked)").
+    const mintSupplyLocked = !!mintLocks.mint_supply;
+    // LOCK_MAX_SUPPLY doesn't gate any ISSUE v2 field (MAX_SUPPLY itself is
+    // only editable via v0); surfaced as read-only context, nothing to disable.
+    const maxSupplyLockedInfo = !!mintLocks.max_supply;
+    const maxMintFieldDisabled = maxMintLocked || mintDeadLocked;
+    const mintWindowFieldsDisabled = mintDeadLocked;
+    const mintNowFieldsDisabled = mintSupplyLocked;
+    const nothingMintEditable = maxMintFieldDisabled && mintWindowFieldsDisabled && mintNowFieldsDisabled;
+
+    // Prefill the four persisted mint-config fields from the token's
+    // current record, once, so re-fetches (or the user editing a field
+    // to empty) don't clobber their in-progress edit. MINT_SUPPLY /
+    // TRANSFER_SUPPLY have no current value to prefill: they're a
+    // one-shot "mint more now" action bundled into the same edit, not
+    // persisted token state.
+    const [mintPrefilled, setMintPrefilled] = useState(false);
+    useEffect(() => {
+        if (mode !== 'mint-settings' || !assetInfo || mintPrefilled) return;
+        setMaxMint(assetInfo.mintMax || '');
+        setMintAddressMax(assetInfo.mintAddressMax || '');
+        setMintStartBlock(assetInfo.mintStartBlock || '');
+        setMintStopBlock(assetInfo.mintStopBlock || '');
+        setMintPrefilled(true);
+    }, [mode, assetInfo, mintPrefilled]);
+
+    // Current indexed block height (same read as History's Indexed-stage
+    // timeline, messaging.getIndexerWatermark) so the block-height inputs
+    // can caption themselves with an estimated date (blockDateEstimate.js).
+    const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        if (mode !== 'mint-settings' || !chainId) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (typeof messaging?.getIndexerWatermark !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getIndexerWatermark({ chainId })
+            .then((r) => { if (!cancelled) setCurrentHeight(r && r.watermark != null ? Number(r.watermark) : null); })
+            .catch(() => { if (!cancelled) setCurrentHeight(null); });
+        return () => { cancelled = true; };
+    }, [mode, chainId, messaging, walletId]);
+    const mintStartEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: mintStartBlock });
+    const mintStopEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: mintStopBlock });
+    const hasAnyMintField = !!(maxMint || mintAddressMax || mintStartBlock || mintStopBlock || mintSupply || transferSupply);
+
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
     const [feePick, setFeePick] = useState(
@@ -212,8 +293,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             ticker,
             description,
             transferTo,
+            maxMint,
+            mintAddressMax,
+            mintStartBlock,
+            mintStopBlock,
+            mintSupply,
+            transferSupply,
         }),
-        [mode, ticker, description, transferTo],
+        [mode, ticker, description, transferTo, maxMint, mintAddressMax,
+         mintStartBlock, mintStopBlock, mintSupply, transferSupply],
     );
 
     const decoded = useMemo(() => {
@@ -247,6 +335,20 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         if (mode === 'transfer' && !transferTo.trim()) {
             setFormError('New owner address is required.');
             return;
+        }
+        if (mode === 'mint-settings') {
+            if (!hasAnyMintField) {
+                setFormError('Enter at least one field to update.');
+                return;
+            }
+            if (mintAddressMax && maxMint && Number(mintAddressMax) < Number(maxMint)) {
+                setFormError('Max mint per address must be at least the max mint per transaction.');
+                return;
+            }
+            if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
+                setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -649,6 +751,117 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 />
             ) : null}
 
+            {mode === 'mint-settings' ? (
+                <>
+                    {nothingMintEditable ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                Every mint setting for {ticker} is permanently locked.
+                                There is nothing left to edit here.
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            {mintDeadLocked ? (
+                                <div role="alert" className={styles.warnings}>
+                                    <p className={styles.warning}>
+                                        Minting is permanently locked for {ticker} (LOCK_MINT).
+                                        The mint window, max mint per transaction, and per-address
+                                        cap below can no longer take effect.
+                                    </p>
+                                </div>
+                            ) : maxMintLocked ? (
+                                <div role="alert" className={styles.warnings}>
+                                    <p className={styles.warning}>
+                                        Max mint per transaction is permanently locked for {ticker} (LOCK_MAX_MINT).
+                                    </p>
+                                </div>
+                            ) : null}
+                            {mintSupplyLocked ? (
+                                <div role="alert" className={styles.warnings}>
+                                    <p className={styles.warning}>
+                                        Minting supply now is permanently locked for {ticker} (LOCK_MINT_SUPPLY).
+                                    </p>
+                                </div>
+                            ) : null}
+                            {maxSupplyLockedInfo ? (
+                                <div role="alert" className={styles.warnings}>
+                                    <p className={styles.warning}>
+                                        Max supply is also permanently locked for {ticker} (LOCK_MAX_SUPPLY).
+                                        That is a separate ISSUE field, not part of Mint settings.
+                                    </p>
+                                </div>
+                            ) : null}
+                        </>
+                    )}
+
+                    <Input
+                        label="Max mint per transaction (optional)"
+                        hint="Caps how much can be minted in one transaction. Leave blank for no limit."
+                        inputMode="decimal"
+                        value={maxMint}
+                        onChange={(e) => setMaxMint(e.target.value)}
+                        autoComplete="off"
+                        disabled={maxMintFieldDisabled}
+                    />
+                    <Input
+                        label="Max mint per address (optional)"
+                        hint="The most this address can ever mint in total, across every MINT transaction. Leave blank for no limit."
+                        inputMode="decimal"
+                        value={mintAddressMax}
+                        onChange={(e) => setMintAddressMax(e.target.value)}
+                        autoComplete="off"
+                        disabled={mintWindowFieldsDisabled}
+                    />
+                    <Input
+                        label="Minting opens at block (optional)"
+                        hint={mintStartEstimate
+                            ? `Block height when public minting starts. Est. ${mintStartEstimate}.`
+                            : 'Block height when public minting starts. Leave blank to open immediately.'}
+                        inputMode="decimal"
+                        value={mintStartBlock}
+                        onChange={(e) => setMintStartBlock(e.target.value)}
+                        autoComplete="off"
+                        disabled={mintWindowFieldsDisabled}
+                    />
+                    <Input
+                        label="Minting closes at block (optional)"
+                        hint={mintStopEstimate
+                            ? `Block height when public minting ends. Est. ${mintStopEstimate}.`
+                            : 'Block height when public minting ends. Leave blank to keep it open.'}
+                        inputMode="decimal"
+                        value={mintStopBlock}
+                        onChange={(e) => setMintStopBlock(e.target.value)}
+                        autoComplete="off"
+                        disabled={mintWindowFieldsDisabled}
+                    />
+                    {currentHeight != null ? (
+                        <p className={styles.hint}>
+                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Dates above are rough estimates; real block times vary.
+                        </p>
+                    ) : null}
+                    <Input
+                        label="Mint supply now (optional)"
+                        hint="Mints this amount immediately, in this same transaction, on top of the settings above."
+                        inputMode="decimal"
+                        value={mintSupply}
+                        onChange={(e) => setMintSupply(e.target.value)}
+                        autoComplete="off"
+                        disabled={mintNowFieldsDisabled}
+                    />
+                    <AddressField
+                        label="Send that new supply to (optional)"
+                        icon="contacts"
+                        hint="Only used together with Mint supply now above. Leave blank to keep it in your own address."
+                        value={transferSupply}
+                        onChange={(e) => setTransferSupply(e.target.value)}
+                        onIconClick={() => setContactsPickerOpen(true)}
+                        disabled={mintNowFieldsDisabled}
+                    />
+                </>
+            ) : null}
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
@@ -671,7 +884,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !ticker
                         || (mode === 'description' && !description)
-                        || (mode === 'transfer' && !transferTo) || actionConfirm.composing}
+                        || (mode === 'transfer' && !transferTo)
+                        || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
+                        || actionConfirm.composing}
                 >
                     {singleEncode ? 'Update token' : 'Preview'}
                 </Button>
@@ -691,6 +906,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
  *   "Update description of TICK…".
  * - **transfer**: ISSUE v0 with only TRANSFER set, decoded as
  *   "Transfer ownership of TICK to ADDR…".
+ * - **mint-settings**: ISSUE v2 with whichever of MAX_MINT / MINT_SUPPLY
+ *   / TRANSFER_SUPPLY / MINT_ADDRESS_MAX / MINT_START_BLOCK /
+ *   MINT_STOP_BLOCK the owner filled in; a blank field is omitted
+ *   entirely rather than sent as an empty string, since the indexer
+ *   treats an omitted v2 field as "leave unchanged" (issue.js `isNull`
+ *   guards on every one of these), never as "clear to zero". Decoded
+ *   as "Update mint parameters of TICK…".
  */
 function composeAdminParams(mode, form) {
     const TICK = (form.ticker || '').trim().toUpperCase();
@@ -709,6 +931,16 @@ function composeAdminParams(mode, form) {
             DESCRIPTION: (form.description || '').trim(),
         };
     }
+    if (mode === 'mint-settings') {
+        const p = { VERSION: '2', TICK };
+        if (form.maxMint) p.MAX_MINT = String(form.maxMint).trim();
+        if (form.mintSupply) p.MINT_SUPPLY = String(form.mintSupply).trim();
+        if (form.transferSupply) p.TRANSFER_SUPPLY = form.transferSupply.trim();
+        if (form.mintAddressMax) p.MINT_ADDRESS_MAX = String(form.mintAddressMax).trim();
+        if (form.mintStartBlock) p.MINT_START_BLOCK = String(form.mintStartBlock).trim();
+        if (form.mintStopBlock) p.MINT_STOP_BLOCK = String(form.mintStopBlock).trim();
+        return p;
+    }
     // mode === 'transfer'
     return {
         VERSION: '0',
@@ -721,18 +953,21 @@ const MODE_LABEL = {
     lock: 'Lock supply',
     description: 'Update description',
     transfer: 'Transfer ownership',
+    'mint-settings': 'Mint settings',
 };
 
 const MODE_LABEL_LOWER = {
     lock: 'lock',
     description: 'description update',
     transfer: 'ownership transfer',
+    'mint-settings': 'mint settings update',
 };
 
 const MODE_DONE_TITLE = {
     lock: 'Locked',
     description: 'Description updated',
     transfer: 'Ownership transferred',
+    'mint-settings': 'Mint settings updated',
 };
 
 function DetailRow({ label, value }) {

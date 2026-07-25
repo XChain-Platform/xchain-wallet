@@ -92,7 +92,11 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
  * @property {string | null} totalSupply                 formatted decimal string ("1000.5")
  * @property {string | null} maxSupply                   formatted decimal string, null if unlimited
  * @property {boolean} locked                            true when description/supply/mint is locked
- * @property {Object} locks                              full lock map (per-field booleans)
+ * @property {Object} locks                              full lock map (per-field booleans). PC-01's Mint settings panel reads `locks.max_mint` (LOCK_MAX_MINT), `locks.mint` (LOCK_MINT), `locks.mint_supply` (LOCK_MINT_SUPPLY), and `locks.max_supply` (LOCK_MAX_SUPPLY) to disable individual ISSUE v2 fields.
+ * @property {string | null} mintMax                     ISSUE v2 `MAX_MINT`: cap per MINT transaction, null when unset (explorer's `mints.max` collapses NULL and 0 to the same value, so 0 reads as unset here too)
+ * @property {string | null} mintAddressMax               ISSUE v2 `MINT_ADDRESS_MAX`: cumulative cap per minting address, null when unset
+ * @property {string | null} mintStartBlock               ISSUE v2 `MINT_START_BLOCK`: block height public minting opens, null when unset
+ * @property {string | null} mintStopBlock                ISSUE v2 `MINT_STOP_BLOCK`: block height public minting closes, null when unset
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
@@ -584,6 +588,18 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         || lockMap.mint
         || lockMap.mint_supply
     );
+    // PC-01 mint-configuration fields (ISSUE v2): xchain-explorer's
+    // getToken groups these under a `mints` object (db.js getToken,
+    // "Group MINT fields"). The grouping loop there runs every mint_*
+    // column through `Number(value)`, and SQL NULL becomes `Number(null)
+    // === 0`, so an explicitly-configured 0 and a never-configured field
+    // are indistinguishable on the wire; treat both as "unset" (null)
+    // rather than showing a misleading "0" in the Mint settings panel.
+    const mintsRaw = row?.mints && typeof row.mints === 'object' ? row.mints : {};
+    const mintMax = mintsRaw.max ? String(mintsRaw.max) : null;
+    const mintAddressMax = mintsRaw.address_max ? String(mintsRaw.address_max) : null;
+    const mintStartBlock = mintsRaw.start_block ? String(mintsRaw.start_block) : null;
+    const mintStopBlock = mintsRaw.stop_block ? String(mintsRaw.stop_block) : null;
     const marketPrice = isFiniteNum(row?.market?.price) ? row.market.price : null;
     const marketFloor = isFiniteNum(row?.market?.floor) ? row.market.floor : null;
     // Divisibility lives at the top of the indexer row (or, in legacy
@@ -643,6 +659,10 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         maxSupply,
         locked,
         locks: lockMap,
+        mintMax,
+        mintAddressMax,
+        mintStartBlock,
+        mintStopBlock,
         marketPrice,
         marketFloor,
         divisibility,
