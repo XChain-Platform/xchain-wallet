@@ -77,6 +77,16 @@ export async function advancedAction(opts) {
         actionData: { action: actionName, params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Make the SDK select funding UTXOs BY ADDRESS (sourceAddress is
+            // SDK-side only, never on the create_tx wire) and return change to
+            // the spender. Without these the encoder falls back to selecting by
+            // `pubkey`, which the utxo-tracker cannot turn into a script and
+            // rejects with "has no matching Script" - the same D-7 failure the
+            // Send path fixed in composeForConfirm.js. The confirm-modal flows
+            // avoid it by supplying a prebuiltPsbt (createTx is skipped); this
+            // generic path builds the tx live, so it must pass them itself.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
