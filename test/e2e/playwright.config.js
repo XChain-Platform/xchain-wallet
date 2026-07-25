@@ -32,7 +32,7 @@ export default defineConfig({
     // serves a PRODUCTION build against a live chain. Those specs sign and
     // broadcast; this dev server serves the dev-mock SDK and cannot. Running
     // them here would fail for an unrelated reason and teach nothing.
-    testIgnore: '**/*.regtest.spec.js',
+    testIgnore: ['**/*.regtest.spec.js', '**/*.extension.spec.js'],
     outputDir: './test-results',
     fullyParallel: false,
     forbidOnly: !!process.env.CI,

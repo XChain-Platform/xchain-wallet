@@ -9,7 +9,8 @@
         "test:headed": "playwright test --config playwright.config.js --headed",
         "test:regtest": "playwright test --config playwright.regtest.config.js",
         "test:regtest:headed": "playwright test --config playwright.regtest.config.js --headed",
-        "install:browsers": "playwright install --with-deps chromium"
+        "install:browsers": "playwright install --with-deps chromium",
+        "test:extension": "playwright test --config playwright.extension.config.js"
     },
     "devDependencies": {
         "@axe-core/playwright": "^4.10.0",

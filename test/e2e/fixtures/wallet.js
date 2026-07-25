@@ -106,8 +106,11 @@ export async function readRecoveryPhrase(page) {
  * rendered rather than assuming which three it picked.
  */
 export async function completeRecoveryPhraseChallenge(page, words) {
+    // Heading copy differs per shell: "Verify your recovery phrase" in the
+    // web app, "Verify phrase" in the extension popup. The challenge itself
+    // (the "Word N" boxes below) is identical.
     await expect(
-        page.getByRole('heading', { name: 'Verify your recovery phrase' }),
+        page.getByRole('heading', { name: /Verify (your recovery )?phrase/i }),
     ).toBeVisible();
 
     let filled = 0;
@@ -131,22 +134,33 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * fees the send specs assert on. Pass `ads: 'enable'` to cover the
  * opt-in path.
  *
+ * Pass `navigate: false` when the page is ALREADY on the wallet, which is
+ * the case for the MV3 extension venue: its popup is opened at
+ * chrome-extension://<id>/popup.html and there is no baseURL to goto. The
+ * onboarding walk itself is identical, and keeping one copy of it is the
+ * reason this fixture exists at all.
+ *
  * @returns {Promise<string[]>} the generated recovery phrase
  */
 export async function createWallet(page, options = {}) {
-    const { password = DEFAULT_PASSWORD, name, ads = 'decline' } = options;
+    const { password = DEFAULT_PASSWORD, name, ads = 'decline', navigate = true } = options;
 
-    await page.goto('/');
+    if (navigate) await page.goto('/');
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Create new wallet' }).click();
 
     if (name) await page.getByLabel('Wallet name').fill(name);
     await page.getByLabel('Password', { exact: true }).fill(password);
-    await page.getByLabel('Confirm password').fill(password);
+    // The shells label this field differently: the web app says "Confirm
+    // password", the extension popup shortens it to "Confirm" for its narrow
+    // width. Match both rather than forking the walk.
+    await page.getByLabel(/^Confirm( password)?$/).fill(password);
     await page.getByRole('button', { name: 'Next' }).click();
 
     const words = await readRecoveryPhrase(page);
-    await page.getByLabel(/i have written down/i).check();
+    // Wording differs per shell again: the web app says "I have written
+    // down...", the extension popup says "I've saved my recovery phrase."
+    await page.getByLabel(/written down|saved my recovery phrase/i).check();
     await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
     await completeRecoveryPhraseChallenge(page, words);
@@ -185,13 +199,27 @@ export async function dismissIntroCarousel(page) {
         .waitFor({ state: 'visible', timeout: 15_000 });
 }
 
-/** Answers the ADS donation-consent screen shown at the end of onboarding. */
+/**
+ * Answers the ADS donation-consent screen shown at the end of onboarding.
+ *
+ * Tolerant by design, like dismissIntroCarousel: the consent step lives in
+ * the shared CreateWallet route the web shell uses, and the extension popup
+ * has its OWN onboarding implementation that does not include it. Waiting
+ * unconditionally would hang every extension spec on a screen that is never
+ * coming. Returns false when there was nothing to answer.
+ */
 export async function acknowledgeDonationConsent(page, choice = 'decline') {
     const button =
         choice === 'enable'
             ? page.getByRole('button', { name: /Enable and continue/i })
             : page.getByRole('button', { name: /Decline/i });
+    try {
+        await button.waitFor({ state: 'visible', timeout: 10_000 });
+    } catch {
+        return false;               // shell has no consent step
+    }
     await button.click();
+    return true;
 }
 
 /** The locked screen's submit button. Disabled until a password is typed. */

@@ -23,4 +23,5 @@ coverage/
 # Playwright E2E artifacts (traces, videos, screenshots, HTML report)
 test/e2e/test-results/
 test/e2e/test-results-regtest/
+test/e2e/test-results-extension/
 test/e2e/playwright-report/
