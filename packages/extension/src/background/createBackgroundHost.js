@@ -1519,6 +1519,69 @@ export function createBackgroundHost(deps) {
         });
     });
 
+    // : VOTE's wire params are built by sdk.voting.*Params, which lives
+    // HERE, not in the renderer. The three VOTE forms each kept a hand-written
+    // client-side mirror of that encoding to feed the generic compose route -
+    // and a mirror that drifts is signed, not caught: the tamper check
+    // verifies the PSBT against the params the encoder was handed, so a wrong
+    // mirror produces a self-consistent PSBT for the WRONG ballot, and
+    // castBallotAction's own builder never runs because `prebuiltPsbt`
+    // short-circuits it. Composing through the real builder removes the mirror
+    // (spec §1: the SDK owns the logic, the wallet owns the glass).
+    //
+    // No vault unlock and no signer: the builders are pure shape validation.
+    host.register('action.vote.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.vote.composeForConfirm: chainId is required');
+        }
+        const builder = req?.builder;
+        // Allow-listed: `builder` crosses the messaging boundary, so it must
+        // never be able to name an arbitrary sdk.voting method.
+        const VOTE_BUILDERS = ['createPollParams', 'castBallotParams', 'delegateVoteParams', 'clearVoteDelegationParams'];
+        if (!VOTE_BUILDERS.includes(builder)) {
+            throw new Error(`action.vote.composeForConfirm: unknown builder "${builder}"`);
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.voting?.[builder] !== 'function') {
+            throw new Error(`action.vote.composeForConfirm: sdk.voting.${builder} is unavailable`);
+        }
+        const source = normalizeSource(req?.from, 'action.vote.composeForConfirm');
+        // Throws on bad input BEFORE the confirm page opens, exactly as the
+        // submit flow's own up-front guard does.
+        const params = sdk.voting[builder](req?.params);
+
+        let ownAddresses = [source.address];
+        try {
+            const byChain = await addressesByChain(req, { vault, chainRegistry });
+            const rows = byChain?.[chainId] || [];
+            ownAddresses = rows.map((r) => r.address).filter(Boolean);
+            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
+        } catch {
+            // fall through to [source.address]
+        }
+
+        const composed = await composeActionForConfirm({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            actionData: { action: 'VOTE', params },
+            encoderOpts: {
+                pubkey: source.publicKey,
+                ...(req?.fee !== undefined && { fee: req.fee }),
+                ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+                ...(req?.rbf !== undefined && { rbf: req.rbf }),
+            },
+            source: source.address,
+            ownAddresses,
+        });
+        // The built wire params ride back so the confirm page decodes its
+        // intent from what the HOST composed, not from the editor state
+        // (same shape as `messageParams` on the MESSAGE route).
+        return { ...composed, voteParams: params };
+    });
+
     //  §4: run sdk.preflight HOST-side (the SDK, its explorer endpoint,
     // and Tier-2 state all live here) and return the serializable report. The
     // popup's AbortController cannot cross the boundary; a superseded report

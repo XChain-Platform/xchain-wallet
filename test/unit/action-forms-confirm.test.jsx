@@ -53,6 +53,7 @@ import { DispenserForm } from '../../packages/core/src/shared/routes/DispenserFo
 import { SwapForm } from '../../packages/core/src/shared/routes/SwapForm.jsx';
 import { PlaceOrderPanel } from '../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMessage.jsx';
+import { PollDetail } from '../../packages/core/src/shared/routes/PollDetail.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 
@@ -119,6 +120,12 @@ function recordingMessaging(overrides = {}) {
         }),
         // AdvancedActionsForm's action picker is populated from the host.
         listActions: () => Promise.resolve(['BROADCAST', 'SEND']),
+        // PollDetail renders its ballot editor from a loaded, OPEN poll.
+        governancePoll: () => Promise.resolve({
+            poll_index: 7, tick: 'JDOG', poll_status: 'open',
+            options: ['Yes', 'No'], tally_mode: 'approval', max_selections: 1,
+        }),
+        governancePollResults: () => Promise.resolve([]),
         // ControllerBindForm builds its wire action host-side (the SDK's
         // controller helper lives there), so the route must be stubbed.
         buildControllerBindParams: (args) => {
@@ -131,6 +138,14 @@ function recordingMessaging(overrides = {}) {
         composeForConfirm: (args) => {
             calls.push({ method: 'composeForConfirm', args });
             return Promise.resolve({ ...COMPOSED });
+        },
+        // : VOTE composes through the SDK's own sdk.voting.*Params
+        // builder, host-side. The stub stands in for that builder and
+        // echoes the wire params back as `voteParams`, which is what the
+        // confirm page decodes its intent from.
+        composeVoteForConfirm: (args) => {
+            calls.push({ method: 'composeVoteForConfirm', args });
+            return Promise.resolve({ ...COMPOSED, voteParams: { VERSION: '0', TICK: 'JDOG' } });
         },
         preflight: (args) => {
             calls.push({ method: 'preflight', args });
@@ -264,11 +279,23 @@ describe(': action forms confirm via the single-encode pipeline', () => {
                 setValue(utils, 'Option 1', 'No');
             },
         });
-        expectSingleEncode(calls, {
-            action: 'VOTE',
-            params: { VERSION: '0', TICK: 'JDOG', END_BLOCK: '900000', OPTIONS: 'Yes,No' },
-            submitMethod: 'createPollAction',
+        // : VOTE's wire encoding belongs to sdk.voting.createPollParams,
+        // which lives host-side, so the form hands over the UI-level input and
+        // the HOST builds the params the encoder sees. The generic route must
+        // NOT be used: it would compose a client-side mirror of that encoding,
+        // and a mirror that drifts gets SIGNED rather than caught (the tamper
+        // check verifies the PSBT against whatever the encoder was handed).
+        const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
+        expect(compose, 'composed through the VOTE builder route').toBeTruthy();
+        expect(compose.args.builder).toBe('createPollParams');
+        expect(compose.args.params).toMatchObject({
+            tick: 'JDOG', endBlock: '900000', options: ['Yes', 'No'],
         });
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(calls.some((c) => c.method === 'preflight'), 'preflight streamed').toBe(true);
+        const submit = calls.find((c) => c.method === 'createPollAction');
+        expect(submit, 'createPollAction dispatched on Approve').toBeTruthy();
+        expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
     });
 
     it('DividendForm composes DIVIDEND and signs the prebuilt PSBT', async () => {
@@ -382,11 +409,14 @@ describe(': action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Delegate votes',
             fill: (utils) => setValue(utils, 'Delegate to address', 'bc1qdelegate'),
         });
-        expectSingleEncode(calls, {
-            action: 'VOTE',
-            params: { VERSION: '3', TICK: 'JDOG', DELEGATE_TO: 'bc1qdelegate' },
-            submitMethod: 'delegateVoteAction',
-        });
+        const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
+        expect(compose, 'composed through the VOTE builder route').toBeTruthy();
+        expect(compose.args.builder).toBe('delegateVoteParams');
+        expect(compose.args.params).toMatchObject({ tick: 'JDOG', delegateTo: 'bc1qdelegate' });
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        const submit = calls.find((c) => c.method === 'delegateVoteAction');
+        expect(submit, 'delegateVoteAction dispatched on Approve').toBeTruthy();
+        expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
     });
 
     it('ControllerBindForm composes the host-built bind action and signs the prebuilt PSBT', async () => {
@@ -710,6 +740,40 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         // The exact params that were composed are the params submitted: a
         // rebuild on Approve would be a different order.
         expect(submit.args.params).toMatchObject({ GIVE_AMOUNT: '10', GET_AMOUNT: '5' });
+    });
+
+    // : casting a ballot was the last signing surface still on the
+    // legacy stage machine, where submitWithSigner rebuilds the PSBT on
+    // Approve. Ballots are token-weighted governance; leaving them without
+    // the tamper check and pre-flight panel every other action gets was a
+    // migration gap, not a design decision.
+    it('PollDetail composes a ballot through the VOTE builder and signs the prebuilt PSBT', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: PollDetail,
+            props: { pollIndex: 7 },
+            actionLabel: 'Vote',
+            fill: (utils) => {
+                // Approval mode: tick the first option.
+                const box = utils.container.querySelector('input[type="checkbox"]');
+                if (!box) throw new Error('no option checkbox on the ballot editor');
+                fireEvent.click(box);
+            },
+        });
+
+        // The ballot encoding (approval indices vs split option:share pairs)
+        // belongs to sdk.voting.castBallotParams, host-side. The form hands
+        // over its UI-level ballot; it must not encode the wire form itself.
+        const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
+        expect(compose, 'composed through the VOTE builder route').toBeTruthy();
+        expect(compose.args.builder).toBe('castBallotParams');
+        expect(compose.args.params).toMatchObject({ pollRef: 7, ballot: [0] });
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(calls.some((c) => c.method === 'preflight'), 'preflight streamed').toBe(true);
+
+        const submit = calls.find((c) => c.method === 'castBallotAction');
+        expect(submit, 'castBallotAction dispatched on Approve').toBeTruthy();
+        expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+        expect(submit.args.params).toMatchObject({ pollRef: 7, ballot: [0] });
     });
 });
 

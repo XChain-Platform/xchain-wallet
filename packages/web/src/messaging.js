@@ -1177,6 +1177,13 @@ export function signerReady(opts) { return /** @type {any} */ (sendMessage('wall
 /** @param {object} opts */
 export function messageAction(opts) { return /** @type {any} */ (sendMessage('action.message', opts)); }
 /**  §5.6 slice 3: encrypt host-side, then compose the one PSBT over that ciphertext. */
+// : compose a VOTE through the SDK's own sdk.voting.*Params builder
+// host-side, so the confirm page previews the wire params the encoder will
+// actually see instead of a client-side mirror of that encoding.
+export function composeVoteForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.vote.composeForConfirm', opts));
+}
+
 export function composeMessageForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.message.composeForConfirm', opts));
 }

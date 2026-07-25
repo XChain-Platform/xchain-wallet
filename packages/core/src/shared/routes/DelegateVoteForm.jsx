@@ -159,10 +159,6 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
-        const wireParams = {
-            VERSION: '3', TICK: tick.trim(), DELEGATE_TO: isClear ? '' : delegateTo.trim(),
-            ...(memo.trim() && { MEMO: memo.trim() }),
-        };
         const submitParams = isClear
             ? { tick: tick.trim(), ...(memo.trim() && { memo: memo.trim() }) }
             : { tick: tick.trim(), delegateTo: delegateTo.trim(), ...(memo.trim() && { memo: memo.trim() }) };
@@ -179,8 +175,18 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'VOTE', params: wireParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                // : the VOTE v3 wire params come from the SDK's own
+                // delegate/clear builder, host-side. A client-side mirror of
+                // that encoding would be SIGNED rather than caught: the tamper
+                // check verifies the PSBT against whatever the encoder was handed.
+                compose: () => messaging.composeVoteForConfirm({
+                    walletId,
+                    chainId,
+                    from,
+                    builder: isClear ? 'clearVoteDelegationParams' : 'delegateVoteParams',
+                    params: submitParams,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                }),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,

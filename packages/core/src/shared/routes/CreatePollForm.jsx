@@ -208,9 +208,13 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         return p;
     }, [tick, endBlock, cleanOptions, maxSelections, tallyMode, weightMode, question, quorum, minVoters, minVoteBalance, decideThreshold, deposit]);
 
-    // Wire-format VOTE v0 params: what the encoder actually sees. The host's
-    // sdk.voting.createPollParams builds the same shape from `pollParams`;
-    // watcher mode and the single-encode confirm page both need it here.
+    // Wire-format VOTE v0 params, for the WATCHER branch only: that path
+    // encodes through buildActionPsbtRequest and cannot run the sdk.voting
+    // builder.  moved the confirm path off this mirror and onto
+    // `action.vote.composeForConfirm`, which runs the real
+    // sdk.voting.createPollParams host-side - a mirror that drifts here would
+    // be SIGNED rather than caught, because the tamper check verifies the PSBT
+    // against whatever params the encoder was handed.
     const wireParams = useMemo(() => ({
         VERSION: '0',
         TICK: pollParams.tick,
@@ -245,12 +249,15 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         hardware: 'createPollActionHw',
     });
 
+    // Spec section 1: the confirm page decodes the params the HOST composed
+    // (the SDK builder's own output), never the editor state.
+    const composedParams = actionConfirm.confirmAction.composed?.voteParams;
     const decoded = useMemo(() => {
-        if (!actionConfirm.open) return null;
+        if (!actionConfirm.open || !composedParams) return null;
         return decoderLib.decodeAction({
-            action: 'VOTE', params: wireParams, chainId: chainId || undefined, chainRegistry,
+            action: 'VOTE', params: composedParams, chainId: chainId || undefined, chainRegistry,
         });
-    }, [actionConfirm.open, wireParams, chainId]);
+    }, [actionConfirm.open, composedParams, chainId]);
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT via createPollAction.prebuiltPsbt.
@@ -268,8 +275,16 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'VOTE', params: wireParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                // : compose through the SDK's own createPollParams,
+                // host-side, instead of the client-side wire mirror below.
+                compose: () => messaging.composeVoteForConfirm({
+                    walletId,
+                    chainId,
+                    from,
+                    builder: 'createPollParams',
+                    params: pollParams,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                }),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,

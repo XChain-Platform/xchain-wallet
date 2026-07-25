@@ -18,8 +18,10 @@ import {
     AddressText,
     FeeSelector,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -181,12 +183,86 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         return Array.from(approvalChoices).sort((a, b) => a - b);
     }
 
+    //  ( §5.6 slice 2, late): casting a ballot was the last signing
+    // surface still on the legacy stage machine, where submitWithSigner rebuilds
+    // the PSBT on Approve - no output-set tamper check, no action-byte
+    // cross-check, no exact fee, no pre-flight panel, no §4.7 reservation. A
+    // ballot is token-weighted governance, so it is not a surface to leave
+    // unverified. Hardware included ; watcher still branches, because it
+    // encodes and never signs.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: isHwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'castBallotAction',
+        hardware: 'castBallotActionHw',
+    });
+
+    function ballotParams() {
+        return { pollRef: pollIndex, ballot: buildBallot(), ...(memo.trim() && { memo: memo.trim() }) };
+    }
+
+    function sourceDescriptor() {
+        return {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+    }
+
+    // The wire params come from sdk.voting.castBallotParams, which lives
+    // host-side, so compose goes through the VOTE-specific route rather than
+    // re-implementing the ballot encoding here. A client-side mirror that
+    // drifted would be SIGNED, not caught: the tamper check verifies the PSBT
+    // against whatever params the encoder was handed.
+    async function openConfirmScreen() {
+        const from = sourceDescriptor();
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                compose: () => messaging.composeVoteForConfirm({
+                    walletId,
+                    chainId,
+                    from,
+                    builder: 'castBallotParams',
+                    params: ballotParams(),
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                }),
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId,
+                    chainId,
+                    from,
+                    params: ballotParams(),
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Vote failed.');
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
         const ballot = buildBallot();
         if (!ballot.length) { setFormError('Choose at least one option.'); return; }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -305,6 +381,44 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             </table>
         </div>
     ) : null;
+
+    // : the confirm page, rendered in place of the poll while the
+    // single-encode pipeline is live. The intent is decoded from the params
+    // the HOST composed (the SDK's own ballot encoding), never from the
+    // editor state, per §1: confirm what will broadcast.
+    if (actionConfirm.open) {
+        const composedParams = actionConfirm.confirmAction.composed?.voteParams;
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={composedParams
+                    ? decoderLib.decodeAction({
+                        action: 'VOTE',
+                        params: composedParams,
+                        chainId: chainId || undefined,
+                        chainRegistry,
+                    })
+                    : null}
+                chainLabel={descriptor?.displayName || chainId}
+                // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+                // : hardware swaps the password field for the device block
+                // and gates Approve on the device being available (§5.1).
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+            />
+        );
+    }
 
     if (stage === 'review' || stage === 'submitting') {
         const ballot = buildBallot();
