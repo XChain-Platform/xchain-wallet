@@ -63,10 +63,13 @@ function extractRows(resp) {
     return [];
 }
 
-// Contract-targeted staking is BTC-only at launch (mirrors capability staking's
-// indexer-side coin gate). All staking actions in this form go through STAKE v3 /
-// UNSTAKE v1 / DELEGATE v1; capability staking lives in the separate StakeForm.
-const STAKE_COIN = 'bitcoin';
+// : contract-targeted staking runs on every chain. This form composes
+// STAKE v3 / UNSTAKE v1 / DELEGATE v1, and the indexer dispatches those
+// versions to their own handlers BEFORE the `COIN !== 'BTC'` gate, so they
+// carry no coin restriction; capability (validator) staking, which does hit
+// that gate and stays Bitcoin-only, lives in the separate StakeForm. The form
+// is already chain-agnostic - it takes its chain from the target contract -
+// so there is no coin constant here to keep in step.
 
 /**
  * ContractStakeForm: STAKE v3 / UNSTAKE v1 / DELEGATE v1 authoring surface.

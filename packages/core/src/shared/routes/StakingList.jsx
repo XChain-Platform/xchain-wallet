@@ -32,11 +32,24 @@ import local from './StakingList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Staking is BTC-only at launch per §10.3 (SDK staking actions are
-// bitcoin-exclusive). The network filter still offers every coin for
-// list-pattern consistency; non-Bitcoin selections simply show an
-// empty list until staking opens up on those chains.
-const STAKING_COIN = 'bitcoin';
+// : the two staking lanes have different chain reach, so this
+// list scans them separately rather than scoping the whole page to one
+// coin.
+//
+//   - CONTRACT stakes (STAKE v3 / UNSTAKE v1 / DELEGATE v1) run on
+//     every chain: the indexer dispatches those versions to their own
+//     handlers before the `COIN !== 'BTC'` gate, and DEPLOY carries no
+//     gate at all, so contracts and positions in them exist on
+//     LTC/DOGE.
+//   - VALIDATOR (capability) stakes, their delegations, and the
+//     rewards/claims that COLLECT pays out stay Bitcoin-only. Those
+//     versions do hit the coin gate, and COLLECT has no contract
+//     variant at all.
+//
+// Asking a non-Bitcoin explorer for validator positions would be a
+// guaranteed-empty round trip per address, so the fan-out below skips
+// that lane off Bitcoin instead of relying on it to return nothing.
+const VALIDATOR_COIN = 'bitcoin';
 
 /**
  * Staking root (§42.7.4, redesigned): a unified list of the wallet's
@@ -70,8 +83,17 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const btcChainIds = useMemo(
-        () => chainRegistry.byCoin(STAKING_COIN).map((d) => d.id),
+    // Chains whose protocol accepts the contract-staking lane, i.e. every
+    // chain the registry advertises STAKE on ( put STAKE into the
+    // shared set), and the Bitcoin subset that also has the validator lane.
+    const stakingChainIds = useMemo(
+        () => chainRegistry.supportedChains()
+            .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('STAKE'))
+            .map((d) => d.id),
+        [],
+    );
+    const validatorChainIds = useMemo(
+        () => new Set(chainRegistry.byCoin(VALIDATOR_COIN).map((d) => d.id)),
         [],
     );
 
@@ -105,18 +127,18 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId]);
 
-    const btcChainsWithAddresses = useMemo(() => {
+    const chainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
-        return btcChainIds.filter((cid) =>
+        return stakingChainIds.filter((cid) =>
             Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0,
         );
-    }, [btcChainIds, addressesByChain]);
+    }, [stakingChainIds, addressesByChain]);
 
     // Per active chain, fan out per-address position queries and merge
     // into unified rows. The validator lane (stakes/delegations/rewards)
     // works today; the contract lane is best-effort per call.
     useEffect(() => {
-        if (btcChainsWithAddresses.length === 0) {
+        if (chainsWithAddresses.length === 0) {
             setStateByChain({});
             return;
         }
@@ -125,7 +147,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         // synthesized validator + contract positions.
         if (isDemoWallet(walletId)) {
             const demoState = {};
-            for (const cid of btcChainsWithAddresses) {
+            for (const cid of chainsWithAddresses) {
                 const owner = (addressesByChain?.[cid] || [])[0]?.address || '';
                 const { stakes, delegations, rewards } = synthesizeDemoStaking(cid);
                 const contract = synthesizeDemoContractStakes(cid);
@@ -148,13 +170,13 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         }
 
         const initial = {};
-        for (const cid of btcChainsWithAddresses) {
+        for (const cid of chainsWithAddresses) {
             initial[cid] = { loading: true, rows: [], rewards: [], rewardClaims: [], error: null };
         }
         setStateByChain(initial);
 
         let cancelled = false;
-        for (const cid of btcChainsWithAddresses) {
+        for (const cid of chainsWithAddresses) {
             const addrs = (addressesByChain?.[cid] || []).map((a) => a.address);
             const perAddress = addrs.map(async (addr) => {
                 const out = {
@@ -168,28 +190,35 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     errors: /** @type {string[]} */ ([]),
                 };
                 // Validator lane: real errors surface (non-blocking banner).
+                // : skipped entirely off Bitcoin, where the capability
+                // versions are coin-gated and these reads can only ever come
+                // back empty.
+                const isValidatorChain = validatorChainIds.has(cid);
                 await Promise.all([
-                    messaging.getStakesForAddress({ chainId: cid, address: addr })
-                        .then((r) => { out.stakes = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
-                        .catch((e) => { out.errors.push(e?.message || String(e)); }),
-                    messaging.getDelegationsForAddress({ chainId: cid, address: addr })
-                        .then((r) => { out.delegations = extractRows(r); })
-                        .catch((e) => { out.errors.push(e?.message || String(e)); }),
-                    messaging.getRewardsForAddress({ chainId: cid, address: addr })
-                        .then((r) => { out.rewards = extractRows(r); })
-                        .catch((e) => { out.errors.push(e?.message || String(e)); }),
-                    // PC-47: the claim side of the unclaimed sum. Best-effort:
-                    // a build without the route degrades to "nothing claimed
-                    // yet", which OVERSTATES what is claimable, so the header
-                    // labels the figure as accrued-minus-claimed rather than
-                    // promising it will all pay out.
-                    (typeof messaging.getRewardClaimsForAddress === 'function'
-                        ? messaging.getRewardClaimsForAddress({ chainId: cid, address: addr })
-                        : Promise.resolve(null))
-                        .then((r) => { out.rewardClaims = extractRows(r); })
-                        .catch(() => {}),
-                    // Contract lane: endpoints are a Phase 7 follow-up and
-                    // throw for live wallets; degrade silently to empty.
+                    ...(isValidatorChain ? [
+                        messaging.getStakesForAddress({ chainId: cid, address: addr })
+                            .then((r) => { out.stakes = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
+                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                        messaging.getDelegationsForAddress({ chainId: cid, address: addr })
+                            .then((r) => { out.delegations = extractRows(r); })
+                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                        messaging.getRewardsForAddress({ chainId: cid, address: addr })
+                            .then((r) => { out.rewards = extractRows(r); })
+                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                        // PC-47: the claim side of the unclaimed sum. Best-effort:
+                        // a build without the route degrades to "nothing claimed
+                        // yet", which OVERSTATES what is claimable, so the header
+                        // labels the figure as accrued-minus-claimed rather than
+                        // promising it will all pay out.
+                        (typeof messaging.getRewardClaimsForAddress === 'function'
+                            ? messaging.getRewardClaimsForAddress({ chainId: cid, address: addr })
+                            : Promise.resolve(null))
+                            .then((r) => { out.rewardClaims = extractRows(r); })
+                            .catch(() => {}),
+                    ] : []),
+                    // Contract lane: runs on EVERY staking chain .
+                    // Endpoints are a Phase 7 follow-up and throw for live
+                    // wallets; degrade silently to empty.
                     messaging.getContractStakesForAddress({ chainId: cid, address: addr })
                         .then((r) => { out.contractStakes = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
                         .catch(() => {}),
@@ -228,7 +257,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             });
         }
         return () => { cancelled = true; };
-    }, [btcChainsWithAddresses, addressesByChain, messaging, walletId]);
+    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId]);
 
     // PC-47: chain tip per chain, for the cooldown countdown. One cheap read
     // per chain; a failure leaves the height null and every countdown falls
@@ -237,7 +266,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
-        for (const cid of btcChainsWithAddresses) {
+        for (const cid of chainsWithAddresses) {
             messaging.getIndexerWatermark({ chainId: cid })
                 .then((r) => {
                     if (cancelled) return;
@@ -246,7 +275,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 .catch(() => { /* countdown degrades to the end block alone */ });
         }
         return () => { cancelled = true; };
-    }, [btcChainsWithAddresses, messaging]);
+    }, [chainsWithAddresses, messaging]);
 
     // PC-47: what every validator address on every chain can claim right now.
     const claimable = useMemo(() => {
@@ -281,9 +310,9 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
 
     const anyLoading = useMemo(() => {
         const states = Object.values(stateByChain);
-        if (states.length === 0) return btcChainsWithAddresses.length > 0;
+        if (states.length === 0) return chainsWithAddresses.length > 0;
         return states.some((s) => s.loading);
-    }, [stateByChain, btcChainsWithAddresses]);
+    }, [stateByChain, chainsWithAddresses]);
 
     const loadErrors = useMemo(() => (
         Object.entries(stateByChain)
@@ -333,11 +362,12 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
     }
-    if (btcChainsWithAddresses.length === 0) {
+    if (chainsWithAddresses.length === 0) {
         return wrap(
             <p className={styles.entryDescription}>
-                Staking is available on Bitcoin only at launch. Use Receive
-                on a Bitcoin network to generate an address first.
+                No addresses yet on a chain that supports staking. Use Receive
+                to generate one first. Staking into a contract works on Bitcoin,
+                Litecoin and Dogecoin; validator staking is Bitcoin-only.
             </p>,
         );
     }

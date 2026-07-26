@@ -41,13 +41,27 @@ assert.ok(!existsSync(join(sharedRoutes, 'ContractStakedPositions.jsx')),
 assert.ok(/export function StakingList\b/.test(listSrc),
     'StakingList is a named export');
 
-// 2. BTC-only gate
-assert.ok(/STAKING_COIN\s*=\s*['"]bitcoin['"]/.test(listSrc),
-    'StakingList pins STAKING_COIN=bitcoin');
-assert.ok(/byCoin\(STAKING_COIN\)/.test(listSrc),
-    'StakingList resolves BTC chain IDs via the registry');
-assert.ok(/Staking is available on Bitcoin only/.test(listSrc),
-    'StakingList surfaces the BTC-only message when no BTC address exists');
+// 2.  two-lane chain reach. Contract staking (STAKE v3 / UNSTAKE v1 /
+// DELEGATE v1) runs on every chain the registry advertises STAKE on, because
+// the indexer dispatches those versions ahead of its `COIN !== 'BTC'` gate.
+// Validator (capability) staking, its delegations, and the rewards COLLECT
+// pays out stay Bitcoin-only, so that lane is SKIPPED off Bitcoin rather than
+// fired at explorers that can only answer empty.
+assert.ok(/VALIDATOR_COIN\s*=\s*['"]bitcoin['"]/.test(listSrc),
+    'StakingList pins the validator lane to bitcoin');
+assert.ok(/supportedChains\(\)[\s\S]{0,200}includes\('STAKE'\)/.test(listSrc),
+    'StakingList derives its staking chains from the registry, not a hardcoded coin');
+assert.ok(/validatorChainIds\s*=\s*useMemo/.test(listSrc)
+    && /byCoin\(VALIDATOR_COIN\)/.test(listSrc),
+    'StakingList resolves the validator-lane chain IDs via the registry');
+assert.ok(/const isValidatorChain = validatorChainIds\.has\(cid\)/.test(listSrc)
+    && /\.\.\.\(isValidatorChain \? \[/.test(listSrc),
+    'validator-lane queries are gated on the chain, not issued everywhere');
+assert.ok(/getContractStakesForAddress/.test(listSrc)
+    && !/isValidatorChain \? \[[\s\S]*getContractStakesForAddress[\s\S]*\] : \[\]/.test(listSrc),
+    'the contract lane runs on every staking chain (outside the validator gate)');
+assert.ok(!/Staking is available on Bitcoin only/.test(listSrc),
+    'the stale BTC-only empty state is gone');
 
 // 3. Data wiring: validator lane + contract lane (contract queries are
 // best-effort until the Phase 7 explorer/SDK endpoints land, so they

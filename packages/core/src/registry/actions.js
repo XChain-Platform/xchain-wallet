@@ -32,6 +32,8 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'BROADCAST',
     'CALLBACK',
     'COINPAY',
+    'DELEGATE',
+    'DEPOSIT',
     'DESTROY',
     'DISPENSER',
     'DIVIDEND',
@@ -45,23 +47,57 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'PRICE',
     'SEND',
     'SLEEP',
+    'STAKE',
     'SWAP',
     'SWEEP',
+    'UNSTAKE',
     'VOTE',
+    'WITHDRAW',
 ]);
 
-// Actions available only on Bitcoin at launch: staking (STAKE/UNSTAKE/
-// DELEGATE for rotate+revoke / COLLECT) and smart contracts
-// (DEPLOY/EXECUTE/DEPOSIT/WITHDRAW). Per §Phase 4 and SPEC §1.
+// What stays Bitcoin-only, and why each one does .
+//
+// Most of the contract family moved into COMMON_ACTIONS above, because
+// `supportedActions` advertises WHAT THE CHAIN'S PROTOCOL ACCEPTS (see
+// header note 2) and the indexer accepts all of it on LTC/DOGE today:
+//
+//   - DEPLOY / EXECUTE / DEPOSIT / WITHDRAW carry no coin gate at all.
+//   - STAKE v3, UNSTAKE v1, DELEGATE v1/v3 (the CONTRACT-targeted
+//     versions) dispatch to their own handlers BEFORE the `COIN !==
+//     'BTC'` check, so they are already chain-open.
+//   - STAKE v1/v2, UNSTAKE v0, DELEGATE v0/v2 (the CAPABILITY /
+//     validator versions) hit that check and stay Bitcoin-only, which
+//     is the intended end state.
+//
+// COLLECT is the exception with no version split: it has a single
+// format that claims accrued VALIDATOR rewards out of the reward pool
+// (indexer collect.js -> getActiveStakeBySource / getUnclaimedRewardTotal
+// / createRewardClaim), contract stakes accrue nothing through it, and
+// it is coin-gated unconditionally. So it is validator-lane by
+// definition and belongs here.
+//
+// Because this split is per-VERSION for STAKE/UNSTAKE/DELEGATE and this
+// list is per-ACTION, the validator-only SURFACES gate themselves at the
+// form level rather than here; see StakingList / StakeForm.
+//
+// DEPLOY and EXECUTE are held back for a different reason, and NOT
+// because the chain refuses them: LTC/DOGE settle the protocol fee in
+// NATIVE COIN, and sizing that output needs a feequote the indexer
+// DENYLISTS for exactly these two (they run caller-supplied code in the
+// VM, so dry-running them on a shared node would be a block-loop stall
+// primitive). The denylist's advice - "pay the fee in XCHAIN" - is BTC-
+// era and has no LTC/DOGE equivalent, so a wallet there can compose
+// them but can never pay for them: measured live 2026-07-26, a DEPLOY
+// indexes `insufficient fee (native coin output required)` while
+// quoteNativeFee answers `supported:false`. Advertising them would hand
+// the user a form that burns a network fee on a guaranteed-invalid
+// action. They open when that fee-quote gap closes (see the ledger).
+// (BATCH is denylisted the same way but predates this and already sits
+// in COMMON_ACTIONS; it is called out in the ledger, not changed here.)
 export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
     'COLLECT',
-    'DELEGATE',
     'DEPLOY',
-    'DEPOSIT',
     'EXECUTE',
-    'STAKE',
-    'UNSTAKE',
-    'WITHDRAW',
 ]);
 
 // Protocol-accepted on every chain, form-less by design (see header note 2).
