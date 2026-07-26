@@ -12,10 +12,15 @@
 //
 // Playwright + axe can't run here, so verify:
 //   1. `@axe-core/playwright` is declared as a dev dep on the e2e package.
-//   2. `tests/a11y.spec.js` exists, imports AxeBuilder, and covers every
-//      Phase-1 screen (onboarding, create password + mnemonic, import,
-//      home, locked, send).
+//   2. the shared scan harness (`fixtures/a11y.js`) exists and imports
+//      AxeBuilder, and `tests/a11y/a11y.spec.js` covers every Phase-1
+//      screen (onboarding, create password + mnemonic, import, home,
+//      locked, send).
 //   3. Each scan asserts `violations` is empty (not just "no crash").
+//   6. The confirm surface is scanned on the REGTEST venue, in both §4.2
+//      verdict states at both widths ( §8.6). It cannot live in the
+//      dev suite: the confirm page needs a successful compose, which the
+//      dev shell can no longer do .
 //   4. WCAG 2.1 A + AA tags are the target severity.
 //   5. README documents the a11y spec.
 
@@ -39,9 +44,16 @@ assert.ok(
 // --- 2. a11y spec ---------------------------------------------------
 
 const spec = readFileSync(join(e2e, 'tests', 'a11y', 'a11y.spec.js'), 'utf8');
+// The scan itself lives in a fixture so the dev-server and regtest a11y
+// suites cannot drift on what counts as a violation or how it is reported.
+const harness = readFileSync(join(e2e, 'fixtures', 'a11y.js'), 'utf8');
 assert.ok(
-    /import AxeBuilder from '@axe-core\/playwright'/.test(spec),
-    'spec imports AxeBuilder',
+    /import AxeBuilder from '@axe-core\/playwright'/.test(harness),
+    'the shared scan harness imports AxeBuilder',
+);
+assert.ok(
+    /from '\.\.\/\.\.\/fixtures\/a11y\.js'/.test(spec),
+    'a11y.spec.js drives the shared harness rather than its own copy',
 );
 
 // Every screen the onboarding walk reaches should have a scan case. The
@@ -71,7 +83,7 @@ for (const name of requiredCases) {
 
 // The shared scan helper still asserts an EMPTY violation set...
 assert.ok(
-    /\.toEqual\(\[\]\)/.test(spec),
+    /\.toEqual\(\[\]\)/.test(harness),
     'scan helper expects an empty violations array',
 );
 
@@ -80,26 +92,53 @@ assert.ok(
 // self-retiring anchor test are gone. Guard against a silent regression
 // back to a wholesale rule bypass instead.
 assert.ok(
-    !/KNOWN_CONTRAST_DEBT/.test(spec),
+    !/KNOWN_CONTRAST_DEBT/.test(harness + spec),
     'the  contrast quarantine was removed once the palette was fixed',
 );
 assert.ok(
-    !/disableRules|withRules\(/.test(spec),
+    !/disableRules|withRules\(/.test(harness + spec),
     'a11y spec does not switch off axe rules wholesale',
 );
 
 // A scan racing a CSS fade reads blended colours and reports phantom
 // contrast failures, so the paint must be settled before axe runs.
 assert.ok(
-    /freezeMotion/.test(spec),
+    /freezeMotion/.test(harness),
     'scan settles animations before analysing (no mid-fade phantom colours)',
 );
 
 // --- 4. WCAG 2.1 A + AA -------------------------------------------
 
 for (const tag of ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']) {
-    assert.ok(spec.includes(tag), `a11y.spec targets ${tag}`);
+    assert.ok(harness.includes(tag), `the scan harness targets ${tag}`);
 }
+
+// --- 6. The confirm surface ( §8.6 "axe-core popup + full") ----
+
+// This is the screen every signature passes through, and it went unscanned
+// while coverage stopped at the Send FORM. Both verdict states matter: only
+// the fail state renders the error list, the per-finding override checkboxes
+// and aria-live="assertive".
+const confirmScan = readFileSync(
+    join(e2e, 'tests', 'a11y', 'confirm-a11y.regtest.spec.js'), 'utf8',
+);
+assert.ok(
+    /from '\.\.\/\.\.\/fixtures\/a11y\.js'/.test(confirmScan),
+    'the confirm scan uses the same harness as every other screen',
+);
+for (const state of ['Looks good', 'Will likely fail']) {
+    assert.ok(confirmScan.includes(state), `the confirm scan covers the "${state}" verdict`);
+}
+// A mid-test resize does not re-mount the responsive shell, so the narrow
+// arm has to be its own context or it is not testing the popup layout.
+assert.ok(
+    /test\.use\(\{ viewport: POPUP \}\)/.test(confirmScan),
+    'the popup-width arm sets its viewport before mounting, not by resizing',
+);
+assert.ok(
+    !/setViewportSize/.test(confirmScan),
+    'the confirm scan does not resize an already-mounted page',
+);
 
 // --- 5. README --------------------------------------------------
 

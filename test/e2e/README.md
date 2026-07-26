@@ -21,7 +21,16 @@ test/e2e/
 ```
 
 The a11y suite asserts zero violations at the **WCAG 2.1 Level A + AA** tag
-severity, scanned via `@axe-core/playwright`.
+severity, scanned via `@axe-core/playwright`. The scan itself lives in
+`fixtures/a11y.js`, because a11y coverage is split across two venues and both
+must agree on what counts as a violation:
+
+- `tests/a11y/a11y.spec.js` (dev config) scans every screen up to the Send
+  form.
+- `tests/a11y/confirm-a11y.regtest.spec.js` (regtest config) scans the
+  **confirm surface** in both §4.2 verdict states at both widths. It has to
+  run there: the confirm page only exists after a successful compose, and the
+  dev shell can no longer compose .
 
 ## Start from the fixture
 
