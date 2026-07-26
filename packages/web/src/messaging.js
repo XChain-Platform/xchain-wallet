@@ -928,6 +928,44 @@ export function governancePolls(req) {
     return /** @type {any} */ (sendMessage('governance.polls', req));
 }
 
+// BET writes. Each format gets its own route: a resolve and a place-bet differ
+// on the wire only by AMOUNT, so the version is never inferred at this boundary.
+export function createMarketAction(opts) {
+    return /** @type {any} */ (sendMessage('action.createMarket', opts));
+}
+
+export function createMarketActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.createMarket.hw', opts));
+}
+
+export function placeBetAction(opts) {
+    return /** @type {any} */ (sendMessage('action.placeBet', opts));
+}
+
+export function placeBetActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.placeBet.hw', opts));
+}
+
+export function resolveMarketAction(opts) {
+    return /** @type {any} */ (sendMessage('action.resolveMarket', opts));
+}
+
+export function resolveMarketActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.resolveMarket.hw', opts));
+}
+
+export function cancelMarketAction(opts) {
+    return /** @type {any} */ (sendMessage('action.cancelMarket', opts));
+}
+
+export function cancelMarketActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.cancelMarket.hw', opts));
+}
+
+export function composeBetForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
+}
+
 // BET reads (no signing): market list / one market with pools + timeline / placed
 // bets / an oracle track record.
 export function betFeeds(req) {

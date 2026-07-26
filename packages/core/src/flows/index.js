@@ -222,6 +222,12 @@ export {
     votesForQuery,
 } from './voteQueries.js';
 export {
+    createMarketAction,
+    placeBetAction,
+    resolveMarketAction,
+    cancelMarketAction,
+} from './betActions.js';
+export {
     betFeedsForChain,
     betFeedDetail,
     betsForQuery,

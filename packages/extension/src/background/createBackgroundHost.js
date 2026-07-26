@@ -146,6 +146,10 @@ const {
     castBallotAction,
     delegateVoteAction,
     clearVoteDelegationAction,
+    createMarketAction,
+    placeBetAction,
+    resolveMarketAction,
+    cancelMarketAction,
     betFeedsForChain,
     betFeedDetail,
     betsForQuery,
@@ -2308,6 +2312,10 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.createPoll.hw', createPollAction);
     registerHwHandler('action.castBallot.hw', castBallotAction);
     registerHwHandler('action.delegateVote.hw', delegateVoteAction);
+    registerHwHandler('action.createMarket.hw', createMarketAction);
+    registerHwHandler('action.placeBet.hw', placeBetAction);
+    registerHwHandler('action.resolveMarket.hw', resolveMarketAction);
+    registerHwHandler('action.cancelMarket.hw', cancelMarketAction);
     registerHwHandler('action.clearVoteDelegation.hw', clearVoteDelegationAction);
     registerHwHandler('action.contractStake.hw', contractStakeAction);
 
@@ -2855,6 +2863,79 @@ export function createBackgroundHost(deps) {
 
     host.register('governance.votes', async (req, { sdkRegistry }) => {
         return votesForQuery({ ...req, sdkRegistry });
+    });
+
+    // BET writes. One action name over four formats, so each gets its own route
+    // rather than a single route taking a version from the caller: a resolve and
+    // a place-bet differ on the wire only by AMOUNT, and the messaging boundary
+    // is not a place to let that distinction be inferred.
+    host.register('action.createMarket', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return createMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.placeBet', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return placeBetAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.resolveMarket', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return resolveMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.cancelMarket', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return cancelMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // Compose a BET through the SDK's own builder HOST-side, so the confirm page
+    // decodes what the host actually composed rather than a client-side wire
+    // mirror (the  rule the vote route already follows).
+    host.register('action.bet.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.bet.composeForConfirm: chainId is required');
+        }
+        const builder = req?.builder;
+        // Allow-listed: `builder` crosses the messaging boundary, so it must
+        // never be able to name an arbitrary sdk.betting method.
+        const BET_BUILDERS = ['createMarketParams', 'placeBetParams', 'resolveMarketParams', 'cancelMarketParams'];
+        if (!BET_BUILDERS.includes(builder)) {
+            throw new Error(`action.bet.composeForConfirm: unknown builder "${builder}"`);
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.betting?.[builder] !== 'function') {
+            throw new Error(`action.bet.composeForConfirm: sdk.betting.${builder} is unavailable`);
+        }
+        const source = normalizeSource(req?.from, 'action.bet.composeForConfirm');
+        // Throws on bad input BEFORE the confirm page opens.
+        const params = sdk.betting[builder](req?.params);
+
+        let ownAddresses = [source.address];
+        try {
+            const byChain = await addressesByChain(req, { vault, chainRegistry });
+            const rows = byChain?.[chainId] || [];
+            ownAddresses = rows.map((r) => r.address).filter(Boolean);
+            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
+        } catch {
+            // fall through to [source.address]
+        }
+
+        const composed = await composeActionForConfirm({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            actionData: { action: 'BET', params },
+            encoderOpts: {
+                pubkey: source.publicKey,
+                ...(req?.fee !== undefined && { fee: req.fee }),
+                ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+                ...(req?.rbf !== undefined && { rbf: req.rbf }),
+            },
+            source: source.address,
+            ownAddresses,
+        });
+        // The built wire params ride back so the confirm page decodes its intent
+        // from what the HOST composed, not from the editor state.
+        return { ...composed, betParams: params };
     });
 
     // BET reads (no signing): market list / one market with pools + timeline /

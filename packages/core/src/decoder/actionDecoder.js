@@ -199,7 +199,131 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeAirdrop(p, chainSuffix);
     }
 
+    if (action === 'BET') {
+        return decodeBet(p, chainSuffix);
+    }
+
     return genericFallback(action, p, chainSuffix);
+}
+
+/**
+ * BET decoder ( §11.3 signing). One action name over four formats, so the
+ * summary must name WHICH one is being signed: approving a resolve is not
+ * remotely the same act as approving a stake.
+ *
+ * Reads the SDK builder's own camelCase output (what the host composes and hands
+ * to the confirm page), and tolerates the uppercase wire spelling so a pasted or
+ * imported raw action still reads sensibly.
+ *
+ * The warnings are the irreversibilities, not lint. A bet cannot be cancelled, a
+ * resolve is the payout decision itself, and a cancel refunds and ends the
+ * market. Those are the facts a signer needs before approving, and they are
+ * exactly what a raw-hex confirm screen would hide.
+ */
+function decodeBet(p, chainSuffix) {
+    const pick = (camel, upper) => {
+        const a = p[camel];
+        if (a !== undefined && a !== null && a !== '') return str(a);
+        const b = p[upper];
+        return (b === undefined || b === null) ? '' : str(b);
+    };
+
+    const version = pick('version', 'VERSION');
+    const feedRef = pick('feedActionIndex', 'FEED_ACTION_INDEX');
+    const outcome = pick('outcome', 'OUTCOME');
+    const memo = pick('memo', 'MEMO');
+    const memoWarn = memo && /[|;]/.test(memo)
+        ? ['Memo contains | or ;: the protocol will reject this transaction.']
+        : [];
+
+    // v2 place a bet
+    if (version === '2') {
+        const amount = pick('amount', 'AMOUNT');
+        return {
+            summary: `Bet ${amount || '?'} on outcome ${outcome || '?'} of market ${feedRef || '?'}${chainSuffix}`,
+            details: [
+                { label: 'Market', value: feedRef },
+                { label: 'Outcome', value: outcome },
+                { label: 'Stake', value: amount },
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                'Bets are final. There is no cancel and no way to change your outcome once this is signed.',
+                'This is a parimutuel market, so your share is not fixed now: later bets change what a win pays.',
+                ...(!amount || Number(amount) <= 0 ? ['Stake is not positive.'] : []),
+                ...memoWarn,
+            ],
+        };
+    }
+
+    // v3 resolve a market
+    if (version === '3') {
+        return {
+            summary: `Resolve market ${feedRef || '?'} to outcome ${outcome || '?'}${chainSuffix}`,
+            details: [
+                { label: 'Market', value: feedRef },
+                { label: 'Winning outcome', value: outcome },
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                'This pays out the market. Everyone backing this outcome splits the pot, everyone else loses their stake.',
+                'Resolving cannot be undone or corrected afterwards.',
+                ...memoWarn,
+            ],
+        };
+    }
+
+    // v1 cancel a market
+    if (version === '1') {
+        return {
+            summary: `Cancel market ${feedRef || '?'} and refund every bet${chainSuffix}`,
+            details: [
+                { label: 'Market', value: feedRef },
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                'Every open bet is refunded in full and the market is over. This cannot be undone.',
+                ...memoWarn,
+            ],
+        };
+    }
+
+    // v0 create a market (also the fallback when VERSION is absent, since the
+    // create format is the only one carrying a label).
+    const label = pick('label', 'LABEL');
+    const outcomes = pick('outcomes', 'OUTCOMES');
+    const tick = pick('tick', 'TICK');
+    const fee = pick('fee', 'FEE');
+    const deadline = pick('deadline', 'DEADLINE');
+    const refundWindow = pick('refundWindow', 'REFUND_WINDOW');
+    const minAmount = pick('minAmount', 'MIN_AMOUNT');
+    const allowList = pick('allowList', 'ALLOW_LIST');
+    const blockList = pick('blockList', 'BLOCK_LIST');
+    const outcomeList = outcomes ? outcomes.split(',') : [];
+
+    return {
+        summary: `Open a betting market on ${tick || '?'}${chainSuffix}: ${label || '(untitled)'}`,
+        details: [
+            { label: 'Market', value: label },
+            { label: 'Outcomes', value: outcomeList.join(' / ') },
+            { label: 'Wager token', value: tick },
+            // Named to keep it distinct from the protocol's market duration fee,
+            // which is a different charge paid to a different party.
+            { label: 'Oracle fee (percent of pot)', value: fee ? `${fee}%` : '0%' },
+            { label: 'Betting closes', value: deadline },
+            { label: 'Refund window (seconds)', value: refundWindow },
+            ...(minAmount ? [{ label: 'Minimum bet', value: minAmount }] : []),
+            ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
+            ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
+        warnings: [
+            'Markets cannot be edited after this. To change any term you must cancel and create a new one.',
+            'You are the oracle: if you never resolve it, bettors are refunded after the refund window, and your address carries that record publicly.',
+            ...(outcomeList.length < 2 ? ['A market needs at least two outcomes.'] : []),
+            ...memoWarn,
+        ],
+    };
 }
 
 /**
