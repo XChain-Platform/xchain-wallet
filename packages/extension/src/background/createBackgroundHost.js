@@ -1984,7 +1984,24 @@ export function createBackgroundHost(deps) {
         // maintains its own queue and bypasses core drainQueuedBroadcast (which
         // already gates), so the same assertion is applied here at the new call site.
         flows.assertSigningAllowed();
-        const result = await sdk.wallet.broadcastTx(entry.signedTxHex);
+        let result;
+        try {
+            result = await sdk.wallet.broadcastTx(entry.signedTxHex);
+        } catch (err) {
+            //  §5.3: the same permanence split the core queue applies,
+            // applied here too - this queue retries on demand and had no way to
+            // stop. A signed transaction whose inputs are gone can never
+            // confirm, so leaving it on the list invites the user to press
+            // "Broadcast now" forever on something already dead. Drop it from
+            // the queue and say why; the recovery is a fresh compose, not
+            // another attempt at these bytes. Transient failures stay queued,
+            // which is what the surface is for.
+            if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                q.splice(idx, 1);
+                await persistQueue();
+            }
+            throw err;
+        }
         q.splice(idx, 1);
         await persistQueue();
         return result;

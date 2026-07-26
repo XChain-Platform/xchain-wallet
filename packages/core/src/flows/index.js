@@ -478,6 +478,10 @@ export {
     discardQueuedBroadcast,
     NoQueuedTxError,
 } from './queuedBroadcast.js';
+// §5.3 broadcast-failure permanence. Exported because BOTH queues need the
+// same verdict: the core PendingTx drain above, and the extension host's own
+// on-demand queue, which would otherwise retry a dead transaction forever.
+export { classifyBroadcastFailure } from './broadcastPermanence.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
 export {
     markBackupVerified,

@@ -28,6 +28,7 @@
 
 import { createPendingTx } from '../schemas/pendingTx.js';
 import { assertSigningAllowed } from './panicMode.js';
+import { classifyBroadcastFailure } from './broadcastPermanence.js';
 
 // In-flight drain guard. `broadcastTx` is an irreversible effector, so two
 // concurrent drains of the same record (double-click, or popup + background
@@ -134,11 +135,13 @@ export async function listQueuedBroadcasts({ vault, chainId, chainRegistry }) {
 
 /**
  * Attempt to broadcast a single queued PendingTx. Transitions:
- *   success → status='broadcast', broadcastAt = now
- *   failure → stays 'queued', error is recorded for the caller
+ *   success              → status='broadcast', broadcastAt = now
+ *   transient failure    → stays 'queued', error recorded, retry allowed
+ *   permanent failure    → status='failed' (§5.3: inputs gone; only a
+ *                          re-compose can succeed, so it stops retrying)
  *
  * @param {DrainQueuedBroadcastOpts} opts
- * @returns {Promise<{ pendingTx: import('../schemas/pendingTx.js').PendingTx, broadcast: boolean, error: string | null }>}
+ * @returns {Promise<{ pendingTx: import('../schemas/pendingTx.js').PendingTx, broadcast: boolean, error: string | null, permanence?: 'permanent' | 'transient' }>}
  */
 export async function drainQueuedBroadcast({
     vault,
@@ -209,11 +212,22 @@ export async function drainQueuedBroadcast({
             await sdk.encoder.broadcastTx(existing.txHex);
         } catch (err) {
             const msg = err && err.message ? String(err.message) : String(err);
-            // Broadcast failed: revert to 'queued' so the user can retry, and
-            // record the error for the caller.
-            await vault.pendingTxs.put({ ...existing, status: 'queued', error: msg });
+            //  §5.3: the SAME permanence split the submit path applies,
+            // applied again on EVERY retry. A queued transaction whose inputs
+            // have since been spent can never confirm as signed, and leaving it
+            // 'queued' invites the user to press "Broadcast now" forever on
+            // something that is already dead - while the balance it reserves
+            // stays committed in their mental model. Permanent failures go to
+            // 'failed', where the surface can offer a re-compose instead.
+            //
+            // Ambiguity resolves to transient (the classifier's own default):
+            // re-queuing a doomed transaction wastes a retry, whereas retiring a
+            // still-valid signed one loses its fee.
+            const permanence = classifyBroadcastFailure(err);
+            const status = permanence === 'permanent' ? 'failed' : 'queued';
+            await vault.pendingTxs.put({ ...existing, status, error: msg });
             const refreshed = await vault.pendingTxs.get(pendingTxId);
-            return { pendingTx: refreshed, broadcast: false, error: msg };
+            return { pendingTx: refreshed, broadcast: false, error: msg, permanence };
         }
 
         const broadcast = {

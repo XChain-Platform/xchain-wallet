@@ -208,6 +208,60 @@ describe('drainQueuedBroadcast: in-flight / idempotency guard', () => {
         expect(after.error).toMatch(/network down/);
     });
 
+    //  §5.3: the queue applies the SAME permanence split as the submit
+    // path, on every retry. Without it the drain reverted everything to
+    // 'queued', so a transaction whose inputs were already spent sat on the
+    // rebroadcast surface forever, inviting the user to retry bytes that can
+    // never confirm.
+    it('marks the record failed when the inputs are gone, so it stops being retried', async () => {
+        const pendingTxs = memCollection([queuedPendingTx()]);
+        const vault = { pendingTxs };
+        const sdkRegistry = {
+            get: () => ({
+                encoder: {
+                    broadcastTx: async () => {
+                        throw new Error('bad-txns-inputs-missingorspent');
+                    },
+                },
+            }),
+        };
+
+        const result = await drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+
+        expect(result.broadcast).toBe(false);
+        expect(result.permanence).toBe('permanent');
+        const after = await pendingTxs.get('ptx-1');
+        expect(after.status).toBe('failed');
+        expect(after.error).toMatch(/missingorspent/);
+
+        // And a 'failed' record is terminal: a later drain refuses rather than
+        // re-broadcasting bytes the chain has already rejected for good.
+        await expect(drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        })).rejects.toThrow(/is not queued/);
+    });
+
+    it('keeps an ambiguous failure queued, because a still-valid signed tx must stay recoverable', async () => {
+        const pendingTxs = memCollection([queuedPendingTx()]);
+        const vault = { pendingTxs };
+        const sdkRegistry = {
+            get: () => ({
+                encoder: {
+                    broadcastTx: async () => { throw new Error('something nobody classified'); },
+                },
+            }),
+        };
+
+        const result = await drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+
+        expect(result.permanence).toBe('transient');
+        expect((await pendingTxs.get('ptx-1')).status).toBe('queued');
+    });
+
     it('releases the in-flight claim so a later drain of the same id can proceed', async () => {
         const pendingTxs = memCollection([queuedPendingTx()]);
         const vault = { pendingTxs };

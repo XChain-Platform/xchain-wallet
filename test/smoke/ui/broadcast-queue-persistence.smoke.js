@@ -118,6 +118,35 @@ assert.ok(
     broadcastBlock && /q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
     'broadcast.queue.broadcast persists after splicing the entry',
 );
+//  §5.3: this queue retries on demand, so it needs the same permanence
+// verdict the core drain applies. A signed transaction whose inputs are gone
+// can never confirm; leaving it listed invites the user to press "Broadcast
+// now" forever on dead bytes, and the recovery is a fresh compose. Transient
+// failures must still stay queued, which is the whole point of the surface.
+assert.ok(
+    broadcastBlock && /flows\.classifyBroadcastFailure\(err\) === 'permanent'/.test(broadcastBlock),
+    'broadcast.queue.broadcast classifies a failed retry',
+);
+assert.ok(
+    broadcastBlock
+        && /=== 'permanent'\)\s*\{\s*\n\s*q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
+    'a PERMANENT failure drops the entry from the queue and persists that',
+);
+assert.ok(
+    broadcastBlock && /\}\s*\n\s*throw err;/.test(broadcastBlock),
+    'the failure still propagates to the caller, permanent or not',
+);
+{
+    // The transient path must NOT splice: a still-valid signed tx that hit a
+    // dead node has to remain retryable, and losing it loses its fee.
+    const catchBlock = broadcastBlock.slice(
+        broadcastBlock.indexOf('} catch (err)'),
+        broadcastBlock.indexOf('throw err;'),
+    );
+    const splices = (catchBlock.match(/q\.splice/g) || []).length;
+    assert.equal(splices, 1, 'only the permanent branch removes the entry');
+}
+
 const discardBlock = sliceRouteBody(bg, 'broadcast.queue.discard');
 assert.ok(
     discardBlock && /if \(idx >= 0\) q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
