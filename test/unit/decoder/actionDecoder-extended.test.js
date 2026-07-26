@@ -152,6 +152,78 @@ describe('decodeAction extended', () => {
             expect(d.warnings.some((w) => /locking is permanent/i.test(w))).toBe(true);
         });
 
+        // PC-06: the wizard's advanced disclosure is the first wallet
+        // path that fills the callback trio and the access lists in at
+        // CREATE time, so the confirm screen has to describe them - a
+        // bound allow-list and a configured callback are exactly the
+        // settings a user must not approve blind.
+        it('v0 describes a callback configured at create, with a plain-language warning', () => {
+            const d = decodeAction({
+                action: 'ISSUE',
+                params: {
+                    TICK: 'X', VERSION: '0', MAX_SUPPLY: '100',
+                    CALLBACK_BLOCK: '900100', CALLBACK_TICK: 'XCHAIN', CALLBACK_AMOUNT: '1',
+                },
+            });
+            const rows = Object.fromEntries(d.details.map((r) => [r.label, r.value]));
+            expect(rows['Callback at block']).toBe('900100');
+            expect(rows['Callback token']).toBe('XCHAIN');
+            expect(rows['Callback amount']).toBe('1');
+            expect(d.warnings.some((w) => /recall every holder/i.test(w))).toBe(true);
+        });
+
+        it('v0 describes access lists bound at create, warning that an allow list is default-deny', () => {
+            const d = decodeAction({
+                action: 'ISSUE',
+                params: { TICK: 'X', VERSION: '0', MAX_SUPPLY: '100', ALLOW_LIST: '412', BLOCK_LIST: '77' },
+            });
+            const rows = Object.fromEntries(d.details.map((r) => [r.label, r.value]));
+            expect(rows['Allow list']).toBe('412');
+            expect(rows['Block list']).toBe('77');
+            expect(d.warnings.some((w) => /Everyone else is denied/i.test(w))).toBe(true);
+        });
+
+        it('v0 block list alone does not raise the allow-list restriction warning', () => {
+            const d = decodeAction({
+                action: 'ISSUE',
+                params: { TICK: 'X', VERSION: '0', MAX_SUPPLY: '100', BLOCK_LIST: '77' },
+            });
+            expect(d.warnings.some((w) => /Everyone else is denied/i.test(w))).toBe(false);
+        });
+
+        it('v0 uses the same row labels as the v4 / v5 edit branches', () => {
+            const create = decodeAction({
+                action: 'ISSUE',
+                params: {
+                    TICK: 'X', VERSION: '0', MAX_SUPPLY: '100',
+                    CALLBACK_BLOCK: '900100', CALLBACK_TICK: 'XCHAIN', CALLBACK_AMOUNT: '1',
+                    ALLOW_LIST: '412', BLOCK_LIST: '77',
+                },
+            });
+            const edit4 = decodeAction({
+                action: 'ISSUE',
+                params: { TICK: 'X', VERSION: '4', CALLBACK_BLOCK: '900100', CALLBACK_TICK: 'XCHAIN', CALLBACK_AMOUNT: '1' },
+            });
+            const edit5 = decodeAction({
+                action: 'ISSUE',
+                params: { TICK: 'X', VERSION: '5', ALLOW_LIST: '412', BLOCK_LIST: '77' },
+            });
+            const labels = (d) => d.details.map((r) => r.label);
+            for (const label of [...labels(edit4), ...labels(edit5)]) {
+                expect(labels(create)).toContain(label);
+            }
+        });
+
+        it('v0 create with none of them is unchanged', () => {
+            const d = decodeAction({
+                action: 'ISSUE',
+                params: { TICK: 'X', VERSION: '0', MAX_SUPPLY: '100', MINT_SUPPLY: '100' },
+            });
+            expect(d.details.map((r) => r.label))
+                .toEqual(['Token', 'Max supply', 'Initial mint']);
+            expect(d.warnings).toEqual([]);
+        });
+
         it('v1 edit description summary', () => {
             const d = decodeAction({ action: 'ISSUE', params: { TICK: 'X', DESCRIPTION: 'new desc', VERSION: '1' } });
             expect(d.summary).toContain('Update description of X');

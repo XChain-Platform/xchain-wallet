@@ -20,11 +20,20 @@ import {
 import {
     registry as registryLib,
     decoder as decoderLib,
+    flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
+import {
+    LOCK_FLAGS,
+    applyAdvancedIssueFields,
+    validateAdvancedIssueFields,
+    advancedIssueWarnings,
+} from '../utils/issueAdvancedFields.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import styles from './TokenWizard.module.css';
@@ -99,6 +108,31 @@ export function TokenWizard({ walletId, onBack }) {
     const [perAddressMax, setPerAddressMax] = useState('');
     const [mintStartBlock, setMintStartBlock] = useState('');
     const [mintStopBlock, setMintStopBlock] = useState('');
+    // PC-06: the Custom template's advanced disclosure. These are the
+    // ISSUE v0 fields that used to be reachable only as post-create
+    // admin edits (PC-02 locks / PC-03 callback / PC-04 access lists),
+    // so a fair-mint token can be fully configured in one transaction.
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [lockChecks, setLockChecks] = useState(
+        /** @type {Record<string, boolean>} */ ({}),
+    );
+    const [callbackTick, setCallbackTick] = useState('');
+    const [callbackAmount, setCallbackAmount] = useState('');
+    const [callbackBlock, setCallbackBlock] = useState('');
+    const [allowListIdx, setAllowListIdx] = useState(/** @type {string | null} */ (null));
+    const [blockListIdx, setBlockListIdx] = useState(/** @type {string | null} */ (null));
+    const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
+    const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    const [listPickerFor, setListPickerFor] = useState(
+        /** @type {'allow' | 'block' | null} */ (null),
+    );
+    const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
+    // Divisibility of the CALLBACK token. `null` means "not proven",
+    // which the validator treats as indivisible - see
+    // issueAdvancedFields.js for why that is the safe direction.
+    const [callbackTickDecimals, setCallbackTickDecimals] = useState(
+        /** @type {number | null} */ (null),
+    );
     const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
@@ -152,6 +186,41 @@ export function TokenWizard({ walletId, onBack }) {
         }
     }, [stage]);
 
+    // PC-06: chain tip, for the callback block's future-block rail and
+    // its date estimate. Only fetched once the advanced panel is open.
+    useEffect(() => {
+        if (!showAdvanced || !chainId) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (typeof messaging?.getIndexerWatermark !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getIndexerWatermark({ chainId })
+            .then((r) => { if (!cancelled) setCurrentHeight(r && r.watermark != null ? Number(r.watermark) : null); })
+            .catch(() => { if (!cancelled) setCurrentHeight(null); });
+        return () => { cancelled = true; };
+    }, [showAdvanced, chainId, messaging, walletId]);
+
+    // PC-06: prove the callback token's divisibility so a fractional
+    // payout can be allowed. Anything short of a confirmed divisibility
+    // (still loading, unknown ticker, unreachable explorer) stays null,
+    // and the validator then holds the payout to whole numbers.
+    useEffect(() => {
+        const tick = callbackTick.trim().toUpperCase();
+        setCallbackTickDecimals(null);
+        if (!showAdvanced || !chainId || !tick) return undefined;
+        if (typeof messaging?.getTokenInfo !== 'function') return undefined;
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            messaging.getTokenInfo({ chainId, tick })
+                .then((info) => {
+                    if (cancelled) return;
+                    const d = info?.divisibility;
+                    setCallbackTickDecimals(Number.isInteger(d) ? d : null);
+                })
+                .catch(() => { if (!cancelled) setCallbackTickDecimals(null); });
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [showAdvanced, chainId, callbackTick, messaging]);
+
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const fromAddress = useMemo(() => {
@@ -176,6 +245,19 @@ export function TokenWizard({ walletId, onBack }) {
     // by template (see TEMPLATE_COMPOSERS); each picks the subset of
     // ISSUE v0 fields its template wants. The memo key intentionally
     // includes `template` so switching templates re-composes.
+    // PC-06: the advanced fields ride only the Custom template (the
+    // other five are opinionated presets), so they are bundled once and
+    // the composer ignores them everywhere else.
+    const advanced = useMemo(() => ({
+        lockChecks,
+        callbackTick,
+        callbackAmount,
+        callbackBlock,
+        allowListIdx,
+        blockListIdx,
+    }), [lockChecks, callbackTick, callbackAmount, callbackBlock,
+         allowListIdx, blockListIdx]);
+
     const actionParams = useMemo(
         () => composeIssueParams(template, {
             name,
@@ -190,10 +272,11 @@ export function TokenWizard({ walletId, onBack }) {
             perAddressMax,
             mintStartBlock,
             mintStopBlock,
+            advanced,
         }),
         [template, name, supply, maxMint, divisible, description,
          lockOnCreate, transferTo, imageUrl, parentToken,
-         perAddressMax, mintStartBlock, mintStopBlock],
+         perAddressMax, mintStartBlock, mintStopBlock, advanced],
     );
 
     const decoded = useMemo(() => {
@@ -242,6 +325,21 @@ export function TokenWizard({ walletId, onBack }) {
             if (mintStartBlock && mintStopBlock
                 && Number(mintStopBlock) <= Number(mintStartBlock)) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
+        }
+        // PC-06: the advanced fields share the create transaction, so a
+        // bad one costs the whole token, not just the field. Pre-flight
+        // them here rather than letting the indexer reject the ISSUE.
+        if (template === 'custom') {
+            const advancedError = validateAdvancedIssueFields(advanced, {
+                supply,
+                currentHeight,
+                callbackTickDecimals,
+            });
+            if (advancedError) {
+                setShowAdvanced(true);
+                setFormError(advancedError);
                 return;
             }
         }
@@ -377,6 +475,32 @@ export function TokenWizard({ walletId, onBack }) {
         );
     }
 
+    // PC-06 access lists: the same TYPE=2 address-list picker the admin
+    // access-lists mode uses, so create and edit bind lists identically.
+    if (listPickerFor) {
+        return (
+            <ListPickerScreen
+                variant={variant}
+                messaging={messaging}
+                chainId={chainId}
+                addresses={addressesByChain?.[chainId] || []}
+                filterType="2"
+                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                onSelect={(row) => {
+                    if (listPickerFor === 'allow') {
+                        setAllowListIdx(row.actionIndex);
+                        setAllowListCount(row.memberCount);
+                    } else {
+                        setBlockListIdx(row.actionIndex);
+                        setBlockListCount(row.memberCount);
+                    }
+                    setListPickerFor(null);
+                }}
+                onBack={() => setListPickerFor(null)}
+            />
+        );
+    }
+
     if (stage === 'template') {
         return wrap(renderTemplateStage({
             onPick: (t) => { setTemplate(t); setStage('chain'); },
@@ -412,6 +536,27 @@ export function TokenWizard({ walletId, onBack }) {
             mintStartBlock, setMintStartBlock,
             mintStopBlock, setMintStopBlock,
             payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
+            advancedPanel: {
+                showAdvanced, setShowAdvanced,
+                lockChecks, setLockChecks,
+                lockOnCreate,
+                callbackTick, setCallbackTick,
+                callbackAmount, setCallbackAmount,
+                callbackBlock, setCallbackBlock,
+                callbackBlockEstimate: blockDateEstimateText({
+                    coin: descriptor?.coin, currentHeight, targetBlock: callbackBlock,
+                }),
+                callbackTickDecimals,
+                currentHeight,
+                chainLabel: descriptor?.displayName || chainId,
+                allowListIdx, blockListIdx, allowListCount, blockListCount,
+                onPickList: setListPickerFor,
+                onClearList: (which) => {
+                    if (which === 'allow') { setAllowListIdx(null); setAllowListCount(null); }
+                    else { setBlockListIdx(null); setBlockListCount(null); }
+                },
+                warnings: advancedIssueWarnings(advanced),
+            },
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
@@ -538,6 +683,10 @@ export function TokenWizard({ walletId, onBack }) {
  *               protocol layer; the wizard doesn't verify pre-flight.
  * - **custom**: every ISSUE v0 field exposed. Superset of the other
  *               five; used for edge cases the templates don't cover.
+ *               PC-06 completes it: the advanced disclosure adds the
+ *               seven lock flags, the callback trio, and the
+ *               allow/block lists, so a token that previously needed a
+ *               create plus three admin edits is one transaction.
  */
 function composeIssueParams(template, form) {
     const composer = TEMPLATE_COMPOSERS[template] || TEMPLATE_COMPOSERS.custom;
@@ -634,6 +783,11 @@ const TEMPLATE_COMPOSERS = {
             p.LOCK_MINT = '1';
         }
         if (form.transferTo) p.TRANSFER = form.transferTo.trim();
+        // PC-06: the advanced disclosure's lock matrix, callback trio,
+        // and access lists. Applied last so an explicitly checked flag
+        // and the `lockOnCreate` shortcut converge on the same '1'
+        // rather than fighting over the field.
+        applyAdvancedIssueFields(p, form.advanced);
         return p;
     },
 };
@@ -819,6 +973,7 @@ function renderDetailsStage({
     mintStartBlock, setMintStartBlock,
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
+    advancedPanel,
     formError, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const show = TEMPLATE_FIELDS[template] || TEMPLATE_FIELDS.custom;
@@ -970,6 +1125,9 @@ function renderDetailsStage({
                     autoCorrect="off"
                 />
             ) : null}
+            {template === 'custom' && advancedPanel ? (
+                <AdvancedIssuePanel {...advancedPanel} />
+            ) : null}
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
@@ -984,6 +1142,197 @@ function renderDetailsStage({
                 </Button>
             </div>
         </form>
+    );
+}
+
+/**
+ * PC-06: the Custom template's advanced disclosure - the ISSUE v0
+ * fields that used to be reachable only as post-create admin edits.
+ *
+ * Collapsed by default: these are permanent, consequential settings
+ * that most issuers never touch, and every one of them shares the
+ * create transaction, so a mistake here costs the token itself.
+ */
+function AdvancedIssuePanel({
+    showAdvanced, setShowAdvanced,
+    lockChecks, setLockChecks,
+    lockOnCreate,
+    callbackTick, setCallbackTick,
+    callbackAmount, setCallbackAmount,
+    callbackBlock, setCallbackBlock,
+    callbackBlockEstimate,
+    callbackTickDecimals,
+    currentHeight,
+    chainLabel,
+    allowListIdx, blockListIdx, allowListCount, blockListCount,
+    onPickList, onClearList,
+    warnings = [],
+}) {
+    // The shortcut checkbox above already commits these two flags, so
+    // their rows render checked-and-disabled rather than offering a
+    // second, contradictory control for the same wire field.
+    const forcedByShortcut = { max_supply: !!lockOnCreate, mint: !!lockOnCreate };
+    return (
+        <div className={styles.advanced}>
+            <Button
+                type="button"
+                variant="ghost"
+                block
+                aria-expanded={showAdvanced}
+                onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+                {showAdvanced ? 'Hide advanced settings' : 'Advanced settings (optional)'}
+            </Button>
+            {!showAdvanced ? (
+                <p className={styles.hint}>
+                    Locks, a callback, and allow/block lists. All optional, and all
+                    settable later from Manage Token - except the locks, which are
+                    permanent whenever they are set.
+                </p>
+            ) : (
+                <div className={styles.advancedBody}>
+                    <p className={styles.hint}>
+                        These settings ride the same transaction that creates the token,
+                        so everything below is configured in one signature. If any value
+                        here is rejected by the network, the whole creation is rejected
+                        and the token is not created.
+                    </p>
+
+                    <h3 className={styles.advancedHeading}>Locks (permanent)</h3>
+                    <p className={styles.hint}>
+                        Each flag is a one-way switch. Once the token is created with a
+                        lock set, it can never be unlocked.
+                    </p>
+                    <div role="group" aria-label="Lock flags">
+                        {LOCK_FLAGS.map((f) => {
+                            const forced = !!forcedByShortcut[f.key];
+                            return (
+                                <div key={f.key} className={styles.lockFlagRow}>
+                                    <label className={styles.checkRow}>
+                                        <input
+                                            type="checkbox"
+                                            checked={forced || !!lockChecks[f.key]}
+                                            disabled={forced}
+                                            onChange={(e) => setLockChecks({
+                                                ...lockChecks,
+                                                [f.key]: e.target.checked,
+                                            })}
+                                        />
+                                        <span>
+                                            {f.label}
+                                            {forced ? ' (set by "Lock supply + minting immediately")' : ''}
+                                        </span>
+                                    </label>
+                                    <p className={styles.lockFlagHint}>{f.hint}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <h3 className={styles.advancedHeading}>Callback</h3>
+                    <p className={styles.hint}>
+                        A callback lets you later recall <strong>all</strong> of this token
+                        back to your address in one action, paying every holder a set amount
+                        of another token per unit they held. It can only be configured before
+                        any supply is distributed, so creating the token with it set is the
+                        one moment it is guaranteed to be available.
+                    </p>
+                    <Input
+                        label="Callback token (optional)"
+                        hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
+                        value={callbackTick}
+                        onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                    <Input
+                        label="Payout per unit"
+                        hint={callbackTickDecimals != null
+                            ? `How much of ${callbackTick} each holder receives per unit they hold. Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
+                            : 'How much of the callback token each holder receives per unit they hold. Whole numbers only until the wallet can confirm the callback token is divisible.'}
+                        inputMode="decimal"
+                        value={callbackAmount}
+                        onChange={(e) => setCallbackAmount(e.target.value)}
+                        autoComplete="off"
+                    />
+                    <Input
+                        label="Callback allowed from block"
+                        hint={callbackBlockEstimate
+                            ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
+                            : 'The earliest block height you can trigger the callback. Must be a future block.'}
+                        inputMode="decimal"
+                        value={callbackBlock}
+                        onChange={(e) => setCallbackBlock(e.target.value)}
+                        autoComplete="off"
+                    />
+                    {currentHeight != null ? (
+                        <p className={styles.hint}>
+                            Current block on {chainLabel}: {currentHeight.toLocaleString('en-US')}.
+                            Date above is a rough estimate; real block times vary.
+                        </p>
+                    ) : null}
+
+                    <h3 className={styles.advancedHeading}>Access lists</h3>
+                    <p className={styles.hint}>
+                        Restrict who can interact with the token by pointing it at address
+                        lists you've published. An allow-list permits only its members; a
+                        block-list denies its members. Create one in My Lists first.
+                    </p>
+                    <div className={styles.listRow}>
+                        <div className={styles.fromLine}>
+                            <span className={styles.detailsLabel}>Allow-list</span>
+                            <span className={styles.detailsValue}>
+                                {allowListIdx
+                                    ? `List #${allowListIdx}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                    : 'None (anyone may interact)'}
+                            </span>
+                        </div>
+                        <Button type="button" variant="ghost" onClick={() => onPickList('allow')}>
+                            {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
+                        </Button>
+                        {allowListIdx ? (
+                            <Button type="button" variant="ghost" onClick={() => onClearList('allow')}>
+                                Remove
+                            </Button>
+                        ) : null}
+                    </div>
+                    <div className={styles.listRow}>
+                        <div className={styles.fromLine}>
+                            <span className={styles.detailsLabel}>Block-list</span>
+                            <span className={styles.detailsValue}>
+                                {blockListIdx
+                                    ? `List #${blockListIdx}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    : 'None'}
+                            </span>
+                        </div>
+                        <Button type="button" variant="ghost" onClick={() => onPickList('block')}>
+                            {blockListIdx ? 'Change block-list' : 'Choose block-list'}
+                        </Button>
+                        {blockListIdx ? (
+                            <Button type="button" variant="ghost" onClick={() => onClearList('block')}>
+                                Remove
+                            </Button>
+                        ) : null}
+                    </div>
+                    <p className={styles.hint}>
+                        Removing a list here only clears it before the token exists. Once
+                        created, a bound list can be replaced but never removed: the
+                        protocol has no "clear" for one. To lift a restriction later, point
+                        it at an empty address list.
+                    </p>
+
+                    {warnings.length > 0 ? (
+                        <div role="alert" className={styles.warnings}>
+                            {warnings.map((w) => (
+                                <p key={w} className={styles.warning}>{w}</p>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            )}
+        </div>
     );
 }
 

@@ -593,11 +593,114 @@ async function main() {
     console.log(`  read-back contract action_index=${cRow?.action_index} status=${asmStatus} code_hash=${String(cRow?.code_hash || '').slice(0, 16)}… (want ${dPlan.codeHash.slice(0, 16)}…)`);
     const deployOk = chunksOk && cRow != null && asmStatus === 'valid';
 
-    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
+    // 14) ISSUE create-time completeness (PC-06). The wizard's advanced
+    // disclosure claims a token can be FULLY configured in the single
+    // transaction that creates it - locks, callback, and access lists
+    // that previously needed three follow-up admin edits (PC-02/03/04).
+    // This leg proves that against the live indexer, and it builds its
+    // params through the WALLET'S OWN composer helper rather than a
+    // hand-written set, so what ships is what is proven.
+    //
+    // It also pins the create-only behaviours the wallet has to guard
+    // itself, because issue.js writes those checks as `tokenInfo && ...`
+    // and there is no token record on a create: configuring a callback
+    // AND locking it in the same action is accepted here, where on an
+    // edit the LOCK_CALLBACK guard would refuse the change.
+    console.log('\n=== ISSUE create-time completeness (PC-06) ===');
+    const { applyAdvancedIssueFields } = await import(
+        path.resolve(__dirname, '../../packages/core/src/shared/utils/issueAdvancedFields.js')
+    );
+    const WZ = sdk.wallet.generateKeyPair();
+    const addrWZ = sdk.wallet.deriveAddress(WZ.publicKeyHex, { type: 'p2wpkh' });
+    const signerWZ = { wif: WZ.wif, pubkeyHex: WZ.publicKeyHex, address: addrWZ };
+    console.log('  wizard issuer W:', addrWZ);
+    nodeRpc(['sendtoaddress', addrWZ, '5']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    // XCHAIN pays the ISSUE fee and is the callback payout token.
+    await submit(sdk, 'MINT for PC-06', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '1000' }, signerWZ);
+    await sleep(3000);
+    // The allow-list must already exist: isValidList resolves it at this
+    // action's index, so the LIST has to be published first (which is
+    // exactly why the wizard's picker only offers published lists).
+    await submit(sdk, 'LIST for PC-06', 'LIST', { VERSION: '0', TYPE: '2', ITEM: [addrWZ, addrB] }, signerWZ);
+    await sleep(3000);
+    const wLists = await sdk.getLists(addrWZ, 'address').catch(() => null);
+    const wListRows = wLists && Array.isArray(wLists.data) ? wLists.data : (Array.isArray(wLists) ? wLists : []);
+    const wListRow = wListRows
+        .filter((r) => String(r.type) === '2' && String(r.status || 'valid') === 'valid')
+        .sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0))[0];
+    const wAllowIdx = wListRow ? String(wListRow.action_index) : null;
+    console.log(`  published TYPE=2 address list #${wAllowIdx}`);
+    const wTip = Number(JSON.parse(nodeRpc(['getblockchaininfo'])).blocks);
+    const wCallbackBlock = wTip + 50;
+    const wTick = randTick('WZ');
+    // Base params exactly as TEMPLATE_COMPOSERS.custom builds them...
+    const wizardParams = {
+        VERSION: '0',
+        TICK: wTick,
+        DECIMALS: '0',
+        MAX_SUPPLY: '1000',
+        MINT_SUPPLY: '1000',
+        DESCRIPTION: 'pc06 advanced create',
+    };
+    // ...then the advanced disclosure folds in all three groups at once.
+    applyAdvancedIssueFields(wizardParams, {
+        lockChecks: {
+            max_supply: true, max_mint: true, mint: true, mint_supply: true,
+            description: true, sleep: true, callback: true,
+        },
+        callbackTick: 'XCHAIN',
+        callbackAmount: '1',
+        callbackBlock: String(wCallbackBlock),
+        allowListIdx: wAllowIdx,
+    });
+    console.log(`  one ISSUE carrying ${Object.keys(wizardParams).length} fields (7 locks + callback trio + allow-list)`);
+    const wRes = await submit(sdk, 'ISSUE v0 advanced', 'ISSUE', wizardParams, signerWZ);
+    const wStatus = wRes.indexed && (wRes.indexed.status || wRes.indexed.state);
+    await sleep(4000);
+    // Two read-backs, because they disagree and the disagreement is the
+    // point. The ACTION row is what the wallet actually composed, so it
+    // is the wallet's regression guard and must show all seven locks.
+    const wIssues = await sdk.getIssues(wTick, 'token').catch(() => null);
+    const wIssueRows = wIssues && Array.isArray(wIssues.data) ? wIssues.data : [];
+    const wIssueRow = wIssueRows.find((r) => String(r.action_index) === String(wRes.actionIndex))
+        || wIssueRows[0] || {};
+    const LOCK_COLS = ['lock_max_supply', 'lock_max_mint', 'lock_mint', 'lock_mint_supply',
+        'lock_description', 'lock_sleep', 'lock_callback'];
+    const actionLocks = LOCK_COLS.filter((c) => String(wIssueRow[c]) === '1');
+    console.log(`  ACTION-row locks (what the wallet composed): ${actionLocks.length}/7`);
+
+    const wInfo = await sdk.getToken(wTick).catch(() => null);
+    const wRow = Array.isArray(wInfo) ? wInfo[0] : wInfo;
+    const wLocks = (wRow && wRow.locks) || {};
+    // : the indexer's createToken() never writes lock_mint_supply
+    // to the `tokens` table, so the READ MODEL reports that one flag as
+    // unset on every token on every chain even though the action set it
+    // and issue.js (which folds the issues rows) still enforces it. The
+    // token-row expectation is therefore 6/7 until that lands; the
+    // action-row check above is what proves the wallet's own leg.
+    const TOKEN_LOCKS_LIVE = ['max_supply', 'max_mint', 'mint', 'description', 'sleep', 'callback'];
+    const locksSet = TOKEN_LOCKS_LIVE.filter((k) => Number(wLocks[k]) === 1);
+    const mintSupplyProjected = Number(wLocks.mint_supply) === 1;
+    const wCallbackOk = wRow && wRow.callback
+        && String(wRow.callback.tick) === 'XCHAIN'
+        && String(wRow.callback.amount) === '1'
+        && Number(wRow.callback.block) === wCallbackBlock;
+    const wAllowOk = wRow && wRow.lists && String(wRow.lists.allow) === String(wAllowIdx);
+    console.log(`  read-back token locks: ${locksSet.length}/6 projectable [${locksSet.join(',')}]`);
+    console.log(`  read-back locks.mint_supply=${mintSupplyProjected} -> ${mintSupplyProjected ? ' IS FIXED, tighten this leg to 7/7' : 'expected false while  is open'}`);
+    console.log(`  read-back callback: tick=${wRow?.callback?.tick} amount=${wRow?.callback?.amount} block=${wRow?.callback?.block} (want block ${wCallbackBlock}) -> ${wCallbackOk ? 'OK' : 'MISMATCH'}`);
+    console.log(`  read-back lists.allow=${wRow?.lists?.allow} (want ${wAllowIdx}) -> ${wAllowOk ? 'OK' : 'MISMATCH'}`);
+    const wizardOk = wStatus === 'valid' && actionLocks.length === 7
+        && locksSet.length === 6 && wCallbackOk && wAllowOk;
+    console.log(`  [ISSUE v0 advanced] indexed status=${wStatus} -> ${wizardOk ? 'PC-06 OK' : 'CHECK'}`);
+
+    console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel + one-transaction fully-configured ISSUE are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk && addrOk && deployOk
-        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create + ADDRESS v0 prefs + CHUNKED DEPLOY)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} addrOk=${addrOk} aStatus=${aStatus} deployOk=${deployOk} asmStatus=${asmStatus})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk && addrOk && deployOk && wizardOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create + ADDRESS v0 prefs + CHUNKED DEPLOY + fully-configured ISSUE create)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} addrOk=${addrOk} aStatus=${aStatus} deployOk=${deployOk} asmStatus=${asmStatus} wizardOk=${wizardOk} wStatus=${wStatus})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

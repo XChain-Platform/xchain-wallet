@@ -942,6 +942,15 @@ function decodeIssue(p, chainName, chainSuffix) {
     const mintStart = str(p.MINT_START_BLOCK);
     const mintStop = str(p.MINT_STOP_BLOCK);
     const lockFlags = collectLockFlags(p);
+    // PC-06: ISSUE v0 also carries the callback trio and the access
+    // lists, and the wizard's advanced disclosure is the first wallet
+    // path that fills them in at create time. Same labels the v4 / v5
+    // edit branches use, so the same setting reads the same either way.
+    const callbackBlock = str(p.CALLBACK_BLOCK);
+    const callbackTick = str(p.CALLBACK_TICK);
+    const callbackAmount = str(p.CALLBACK_AMOUNT);
+    const allowList = str(p.ALLOW_LIST);
+    const blockList = str(p.BLOCK_LIST);
 
     const isCreate = maxSupply !== '' || mintSupply !== '';
     const isTransferOnly = !isCreate && transfer !== '' && maxMint === '' && description === '';
@@ -969,6 +978,11 @@ function decodeIssue(p, chainName, chainSuffix) {
         ...(mintSupply ? [{ label: 'Initial mint', value: mintSupply }] : []),
         ...(transfer ? [{ label: 'Transfer ownership to', value: transfer }] : []),
         ...(transferSupply ? [{ label: 'Transfer initial supply to', value: transferSupply }] : []),
+        ...(callbackBlock ? [{ label: 'Callback at block', value: callbackBlock }] : []),
+        ...(callbackTick ? [{ label: 'Callback token', value: callbackTick }] : []),
+        ...(callbackAmount ? [{ label: 'Callback amount', value: callbackAmount }] : []),
+        ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
+        ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
         ...(lockFlags.length > 0
             ? [{ label: 'Locking', value: lockFlags.join(', ') }]
             : []),
@@ -978,6 +992,15 @@ function decodeIssue(p, chainName, chainSuffix) {
     const warnings = [
         ...(lockFlags.length > 0
             ? ['Locking is permanent. These properties cannot be changed after this transaction confirms.']
+            : []),
+        // An allow-list is default-deny: binding one at create means the
+        // token is unusable by anyone the list omits, which is not
+        // obvious from a bare list number on the confirm screen.
+        ...(allowList
+            ? ['An allow list restricts this token to the addresses on that list. Everyone else is denied.']
+            : []),
+        ...(callbackBlock || callbackTick || callbackAmount
+            ? ['A callback lets the owner recall every holder\'s balance after the callback block, paying them the callback amount.']
             : []),
         ...baseWarnings,
     ];

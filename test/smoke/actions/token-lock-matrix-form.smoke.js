@@ -57,7 +57,21 @@ const src = readFileSync(formPath, 'utf8');
 
 // --- 1. LOCK_FLAGS: all seven flags -------------------------------------
 
-const lockFlagsBlock = src.match(/const LOCK_FLAGS = \[[\s\S]*?\n\];/);
+// PC-06 moved the table into shared/utils/issueAdvancedFields.js so the
+// admin lock matrix and the create wizard's advanced lock panel drive
+// the same seven flags and cannot drift.
+const lockFlagsPath = join(core, 'src', 'shared', 'utils', 'issueAdvancedFields.js');
+assert.ok(existsSync(lockFlagsPath), 'issueAdvancedFields.js exists');
+const lockFlagsSrc = readFileSync(lockFlagsPath, 'utf8');
+assert.ok(
+    /import \{ LOCK_FLAGS \} from '\.\.\/utils\/issueAdvancedFields\.js'/.test(src),
+    'TokenAdminForm imports the shared LOCK_FLAGS rather than redeclaring it',
+);
+assert.ok(
+    !/const LOCK_FLAGS = \[/.test(src),
+    'TokenAdminForm no longer carries its own copy of the table',
+);
+const lockFlagsBlock = lockFlagsSrc.match(/export const LOCK_FLAGS = \[[\s\S]*?\n\];/);
 assert.ok(lockFlagsBlock, 'LOCK_FLAGS constant found');
 const lockFlags = lockFlagsBlock[0];
 const EXPECTED_FLAGS = [

@@ -44,6 +44,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
+import { LOCK_FLAGS } from '../utils/issueAdvancedFields.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import styles from './IssueTokenForm.module.css';
@@ -56,57 +57,9 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
-// PC-02 lock matrix: the seven independent ISSUE v3 lock flags
-// (ISSUE.md "Version 3 - Edit LOCK PARAMS"). `key` matches the
-// `locks` field name getToken returns (xchain-explorer db.js "Group
-// LOCK fields"); `field` is the ISSUE wire param. Every flag is
-// one-way: issue.js's `isValidLock` only ever allows 0->1 or a
-// no-op re-affirm of the current value, never 1->0, so once a flag
-// is set on the token record it can never be cleared again.
-const LOCK_FLAGS = [
-    {
-        key: 'max_supply',
-        field: 'LOCK_MAX_SUPPLY',
-        label: 'Max supply',
-        hint: 'Freezes MAX_SUPPLY. The cap can never be raised again.',
-    },
-    {
-        key: 'max_mint',
-        field: 'LOCK_MAX_MINT',
-        label: 'Max mint per transaction',
-        hint: 'Freezes MAX_MINT. The per-transaction mint cap can never change again.',
-    },
-    {
-        key: 'mint',
-        field: 'LOCK_MINT',
-        label: 'Minting',
-        hint: 'Permanently disables the MINT command. No one will ever be able to mint this token again.',
-    },
-    {
-        key: 'mint_supply',
-        field: 'LOCK_MINT_SUPPLY',
-        label: 'Mint supply now',
-        hint: 'Permanently disables MINT_SUPPLY (mint-now via a token update). The owner can never mint additional supply that way again.',
-    },
-    {
-        key: 'description',
-        field: 'LOCK_DESCRIPTION',
-        label: 'Description',
-        hint: 'Freezes DESCRIPTION. The token metadata can never be edited again.',
-    },
-    {
-        key: 'sleep',
-        field: 'LOCK_SLEEP',
-        label: 'Sleep',
-        hint: 'Permanently disables the SLEEP command for this token.',
-    },
-    {
-        key: 'callback',
-        field: 'LOCK_CALLBACK',
-        label: 'Callback',
-        hint: 'Freezes the callback configuration (block, token, and amount). It can never change again.',
-    },
-];
+// PC-02's lock matrix and PC-06's create-time lock panel drive the same
+// seven ISSUE lock flags, so the table lives in one place (see
+// utils/issueAdvancedFields.js) and neither matrix can drift.
 
 /**
  * Token admin surfaces (§40.5).

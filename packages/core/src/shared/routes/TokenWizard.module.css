@@ -237,3 +237,63 @@
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
 }
+
+/* PC-06: the Custom template's advanced disclosure (locks, callback,
+   access lists). Collapsed by default; the body is a dense settings
+   block, so its copy reads left-aligned rather than centred like the
+   wizard's one-line stage hints. */
+.advanced {
+    margin: var(--xc-space-4) 0 var(--xc-space-3);
+    padding-top: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+.advancedBody {
+    margin-top: var(--xc-space-3);
+}
+
+.advancedBody .hint {
+    text-align: start;
+}
+
+.advancedHeading {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: var(--xc-space-4) 0 var(--xc-space-2);
+}
+
+.lockFlagRow {
+    padding: var(--xc-space-2) 0;
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.lockFlagRow:last-child {
+    border-bottom: none;
+}
+
+.lockFlagRow .checkRow {
+    margin-bottom: var(--xc-space-1);
+}
+
+.lockFlagHint {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin: 0 0 0 calc(var(--xc-space-2) + 1em);
+    line-height: 1.4;
+}
+
+.listRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin: 0 0 var(--xc-space-3);
+}
+
+.listRow .fromLine {
+    flex: 1 1 12rem;
+    margin-bottom: 0;
+}
