@@ -216,10 +216,18 @@ await assert.rejects(async () => flows.airdropAction({ params: { TICK: 'A', AMOU
 }
 
 {
-    const sdk = { getTransaction: () => ({ tx_hash: 'abc', action_index: '1234' }) };
+    // The QUERY TYPE is asserted, not just the return value. /transaction/
+    // accepts tx_hash and tx_index only; this called it with 'hash', which
+    // 404s for every txid, and the 404 branch above turns that into null - so
+    // the resolved-action path could never be reached in production while a
+    // stub that ignored its arguments reported it working.
+    let seen = null;
+    const sdk = { getTransaction: (q, type) => { seen = { q, type }; return { tx_hash: 'abc', action_index: '1234' }; } };
     const sdkRegistry = { get: () => sdk };
     const r = await flows.actionByTxid({ sdkRegistry, chainId: 'x', txid: 'abc' });
     assert.equal(r.action_index, '1234', 'actionByTxid returns the resolved action');
+    assert.equal(seen.q, 'abc', 'actionByTxid queries by the txid');
+    assert.equal(seen.type, 'tx_hash', 'actionByTxid uses the tx_hash query type the route accepts');
 }
 
 await assert.rejects(async () => flows.listByActionIndex({}), /sdkRegistry is required/);

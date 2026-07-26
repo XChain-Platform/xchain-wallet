@@ -37,7 +37,11 @@ export async function actionByTxid({ sdkRegistry, chainId, txid }) {
     if (!txid) throw new Error('actionByTxid: txid is required');
     const sdk = sdkRegistry.get(chainId);
     try {
-        return await sdk.getTransaction(txid, 'hash');
+        // 'tx_hash', not 'hash': /transaction/{QUERY}/{TYPE} accepts tx_hash and
+        // tx_index only. With 'hash' the route 404s for EVERY txid, and the
+        // catch below reads 404 as "not yet indexed" - so this resolved to null
+        // forever and the surfaces polling it never stopped waiting.
+        return await sdk.getTransaction(txid, 'tx_hash');
     } catch (err) {
         // Treat 404 / not-found as "not yet indexed". The SDK's HTTP
         // layer may surface this as an error with a status field or
