@@ -41,11 +41,20 @@ assert.match(guard, /export async function gatedSendReadiness/, 'secret-free rea
 // ---- Every SEND-composing path runs the guard ---------------------------
 const sendFlow = read('packages', 'core', 'src', 'flows', 'sendToken.js');
 assert.match(sendFlow, /prepareGatedSend\(\{/, 'sendToken (software + HW + bridge) runs the guard');
-assert.match(sendFlow, /if \(!opts\.prebuiltPsbt\) \{/, 'prebuilt path skips (already guarded at compose)');
+assert.match(sendFlow, /if \(!opts\.prebuiltPsbt && !isMulti\) \{/,
+    'prebuilt path skips (already guarded at compose); PC-52 multi-leg skips because it is refused outright');
 const psbtFlow = read('packages', 'core', 'src', 'flows', 'buildSendPsbt.js');
 assert.match(psbtFlow, /prepareGatedSend\(\{/, 'watcher buildSendPsbt runs the guard');
 const host = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
-assert.match(host, /const gatedPlan = await prepareGatedSend\(\{/, 'composeForConfirm SEND branch runs the guard');
+assert.match(host, /const gatedPlan = isMulti \? null : await prepareGatedSend\(\{/,
+    'composeForConfirm SEND branch runs the guard on the single-recipient path');
+
+// PC-52: the guard composes ONE key handoff, encrypted to ONE recipient, so a
+// multi-recipient send of a gated tick has no valid composition today. Each
+// SEND-composing path must refuse it rather than emit an unpaired gated send.
+for (const [name, src] of [['sendToken', sendFlow], ['buildSendPsbt', psbtFlow], ['host composeForConfirm', host]]) {
+    assert.match(src, /assertNoGatedLegs\(\{/, `${name} refuses a multi-leg send of a gated tick`);
+}
 assert.match(host, /host\.register\('action\.send\.psbt', async \(req, \{ vault, chainRegistry, sdkRegistry \}\)/,
     'watcher handler passes the vault for gatedKeys access');
 assert.match(host, /host\.register\('gatedContent\.sendReadiness',/, 'readiness handler exists');

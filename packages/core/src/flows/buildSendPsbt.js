@@ -32,6 +32,12 @@
 import { normalizeSource } from './sendToken.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { prepareGatedSend } from './gatedSendGuard.js';
+import {
+    assertMultiSendSupported,
+    assertNoGatedLegs,
+    buildSendParams,
+    normalizeSendLegs,
+} from './sendLegs.js';
 
 /**
  * @typedef {Object} BuildSendPsbtOpts
@@ -45,6 +51,7 @@ import { prepareGatedSend } from './gatedSendGuard.js';
  * @property {string} tick
  * @property {string | number} amount
  * @property {string} [memo]
+ * @property {import('./sendLegs.js').SendLeg[]} [legs]   PC-52 multi-recipient / multi-tick SEND (v1–v3); same shape and refusals as sendToken
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -72,15 +79,22 @@ export async function buildSendPsbt(opts) {
     if (typeof opts.chainId !== 'string' || !opts.chainId) {
         throw new Error('buildSendPsbt: chainId is required');
     }
-    if (!opts.to) throw new Error('buildSendPsbt: to is required');
-    if (!opts.tick) throw new Error('buildSendPsbt: tick is required');
-    if (opts.amount === undefined || opts.amount === null || opts.amount === '') {
-        throw new Error('buildSendPsbt: amount is required');
-    }
+    const { legs, isMulti } = normalizeSendLegs(opts, 'buildSendPsbt');
     const source = normalizeSource(opts.from, 'buildSendPsbt');
 
     const descriptor = opts.chainRegistry.get(opts.chainId);
     if (!descriptor) throw new Error(`buildSendPsbt: unknown chain "${opts.chainId}"`);
+    // PC-52: the watcher builds the same bytes the signer will sign, so it
+    // makes the same multi-recipient refusals as sendToken.
+    assertMultiSendSupported({ legs, descriptor });
+    if (isMulti) {
+        await assertNoGatedLegs({
+            sdkRegistry: opts.sdkRegistry,
+            chainRegistry: opts.chainRegistry,
+            chainId: opts.chainId,
+            legs,
+        });
+    }
 
     const sdk = opts.sdkRegistry.get(opts.chainId);
     const encoder = sdk?.encoder;
@@ -90,30 +104,25 @@ export async function buildSendPsbt(opts) {
         );
     }
 
-    /** @type {Record<string, string>} */
-    const params = {
-        TICK: opts.tick,
-        AMOUNT: String(opts.amount),
-        DESTINATION: opts.to,
-    };
-    if (opts.memo !== undefined) params.MEMO = opts.memo;
+    const params = buildSendParams(legs);
 
     // PC-26: rewrite a gated tick's SEND into BATCH(SEND, MESSAGE) so the
     // watcher-built PSBT is one the indexer will accept. Same guard and
     // typed errors as sendToken; key source is the vault (a watcher has no
-    // in-session scan cache).
+    // in-session scan cache). Multi-leg sends never reach it: a gated tick
+    // among the legs was refused above.
     let actionData = { action: 'SEND', params };
-    const gatedPlan = await prepareGatedSend({
+    const gatedPlan = isMulti ? null : await prepareGatedSend({
         sdkRegistry: opts.sdkRegistry,
         chainRegistry: opts.chainRegistry,
         vault: opts.vault || null,
         walletId: opts.walletId || null,
         chainId: opts.chainId,
         source,
-        to: opts.to,
-        tick: opts.tick,
-        amount: opts.amount,
-        memo: opts.memo,
+        to: legs[0].to,
+        tick: legs[0].tick,
+        amount: legs[0].amount,
+        memo: legs[0].memo,
     });
     if (gatedPlan) actionData = gatedPlan.actionData;
 
@@ -127,9 +136,9 @@ export async function buildSendPsbt(opts) {
     // D-9: a native-coin send must pay the recipient a real output; the SEND
     // OP_RETURN alone moves no value. Token sends return null and are unchanged.
     const nativeOut = nativePaymentOutput({
-        tick: opts.tick,
-        amount: opts.amount,
-        destination: opts.to,
+        tick: legs[0].tick,
+        amount: legs[0].amount,
+        destination: legs[0].to,
         descriptor,
     });
 

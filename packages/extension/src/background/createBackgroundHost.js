@@ -49,6 +49,7 @@ const {
     receiveAddress,
     ensureNetworkAddresses,
     ensureSettings,
+    seedChainIdsForVault,
     verifyReceiveAddress,
     dispenserAddress,
     resolveActiveAddresses,
@@ -104,6 +105,10 @@ const {
     copyGatedKeysToWallet,
     prepareGatedSend,
     gatedSendReadiness,
+    normalizeSendLegs,
+    buildSendParams,
+    assertMultiSendSupported,
+    assertNoGatedLegs,
     messageAction,
     buildMessageParams,
     handshakeAction,
@@ -746,9 +751,17 @@ export function createBackgroundHost(deps) {
     // already exists). Same flow underneath; the difference is which
     // path is reachable in which session state.
     host.register('wallet.add.import', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const activeChainIds = Array.isArray(req?.activeChainIds) && req.activeChainIds.length > 0
-            ? req.activeChainIds
-            : DEFAULT_ACTIVE_CHAIN_IDS;
+        // : seed from the vault's active chain set, not the mainnet
+        // constant. A wallet added while the app sits on regtest/testnet
+        // used to get mainnet-only addresses, which the active-network
+        // filter hides everywhere - an inert wallet with no in-app way to
+        // give itself an address.
+        const activeChainIds = await seedChainIdsForVault({
+            vault,
+            chainRegistry,
+            requested: req?.activeChainIds,
+            fallback: DEFAULT_ACTIVE_CHAIN_IDS,
+        });
         const r = await importMnemonic({
             ...req,
             activeChainIds,
@@ -805,9 +818,15 @@ export function createBackgroundHost(deps) {
     // `source: 'trezor' | 'ledger'`. Falls back to a password-based
     // unlock for shells/sessions that don't pre-populate the pool.
     host.register('account.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const activeChainIds = Array.isArray(req?.activeChainIds) && req.activeChainIds.length > 0
-            ? req.activeChainIds
-            : DEFAULT_ACTIVE_CHAIN_IDS;
+        // : same seeding rule as wallet.add.import - a new account
+        // created on regtest/testnet must land on the chains the vault is
+        // actually active on, not on the mainnet constant.
+        const activeChainIds = await seedChainIdsForVault({
+            vault,
+            chainRegistry,
+            requested: req?.activeChainIds,
+            fallback: DEFAULT_ACTIVE_CHAIN_IDS,
+        });
         const walletId = req?.walletId;
         const signer = await pickSignerFromRequest({
             vault,
@@ -1556,14 +1575,16 @@ export function createBackgroundHost(deps) {
             actionData = req.actionData;
             encoderOpts = { pubkey: source.publicKey, ...(req.encoderOpts || {}) };
         } else {
-            if (!req?.to) throw new Error('action.composeForConfirm: to is required');
-            if (!req?.tick) throw new Error('action.composeForConfirm: tick is required');
-            if (req?.amount === undefined || req?.amount === null || req?.amount === '') {
-                throw new Error('action.composeForConfirm: amount is required');
+            // PC-52: one shaping call for the recipient list, shared with
+            // sendToken / buildSendPsbt. One leg keeps the flat params (and
+            // the v0 bytes) this route has always composed; two or more emit
+            // LEGS and refuse native-coin and gated ticks.
+            const { legs, isMulti } = normalizeSendLegs(req, 'action.composeForConfirm');
+            assertMultiSendSupported({ legs, descriptor: chainRegistry.get(chainId) });
+            if (isMulti) {
+                await assertNoGatedLegs({ sdkRegistry, chainRegistry, chainId, legs });
             }
-            /** @type {Record<string, string>} */
-            const params = { TICK: req.tick, AMOUNT: String(req.amount), DESTINATION: req.to };
-            if (req.memo !== undefined) params.MEMO = req.memo;
+            const params = buildSendParams(legs);
             actionData = { action: 'SEND', params };
             // PC-26: a gated tick's SEND composes as BATCH(SEND, MESSAGE)
             // HERE, at the single-encode step, so the PSBT the modal
@@ -1571,11 +1592,11 @@ export function createBackgroundHost(deps) {
             // byte-identically (sendToken skips its own guard on the
             // prebuilt path). Typed guard errors reject the confirm()
             // promise unwrapped, like any compose failure.
-            const gatedPlan = await prepareGatedSend({
+            const gatedPlan = isMulti ? null : await prepareGatedSend({
                 sdkRegistry, chainRegistry, vault,
                 walletId: req.walletId,
                 chainId, source,
-                to: req.to, tick: req.tick, amount: req.amount, memo: req.memo,
+                to: legs[0].to, tick: legs[0].tick, amount: legs[0].amount, memo: legs[0].memo,
             });
             if (gatedPlan) actionData = gatedPlan.actionData;
             encoderOpts = {

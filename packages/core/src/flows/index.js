@@ -30,6 +30,16 @@ export {
 export { submitAction } from './submitAction.js';
 export { sendToken, normalizeSource } from './sendToken.js';
 export { buildSendPsbt } from './buildSendPsbt.js';
+export {
+    MAX_SEND_LEGS,
+    MultiSendUnsupportedError,
+    normalizeSendLegs,
+    buildSendParams,
+    assertMultiSendSupported,
+    assertNoGatedLegs,
+    summarizeSendLegs,
+    totalsByTick,
+} from './sendLegs.js';
 export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { createReservationLedger } from './reservationLedger.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
@@ -568,6 +578,14 @@ export {
     isChainOnActiveNetwork,
     filterChainIdsByActiveNetwork,
 } from './effectiveNetwork.js';
+// : seed a newly added wallet/account from the vault's active chain
+// set, so adding a wallet on regtest/testnet cannot mint an inert wallet
+// whose only addresses are on a network the user is not looking at.
+export {
+    activeChainIdsFromSettings,
+    resolveSeedChainIds,
+    seedChainIdsForVault,
+} from './seedChainIds.js';
 export {
     createPriceOracle,
     COINGECKO_SUPPORTED_CHAINS,

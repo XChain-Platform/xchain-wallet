@@ -661,3 +661,36 @@
     border: 2px solid var(--xc-surface-raised);
     box-shadow: 0 0 0 1px var(--xc-border);
 }
+
+/* PC-52 multi-recipient rows. Each extra recipient is boxed so the eye can
+   tell one recipient's address+amount pair from the next; the first recipient
+   stays in the main form flow, unboxed, because it is the ordinary send. */
+.recipientRows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    margin: var(--xc-space-3) 0;
+}
+
+.recipientRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
+.recipientRowHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.recipientRowLabel {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+}

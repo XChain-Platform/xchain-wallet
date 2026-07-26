@@ -13,13 +13,23 @@
 // actions/SEND.md). Maps JS-friendly params to the protocol's
 // uppercase field names and forwards to submitAction.
 //
-// For multi-destination SEND (protocol formats v1–v3) or advanced
-// encoder options, call submitAction directly.
+// PC-52: pass `legs` for a multi-destination / multi-tick SEND
+// (protocol formats v1–v3). The flat to/tick/amount call shape stays
+// the single-recipient case and still emits a byte-identical v0.
+// flows/sendLegs.js owns the shaping and the two refusals (native coin,
+// gated ticks) so every SEND-composing path makes the same call.
 
 import { submitAction } from './submitAction.js';
 import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
 import { nativePaymentOutput } from './nativePayment.js';
 import { prepareGatedSend } from './gatedSendGuard.js';
+import {
+    assertMultiSendSupported,
+    assertNoGatedLegs,
+    buildSendParams,
+    normalizeSendLegs,
+    summarizeSendLegs,
+} from './sendLegs.js';
 
 /**
  * Fail closed on a destination that isn't a valid address for the chain this
@@ -69,6 +79,7 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {string} tick                           TICK (or `^<id>` for TICK_ID)
  * @property {string | number} amount                 AMOUNT
  * @property {string} [memo]                          MEMO (protocol rejects `|` or `;`)
+ * @property {import('./sendLegs.js').SendLeg[]} [legs]   PC-52 multi-recipient / multi-tick SEND (v1–v3). Supersedes to/tick/amount/memo, which then act as per-leg defaults. Two or more legs refuse native-coin and gated ticks (see flows/sendLegs.js).
  * @property {number} [fee]                           absolute sats
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -86,31 +97,36 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  */
 export async function sendToken(opts) {
     if (!opts) throw new Error('sendToken: opts is required');
-    if (!opts.to) throw new Error('sendToken: to is required');
-    if (!opts.tick) throw new Error('sendToken: tick is required');
-    if (opts.amount === undefined || opts.amount === null || opts.amount === '') {
-        throw new Error('sendToken: amount is required');
+    const { legs, isMulti } = normalizeSendLegs(opts, 'sendToken');
+    const descriptor = opts.chainRegistry?.get?.(opts.chainId);
+    assertMultiSendSupported({ legs, descriptor });
+    for (const leg of legs) {
+        assertValidDestination('sendToken', leg.to, opts.chainRegistry, opts.chainId);
     }
-    assertValidDestination('sendToken', opts.to, opts.chainRegistry, opts.chainId);
     const source = normalizeSource(opts.from, 'sendToken');
+    // Refused rather than half-composed: a gated tick needs one key handoff per
+    // recipient, which only the single-recipient path builds. No-op for one leg.
+    if (isMulti && !opts.prebuiltPsbt) {
+        await assertNoGatedLegs({
+            sdkRegistry: opts.sdkRegistry,
+            chainRegistry: opts.chainRegistry,
+            chainId: opts.chainId,
+            legs,
+        });
+    }
 
-    /** @type {Record<string, string>} */
-    const params = {
-        TICK: opts.tick,
-        AMOUNT: String(opts.amount),
-        DESTINATION: opts.to,
-    };
-    if (opts.memo !== undefined) params.MEMO = opts.memo;
+    const params = buildSendParams(legs);
 
     // PC-26: a tick with active gated content must send as
     // BATCH(SEND, MESSAGE-with-key) or the indexer rejects it. The guard
     // rewrites actionData when it applies and throws typed errors when the
     // send cannot be composed validly (no keys / recipient has no pubkey).
     // Skipped on the prebuilt path: the  confirm pipeline already ran
-    // it at compose time and these bytes must not be rebuilt.
+    // it at compose time and these bytes must not be rebuilt. Multi-leg sends
+    // never reach it (assertNoGatedLegs refused any gated tick above).
     let actionData = { action: 'SEND', params };
     let gatedPlan = null;
-    if (!opts.prebuiltPsbt) {
+    if (!opts.prebuiltPsbt && !isMulti) {
         gatedPlan = await prepareGatedSend({
             sdkRegistry: opts.sdkRegistry,
             chainRegistry: opts.chainRegistry,
@@ -118,20 +134,19 @@ export async function sendToken(opts) {
             walletId: opts.walletId,
             chainId: opts.chainId,
             source,
-            to: opts.to,
-            tick: opts.tick,
-            amount: opts.amount,
-            memo: opts.memo,
+            to: legs[0].to,
+            tick: legs[0].tick,
+            amount: legs[0].amount,
+            memo: legs[0].memo,
         });
         if (gatedPlan) actionData = gatedPlan.actionData;
     }
 
-    const memoTail = opts.memo ? ` (memo: "${opts.memo}")` : '';
     const gatedTail = gatedPlan ? ' + gated unlock key handoff' : '';
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
-        toAddress: opts.to,
-        actionSummary: `Send ${opts.amount} ${opts.tick} to ${opts.to}${memoTail}${gatedTail}`,
+        toAddress: legs[0].to,
+        actionSummary: `${summarizeSendLegs(legs)}${gatedTail}`,
     };
 
     // D-9: a native-coin send must pay the recipient a real output; the SEND
@@ -139,11 +154,13 @@ export async function sendToken(opts) {
     // customOutputs (submitAction's ADS fold appends the donation after, so this
     // survives). Token sends return null and are unchanged. This is the atomic
     // (non-prebuilt) path; the confirm-modal path handles it in composeForConfirm.
+    // Single leg only: a native tick can never be multi-leg (refused above), so
+    // there is exactly one destination to pay here.
     const nativeOut = nativePaymentOutput({
-        tick: opts.tick,
-        amount: opts.amount,
-        destination: opts.to,
-        descriptor: opts.chainRegistry?.get(opts.chainId),
+        tick: legs[0].tick,
+        amount: legs[0].amount,
+        destination: legs[0].to,
+        descriptor,
     });
 
     return submitAction({

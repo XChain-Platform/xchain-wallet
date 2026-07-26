@@ -123,10 +123,24 @@ assert.match(msgSrc, /sendMessage\('settings\.get'\)/);
 assert.match(sendSrc, /import \{ RawPsbtViewer \}/);
 assert.match(sendSrc, /import \{ useDeveloperMode \}/);
 assert.match(sendSrc, /const \{ developerMode \} = useDeveloperMode\(\);/);
+// PC-52 split this into two shapes: a multi-recipient send shows its LEGS,
+// a single one keeps the flat TICK/AMOUNT/DESTINATION fields. Both must still
+// declare the action, so developer mode never shows a send whose recipients
+// disagree with what gets composed.
 assert.match(
     sendSrc,
-    /<RawPsbtViewer\s+developerMode=\{developerMode\}\s+actionFields=\{\{\s*action: 'SEND'/s,
-    'Send.jsx review renders RawPsbtViewer with action fields it has at review time',
+    /<RawPsbtViewer\s+developerMode=\{developerMode\}\s+actionFields=\{isMultiSend \? \{\s*action: 'SEND'/s,
+    'Send.jsx review renders RawPsbtViewer with the action fields it has at review time',
+);
+assert.match(
+    sendSrc,
+    /LEGS: sendLegs\.map\(/,
+    'the multi-recipient branch shows every leg, not a one-recipient stand-in',
+);
+assert.match(
+    sendSrc,
+    /\} : \{\s*action: 'SEND',\s*TICK: tick\.trim\(\),/s,
+    'the single-recipient branch is unchanged',
 );
 
 console.log('raw-psbt-viewer smoke OK');

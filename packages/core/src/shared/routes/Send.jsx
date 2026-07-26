@@ -46,6 +46,7 @@ import {
 } from '../../schemas/settings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
+import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
 
 // Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
 // The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
@@ -257,6 +258,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [amountInputMode, setAmountInputMode] = useState(
         /** @type {'coin' | 'fiat'} */ ('coin'),
     );
+    // PC-52: additional recipients. The fields above stay the FIRST recipient
+    // (so every single-send affordance - contacts, paste checks, fiat entry,
+    // Max, the gated-content rails - keeps working untouched), and these rows
+    // are the extra legs of a SEND v1/v2. `perRecipientToken` reveals a tick
+    // field per row, which is what moves the action from v1 to v2; without it
+    // every leg carries the token chosen above.
+    const [extraLegs, setExtraLegs] = useState(
+        /** @type {Array<{ id: string, to: string, amount: string, tick: string }>} */ ([]),
+    );
+    const [perRecipientToken, setPerRecipientToken] = useState(false);
     const [fiatAmount, setFiatAmount] = useState('');
     const [password, setPassword] = useState('');
     // Live mirror of `password` so the confirm-modal's onApprove closure
@@ -569,6 +580,52 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return Boolean(nativeTicker && tick.trim().toUpperCase() === nativeTicker);
     }, [chainId, tick]);
 
+    // PC-52 derived state. `sendLegs` is the whole recipient list (first row +
+    // extras) in the shape the flows take; `isMultiSend` is what switches the
+    // payload from the flat to/tick/amount fields to `legs`.
+    const isMultiSend = extraLegs.length > 0;
+    const sendLegs = useMemo(() => [
+        {
+            to: toAddress.trim(),
+            tick: tick.trim(),
+            amount: String(amount).trim(),
+            ...(isNativeSend || !memo.trim() ? {} : { memo: memo.trim() }),
+        },
+        ...extraLegs.map((leg) => ({
+            to: leg.to.trim(),
+            tick: (perRecipientToken && leg.tick.trim()) ? leg.tick.trim() : tick.trim(),
+            amount: String(leg.amount).trim(),
+            ...(isNativeSend || !memo.trim() ? {} : { memo: memo.trim() }),
+        })),
+    ], [toAddress, tick, amount, memo, isNativeSend, extraLegs, perRecipientToken]);
+    // Per-token totals, so the form can show what the whole send costs rather
+    // than only the first row's amount.
+    const sendTotals = useMemo(() => totalsByTick(sendLegs), [sendLegs]);
+    const addRecipient = useCallback(() => {
+        setExtraLegs((prev) => (prev.length + 1 >= MAX_SEND_LEGS ? prev : [
+            ...prev,
+            // Date.now alone collides when two rows are added in the same tick.
+            { id: `leg-${Date.now()}-${prev.length}`, to: '', amount: '', tick: '' },
+        ]));
+    }, []);
+    const updateRecipient = useCallback((id, patch) => {
+        setExtraLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...patch } : leg)));
+    }, []);
+    const removeRecipient = useCallback((id) => {
+        setExtraLegs((prev) => prev.filter((leg) => leg.id !== id));
+    }, []);
+    // A native tick pays real outputs instead of writing an action, so it has
+    // no multi-recipient form (flows/sendLegs.js refuses it, and the refusal is
+    // mirrored here so the user learns it at compose time rather than at sign
+    // time). Typed rows are KEPT, not silently dropped: switching the token
+    // back is the fix, and discarding a list of addresses the user just entered
+    // would be the worse failure.
+    const nativeMultiSendBlock = isMultiSend && isNativeSend
+        ? `${tick.trim().toUpperCase()} can only be sent to one recipient at a time. `
+          + 'It pays a real output rather than writing an XChain action, so each recipient '
+          + 'needs their own transaction. Remove the extra recipients, or pick a token.'
+        : null;
+
     // : `fiatRate` prices the CHAIN COIN. The amount field may be holding a
     // TOKEN amount, and pricing that at the coin's rate renders a confidently
     // formatted, wildly wrong number (50,000 XCHAIN shown as billions of dollars).
@@ -729,6 +786,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
+        // PC-52: the decoder summarizes ONE leg, so a multi-recipient send is
+        // summarized here instead of being decoded into a line that names the
+        // first recipient and hides the rest. Every leg is listed in Details.
+        if (isMultiSend) {
+            return {
+                summary: summarizeSendLegs(sendLegs),
+                details: sendLegs.map((leg, i) => ({
+                    label: `Recipient ${i + 1}`,
+                    value: `${leg.amount} ${leg.tick.toUpperCase()} to ${leg.to}`,
+                })),
+                warnings: [],
+            };
+        }
         return decoderLib.decodeAction({
             action: 'SEND',
             params: {
@@ -740,7 +810,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, tick, amount, toAddress, memo, chainId]);
+    }, [stage, tick, amount, toAddress, memo, chainId, isMultiSend, sendLegs]);
 
     // §21.2 balance-change preview. Fetched on entering review against
     // the source address; the result feeds `decoder.simulateAction` and
@@ -820,6 +890,18 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }, 400);
         return () => { clearTimeout(timer); };
     }, [walletId, chainId, tick, toAddress, amount, fromAddress?.address, messaging]);
+
+    // PC-52 + PC-26: a gated tick's SEND is only valid inside
+    // BATCH(SEND, MESSAGE) carrying an unlock key encrypted to the RECIPIENT,
+    // so an N-recipient send needs N handoffs. Only the single-recipient path
+    // composes that today, and the flows refuse the rest, so the form refuses
+    // it here too instead of letting compose fail after the modal opens.
+    // `gatedInfo` is non-null only for a tick with active gated content
+    // (an 'ungated' probe result is never stored).
+    const gatedMultiSendBlock = isMultiSend && gatedInfo
+        ? `${tick.trim().toUpperCase()} has token-gated content, and each recipient needs their own `
+          + 'unlock-key handoff. Send this token to one recipient at a time.'
+        : null;
 
     async function handleGatedScan(event) {
         event.preventDefault();
@@ -1000,17 +1082,24 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
     }, [sourceBalance, isNativeSend, feeEstimate, amountInputMode, amountFiatRate]);
 
+    // PC-52: the simulator models ONE leg. For a multi-recipient send of a
+    // single token that is still exact (the source-side delta is the sum, and
+    // the indexer consolidates by destination|tick), so the preview runs on the
+    // total. Across several tokens it would model only one of them, which is
+    // worse than no preview: that case says so instead (see the review stage).
+    const multiTickPreviewGap = isMultiSend && sendTotals.length > 1;
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
             return null;
         }
+        if (multiTickPreviewGap) return null;
         const feeStr = feeEstimate?.coinAmount || '0';
         return decoderLib.simulateAction({
             action: 'SEND',
             params: {
                 TICK: tick.trim(),
-                AMOUNT: String(amount).trim(),
+                AMOUNT: isMultiSend ? sendTotals[0].amount : String(amount).trim(),
                 DESTINATION: toAddress.trim(),
                 MEMO: memo.trim() || undefined,
             },
@@ -1024,7 +1113,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, tick, amount, toAddress, memo, chainId, previewBalances, feeEstimate]);
+    }, [
+        stage, tick, amount, toAddress, memo, chainId, previewBalances, feeEstimate,
+        isMultiSend, sendTotals, multiTickPreviewGap,
+    ]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -1055,6 +1147,36 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
+        // PC-52: the extra recipients get the same checks the first one gets.
+        // A bad address here is the same unspendable-output mistake, and it
+        // would otherwise only surface as a compose failure after the modal
+        // opened.
+        if (nativeMultiSendBlock) {
+            setFormError(nativeMultiSendBlock);
+            return;
+        }
+        for (let i = 0; i < extraLegs.length; i += 1) {
+            const leg = extraLegs[i];
+            const label = `Recipient ${i + 2}`;
+            if (!leg.to.trim()) {
+                setFormError(`${label}: address is required.`);
+                return;
+            }
+            const legAddressError = destinationAddressError(leg.to, descriptor);
+            if (legAddressError) {
+                setFormError(`${label}: ${legAddressError}`);
+                return;
+            }
+            if (perRecipientToken && !leg.tick.trim()) {
+                setFormError(`${label}: token is required.`);
+                return;
+            }
+            const legAmount = String(leg.amount).trim();
+            if (!legAmount || Number(legAmount) <= 0) {
+                setFormError(`${label}: amount must be a positive number.`);
+                return;
+            }
+        }
         // PC-26: no unlock key held for a gated tick = the network would
         // reject the send anyway; stop it here with the recovery path
         // visible instead of surfacing a compose error later.
@@ -1063,6 +1185,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 `${tick.trim().toUpperCase()} has token-gated content and this wallet holds none of its unlock keys. `
                 + 'Recover the keys below before sending.',
             );
+            return;
+        }
+        if (gatedMultiSendBlock) {
+            setFormError(gatedMultiSendBlock);
             return;
         }
         setFormError(null);
@@ -1106,14 +1232,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             && sats !== null && sats > 0;
         const amountSats = isNativeSend ? sats : 0;
         let recipientNovel = false;
-        if (toAddress.trim() && desc?.coin) {
-            const novelty = checkRecipientNovelty({
-                address: toAddress.trim(),
+        // PC-52: ANY never-seen recipient makes the send novel, not just the
+        // first row. The cross-check exists so a hardware user verifies an
+        // unfamiliar address on the device, and a multi-recipient send has more
+        // addresses to get wrong, not fewer.
+        if (desc?.coin) {
+            recipientNovel = sendLegs.some((leg) => leg.to && checkRecipientNovelty({
+                address: leg.to,
                 chainCoin: desc.coin,
                 contacts,
                 historyRows,
-            });
-            recipientNovel = novelty.novel === true;
+            }).novel === true);
         }
         return classifySignRisk({
             signerKind: fromAddress?.source,
@@ -1125,12 +1254,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
-    }, [isHwSource, fromAddress?.source, chainId, tick, amount, toAddress, contacts, historyRows, settings]);
+    }, [isHwSource, fromAddress?.source, chainId, tick, amount, sendLegs, contacts, historyRows, settings]);
     // Reset the confirm state whenever the requirement flips on, so a
     // user can't carry a stale "yes" through a recipient/amount change.
+    // Editing ANY recipient row counts as that change (PC-52).
     useEffect(() => {
         setHwExplicitConfirmed(false);
-    }, [signRisk.requireExplicitConfirm, fromAddress?.address, toAddress, amount]);
+    }, [signRisk.requireExplicitConfirm, fromAddress?.address, sendLegs, amount]);
 
     //  slice 1: the single-encode confirm-modal path. The modal is
     // rendered only while the pipeline is live (preflighting..rechecking);
@@ -1164,6 +1294,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             memo: isNativeSend ? undefined : (memo.trim() || undefined),
             rbf: rbfEnabled,
             ...(feePerKb != null ? { feePerKb } : {}),
+            // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
+            // real multi-recipient send so a single send composes the identical
+            // v0 bytes it always has.
+            ...(isMultiSend ? { legs: sendLegs } : {}),
         };
         setSubmitError(null);
         setSubmitErrorDetail(null);
@@ -1182,7 +1316,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     reserve: (e) => messaging.reserve(e),
                     release: (id) => messaging.releaseReservation({ id }),
                 },
-                reserve: { tick: tick.trim(), amount: String(amount).trim() },
+                // §4.7: reserve what this send actually spends of the primary
+                // token, which for a multi-recipient send is the SUM of its
+                // legs, not the first row's amount. Legs on OTHER ticks are not
+                // reserved: the ledger descriptor carries one tick, so a
+                // multi-tick send under-reserves the secondary ticks (recorded
+                // as a PC-52 residual rather than silently mis-reserving).
+                reserve: {
+                    tick: tick.trim(),
+                    amount: sendTotals.find((t) => t.tick === tick.trim().toUpperCase())?.amount
+                        || String(amount).trim(),
+                },
                 compose: () => messaging.composeForConfirm(sendBase),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // : the HW route runs the SAME send flow with a remote
@@ -1226,7 +1370,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     }, [
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfEnabled,
         feePerKb, password, settings, messaging, confirmAction, draft, haptic,
-        isHwSource,
+        isHwSource, isMultiSend, sendLegs, sendTotals,
     ]);
 
     async function handleSubmit(event) {
@@ -1262,6 +1406,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 memo: isNativeSend ? undefined : (memo.trim() || undefined),
                 rbf: rbfEnabled,
                 ...(feePerKb != null ? { feePerKb } : {}),
+                // PC-52: multi-recipient legs, on the watcher and HW paths too
+                // (buildSendPsbt and the HW send handler take the same shape).
+                ...(isMultiSend ? { legs: sendLegs } : {}),
             };
             // §20 / G040: watcher mode encodes only. No password, no signer,
             // no broadcast. The result envelope carries `psbtHex` instead of
@@ -1526,6 +1673,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     loading={previewBalances.loading}
                     error={previewBalances.error}
                 />
+                {multiTickPreviewGap ? (
+                    <StatusMessage variant="status">
+                        This send moves more than one token, and the balance preview
+                        covers a single token at a time. Every recipient and amount is
+                        listed under Details below.
+                    </StatusMessage>
+                ) : null}
                 <details className={styles.details}>
                     <summary className={styles.detailsToggle}>
                         Details ({2 + (decoded?.details?.length || 0)})
@@ -1589,7 +1743,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 ) : null}
                 <RawPsbtViewer
                     developerMode={developerMode}
-                    actionFields={{
+                    actionFields={isMultiSend ? {
+                        action: 'SEND',
+                        // Mirrors the LEGS shape the host sends to the SDK, so
+                        // developer mode shows the action that is actually
+                        // composed rather than a one-recipient stand-in.
+                        LEGS: sendLegs.map((leg) => `${leg.amount} ${leg.tick.toUpperCase()} -> ${leg.to}`).join(' | '),
+                        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
+                    } : {
                         action: 'SEND',
                         TICK: tick.trim(),
                         AMOUNT: String(amount).trim(),
@@ -1836,6 +1997,114 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                                 : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()
                 }
             />
+            {/* PC-52: extra recipients. Each row is another leg of the SAME
+                transaction (SEND v1, or v2 when the rows carry their own
+                token), so the recipients share one network fee instead of
+                paying one each. Native coin is excluded: it moves value in a
+                real output, which has no multi-leg action form. */}
+            {extraLegs.length > 0 ? (
+                <div className={styles.recipientRows}>
+                    {extraLegs.map((leg, i) => (
+                        <div key={leg.id} className={styles.recipientRow}>
+                            <div className={styles.recipientRowHead}>
+                                <span className={styles.recipientRowLabel}>Recipient {i + 2}</span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => removeRecipient(leg.id)}
+                                    aria-label={`Remove recipient ${i + 2}`}
+                                >
+                                    Remove
+                                </Button>
+                            </div>
+                            {/* The visible labels stay "To" / "Token" / "Amount"
+                                to read like the fields above, but each carries
+                                a row-qualified accessible name: without it a
+                                screen reader announces three identical "To"
+                                fields with no way to tell which recipient is
+                                being edited. */}
+                            <AddressCombobox
+                                label="To"
+                                aria-label={`Recipient ${i + 2} address`}
+                                value={leg.to}
+                                onChange={(e) => updateRecipient(leg.id, { to: e.target.value })}
+                                suggestions={suggestions}
+                                placeholder="Enter or paste an address or name..."
+                                error={leg.to.trim() && destinationAddressError(leg.to, descriptor)
+                                    ? destinationAddressError(leg.to, descriptor)
+                                    : undefined}
+                            />
+                            {perRecipientToken ? (
+                                <Input
+                                    label="Token"
+                                    aria-label={`Recipient ${i + 2} token`}
+                                    hint="Tick. Leave as the token above to send the same one."
+                                    value={leg.tick}
+                                    onChange={(e) => updateRecipient(leg.id, { tick: e.target.value })}
+                                    autoComplete="off"
+                                    autoCapitalize="characters"
+                                />
+                            ) : null}
+                            <Input
+                                label="Amount"
+                                aria-label={`Recipient ${i + 2} amount`}
+                                inputMode="decimal"
+                                value={leg.amount}
+                                onChange={(e) => updateRecipient(leg.id, { amount: e.target.value })}
+                                autoComplete="off"
+                            />
+                        </div>
+                    ))}
+                    <label className={styles.rbfRow}>
+                        <span className={styles.rbfLabel}>
+                            <span>Different token per recipient</span>
+                            <span className={styles.rbfHint}>
+                                Off: every recipient gets {tick.trim().toUpperCase() || 'the token above'}.
+                            </span>
+                        </span>
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            aria-label="Different token per recipient"
+                            checked={perRecipientToken}
+                            onChange={(e) => setPerRecipientToken(e.target.checked)}
+                        />
+                    </label>
+                    {sendTotals.length > 0 && !nativeMultiSendBlock ? (
+                        <p className={styles.hint}>
+                            Total: {sendTotals.map((t) => `${formatWithThousands(t.amount)} ${t.tick}`).join(' + ')}
+                            {' '}across {sendLegs.length} recipients, in one transaction and one network fee.
+                        </p>
+                    ) : null}
+                </div>
+            ) : null}
+            {nativeMultiSendBlock ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{nativeMultiSendBlock}</p>
+                </div>
+            ) : null}
+            {gatedMultiSendBlock ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{gatedMultiSendBlock}</p>
+                </div>
+            ) : null}
+            {/* Hidden for a native send (no multi-leg form exists) and at the
+                cap, where another row could not be composed anyway. */}
+            {!isNativeSend && extraLegs.length + 1 < MAX_SEND_LEGS ? (
+                <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={addRecipient}
+                >
+                    + Add recipient
+                </Button>
+            ) : null}
+            {extraLegs.length + 1 >= MAX_SEND_LEGS ? (
+                <p className={styles.hint}>
+                    {MAX_SEND_LEGS} recipients is the most one send carries. Use an
+                    airdrop to distribute to a longer list.
+                </p>
+            ) : null}
             {gatedInfo && gatedInfo.state === 'ready' ? (
                 <StatusMessage variant="status">
                     This token has gated content. The unlock key will be securely attached
