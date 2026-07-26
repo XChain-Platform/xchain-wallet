@@ -393,7 +393,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const getAmount = dispenser?.get_amount;
     const giveTick = dispenser?.give_tick;
     const giveAmount = dispenser?.give_amount;
-    const dispAddr = dispenser?.address;
+    // Where a buyer sends payment. The by-action-index read path returns the
+    // flattened action row, which carries `get_address`/`source` but no
+    // `address` column, so keying only on `address` left the pay-to-buy panel
+    // showing a blank address and kept the token-paid Buy button disabled.
+    // Order follows the protocol: GET_ADDRESS when the dispenser set one,
+    // otherwise the source that opened it.
+    const dispAddr = dispenser?.address
+        || dispenser?.get_address
+        || dispenser?.source
+        || action?.source
+        || '';
     // Live status: `current_status` reflects post-create transitions (the
     // 1-hour "cancelling" close window, expiry, sold-out), falling back to
     // the create `status` for demo fixtures that carry only that field.

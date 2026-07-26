@@ -208,3 +208,15 @@
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
 }
+
+/* One radio option: the control beside its text. `.pickerLabel` stacks its
+   children (it is built for a caption above a select), which left the
+   dispenser form's "Buyers pay with" and "Expiration" options rendering as a
+   centred radio with its label orphaned on the next line. */
+.radioOption {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-weight: normal;
+}

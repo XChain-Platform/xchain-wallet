@@ -1175,11 +1175,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     : null}
             />
             <p className={styles.pickerLabel}>Buyers pay with</p>
-            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+            <label className={styles.radioOption}>
                 <input type="radio" name="disp-pay" checked={payWith === 'coin'} onChange={() => setPayWith('coin')} />
                 {' '}Native {coinTicker || 'coin'}
             </label>
-            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+            <label className={styles.radioOption}>
                 <input type="radio" name="disp-pay" checked={payWith === 'token'} onChange={() => setPayWith('token')} />
                 {' '}A token
             </label>
@@ -1263,11 +1263,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             ) : null}
 
             <p className={styles.pickerLabel}>Expiration</p>
-            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+            <label className={styles.radioOption}>
                 <input type="radio" name="disp-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                 {' '}Default window
             </label>
-            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+            <label className={styles.radioOption}>
                 <input type="radio" name="disp-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                 {' '}Expire at a specific time
             </label>

@@ -137,6 +137,14 @@ assert.ok(
     'coin-paid surfaces a "Pay to buy" panel',
 );
 assert.ok(
+    /dispenser\?\.address\s*\n?\s*\|\|\s*dispenser\?\.get_address/.test(detailSrc),
+    // The by-action-index read path returns the flattened action row, which has
+    // get_address/source but no `address` column. Keying only on `address` left
+    // the pay-to address blank and the token-paid Buy button permanently
+    // disabled, so a buyer had nothing to send to.
+    'pay-to address falls back to GET_ADDRESS/source when the row has no address column',
+);
+assert.ok(
     /navigator\.clipboard/.test(detailSrc),
     'pay-here panel exposes a copy-to-clipboard button',
 );
