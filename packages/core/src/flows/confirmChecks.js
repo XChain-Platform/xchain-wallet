@@ -73,7 +73,7 @@ const P2WSH_TYPES = new Set(['p2wsh']);
  * @param {{ address: string|null, value: number }|null} [args.adsOutput]   the resolved ADS donation, when present (hidden from display)
  * @returns {{ addressed: Array<{ address: string, value: number, isAds: boolean }>, encoding: string }}
  */
-export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null }) {
+export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, actionByteLen }) {
     const addressed = (Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
         address: String(o.address),
         value: Number(o.value),
@@ -81,7 +81,8 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
         isAds: !!(adsOutput && String(o.address) === String(adsOutput.address) &&
             Number(o.value) === Number(adsOutput.value)),
     }));
-    return { addressed, encoding: String(encoding || '').toUpperCase() };
+    const enc = String(encoding || '').toUpperCase();
+    return { addressed, encoding: enc, carrierAllowance: expectedCarrierAllowance(enc, actionByteLen) };
 }
 
 /**
@@ -102,7 +103,14 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
 
     // Consumable copy of the addressed matchers (each matches at most once).
     const addressed = expected.addressed.map((s) => ({ ...s, consumed: false }));
-    let carrierAllowance = carrierAllowanceFor(expected.encoding);
+    // How many carrier legs the chosen encoding may emit. OP_RETURN is always
+    // one; a P2SH/P2WSH/MULTISIGN payload larger than a single on-chain chunk
+    // spreads across several data-carrier outputs, so the allowance is derived
+    // from the action size (see expectedCarrierAllowance). Falls back to the
+    // single-leg default when the size was not supplied (older call sites/tests).
+    let carrierAllowance = Number.isFinite(expected.carrierAllowance)
+        ? expected.carrierAllowance
+        : carrierAllowanceFor(expected.encoding);
     const unexpected = [];
 
     for (let i = 0; i < outputs.length; i++) {
@@ -129,9 +137,58 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
 }
 
 function carrierAllowanceFor(encoding) {
-    // Exactly one carrier leg per encoding (the inline OP_RETURN, or the
-    // single P2SH/P2WSH/MULTISIGN commit output).
+    // Exactly one carrier leg per encoding (the inline OP_RETURN, or a
+    // single P2SH/P2WSH/MULTISIGN commit output). Used only as the fallback
+    // when the action size is unknown; expectedCarrierAllowance is the real
+    // count for chunk encodings.
     return encoding ? 1 : 0;
+}
+
+// On-chain payload budget per data-carrier output, mirroring xchain-encoder
+// XChainEncoder.js prepareData: a P2SH/P2WSH chunk holds SCRIPT_ELEMENT_SIZE
+// (520) minus a 44-byte script-trailer/overhead reservation = 476 payload
+// bytes; a bare-multisig carrier packs 60. If these encoder constants ever
+// change, this over-estimates rather than rejects (see the +overhead/+1 margin
+// below), so a deploy never falsely fails - at worst one extra carrier slot is
+// tolerated (a slot a compromised encoder could already inflate in value under
+// the documented residual-encoder-trust model, and which shows up in the
+// confirm page's total-debit line).
+const CHUNK_PAYLOAD_BYTES = { P2SH: 476, P2WSH: 476, MULTISIGN: 60 };
+
+/**
+ * How many carrier outputs the chosen encoding legitimately emits for an
+ * action of `actionByteLen` bytes.
+ *
+ * D-24 : the encoder splits a P2SH/P2WSH/MULTISIGN payload that exceeds
+ * one on-chain chunk across MULTIPLE data-carrier outputs (one per chunk), but
+ * the tamper check formerly allowed exactly one - so any real contract DEPLOY
+ * (or a large FILE / gated publish) was falsely flagged "outputs you did not
+ * approve" and could never broadcast through the confirm modal. The count is a
+ * deterministic function of the payload size, so it can be bounded here without
+ * trusting the encoder's output count: an EXTRA carrier beyond this allowance is
+ * still a tamper. Per-carrier VALUE stays unbounded, matching the existing
+ * residual-encoder-trust posture (a commit output funds the reveal spend and is
+ * not dust; confirmChecks.test.js documents a high-value single carrier as
+ * accepted), with the confirm page's total-debit as the backstop against an
+ * inflated carrier.
+ *
+ * @param {string} encoding   normalized ('OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN')
+ * @param {number} [actionByteLen]   UTF-8 byte length of the composed action string
+ * @returns {number}
+ */
+function expectedCarrierAllowance(encoding, actionByteLen) {
+    const enc = String(encoding || '').toUpperCase();
+    if (!enc) return 0;
+    if (enc === 'OP_RETURN') return 1; // single zero-value nulldata leg
+    const per = CHUNK_PAYLOAD_BYTES[enc];
+    if (!per) return 0;
+    // Unknown size (legacy call sites/tests): keep the single-leg default.
+    if (!Number.isFinite(actionByteLen)) return 1;
+    // +16 covers the magic word + compiled push prefix; the trailing +1 is a
+    // rounding margin so a legitimate deploy is NEVER rejected (over-allowing at
+    // a chunk boundary is safe - see CHUNK_PAYLOAD_BYTES).
+    const len = Math.max(0, Number(actionByteLen));
+    return Math.ceil((len + 16) / per) + 1;
 }
 
 function isCarrier(out, encoding) {

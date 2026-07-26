@@ -35,6 +35,18 @@ import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 
+// UTF-8 byte length of a string, portable across the host (Node) and any
+// worker/browser build of core. Used to size the expected carrier-output count
+// for chunk-lane encodings (D-24); the base64 CODE in a DEPLOY is ASCII, but a
+// MEMO or FILE payload can be multi-byte, and undercounting would reject a
+// legitimate deploy.
+function byteLen(s) {
+    const str = String(s);
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str).length;
+    if (typeof Buffer !== 'undefined') return Buffer.byteLength(str, 'utf8');
+    return str.length; // last-resort (ASCII-equivalent)
+}
+
 /**
  * @typedef {Object} ComposedAction
  * @property {string} actionString
@@ -146,6 +158,15 @@ export async function composeForConfirm({
         customOutputs: finalEncoderOpts.customOutputs,
         encoding: bareNativePayment ? null : encoded.encoding,
         adsOutput,
+        // D-24 : a P2SH/P2WSH/MULTISIGN payload larger than one on-chain
+        // chunk is carried by SEVERAL data-carrier outputs; the tamper check
+        // derives how many to allow from the action size, so a real contract
+        // DEPLOY (or large FILE / gated publish) is not falsely flagged. Byte
+        // length, not char length, since the base64 CODE can push the payload
+        // past a chunk boundary that char length would under-count.
+        actionByteLen: bareNativePayment || !createResult?.actionString
+            ? undefined
+            : byteLen(createResult.actionString),
     });
 
     return {

@@ -85,9 +85,12 @@ describe('confirmChecks', () => {
             expect(res.ok).toBe(true);
         });
 
-        it('P2SH: a SECOND unexpected P2SH output is tamper (only one carrier allowed)', () => {
+        it('P2SH: a SECOND unexpected P2SH output is tamper when the action fits one chunk', () => {
+            // No actionByteLen supplied -> single-carrier default (a small,
+            // single-chunk payload). The second P2SH output is unexpected.
             const psbt = 'p2sh2';
             const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH' });
+            expect(expected.carrierAllowance).toBe(1);
             const res = checkOutputSet({
                 psbtHex: psbt, expected, ownAddresses: OWN,
                 decomposePsbt: decomposerFor({ [psbt]: [
@@ -96,6 +99,42 @@ describe('confirmChecks', () => {
                 ] }),
             });
             expect(res.ok).toBe(false);
+        });
+
+        // D-24 : a real contract DEPLOY spreads its base64 CODE across
+        // several P2SH data-carrier outputs (one per ~476-byte chunk). The
+        // allowance is derived from the action size so all legitimate chunk
+        // carriers pass, while an EXTRA carrier beyond the count is still tamper.
+        it('multi-chunk P2SH: allows the N carriers a large payload legitimately needs', () => {
+            const psbt = 'p2shN';
+            // actionByteLen 900 -> ceil((900+16)/476)+1 = 2+1 = 3 carriers.
+            const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH', actionByteLen: 900 });
+            expect(expected.carrierAllowance).toBe(3);
+            const carrier = (v) => ({ address: 'chunk', scriptType: 'p2sh', scriptPubKeyHex: 'a914', value: v });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [carrier(700), carrier(700), carrier(700), CHANGE] }),
+            });
+            expect(res.ok).toBe(true);
+            expect(res.unexpected).toEqual([]);
+        });
+
+        it('multi-chunk P2SH: a carrier BEYOND the size-derived count is still tamper', () => {
+            const psbt = 'p2shExtra';
+            const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH', actionByteLen: 900 });
+            expect(expected.carrierAllowance).toBe(3);
+            const carrier = (v) => ({ address: 'chunk', scriptType: 'p2sh', scriptPubKeyHex: 'a914', value: v });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                // 4 P2SH carriers when only 3 are legitimate -> the 4th is unexpected.
+                decomposePsbt: decomposerFor({ [psbt]: [carrier(700), carrier(700), carrier(700), carrier(700)] }),
+            });
+            expect(res.ok).toBe(false);
+            expect(res.unexpected).toHaveLength(1);
+        });
+
+        it('OP_RETURN carrier allowance is exactly one regardless of action size', () => {
+            expect(buildExpectedOutputs({ customOutputs: [], encoding: 'OP_RETURN', actionByteLen: 5000 }).carrierAllowance).toBe(1);
         });
     });
 
