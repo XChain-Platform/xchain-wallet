@@ -1,1 +1,18 @@
+# Siblings the CI gate checks out (at origin/master) next to this repo so the
+# wallet's cross-repo tests resolve them deterministically.
+#
+# xchain-sdk: the wallet composes every action through it.
+#
+# xchain-documentation: test/unit/ActionManifestConformance.test.js compares the
+# vendored test/fixtures/action-manifest.json against the canonical
+# ../xchain-documentation/protocol/action-manifest.json. That test SKIPS when the
+# sibling is absent, so an undeclared dependency does not fail loudly - it fails
+# only when some OTHER repo's gate run happens to have left a checkout at the
+# venue's work/xchain-documentation, and then the byte-identity guard silently
+# compares against that leftover revision instead of canonical. Observed exactly
+# that way : a wallet push failed on devhost against a docs sibling one
+# commit stale, while the same suite was green locally and had passed on test-host.
+# Declaring it makes the harness ship the canonical origin/master copy and rm -rf
+# any leftover, so the guard runs against the single source of truth.
 xchain-sdk
+xchain-documentation
