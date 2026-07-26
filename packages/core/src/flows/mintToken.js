@@ -86,6 +86,11 @@ export async function mintToken(opts) {
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            // PC-51: MINT is a quotable fee-bearing action, so it can pay the
+            // XCHAIN protocol fee in the native coin. submitAction runs the
+            // indexer preflight and refuses (NativeFeeForfeitError) if MINT
+            // can't be priced at sign time.
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
         },
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }

@@ -46,6 +46,7 @@ import {
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
 
@@ -133,6 +134,12 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // PC-51: opt in to pay the XCHAIN protocol fee in the native coin. MINT is
+    // a quotable fee-bearing action; the authoritative price/validity check
+    // runs at submit time (applyNativeFeePreflight) and forfeit-warns if the
+    // action can't be priced.
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -235,13 +242,20 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     chainId,
                     from,
                     actionData: { action: 'MINT', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // PC-51: the native-fee opt-in must reach COMPOSE so the
+                    // FEE_DESTINATION output sits inside the PSBT the user
+                    // approves, not folded in on a later rebuild.
+                    encoderOpts: {
+                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
                     extraBase: {
+                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         prebuiltPsbt: {
                             psbtHex: composed.psbt,
@@ -302,7 +316,14 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             const res = await submit({
                 params: actionParams,
                 password,
-                ...(feePerKb != null ? { extraBase: { feePerKb }, encoderOpts: { feePerKb } } : {}),
+                extraBase: {
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                encoderOpts: {
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             setResult(res);
             setPassword('');
@@ -603,6 +624,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+            />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
