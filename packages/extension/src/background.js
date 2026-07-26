@@ -45,6 +45,11 @@ import {
     createDevMockSdk as createDevMockSdkImpl,
     resolveSdkFactory,
 } from './background/index.js';
+// : NOT re-exported through the barrel above. A static `import` is the
+// only way a service worker can load the SDK (`import()` is disallowed on
+// ServiceWorkerGlobalScope), and keeping it off the barrel is what lets the
+// Node smokes go on importing sdkFactory.js without an installed SDK.
+import { XChainSDK } from './background/sdkStatic.js';
 import { SIGNING_SECRET_SESSION_KEY, loadSigningSecret } from './background/signingSecretSession.js';
 import { initPanicModePersistence } from './background/panicModeStorage.js';
 import {
@@ -122,7 +127,7 @@ const createLoadingSdk = () => makeLoadingSdkSurface();
 // Build the SDKRegistry against the dev mock (dev builds) or a throwing
 // placeholder (production) synchronously so the service worker can
 // register handlers immediately, then swap in the real
-// `xchain-sdk`-backed factory once the dynamic import settles.
+// `xchain-sdk`-backed factory once `adaptXChainSDK` has wrapped it.
 // Callers that need to wait on real-SDK availability can await
 // `sdkResolved` before issuing sign / broadcast requests.
 let sdkRegistry = new sdkLib.SDKRegistry({
@@ -130,7 +135,7 @@ let sdkRegistry = new sdkLib.SDKRegistry({
     sdkFactory: createDevMockSdk ?? createLoadingSdk,
 });
 
-export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
+export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk, XChainSDK })
     .then((result) => {
         sdkRegistry = new sdkLib.SDKRegistry({
             chainRegistry,

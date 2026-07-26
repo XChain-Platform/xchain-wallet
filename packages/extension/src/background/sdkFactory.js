@@ -10,30 +10,44 @@
 
 // Extension-side SDKFactory resolver: mirrors packages/web/src/sdkFactory.js.
 //
-// Dynamic import so the service worker can boot even when xchain-sdk
-// isn't installed (node smokes / CI jobs without workspace install).
-// When the real SDK loads, `adaptXChainSDK` produces the production
-// factory; otherwise we fall back to a dev-mock that lets onboarding
-// persist but throws loudly on signing + broadcast.
+// The SDK class is INJECTED by the caller (background.js passes the one from
+// ./sdkStatic.js). : this resolver used to `await import('xchain-sdk')`
+// itself, which can never succeed in a service worker - see sdkStatic.js for
+// the full account. The dynamic path survives only for callers that supply no
+// class, i.e. Node harnesses running this file outside a bundler; the shipped
+// worker never takes it.
+//
+// When the real SDK is available, `adaptXChainSDK` produces the production
+// factory; otherwise we fall back to a dev-mock that lets onboarding persist
+// but throws loudly on signing + broadcast.
 
 import { sdk as sdkLib } from '@xchain-wallet/core';
 
 let warned = false;
 
 /**
- * @param {{ devMockFactory: () => any }} opts
+ * @param {{ devMockFactory: () => any, XChainSDK?: any }} opts
+ *   `XChainSDK` present (even as undefined) means the caller owns loading the
+ *   SDK statically; the dynamic import is then never attempted, so a shape
+ *   change reports itself instead of being masked by a service-worker
+ *   `import()` rejection.
  * @returns {Promise<{ factory: () => any, source: 'real' | 'dev-mock' }>}
  */
-export async function resolveSdkFactory({ devMockFactory }) {
+export async function resolveSdkFactory(opts) {
+    const { devMockFactory } = opts ?? {};
     // In production builds the dev mock is dead-code-eliminated  and
     // the background passes null; the PROD branch below throws before the
     // fallback would ever be used, so only require it where it can run.
     if (typeof devMockFactory !== 'function' && !import.meta.env?.PROD) {
         throw new Error('resolveSdkFactory: devMockFactory is required');
     }
+    const injected = Object.prototype.hasOwnProperty.call(opts ?? {}, 'XChainSDK');
     try {
-        const module = await import('xchain-sdk');
-        const XChainSDK = module?.XChainSDK ?? module?.default?.XChainSDK ?? module?.default;
+        let XChainSDK = opts?.XChainSDK;
+        if (!injected) {
+            const module = await import('xchain-sdk');
+            XChainSDK = module?.XChainSDK ?? module?.default?.XChainSDK ?? module?.default;
+        }
         if (typeof XChainSDK !== 'function') {
             throw new Error('xchain-sdk did not expose an `XChainSDK` class');
         }

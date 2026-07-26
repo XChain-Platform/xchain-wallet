@@ -13,8 +13,11 @@
 // The real `xchain-sdk` isn't installable without pnpm, so this smoke
 // exercises the fallback path deterministically:
 //
-//   - Both shells expose a `resolveSdkFactory` that tries to load
-//     `xchain-sdk` via dynamic import + `adaptXChainSDK`.
+//   - Both shells expose a `resolveSdkFactory` that produces the real
+//     factory via `adaptXChainSDK`. The web shell loads the SDK with a
+//     dynamic import (legal in a page); the extension CANNOT (:
+//     `import()` is disallowed on ServiceWorkerGlobalScope) and injects a
+//     statically imported class instead.
 //   - When the package isn't resolvable, the resolver falls back to a
 //     dev-mock factory and emits a single console.warn so the state
 //     is visibly cheap to spot.
@@ -24,7 +27,7 @@
 //   - package.json declares xchain-sdk as a runtime dep on both shells.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { webcrypto } from 'node:crypto';
@@ -64,12 +67,35 @@ assert.ok(
     'extension sdkFactory wraps via adaptXChainSDK',
 );
 assert.ok(
-    /import\('xchain-sdk'\)/.test(extFactory),
-    'extension sdkFactory dynamic-imports xchain-sdk',
-);
-assert.ok(
     /export function createDevMockSdk/.test(extFactory),
     'extension sdkFactory exports createDevMockSdk for the background to use as fallback',
+);
+
+// : the extension resolver must NOT load the SDK itself. `import()` is
+// disallowed on ServiceWorkerGlobalScope by the HTML specification, so the
+// dynamic import that used to live here always rejected in the packaged
+// extension and the wallet could not create, sign, or serve data at all.
+// The class is injected by background.js from a STATIC import.
+const extSdkStatic = readFileSync(
+    join(wsRoot, 'packages', 'extension', 'src', 'background', 'sdkStatic.js'),
+    'utf8',
+);
+assert.ok(
+    /^import \* as sdkModule from 'xchain-sdk';$/m.test(extSdkStatic),
+    'extension sdkStatic STATICALLY imports xchain-sdk (import() is illegal in a service worker)',
+);
+assert.ok(
+    /export const XChainSDK/.test(extSdkStatic),
+    'extension sdkStatic exports the XChainSDK class',
+);
+assert.ok(
+    !/from '\.\/sdkStatic\.js'/.test(
+        readFileSync(
+            join(wsRoot, 'packages', 'extension', 'src', 'background', 'index.js'),
+            'utf8',
+        ),
+    ),
+    'sdkStatic stays OFF the background barrel, so Node smokes can import sdkFactory.js without an installed SDK',
 );
 
 const hostBridge = readFileSync(
@@ -94,8 +120,12 @@ assert.ok(
     'background.js exports sdkResolved promise',
 );
 assert.ok(
-    /resolveSdkFactory\(\{ devMockFactory: createDevMockSdk \}\)/.test(background),
-    'background wires dev mock as the resolver fallback',
+    /resolveSdkFactory\(\{ devMockFactory: createDevMockSdk, XChainSDK \}\)/.test(background),
+    'background wires dev mock as the resolver fallback AND injects the statically imported SDK ',
+);
+assert.ok(
+    /^import \{ XChainSDK \} from '\.\/background\/sdkStatic\.js';$/m.test(background),
+    'background statically imports the SDK class',
 );
 
 // --- 2. Runtime xchain-sdk dep declarations -------------------------
@@ -239,6 +269,62 @@ for (const shell of ['web', 'extension']) {
     );
 }
 
+// --- 6. : the worker bundle must contain no dynamic import ------
+
+// Behavioural half: an injected class is used verbatim and the dynamic
+// import is never attempted. Passing the key as undefined must NOT silently
+// fall through to `import()`, or a package-shape change in the extension
+// would report itself as the service worker's `import()` rejection instead.
+const { resolveSdkFactory: extResolve } = await import(
+    '../../../packages/extension/src/background/sdkFactory.js'
+);
+class FakeSDK {}
+const injectedResult = await extResolve({
+    devMockFactory: devMock,
+    XChainSDK: FakeSDK,
+});
+assert.equal(injectedResult.source, 'real', 'an injected SDK class yields the real factory');
+assert.notEqual(injectedResult.factory, devMock, 'injected path does not return the dev mock');
+
+console.warn = () => {};
+const emptyInjection = await extResolve({ devMockFactory: devMock, XChainSDK: undefined });
+console.warn = originalWarn;
+assert.equal(
+    emptyInjection.source,
+    'dev-mock',
+    'an explicitly empty injection falls back rather than dynamic-importing (the worker cannot)',
+);
+
+// Structural half: the BUILT service worker must load every dependency
+// statically. This is the artifact-level pin - the source can look right
+// while the bundler still emits an `import("./chunks/...")` the worker is
+// forbidden to execute, which is exactly how  shipped. Skipped when
+// dist/ is absent so the smoke stays runnable without a build.
+const bgDist = join(wsRoot, 'packages', 'extension', 'dist', 'background.js');
+if (existsSync(bgDist)) {
+    const built = readFileSync(bgDist, 'utf8');
+    // Block comments carry JSDoc `{import('./x.js').Type}` annotations, which
+    // are not executable. The build runs unminified, so every real statement
+    // is on its own line and stripping /* */ is enough to tell them apart.
+    const code = built.replace(/\/\*[\s\S]*?\*\//g, '');
+    const emittedDynamicImport = /(?<![\w."'])import\(\s*["']\.\//.exec(code);
+    assert.ok(
+        !emittedDynamicImport,
+        'built service worker must not dynamic-import a chunk (import() is disallowed on '
+        + `ServiceWorkerGlobalScope): found ${emittedDynamicImport?.[0]}`,
+    );
+    assert.ok(
+        /^import [^\n]*from "\.\/chunks\//m.test(built),
+        'built service worker still loads its chunks via static imports',
+    );
+    assert.ok(
+        built.includes('CONTRACT_LINT_FAILED') || built.includes('ENCODER_NOT_CONFIGURED'),
+        'the real SDK is bundled INTO the worker entry, not behind a chunk it cannot reach',
+    );
+} else {
+    console.log('  (skip: packages/extension/dist not built; worker-bundle checks not run)');
+}
+
 console.log(
-    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK,  static worker SDK)',
 );
