@@ -269,6 +269,33 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
         expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC');
     });
 
+    // §1.1 / §5.2.2: the intent states what was COMPOSED. The caller's
+    // `decoded` is built from its own form params, which is the "renders from
+    // form state" §1 forbids; the host derives its version from the parsed
+    // composed action string. When they disagree, the composed one is the one
+    // that describes the bytes about to be signed.
+    it('renders the host intent over the caller form-param intent', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({
+                networkFeeSats: 5900,
+                chainId: 'bitcoin-mainnet',
+                decoded: { summary: 'Send 42 REALTICK', details: [], warnings: [] },
+            }),
+        }));
+        expect(utils.container.textContent).toContain('Send 42 REALTICK');
+        expect(utils.container.textContent).not.toContain('Send 1 JDOG');
+    });
+
+    // Only when the host could not describe it - a psbt/message variant that
+    // composes nothing, or a parse failure. An absent intent line would be
+    // worse than one described from the params that built the bytes.
+    it('falls back to the caller intent when the host described nothing', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({ networkFeeSats: 5900, chainId: 'bitcoin-mainnet', decoded: null }),
+        }));
+        expect(utils.container.textContent).toContain('Send 1 JDOG');
+    });
+
     it('resolves the ticker from the envelope chain, not the caller', () => {
         const utils = render(React.createElement(ActionConfirmScreen, {
             ...screenProps({ networkFeeSats: 100000000, chainId: 'dogecoin-mainnet' }),

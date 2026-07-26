@@ -93,6 +93,40 @@ describe('composeActionForConfirm', () => {
         expect(composed.simulation).toBeTruthy();
     });
 
+    // §1.1 / §5.2.2. The decisive case: the caller's params and the composed
+    // action string DISAGREE. That is the  mirror-drift hazard - a form
+    // that hand-builds wire params can produce a self-consistent PSBT for the
+    // wrong action, and the previous surface would have described the form's
+    // version of events while signing the encoder's. The intent must state
+    // what was composed.
+    it('describes the COMPOSED action, not the caller form params', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'SEND',
+            // What the encoder actually built: a different tick and amount
+            // from the ARGS() form params below.
+            params: { TICK: 'REALTICK', AMOUNT: '42', DESTINATION: 'realdest' },
+        }));
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.decoded.summary).toContain('42');
+        expect(composed.decoded.summary).toContain('REALTICK');
+        expect(composed.decoded.summary).toContain('realdest');
+        // And emphatically NOT the form's claim.
+        expect(composed.decoded.summary).not.toContain('JDOG');
+    });
+
+    it('leaves the intent null when the composed action cannot be described', async () => {
+        // Null, so the caller's own `decoded` still renders: a confirm page
+        // with no intent line is worse than one described from the params that
+        // built the bytes.
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({ ok: false, code: 'UNKNOWN_ACTION' }));
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.decoded).toBe(null);
+        expect(composed.tamperVerified).toBe(true);
+    });
+
     it('leaves the simulation null when it cannot be computed', async () => {
         // A delta the wallet cannot compute must be ABSENT, never a zero that
         // reads as "nothing changes". The harness has no balances source.

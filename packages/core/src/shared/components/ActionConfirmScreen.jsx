@@ -126,7 +126,18 @@ export function ActionConfirmScreen({
             canApprove={confirmAction.canApprove}
             onApprove={confirmAction.approve}
             onReject={confirmAction.reject}
-            decoded={decoded}
+            // §1.1 / §5.2.2: the intent describes what was actually COMPOSED,
+            // not what the form believes it asked for. The host derives it from
+            // the same parsed action string the deltas read, so the two provably
+            // agree.
+            //
+            // Precedence here is deliberately the OPPOSITE of `simulation`
+            // below. A caller may have a better simulation than the generic
+            // one; a caller cannot have a better account of what the encoder
+            // built than the encoder's own output. The prop remains as the
+            // fallback for surfaces the host could not describe (and for the
+            // psbt/message variants, which compose nothing).
+            decoded={composed?.decoded || decoded}
             // §5.2.3: the host computes deltas from the PARSED COMPOSED action
             // (one canonical source with the intent above). A caller-supplied
             // simulation still wins, for surfaces that have a better one.

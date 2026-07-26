@@ -31,6 +31,7 @@ import { assertNoTamper } from './confirmChecks.js';
 import { exactNetworkFeeSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
+import { decodeAction } from '../decoder/actionDecoder.js';
 import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 
@@ -117,16 +118,54 @@ export async function composeActionForConfirm({
     // the exact fee from above, so the projected coin delta matches the fee the
     // user is shown. Best-effort: any failure leaves `simulation` null and the
     // section simply does not render, exactly as before.
-    let simulation = null;
+    // : a bare native payment has no action string to parse. Its
+    // canonical source is the payment output itself, and the output-set
+    // tamper check above has already proven the PSBT matches exactly the
+    // outputs these params produced - so they are as canonical here as a
+    // re-parse would be, and there is nothing else to read.
+    let parsed = null;
     try {
-        // : a bare native payment has no action string to parse. Its
-        // canonical source is the payment output itself, and the output-set
-        // tamper check above has already proven the PSBT matches exactly the
-        // outputs these params produced - so they are as canonical here as a
-        // re-parse would be, and there is nothing else to read.
-        const parsed = composed.bareNativePayment
+        parsed = composed.bareNativePayment
             ? { ok: true, action: actionData.action, params: actionData.params }
             : sdk.decoder.parse(composed.actionString);
+    } catch {
+        parsed = null;
+    }
+
+    // §1.1 / §5.2.2: the INTENT the user reads is described from that same
+    // parsed composed action, for the same reason the deltas are.
+    //
+    // It was not, until now. Every form built its own `decoded` by calling
+    // `decodeAction` on its FORM PARAMS and passing it down, which is exactly
+    // the "renders from form state or a caller's claimed intent" that §1
+    // forbids - and the deltas' own comment claimed intent already read one
+    // canonical source with them. Describing what was actually composed makes
+    // that true, and makes it true ONCE instead of per form: the  VOTE
+    // mirror and the MESSAGE ciphertext both needed bespoke fixes to keep the
+    // rendered intent honest, and a surface that describes the composed bytes
+    // needs none.
+    //
+    // The describer and its copy are unchanged, so nothing the user reads
+    // moves; only where the words come from does.
+    let decoded = null;
+    try {
+        if (parsed?.ok) {
+            decoded = decodeAction({
+                action: parsed.action,
+                params: parsed.params,
+                chainId,
+                chainRegistry,
+            });
+        }
+    } catch {
+        // Leave it null and the caller's own `decoded` still renders: a
+        // confirm page with no intent line would be worse than one described
+        // from the params that built it.
+        decoded = null;
+    }
+
+    let simulation = null;
+    try {
         const sdkBalances = await balancesPromise;
         if (parsed?.ok && sdkBalances) {
             simulation = simulateAction({
@@ -172,6 +211,10 @@ export async function composeActionForConfirm({
         // §5.2.3: projected balance deltas, or null when they could not be
         // computed. Never a zero that would read as "nothing changes".
         simulation,
+        // §1.1 / §5.2.2: the intent, described from the composed action
+        // string. Null when it could not be described, in which case the
+        // caller's own `decoded` renders.
+        decoded,
         tamperVerified: true,
     };
 }

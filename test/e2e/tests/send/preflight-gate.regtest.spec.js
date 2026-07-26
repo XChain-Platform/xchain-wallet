@@ -166,6 +166,14 @@ test.describe('pre-flight gate on regtest', () => {
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
 
         await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+
+        // §1.1 / §5.2.2: the intent describes the COMPOSED action string. This
+        // is the token path, so it goes through a real `decoder.parse()` of
+        // what the encoder built - not the native-payment shortcut, and not
+        // the form params the surface used to describe.
+        await expect(page.getByTestId('action-intent'))
+            .toContainText(`Send ${AFFORDABLE} XCHAIN on Bitcoin to ${REGTEST_DESTINATION}`);
+
         // No override control at all, because there is nothing to override.
         // Its presence would mean the previous report leaked into this one.
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
