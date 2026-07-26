@@ -46,6 +46,13 @@ test.describe('license gate', () => {
     test('acceptance persists across a reload', async ({ page }) => {
         await page.goto('/');
         await page.getByRole('checkbox').check();
+        // Wait for the button the acknowledgement ENABLES, not just for the
+        // checkbox click to return. The gate derives its enabled state from a
+        // state write, so a click fired in that window lands on a disabled
+        // button and Playwright retries until the test times out: seen once
+        // under full-suite load, green in isolation, which is the signature of
+        // a race rather than a break.
+        await expect(page.getByRole('button', { name: ACCEPT })).toBeEnabled();
         await page.getByRole('button', { name: ACCEPT }).click();
         await dismissIntroCarousel(page);
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
@@ -60,6 +67,13 @@ test.describe('license gate', () => {
     test('acceptance records the current license version', async ({ page }) => {
         await page.goto('/');
         await page.getByRole('checkbox').check();
+        // Wait for the button the acknowledgement ENABLES, not just for the
+        // checkbox click to return. The gate derives its enabled state from a
+        // state write, so a click fired in that window lands on a disabled
+        // button and Playwright retries until the test times out: seen once
+        // under full-suite load, green in isolation, which is the signature of
+        // a race rather than a break.
+        await expect(page.getByRole('button', { name: ACCEPT })).toBeEnabled();
         await page.getByRole('button', { name: ACCEPT }).click();
         await dismissIntroCarousel(page);
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
