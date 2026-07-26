@@ -158,11 +158,17 @@ export async function sendToken(opts) {
         encoderOpts: {
             pubkey: source.publicKey,
             // D-7 (atomic/HW path parity): the spender address is both the change
-            // sink and the funding source. Passing `change` supplies the change
-            // output AND lets the SDK pre-select UTXOs by address (createTx falls
-            // back to `change` when no `sourceAddress` is given), so this path does
-            // not hit "has no matching Script" / "CHANGE_ADDRESS_REQUIRED".
+            // sink and the funding source, so it goes in twice on purpose.
+            // `change` supplies the change output; `sourceAddress` is what makes
+            // the SDK pre-select UTXOs by address. Both are required - the SDK
+            // states outright that `change` is "deliberately NOT a fallback" for
+            // `sourceAddress` (xchain-sdk/src/encoder.js createTx), because a
+            // change address is not always the spender. Passing only `change` left
+            // the encoder resolving UTXOs from the raw `pubkey`, which is the
+            // opaque "has no matching Script" failure this comment used to claim
+            // was handled.
             change: source.address,
+            sourceAddress: source.address,
             ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
