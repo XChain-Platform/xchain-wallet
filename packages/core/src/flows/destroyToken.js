@@ -83,6 +83,9 @@ export async function destroyToken(opts) {
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            // PC-51: opt-in native-coin protocol fee (quotable action); submitAction's
+            // preflight refuses at sign time (NativeFeeForfeitError) if unpriceable.
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
         },
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }

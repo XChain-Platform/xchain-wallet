@@ -24,6 +24,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { GatedPublishForm } from './GatedPublishForm.jsx';
@@ -71,6 +73,11 @@ export function PublishFileForm({ walletId, onBack }) {
     const { isWatcherMode } = useWalletMode();
 
     const [mode, setMode] = useState(/** @type {'public' | 'gated'} */ ('public'));
+
+    // PC-51: opt-in native-coin protocol fee for the PUBLIC lane only
+    // (standalone FILE is quotable; the gated lane composes a BATCH, which
+    // is fee-quote DENIED, so GatedPublishForm has no toggle by design).
+    const nativeFee = useNativeFee();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -303,6 +310,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     },
                     encoderOpts: {
                         rawData,
+                        payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
                 });
@@ -316,6 +324,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     title: title.trim() || undefined,
                     memo: memo.trim() || undefined,
                     rawData,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 };
                 r = hw
@@ -644,6 +653,10 @@ export function PublishFileForm({ walletId, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
+                    <NativeFeeToggle
+                        {...nativeFee.toggleProps}
+                        coinTicker={descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : ''}
+                    />
 
                     {formError ? (
                         <div role="alert" className={styles.error}>{formError}</div>

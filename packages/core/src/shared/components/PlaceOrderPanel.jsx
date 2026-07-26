@@ -43,6 +43,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -99,7 +100,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
 
     // PC-16 CoinPay auto-pay consent. Checked by default (operator-ratified):
     // a coin-GIVE order that is not auto-paid is not fire-and-forget.

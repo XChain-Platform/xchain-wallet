@@ -36,6 +36,8 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import {
     estimateNativeSendFee,
@@ -117,6 +119,10 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     });
 
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
+
+    // PC-51: opt-in native-coin protocol fee (ORDER is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
 
     // GIVE / GET side state. type: 'token' (a tick) or 'coin' (native).
     const [giveType, setGiveType] = useState(/** @type {'token' | 'coin'} */ ('token'));
@@ -280,6 +286,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     }
 
     const extraBaseFor = (composed) => ({
+        payFeeInNativeCoin: nativeFee.flag,
         ...(feePerKb != null ? { feePerKb } : {}),
         ...(autopayArm ? { autopay: { enabled: true } } : {}),
         ...(composed ? {
@@ -304,7 +311,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 compose: () => messaging.composeForConfirm({
                     walletId, chainId, from,
                     actionData: { action: 'ORDER', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
+                    // output sits inside the PSBT the user approves.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => submit({
@@ -346,7 +358,10 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 params: actionParams,
                 password,
                 extraBase: extraBaseFor(null),
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             persistAckIfNeeded();
             setResult(res);
@@ -663,6 +678,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
             <div className={styles.actions}>
                 {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}

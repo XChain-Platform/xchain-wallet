@@ -35,6 +35,8 @@ import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { TokenField } from '../components/TokenField.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -207,6 +209,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
+    // PC-51: opt-in native-coin protocol fee (DIVIDEND is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
+
     // Source balance of the dividend ticker, backing the per-unit
     // AmountField's Max button + "available" footer.
     const dividendBalance = useTickBalance({
@@ -372,12 +378,18 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 chainId,
                 from,
                 actionData: { action: 'DIVIDEND', params: actionParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
+                // output sits inside the PSBT the user approves.
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: actionParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -411,6 +423,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -419,7 +432,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     chainId,
                     from: base.from,
                     actionData: { action: 'DIVIDEND', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.dividendActionHw({ ...base, signerId: fromAddress.signerId });
@@ -776,6 +792,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

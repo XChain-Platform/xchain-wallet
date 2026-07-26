@@ -40,6 +40,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -141,7 +142,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         /** @type {{ valid: boolean, errors: any[] } | null} */ (null),
     );
 
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
 
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'),

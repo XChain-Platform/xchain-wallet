@@ -31,6 +31,8 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import {
     quoteDeviationPct,
     activationCountdownText,
@@ -129,6 +131,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // PC-51: opt-in native-coin protocol fee (PRICE is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [fiat, setFiat] = useState('USD');
@@ -311,7 +317,14 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             const res = await submit({
                 params: actionParams,
                 password,
-                ...(feePerKb != null ? { extraBase: { feePerKb }, encoderOpts: { feePerKb } } : {}),
+                extraBase: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             setResult(res);
             setPassword('');
@@ -638,6 +651,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
             <div className={styles.actions}>
                 <Button

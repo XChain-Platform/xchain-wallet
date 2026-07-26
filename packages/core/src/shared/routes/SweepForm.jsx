@@ -40,6 +40,8 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -165,6 +167,10 @@ export function SweepForm({
     const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'SWEEP';
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // PC-51: opt-in native-coin protocol fee (SWEEP is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
 
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
@@ -355,7 +361,8 @@ export function SweepForm({
         dispensers: flags.dispensers,
         ...(memo.trim().length > 0 ? { memo: memo.trim() } : {}),
         ...(feePerKb != null ? { feePerKb } : {}),
-    }), [destTrimmed, flags, memo, feePerKb]);
+        payFeeInNativeCoin: nativeFee.flag,
+    }), [destTrimmed, flags, memo, feePerKb, nativeFee.flag]);
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -392,7 +399,12 @@ export function SweepForm({
                     chainId,
                     from,
                     actionData: { action: 'SWEEP', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
+                    // output sits inside the PSBT the user approves.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => submit({
@@ -475,7 +487,10 @@ export function SweepForm({
                 params: actionParams,
                 password,
                 extraBase: flowOpts,
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             setResult(res);
             setPassword('');
@@ -953,6 +968,7 @@ export function SweepForm({
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

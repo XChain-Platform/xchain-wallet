@@ -47,6 +47,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -158,7 +159,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         /** @type {string | null} */ (null),
     );
     const [password, setPassword] = useState('');
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
 
     // §16 extension: where the dispenser itself lives (GET_ADDRESS).
     //   'new'      derive a fresh dispenser address at review (default)

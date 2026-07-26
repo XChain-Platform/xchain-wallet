@@ -30,6 +30,8 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import {
     estimateNativeSendFee,
@@ -155,6 +157,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const { isWatcherMode } = useWalletMode();
     const coinTicker = descriptor ? { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor.coin] : '';
 
+    // PC-51: opt-in native-coin protocol fee (LIST is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
+
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
@@ -253,12 +259,16 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 chainId,
                 from,
                 actionData: { action: 'LIST', params: wireParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: wireParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -319,6 +329,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 chainId,
                 from,
                 params: wireParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -326,7 +337,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from,
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                     actionData: { action: 'LIST', params: wireParams },
                 });
             } else {
@@ -639,6 +653,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             <p className={styles.hint}>
                 A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
             </p>

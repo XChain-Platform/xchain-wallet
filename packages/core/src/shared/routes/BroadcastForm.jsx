@@ -31,6 +31,8 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -168,6 +170,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
+    // PC-51: opt-in native-coin protocol fee (BROADCAST is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
+
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
     const [feePick, setFeePick] = useState(
@@ -299,7 +305,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 chainId,
                 from,
                 actionData: { action: 'BROADCAST', params: actionParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => (isHwSource
                     // The HW route runs the SAME broadcastAction flow with a
                     // remote signer, so it signs the prebuilt PSBT byte-
@@ -310,6 +319,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                         from,
                         params: actionParams,
                         signerId: fromAddress.signerId,
+                        payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         prebuiltPsbt,
                     })
@@ -319,6 +329,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                         from,
                         params: actionParams,
                         password: passwordValueRef.current,
+                        payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         prebuiltPsbt,
                     })),
@@ -352,6 +363,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -360,7 +372,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     chainId,
                     from: base.from,
                     actionData: { action: 'BROADCAST', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.broadcastActionHw({ ...base, signerId: fromAddress.signerId });
@@ -643,6 +658,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

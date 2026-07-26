@@ -24,6 +24,8 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -255,6 +257,10 @@ export function LinkForm({ walletId, onBack }) {
         ? (COIN_DISPLAY_TICKER[submitDescriptor.coin] || submitDescriptor.coin)
         : null;
 
+    // PC-51: opt-in native-coin protocol fee (LINK is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
+
     // Form submit goes to the review stage, not directly to broadcast.
     // Runs the same guards that previously gated signing so nothing
     // reachable from the review screen is in an invalid state.
@@ -300,6 +306,7 @@ export function LinkForm({ walletId, onBack }) {
                 coin2: ticker2,
                 coin2ActionIndex: actionIndex2,
                 ...(memo.trim() ? { memo: memo.trim() } : {}),
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let r;
@@ -316,7 +323,10 @@ export function LinkForm({ walletId, onBack }) {
                     chainId: submitChainId,
                     from: base.from,
                     actionData: { action: 'LINK', params: linkParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (hw) {
                 r = await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId });
@@ -613,6 +623,7 @@ export function LinkForm({ walletId, onBack }) {
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker || ''} />
 
             {formError ? (
                 <p role="alert" className={styles.error}>{formError}</p>

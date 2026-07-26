@@ -49,6 +49,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -139,7 +140,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // a quotable fee-bearing action; the authoritative price/validity check
     // runs at submit time (applyNativeFeePreflight) and forfeit-warns if the
     // action can't be priced.
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).

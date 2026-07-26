@@ -49,6 +49,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -127,7 +128,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [getAddress, setGetAddress] = useState('');
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     const [showAdvanced, setShowAdvanced] = useState(false);
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
     const [password, setPassword] = useState('');
     const [givePickerOpen, setGivePickerOpen] = useState(false);
     const [getPickerOpen, setGetPickerOpen] = useState(false);

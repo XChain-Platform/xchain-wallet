@@ -38,6 +38,8 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { interpretSleep } from '../../flows/sleepQueries.js';
 import {
@@ -127,6 +129,10 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const typedConfirmOk = isTick || typedConfirm.trim().toUpperCase() === 'SLEEP';
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // PC-51: opt-in native-coin protocol fee (SLEEP is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
 
     // Tick record: LOCK_SLEEP gate (tick mode only).
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: !isTick || !ticker });
@@ -249,13 +255,19 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 compose: () => messaging.composeForConfirm({
                     walletId, chainId, from,
                     actionData: { action: 'SLEEP', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
+                    // output sits inside the PSBT the user approves.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
                     extraBase: {
+                        payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         prebuiltPsbt: {
                             psbtHex: composed.psbt,
@@ -300,7 +312,14 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             const res = await submit({
                 params: actionParams,
                 password,
-                ...(feePerKb != null ? { extraBase: { feePerKb }, encoderOpts: { feePerKb } } : {}),
+                extraBase: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             setResult(res);
             setPassword('');
@@ -569,6 +588,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
             <div className={styles.actions}>
                 <Button

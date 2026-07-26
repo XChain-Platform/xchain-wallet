@@ -44,6 +44,8 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -278,6 +280,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // PC-51: opt-in native-coin protocol fee (every ISSUE edit version this
+    // form signs is quotable); authoritative check at submit via
+    // applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
 
     // Current on-chain lock state, read via the same useTokenInfo hook
     // ManageToken uses. Shared by `'mint-settings'` (PC-01, four of the
@@ -637,12 +644,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 chainId,
                 from,
                 actionData: { action: 'ISSUE', params: actionParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: actionParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -676,6 +687,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -684,7 +696,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     chainId,
                     from: base.from,
                     actionData: { action: 'ISSUE', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.issueTokenHw({ ...base, signerId: fromAddress.signerId });
@@ -1290,6 +1305,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

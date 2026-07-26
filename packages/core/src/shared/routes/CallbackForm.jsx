@@ -40,6 +40,8 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     estimateNativeSendFee,
@@ -120,6 +122,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'CALLBACK';
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+
+    // PC-51: opt-in native-coin protocol fee (CALLBACK is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
 
     // Token record: the callback config (CALLBACK_TICK/AMOUNT/BLOCK) and
     // owner, used for the payout preview and the block-height gate.
@@ -290,13 +296,19 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     chainId,
                     from,
                     actionData: { action: 'CALLBACK', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
+                    // output sits inside the PSBT the user approves.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
                     extraBase: {
+                        payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         prebuiltPsbt: {
                             psbtHex: composed.psbt,
@@ -369,7 +381,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             const res = await submit({
                 params: actionParams,
                 password,
-                ...(feePerKb != null ? { extraBase: { feePerKb }, encoderOpts: { feePerKb } } : {}),
+                extraBase: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             setResult(res);
             setPassword('');
@@ -663,6 +682,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

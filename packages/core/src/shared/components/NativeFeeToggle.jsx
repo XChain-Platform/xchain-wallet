@@ -18,8 +18,11 @@ import { ToggleRow } from './settings/_settingsPrimitives.jsx';
  * surfaces `NativeFeeForfeitError` when the action can't be priced. Renders nothing when `coinTicker`
  * is empty (custom/unknown chains that do not offer native-coin fee payment).
  *
- * Only mount this on create actions the indexer can price (ISSUE / ORDER / SWAP / DISPENSER); other
- * actions reject the flag as unsupported.
+ * Mount this on any QUOTABLE authoring action. Per the indexer's classifyFeeQuoteAction
+ * (xchain-indexer/src/actions.js), every action is quotable EXCEPT the denied set
+ * {DEPLOY, EXECUTE, XEXEC, BATCH} and the exempt settlement/emitted set {COINPAY, DISPENSE,
+ * *_MATCH, *_EXPIRE, DISPENSER_CLOSE, CROSS_SETTLE, XCALL, ATTEST}; denied/exempt actions
+ * reject the flag as unsupported. Forms hold the opt-in via the useNativeFee hook.
  *
  * @param {object} props
  * @param {boolean} props.checked

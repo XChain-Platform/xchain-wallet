@@ -28,6 +28,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import styles from './TokenWizard.module.css';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -98,7 +99,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [perAddressMax, setPerAddressMax] = useState('');
     const [mintStartBlock, setMintStartBlock] = useState('');
     const [mintStopBlock, setMintStopBlock] = useState('');
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');

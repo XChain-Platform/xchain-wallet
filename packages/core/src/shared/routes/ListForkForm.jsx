@@ -22,6 +22,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -187,6 +189,11 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
     const { isWatcherMode } = useWalletMode();
 
     const coinTicker = descriptor ? { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor.coin] : '';
+
+    // PC-51: opt-in native-coin protocol fee (LIST is quotable; both fork
+    // legs are LIST creates so the opt-in rides both). Authoritative price
+    // check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
@@ -300,13 +307,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         setSubmitError(null);
         try {
             const from = sourceDescriptor();
-            const base = { walletId, chainId, from, params: firstParams, ...(feePerKb != null ? { feePerKb } : {}) };
+            const base = { walletId, chainId, from, params: firstParams, payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
             let res;
             if (isWatcherMode) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from,
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                     actionData: { action: 'LIST', params: firstParams },
                 });
             } else {
@@ -347,7 +357,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         setSubmitError(null);
         try {
             const from = sourceDescriptor();
-            const base = { walletId, chainId, from, params: secondParams, ...(feePerKb != null ? { feePerKb } : {}) };
+            const base = { walletId, chainId, from, params: secondParams, payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
             const res = hw
                 ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.createList({ ...base, password });
@@ -647,6 +657,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
             {formError ? (<div role="alert" className={styles.error}>{formError}</div>) : null}
             <div className={styles.actions}>

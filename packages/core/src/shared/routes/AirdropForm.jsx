@@ -34,6 +34,8 @@ import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -447,6 +449,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
+    // PC-51: opt-in native-coin protocol fee (LIST and AIRDROP are both
+    // quotable, so the opt-in rides BOTH legs); the authoritative price
+    // check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
+
     // Stable reference (only changes when chainId/addressesByChain actually
     // do) so ExistingListPickerScreen's data-fetch effect below doesn't see
     // a fresh `[]` identity every render when this chain has no addresses.
@@ -701,12 +708,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 chainId,
                 from,
                 actionData: { action: 'LIST', params: listParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitListConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: listParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -745,12 +756,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 chainId,
                 from,
                 actionData: { action: 'AIRDROP', params: airdropParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitAirdropConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: airdropParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -795,6 +810,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     signerId: fromAddress.signerId,
                 },
                 params: listParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = hw
@@ -855,6 +871,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     signerId: fromAddress.signerId,
                 },
                 params: airdropParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = hw
@@ -1549,6 +1566,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

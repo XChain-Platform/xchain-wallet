@@ -41,6 +41,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -87,7 +88,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [description, setDescription] = useState('');
     const [lockSupply, setLockSupply] = useState(false);
     const [transferTo, setTransferTo] = useState('');
-    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);

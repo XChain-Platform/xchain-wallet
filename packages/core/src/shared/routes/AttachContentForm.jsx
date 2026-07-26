@@ -23,6 +23,8 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { normalizeGenesisRow } from './ManageToken.jsx';
 import { FeeSelector } from '@xchain-wallet/core/ui';
 import {
@@ -244,6 +246,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
+
+    // PC-51: opt-in native-coin protocol fee; every leg this form signs
+    // (FILE artwork, LINK, FILE token-info, ISSUE v1 describe) is quotable,
+    // so the one opt-in rides all of them. Authoritative price check runs
+    // at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -386,6 +394,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 name: fileMeta.name,
                 type: fileMeta.type,
@@ -436,6 +445,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 coin1: coinTicker,
                 coin1ActionIndex: fileActionIndex,
@@ -511,6 +521,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 name: String(tick).toUpperCase() + '.json',
                 type: 'application/json',
@@ -560,6 +571,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 // ISSUE v1: edit description (owner-only at the indexer).
                 params: {
@@ -1078,6 +1090,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}

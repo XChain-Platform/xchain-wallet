@@ -35,6 +35,8 @@ import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -134,6 +136,10 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
+    // PC-51: opt-in native-coin protocol fee (DESTROY is quotable); the
+    // authoritative price check runs at submit via applyNativeFeePreflight.
+    const nativeFee = useNativeFee();
+
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
     const [feePick, setFeePick] = useState(
@@ -223,13 +229,19 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     chainId,
                     from,
                     actionData: { action: 'DESTROY', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
+                    // output sits inside the PSBT the user approves.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
                     extraBase: {
+                        payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         prebuiltPsbt: {
                             psbtHex: composed.psbt,
@@ -298,7 +310,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             const res = await submit({
                 params: actionParams,
                 password,
-                ...(feePerKb != null ? { extraBase: { feePerKb }, encoderOpts: { feePerKb } } : {}),
+                extraBase: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
             });
             setResult(res);
             setPassword('');
@@ -609,6 +628,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
