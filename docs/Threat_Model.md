@@ -98,6 +98,20 @@ This document names what the wallet defends against, what it deliberately doesn'
 - Fallback to the dev mock fires a single `console.warn` visible in DevTools: "xchain-sdk unavailable - falling back to dev-mock SDK. Signing + broadcast will fail."
 - Production builds pin `xchain-sdk` as a dependency; the fallback path should never trigger in a packaged release. CI should `grep 'dev-mock'` in build output as a pre-release gate (TODO).
 
+### 4.6 The same balance approved twice in two windows
+
+**Attack:** Two confirmation surfaces are open at once against one balance, and each is told the full amount is available, so both approve and the second transaction is rejected on chain after the user authorised it. A dApp can arrange this deliberately: `approvalBroker` allows N concurrent approval windows by design, one per request.
+
+**Mitigation, and where it does NOT hold.** The pre-flight reservation ledger (confirm/decode/pre-flight spec §4.7) registers an approved-but-not-yet-broadcast amount so a second window nets it out of its own balance check and warns. The ledger lives inside `createBackgroundHost`, so the protection is only as wide as the host:
+
+- **Extension (MV3): protected.** One service worker serves every popup window, so all windows share one ledger. It persists to `chrome.storage.session`, so it also survives a worker eviction.
+- **Web: NOT protected.** `packages/web/src/hostBridge.js` builds a `createBackgroundHost` **per page**. Two browser tabs are two JS contexts and therefore two independent ledgers, with no cross-window protection whatsoever. Two tabs can each approve the full balance.
+- **Desktop:** in-memory per renderer host; the same limit applies to genuinely separate windows.
+
+This is a real limit on the protection, not a gap in its tests. Stated here rather than left implied by a passing extension test, because the extension suite is the only place the guarantee is exercised and a green run there says nothing about the web shell. Sharing a ledger across web tabs needs a cross-tab channel (`BroadcastChannel` or a storage-event lock), which is unbuilt.
+
+**Residual risk is bounded:** the loss is a rejected transaction and its miner fee, not stolen funds. Nothing here lets a third party move value; both approvals are the user's own.
+
 ## 5. Known open items
 
 These are tracked but not blocking Phase 1; each has a pointer.
@@ -110,6 +124,7 @@ These are tracked but not blocking Phase 1; each has a pointer.
 | Reproducible-build pipeline | spec §51.4 / `tools/build-reproduce/` | piece 22 (this batch) |
 | External security review | this doc | **pending** - required before Phase-1 mainnet RC |
 | Threat-model gap log for incidents | n/a | open a section here after every resolved incident |
+| Cross-tab reservation ledger for the web shell (§4.6) | confirm/decode/pre-flight spec §4.7 | open - extension is protected, web is not |
 
 ## 6. Change review cadence
 
