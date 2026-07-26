@@ -98,7 +98,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
-import { useFiatRate } from '../hooks/useFiatRate.js';
+import { useFiatRate, fiatRateForTick } from '../hooks/useFiatRate.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -570,6 +570,30 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return Boolean(nativeTicker && tick.trim().toUpperCase() === nativeTicker);
     }, [chainId, tick]);
 
+    // : `fiatRate` prices the CHAIN COIN. The amount field may be holding a
+    // TOKEN amount, and pricing that at the coin's rate renders a confidently
+    // formatted, wildly wrong number (50,000 XCHAIN shown as billions of dollars).
+    // Everything that prices the AMOUNT uses this gated rate; the network-fee
+    // preview below keeps using the raw `fiatRate`, because a fee is always paid
+    // in the native coin regardless of which token is being sent.
+    const amountFiatRate = useMemo(
+        () => fiatRateForTick({
+            rate: fiatRate,
+            tick,
+            nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
+        }),
+        [fiatRate, tick, chainId],
+    );
+
+    // Switching from the coin to a token while typing in fiat would leave the
+    // field in a mode it can no longer convert, so fall back to coin entry.
+    useEffect(() => {
+        if (!amountFiatRate && amountInputMode === 'fiat') {
+            setAmountInputMode('coin');
+            setFiatAmount('');
+        }
+    }, [amountFiatRate, amountInputMode]);
+
     const onCoinInputChange = useCallback((value) => {
         setAmount(value);
     }, []);
@@ -595,10 +619,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
         if (amountInputMode === 'fiat') {
             setFiatAmount(stripped);
-            if (!fiatRate) {
+            if (!amountFiatRate) {
                 if (stripped === '') setAmount('');
             } else {
-                const derivedCoin = fiatToCoin(stripped, fiatRate);
+                const derivedCoin = fiatToCoin(stripped, amountFiatRate);
                 setAmount(derivedCoin != null ? derivedCoin : '');
             }
         } else {
@@ -615,13 +639,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 }
             });
         }
-    }, [amountInputMode, fiatRate]);
+    }, [amountInputMode, amountFiatRate]);
 
     const toggleAmountInputMode = useCallback(() => {
-        if (!fiatRate) return;
+        if (!amountFiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const fv = amount ? coinToFiat(amount, fiatRate) : null;
+                const fv = amount ? coinToFiat(amount, amountFiatRate) : null;
                 setFiatAmount(fv != null ? fv.toFixed(2) : '');
                 return 'fiat';
             }
@@ -629,7 +653,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFiatAmount('');
             return 'coin';
         });
-    }, [amount, fiatRate]);
+    }, [amount, amountFiatRate]);
 
     const onSendSmallTest = useCallback(() => {
         const amtSats = exactSatsBigIntFromDecimalString(amount);
@@ -971,11 +995,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
         const display = decimalStringFromSats(maxSats);
         setAmount(display);
-        if (amountInputMode === 'fiat' && fiatRate) {
-            const fv = coinToFiat(display, fiatRate);
+        if (amountInputMode === 'fiat' && amountFiatRate) {
+            const fv = coinToFiat(display, amountFiatRate);
             setFiatAmount(fv != null ? fv.toFixed(2) : '');
         }
-    }, [sourceBalance, isNativeSend, feeEstimate, amountInputMode, fiatRate]);
+    }, [sourceBalance, isNativeSend, feeEstimate, amountInputMode, amountFiatRate]);
 
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -1809,7 +1833,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 amount={amount}
                 fiatAmount={fiatAmount}
                 tick={tick}
-                fiatRate={fiatRate}
+                fiatRate={amountFiatRate}
                 fiatCurrency={fiatCurrency}
                 amountInputMode={amountInputMode}
                 onAmountFieldChange={onAmountFieldChange}

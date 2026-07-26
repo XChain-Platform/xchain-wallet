@@ -67,10 +67,26 @@ assert.match(sendSrc, /'coin' \| 'fiat'/, 'mode union typed');
 
 assert.match(sendSrc, /toggleAmountInputMode = useCallback/, 'toggle callback');
 assert.match(sendSrc, /onAmountFieldChange = useCallback/, 'fiat input handler');
+//  re-anchor: the amount side now converts through `amountFiatRate`, the
+// tick-gated rate, not the raw coin-family `fiatRate`. Asserting the raw name
+// here would pin the defect (a token amount priced at the coin's rate).
 assert.match(
     sendSrc,
-    /fiatToCoin\(stripped, fiatRate\)/,
-    'fiat → coin conversion when typing in fiat mode',
+    /fiatToCoin\(stripped, amountFiatRate\)/,
+    'fiat → coin conversion when typing in fiat mode, through the tick-gated rate',
+);
+
+// The gate itself, and the one place the RAW coin rate is still correct: the
+// network fee, which is paid in the native coin whatever token is being sent.
+assert.match(
+    sendSrc,
+    /amountFiatRate = useMemo\(\s*\n?\s*\(\) => fiatRateForTick\(/,
+    'the amount-side rate is gated on the tick ',
+);
+assert.match(
+    sendSrc,
+    /fiatRate={amountFiatRate}/,
+    'AmountField receives the tick-gated rate, so a token send shows no fiat',
 );
 
 // --- fiat preview hint ------------------------------------------------
