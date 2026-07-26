@@ -213,6 +213,7 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    chainTipBlockTime,
     indexerWatermark,
     verifyAddressBalance,
     verifyAddressAction,
@@ -3427,6 +3428,15 @@ export function createBackgroundHost(deps) {
     // report it, so a status outage never breaks the History view.
     host.register('indexer.watermark', async (req, { sdkRegistry }) => {
         return indexerWatermark({ ...req, sdkRegistry });
+    });
+
+    // PC-42: block time of a chain's latest indexed block, the quantity every
+    // timestamp-gated protocol flag-day is measured against. Read-only status
+    // probe; degrades to { blockTime: null }, which callers treat as "flag-day
+    // not active" so a status outage withholds a field rather than emitting
+    // one the network would silently drop.
+    host.register('chain.tipBlockTime', async (req, { sdkRegistry }) => {
+        return chainTipBlockTime({ ...req, sdkRegistry });
     });
 
     // §7/§8 SPV proof verification. Verifies a token balance / action

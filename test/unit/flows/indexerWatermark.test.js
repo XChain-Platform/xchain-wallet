@@ -14,7 +14,7 @@
 // status call is unsupported or the field is missing.
 
 import { describe, it, expect } from 'vitest';
-import { indexerWatermark } from '../../../packages/core/src/flows/balances.js';
+import { indexerWatermark, chainTipBlockTime } from '../../../packages/core/src/flows/balances.js';
 
 // Registry whose single SDK exposes getStatus() + explorer.coin. Pass
 // `status` for the resolved /status body, `coin` for the explorer prefix
@@ -80,5 +80,53 @@ describe('indexerWatermark', () => {
         const registry = makeRegistry({ status: { last_block: { RBTC: null, RLTC: undefined } } });
         const r = await indexerWatermark({ sdkRegistry: registry, chainId: 'bitcoin-regtest' });
         expect(r.watermark).toBeNull();
+    });
+});
+
+// PC-42: `chainTipBlockTime` reads the SAME /status report for
+// `last_block_time`, the quantity every timestamp-gated flag-day is measured
+// against. It deliberately does NOT share indexerWatermark's cross-coin
+// fallback: a higher block index from a sibling coin is a safe lower bound for
+// "indexed", but a sibling's TIMESTAMP would be a claim about a different
+// chain's flag-day progress.
+describe('chainTipBlockTime', () => {
+    it('returns this chain\'s own coin block time', async () => {
+        const registry = makeRegistry({
+            status: { last_block_time: { RBTC: 1785117499, RDOGE: 1784302383 } },
+            coin: 'RBTC',
+        });
+        await expect(chainTipBlockTime({ sdkRegistry: registry, chainId: 'bitcoin-regtest' }))
+            .resolves.toEqual({ chainId: 'bitcoin-regtest', blockTime: 1785117499 });
+    });
+
+    it('never borrows a sibling coin\'s timestamp', async () => {
+        const registry = makeRegistry({
+            status: { last_block_time: { RDOGE: 1784302383 } },
+            coin: 'RBTC',
+        });
+        const res = await chainTipBlockTime({ sdkRegistry: registry, chainId: 'bitcoin-regtest' });
+        expect(res.blockTime).toBeNull();
+    });
+
+    it('degrades to null rather than throwing on every gap', async () => {
+        const cases = [
+            makeRegistry({ getStatus: false }),
+            makeRegistry({ status: {} }),
+            makeRegistry({ status: { last_block_time: null } }),
+            makeRegistry({ status: { last_block_time: { RBTC: null } } }),
+            makeRegistry({ status: { last_block_time: { RBTC: 'soon' } } }),
+            makeRegistry({ status: { last_block_time: { RBTC: 1 } }, coin: null }),
+            { get: () => { throw new Error('no sdk for chain'); } },
+            makeRegistry({ status: () => { throw new Error('explorer down'); } }),
+        ];
+        for (const sdkRegistry of cases) {
+            const res = await chainTipBlockTime({ sdkRegistry, chainId: 'bitcoin-regtest' });
+            expect(res).toEqual({ chainId: 'bitcoin-regtest', blockTime: null });
+        }
+    });
+
+    it('still guards its required inputs', async () => {
+        await expect(chainTipBlockTime({ chainId: 'bitcoin-regtest' })).rejects.toThrow(/sdkRegistry/);
+        await expect(chainTipBlockTime({ sdkRegistry: makeRegistry({}) })).rejects.toThrow(/chainId/);
     });
 });

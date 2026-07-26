@@ -104,3 +104,99 @@ export async function resolveGateMinAmountActive({ chainId, getBlockHeight, heig
     try { height = await getBlockHeight(); } catch (_e) { return false; }
     return Number.isFinite(height) && Number(height) >= scheduled;
 }
+
+// ---------------------------------------------------------------------------
+// PC-42: the two binding-poll flag-days.
+//
+// Unlike GATE_MIN_AMOUNT above, these are NOT waiting on the  train and
+// are NOT block heights. Both are already scheduled in the indexer
+// (xchain-indexer/src/protocol_changes.js) as BLOCK-TIMESTAMP gates, with real
+// values: mainnet 1790812800 (2026-10-01), testnet and regtest 0, i.e. live
+// from genesis so the regtest stack exercises the rules today.
+//
+// The comparison must be against the CHAIN's block time, never the local
+// clock: the indexer gates on the block timestamp of the block the action
+// lands in, and a wallet whose clock runs fast would otherwise emit just
+// before activation. The explorer's `/status` reports `last_block_time` per
+// coin, which is the same quantity, so `chainTipBlockTime` (flows/balances.js)
+// is the intended source.
+// ---------------------------------------------------------------------------
+
+/** Shared schedule; the two changes activate together but are independent
+ *  protocol changes, so each gets its own map to keep a future divergence a
+ *  one-line edit rather than a refactor. */
+const VOTE_FLAG_DAY_TIMES = {
+    'bitcoin-mainnet': 1790812800,
+    'bitcoin-testnet': 0,
+    'bitcoin-regtest': 0,
+    'litecoin-mainnet': 1790812800,
+    'litecoin-testnet': 0,
+    'litecoin-regtest': 0,
+    'dogecoin-mainnet': 1790812800,
+    'dogecoin-testnet': 0,
+    'dogecoin-regtest': 0,
+};
+
+/**
+ * VOTE_BINDING_MINIMUMS: from this block time a binding poll MUST carry
+ * QUORUM and MIN_VOTERS >= 1 or the v0 is invalid. The wallet requires both
+ * unconditionally (a stricter client rule is valid on either side of the flag
+ * day); this map exists so the UI can explain WHEN the network itself starts
+ * enforcing it.
+ */
+export const VOTE_BINDING_MINIMUMS_TIMES = Object.freeze({ ...VOTE_FLAG_DAY_TIMES });
+
+/**
+ * VOTE_CALLBACK_TIMELOCK: from this block time CALLBACK_DELAY_BLOCKS is
+ * honored. BEFORE it the indexer nulls the field and still accepts the poll,
+ * so an early emission publishes a permanent poll whose timelock silently does
+ * not exist - the wallet must not offer the field until this is active.
+ */
+export const VOTE_CALLBACK_TIMELOCK_TIMES = Object.freeze({ ...VOTE_FLAG_DAY_TIMES });
+
+/**
+ * The activation block time for a chain, or null when the chain is unknown.
+ * A scheduled time of 0 means "active from genesis".
+ *
+ * @param {string} chainId
+ * @param {Record<string, number>} times
+ * @returns {number | null}
+ */
+export function voteFlagDayTime(chainId, times) {
+    const t = times ? times[chainId] : undefined;
+    return Number.isFinite(t) ? Number(t) : null;
+}
+
+/**
+ * Is a VOTE flag-day active at a given chain block time? Fail-closed: an
+ * unknown chain or an unusable block time reads as NOT active, so the wallet
+ * withholds a field rather than emitting one the network will drop.
+ *
+ * @param {{ chainId: string, blockTime: number | null | undefined,
+ *           times: Record<string, number> }} params
+ * @returns {boolean}
+ */
+function isVoteFlagDayActive({ chainId, blockTime, times }) {
+    const scheduled = voteFlagDayTime(chainId, times);
+    if (scheduled === null) return false;
+    if (!Number.isFinite(blockTime)) return false;
+    return Number(blockTime) >= scheduled;
+}
+
+/**
+ * @param {{ chainId: string, blockTime: number | null | undefined,
+ *           times?: Record<string, number> }} params
+ * @returns {boolean}
+ */
+export function isVoteBindingMinimumsActive({ chainId, blockTime, times = VOTE_BINDING_MINIMUMS_TIMES }) {
+    return isVoteFlagDayActive({ chainId, blockTime, times });
+}
+
+/**
+ * @param {{ chainId: string, blockTime: number | null | undefined,
+ *           times?: Record<string, number> }} params
+ * @returns {boolean}
+ */
+export function isVoteCallbackTimelockActive({ chainId, blockTime, times = VOTE_CALLBACK_TIMELOCK_TIMES }) {
+    return isVoteFlagDayActive({ chainId, blockTime, times });
+}

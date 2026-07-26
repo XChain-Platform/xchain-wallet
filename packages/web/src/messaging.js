@@ -1094,6 +1094,17 @@ export function getIndexerWatermark(req) {
     return /** @type {any} */ (sendMessage('indexer.watermark', req));
 }
 
+/**
+ * PC-42: block time of a chain's latest indexed block. Callers gate
+ * timestamp-scheduled protocol fields on this rather than the local clock;
+ * a null blockTime means "treat the flag-day as not yet active".
+ *
+ * @param {{ chainId: string }} req
+ */
+export function getChainTipBlockTime(req) {
+    return /** @type {any} */ (sendMessage('chain.tipBlockTime', req));
+}
+
 /** @param {object} req */
 export function createMultisigConfig(req) {
     return /** @type {any} */ (sendMessage('multisig.create', req));

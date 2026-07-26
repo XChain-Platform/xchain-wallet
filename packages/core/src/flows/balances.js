@@ -202,6 +202,45 @@ export async function indexerWatermark({ sdkRegistry, chainId }) {
 }
 
 /**
+ * PC-42: the block time of a chain's latest indexed block.
+ *
+ * This is the quantity every timestamp-gated protocol change is measured
+ * against (the indexer compares a flag-day against the timestamp of the block
+ * an action lands in), so it - not the local clock - is what the wallet must
+ * consult before offering a field that only activates at a flag day. A wallet
+ * whose clock runs fast would otherwise emit just before activation, and the
+ * indexer accepts such an action while silently dropping the field.
+ *
+ * Reads the same `/status` report as `indexerWatermark`, whose `last_block_time`
+ * is keyed by coin prefix. Never throws: any gap returns `blockTime: null`,
+ * which every caller must treat as "not active" (fail-closed).
+ *
+ * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} params
+ * @returns {Promise<{ chainId: string, blockTime: number | null }>}
+ */
+export async function chainTipBlockTime({ sdkRegistry, chainId }) {
+    if (!sdkRegistry) throw new Error('chainTipBlockTime: sdkRegistry is required');
+    if (!chainId) throw new Error('chainTipBlockTime: chainId is required');
+    let sdk;
+    try { sdk = sdkRegistry.get(chainId); } catch { return { chainId, blockTime: null }; }
+    if (!sdk || typeof sdk.getStatus !== 'function') return { chainId, blockTime: null };
+    let status;
+    try { status = await sdk.getStatus(); } catch { return { chainId, blockTime: null }; }
+    const times = status && typeof status === 'object' ? status.last_block_time : null;
+    if (!times || typeof times !== 'object') return { chainId, blockTime: null };
+    const coinPrefix = sdk.explorer && typeof sdk.explorer.coin === 'string'
+        ? sdk.explorer.coin
+        : null;
+    // Only this chain's own coin will do. indexerWatermark can fall back to the
+    // max across coins because a higher block index is a safe lower bound for
+    // "has been indexed"; here a sibling chain's timestamp would be a claim
+    // about a DIFFERENT chain's flag-day progress, so no fallback.
+    const own = coinPrefix ? times[coinPrefix] : undefined;
+    if (own == null || !Number.isFinite(Number(own))) return { chainId, blockTime: null };
+    return { chainId, blockTime: Number(own) };
+}
+
+/**
  * @typedef {Object} WalletBalancesOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId

@@ -368,9 +368,11 @@ export {
 } from './verifyReceiveAddress.js';
 export { dispenserAddress } from './dispenserAddress.js';
 export { resolveActiveAddresses, setActiveAddress } from './activeAddress.js';
+export { isBindingPoll, bindingPollErrors, CALLBACK_ON_VALUES } from './bindingPoll.js';
 export {
     addressBalances,
     addressHistory,
+    chainTipBlockTime,
     indexerWatermark,
     walletBalances,
 } from './balances.js';

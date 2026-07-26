@@ -19,6 +19,10 @@ import {
     gateMinAmountScheduledHeight,
     isGateMinAmountActive,
     resolveGateMinAmountActive,
+    VOTE_BINDING_MINIMUMS_TIMES,
+    VOTE_CALLBACK_TIMELOCK_TIMES,
+    isVoteBindingMinimumsActive,
+    isVoteCallbackTimelockActive,
 } from '../../../packages/core/src/flows/protocolActivations.js';
 
 describe('shipped GATE_MIN_AMOUNT map (pre--train state)', () => {
@@ -83,5 +87,40 @@ describe('scheduled behavior (test override map)', () => {
             chainId: 'bitcoin-regtest', heights: HEIGHTS,
             getBlockHeight: async () => null,
         })).resolves.toBe(false);
+    });
+});
+
+// PC-42: the two VOTE flag-days. Unlike GATE_MIN_AMOUNT these carry REAL
+// scheduled values and are BLOCK TIMESTAMPS, not heights.
+describe('VOTE binding-poll flag-days (PC-42)', () => {
+    const MAINNET_FLAG_DAY = 1790812800; // 2026-10-01, per xchain-indexer protocol_changes.js
+
+    it('matches the indexer schedule: mainnet 2026-10-01, testnet and regtest from genesis', () => {
+        expect(VOTE_CALLBACK_TIMELOCK_TIMES['bitcoin-mainnet']).toBe(MAINNET_FLAG_DAY);
+        expect(VOTE_CALLBACK_TIMELOCK_TIMES['litecoin-mainnet']).toBe(MAINNET_FLAG_DAY);
+        expect(VOTE_CALLBACK_TIMELOCK_TIMES['dogecoin-mainnet']).toBe(MAINNET_FLAG_DAY);
+        expect(VOTE_CALLBACK_TIMELOCK_TIMES['bitcoin-regtest']).toBe(0);
+        expect(VOTE_CALLBACK_TIMELOCK_TIMES['bitcoin-testnet']).toBe(0);
+        // The two changes activate together today.
+        expect(VOTE_BINDING_MINIMUMS_TIMES).toEqual(VOTE_CALLBACK_TIMELOCK_TIMES);
+    });
+
+    it('is live on regtest and testnet at any block time', () => {
+        expect(isVoteCallbackTimelockActive({ chainId: 'bitcoin-regtest', blockTime: 1 })).toBe(true);
+        expect(isVoteBindingMinimumsActive({ chainId: 'bitcoin-testnet', blockTime: 1 })).toBe(true);
+    });
+
+    it('gates mainnet on the flag day, inclusive', () => {
+        expect(isVoteCallbackTimelockActive({ chainId: 'bitcoin-mainnet', blockTime: MAINNET_FLAG_DAY - 1 })).toBe(false);
+        expect(isVoteCallbackTimelockActive({ chainId: 'bitcoin-mainnet', blockTime: MAINNET_FLAG_DAY })).toBe(true);
+        expect(isVoteCallbackTimelockActive({ chainId: 'bitcoin-mainnet', blockTime: MAINNET_FLAG_DAY + 1 })).toBe(true);
+    });
+
+    it('fails closed on an unusable block time or an unknown chain', () => {
+        // A status outage must withhold the field, never emit one the chain drops.
+        for (const blockTime of [null, undefined, NaN, 'soon']) {
+            expect(isVoteCallbackTimelockActive({ chainId: 'bitcoin-regtest', blockTime })).toBe(false);
+        }
+        expect(isVoteCallbackTimelockActive({ chainId: 'ethereum-mainnet', blockTime: 9e9 })).toBe(false);
     });
 });

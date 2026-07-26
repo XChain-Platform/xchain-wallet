@@ -41,6 +41,11 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import {
+    isVoteBindingMinimumsActive,
+    isVoteCallbackTimelockActive,
+} from '../../flows/protocolActivations.js';
+import { bindingPollErrors, CALLBACK_ON_VALUES } from '../../flows/bindingPoll.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -112,6 +117,15 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     const [minVoteBalance, setMinVoteBalance] = useState('');
     const [decideThreshold, setDecideThreshold] = useState('');
     const [deposit, setDeposit] = useState('');
+    // PC-42 binding-poll fields. A blank callback contract keeps the poll
+    // advisory and the rest of these are never emitted.
+    const [showBinding, setShowBinding] = useState(false);
+    const [callbackContract, setCallbackContract] = useState('');
+    const [callbackMethod, setCallbackMethod] = useState('');
+    const [callbackParams, setCallbackParams] = useState('');
+    const [callbackOn, setCallbackOn] = useState('pass');
+    const [gasEscrow, setGasEscrow] = useState('');
+    const [callbackDelayBlocks, setCallbackDelayBlocks] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
@@ -183,6 +197,37 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
     const cleanOptions = useMemo(() => options.map((o) => o.trim()).filter((o) => o.length > 0), [options]);
 
+    // PC-42: a poll is binding the moment it names a callback contract. Every
+    // other callback field only means something once it does.
+    const isBinding = callbackContract.trim() !== '';
+
+    // The timelock field is offered only once VOTE_CALLBACK_TIMELOCK is live on
+    // THIS chain, measured against the chain's own latest block time (the same
+    // quantity the indexer gates on). Before activation the indexer accepts the
+    // poll and silently nulls the delay, so an early field would promise a
+    // reaction window that does not exist - and a poll is permanent. A failed
+    // lookup leaves blockTime null, which reads as not-active.
+    const [tipBlockTime, setTipBlockTime] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging?.getChainTipBlockTime !== 'function') { setTipBlockTime(null); return undefined; }
+        messaging.getChainTipBlockTime({ chainId })
+            .then((res) => { if (!cancelled) setTipBlockTime(Number.isFinite(res?.blockTime) ? res.blockTime : null); })
+            .catch(() => { if (!cancelled) setTipBlockTime(null); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+
+    const timelockActive = isVoteCallbackTimelockActive({ chainId, blockTime: tipBlockTime });
+    const minimumsActive = isVoteBindingMinimumsActive({ chainId, blockTime: tipBlockTime });
+
+    const bindingErrors = useMemo(() => bindingPollErrors({
+        callbackContract, callbackMethod, callbackParams, callbackOn, gasEscrow,
+        // Only validate the delay when it can actually be emitted.
+        ...(timelockActive ? { callbackDelayBlocks } : {}),
+        quorum, minVoters,
+    }), [callbackContract, callbackMethod, callbackParams, callbackOn, gasEscrow,
+        callbackDelayBlocks, timelockActive, quorum, minVoters]);
+
     function setOptionAt(i, value) {
         setOptions((prev) => prev.map((o, idx) => (idx === i ? value : o)));
     }
@@ -205,8 +250,21 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         if (minVoteBalance.trim()) p.minVoteBalance = minVoteBalance.trim();
         if (decideThreshold.trim()) p.decideThreshold = decideThreshold.trim();
         if (deposit.trim()) p.deposit = deposit.trim();
+        if (isBinding) {
+            p.callbackContract = callbackContract.trim();
+            p.callbackMethod = callbackMethod.trim();
+            if (callbackParams.trim()) p.callbackParams = callbackParams.trim();
+            p.callbackOn = callbackOn;
+            if (gasEscrow.trim()) p.gasEscrow = gasEscrow.trim();
+            // Emitted only when the network will actually honor it.
+            if (timelockActive && callbackDelayBlocks.trim()) {
+                p.callbackDelayBlocks = callbackDelayBlocks.trim();
+            }
+        }
         return p;
-    }, [tick, endBlock, cleanOptions, maxSelections, tallyMode, weightMode, question, quorum, minVoters, minVoteBalance, decideThreshold, deposit]);
+    }, [tick, endBlock, cleanOptions, maxSelections, tallyMode, weightMode, question, quorum, minVoters,
+        minVoteBalance, decideThreshold, deposit, isBinding, callbackContract, callbackMethod,
+        callbackParams, callbackOn, gasEscrow, callbackDelayBlocks, timelockActive]);
 
     // Wire-format VOTE v0 params, for the WATCHER branch only: that path
     // encodes through buildActionPsbtRequest and cannot run the sdk.voting
@@ -229,6 +287,12 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         ...(pollParams.decideThreshold && { DECIDE_THRESHOLD: pollParams.decideThreshold }),
         ...(pollParams.question && { QUESTION: pollParams.question }),
         ...(pollParams.deposit && { DEPOSIT: pollParams.deposit }),
+        ...(pollParams.callbackContract && { CALLBACK_CONTRACT: pollParams.callbackContract }),
+        ...(pollParams.callbackMethod && { CALLBACK_METHOD: pollParams.callbackMethod }),
+        ...(pollParams.callbackParams && { CALLBACK_PARAMS: pollParams.callbackParams }),
+        ...(pollParams.callbackContract && { CALLBACK_ON: pollParams.callbackOn }),
+        ...(pollParams.gasEscrow && { GAS_ESCROW: pollParams.gasEscrow }),
+        ...(pollParams.callbackDelayBlocks && { CALLBACK_DELAY_BLOCKS: pollParams.callbackDelayBlocks }),
     }), [pollParams, cleanOptions]);
 
     //  ( §5.6 slice 2): polls go through the single-encode
@@ -310,6 +374,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         if (!endBlock.trim() || !/^\d+$/.test(endBlock.trim())) { setFormError('End block must be a block height (a future block).'); return; }
         if (cleanOptions.length < 2) { setFormError('Add at least two non-empty options.'); return; }
         if (cleanOptions.some((o) => o.includes(','))) { setFormError('Option labels cannot contain a comma.'); return; }
+        if (bindingErrors.length > 0) { setFormError(bindingErrors[0]); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -422,6 +487,35 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     <dt className={styles.detailsLabel}>Mode</dt>
                     <dd className={styles.detailsValue}>{tallyMode} / {weightMode}</dd>
                     {deposit.trim() ? (<><dt className={styles.detailsLabel}>Deposit</dt><dd className={styles.detailsValue}>{deposit.trim()} (GAS)</dd></>) : null}
+                    {isBinding ? (
+                        <>
+                            <dt className={styles.detailsLabel}>When this poll ends</dt>
+                            <dd className={styles.detailsValue}>
+                                The network runs <strong>{callbackMethod.trim()}</strong> on contract
+                                {' '}#{callbackContract.trim()}
+                                {callbackOn === 'always' ? ', on every result.' : ', but only if the poll passes.'}
+                                {pollParams.callbackDelayBlocks
+                                    ? ` It runs ${pollParams.callbackDelayBlocks} blocks after the poll closes.`
+                                    : ' It runs in the same block the poll closes in.'}
+                            </dd>
+                            {callbackParams.trim() ? (
+                                <>
+                                    <dt className={styles.detailsLabel}>Extra arguments</dt>
+                                    <dd className={styles.detailsValue}>{callbackParams.trim()}</dd>
+                                </>
+                            ) : null}
+                            {gasEscrow.trim() ? (
+                                <>
+                                    <dt className={styles.detailsLabel}>Escrow for the call</dt>
+                                    <dd className={styles.detailsValue}>{gasEscrow.trim()} (GAS)</dd>
+                                </>
+                            ) : null}
+                            <dt className={styles.detailsLabel}>Turnout needed</dt>
+                            <dd className={styles.detailsValue}>
+                                {quorum.trim()} of supply and at least {minVoters.trim()} voter(s).
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -582,6 +676,64 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 </>
             ) : null}
 
+            <Button type="button" variant="ghost" onClick={() => setShowBinding((v) => !v)}>
+                {showBinding ? 'Hide binding poll' : 'Binding poll (run a contract on the result)'}
+            </Button>
+            {showBinding ? (
+                <>
+                    <p className={styles.hint}>
+                        A binding poll doesn&rsquo;t just record an opinion: when it
+                        finishes, the network calls a contract with the result. Use it to
+                        release funds or change a setting automatically. Leave the contract
+                        blank to keep this poll advisory.
+                    </p>
+                    <Input label="Contract to call (optional)" hint="The contract's number, shown on its page in the explorer."
+                        value={callbackContract} onChange={(e) => setCallbackContract(e.target.value)} inputMode="numeric" autoComplete="off" />
+                    {isBinding ? (
+                        <>
+                            <Input label="Method to run" hint="The method name on that contract, e.g. releaseFunds."
+                                value={callbackMethod} onChange={(e) => setCallbackMethod(e.target.value)} autoComplete="off" />
+                            <Select label="When to call it" value={callbackOn} onChange={(e) => setCallbackOn(e.target.value)}
+                                hint="Only on a pass runs the contract when the poll wins its vote. On every result also runs it when the poll fails its turnout gate.">
+                                {CALLBACK_ON_VALUES.map((v) => (
+                                    <option key={v} value={v}>
+                                        {v === 'pass' ? 'Only when the poll passes' : 'On every result'}
+                                    </option>
+                                ))}
+                            </Select>
+                            <Input label="Extra arguments (optional)" hint='A JSON list appended after the poll result, e.g. ["treasury", 1000].'
+                                value={callbackParams} onChange={(e) => setCallbackParams(e.target.value)} autoComplete="off" />
+                            <Input label="Escrow to fund the call (optional)" hint="GAS locked at creation to pay for running the contract; released when the poll finishes."
+                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} autoComplete="off" />
+                            {timelockActive ? (
+                                <Input label="Delay before the call runs (optional)" hint="Blocks between the poll closing and the contract running. A delay gives holders time to react to a result before it takes effect."
+                                    value={callbackDelayBlocks} onChange={(e) => setCallbackDelayBlocks(e.target.value)} inputMode="numeric" autoComplete="off" />
+                            ) : (
+                                <p className={styles.hint}>
+                                    A delay between the poll closing and the contract running
+                                    isn&rsquo;t available on this network yet. Setting one now
+                                    would have no effect, and a poll can&rsquo;t be edited
+                                    afterwards, so the option appears once the network starts
+                                    honoring it.
+                                </p>
+                            )}
+                            <p className={styles.hint}>
+                                Because this poll can move value, it needs a quorum and a
+                                minimum voter count (set both under Advanced).
+                                {minimumsActive
+                                    ? ' The network requires them too.'
+                                    : ' The network will require them from its next upgrade; this wallet asks for them now so the poll stays valid either side of it.'}
+                            </p>
+                            {bindingErrors.length > 0 ? (
+                                <ul className={styles.hint} style={{ paddingLeft: '1.25rem' }}>
+                                    {bindingErrors.map((e) => <li key={e}>{e}</li>)}
+                                </ul>
+                            ) : null}
+                        </>
+                    ) : null}
+                </>
+            ) : null}
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
@@ -600,7 +752,8 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick.trim() || cleanOptions.length < 2 || !endBlock.trim() || actionConfirm.composing}
+                    disabled={!fromAddress || !tick.trim() || cleanOptions.length < 2 || !endBlock.trim()
+                        || bindingErrors.length > 0 || actionConfirm.composing}
                 >
                     {singleEncode ? 'Create poll' : 'Preview'}
                 </Button>
