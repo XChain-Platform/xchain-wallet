@@ -27,6 +27,7 @@ import {
     acknowledgeDonationConsent,
     createWallet,
     expect,
+    dismissIntroCarousel,
     freezeMotion,
     gotoSection,
     lockWallet,
@@ -88,12 +89,14 @@ test.describe('a11y: WCAG 2.1 A/AA (license gate)', () => {
 test.describe('a11y: WCAG 2.1 A/AA', () => {
     test('onboarding welcome', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
         await scan(page, 'Onboarding welcome');
     });
 
     test('create wallet: password stage', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await expect(
             page.getByRole('heading', { name: 'Create a new wallet' }),
@@ -103,6 +106,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
 
     test('create wallet: mnemonic display stage', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
         await page.getByLabel('Confirm password').fill('a11ypassword123');
@@ -113,6 +117,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
 
     test('create wallet: recovery-phrase verification stage', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
         await page.getByLabel('Confirm password').fill('a11ypassword123');
@@ -128,6 +133,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
 
     test('donation consent', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
         await page.getByLabel('Confirm password').fill('a11ypassword123');
@@ -152,6 +158,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
 
     test('import wallet', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
         await expect(
             page.getByRole('heading', { name: 'Import an existing wallet' }),

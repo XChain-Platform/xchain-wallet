@@ -25,6 +25,7 @@
 import {
     createWallet,
     expect,
+    dismissIntroCarousel,
     lockButton,
     lockWallet,
     nav,
@@ -39,6 +40,7 @@ const KNOWN_BIP39 =
 test.describe('onboarding', () => {
     test('welcome screen offers the entry paths', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
 
         await expect(page.getByRole('heading', { name: 'XChain Wallet' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
@@ -58,6 +60,7 @@ test.describe('onboarding', () => {
 
     test('the recovery-phrase challenge rejects a wrong word', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('password1234');
         await page.getByLabel('Confirm password').fill('password1234');
@@ -94,6 +97,7 @@ test.describe('onboarding', () => {
 
     test('import an existing BIP39 mnemonic', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
         await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
@@ -107,6 +111,7 @@ test.describe('onboarding', () => {
 
     test('import rejects wrong word count', async ({ page }) => {
         await page.goto('/');
+        await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
         await page.getByLabel('Recovery phrase').fill('word '.repeat(13).trim());

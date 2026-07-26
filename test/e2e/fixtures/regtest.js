@@ -46,6 +46,7 @@
 // bug.
 
 import { expect } from '@playwright/test';
+import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 
 /** Explorer/encoder/hub ports come from the `bitcoin-regtest` descriptor. */
 export const EXPLORER_URL = 'http://localhost:18080';
@@ -273,7 +274,10 @@ export async function assertNoActionRecorded(txid) {
  * this unlocks again before returning.
  */
 export async function switchToRegtest(page, password) {
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    // One UI walk for every shell. `openSettings` absorbs the only difference:
+    // web/desktop navigate, the MV3 popup goes through the command palette
+    // because it has no nav surface .
+    await openSettings(page);
 
     await page.getByRole('button', { name: /^Developer Mode/ }).click();
     const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
@@ -305,11 +309,22 @@ export async function switchToRegtest(page, password) {
  */
 export async function unlockAfterReload(page, password) {
     const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
-    await expect(unlock).toBeVisible({ timeout: 60_000 });
+
+    // Wait for whichever side of the fork this shell lands on. The extension
+    // keeps its session master key in `chrome.storage.session`, which SURVIVES
+    // a popup reload, so it comes back already unlocked; the web shell holds
+    // it in memory and re-locks. Waiting only for the unlock screen hangs for
+    // 60s in the extension on a wallet that is fine.
+    await unlock.or(unlockedShell(page)).first()
+        .waitFor({ state: 'visible', timeout: 60_000 });
+
+    if (await unlock.count() === 0) return;
+
     await page.getByLabel('Password').fill(password);
     await unlock.click();
-    await expect(page.getByRole('button', { name: 'Lock', exact: true }))
-        .toBeVisible({ timeout: 90_000 });
+    // Home's balance hero, not the Lock button: the popup renders no nav at
+    // all, and below 600px Lock sits inside the closed More sheet.
+    await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
 }
 
 /**
@@ -319,9 +334,7 @@ export async function unlockAfterReload(page, password) {
  * at wallet creation, so the spec cannot know it in advance.
  */
 export async function readReceiveAddress(page) {
-    await page.getByRole('navigation', { name: 'Primary navigation' })
-        .getByRole('button', { name: 'Receive', exact: true })
-        .click();
+    await gotoSection(page, 'Receive');
 
     const field = page.getByLabel('Address', { exact: true });
     await expect(field).toBeVisible({ timeout: 30_000 });

@@ -20,7 +20,7 @@
 // design (new binding terms must be re-collected), and it is also what
 // silently broke the entire E2E suite once already, so it is pinned here.
 
-import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, expect, test } from '../../fixtures/wallet.js';
+import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, dismissIntroCarousel, expect, test } from '../../fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 
 test.use({ acceptLicense: false });
@@ -38,6 +38,7 @@ test.describe('license gate', () => {
         await page.getByRole('checkbox').check();
         await expect(page.getByRole('button', { name: ACCEPT })).toBeEnabled();
         await page.getByRole('button', { name: ACCEPT }).click();
+        await dismissIntroCarousel(page);
 
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
     });
@@ -46,6 +47,7 @@ test.describe('license gate', () => {
         await page.goto('/');
         await page.getByRole('checkbox').check();
         await page.getByRole('button', { name: ACCEPT }).click();
+        await dismissIntroCarousel(page);
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
 
         await page.reload();
@@ -59,6 +61,7 @@ test.describe('license gate', () => {
         await page.goto('/');
         await page.getByRole('checkbox').check();
         await page.getByRole('button', { name: ACCEPT }).click();
+        await dismissIntroCarousel(page);
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
 
         const stored = await page.evaluate(

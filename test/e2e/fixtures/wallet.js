@@ -66,14 +66,102 @@ export { expect };
 // so a bare getByRole('button', { name: 'Send' }) resolves to three
 // elements and trips strict mode. Always say WHICH surface you mean.
 
-/** The nav rail ("Primary navigation"). */
+/**
+ * The wallet's navigation surface, whichever one the layout is showing.
+ *
+ * §5.6 responsive-first : the left rail ("Primary navigation")
+ * collapses below 900px and below 600px `<BottomTabBar>` ("Bottom
+ * navigation") takes over. The MV3 popup is 400px wide, so it is ALWAYS in
+ * the bottom-bar band - a fixture anchored on the rail alone finds nothing
+ * there, which is not a wallet defect but a test that only knew one shell.
+ *
+ * Normally exactly one is in the accessibility tree: the rail is
+ * `display:none` below 900px, and the bar only mounts for the JS-gated
+ * `small` variant. They CAN coexist - pinning small at a wide window
+ * deliberately keeps the bar (LeftNav.module.css:60-67) - and both are
+ * genuinely usable then, so take the first rather than trip strict mode on
+ * a configuration that is working as designed.
+ */
 export function nav(page) {
-    return page.getByRole('navigation', { name: 'Primary navigation' });
+    return page.getByRole('navigation', { name: 'Primary navigation' })
+        .or(page.getByRole('navigation', { name: 'Bottom navigation' }))
+        .first();
 }
 
-/** Clicks a section in the nav rail (Send / History / DEX / ...). */
+/**
+ * The unlocked shell's signal that onboarding finished, in ANY shell.
+ *
+ * Anchored on Home's `<section aria-label="Total balance">` (core's
+ * `TotalBalanceHero`, rendered via `HomeTabs` by every shell) rather than on
+ * navigation, because the three shells do not agree on navigation at all:
+ * web/desktop render the rail or the bottom bar, and the MV3 popup renders
+ * NEITHER - it is a route-per-view shell with no shared layout wrapper
+ * (`packages/extension/src/popup/App.jsx:600-603` says so explicitly), so no
+ * nav landmark exists there to wait on.
+ *
+ * The nav rail's Lock button is not usable for this either: below 600px it
+ * lives inside the More sheet, which is closed by default.
+ */
+export function unlockedShell(page) {
+    return page.getByRole('region', { name: 'Total balance' }).first();
+}
+
+/**
+ * Opens Settings, by whichever route this shell offers.
+ *
+ * : the MV3 popup has no navigation surface. Its entry point is the gear
+ * in Home's balance hero, which is what a real user has; the command palette
+ * also lists every Settings section and is kept here as the fallback so this
+ * still works if the gear ever moves. Web and desktop use the nav. Same screen
+ * either way, so the walk after this is shared.
+ */
+export async function openSettings(page) {
+    if (await nav(page).count() > 0) {
+        await gotoSection(page, 'Settings');
+        return;
+    }
+
+    const gear = page.getByRole('button', { name: 'Open settings' });
+    if (await gear.count() > 0) {
+        await gear.click();
+    } else {
+        await page.keyboard.press('ControlOrMeta+k');
+        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        await palette.waitFor({ state: 'visible', timeout: 15_000 });
+        await palette.getByRole('combobox').fill('settings');
+        await palette.getByRole('option', { name: /^Settings/ }).first().click();
+    }
+    await expect(page.getByRole('button', { name: /^Developer Mode/ }))
+        .toBeVisible({ timeout: 15_000 });
+}
+
+/**
+ * Clicks a section (Send / History / DEX / ...) in whichever nav is showing.
+ *
+ * The bottom bar surfaces only four primary tabs (Home, History, Send,
+ * Scan); everything else lives behind "More". Try the visible nav first and
+ * fall back to the sheet, so one call works at every width.
+ */
 export async function gotoSection(page, name) {
-    await nav(page).getByRole('button', { name, exact: true }).click();
+    const bar = nav(page);
+    if (await bar.count() > 0) {
+        const direct = bar.getByRole('button', { name, exact: true });
+        if (await direct.count() > 0) {
+            await direct.click();
+            return;
+        }
+        await bar.getByRole('button', { name: 'More', exact: true }).click();
+        await page.getByRole('dialog', { name: 'More navigation' })
+            .getByRole('button', { name, exact: true })
+            .click();
+        return;
+    }
+
+    // No nav landmark at all: the MV3 popup. It navigates from Home's quick
+    // actions (Send / Receive / Exchange / More) instead of a nav surface.
+    // Destinations that are NOT quick actions are not reachable this way; see
+    //  before writing an extension spec that needs one.
+    await page.getByRole('main').getByRole('button', { name, exact: true }).click();
 }
 
 /** A button inside the main content region, e.g. a form's submit. */
@@ -169,7 +257,7 @@ export async function createWallet(page, options = {}) {
     await acknowledgeDonationConsent(page, ads);
 
     // Argon2id runs on the CI runner's CPU; this is the slow step.
-    await expect(lockButton(page)).toBeVisible({ timeout: 90_000 });
+    await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
     return words;
 }
 
@@ -188,15 +276,21 @@ export async function createWallet(page, options = {}) {
  */
 export async function dismissIntroCarousel(page) {
     const skip = page.getByRole('button', { name: 'Skip' });
-    try {
-        await skip.waitFor({ state: 'visible', timeout: 5_000 });
-    } catch {
-        return;                     // no carousel: nothing to dismiss
-    }
+    const welcome = page.getByRole('button', { name: 'Create new wallet' });
+
+    // Wait for whichever screen this build actually paints, rather than giving
+    // the carousel a fixed head start. The old 5s wait was a race the cold
+    // dev-server compile could lose: the helper then no-opped as "no carousel"
+    // and the caller sat out its full 120s timeout waiting for a button that
+    // was one screen away - the same failure this helper exists to prevent.
+    await skip.or(welcome).first().waitFor({ state: 'visible', timeout: 60_000 });
+
+    // Tolerant by design: if the carousel is ever removed, there is no Skip and
+    // we are already where the caller needs to be.
+    if (await skip.count() === 0) return;
+
     await skip.click();
-    // The welcome screen is what the caller actually needs.
-    await page.getByRole('button', { name: 'Create new wallet' })
-        .waitFor({ state: 'visible', timeout: 15_000 });
+    await welcome.waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 /**
