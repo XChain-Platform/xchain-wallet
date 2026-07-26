@@ -22,57 +22,17 @@
 // verification stage and the ADS consent screen all shipped unscanned
 // while this suite sat un-run. They are covered below.
 
-import AxeBuilder from '@axe-core/playwright';
 import {
     acknowledgeDonationConsent,
     createWallet,
     expect,
     dismissIntroCarousel,
-    freezeMotion,
     gotoSection,
     lockWallet,
     readRecoveryPhrase,
     test,
 } from '../../fixtures/wallet.js';
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
-
-// : the accent/success/warning/muted-text contrast debt this suite
-// used to quarantine is fixed in tokens.css (default light theme darkened
-// to clear AA). No exceptions remain -- every color-contrast finding fails
-// the build now.
-
-function contrastPair(node) {
-    const data = node.any?.[0]?.data || {};
-    return { fg: data.fgColor, bg: data.bgColor, ratio: data.contrastRatio };
-}
-
-async function violationsFor(page) {
-    // Settle the paint first: a scan racing a fade-in reads blended colors.
-    await freezeMotion(page);
-    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-    return results.violations;
-}
-
-async function scan(page, label) {
-    const unexpected = await violationsFor(page);
-
-    expect(
-        unexpected,
-        `${label} a11y violations: ${unexpected
-            .map((v) =>
-                v.id === 'color-contrast'
-                    ? `color-contrast on ${v.nodes
-                        .map((n) => {
-                            const { fg, bg, ratio } = contrastPair(n);
-                            return `${fg} on ${bg} (${ratio}:1)`;
-                        })
-                        .join(', ')}`
-                    : `${v.id} (${v.impact}): ${v.help}`,
-            )
-            .join('; ')}`,
-    ).toEqual([]);
-}
+import { scan } from '../../fixtures/a11y.js';
 
 // The license gate renders ahead of everything else, so it needs the
 // fixture's bypass turned off to be scanned at all.
