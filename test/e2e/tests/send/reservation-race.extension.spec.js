@@ -26,33 +26,82 @@
 // per PAGE, so two tabs get two independent ledgers and no protection at
 // all - a fact worth stating in the threat model rather than leaving
 // implied by a passing extension test.
+//
+// WHY A TOKEN SEND, NOT A NATIVE ONE . The reservation ledger nets
+// a reservation into the NEXT window's PRE-FLIGHT, and it reserves the TOKEN
+// tick only: `reserveFromSimulation` excludes the native coin on purpose
+// (its debit is dominated by the miner fee), and a native-coin send is a
+// `bareNativePayment` that skips pre-flight entirely (useConfirmAction.js).
+// So a native send neither registers nor nets a reservation - it is
+// deliberately outside §4.7. To exercise the protection the wallet actually
+// implements, both windows send an XChain TOKEN (XCHAIN, free-mintable on
+// regtest), which has a pre-flight and a reservable delta.
 
 import {
     createWallet, gotoSection, mainButton,
 } from '../../fixtures/wallet.js';
 import { expect, openSecondPopup, test } from '../../fixtures/extension.js';
 import {
-    REGTEST_DESTINATION, fundAddress, readReceiveAddress, switchToRegtest, unlockAfterReload,
+    EXPLORER_URL, REGTEST_COIN, REGTEST_DESTINATION,
+    fundAddress, minerRpc, readReceiveAddress, switchToRegtest, unlockAfterReload,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'extpassword1234';
 const FUNDING_BTC = 1;
-// Deliberately more than half the funded balance, so the two sends cannot
-// both succeed: the second is only affordable if the first is ignored.
-const SEND_BTC = '0.6';
+// Mint this much XCHAIN, then send more than half of it in each window: the
+// two sends cannot both succeed, so the second is only affordable if the
+// first reservation is ignored.
+const MINT_XCHAIN = 1000;
+const SEND_XCHAIN = '600';
 
-function toField(page) {
-    return page.getByLabel('To', { exact: true });
+// Mint XCHAIN to the active address by driving the command palette ->
+// Advanced action -> MINT (the friendly Mint form is balance-scoped and
+// won't list a tick you hold zero of). XCHAIN is free-mintable on regtest.
+async function mintXchain(page, amount) {
+    await page.keyboard.press('ControlOrMeta+k');
+    const combobox = page.getByRole('combobox');
+    await expect(combobox).toBeVisible();
+    await combobox.fill('Advanced action');
+    await page.keyboard.press('Enter');
+
+    await page.getByLabel('Action').selectOption('MINT');
+    await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
+    await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
+    await page.getByRole('button', { name: 'Sign action' }).click();
+
+    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await page.getByTestId('confirm-approve').click();
+    // The advanced-action confirm shows a different terminal state than the
+    // Send flow; the on-chain balance is the truth we wait on below.
+    await page.waitForTimeout(4_000);
 }
 
-function amountField(page) {
-    return page.getByRole('textbox', { name: /^Amount/ });
+async function waitForTokenBalance(address, tick, min, timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+        try {
+            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`);
+            const body = await res.json();
+            const row = (body?.data || []).find((b) => b.tick === tick);
+            last = row ? row.amount : null;
+            if (row && Number(row.amount) >= min) return row;
+        } catch { /* transient */ }
+        await minerRpc('generate_blocks', { count: 1 });
+        await new Promise((r) => setTimeout(r, 1_500));
+    }
+    throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-async function composeSend(page) {
+// Compose an XCHAIN send: pick the token in the Send asset picker, then fill
+// the destination + amount and open the confirm modal.
+async function composeTokenSend(page) {
     await gotoSection(page, 'Send');
-    await toField(page).fill(REGTEST_DESTINATION);
-    await amountField(page).fill(SEND_BTC);
+    await page.getByRole('button', { name: /Change asset/ }).click();
+    await page.getByLabel('Search coins or tokens').fill('XCHAIN');
+    await page.getByLabel(/Open XCHAIN details/i).click();
+    await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+    await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_XCHAIN);
     await mainButton(page, 'Send').click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
 }
@@ -71,38 +120,52 @@ test.describe('two-window same-balance race (extension)', () => {
         expect(page.url()).toContain(extensionId);
     });
 
-    // BLOCKED on , not written blind: the venue below is proven (the
-    // structural test above passes, the extension loads, one SW serves every
-    // popup), but onboarding cannot COMPLETE in an automated fresh profile.
-    // The popup reports "[xchain-wallet/extension] xchain-sdk is not loaded
-    // yet (or failed to load); refusing to serve data" and wallet creation
-    // bounces back to the recovery-phrase screen. That guard is the 
-    // fail-closed protection doing its job; what it is protecting against
-    // here is unresolved. Marked fixme rather than deleted so the walk is
-    // ready the moment the SW loads its SDK in this venue.
+    // BLOCKED on a §4.7 lifecycle gap, not on the wallet-side blockers, which
+    // are fixed ( SDK-in-worker;  second-popup false-offline). This
+    // token re-spec (native sends are deliberately outside §4.7, ) and the
+    // mint/token-send machinery below are proven working; what it surfaced:
+    //   1.  (FIXED): the pre-flight COALESCER keyed on (chainId,
+    //      actionString, source) and omitted localDeltas, so a window carrying a
+    //      reservation delta coalesced onto the un-netted producer. Fixed in
+    //      xchain-sdk (lifecycle.js key + index.js call) with a unit test.
+    //   2.  (OPEN): the reservation is RELEASED the instant window 1's
+    //      onApprove settles (useConfirmAction settleResolve -> teardown) at
+    //      sign/handoff - a slow broadcast just times out into the queued
+    //      terminal, which also releases. There is no post-handoff pendingTx
+    //      netting for a concurrent window (gatherLocalDeltas returns only caller
+    //      deltas, which the Send flow never sets). So by the time a second popup
+    //      finishes onboarding+composing (~8s) the reservation is gone (verified:
+    //      window 2's pre-flight sees reserved=[]). Un-fixme once  lands.
     test.fixme('the second window sees the first window reservation and warns', async ({ context, extensionId, page }) => {
         await createWallet(page, { password: PASSWORD, navigate: false });
         await switchToRegtest(page, PASSWORD);
 
         const own = await readReceiveAddress(page);
+        // BTC funds the miner fee; the reservable balance is the minted token.
         await fundAddress(own, FUNDING_BTC);
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
 
-        // Window 1: compose and APPROVE, which is what registers the
-        // reservation. Approving is the point: a merely-open modal reserves
-        // nothing, because the user has not committed to anything yet.
-        await composeSend(page);
+        await mintXchain(page, MINT_XCHAIN);
+        await minerRpc('generate_blocks', { count: 2 });
+        await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
+
+        // The mint left the popup on the advanced-action terminal screen;
+        // reload back to a clean unlocked Home before composing the send.
+        await page.reload();
+        await unlockAfterReload(page, PASSWORD);
+
+        // Window 1: compose and APPROVE, which registers the reservation.
+        await composeTokenSend(page);
         await page.getByTestId('confirm-approve').click();
         await expect(page.getByRole('heading', { name: /Broadcast pending|Signed\./ }))
             .toBeVisible({ timeout: 120_000 });
 
-        // Window 2: the same balance, already spent by window 1. The chain
-        // has not confirmed anything yet, so a wallet that reads only the
-        // confirmed balance would happily let this through.
+        // Window 2: the same token balance, reserved by window 1. The shared
+        // §4.7 ledger must net window 1's reservation into this pre-flight.
         const second = await openSecondPopup(context, extensionId);
         await unlockAfterReload(second, PASSWORD);
-        await composeSend(second);
+        await composeTokenSend(second);
 
         // The protection may present as a pre-flight warning, a fail
         // verdict, or a blocked Approve; what must NOT happen is a clean
