@@ -129,7 +129,40 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
         'BetFeedDetail projects payout through the SDK, not a local estimate');
 }
 
-// --- 6. the confirm screen decodes BET rather than falling back --------
+// --- 6. the oracle console composes through the route too --------------
+
+{
+    const src = read('packages', 'core', 'src', 'shared', 'routes', 'OracleConsole.jsx');
+    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+        'OracleConsole composes through the BET builder route');
+    for (const b of ['resolveMarketParams', 'cancelMarketParams']) {
+        assert.ok(src.includes(`'${b}'`), `OracleConsole names the ${b} builder`);
+    }
+    assert.ok(!/actionData: \{ action: 'BET'/.test(src),
+        'OracleConsole does not feed a client-side wire mirror into the signing path');
+
+    // Resolve is legal only between the deadline and the end of the refund
+    // window, so the button is offered only where the chain would accept it
+    // rather than letting the user pay a fee for a rejected transaction.
+    assert.match(src, /canResolve\s*=\s*f\.feed_status === 'closed'/,
+        'OracleConsole only offers resolve once betting has closed');
+    assert.match(src, /Number\(f\.expire_at\) > nowSec/,
+        'OracleConsole only offers resolve before the refund window ends');
+}
+
+// --- 7. MyBets aggregates across every address ------------------------
+
+{
+    const src = read('packages', 'core', 'src', 'shared', 'routes', 'MyBets.jsx');
+    // Address-aggregated, not active-address-scoped: bets are keyed to the
+    // address that placed them and payouts credit that same address, so a
+    // per-address view would quietly hide money.
+    assert.match(src, /getAddressesByChain\(walletId, accountId\)/,
+        'MyBets enumerates every address rather than the active one');
+    assert.match(src, /type: 'address'/, 'MyBets queries bets by bettor address');
+}
+
+// --- 8. the confirm screen decodes BET rather than falling back --------
 
 const decoderSrc = read('packages', 'core', 'src', 'decoder', 'actionDecoder.js');
 assert.match(decoderSrc, /if \(action === 'BET'\)/,
