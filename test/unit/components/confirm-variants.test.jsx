@@ -33,7 +33,7 @@ import { ActionConfirmScreen } from '../../../packages/core/src/shared/component
 import { PsbtIntentPanel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
 import { psbtRefusalReason } from '../../../packages/core/src/shared/components/PsbtConfirmScreen.jsx';
 import { isUnreadableActionReason } from '../../../packages/core/src/shared/components/psbtDecodeReasons.js';
-import { canApproveWithReport } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { canApproveWithReport, toggleAcknowledged } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
 
 const OWN = 'bc1qownownownownownownownownownownownowno';
 const OTHER = 'bc1qotherotherotherotherotherotherotherx';
@@ -305,6 +305,49 @@ describe('§4.2 Approve gate is ONE predicate across surfaces', () => {
             ],
         };
         expect(canApproveWithReport(report, new Set())).toBe(true);
+    });
+
+    // Found by driving the real gate on regtest: an over-balance token send
+    // produces TWO overridable errors (Tier-1 DRYRUN_INVALID and Tier-2
+    // BALANCE_INSUFFICIENT, which constants.js registers as `network` because
+    // it is only as trustworthy as the explorer balance it read).
+    it('requires EVERY overridable error to be acknowledged, not just one', () => {
+        const report = {
+            findings: [
+                { code: 'DRYRUN_INVALID', severity: 'error', overridable: true },
+                { code: 'BALANCE_INSUFFICIENT', severity: 'error', overridable: true },
+            ],
+        };
+        expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(false);
+        expect(canApproveWithReport(report, new Set(['BALANCE_INSUFFICIENT']))).toBe(false);
+        expect(canApproveWithReport(report,
+            new Set(['DRYRUN_INVALID', 'BALANCE_INSUFFICIENT']))).toBe(true);
+    });
+});
+
+// The override is rendered as a CHECKBOX, and both surfaces used to add to the
+// acknowledged set without ever removing from it - so a stray click on "Sign
+// anyway", beside a finding saying the network expects this to fail, could
+// never be withdrawn. Caught by the regtest gate walk.
+describe('§4.2 acknowledgement is reversible', () => {
+    it('toggles a code in and out of the set', () => {
+        const once = toggleAcknowledged(new Set(), 'DRYRUN_INVALID');
+        expect(once.has('DRYRUN_INVALID')).toBe(true);
+        expect(toggleAcknowledged(once, 'DRYRUN_INVALID').has('DRYRUN_INVALID')).toBe(false);
+    });
+
+    it('leaves other acknowledgements alone and does not mutate the input', () => {
+        const prev = new Set(['A', 'B']);
+        const next = toggleAcknowledged(prev, 'A');
+        expect([...next]).toEqual(['B']);
+        expect([...prev]).toEqual(['A', 'B']);
+    });
+
+    it('un-acknowledging re-blocks Approve', () => {
+        const report = { findings: [{ code: 'A', severity: 'error', overridable: true }] };
+        const acked = toggleAcknowledged(new Set(), 'A');
+        expect(canApproveWithReport(report, acked)).toBe(true);
+        expect(canApproveWithReport(report, toggleAcknowledged(acked, 'A'))).toBe(false);
     });
 });
 

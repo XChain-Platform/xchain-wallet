@@ -28,7 +28,7 @@ import { PsbtIntentPanel } from '@xchain-wallet/core/shared/components/PsbtInten
 import { PreflightPanel } from '@xchain-wallet/core/shared/components/PreflightPanel.jsx';
 import { ActionIntentSummary } from '@xchain-wallet/core/shared/components/ActionIntentSummary.jsx';
 import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtConfirmScreen.jsx';
-import { canApproveWithReport } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
+import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import {
@@ -319,11 +319,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
         ({ loading: false, report: null }),
     );
     const [acknowledged, setAcknowledged] = useState(() => new Set());
-    const acknowledge = (code) => setAcknowledged((prev) => {
-        const next = new Set(prev);
-        next.add(code);
-        return next;
-    });
+    // Shared with the hook: an add-only copy here made the "Sign anyway"
+    // checkbox a one-way latch on the dApp approval surface too.
+    const acknowledge = (code) => setAcknowledged((prev) => toggleAcknowledged(prev, code));
     useEffect(() => {
         if (!confirmSlice || kind !== 'signAction' || !chainId) return undefined;
         // The action string the dApp supplied IS the payload for this kind, so

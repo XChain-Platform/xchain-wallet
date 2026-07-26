@@ -121,8 +121,17 @@ for (const file of walk(bridgeSpecDir)) {
 
 assert.match(
     signSrc,
-    /import \{ canApproveWithReport \} from '@xchain-wallet\/core\/shared\/hooks\/useConfirmAction\.js'/,
-    'uses the shared §4.2 Approve-gate predicate',
+    /import \{ canApproveWithReport, toggleAcknowledged \} from '@xchain-wallet\/core\/shared\/hooks\/useConfirmAction\.js'/,
+    'uses the shared §4.2 Approve-gate predicate AND the shared acknowledgement toggle',
+);
+// This window held its own add-only copy of the acknowledgement setter, which
+// made the "Sign anyway" checkbox a one-way latch here exactly as it was in the
+// hook. Unifying the GATE (below) while leaving the STATE duplicated is how
+// that survived, so pin both.
+assert.doesNotMatch(
+    signSrc,
+    /setAcknowledged\(\(prev\) => \{[\s\S]{0,160}next\.add\(code\)/,
+    'the acknowledgement setter must go through toggleAcknowledged, not a local add-only copy',
 );
 assert.match(
     signSrc,

@@ -322,11 +322,7 @@ export function useConfirmAction() {
     }, [settleReject]);
 
     const acknowledge = useCallback((code) => {
-        setAcknowledged((prev) => {
-            const next = new Set(prev);
-            next.add(code);
-            return next;
-        });
+        setAcknowledged((prev) => toggleAcknowledged(prev, code));
     }, []);
 
     return {
@@ -388,4 +384,29 @@ export function canApproveWithReport(report, acknowledged) {
         if (!acknowledged.has(f.code)) return false;         // needs explicit ack
     }
     return true;
+}
+
+/**
+ * Adds or REMOVES `code` from the acknowledged set (§4.2 override).
+ *
+ * It removes because <PreflightPanel> renders each override as a CHECKBOX, and
+ * an add-only handler makes that checkbox a one-way latch: a stray click on
+ * "Sign anyway" - next to a finding that says the network expects this
+ * transaction to fail - could never be taken back for the life of the modal.
+ * Irreversible accidental consent is the one thing a deliberate-authorization
+ * screen must not have. Un-acknowledging only ever re-blocks Approve, so this
+ * cannot loosen any gate.
+ *
+ * Shared with the extension's approval window for the same reason
+ * `canApproveWithReport` is: that window keeps its own acknowledgment state in
+ * a separate React root, and it carried an identical add-only copy of this.
+ *
+ * @param {Set<string>} prev
+ * @param {string} code
+ * @returns {Set<string>}
+ */
+export function toggleAcknowledged(prev, code) {
+    const next = new Set(prev);
+    if (!next.delete(code)) next.add(code);
+    return next;
 }

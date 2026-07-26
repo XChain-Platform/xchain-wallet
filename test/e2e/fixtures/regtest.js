@@ -257,6 +257,131 @@ export async function assertNoActionRecorded(txid) {
 }
 
 /**
+ * Waits for the chain's own verdict on the action carried by `txid`, and
+ * asserts it is `valid`.
+ *
+ * The counterpart of `assertNoActionRecorded`, and the independent half of
+ * any token-action assertion: "Broadcast pending" is the wallet reporting on
+ * itself, and even a confirmed transaction says nothing about whether the
+ * indexer ACCEPTED the action inside it. An action the handler rejects is
+ * recorded with a non-`valid` status and the money simply does not move - a
+ * spec that stopped at the txid would pass on that.
+ *
+ * Mines while it waits: the indexer only records an action once its block
+ * lands, and the regtest miner's own timer is too slow to wait out.
+ */
+export async function waitForValidAction(txid, timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        await minerRpc('generate_blocks', { count: 1 });
+        const list = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/actions?limit=200`, {
+            signal: AbortSignal.timeout(15_000),
+        }).then((r) => r.json()).catch(() => null);
+        const row = (list?.data || []).find((r) => r.tx_hash === txid);
+        if (row) {
+            const detail = await fetch(
+                `${EXPLORER_URL}/${REGTEST_COIN}/api/action/${row.action_index}`,
+                { signal: AbortSignal.timeout(15_000) },
+            ).then((r) => r.json());
+            // Assert on the status rather than merely on presence: `invalid:
+            // insufficient funds` is also "an action was recorded".
+            for (const status of actionStatuses(detail)) {
+                expect(status, `chain rejected the action for ${txid}`).toBe('valid');
+            }
+            return detail;
+        }
+        await new Promise((r) => setTimeout(r, 2_000));
+    }
+    throw new Error(`No XChain action was ever recorded for ${txid}`);
+}
+
+/**
+ * Every status an action detail exposes, across both shapes the explorer
+ * uses.
+ *
+ * Single-leg actions (DISPENSER, ISSUE, ...) carry one top-level `status`.
+ * A SEND does not: its verdict lives per transfer leg in `sends[]`, because
+ * one action can move several ticks and the handler judges each. Asking only
+ * for `detail.status` on a SEND reads `undefined`, which is why this throws
+ * on finding nothing rather than returning an empty list - a caller looping
+ * over zero statuses asserts nothing and passes.
+ */
+function actionStatuses(detail) {
+    const statuses = [];
+    if (typeof detail.status === 'string') statuses.push(detail.status);
+    for (const leg of Array.isArray(detail.sends) ? detail.sends : []) {
+        if (typeof leg.status === 'string') statuses.push(leg.status);
+    }
+    if (statuses.length === 0) {
+        throw new Error(
+            `action ${detail.action_index} (${detail.action}) exposed no status; `
+            + `keys: ${Object.keys(detail).join(',')}`,
+        );
+    }
+    return statuses;
+}
+
+/**
+ * Mints `amount` XCHAIN to the active address and waits for the balance.
+ *
+ * XCHAIN is free-mintable on regtest and testnet by any address, so this is
+ * how a freshly-created wallet gets a TOKEN balance - which several §8.6
+ * scenarios need, because the parts of the confirm system that only apply to
+ * XChain actions (pre-flight, the §4.7 reservation) are exactly the parts a
+ * native-coin send skips.
+ *
+ * Driven through the command palette's Advanced action -> MINT rather than
+ * the friendly Mint form, which is balance-scoped and will not offer a tick
+ * the wallet holds none of.
+ */
+export async function mintXchain(page, amount) {
+    await page.keyboard.press('ControlOrMeta+k');
+    const combobox = page.getByRole('combobox').first();
+    await expect(combobox).toBeVisible();
+    await combobox.fill('Advanced action');
+    await page.keyboard.press('Enter');
+
+    await page.getByLabel('Action').selectOption('MINT');
+    await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
+    await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
+    await page.getByRole('button', { name: 'Sign action' }).click();
+
+    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await page.getByTestId('confirm-approve').click();
+    // The advanced-action flow has its own terminal screen; rather than
+    // couple to it, wait on the thing that actually matters downstream - the
+    // on-chain balance, below.
+    await page.waitForTimeout(4_000);
+}
+
+/**
+ * Polls the explorer until `address` holds at least `min` of `tick`.
+ *
+ * Mines on each pass for the same reason `fundAddress` does: the wallet and
+ * the indexer both only see confirmed state, and waiting on the miner's own
+ * timer turns every balance-dependent spec into an intermittent failure that
+ * reads like a wallet bug.
+ */
+export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+        try {
+            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`, {
+                signal: AbortSignal.timeout(15_000),
+            });
+            const body = await res.json();
+            const row = (body?.data || []).find((b) => b.tick === tick);
+            last = row ? row.amount : null;
+            if (row && Number(row.amount) >= min) return row;
+        } catch { /* transient while a block lands */ }
+        await minerRpc('generate_blocks', { count: 1 });
+        await new Promise((r) => setTimeout(r, 1_500));
+    }
+    throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
+}
+
+/**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
  *
