@@ -78,6 +78,32 @@ export function multiplyAmounts(a, b) {
 }
 
 /**
+ * Exact decimal comparison of two amounts: -1 when `a < b`, 0 when equal,
+ * 1 when `a > b`.
+ *
+ * Added for , where the answer gates whether a buy may be broadcast at
+ * all. `Number(a) >= Number(b)` is the wrong instrument for that: at 8dp a
+ * balance and a price that differ by one sat compare equal once they round
+ * through a float, which is exactly the case a funding check exists to catch.
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {-1 | 0 | 1 | null}  null when either operand is not a plain decimal.
+ */
+export function compareAmounts(a, b) {
+    const pa = parseDecimal(a);
+    const pb = parseDecimal(b);
+    if (!pa || !pb) return null;
+
+    const scale = Math.max(pa.frac.length, pb.frac.length);
+    const scaled = (p) => BigInt(`${p.int || '0'}${p.frac.padEnd(scale, '0')}`);
+    const left = scaled(pa);
+    const right = scaled(pb);
+    if (left === right) return 0;
+    return left < right ? -1 : 1;
+}
+
+/**
  * Exact decimal difference `a - b` as a plain fixed-notation string.
  *
  * Added for : deriving how much of a token an action spends from the

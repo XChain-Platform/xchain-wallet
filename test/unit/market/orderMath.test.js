@@ -14,7 +14,7 @@
 // the SDK precision cap stays enforceable.
 
 import { describe, it, expect } from 'vitest';
-import { multiplyAmounts } from '../../../packages/core/src/market/orderMath.js';
+import { compareAmounts, multiplyAmounts } from '../../../packages/core/src/market/orderMath.js';
 
 describe('market/orderMath multiplyAmounts', () => {
     it('multiplies whole numbers exactly', () => {
@@ -75,5 +75,45 @@ describe('market/orderMath multiplyAmounts', () => {
 
     it('accepts BigInt operands', () => {
         expect(multiplyAmounts(2n, 3n)).toBe('6');
+    });
+});
+
+// : compareAmounts gates whether an underfunded buy may be broadcast,
+// so it has to stay exact at the 8dp end where floats stop distinguishing
+// two different amounts.
+describe('market/orderMath compareAmounts', () => {
+    it('orders whole numbers', () => {
+        expect(compareAmounts('12', '5')).toBe(1);
+        expect(compareAmounts('5', '12')).toBe(-1);
+        expect(compareAmounts('5', '5')).toBe(0);
+    });
+
+    it('aligns different fraction widths before comparing', () => {
+        expect(compareAmounts('1', '0.99999999')).toBe(1);
+        expect(compareAmounts('0.1', '0.10')).toBe(0);
+        expect(compareAmounts('0.10000001', '0.1')).toBe(1);
+    });
+
+    it('separates amounts a float comparison collapses', () => {
+        // Past ~17 significant digits a float has no room left to tell two
+        // amounts apart, so a Number() comparison would call a balance
+        // sufficient that is actually short.
+        const a = '0.1000000000000000001';
+        const b = '0.1000000000000000002';
+        expect(Number(a)).toBe(Number(b)); // documents the hazard
+        expect(compareAmounts(a, b)).toBe(-1);
+    });
+
+    it('compares zero honestly (a zero balance never covers a price)', () => {
+        expect(compareAmounts('0', '5')).toBe(-1);
+        expect(compareAmounts('0', '0')).toBe(0);
+    });
+
+    it('rejects non-decimal input rather than guessing an order', () => {
+        expect(compareAmounts('1e-7', '5')).toBeNull();
+        expect(compareAmounts('-5', '2')).toBeNull();
+        expect(compareAmounts(null, '2')).toBeNull();
+        expect(compareAmounts('1,000', '2')).toBeNull();
+        expect(compareAmounts('.', '2')).toBeNull();
     });
 });
