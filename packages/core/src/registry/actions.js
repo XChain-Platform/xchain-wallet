@@ -25,6 +25,7 @@
 //      userEncodable-without-walletForm slice by the same conformance guard.
 
 export const COMMON_ACTIONS = /** @type {const} */ ([
+    'ADDRESS',
     'AIRDROP',
     'BATCH',
     'BROADCAST',
@@ -63,12 +64,14 @@ export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
 ]);
 
 // Protocol-accepted on every chain, form-less by design (see header note 2).
-// ADDRESS publishes a messaging encryption pubkey; it is emitted as plumbing
-// by the messaging flows, never authored from a menu.
+// ADDRESS moved OUT of this list in PC-32: v0 preferences got a real form
+// (AddressPreferencesForm) and v1 controller-bind already had one
+// (ControllerBindForm), so it is authorable on every chain. (The old note
+// claiming the messaging flows emit ADDRESS was wrong; only controllerBind
+// composed it.)
 // BET  is mid-rollout: encoder/SDK accept it (userEncodable) but the
 // wallet form is package P7, which moves BET out of this list when it lands.
 export const PROTOCOL_ONLY_ACTIONS = /** @type {const} */ ([
-    'ADDRESS',
     'BET',
 ]);
 

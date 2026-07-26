@@ -504,11 +504,33 @@ async function main() {
     const dispOk = dCreateStatus === 'valid' && dRow != null
         && String(dRow.give_tick) === 'XCHAIN' && dGetTick === dPayTick && dRowExp === dExp;
 
+    // 12) ADDRESS v0 preferences (PC-32). Non-default values on all three
+    // fields so the read-back proves real writes, not defaults: destroy-fee
+    // (1), memo-required (1), anyone-may-dispense (2). Read-back replays the
+    // consensus fold the wallet's currentAddressPreferences mirrors.
+    console.log('\n=== ADDRESS v0 preferences (PC-32) ===');
+    const addrRes = await submit(sdk, 'ADDRESS v0 prefs', 'ADDRESS', {
+        VERSION: '0', FEE_PREFERENCE: '1', REQUIRE_MEMO: '1', DISPENSER_PREFERENCE: '2', MEMO: 'pc32 prefs',
+    }, signerD);
+    const aStatus = addrRes.indexed && (addrRes.indexed.status || addrRes.indexed.state);
+    console.log(`  [ADDRESS v0] indexed status=${aStatus} (want valid)`);
+    await sleep(3000);
+    const aResp = await sdk.getAddresses(addrD, 'address').catch(() => null);
+    const aRows = (aResp && Array.isArray(aResp.data) ? aResp.data : (Array.isArray(aResp) ? aResp : []))
+        .filter((r) => String(r.status || '') === 'valid')
+        .sort((x, y) => Number(x.action_index || 0) - Number(y.action_index || 0));
+    const aLast = aRows.length ? aRows[aRows.length - 1] : null;
+    console.log(`  read-back fold: fee=${aLast?.fee_preference} require_memo=${aLast?.require_memo} dispenser=${aLast?.dispenser_preference} (want 1/1/2)`);
+    const addrOk = aStatus === 'valid' && aLast != null
+        && Number(aLast.fee_preference) === 1
+        && Number(aLast.require_memo) === 1
+        && Number(aLast.dispenser_preference) === 2;
+
     console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk
-        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} dCreateStatus=${dCreateStatus} dGetTick=${dGetTick} dRowExp=${dRowExp})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk && addrOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create + ADDRESS v0 prefs)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} addrOk=${addrOk} aStatus=${aStatus})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

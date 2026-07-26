@@ -73,6 +73,8 @@ const {
     oraclePriceAction,
     myOracleFeeds,
     oracleConsumers,
+    addressPreferencesAction,
+    currentAddressPreferences,
     dispenserAction,
     orderAction,
     cancelOrder,
@@ -2286,6 +2288,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.sleep.hw', sleepAction);
     registerHwHandler('action.broadcast.hw', broadcastAction);
     registerHwHandler('action.oraclePrice.hw', oraclePriceAction);
+    registerHwHandler('action.addressPrefs.hw', addressPreferencesAction);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
     registerHwHandler('action.createList.hw', createList);
@@ -2417,6 +2420,17 @@ export function createBackgroundHost(deps) {
     // a republish because they settle at whatever price matures.
     host.register('oracle.consumers', async (req, { sdkRegistry }) => {
         return oracleConsumers({ sdkRegistry, chainId: req.chainId, address: req.address });
+    });
+
+    // PC-32: write ADDRESS v0 on-chain preferences (all three fields, always).
+    host.register('action.addressPrefs', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return addressPreferencesAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-32: the address's current effective preferences (consensus fold of
+    // its valid ADDRESS v0 history; defaults when none).
+    host.register('address.preferences', async (req, { sdkRegistry }) => {
+        return currentAddressPreferences({ sdkRegistry, chainId: req.chainId, address: req.address });
     });
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {

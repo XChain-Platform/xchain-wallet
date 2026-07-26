@@ -51,6 +51,17 @@ export {
 } from './batchCommand.js';
 export { oraclePriceAction } from './oraclePriceAction.js';
 export {
+    addressPreferencesAction,
+    currentAddressPreferences,
+    feePreferenceLabel,
+    requireMemoLabel,
+    dispenserPreferenceLabel,
+    DEFAULT_PREFERENCES,
+    VALID_FEE_PREFERENCE,
+    VALID_REQUIRE_MEMO,
+    VALID_DISPENSER_PREFERENCE,
+} from './addressPreferences.js';
+export {
     myOracleFeeds,
     oracleConsumers,
     toQuote,

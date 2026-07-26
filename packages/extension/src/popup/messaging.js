@@ -868,6 +868,30 @@ export function oracleConsumers(req) {
 }
 
 /**
+ * Write ADDRESS v0 on-chain preferences (PC-32). Always carries all three
+ * fields; a blank FEE_PREFERENCE / REQUIRE_MEMO on the wire silently
+ * reverts to default, so the flow refuses blanks.
+ * @param {object} opts
+ */
+export function addressPreferencesAction(opts) {
+    return /** @type {any} */ (sendMessage('action.addressPrefs', opts));
+}
+
+/** @param {object} opts hardware-signer ADDRESS v0 preferences write */
+export function addressPreferencesActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.addressPrefs.hw', opts));
+}
+
+/**
+ * Current effective on-chain preferences for an address (consensus fold of
+ * its valid ADDRESS v0 history; protocol defaults when none).
+ * @param {{ chainId: string, address: string }} req
+ */
+export function getAddressPreferences(req) {
+    return /** @type {any} */ (sendMessage('address.preferences', req));
+}
+
+/**
  * Build, sign, and broadcast a DISPENSER action : opens a vending-
  * machine that dispenses GIVE_TICK when triggered by a GET_COIN or
  * GET_TICK payment (§40.7). Version: '0' create, '1' cancel, '2' edit.

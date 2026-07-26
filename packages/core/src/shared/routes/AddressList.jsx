@@ -33,6 +33,11 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import {
+    feePreferenceLabel,
+    requireMemoLabel,
+    dispenserPreferenceLabel,
+} from '../../flows/addressPreferences.js';
 import styles from './History.module.css';
 import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
@@ -73,6 +78,7 @@ function formatFiatAmount(value, currency) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onReceive]
  * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, the detail view exposes a "Secret" affordance for non-multisig rows with a record, handing that address back to the caller (shell wires it to <ViewPrivateKey>)
+ * @param {(sel: { chainId: string, address: string }) => void} [props.onEditPreferences]   PC-32: when supplied, the detail view's On-chain preferences card exposes an Edit affordance (shell wires it to <AddressPreferencesForm>)
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   picker mode only: caller-supplied rows rendered above the address list (e.g. Dispenser's "New dispenser address"); unaffected by search/filters
  */
 export function AddressList({
@@ -81,6 +87,7 @@ export function AddressList({
     onBack,
     onReceive,
     onShowPrivateKey,
+    onEditPreferences,
     networkFilter = 'all',
     tokenQuery = '',
     pickerMode = false,
@@ -117,6 +124,24 @@ export function AddressList({
     const [labelSaving, setLabelSaving] = useState(false);
     // Brief "copied" feedback on the inline address copy icon.
     const [addrCopied, setAddrCopied] = useState(false);
+
+    // PC-32: the selected address's current on-chain preferences (consensus
+    // fold; protocol defaults when never written). Lazy per selection; a
+    // failed or unsupported read degrades to hiding the card's values, never
+    // blocking the detail view.
+    const [chainPrefs, setChainPrefs] = useState(/** @type {any | null} */ (null));
+    const [chainPrefsError, setChainPrefsError] = useState(/** @type {string | null} */ (null));
+    useEffect(() => {
+        let cancelled = false;
+        setChainPrefs(null);
+        setChainPrefsError(null);
+        if (!selected?.address || !selected?.chainId) return undefined;
+        if (typeof messaging.getAddressPreferences !== 'function') return undefined;
+        messaging.getAddressPreferences({ chainId: selected.chainId, address: selected.address })
+            .then((p) => { if (!cancelled) setChainPrefs(p); })
+            .catch((err) => { if (!cancelled) setChainPrefsError(err?.message || 'Preferences unavailable.'); });
+        return () => { cancelled = true; };
+    }, [messaging, selected?.address, selected?.chainId]);
 
     // "+" menu in the header: Add address / Import address.
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -789,6 +814,46 @@ export function AddressList({
                                 <div className={local.detailValue}>{f.value}</div>
                             </div>
                         ))}
+                    </div>
+                    {/* PC-32: on-chain ADDRESS v0 preferences for this address. */}
+                    <div className={local.detailCard} style={{ marginTop: 'var(--xc-space-3)' }}>
+                        <div className={local.detailField}>
+                            <div className={local.detailLabel}>On-chain preferences</div>
+                            <div className={local.detailValue}>
+                                {chainPrefsError
+                                    ? chainPrefsError
+                                    : (chainPrefs
+                                        ? (chainPrefs.onChain ? 'Custom preferences set' : 'Protocol defaults')
+                                        : 'Loading…')}
+                            </div>
+                        </div>
+                        {chainPrefs ? (
+                            <>
+                                <div className={local.detailField}>
+                                    <div className={local.detailLabel}>Protocol fee</div>
+                                    <div className={local.detailValue}>{feePreferenceLabel(chainPrefs.feePreference)}</div>
+                                </div>
+                                <div className={local.detailField}>
+                                    <div className={local.detailLabel}>Incoming sends</div>
+                                    <div className={local.detailValue}>{requireMemoLabel(chainPrefs.requireMemo)}</div>
+                                </div>
+                                <div className={local.detailField}>
+                                    <div className={local.detailLabel}>Dispensers</div>
+                                    <div className={local.detailValue}>{dispenserPreferenceLabel(chainPrefs.dispenserPreference)}</div>
+                                </div>
+                            </>
+                        ) : null}
+                        {onEditPreferences ? (
+                            <div className={local.detailField}>
+                                <Button
+                                    size="md"
+                                    variant="secondary"
+                                    onClick={() => onEditPreferences({ chainId: selected.chainId, address: selected.address })}
+                                >
+                                    Edit on-chain preferences
+                                </Button>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
                 {confirmDialog.request ? (

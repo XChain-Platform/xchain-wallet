@@ -84,7 +84,7 @@ const AUTO_FIELDS = new Set(['VERSION']);
 const ACTIONS_WITH_DEDICATED_FORMS = new Set([
     'SEND', 'ISSUE', 'MINT', 'DESTROY',
     'BROADCAST', 'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
-    'LINK', 'SWEEP', 'PRICE',
+    'LINK', 'SWEEP', 'PRICE', 'ADDRESS',
 ]);
 
 /**
@@ -92,7 +92,7 @@ const ACTIONS_WITH_DEDICATED_FORMS = new Set([
  *
  * Generic "submit any XChain action" surface for power users and for
  * action kinds without a dedicated form (FILE beyond collectibles,
- * ADDRESS, CALLBACK, SLEEP, raw MESSAGE). Fields are
+ * CALLBACK, SLEEP, raw MESSAGE). Fields are
  * driven entirely by the SDK's schema introspection; the form has no
  * per-action knowledge beyond generic rendering rules for rest-fields
  * + auto-fields.

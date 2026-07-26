@@ -430,6 +430,30 @@ export function oracleConsumers(req) {
     return /** @type {any} */ (sendMessage('oracle.consumers', req));
 }
 
+/**
+ * Write ADDRESS v0 on-chain preferences (PC-32). Always carries all three
+ * fields; a blank FEE_PREFERENCE / REQUIRE_MEMO on the wire silently
+ * reverts to default, so the flow refuses blanks.
+ * @param {object} opts
+ */
+export function addressPreferencesAction(opts) {
+    return /** @type {any} */ (sendMessage('action.addressPrefs', opts));
+}
+
+/** @param {object} opts hardware-signer ADDRESS v0 preferences write */
+export function addressPreferencesActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.addressPrefs.hw', opts));
+}
+
+/**
+ * Current effective on-chain preferences for an address (consensus fold of
+ * its valid ADDRESS v0 history; protocol defaults when none).
+ * @param {{ chainId: string, address: string }} req
+ */
+export function getAddressPreferences(req) {
+    return /** @type {any} */ (sendMessage('address.preferences', req));
+}
+
 /** @param {object} opts */
 export function dispenserAction(opts) {
     return /** @type {any} */ (sendMessage('action.dispenser', opts));
