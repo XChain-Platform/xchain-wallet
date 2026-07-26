@@ -8,13 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
-import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { useEffect, useMemo, useState } from 'react';
+import { Screen, PageHeader, Icon, VerifiedBadge } from '@xchain-wallet/core/ui';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DetailCard } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { useActionProofVerification } from '../hooks/useProofVerification.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -62,6 +64,23 @@ export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBa
         return () => { cancelled = true; };
     }, [entry, messaging]);
 
+    // PC-50: the same SPV verdict the History list badges, on the detail view
+    // the item names. Only a confirmed action with a numeric index is
+    // checkpointable, and the verdict is skipped for demo wallets and when the
+    // user has opted out of proof traffic (`verifyProofs`, default on).
+    const proofSettings = useSettings();
+    const verifyEnabled = proofSettings.settings?.verifyProofs !== false
+        && !flowsLib.isDemoWallet(walletId);
+    const verifyItems = useMemo(() => {
+        if (!entry || !(Number(entry.blockIndex) > 0)) return [];
+        if (entry.actionIndex == null || entry.actionIndex === '') return [];
+        return [{ key: 'detail', chainId: entry.chainId, actionIndex: entry.actionIndex }];
+    }, [entry]);
+    const verifyMap = useActionProofVerification({
+        messaging, items: verifyItems, enabled: verifyEnabled,
+    });
+    const verdict = verifyMap.detail || null;
+
     if (!entry) {
         return (
             <Screen variant={variant} header={(
@@ -95,6 +114,11 @@ export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBa
     return (
         <Screen variant={variant} header={header}>
             <div className={styles.body}>
+                {verdict ? (
+                    <div className={styles.detailVerify}>
+                        <VerifiedBadge status={verdict.status} reason={verdict.reason} size="sm" />
+                    </div>
+                ) : null}
                 <DetailCard
                     entry={entry}
                     peerCache={peerCache}

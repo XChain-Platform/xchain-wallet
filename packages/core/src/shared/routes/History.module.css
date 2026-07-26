@@ -1292,3 +1292,10 @@
     margin-inline-start: auto;
     color: var(--xc-text-muted);
 }
+
+/* PC-50: SPV verdict badge above the action detail card. */
+.detailVerify {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+}
