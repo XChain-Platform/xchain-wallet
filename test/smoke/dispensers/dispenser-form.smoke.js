@@ -151,12 +151,11 @@ assert.ok(/VERSION:\s*'0'/.test(src), 'DispenserForm pins VERSION=0 (create)');
 assert.ok(/GIVE_COIN\b/.test(src), 'DispenserForm sets GIVE_COIN');
 assert.ok(/GET_COIN\b/.test(src), 'DispenserForm sets GET_COIN');
 assert.ok(/PROTOCOL_COIN_TICKER/.test(src), 'DispenserForm maps descriptor.coin → protocol ticker');
-// GET_TICK should NOT be assigned anywhere in the composer: the §40.7.1
-// primary lane is coin-paid (empty GET_TICK). The SDK validator from
-// 1.8.1 treats that as a valid coin-paid create.
+// PC-20: GET_TICK is set ONLY in the token-priced lane (payWith === 'token');
+// the §40.7.1 coin-paid lane still leaves it empty.
 assert.ok(
-    !/p\.GET_TICK\s*=/.test(src),
-    'DispenserForm leaves GET_TICK unset (coin-paid lane)',
+    /payWith === 'token'/.test(src) && /p\.GET_TICK = getTick/.test(src),
+    'DispenserForm sets GET_TICK only in the token-priced lane',
 );
 assert.ok(/p\.ORACLE_ADDRESS\s*=\s*oracle/.test(src),
     'DispenserForm only sets ORACLE_ADDRESS when user provides one');

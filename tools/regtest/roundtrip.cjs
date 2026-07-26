@@ -462,11 +462,53 @@ async function main() {
         && swEditStatus === 'valid' && swEditRowExp === swEditExp
         && swCancelStatus === 'valid' && swCancelRowFound === true;
 
+    // 11) DISPENSER v0 token-priced create (PC-20). Proves the two field-set
+    // additions that are new at CREATE: a TOKEN-priced lane (GET_TICK +
+    // GET_AMOUNT, vs the coin-only lane the form had) and a Unix EXPIRATION
+    // (block counts would index "past"). MINT XCHAIN gives the dispensed
+    // token + fees; ISSUE a second token to name on the GET (payment) side.
+    console.log('\n=== DISPENSER v0 token-priced create (PC-20) ===');
+    const D = sdk.wallet.generateKeyPair();
+    const addrD = sdk.wallet.deriveAddress(D.publicKeyHex, { type: 'p2wpkh' });
+    const signerD = { wif: D.wif, pubkeyHex: D.publicKeyHex, address: addrD };
+    console.log('  dispenser signer D:', addrD);
+    nodeRpc(['sendtoaddress', addrD, '5']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    await submit(sdk, 'MINT for DISPENSER', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '500' }, signerD);
+    await sleep(3000);
+    const dPayTick = randTick('DP');
+    await submit(sdk, 'ISSUE pay-token', 'ISSUE',
+        { VERSION: '0', TICK: dPayTick, MAX_SUPPLY: '1000', MINT_SUPPLY: '1000', DECIMALS: '0', DESCRIPTION: 'dispenser pay token' },
+        signerD);
+    await sleep(3000);
+    const dNow = Number(JSON.parse(nodeRpc(['getblockchaininfo'])).mediantime);
+    const dExp = String(dNow + 30 * 86400);
+    const dispRes = await submit(sdk, 'DISPENSER v0 (token-priced)', 'DISPENSER', {
+        VERSION: '0', GIVE_COIN: 'BTC', GIVE_TICK: 'XCHAIN', GIVE_AMOUNT: '10', GIVE_ESCROW: '100',
+        GET_COIN: 'BTC', GET_TICK: dPayTick, GET_AMOUNT: '5', EXPIRATION: dExp, MEMO: 'pc20 token-priced',
+    }, signerD);
+    const dCreateStatus = dispRes.indexed && (dispRes.indexed.status || dispRes.indexed.state);
+    console.log(`  [DISPENSER v0] indexed status=${dCreateStatus} (want valid; a block-count EXPIRATION would be "past")`);
+    await sleep(3000);
+    const dispRows = await sdk.getDispensers(addrD, 'address').catch(() => null);
+    const dRows = dispRows && Array.isArray(dispRows.data) ? dispRows.data : (Array.isArray(dispRows) ? dispRows : []);
+    const dRow = dRows.slice().sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0))[0];
+    const dGetTick = dRow ? String(dRow.get_tick || '') : '';
+    // The getDispensers LIST projection omits expiration; read it off the
+    // per-action detail (getAction) instead, like the ORDER leg.
+    const dAction = dRow ? await sdk.getAction(String(dRow.action_index)).catch(() => null) : null;
+    const dDetail = dAction && dAction.data && !Array.isArray(dAction.data) ? dAction.data : dAction;
+    const dRowExp = dDetail ? String((dDetail.state && dDetail.state.expiration) || dDetail.expiration || '') : '';
+    console.log(`  read-back dispenser give_tick=${dRow?.give_tick} get_tick=${dGetTick} expiration=${dRowExp} (want XCHAIN / ${dPayTick} / ${dExp})`);
+    const dispOk = dCreateStatus === 'valid' && dRow != null
+        && String(dRow.give_tick) === 'XCHAIN' && dGetTick === dPayTick && dRowExp === dExp;
+
     console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk
-        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} swCreateStatus=${swCreateStatus} swOpenStatus=${swOpenStatus} swEditStatus=${swEditStatus} swEditRowExp=${swEditRowExp} swCancelStatus=${swCancelStatus} swCancelRowFound=${swCancelRowFound})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} dCreateStatus=${dCreateStatus} dGetTick=${dGetTick} dRowExp=${dRowExp})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

@@ -32,6 +32,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { AmountField } from '../components/AmountField.jsx';
+import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -61,6 +62,15 @@ const PROTOCOL_COIN_TICKER = {
 // fields under "Advanced options" so the §40.7.1 primary flow stays
 // uncluttered.
 const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL', 'INR', 'EUR', 'KRW'];
+
+// datetime-local string -> Unix seconds. DISPENSER EXPIRATION is a
+// wall-clock Unix timestamp (indexer bclte(EXPIRATION, BLOCK_TIME)),
+// same as the DISPENSER v2 edit (PC-19).
+function localInputToUnix(localStr) {
+    const ms = Date.parse(String(localStr));
+    if (!Number.isFinite(ms)) return null;
+    return Math.floor(ms / 1000);
+}
 
 /**
  * Dispenser authoring form (§40.7.1).
@@ -130,6 +140,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [fiatCode, setFiatCode] = useState('');
     const [fiatAmount, setFiatAmount] = useState('');
     const [showAdvanced, setShowAdvanced] = useState(false);
+    // PC-20: the rest of the DISPENSER v0 field set. payWith 'token' opens
+    // a token-priced lane (GET_TICK/GET_AMOUNT) instead of the native-coin
+    // lane; EXPIRATION + allow/block lists complete the field set.
+    const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ ('coin'));
+    const [getTick, setGetTick] = useState('');
+    const [getTokenAmount, setGetTokenAmount] = useState('');
+    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
+    const [expInput, setExpInput] = useState('');
+    const [allowListIdx, setAllowListIdx] = useState('');
+    const [blockListIdx, setBlockListIdx] = useState('');
+    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     // SOURCE address's balance of `ticker` (coin-scale string), backing
     // the escrow AmountField's Max button + "available" footer. Null
     // while unresolved or when no ticker is entered.
@@ -456,7 +477,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             p.GET_ADDRESS = existingAddress.address;
         }
 
-        if (oracle) {
+        if (payWith === 'token') {
+            // PC-20 token-priced lane: buyers pay a fixed amount of a TOKEN
+            // (GET_TICK) rather than the native coin. Oracle/fiat pricing is
+            // coin-only and does not apply here.
+            if (getTick.trim()) p.GET_TICK = getTick.trim().toUpperCase();
+            if (getTokenAmount.trim()) p.GET_AMOUNT = getTokenAmount.trim();
+        } else if (oracle) {
             // Oracle pricing: validator path (fiatAmount + code) or user-
             // oracle path (oracle + code, fiatAmount empty). GET_AMOUNT
             // is typically 0 per DISPENSER.md example 4/5 because the
@@ -475,8 +502,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (trig) p.GET_AMOUNT = trig;
         }
 
+        // PC-20: EXPIRATION (Unix wall-clock, 'default' omits it) + the
+        // allow/block access lists.
+        if (expMode === 'custom' && expInput.trim()) {
+            const unix = localInputToUnix(expInput.trim());
+            if (unix) p.EXPIRATION = String(unix);
+        }
+        if (allowListIdx) p.ALLOW_LIST = allowListIdx;
+        if (blockListIdx) p.BLOCK_LIST = blockListIdx;
+
         return p;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress, addressMode, existingAddress, sourceAddress]);
+    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress, addressMode, existingAddress, sourceAddress, payWith, getTick, getTokenAmount, expMode, expInput, allowListIdx, blockListIdx]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -520,9 +556,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const oracle = oracleAddress.trim();
         const fa = fiatAmount.trim();
         const trig = triggerPrice.trim();
-        if (!oracle && !fa && !trig) {
+        if (payWith === 'token') {
+            if (!getTick.trim()) { setFormError('Enter the token buyers pay with.'); return; }
+            if (!/^\d+(\.\d+)?$/.test(getTokenAmount.trim()) || Number(getTokenAmount.trim()) <= 0) {
+                setFormError('Enter a positive token amount buyers pay per fill.'); return;
+            }
+        } else if (!oracle && !fa && !trig) {
             setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
             return;
+        }
+        if (expMode === 'custom') {
+            const raw = expInput.trim();
+            if (!raw) { setFormError('Pick an expiration date and time, or use the default window.'); return; }
+            const unix = localInputToUnix(raw);
+            if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be in the future.'); return; }
         }
         if (trig && Number(trig) < 0) {
             setFormError('Trigger price cannot be negative.');
@@ -970,6 +1017,24 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
 
     // Source (SOURCE) picker: the wallet's own addresses on the active chain.
+    if (listPickerFor) {
+        return (
+            <ListPickerScreen
+                variant={variant}
+                messaging={messaging}
+                chainId={chainId}
+                addresses={addressesByChain?.[chainId] || []}
+                filterType="2"
+                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                onSelect={(row) => {
+                    if (listPickerFor === 'allow') setAllowListIdx(row.actionIndex); else setBlockListIdx(row.actionIndex);
+                    setListPickerFor(null);
+                }}
+                onBack={() => setListPickerFor(null)}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -1108,25 +1173,59 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
                     : null}
             />
-            <Input
-                label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
-                hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
-                inputMode="decimal"
-                value={triggerPrice}
-                onChange={(e) => setTriggerPrice(e.target.value)}
-                autoComplete="off"
-            />
+            <p className={styles.pickerLabel}>Buyers pay with</p>
+            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+                <input type="radio" name="disp-pay" checked={payWith === 'coin'} onChange={() => setPayWith('coin')} />
+                {' '}Native {coinTicker || 'coin'}
+            </label>
+            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+                <input type="radio" name="disp-pay" checked={payWith === 'token'} onChange={() => setPayWith('token')} />
+                {' '}A token
+            </label>
+            {payWith === 'token' ? (
+                <>
+                    <Input
+                        label="Payment token"
+                        hint="Ticker buyers pay with (a token, not the native coin)."
+                        value={getTick}
+                        onChange={(e) => setGetTick(e.target.value.toUpperCase())}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                    <Input
+                        label="Payment amount (per fill)"
+                        hint="Amount of the payment token buyers send per fill."
+                        inputMode="decimal"
+                        value={getTokenAmount}
+                        onChange={(e) => setGetTokenAmount(e.target.value)}
+                        autoComplete="off"
+                    />
+                </>
+            ) : (
+                <Input
+                    label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
+                    hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
+                    inputMode="decimal"
+                    value={triggerPrice}
+                    onChange={(e) => setTriggerPrice(e.target.value)}
+                    autoComplete="off"
+                />
+            )}
 
-            <button
-                type="button"
-                className={styles.pickerLabel}
-                onClick={() => setShowAdvanced((v) => !v)}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
-            >
-                {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
-            </button>
+            {payWith === 'coin' ? (
+                <button
+                    type="button"
+                    className={styles.pickerLabel}
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                >
+                    {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
+                </button>
+            ) : null}
 
-            {showAdvanced ? (
+            {showAdvanced && payWith === 'coin' ? (
                 <>
                     <label className={styles.pickerLabel}>
                         Priced in fiat (optional)
@@ -1161,6 +1260,37 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </>
             ) : null}
+
+            <p className={styles.pickerLabel}>Expiration</p>
+            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+                <input type="radio" name="disp-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
+                {' '}Default window
+            </label>
+            <label className={styles.pickerLabel} style={{ fontWeight: 'normal' }}>
+                <input type="radio" name="disp-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
+                {' '}Expire at a specific time
+            </label>
+            {expMode === 'custom' ? (
+                <Input
+                    label="Expires"
+                    type="datetime-local"
+                    hint="Wall-clock time the dispenser closes. Must be in the future."
+                    value={expInput}
+                    onChange={(e) => setExpInput(e.target.value)}
+                />
+            ) : null}
+
+            <p className={styles.pickerLabel}>Restrict who can buy (optional)</p>
+            <div className={styles.actions}>
+                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                    {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                </Button>
+                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                    {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                </Button>
+                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+            </div>
 
             {feeTiers ? (
                 <FeeSelector
