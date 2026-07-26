@@ -35,6 +35,28 @@ import {
 } from './broadcastPermanence.js';
 
 /**
+ *  / §4.7: the single-tick debit a SEND moves, for the concurrent-window
+ * pending-delta netting (§28.4 pendingTx v2 tick/amount fields). Only a
+ * single-leg SEND has an unambiguous token debit; a multi-leg SEND, or any
+ * non-SEND action, returns null (nets nothing) - the same conservatism
+ * `reserveFromSimulation` applies to the reservation side.
+ *
+ * @param {{ action?: string, params?: object } | null | undefined} actionData
+ * @returns {{ tick: string, amount: string } | null}
+ */
+export function sendDeltaFromAction(actionData) {
+    if (!actionData || actionData.action !== 'SEND') return null;
+    const p = actionData.params || {};
+    const ticks = [].concat(p.TICK == null ? [] : p.TICK);
+    const amounts = [].concat(p.AMOUNT == null ? [] : p.AMOUNT);
+    if (ticks.length !== 1 || amounts.length !== 1) return null;
+    const tick = String(ticks[0]).trim();
+    const amount = String(amounts[0]).trim();
+    if (!tick || amount === '') return null;
+    return { tick, amount };
+}
+
+/**
  * @typedef {Object} PendingTxMeta
  * @property {string} fromAddress
  * @property {string} toAddress
@@ -124,6 +146,12 @@ export async function submitAction({
     // on every transition; it also observes onProgress phase events.
     let pending = null;
     if (pendingTxMeta) {
+        //  / §4.7: record the single-tick debit this tx moves so a
+        // concurrent approval window's pre-flight can net it (via the shared
+        // pendingTx store) once the reservation releases at broadcast. Mirrors
+        // reserveFromSimulation's conservatism - only a single-leg SEND has an
+        // unambiguous token debit; a multi-leg SEND or a non-SEND records none.
+        const sendDelta = sendDeltaFromAction(actionData);
         pending = createPendingTx({
             chain: descriptor.coin,
             network: descriptor.networkKind,
@@ -132,6 +160,7 @@ export async function submitAction({
             action: actionData.action,
             actionSummary: pendingTxMeta.actionSummary,
             psbtHex: '',
+            ...(sendDelta ? { tick: sendDelta.tick, amount: sendDelta.amount } : {}),
         });
         await vault.pendingTxs.put(pending);
     }

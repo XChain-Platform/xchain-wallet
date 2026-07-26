@@ -1666,7 +1666,7 @@ export function createBackgroundHost(deps) {
     // popup's AbortController cannot cross the boundary; a superseded report
     // is simply ignored by the hook once it resolves. `bypassCache` powers
     // the Approve-time staleness re-check (§4.6).
-    host.register('action.preflight', async (req, { sdkRegistry }) => {
+    host.register('action.preflight', async (req, { sdkRegistry, vault, chainRegistry }) => {
         const chainId = req?.chainId;
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.preflight: chainId is required');
@@ -1685,7 +1685,23 @@ export function createBackgroundHost(deps) {
         // Send flow, where reserve always follows the last preflight).
         const reserved = await reservationLedger.localDeltas(chainId, req.excludeReservationId);
         const callerDeltas = Array.isArray(req.localDeltas) ? req.localDeltas : [];
-        const localDeltas = [...callerDeltas, ...reserved];
+        // : also net the source's UNCONFIRMED committed spends. The
+        // reservation covers approve -> broadcast only (released the instant the
+        // send is signed and handed off); this covers broadcast -> confirmation,
+        // where the spend is real but the explorer balance does not yet reflect
+        // it, so a second window still can't double-spend. Best-effort: never
+        // block pre-flight on the pendingTx read.
+        let pendingDeltas = [];
+        try {
+            const descriptor = chainRegistry?.get?.(chainId);
+            if (descriptor && vault && typeof req.source === 'string' && req.source) {
+                const list = await vault.pendingTxs.list();
+                pendingDeltas = flows.unconfirmedPendingDeltas(list, {
+                    coin: descriptor.coin, network: descriptor.networkKind, source: req.source,
+                });
+            }
+        } catch { /* best-effort; a pending-read hiccup must not fail the pre-flight */ }
+        const localDeltas = [...callerDeltas, ...reserved, ...pendingDeltas];
         return sdk.preflight(req.actionString, {
             source: req.source,
             chain: chainId,

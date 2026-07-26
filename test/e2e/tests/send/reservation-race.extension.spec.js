@@ -120,23 +120,18 @@ test.describe('two-window same-balance race (extension)', () => {
         expect(page.url()).toContain(extensionId);
     });
 
-    // BLOCKED on a §4.7 lifecycle gap, not on the wallet-side blockers, which
-    // are fixed ( SDK-in-worker;  second-popup false-offline). This
-    // token re-spec (native sends are deliberately outside §4.7, ) and the
-    // mint/token-send machinery below are proven working; what it surfaced:
-    //   1.  (FIXED): the pre-flight COALESCER keyed on (chainId,
-    //      actionString, source) and omitted localDeltas, so a window carrying a
-    //      reservation delta coalesced onto the un-netted producer. Fixed in
-    //      xchain-sdk (lifecycle.js key + index.js call) with a unit test.
-    //   2.  (OPEN): the reservation is RELEASED the instant window 1's
-    //      onApprove settles (useConfirmAction settleResolve -> teardown) at
-    //      sign/handoff - a slow broadcast just times out into the queued
-    //      terminal, which also releases. There is no post-handoff pendingTx
-    //      netting for a concurrent window (gatherLocalDeltas returns only caller
-    //      deltas, which the Send flow never sets). So by the time a second popup
-    //      finishes onboarding+composing (~8s) the reservation is gone (verified:
-    //      window 2's pre-flight sees reserved=[]). Un-fixme once  lands.
-    test.fixme('the second window sees the first window reservation and warns', async ({ context, extensionId, page }) => {
+    // Native sends are deliberately outside §4.7 , so this uses a TOKEN
+    // send (XCHAIN, free-mintable on regtest). Getting here fixed two §4.7 bugs:
+    //   : the pre-flight coalescer keyed on (chainId, actionString, source)
+    //     and omitted localDeltas, so a reservation-carrying pre-flight coalesced
+    //     onto the un-netted producer (fixed in xchain-sdk with a unit test).
+    //   : the reservation is released the instant window 1's send is signed
+    //     and handed off, and nothing covered the broadcast -> confirmation gap.
+    //     Fixed by netting the source's UNCONFIRMED pendingTx debits (submitAction
+    //     now records the SEND's tick/amount; the host pre-flight nets them), so
+    //     window 1's broadcast-but-unconfirmed 600 XCHAIN reduces window 2's
+    //     available balance even after the reservation released.
+    test('the second window sees the first window reservation and warns', async ({ context, extensionId, page }) => {
         await createWallet(page, { password: PASSWORD, navigate: false });
         await switchToRegtest(page, PASSWORD);
 
@@ -160,6 +155,11 @@ test.describe('two-window same-balance race (extension)', () => {
         await page.getByTestId('confirm-approve').click();
         await expect(page.getByRole('heading', { name: /Broadcast pending|Signed\./ }))
             .toBeVisible({ timeout: 120_000 });
+        // Let window 1's broadcast settle into a durable pendingTx (status
+        // signed/broadcast) before window 2 pre-flights; the netting reads the
+        // shared pendingTx store, so this closes the write-vs-read race that
+        // otherwise makes the assertion timing-dependent.
+        await page.waitForTimeout(3_000);
 
         // Window 2: the same token balance, reserved by window 1. The shared
         // §4.7 ledger must net window 1's reservation into this pre-flight.

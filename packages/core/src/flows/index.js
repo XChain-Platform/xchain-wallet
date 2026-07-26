@@ -350,6 +350,7 @@ export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 // : derive the first address per chain when the active network changes,
 // so switching networks cannot strand a wallet with no addresses.
 export { ensureNetworkAddresses } from './ensureNetworkAddresses.js';
+export { unconfirmedPendingDeltas } from './pendingDeltas.js';
 export {
     verifyReceiveAddress,
     HardwareAddressMismatchError,
