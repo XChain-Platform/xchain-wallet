@@ -2027,6 +2027,11 @@ function AppInner() {
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
                         onCommandPalette={palette.openPalette}
+                        // : the popup's only VISIBLE route into Settings.
+                        // Web and desktop deliberately pass nothing here: they
+                        // reach Settings from the nav rail, and a second entry
+                        // in the hero would be duplicate chrome.
+                        onOpenSettings={() => openSettingsSection(null)}
                     />
                 </>
             );

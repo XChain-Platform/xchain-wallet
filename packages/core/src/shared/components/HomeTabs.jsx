@@ -57,7 +57,7 @@ import styles from './HomeTabs.module.css';
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, onCommandPalette }) {
+export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, onCommandPalette, onOpenSettings }) {
     const [active, setActive] = useState('coins');
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
@@ -131,6 +131,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 filterOpen={filterOpen}
                 onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
                 onCommandPalette={onCommandPalette}
+                onOpenSettings={onOpenSettings}
             />
 
             <PortfolioChart

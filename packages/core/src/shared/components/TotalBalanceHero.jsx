@@ -35,7 +35,7 @@ import styles from './TotalBalanceHero.module.css';
  * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
  * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  */
-export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette }) {
+export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
@@ -122,6 +122,23 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen
                     ) : null}
                 </span>
                 <div className={styles.actions}>
+                    {/* : shells with no navigation surface need a
+                        VISIBLE way into Settings. Only the MV3 popup passes
+                        this (web and desktop reach Settings from the nav
+                        rail), so nothing changes for them. Prop-gated rather
+                        than variant-sniffed: the shell that lacks the route
+                        is the one that knows it. */}
+                    {typeof onOpenSettings === 'function' ? (
+                        <button
+                            type="button"
+                            className={styles.eye}
+                            onClick={onOpenSettings}
+                            aria-label="Open settings"
+                            title="Settings"
+                        >
+                            <Icon.GearIcon />
+                        </button>
+                    ) : null}
                     {typeof onCommandPalette === 'function' ? (
                         <button
                             type="button"
