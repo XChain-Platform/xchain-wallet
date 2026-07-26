@@ -51,7 +51,7 @@ assert.equal(getFiatRate({ chainCoin: '' }), null);
 const calls = [];
 configureFiatRateSource({
     now: () => NOW,
-    explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+    explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
     fetch: async (url) => {
         calls.push(url);
         if (url.startsWith('https://explorer.test/BTC/api/price_snapshots/FINALIZED/status')) {
@@ -87,7 +87,7 @@ _resetPriceLookupForTests();
 const STALE_TS = Math.floor(NOW / 1000) - 2 * 60 * 60; // 2h-old round
 configureFiatRateSource({
     now: () => NOW,
-    explorerUrlByCoin: { dogecoin: 'https://explorer.test/DOGE' },
+    explorerUrlByCoin: { dogecoin: 'https://explorer.test' },
     fetch: async (url) => {
         if (url.includes('/api/price_snapshots/')) return oracleResponse('DOGE/USD', '0.5', STALE_TS);
         if (url.startsWith('https://api.coingecko.com/')) return coingeckoResponse({ dogecoin: { usd: 0.10 } });
@@ -105,7 +105,7 @@ assert.equal(doge.rate, 0.10);
 _resetPriceLookupForTests();
 configureFiatRateSource({
     now: () => NOW,
-    explorerUrlByCoin: { litecoin: 'https://explorer.test/LTC' },
+    explorerUrlByCoin: { litecoin: 'https://explorer.test' },
     fetch: async (url) => {
         if (url.includes('/api/price_snapshots/')) throw new Error('ECONNREFUSED');
         return coingeckoResponse({ litecoin: { usd: 80 } });

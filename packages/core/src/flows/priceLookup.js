@@ -103,14 +103,15 @@ function resolveFetch() {
 // user is currently on (a regtest BTC balance is still priced as BTC,
 // matching priceOracle.js's chain-id mapping).
 function explorerUrlForCoin(chainCoin) {
-    if (deps.explorerUrlByCoin && deps.explorerUrlByCoin[chainCoin]) {
-        return deps.explorerUrlByCoin[chainCoin];
-    }
-    const desc = defaultRegistry()
-        .byCoin(chainCoin)
-        .find((d) => d.networkKind === 'mainnet');
-    const url = desc?.explorer?.defaultUrl;
-    return typeof url === 'string' && url.length > 0 ? url.replace(/\/+$/, '') : null;
+    // : the explorer base is bare (no coin) by design; every explorer
+    // request must carry the coin path segment. This is the coin's MAINNET
+    // code (== tickerForCoin, no network prefix) since the oracle is queried
+    // from mainnet. Applied to the descriptor base AND any configured override,
+    // both of which are bare under the same convention.
+    const raw = (deps.explorerUrlByCoin && deps.explorerUrlByCoin[chainCoin])
+        || defaultRegistry().byCoin(chainCoin).find((d) => d.networkKind === 'mainnet')?.explorer?.defaultUrl;
+    if (typeof raw !== 'string' || raw.length === 0) return null;
+    return raw.replace(/\/+$/, '') + '/' + tickerForCoin(chainCoin);
 }
 
 async function fetchJson(fetchImpl, url) {

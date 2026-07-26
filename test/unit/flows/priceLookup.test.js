@@ -54,7 +54,7 @@ describe('flows/priceLookup', () => {
         configureFiatRateSource({
             now: () => NOW,
             fetch: fetchImpl,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
         });
         const res = await refreshFiatRates({ chainCoins: ['bitcoin'] });
         expect(res.updated).toEqual(['bitcoin']);
@@ -74,7 +74,7 @@ describe('flows/priceLookup', () => {
         configureFiatRateSource({
             now: () => NOW,
             fetch: fetchImpl,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
         });
         await refreshFiatRates({ chainCoins: ['bitcoin'] });
         await refreshFiatRates({ chainCoins: ['bitcoin'] });
@@ -87,7 +87,7 @@ describe('flows/priceLookup', () => {
         const urls = [];
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { dogecoin: 'https://explorer.test/DOGE' },
+            explorerUrlByCoin: { dogecoin: 'https://explorer.test' },
             fetch: async (url) => {
                 urls.push(url);
                 if (url.includes('/api/price_snapshots/')) {
@@ -104,7 +104,7 @@ describe('flows/priceLookup', () => {
     it('falls back to CoinGecko when the oracle is unreachable', async () => {
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { litecoin: 'https://explorer.test/LTC' },
+            explorerUrlByCoin: { litecoin: 'https://explorer.test' },
             fetch: async (url) => {
                 if (url.includes('/api/price_snapshots/')) throw new Error('ECONNREFUSED');
                 return { ok: true, json: async () => ({ litecoin: { usd: 80 } }) };
@@ -118,7 +118,7 @@ describe('flows/priceLookup', () => {
         const urls = [];
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { litecoin: 'https://explorer.test/LTC' },
+            explorerUrlByCoin: { litecoin: 'https://explorer.test' },
             fetch: async (url) => {
                 urls.push(url);
                 throw new Error('down');
@@ -133,7 +133,7 @@ describe('flows/priceLookup', () => {
         const urls = [];
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
             fetch: async (url) => {
                 urls.push(url);
                 return { ok: true, json: async () => ({ bitcoin: { eur: 60000 } }) };
@@ -149,7 +149,7 @@ describe('flows/priceLookup', () => {
     it('keeps the last good rate through a total outage', async () => {
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
             fetch: async () => snapshotResponse([snapshotRow('BTC/USD', '50000')]),
         });
         await refreshFiatRates({ chainCoins: ['bitcoin'] });
@@ -163,7 +163,7 @@ describe('flows/priceLookup', () => {
         const unsub = subscribeFiatRates(listener);
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
             fetch: async () => snapshotResponse([snapshotRow('BTC/USD', '50000')]),
         });
         await refreshFiatRates({ chainCoins: ['bitcoin'] });
@@ -178,7 +178,7 @@ describe('flows/priceLookup', () => {
     it('rejects malformed oracle prices', async () => {
         configureFiatRateSource({
             now: () => NOW,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test/BTC' },
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
             fetch: async (url) => {
                 if (url.includes('/api/price_snapshots/')) {
                     return snapshotResponse([snapshotRow('BTC/USD', 'not-a-number')]);

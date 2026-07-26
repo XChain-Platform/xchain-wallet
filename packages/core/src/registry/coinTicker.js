@@ -28,3 +28,22 @@ const COIN_TICKER = {
 export function tickerForCoin(coin) {
     return COIN_TICKER[coin] || String(coin || '').toUpperCase();
 }
+
+// : the coin-path segment the platform routes explorer requests by, e.g.
+// bitcoin-mainnet -> BTC, bitcoin-testnet -> TBTC, dogecoin-regtest -> RDOGE.
+// Mirrors xchain-sdk endpoints.coinPrefix + explorer.js COIN_PREFIX_MAP. The
+// explorer BASE url is bare (no coin) by design - the SDK explorer client and
+// every wallet-side explorer link must append THIS segment, or they either
+// double it (coin-in-base + client-appends) or drop it (bare-base + no-append).
+const NETWORK_CODE_PREFIX = { mainnet: '', testnet: 'T', regtest: 'R' };
+
+/**
+ * @param {{ coin?: string, networkKind?: string } | null | undefined} descriptor
+ * @returns {string}  explorer coin code (e.g. 'RBTC'); '' for an unknown network
+ */
+export function explorerCoinCode(descriptor) {
+    if (!descriptor) return '';
+    const prefix = NETWORK_CODE_PREFIX[descriptor.networkKind];
+    if (prefix === undefined) return '';
+    return prefix + tickerForCoin(descriptor.coin);
+}

@@ -32,7 +32,7 @@ import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceL
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { tickerForCoin } from '../../registry/coinTicker.js';
+import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
 import {
     feePreferenceLabel,
     requireMemoLabel,
@@ -662,7 +662,10 @@ export function AddressList({
         const openXchain = () => {
             const base = d?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
             if (!base) return;
-            try { window.open(`${base}/address/${selected.address}`, '_blank', 'noopener'); } catch { /* no-op */ }
+            // : the explorer base is bare; append the coin path segment.
+            const code = explorerCoinCode(d);
+            const path = code ? `/${code}/address/${selected.address}` : `/address/${selected.address}`;
+            try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
         };
         const saveLabel = async () => {
             if (!selected.record?.id || labelSaving) return;

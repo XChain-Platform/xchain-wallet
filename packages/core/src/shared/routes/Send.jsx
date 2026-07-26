@@ -25,6 +25,7 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { explorerCoinCode } from '../../registry/coinTicker.js';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -1410,8 +1411,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         const txid = result?.txid || result?.broadcast?.txid;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const explorerBase = desc?.explorer?.defaultUrl || '';
+        // : the explorer base is bare; append the coin path segment.
+        const explorerCode = explorerCoinCode(desc);
         const explorerUrl = txid && explorerBase
-            ? `${explorerBase.replace(/\/$/, '')}/tx/${txid}`
+            ? `${explorerBase.replace(/\/$/, '')}${explorerCode ? `/${explorerCode}` : ''}/tx/${txid}`
             : null;
         const sentAmount = amount && tick ? `${amount} ${tick}` : null;
         const recipient = toAddress

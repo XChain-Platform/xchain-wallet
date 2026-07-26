@@ -38,6 +38,7 @@ import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import * as branding from '../../branding/branding.js';
+import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 
@@ -1238,7 +1239,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     className={local.quickAction}
                     onClick={() => {
                         const base = descriptor?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
-                        try { window.open(`${base}/action/${actionIndex}`, '_blank', 'noopener'); } catch { /* no-op */ }
+                        // : the explorer base is bare; append the coin path segment.
+                        const code = explorerCoinCode(descriptor);
+                        const path = code ? `/${code}/action/${actionIndex}` : `/action/${actionIndex}`;
+                        try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
                     }}
                     title="View on the XChain explorer"
                 >
