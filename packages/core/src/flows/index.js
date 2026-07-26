@@ -203,6 +203,15 @@ export {
     contractManifestFor,
 } from './contractDetail.js';
 export { deployAction } from './deployAction.js';
+export {
+    planChunkedDeploy,
+    chunkCarrierParams,
+    assembleParams,
+    verifyRecordedChunks,
+    deployChunkedRun,
+    listPendingDeploysForWallet,
+    clearPendingDeploy,
+} from './deployChunked.js';
 export { executeAction } from './executeAction.js';
 export { controllerBindParams, controllerActionClasses } from './controllerBind.js';
 export { depositAction, withdrawAction } from './contractFundsActions.js';

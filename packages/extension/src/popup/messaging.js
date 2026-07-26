@@ -892,6 +892,47 @@ export function getAddressPreferences(req) {
 }
 
 /**
+ * PC-38: contract-template library (audited scaffolds shipped in the SDK).
+ * @param {{ chainId: string }} req
+ */
+export function listContractTemplates(req) {
+    return /** @type {any} */ (sendMessage('contracts.listTemplates', req));
+}
+
+/** @param {{ chainId: string, name: string }} req */
+export function scaffoldContract(req) {
+    return /** @type {any} */ (sendMessage('contracts.scaffold', req));
+}
+
+/**
+ * PC-38: single-shot vs chunked deploy plan for this source (read-only).
+ * @param {{ chainId: string, code: string, gasLimit?: string, constructorParams?: string }} req
+ */
+export function planDeploy(req) {
+    return /** @type {any} */ (sendMessage('deploy.plan', req));
+}
+
+/** PC-38: run or resume a chunked deploy (N+1 sequential signed legs). */
+export function deployChunked(opts) {
+    return /** @type {any} */ (sendMessage('action.deployChunked', opts));
+}
+
+/** @param {object} opts hardware-signer chunked deploy */
+export function deployChunkedHw(opts) {
+    return /** @type {any} */ (sendMessage('action.deployChunked.hw', opts));
+}
+
+/** PC-38: in-flight chunked deploys (chunks already paid for on chain). */
+export function listPendingDeploys(req) {
+    return /** @type {any} */ (sendMessage('pendingDeploys.listForWallet', req));
+}
+
+/** @param {{ id: string }} req */
+export function clearPendingDeploy(req) {
+    return /** @type {any} */ (sendMessage('pendingDeploys.clear', req));
+}
+
+/**
  * Build, sign, and broadcast a DISPENSER action : opens a vending-
  * machine that dispenses GIVE_TICK when triggered by a GET_COIN or
  * GET_TICK payment (§40.7). Version: '0' create, '1' cancel, '2' edit.
@@ -1374,6 +1415,9 @@ export function betOracle(req) {
 
 export function betProjectPayout(req) {
     return /** @type {any} */ (sendMessage('bet.projectPayout', req));
+}
+export function betProjectFeedCreateFee(req) {
+    return /** @type {any} */ (sendMessage('bet.projectFeedCreateFee', req));
 }
 
 export function governancePoll(req) {

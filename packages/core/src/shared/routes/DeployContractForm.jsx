@@ -19,6 +19,7 @@ import {
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -120,6 +121,26 @@ export function DeployContractForm({ walletId, onBack }) {
     const [suggestedGas, setSuggestedGas] = useState(/** @type {number | null} */ (null));
     const [suggestedRationale, setSuggestedRationale] = useState(/** @type {string | null} */ (null));
 
+    // PC-38: the SDK's audited template library. Sync + no network host-side,
+    // so this is a cheap one-shot load per chain.
+    const [templates, setTemplates] = useState(
+        /** @type {{ templates: string[], patterns: string[] } | null} */ (null),
+    );
+    // PC-38: single-shot vs chunked. A contract past one action's capacity
+    // deploys as N carrier transactions plus an assembling one, each with its
+    // own fee, so the user sees the shape BEFORE signing anything.
+    const [plan, setPlan] = useState(
+        /** @type {{ single: boolean, totalChunks: number, codeHash: string } | null} */ (null),
+    );
+    const [planError, setPlanError] = useState(/** @type {string | null} */ (null));
+    // PC-38: chunk-by-chunk progress for the multi-leg run.
+    const [chunkProgress, setChunkProgress] = useState(
+        /** @type {{ done: number, total: number, phase: string } | null} */ (null),
+    );
+    // PC-38: interrupted runs whose chunks are already paid for on chain.
+    const [resumable, setResumable] = useState(/** @type {any[]} */ ([]));
+    const [resumeId, setResumeId] = useState(/** @type {string | null} */ (null));
+
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
@@ -218,7 +239,18 @@ export function DeployContractForm({ walletId, onBack }) {
             GAS_LIMIT: String(gasLimit || suggestedGas || ''),
         };
         if (name.trim()) p.NAME = name.trim();
-        if (constructorParams.trim()) p.CONSTRUCTOR_PARAMS = constructorParams.trim();
+        // PC-38: CONSTRUCTOR_PARAMS is a REST field on the non-stakeable
+        // formats (`...CONSTRUCTOR_PARAMS` on v0/v2), so the wire wants the
+        // ARRAY and emits one segment per entry. Sending the raw pipe-delimited
+        // STRING made the SDK reject every multi-argument constructor
+        // ("CONSTRUCTOR_PARAMS[0] cannot contain pipe"), i.e. this form could
+        // not deploy a contract taking more than one argument. The stakeable
+        // formats (v1/v3) carry ONE plain field instead and accept a single
+        // entry, so they keep the scalar.
+        const ctorParts = normalizeConstructorParams(constructorParams);
+        if (ctorParts.length > 0) {
+            p.CONSTRUCTOR_PARAMS = hasCooldown ? ctorParts[0] : ctorParts;
+        }
         if (hasCooldown) {
             p.COOLDOWN_BLOCKS = cooldownBlocks.trim();
             // Default to BURN if cooldown is set but destination is blank; the indexer
@@ -227,6 +259,58 @@ export function DeployContractForm({ walletId, onBack }) {
         }
         return p;
     }, [code, gasLimit, suggestedGas, name, constructorParams, cooldownBlocks, slashDestination]);
+
+    // PC-38: load the template list + any resumable run once the chain is known.
+    useEffect(() => {
+        let cancelled = false;
+        if (!chainId) return undefined;
+        if (typeof messaging.listContractTemplates === 'function') {
+            messaging.listContractTemplates({ chainId })
+                .then((t) => { if (!cancelled) setTemplates(t); })
+                .catch(() => { if (!cancelled) setTemplates(null); });
+        }
+        if (typeof messaging.listPendingDeploys === 'function') {
+            messaging.listPendingDeploys({ walletId })
+                .then((rows) => {
+                    if (cancelled) return;
+                    setResumable((rows || []).filter((r) => r.stage !== 'done' && r.chainId === chainId));
+                })
+                .catch(() => { if (!cancelled) setResumable([]); });
+        }
+        return () => { cancelled = true; };
+    }, [messaging, chainId, walletId]);
+
+    // PC-38: re-plan whenever the source or the fields that share the action's
+    // byte budget change. The plan is what decides which submit lane runs.
+    useEffect(() => {
+        let cancelled = false;
+        setPlan(null);
+        setPlanError(null);
+        if (!chainId || !code.trim()) return undefined;
+        if (typeof messaging.planDeploy !== 'function') return undefined;
+        messaging.planDeploy({
+            chainId,
+            code,
+            gasLimit: String(gasLimit || suggestedGas || ''),
+            constructorParams: constructorParams.trim() || undefined,
+        })
+            .then((p) => { if (!cancelled) setPlan(p); })
+            .catch((e) => { if (!cancelled) setPlanError(e?.message || 'Could not size this contract.'); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, code, gasLimit, suggestedGas, constructorParams]);
+
+    async function handleUseTemplate(templateName) {
+        if (!chainId) return;
+        setFormError(null);
+        try {
+            const { code: src } = await messaging.scaffoldContract({ chainId, name: templateName });
+            setCode(src);
+            setValidation(null);
+            setSizeInfo(null);
+        } catch (e) {
+            setFormError(e?.message || `Could not load the "${templateName}" template.`);
+        }
+    }
 
     async function handleValidate() {
         if (!chainId) return;
@@ -383,7 +467,39 @@ export function DeployContractForm({ walletId, onBack }) {
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
-            if (isWatcherMode) {
+            // PC-38: a source past one action's capacity deploys as N chunk
+            // carriers plus an assembling DEPLOY. The legs are sequential by
+            // consensus (each carrier must be indexed, at a lower action_index,
+            // before the assembler runs), so this lane cannot be an encode-only
+            // build: watcher mode is refused rather than half-served.
+            if (plan && plan.single === false) {
+                if (isWatcherMode) {
+                    throw new Error(
+                        `This contract needs ${plan.totalChunks} chunk transactions plus an assembling one, `
+                        + 'each signed only after the previous is confirmed. A watch-only wallet cannot '
+                        + 'complete that sequence; deploy it from the wallet holding the key.',
+                    );
+                }
+                const chunkedBase = {
+                    walletId,
+                    chainId,
+                    from: base.from,
+                    code,
+                    gasLimit: String(gasLimit || suggestedGas || ''),
+                    name: name.trim() || undefined,
+                    constructorParams: constructorParams.trim() || undefined,
+                    cooldownBlocks: cooldownBlocks.trim() || undefined,
+                    slashDestination: slashDestination.trim() || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    ...(resumeId ? { resumeId } : {}),
+                };
+                setChunkProgress({ done: 0, total: plan.totalChunks, phase: 'chunking' });
+                res = isHwSource
+                    ? await messaging.deployChunkedHw({ ...chunkedBase, signerId: fromAddress.signerId })
+                    : await messaging.deployChunked({ ...chunkedBase, password });
+                setChunkProgress(null);
+                setResumeId(null);
+            } else if (isWatcherMode) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
@@ -405,6 +521,15 @@ export function DeployContractForm({ walletId, onBack }) {
                     ? 'Incorrect password.'
                     : err?.message || 'Deploy failed.',
             );
+            setChunkProgress(null);
+            // PC-38: a failed chunked run leaves its record behind on purpose -
+            // the chunks already on chain are paid for, so re-list so the resume
+            // banner can offer to finish rather than restart.
+            if (typeof messaging.listPendingDeploys === 'function') {
+                messaging.listPendingDeploys({ walletId })
+                    .then((rows) => setResumable((rows || []).filter((r) => r.stage !== 'done' && r.chainId === chainId)))
+                    .catch(() => {});
+            }
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
                 passwordRef.current?.focus();
@@ -644,7 +769,14 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Name (optional)"
-                hint="Display name for this contract. Appears in My contracts and the detail page."
+                // PC-38 §14 rule 3: the old hint promised this "Appears in My
+                // contracts and the detail page", which is false in both
+                // directions - DEPLOY carries no NAME field in any version
+                // (verified on chain: the wire string is
+                // DEPLOY|<ver>|<code|hash>|<gas>), and the explorer's contract
+                // rows have no name column, so ContractsList's row.name lookup
+                // always falls through to "(unnamed)".
+                hint="Not published on chain: the protocol has no name field for contracts, which are identified by their action index. This is a label for this screen only."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="off"
@@ -652,6 +784,73 @@ export function DeployContractForm({ walletId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
             />
+
+            {/* PC-38: resume an interrupted chunked deploy. Those chunks are
+                already on chain and already paid for; restarting re-pays. */}
+            {resumable.length > 0 ? (
+                <div className={styles.warnings}>
+                    {resumable.map((r) => {
+                        const done = (r.chunks || []).filter((c) => c.actionIndex).length;
+                        return (
+                            <div key={r.id} className={styles.warning}>
+                                <p>
+                                    Unfinished deploy{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
+                                    {r.totalChunks} chunk transactions are already on chain. Finishing
+                                    costs only the remaining ones; starting over pays for all of them again.
+                                </p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => {
+                                            setCode(r.code);
+                                            setName(r.name || '');
+                                            setResumeId(r.id);
+                                            setValidation(null);
+                                            setSizeInfo(null);
+                                        }}
+                                    >
+                                        Resume this deploy
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        onClick={async () => {
+                                            await messaging.clearPendingDeploy({ id: r.id });
+                                            setResumable((rows) => rows.filter((x) => x.id !== r.id));
+                                            if (resumeId === r.id) setResumeId(null);
+                                        }}
+                                    >
+                                        Discard
+                                    </Button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : null}
+
+            {/* PC-38: the SDK ships audited scaffolds; the wallet had no path to them. */}
+            {templates && (templates.templates?.length || templates.patterns?.length) ? (
+                <div style={{ marginBottom: '0.75rem' }}>
+                    <p className={styles.detailsLabel}>Start from an audited template</p>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {[...(templates.templates || []), ...(templates.patterns || [])].map((t) => (
+                            <Button
+                                key={t}
+                                type="button"
+                                variant="ghost"
+                                onClick={() => handleUseTemplate(t)}
+                            >
+                                {t}
+                            </Button>
+                        ))}
+                    </div>
+                    <p className={styles.hint}>
+                        Loading a template replaces the source below. Review and customize it before deploying.
+                    </p>
+                </div>
+            ) : null}
 
             <label className={styles.pickerLabel}>
                 Code source
@@ -688,6 +887,35 @@ export function DeployContractForm({ walletId, onBack }) {
                     Suggest gas
                 </Button>
             </div>
+
+            {/* PC-38: how many transactions this deploy actually costs. */}
+            {planError ? (
+                <p role="alert" className={styles.error}>{planError}</p>
+            ) : plan ? (
+                <p className={plan.single ? styles.summary : styles.warning}>
+                    {plan.single
+                        ? 'Fits in a single transaction.'
+                        : `Too large for one transaction: deploys as ${plan.totalChunks} chunk `
+                          + `transactions plus 1 assembling transaction (${plan.totalChunks + 1} total, `
+                          + 'each paying its own network fee). They are signed one at a time, and each '
+                          + 'must confirm before the next is built, so keep the wallet open until it finishes. '
+                          + 'If it is interrupted you can resume without re-paying for the chunks already sent.'}
+                </p>
+            ) : null}
+
+            {/* PC-38: the run is host-side and does not stream per-leg events
+                back here, so this states what is happening WITHOUT claiming a
+                live count it cannot know (a frozen "0 of N" would read as a
+                stall). Per-leg progress is recorded in the pendingDeploy
+                record, which is what the resume banner reads. */}
+            {chunkProgress ? (
+                <p className={styles.summary} role="status">
+                    Deploying {chunkProgress.total} chunk transactions, then the assembling one.
+                    Each waits for confirmation before the next is signed, so this takes a
+                    few minutes. Leave the wallet open; if it is interrupted you can resume
+                    without re-paying for the chunks already sent.
+                </p>
+            ) : null}
 
             {validation ? (
                 <p

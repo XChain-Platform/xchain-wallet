@@ -526,11 +526,78 @@ async function main() {
         && Number(aLast.require_memo) === 1
         && Number(aLast.dispenser_preference) === 2;
 
+    // 13) CHUNKED DEPLOY (PC-38). The payload is the SDK's OWN audited `escrow`
+    // template, which is past one action's capacity - i.e. before this lane the
+    // wallet could not deploy the library it ships. The legs are built by the
+    // WALLET's own param builders (flows/deployChunked.js) so this proves the
+    // exact bytes the wallet composes, and they run in the consensus-required
+    // order: every v4 carrier indexed (at a lower action_index) before the
+    // assembling v2 that names their CODE_HASH.
+    console.log('\n=== CHUNKED DEPLOY of the audited escrow template (PC-38) ===');
+    const { chunkCarrierParams, assembleParams } = await import(
+        path.resolve(__dirname, '../../packages/core/src/flows/deployChunked.js')
+    );
+    const P = sdk.wallet.generateKeyPair();
+    const addrP = sdk.wallet.deriveAddress(P.publicKeyHex, { type: 'p2wpkh' });
+    const signerP = { wif: P.wif, pubkeyHex: P.publicKeyHex, address: addrP };
+    console.log('  deployer P:', addrP);
+    nodeRpc(['sendtoaddress', addrP, '5']);
+    nodeRpc(['-generate', '3']);
+    await sleep(6000);
+    await submit(sdk, 'MINT for DEPLOY', 'MINT', { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '500' }, signerP);
+    await sleep(3000);
+
+    const escrowSrc = sdk.scaffold('escrow');
+    // Size gas the way the form's "Suggest gas" button does, rather than
+    // hardcoding a limit.
+    const dGas = String(sdk.contracts.suggestGasLimit(escrowSrc).suggested);
+    // The escrow template's initialize() validates its own inputs
+    // (buyer, seller, arbiter, tick, amount, deadlineBlocks) and calls
+    // xchain.require on each. Deploying it with NO constructor params makes the
+    // VM run and then revert - which in the indexer log reads
+    // `DEPLOY : hash=... : reverted`, i.e. exactly like a chunking failure even
+    // though assembly + sha256 verification both succeeded. Supply real args so
+    // this leg tests the deploy lane, not the template's input validation.
+    const dCtor = [addrB, addrA, addrA, 'XCHAIN', '100', '144'];
+    const dPlan = sdk.planDeploy(escrowSrc, { gasLimit: dGas, constructorParams: dCtor });
+    console.log(`  escrow template: ${escrowSrc.length} bytes -> single=${dPlan.single} chunks=${dPlan.totalChunks} gas=${dGas}`);
+    let chunksOk = !dPlan.single;
+    for (let i = 0; i < dPlan.totalChunks; i++) {
+        const cRes = await submit(sdk, `DEPLOY v4 chunk ${i + 1}/${dPlan.totalChunks}`, 'DEPLOY',
+            chunkCarrierParams({
+                codeHash: dPlan.codeHash, index: i, totalChunks: dPlan.totalChunks, part: dPlan.parts[i],
+            }), signerP);
+        const cStatus = cRes.indexed && (cRes.indexed.status || cRes.indexed.state);
+        console.log(`    chunk ${i} indexed status=${cStatus}`);
+        if (cStatus !== 'valid') chunksOk = false;
+        await sleep(2000);
+    }
+    const asmParams = assembleParams({
+        codeHash: dPlan.codeHash, gasLimit: dGas, constructorParams: dCtor,
+    });
+    const asmRes = await submit(sdk, 'DEPLOY v2 assemble', 'DEPLOY', asmParams, signerP);
+    // Do NOT trust submitAction's `indexed.status` for this leg: the waiter
+    // resolves by txid without an actionIndex, so a neighboring action's status
+    // can leak in (it reported "valid" for an assembly that had actually
+    // reverted). The contract ROW is the authoritative proof - it exists only
+    // if the chunks reassembled, sha256-verified, and the constructor ran
+    // without reverting.
+    let cRow = null;
+    for (let tries = 0; tries < 10 && !cRow; tries++) {
+        await sleep(3000);
+        const contracts = await sdk.getContracts(addrP, 'source').catch(() => null);
+        const cRows = contracts && Array.isArray(contracts.data) ? contracts.data : (Array.isArray(contracts) ? contracts : []);
+        cRow = cRows.find((r) => String(r.code_hash || '') === dPlan.codeHash) || null;
+    }
+    const asmStatus = cRow ? String(cRow.status || '') : 'no-contract-row';
+    console.log(`  read-back contract action_index=${cRow?.action_index} status=${asmStatus} code_hash=${String(cRow?.code_hash || '').slice(0, 16)}… (want ${dPlan.codeHash.slice(0, 16)}…)`);
+    const deployOk = chunksOk && cRow != null && asmStatus === 'valid';
+
     console.log('\nDONE. LIST + max-size FILE + balance-moving SWEEP + callback config/execution + v5 access-list bind + tick pause/resume + ORDER create/edit/cancel are the indexed proofs; ISSUE/SEND prove compose+broadcast.');
     const fileOk = fileStatus === 'valid' && fileRejectOk;
-    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk && addrOk
-        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create + ADDRESS v0 prefs)'
-        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} addrOk=${addrOk} aStatus=${aStatus})`);
+    console.log(listOk && fileOk && sweepOk && callbackOk && accessListOk && sleepOk && orderOk && swapOk && dispOk && addrOk && deployOk
+        ? 'RESULT: PASS (LIST + max-size FILE + over-ceiling reject + SWEEP + CALLBACK config/exec + ISSUE v5 access-list + SLEEP pause/resume + ORDER create/edit/cancel + SWAP create/edit/cancel + DISPENSER token-priced create + ADDRESS v0 prefs + CHUNKED DEPLOY)'
+        : `RESULT: CHECK (listOk=${listOk} fileStatus=${fileStatus} fileRejectOk=${fileRejectOk} sweepOk=${sweepOk} callbackOk=${callbackOk} accessListOk=${accessListOk} sleepOk=${sleepOk} orderOk=${orderOk} swapOk=${swapOk} dispOk=${dispOk} addrOk=${addrOk} aStatus=${aStatus} deployOk=${deployOk} asmStatus=${asmStatus})`);
 }
 
 main().catch((e) => { console.error('HARNESS ERROR:', e && e.stack ? e.stack : e); process.exit(1); });

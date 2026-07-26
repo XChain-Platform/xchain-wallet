@@ -50,6 +50,7 @@ export function emptyDocument() {
         pendingTxs: [],
         signers: [],
         pendingAirdrops: [],
+        pendingDeploys: [],
         watchlistEntries: [],
         priceAlerts: [],
         multisigSigningSessions: [],
@@ -72,6 +73,7 @@ export function emptyDocument() {
  * @property {import('../schemas/pendingTx.js').PendingTx[]} pendingTxs
  * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/pendingAirdrop.js').PendingAirdrop[]} pendingAirdrops
+ * @property {import('../schemas/pendingDeploy.js').PendingDeploy[]} pendingDeploys
  * @property {import('../schemas/watchlistEntry.js').WatchlistEntry[]} watchlistEntries
  * @property {import('../schemas/priceAlert.js').PriceAlert[]} priceAlerts
  * @property {import('../schemas/multisigSigningSession.js').MultisigSigningSession[]} multisigSigningSessions
@@ -140,6 +142,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         pendingTxs: parsed.pendingTxs ?? empty.pendingTxs,
         signers: parsed.signers ?? empty.signers,
         pendingAirdrops: parsed.pendingAirdrops ?? empty.pendingAirdrops,
+        pendingDeploys: parsed.pendingDeploys ?? empty.pendingDeploys,
         watchlistEntries: parsed.watchlistEntries ?? empty.watchlistEntries,
         priceAlerts: parsed.priceAlerts ?? empty.priceAlerts,
         multisigSigningSessions: parsed.multisigSigningSessions ?? empty.multisigSigningSessions,

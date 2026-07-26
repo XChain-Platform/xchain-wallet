@@ -75,6 +75,10 @@ const {
     oracleConsumers,
     addressPreferencesAction,
     currentAddressPreferences,
+    planChunkedDeploy,
+    deployChunkedRun,
+    listPendingDeploysForWallet,
+    clearPendingDeploy,
     dispenserAction,
     orderAction,
     cancelOrder,
@@ -2305,6 +2309,8 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.broadcast.hw', broadcastAction);
     registerHwHandler('action.oraclePrice.hw', oraclePriceAction);
     registerHwHandler('action.addressPrefs.hw', addressPreferencesAction);
+    // PC-38: N+1 device confirmations, one per chunk carrier plus the assembler.
+    registerHwHandler('action.deployChunked.hw', deployChunkedRun);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
     registerHwHandler('action.createList.hw', createList);
@@ -3116,6 +3122,55 @@ export function createBackgroundHost(deps) {
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {
         return contractValidate({ ...req, sdkRegistry });
+    });
+
+    // PC-38: the audited contract-template library (sync, no network). The
+    // wallet had no path to it even though the SDK ships it, and the escrow
+    // template alone is past one action's capacity, so it also needs the
+    // chunked lane below.
+    host.register('contracts.listTemplates', async (req, { sdkRegistry }) => {
+        return sdkRegistry.get(req.chainId).listTemplates();
+    });
+
+    host.register('contracts.scaffold', async (req, { sdkRegistry }) => {
+        return { code: sdkRegistry.get(req.chainId).scaffold(req.name) };
+    });
+
+    // PC-38: single-shot vs chunked, decided by the SDK's consensus-exact
+    // planner. Read-only; the form calls it to size the deploy before signing.
+    host.register('deploy.plan', async (req, { sdkRegistry }) => {
+        const plan = planChunkedDeploy({ sdkRegistry, ...req });
+        // parts are the full base64 payload; the form only needs the shape,
+        // and shipping ~8KB per slice across the boundary is pure waste.
+        return {
+            codeHash: plan.codeHash,
+            single: plan.single,
+            totalChunks: plan.totalChunks,
+            partLengths: plan.parts ? plan.parts.map((p) => p.length) : null,
+        };
+    });
+
+    // PC-38: run (or resume) a chunked deploy. N+1 sequential signed legs, so
+    // each leg waits for the indexer before the next is built (consensus
+    // requires carriers to precede the assembling DEPLOY).
+    host.register('action.deployChunked', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const sdk = sdkRegistry.get(req.chainId);
+        return deployChunkedRun({
+            ...req,
+            signer: await sessionSigner(req, vault, signerPool),
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            waitForTxid: (txid, o) => sdk.waitForAction(txid, o),
+        });
+    });
+
+    host.register('pendingDeploys.listForWallet', async (req, { vault }) => {
+        return listPendingDeploysForWallet({ ...req, vault });
+    });
+
+    host.register('pendingDeploys.clear', async (req, { vault }) => {
+        return clearPendingDeploy({ ...req, vault });
     });
 
     host.register('contracts.checkCodeSize', async (req, { sdkRegistry }) => {
