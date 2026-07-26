@@ -97,6 +97,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [dispenser, setDispenser] = useState(/** @type {any | null} */ (null));
     const [action, setAction] = useState(/** @type {any | null} */ (null));
     const [dispenses, setDispenses] = useState(/** @type {any[]} */ ([]));
+    // PC-21 trade lifecycle: non-dispense events (refills/edits, closes,
+    // expirations) merged with dispenses into one timeline under a tab.
+    const [lifecycle, setLifecycle] = useState(/** @type {any[]} */ ([]));
+    const [tab, setTab] = useState(/** @type {'dispenses' | 'lifecycle'} */ ('dispenses'));
     const [ownerAddress, setOwnerAddress] = useState(
         /** @type {any | null} */ (null),
     );
@@ -313,6 +317,28 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 messaging.getDispenses({ chainId, query: source, type: 'source' })
                     .then((d) => { if (!cancelled) setDispenses(extractRows(d)); })
                     .catch(() => { /* best-effort; detail still usable without dispenses */ });
+                // PC-21: the rest of the lifecycle (refills/edits, closes,
+                // expirations). Best-effort; scoped to this dispenser by its
+                // action index when the event rows carry it.
+                if (typeof messaging.getDispenserLifecycle === 'function') {
+                    Promise.all(['edits', 'closes', 'expires'].map((kind) => messaging
+                        .getDispenserLifecycle({ chainId, kind, query: source, type: 'address' })
+                        .then((r) => ({ kind, rows: extractRows(r) }))
+                        .catch(() => ({ kind, rows: [] }))))
+                        .then((results) => {
+                            if (cancelled) return;
+                            const evs = [];
+                            for (const { kind, rows } of results) {
+                                for (const row of rows) {
+                                    const dai = row.dispenser_action_index;
+                                    if (dai != null && String(dai) !== String(actionIndex)) continue;
+                                    evs.push({ kind, row });
+                                }
+                            }
+                            setLifecycle(evs);
+                        })
+                        .catch(() => { /* best-effort */ });
+                }
             }
         }).catch((err) => {
             if (!cancelled) {
@@ -1067,6 +1093,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             && String(d.give_tick || dispenser?.give_tick) === String(dispenser?.give_tick),
     );
 
+    // PC-21: one chronological lifecycle timeline (newest first) merging
+    // dispenses with the refill/edit, close, and expire events.
+    const LIFECYCLE_LABEL = { dispense: 'Dispensed', edits: 'Refilled / edited', closes: 'Closed', expires: 'Expired' };
+    const lifecycleTimeline = [
+        ...matchingDispenses.map((row) => ({ kind: 'dispense', row })),
+        ...lifecycle,
+    ]
+        .map((e) => ({ ...e, sortKey: Number(e.row.block_index ?? e.row.timestamp ?? e.row.action_index ?? 0) }))
+        .sort((a, b) => b.sortKey - a.sortKey);
+
     return wrap(
         <>
             {isClosing ? (
@@ -1246,10 +1282,46 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             </div>
 
             <div className={local.tabBar} role="tablist">
-                <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === 'dispenses'}
+                    className={`${local.tab} ${tab === 'dispenses' ? local.tabActive : ''}`}
+                    onClick={() => setTab('dispenses')}
+                >
                     Dispenses
                 </button>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === 'lifecycle'}
+                    className={`${local.tab} ${tab === 'lifecycle' ? local.tabActive : ''}`}
+                    onClick={() => setTab('lifecycle')}
+                >
+                    Lifecycle
+                </button>
             </div>
+            {tab === 'lifecycle' ? (
+                <ul className={local.dispenseList}>
+                    {lifecycleTimeline.length === 0 ? (
+                        <li><div className={local.dispenseEmpty}>No lifecycle events yet.</div></li>
+                    ) : lifecycleTimeline.slice(0, 40).map((e) => (
+                        <li key={`${e.kind}-${e.row.action_index}`}>
+                            <div className={local.dispenseRow}>
+                                <span className={local.dispenseAmount}>{LIFECYCLE_LABEL[e.kind] || e.kind}</span>
+                                <span className={local.dispensePaid}>
+                                    {e.kind === 'dispense'
+                                        ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
+                                        : (e.row.expiration ? `expires ${e.row.expiration}` : `#${e.row.action_index}`)}
+                                </span>
+                                <span className={local.dispenseWhen}>
+                                    {e.row.block_index ? `block ${e.row.block_index}` : ''}
+                                </span>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
             <ul className={local.dispenseList}>
                 {matchingDispenses.length === 0 ? (
                     <li><div className={local.dispenseEmpty}>No dispenses yet.</div></li>
@@ -1273,6 +1345,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     );
                 })}
             </ul>
+            )}
 
             {canBuyWithSend ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>

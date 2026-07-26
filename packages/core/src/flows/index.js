@@ -158,6 +158,7 @@ export {
     dispensersForToken,
     dispenserByActionIndex,
     dispensesFor,
+    dispenserLifecycleFor,
 } from './dispenserQueries.js';
 export {
     contractsForSource,

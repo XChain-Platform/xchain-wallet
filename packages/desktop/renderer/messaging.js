@@ -429,6 +429,10 @@ export function getDispenses(req) {
     return /** @type {any} */ (sendMessage('dispenses.query', req));
 }
 
+export function getDispenserLifecycle(req) {
+    return /** @type {any} */ (sendMessage('dispensers.lifecycle', req));
+}
+
 /** @param {object} req */
 export function getContractsForSource(req) {
     return /** @type {any} */ (sendMessage('contracts.forSource', req));

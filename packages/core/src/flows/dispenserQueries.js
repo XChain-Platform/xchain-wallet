@@ -98,3 +98,21 @@ export async function dispensesFor({ sdkRegistry, chainId, query, type, opts }) 
     const sdk = sdkRegistry.get(chainId);
     return sdk.getDispenses(query, type, opts);
 }
+
+/**
+ * PC-21 trade lifecycle: the non-dispense dispenser lifecycle events -
+ * refills/edits (DISPENSER v2), closes (SWEEP/cancel), and expirations -
+ * for a source / address / token. `kind` selects the event stream; the
+ * caller merges these with dispensesFor() into one chronological timeline
+ * on the detail page. Thin passthrough to the PC-55 SDK wrappers.
+ * @param {{ sdkRegistry: any, chainId: string, kind: 'closes' | 'edits' | 'expires', query: string, type?: string, opts?: object }} params
+ */
+export async function dispenserLifecycleFor({ sdkRegistry, chainId, kind, query, type, opts }) {
+    if (!sdkRegistry) throw new Error('dispenserLifecycleFor: sdkRegistry is required');
+    if (!chainId) throw new Error('dispenserLifecycleFor: chainId is required');
+    if (!query) throw new Error('dispenserLifecycleFor: query is required');
+    const fn = { closes: 'getDispenserCloses', edits: 'getDispenserEdits', expires: 'getDispenserExpires' }[kind];
+    if (!fn) throw new Error(`dispenserLifecycleFor: unknown kind ${kind}`);
+    const sdk = sdkRegistry.get(chainId);
+    return sdk[fn](query, type || 'address', opts);
+}

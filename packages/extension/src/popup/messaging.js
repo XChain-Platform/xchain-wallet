@@ -892,6 +892,10 @@ export function getDispenses(req) {
     return /** @type {any} */ (sendMessage('dispenses.query', req));
 }
 
+export function getDispenserLifecycle(req) {
+    return /** @type {any} */ (sendMessage('dispensers.lifecycle', req));
+}
+
 /**
  * List contracts deployed by a given address. Backs the §42.2 "My
  * contracts" section.

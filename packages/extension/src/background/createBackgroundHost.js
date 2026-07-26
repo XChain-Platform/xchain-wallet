@@ -107,6 +107,7 @@ const {
     dispensersForToken,
     dispenserByActionIndex,
     dispensesFor,
+    dispenserLifecycleFor,
     contractsForSource,
     contractsForAddress,
     contractsBrowseAll,
@@ -2642,6 +2643,10 @@ export function createBackgroundHost(deps) {
 
     host.register('dispenses.query', async (req, { sdkRegistry }) => {
         return dispensesFor({ ...req, sdkRegistry });
+    });
+    // PC-21: dispenser lifecycle events (closes / edits / expires).
+    host.register('dispensers.lifecycle', async (req, { sdkRegistry }) => {
+        return dispenserLifecycleFor({ ...req, sdkRegistry });
     });
 
     // VM / contract discovery: read-only explorer passthroughs for the
