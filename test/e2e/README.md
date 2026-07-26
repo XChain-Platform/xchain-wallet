@@ -15,6 +15,9 @@ test/e2e/
 └── tests/
     ├── onboarding/    welcome, create/lock/unlock, import, license gate
     ├── send/          validation, confirm stage
+    ├── betting/       BET create -> bet -> resolve round trip (regtest only:
+    │                  it signs four actions and reads the settled balances
+    │                  back off the chain)
     └── a11y/          @axe-core/playwright WCAG 2.1 A/AA scans
                        (color contrast lives here because jsdom can't
                        compute styles)

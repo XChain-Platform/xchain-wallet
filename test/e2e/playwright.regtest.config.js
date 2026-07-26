@@ -34,7 +34,13 @@ import { defineConfig, devices } from '@playwright/test';
 // venue is also driven manually while debugging, and a second coder shares
 // this machine) would otherwise collide with the run and, worse, could be
 // reused as if it were ours - serving a build we did not make.
-const PREVIEW_PORT = 4183;
+// Overridable because two people (or two sessions) do share this machine, and
+// `strictPort` turns that into an immediate hard failure: whoever starts second
+// gets "port already used" and no run at all. Default unchanged, so nothing has
+// to know about this; set XC_PREVIEW_PORT to run a second suite alongside one
+// already in flight. Note the CHAIN is still shared even when the ports are not,
+// so a spec that moves the node's clock still needs to take its turn.
+const PREVIEW_PORT = Number(process.env.XC_PREVIEW_PORT) || 4183;
 
 export default defineConfig({
     testDir: './tests',
