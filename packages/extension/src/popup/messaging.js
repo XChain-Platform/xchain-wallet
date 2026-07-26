@@ -1292,6 +1292,24 @@ export function governancePolls(req) {
     return /** @type {any} */ (sendMessage('governance.polls', req));
 }
 
+// BET reads (no signing): market list / one market with pools + timeline / placed
+// bets / an oracle track record.
+export function betFeeds(req) {
+    return /** @type {any} */ (sendMessage('bet.feeds', req));
+}
+
+export function betFeed(req) {
+    return /** @type {any} */ (sendMessage('bet.feed', req));
+}
+
+export function bets(req) {
+    return /** @type {any} */ (sendMessage('bet.bets', req));
+}
+
+export function betOracle(req) {
+    return /** @type {any} */ (sendMessage('bet.oracle', req));
+}
+
 export function governancePoll(req) {
     return /** @type {any} */ (sendMessage('governance.poll', req));
 }

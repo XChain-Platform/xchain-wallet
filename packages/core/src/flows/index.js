@@ -221,6 +221,12 @@ export {
     pollResults,
     votesForQuery,
 } from './voteQueries.js';
+export {
+    betFeedsForChain,
+    betFeedDetail,
+    betsForQuery,
+    oracleStats,
+} from './betQueries.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
 export {

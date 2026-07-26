@@ -146,6 +146,10 @@ const {
     castBallotAction,
     delegateVoteAction,
     clearVoteDelegationAction,
+    betFeedsForChain,
+    betFeedDetail,
+    betsForQuery,
+    oracleStats,
     pollsForChain,
     pollDetail,
     pollResults,
@@ -2851,6 +2855,24 @@ export function createBackgroundHost(deps) {
 
     host.register('governance.votes', async (req, { sdkRegistry }) => {
         return votesForQuery({ ...req, sdkRegistry });
+    });
+
+    // BET reads (no signing): market list / one market with pools + timeline /
+    // placed bets / an oracle's track record.
+    host.register('bet.feeds', async (req, { sdkRegistry }) => {
+        return betFeedsForChain({ ...req, sdkRegistry });
+    });
+
+    host.register('bet.feed', async (req, { sdkRegistry }) => {
+        return betFeedDetail({ ...req, sdkRegistry });
+    });
+
+    host.register('bet.bets', async (req, { sdkRegistry }) => {
+        return betsForQuery({ ...req, sdkRegistry });
+    });
+
+    host.register('bet.oracle', async (req, { sdkRegistry }) => {
+        return oracleStats({ ...req, sdkRegistry });
     });
 
     // Contract-targeted staking: parallel to the capability staking passthroughs above.
