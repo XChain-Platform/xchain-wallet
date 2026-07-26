@@ -36,6 +36,8 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { useContractManifest } from '../hooks/useContractManifest.js';
+import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -256,6 +258,18 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+
+    // PC-39: consent disclosure for the contract the stake is locked
+    // into. Staking puts a real balance behind this contract's rules for
+    // the cooldown's duration, so the same manifest the EXECUTE / DEPOSIT
+    // screens show belongs here. Fetched only once the user reaches the
+    // review stage. Unstake and delegate are excluded: both act on an
+    // existing position rather than granting new authority.
+    const manifest = useContractManifest({
+        chainId,
+        contractActionIndex: String(contractActionIndex),
+        skip: mode !== 'stake' || (stage !== 'review' && stage !== 'submitting'),
+    });
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -564,6 +578,13 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                             : 'Estimate unavailable'}
                     </dd>
+                    {mode === 'stake' ? (
+                        <ContractConsentPanel
+                            manifest={manifest}
+                            labelClassName={styles.detailsLabel}
+                            valueClassName={styles.detailsValue}
+                        />
+                    ) : null}
                     <dt className={styles.detailsLabel} style={{ color: '#b94a48' }}>Slash risk</dt>
                     <dd className={styles.detailsValue} style={{ color: '#b94a48' }}>
                         Funds slashed by this contract are sent to{' '}

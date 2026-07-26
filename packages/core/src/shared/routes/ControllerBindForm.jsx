@@ -27,6 +27,8 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { useContractManifest } from '../hooks/useContractManifest.js';
+import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -365,6 +367,18 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         setStage('form');
     }
 
+    // PC-39: consent disclosure for the guard contract being bound.
+    // Binding hands a contract standing authority over a whole action
+    // class, so the manifest matters more here than on a one-shot
+    // EXECUTE. Skipped on unbind (revoking authority needs no consent)
+    // and deferred until the review stage so a half-typed contract
+    // index doesn't fire a lookup per keystroke.
+    const manifest = useContractManifest({
+        chainId,
+        contractActionIndex: String(controller).trim(),
+        skip: unbind || (stage !== 'review' && stage !== 'submitting'),
+    });
+
     const verb = unbind ? 'Unbind' : 'Bind';
     const subjectLabel = target === 'token'
         ? `token ${tick || ''}`.trim()
@@ -462,6 +476,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                             : 'Estimate unavailable'}
                     </dd>
+                    {!unbind ? (
+                        <ContractConsentPanel
+                            manifest={manifest}
+                            labelClassName={styles.detailsLabel}
+                            valueClassName={styles.detailsValue}
+                        />
+                    ) : null}
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>

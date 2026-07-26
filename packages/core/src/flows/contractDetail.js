@@ -109,45 +109,78 @@ export async function executionsForContract({ sdkRegistry, chainId, contractActi
 
 /**
  * @typedef {Object} ContractManifest
- * @property {string[] | null} permissions  action types the contract may emit; null = unrestricted/undeclared
- * @property {number | null}   maxTakeBps    max fee the contract may take, in basis points; null = undeclared
+ * @property {string[] | null} permissions  action types the contract may emit; null = no declared allowlist
+ * @property {number | null}   maxTakeBps    per-contract fee cap in basis points; null = the network cap applies
+ * @property {'declared' | 'unrestricted' | 'unavailable'} status  how much the wallet actually knows
  */
 
-const NULL_MANIFEST = /** @type {ContractManifest} */ ({ permissions: null, maxTakeBps: null });
+const UNAVAILABLE_MANIFEST = /** @type {ContractManifest} */ ({
+    permissions: null, maxTakeBps: null, status: 'unavailable',
+});
 
 /**
- * Phase F: read a contract's permissions manifest for the inline
- * consent disclosure shown before EXECUTE / DEPOSIT / WITHDRAW.
+ * Phase F / PC-39: read a contract's permissions manifest for the
+ * inline consent disclosure shown before EXECUTE / DEPOSIT / WITHDRAW
+ * / controller-bind / contract-stake.
  *
- * Defensive by design: this flow **never throws**. It returns the
- * normalized `{ permissions, maxTakeBps }` shape the SDK reader
- * produces, and degrades to `{ permissions: null, maxTakeBps: null }`
- * on ANY gap: a missing chainId/contractActionIndex, an SDK instance
- * that predates `getContractManifest` (the SDK reader ships in
- * parallel under Phase F Part 2), or a network/parse error. A consent
- * panel must always render; an undeclared manifest is a soft caution,
- * not a hard failure.
+ * Defensive by design: this flow **never throws**. A consent panel must
+ * always render, and an absent manifest is a caution rather than a hard
+ * failure.
+ *
+ * PC-39's trust rule is what makes `status` load-bearing. The SDK's
+ * `getContractManifest` collapses two very different answers into the
+ * same `{ permissions: null }`: "the explorer answered, and this
+ * contract declared no allowlist" (which per DEPLOY.md means
+ * UNRESTRICTED - it may emit any action type) and "we never got an
+ * answer" (404 / offline / SDK too old). Showing the unrestricted copy
+ * for an unreachable explorer is exactly the false assurance the item
+ * forbids, so this flow reads the raw contract row instead: a resolved
+ * row proves the explorer answered, and only then is a null
+ * `permissions` meaningful.
+ *
+ * `permissions` arrives as a JSON string or an already-parsed array
+ * depending on the explorer build (mirrors ContractClient.parseManifest,
+ * which we cannot reuse here because the row itself is what carries the
+ * answered/not-answered signal).
  *
  * @param {ContractRefOpts} params
  * @returns {Promise<ContractManifest>}
  */
 export async function contractManifestFor({ sdkRegistry, chainId, contractActionIndex }) {
-    if (!sdkRegistry || !chainId || !contractActionIndex) return NULL_MANIFEST;
+    if (!sdkRegistry || !chainId || !contractActionIndex) return UNAVAILABLE_MANIFEST;
     let sdk;
     try {
         sdk = sdkRegistry.get(chainId);
     } catch {
-        return NULL_MANIFEST;
+        return UNAVAILABLE_MANIFEST;
     }
-    if (!sdk || typeof sdk.getContractManifest !== 'function') return NULL_MANIFEST;
+    if (!sdk || typeof sdk.getContract !== 'function') return UNAVAILABLE_MANIFEST;
+    let row;
     try {
-        const res = await sdk.getContractManifest(contractActionIndex);
-        if (!res || typeof res !== 'object') return NULL_MANIFEST;
-        return {
-            permissions: Array.isArray(res.permissions) ? res.permissions : null,
-            maxTakeBps: Number.isFinite(res.maxTakeBps) ? res.maxTakeBps : null,
-        };
+        row = await sdk.getContract(contractActionIndex);
     } catch {
-        return NULL_MANIFEST;
+        return UNAVAILABLE_MANIFEST;
     }
+    if (!row || typeof row !== 'object') return UNAVAILABLE_MANIFEST;
+
+    let permissions = null;
+    const raw = row.permissions;
+    if (Array.isArray(raw)) {
+        permissions = raw.every((p) => typeof p === 'string') ? raw : null;
+    } else if (typeof raw === 'string' && raw.length) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.every((p) => typeof p === 'string')) permissions = parsed;
+        } catch { permissions = null; }
+    }
+
+    const rawCap = row.max_take_bps;
+    const cap = (rawCap === null || rawCap === undefined || rawCap === '') ? null : Number(rawCap);
+    const maxTakeBps = Number.isFinite(cap) ? cap : null;
+
+    return {
+        permissions,
+        maxTakeBps,
+        status: permissions === null ? 'unrestricted' : 'declared',
+    };
 }
