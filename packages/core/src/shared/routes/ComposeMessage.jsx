@@ -20,7 +20,7 @@ import {
     ChainBadge,
     AddressText,
  Icon, AddressField,} from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -684,7 +684,6 @@ export function ComposeMessage({
     // is decoded from the params the HOST actually composed (the encrypted
     // body), never from form state - §1: confirm what will broadcast.
     if (actionConfirm.open) {
-        const composedParams = actionConfirm.confirmAction.composed?.messageParams;
         const fee = selectedFeeEstimate;
         const ticker = descriptor?.coin
             ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
@@ -693,14 +692,6 @@ export function ComposeMessage({
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={composedParams
-                    ? decoderLib.decodeAction({
-                        action: 'MESSAGE',
-                        params: composedParams,
-                        chainId: destChainId || undefined,
-                        chainRegistry,
-                    })
-                    : null}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={fee?.coinAmount
                     ? `Network fee: ${fee.coinAmount} ${ticker}`.trim()

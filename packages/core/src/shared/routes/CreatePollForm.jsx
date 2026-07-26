@@ -22,7 +22,7 @@ import {
     FeeSelector,
     AddressField,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -313,16 +313,6 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         hardware: 'createPollActionHw',
     });
 
-    // Spec section 1: the confirm page decodes the params the HOST composed
-    // (the SDK builder's own output), never the editor state.
-    const composedParams = actionConfirm.confirmAction.composed?.voteParams;
-    const decoded = useMemo(() => {
-        if (!actionConfirm.open || !composedParams) return null;
-        return decoderLib.decodeAction({
-            action: 'VOTE', params: composedParams, chainId: chainId || undefined, chainRegistry,
-        });
-    }, [actionConfirm.open, composedParams, chainId]);
-
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT via createPollAction.prebuiltPsbt.
     async function openConfirmScreen() {
@@ -557,7 +547,6 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoded}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

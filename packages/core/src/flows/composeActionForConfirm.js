@@ -31,7 +31,6 @@ import { assertNoTamper } from './confirmChecks.js';
 import { exactNetworkFeeSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
-import { decodeAction } from '../decoder/actionDecoder.js';
 import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 
@@ -145,16 +144,23 @@ export async function composeActionForConfirm({
     // rendered intent honest, and a surface that describes the composed bytes
     // needs none.
     //
-    // The describer and its copy are unchanged, so nothing the user reads
-    // moves; only where the words come from does.
+    // : described by `sdk.decoder.describe`, not by the wallet's own
+    // copy of it. §3.2 promoted the describer to the SDK precisely so the
+    // words a signer reads come from the same library that parsed the bytes,
+    // and a second implementation is a second thing to drift: the SDK's
+    // covers 30 actions to the wallet copy's 13 (ORDER, SWAP, STAKE, VOTE,
+    // DEPLOY, EXECUTE and the rest were all landing on the generic
+    // "no plain-English summary available" fallback on the signing screen).
+    // `ownAddresses` is passed because §3.2's extended ctx marks a
+    // destination the user already owns, which is the cheapest way to catch
+    // a send that is not going where the signer thinks.
     let decoded = null;
     try {
         if (parsed?.ok) {
-            decoded = decodeAction({
-                action: parsed.action,
-                params: parsed.params,
+            decoded = sdk.decoder.describe(parsed, {
                 chainId,
                 chainRegistry,
+                ownAddresses: [...own],
             });
         }
     } catch {

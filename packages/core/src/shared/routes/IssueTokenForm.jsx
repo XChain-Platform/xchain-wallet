@@ -578,12 +578,6 @@ export function IssueTokenForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoderLib.decodeAction({
-                    action: 'ISSUE',
-                    params: actionParams,
-                    chainId: chainId || undefined,
-                    chainRegistry,
-                })}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

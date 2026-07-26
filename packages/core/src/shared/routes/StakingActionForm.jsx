@@ -19,7 +19,7 @@ import {
     NetworkField,
     AddressText,
  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
@@ -633,12 +633,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoderLib.decodeAction({
-                    action: isUnstake ? 'UNSTAKE' : 'COLLECT',
-                    params: actionParams,
-                    chainId: chainId || undefined,
-                    chainRegistry,
-                })}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

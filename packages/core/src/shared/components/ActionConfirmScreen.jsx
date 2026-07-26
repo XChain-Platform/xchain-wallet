@@ -38,7 +38,6 @@ function nativeTickerFor(chainId) {
  * @param {object} props
  * @param {ReturnType<typeof import('../hooks/useActionConfirmFlow.js').useActionConfirmFlow>['confirmAction']} props.confirmAction
  * @param {'small'|'full'} [props.screenVariant]
- * @param {object|null} props.decoded            decodeAction output for the composed action
  * @param {string} props.chainLabel
  * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
  *   fallback: when the composed PSBT knows its own fee (§5.2.5) that exact value wins
@@ -70,7 +69,6 @@ function nativeTickerFor(chainId) {
 export function ActionConfirmScreen({
     confirmAction,
     screenVariant = 'small',
-    decoded,
     chainLabel,
     feeText,
     signerReady,
@@ -128,16 +126,18 @@ export function ActionConfirmScreen({
             onReject={confirmAction.reject}
             // §1.1 / §5.2.2: the intent describes what was actually COMPOSED,
             // not what the form believes it asked for. The host derives it from
-            // the same parsed action string the deltas read, so the two provably
-            // agree.
+            // the same parsed action string the deltas read (through
+            // sdk.decoder.describe), so the two provably agree.
             //
-            // Precedence here is deliberately the OPPOSITE of `simulation`
-            // below. A caller may have a better simulation than the generic
-            // one; a caller cannot have a better account of what the encoder
-            // built than the encoder's own output. The prop remains as the
-            // fallback for surfaces the host could not describe (and for the
-            // psbt/message variants, which compose nothing).
-            decoded={composed?.decoded || decoded}
+            // : there is no caller-supplied fallback any more, and the
+            // absence is the point. A caller may legitimately have a better
+            // SIMULATION than the generic one; no caller can have a better
+            // account of what the encoder built than the encoder's own output.
+            // While a fallback existed, a host that failed to describe would
+            // silently seat form state on the screen that says what you are
+            // signing. Now an undescribable action shows no intent line, which
+            // is a visible absence rather than a plausible substitute.
+            decoded={composed?.decoded}
             // §5.2.3: the host computes deltas from the PARSED COMPOSED action
             // (one canonical source with the intent above). A caller-supplied
             // simulation still wins, for surfaces that have a better one.

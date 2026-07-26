@@ -134,6 +134,24 @@ export function preflight(opts) {
 }
 
 /**
+ * Describe a dApp-supplied (or co-sign-decoded) action in plain English,
+ * HOST-side, via `sdk.decoder.describe` ( §3.2).
+ *
+ * The approval window has no compose step, so it cannot take its intent
+ * from `composeActionForConfirm` the way in-wallet forms do - and it was
+ * describing attacker-authored params through the wallet's own local
+ * describer, which applies none of §3.5's display hardening. This route
+ * returns text the SDK has already sanitized (bidi/zero-width neutralized,
+ * junk and exponential amounts flagged rather than prettified).
+ *
+ * @param {{ chainId: string, action: string, version?: number, params?: object, ownAddresses?: string[] }} opts
+ * @returns {Promise<{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }>}
+ */
+export function describeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.describe', opts));
+}
+
+/**
  * Build the read-only preview for a co-sign approval (§22 / P4): the decoded
  * action + amount + destinations and whether the request is within the agent
  * account's policy. Routes to the `coSign.parse` host handler

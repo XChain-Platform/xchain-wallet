@@ -625,12 +625,6 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoderLib.decodeAction({
-                    action: 'DIVIDEND',
-                    params: actionParams,
-                    chainId: chainId || undefined,
-                    chainRegistry,
-                })}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

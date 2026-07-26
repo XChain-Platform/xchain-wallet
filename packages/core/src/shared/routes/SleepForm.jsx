@@ -467,7 +467,6 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                decoded={decoded}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim() : undefined}
                 signerReady={signerReady}

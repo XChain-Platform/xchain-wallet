@@ -19,7 +19,7 @@ import {
     FeeSelector,
     AddressField,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -648,12 +648,6 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoderLib.decodeAction({
-                    action: mode === 'stake' ? 'STAKE' : mode === 'unstake' ? 'UNSTAKE' : 'DELEGATE',
-                    params: { VERSION: mode === 'stake' ? '3' : '1', ...actionParams },
-                    chainId: chainId || undefined,
-                    chainRegistry,
-                })}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

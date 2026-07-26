@@ -29,6 +29,16 @@ function makeHarness({ outputs, decoded, inputs } = {}) {
         },
         decoder: {
             decodeActionStringFromPsbt: vi.fn(() => decoded || { ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
+            // : the intent is described by the SDK, so the double is the
+            // SDK's describer. Deliberately NOT a copy of the real wording -
+            // a stub that imitates product copy invites assertions that pass on
+            // the stub's phrasing; this one only echoes what it was handed, so
+            // the tests below can only be about provenance.
+            describe: vi.fn((parsed) => ({
+                summary: `described:${JSON.stringify(parsed.params)}`,
+                details: [],
+                warnings: [],
+            })),
         },
     };
     const sdkRegistry = { get: () => sdk };
@@ -114,6 +124,26 @@ describe('composeActionForConfirm', () => {
         expect(composed.decoded.summary).toContain('realdest');
         // And emphatically NOT the form's claim.
         expect(composed.decoded.summary).not.toContain('JDOG');
+    });
+
+    // : the describer itself is the SDK's (§3.2), not the wallet's own
+    // copy. Two implementations of "what does this action say" is two things to
+    // drift, and the wallet copy had already fallen behind: it described 13
+    // actions to the SDK's 30, so ORDER, SWAP, STAKE, VOTE, DEPLOY and the rest
+    // reached the SIGNING screen on the generic "no plain-English summary"
+    // fallback.
+    it('describes via sdk.decoder.describe, handed the parsed composed action', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        const parsed = { ok: true, action: 'SEND', params: { TICK: 'REALTICK', AMOUNT: '42', DESTINATION: 'realdest' } };
+        h.sdk.decoder.parse = vi.fn(() => parsed);
+        await composeActionForConfirm(ARGS(h));
+        expect(h.sdk.decoder.describe).toHaveBeenCalledOnce();
+        const [handed, ctx] = h.sdk.decoder.describe.mock.calls[0];
+        expect(handed).toBe(parsed);
+        // §3.2 extended ctx: own addresses so a destination the user already
+        // controls is marked as such on the screen where it matters.
+        expect(ctx.ownAddresses).toContain('chg');
+        expect(ctx.chainId).toBe('btc');
     });
 
     it('leaves the intent null when the composed action cannot be described', async () => {

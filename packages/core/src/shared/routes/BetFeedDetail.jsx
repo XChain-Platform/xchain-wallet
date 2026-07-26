@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Input } from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -213,19 +213,10 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     // The intent is decoded from the params the HOST composed, never from the
     // form state: a place-bet and a resolve differ on the wire only by AMOUNT.
     if (actionConfirm.open) {
-        const composedParams = actionConfirm.confirmAction.composed?.betParams;
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={composedParams
-                    ? decoderLib.decodeAction({
-                        action: 'BET',
-                        params: composedParams,
-                        chainId: chainId || undefined,
-                        chainRegistry,
-                    })
-                    : null}
                 chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
                 signerReady={signerReady}
                 password={password}

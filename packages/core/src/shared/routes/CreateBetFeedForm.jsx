@@ -19,7 +19,7 @@ import {
     NetworkField,
     AddressField,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -417,19 +417,10 @@ export function CreateBetFeedForm({
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (actionConfirm.open) {
-        const composedParams = actionConfirm.confirmAction.composed?.betParams;
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={composedParams
-                    ? decoderLib.decodeAction({
-                        action: 'BET',
-                        params: composedParams,
-                        chainId: chainId || undefined,
-                        chainRegistry,
-                    })
-                    : null}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
                 password={password}

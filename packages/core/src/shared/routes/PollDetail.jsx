@@ -18,7 +18,7 @@ import {
     AddressText,
     FeeSelector,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -387,19 +387,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     // the HOST composed (the SDK's own ballot encoding), never from the
     // editor state, per §1: confirm what will broadcast.
     if (actionConfirm.open) {
-        const composedParams = actionConfirm.confirmAction.composed?.voteParams;
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={composedParams
-                    ? decoderLib.decodeAction({
-                        action: 'VOTE',
-                        params: composedParams,
-                        chainId: chainId || undefined,
-                        chainRegistry,
-                    })
-                    : null}
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount

@@ -486,7 +486,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                decoded={decoded}
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount

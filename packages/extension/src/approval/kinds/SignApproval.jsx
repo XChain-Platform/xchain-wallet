@@ -40,6 +40,7 @@ import {
     parsePsbt,
     parseCoSign,
     preflight,
+    describeAction as describeActionOnHost,
     getTokenInfo,
 } from '../messaging.js';
 import shared from '../approval.module.css';
@@ -367,6 +368,48 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, coSignAccountId, coSignPsbtHex]);
 
+    //  §3.2/§3.5: the plain-English intent, described by the SDK on the
+    // host rather than by the wallet's own local describer here.
+    //
+    // Two reasons this window in particular must not keep its own copy. The
+    // params are the one set on any signing surface that an ATTACKER wrote,
+    // and the local describer applies none of §3.5's hardening - a bidi
+    // override in a dApp's MEMO reordered the sentence the user read while
+    // the bytes said something else. And the local copy described 13 actions
+    // to the SDK's 30, so a dApp asking to sign an ORDER, a STAKE or a VOTE
+    // got "no plain-English summary is available" on the screen where the
+    // whole point is knowing what is being approved.
+    //
+    // Runs for signAction (params from the dApp) and coSign (params the host
+    // decoded out of the PSBT). Best-effort: a failure leaves the intent null
+    // and the surface says so, rather than falling back to unhardened text.
+    const coSignDecoded = coSignPreviewDecodedFrom(coSignPreview);
+    const describeAction_ = kind === 'signAction'
+        ? { action: resolvedPayload?.action, params: resolvedPayload?.payload }
+        : (kind === 'coSign' && coSignDecoded ? coSignDecoded : null);
+    const [intent, setIntent] = useState(
+        /** @type {{ loading: boolean, decoded: any | null }} */
+        ({ loading: false, decoded: null }),
+    );
+    const intentKey = describeAction_ ? JSON.stringify(describeAction_) : null;
+    useEffect(() => {
+        if (!chainId || !intentKey) return undefined;
+        const req = JSON.parse(intentKey);
+        if (!req.action) return undefined;
+        let cancelled = false;
+        setIntent({ loading: true, decoded: null });
+        describeActionOnHost({
+            chainId,
+            action: req.action,
+            ...(req.version !== undefined && { version: req.version }),
+            params: req.params || {},
+        })
+            .then((decoded) => { if (!cancelled) setIntent({ loading: false, decoded: decoded || null }); })
+            .catch(() => { if (!cancelled) setIntent({ loading: false, decoded: null }); });
+        return () => { cancelled = true; };
+    }, [chainId, intentKey]);
+
+
     const title = KIND_TITLE[kind] ?? 'Approval required';
     const showSavePermanent =
         kind === 'signAction' ||
@@ -531,7 +574,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </section>
             ) : null}
 
-            <SignSummary kind={kind} payload={resolvedPayload} />
+            <SignSummary
+                kind={kind}
+                payload={resolvedPayload}
+                decoded={intent.decoded}
+                intentLoading={intent.loading}
+            />
 
             {/*  §5.6 slice 4: the shared PSBT panel enumerates every
                 input AND output (the local summary showed outputs + totals
@@ -565,15 +613,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         co-signer's own; the ACTION intent now renders through
                         the shared summary so an agent request and a hand-signed
                         one describe themselves identically. */}
-                    {coSignPreview.preview?.decodeOk ? (
-                        <ActionIntentSummary
-                            decoded={decoderLib.decodeAction({
-                                action: coSignPreview.preview.action,
-                                params: coSignPreview.preview.params || {},
-                                chainId: chainId || undefined,
-                                chainRegistry,
-                            })}
-                        />
+                    {coSignPreview.preview?.decodeOk && intent.decoded ? (
+                        <ActionIntentSummary decoded={intent.decoded} />
                     ) : null}
                     <CoSignIntentSummary
                         loading={coSignPreview.loading}
@@ -649,7 +690,20 @@ export function SignApproval({ id, kind, payload, onReject }) {
     );
 }
 
-function SignSummary({ kind, payload }) {
+/*
+ * The action a co-sign request carries, in the shape `action.describe`
+ * wants, or null while the preview is loading / could not be decoded.
+ * `previewCoSignRequest` already ran the PSBT through the SDK's fail-closed
+ * decoder host-side, so a `decodeOk` preview is exactly as canonical here as
+ * a composed action string is on the in-wallet path.
+ */
+function coSignPreviewDecodedFrom(coSignPreview) {
+    const preview = coSignPreview?.preview;
+    if (!preview?.decodeOk || !preview.action) return null;
+    return { action: preview.action, params: preview.params || {} };
+}
+
+function SignSummary({ kind, payload, decoded, intentLoading }) {
     const inner = payload?.payload || {};
     switch (kind) {
         case 'signMessage':
@@ -679,12 +733,22 @@ function SignSummary({ kind, payload }) {
                 </div>
             ) : null;
         case 'signAction': {
-            const decoded = decoderLib.decodeAction({
-                action: payload?.action,
-                params: inner,
-                chainId: payload?.chainId,
-                chainRegistry,
-            });
+            // : described by the SDK, host-side (see `intent` above).
+            // While it is in flight, or if it could not be described, this
+            // says so rather than rendering a locally-guessed sentence about
+            // attacker-supplied params.
+            if (!decoded) {
+                return (
+                    <div className={shared.summary}>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || 'Action'}</p>
+                        <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
+                            {intentLoading
+                                ? 'Reading this action…'
+                                : 'This action could not be described. Approve only if you know exactly what it does.'}
+                        </p>
+                    </div>
+                );
+            }
             return (
                 <>
                     <div className={shared.summary}>

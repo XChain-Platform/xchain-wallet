@@ -460,12 +460,6 @@ export function TokenWizard({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoderLib.decodeAction({
-                    action: 'ISSUE',
-                    params: actionParams,
-                    chainId: chainId || undefined,
-                    chainRegistry,
-                })}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
                 password={password}

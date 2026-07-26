@@ -1140,21 +1140,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
 
-    const modalDecoded = useMemo(() => {
-        if (!confirmModalOpen) return null;
-        return decoderLib.decodeAction({
-            action: 'SEND',
-            params: {
-                TICK: tick.trim(),
-                AMOUNT: String(amount).trim(),
-                DESTINATION: toAddress.trim(),
-                MEMO: memo.trim() || undefined,
-            },
-            chainId: chainId || undefined,
-            chainRegistry,
-        });
-    }, [confirmModalOpen, tick, amount, toAddress, memo, chainId]);
-
     // Open the single-encode confirm modal for a software send. compose +
     // tamper-check + pre-flight all run HOST-side (composeForConfirm /
     // preflight over messaging); Approve signs the byte-identical prebuilt
@@ -1376,7 +1361,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                decoded={modalDecoded}
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount

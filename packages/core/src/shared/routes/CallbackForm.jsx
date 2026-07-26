@@ -562,7 +562,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                decoded={decoded}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

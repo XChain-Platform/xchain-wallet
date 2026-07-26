@@ -286,14 +286,16 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
         expect(utils.container.textContent).not.toContain('Send 1 JDOG');
     });
 
-    // Only when the host could not describe it - a psbt/message variant that
-    // composes nothing, or a parse failure. An absent intent line would be
-    // worse than one described from the params that built the bytes.
-    it('falls back to the caller intent when the host described nothing', () => {
+    // : there is no caller fallback any more. An action the host could
+    // not describe shows NO intent line, rather than one built from form
+    // state: a visible absence beats a plausible substitute on the screen
+    // whose job is saying what will broadcast. (The psbt and message variants
+    // compose nothing and have their own screens, so they are unaffected.)
+    it('shows no intent at all when the host described nothing', () => {
         const utils = render(React.createElement(ActionConfirmScreen, {
             ...screenProps({ networkFeeSats: 5900, chainId: 'bitcoin-mainnet', decoded: null }),
         }));
-        expect(utils.container.textContent).toContain('Send 1 JDOG');
+        expect(utils.container.textContent).not.toContain('Send 1 JDOG');
     });
 
     it('resolves the ticker from the envelope chain, not the caller', () => {

@@ -16,9 +16,14 @@
 //      amounts surface as warnings; unknown actions fall back to a
 //      generic summary + "no plain-English" warning.
 //   2. Static wiring: core/src/index.js re-exports the decoder
-//      namespace; the extension's SignApproval.jsx calls
-//      `decoder.decodeAction` for the signAction kind and renders the
-//      warnings array.
+//      namespace; the extension's SignApproval.jsx describes a dApp's
+//      action through the `action.describe` HOST route (: the SDK's
+//      hardened describer, not this local one) and renders its warnings.
+//
+// This local describer survives only as the in-form DRAFT preview for
+// ~20 authoring surfaces (form state, synchronous, no host round-trip).
+// Nothing that SIGNS reads it: the confirm page describes the composed
+// action string host-side, and the approval window uses the route above.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -534,13 +539,30 @@ const sign = readFileSync(
     join(ext, 'src', 'approval', 'kinds', 'SignApproval.jsx'),
     'utf8',
 );
+//  §3.2/§3.5: the approval window describes through the SDK, on the
+// host, and no longer through this local describer. Inverted deliberately
+// rather than deleted: these params are the one set on any signing surface
+// an ATTACKER wrote, the local describer applies none of §3.5's hardening
+// (no bidi/zero-width neutralization, no amount flagging), and it covers 13
+// actions to the SDK's 30. A regression here is a security regression, so
+// the smoke now forbids exactly what it used to require.
 assert.ok(
-    /decoder as decoderLib/.test(sign),
-    'SignApproval.jsx imports decoderLib from core',
+    !/decoderLib\.decodeAction/.test(sign),
+    'SignApproval.jsx no longer describes dApp params with the wallet-local describer',
 );
 assert.ok(
-    /decoderLib\.decodeAction/.test(sign),
-    'SignApproval.jsx calls decoderLib.decodeAction for signAction',
+    /describeAction as describeActionOnHost/.test(sign)
+        && /describeActionOnHost\(/.test(sign),
+    'SignApproval.jsx describes via the action.describe host route (sdk.decoder.describe)',
+);
+const hostFile = readFileSync(
+    join(ext, 'src', 'background', 'createBackgroundHost.js'),
+    'utf8',
+);
+assert.ok(
+    /host\.register\('action\.describe'/.test(hostFile)
+        && /sdk\.decoder\.describe\(/.test(hostFile),
+    'the action.describe host route runs sdk.decoder.describe',
 );
 assert.ok(
     /decoded\.warnings/.test(sign),

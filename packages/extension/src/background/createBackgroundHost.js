@@ -1668,6 +1668,40 @@ export function createBackgroundHost(deps) {
         return { ...composed, voteParams: params };
     });
 
+    //  §3.2/§3.5: describe an action the wallet did NOT compose - a
+    // dApp's `signAction` payload, or a co-signer request decoded out of a
+    // PSBT. The in-wallet path gets its intent from composeActionForConfirm,
+    // which describes the composed action string; these two have no compose
+    // step, and were rendering through the wallet's own local describer
+    // instead. That describer applies none of §3.5's display hardening, and
+    // this is the one surface where the params are ATTACKER-AUTHORED: a
+    // bidi override or zero-width run in a dApp's MEMO changed what the
+    // approval window read while the bytes said something else.
+    //
+    // Params in, description out. Serializable both ways, so the approval
+    // window renders text the SDK has already neutralized.
+    host.register('action.describe', async (req, { sdkRegistry, chainRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.describe: chainId is required');
+        }
+        if (typeof req?.action !== 'string' || !req.action) {
+            throw new Error('action.describe: action is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.decoder?.describe !== 'function') {
+            throw new Error(`action.describe: SDK for "${chainId}" lacks decoder.describe`);
+        }
+        return sdk.decoder.describe(
+            { action: req.action, version: req.version, params: req.params || {} },
+            {
+                chainId,
+                chainRegistry,
+                ...(Array.isArray(req.ownAddresses) && { ownAddresses: req.ownAddresses }),
+            },
+        );
+    });
+
     //  §4: run sdk.preflight HOST-side (the SDK, its explorer endpoint,
     // and Tier-2 state all live here) and return the serializable report. The
     // popup's AbortController cannot cross the boundary; a superseded report

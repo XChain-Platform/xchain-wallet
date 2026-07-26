@@ -967,12 +967,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={decoderLib.decodeAction({
-                    action: confirmLeg,
-                    params: confirmLeg === 'LIST' ? listParams : airdropParams,
-                    chainId: chainId || undefined,
-                    chainRegistry,
-                })}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()

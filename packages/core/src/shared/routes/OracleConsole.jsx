@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Input } from '@xchain-wallet/core/ui';
-import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -200,20 +200,11 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     // Decoded from what the HOST composed, so the screen names the format that
     // will actually broadcast rather than the row that was clicked.
     if (actionConfirm.open) {
-        const composedParams = actionConfirm.confirmAction.composed?.betParams;
         const cid = active?.chainId;
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                decoded={composedParams
-                    ? decoderLib.decodeAction({
-                        action: 'BET',
-                        params: composedParams,
-                        chainId: cid || undefined,
-                        chainRegistry,
-                    })
-                    : null}
                 chainLabel={chainRegistry.get(cid)?.displayName || cid}
                 signerReady={signerReady}
                 password={password}

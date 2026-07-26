@@ -11,10 +11,22 @@
 // Plain-English action decoder. §21.1 / §30.
 //
 // Translates the raw protocol-shaped action payload (uppercase field
-// names, string-encoded amounts) into UI-friendly strings the sign
-// screens render. Pure function (no vault, no SDK, no network), so
-// both shells can use the same decoder and the logic is trivial to
-// smoke-test.
+// names, string-encoded amounts) into UI-friendly strings. Pure
+// function (no vault, no SDK, no network), so every shell can call it
+// synchronously while the user is still typing.
+//
+// SCOPE, since : this is the IN-FORM DRAFT PREVIEW describer, and
+// nothing that signs may read it. The confirm surface describes the
+// action string the host actually COMPOSED, via `sdk.decoder.describe`
+// (confirm-decode-preflight-spec §1.1/§3.2), and the dApp approval
+// window describes attacker-supplied params through the same SDK over
+// the `action.describe` host route. Two reasons not to reunify them
+// here: this copy has no §3.5 display hardening (no bidi/zero-width
+// neutralization, no amount flagging), and it covers 13 actions where
+// the SDK's covers 30. It survives only because a draft preview must
+// be synchronous and the React tree holds no SDK - a host round trip
+// per keystroke is not a preview. `test/smoke/ui/confirm-intent-
+// provenance.smoke.js` holds that boundary.
 //
 // Phase 1 covers SEND and SWEEP per §39.1. Phase 2 adds ISSUE (all 6
 // format versions: create, edit-description, edit-mint-params, lock-
