@@ -26,9 +26,11 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
+import { PreflightPanel } from '../components/PreflightPanel.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { multiplyAmounts } from '../../market/orderMath.js';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
@@ -43,6 +45,10 @@ import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// The buy pre-flight is generated locally and has nothing overridable in it,
+// so PreflightPanel's acknowledgment set is a constant rather than state.
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // Address rows in the stats hero: one line, full address shown when it
 // fits, CSS-ellipsized only when the cell actually runs out of width
@@ -95,6 +101,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    // Bumped when an owner action (refill / edit / close) finishes, to re-read
+    // the dispenser. Without it the page returning from a successful refill
+    // still showed the PRE-refill escrow - the one number the owner just
+    // changed - until they navigated away and back (D-44).
+    const [reloadKey, setReloadKey] = useState(0);
     const [dispenser, setDispenser] = useState(/** @type {any | null} */ (null));
     const [action, setAction] = useState(/** @type {any | null} */ (null));
     const [dispenses, setDispenses] = useState(/** @type {any[]} */ ([]));
@@ -315,14 +326,26 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             if (isDemo) {
                 setDispenses(flowsLib.synthesizeDemoDispenses(actionIndex));
             } else if (source) {
-                messaging.getDispenses({ chainId, query: source, type: 'source' })
+                // Fills of THIS dispenser, keyed by its action index. The source
+                // lane answers "fills on this address", which over-reports as soon
+                // as the address hosts a second dispenser - the normal case, since
+                // dispensers open on their creator's source. Older explorers have
+                // no dispenser lane, so fall back to the source lane and let
+                // matchingDispenses() filter what it can (D-38).
+                messaging.getDispenses({ chainId, query: actionIndex, type: 'dispenser' })
                     .then((d) => { if (!cancelled) setDispenses(extractRows(d)); })
+                    .catch(() => messaging.getDispenses({ chainId, query: source, type: 'source' })
+                        .then((d) => { if (!cancelled) setDispenses(extractRows(d)); }))
                     .catch(() => { /* best-effort; detail still usable without dispenses */ });
                 // PC-21: the rest of the lifecycle (refills/edits, closes,
                 // expirations). Best-effort; scoped to this dispenser by its
                 // action index when the event rows carry it.
                 if (typeof messaging.getDispenserLifecycle === 'function') {
-                    Promise.all(['edits', 'closes', 'expires'].map((kind) => messaging
+                    // 'cancels' is the owner's own cancel action - the one that STARTS
+                    // the 1-hour close window - while 'closes' is the completion the chain
+                    // writes when the window ends. Omitting it left the cancel invisible on
+                    // the timeline for that whole hour, right after the owner took it (D-45).
+                    Promise.all(['edits', 'cancels', 'closes', 'expires'].map((kind) => messaging
                         .getDispenserLifecycle({ chainId, kind, query: source, type: 'address' })
                         .then((r) => ({ kind, rows: extractRows(r) }))
                         .catch(() => ({ kind, rows: [] }))))
@@ -348,7 +371,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             }
         });
         return () => { cancelled = true; };
-    }, [walletId, chainId, actionIndex, messaging]);
+    }, [walletId, chainId, actionIndex, messaging, reloadKey]);
 
     useEffect(() => {
         if (cancelStage === 'confirm') {
@@ -404,20 +427,32 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         || dispenser?.source
         || action?.source
         || '';
-    // Live status: `current_status` reflects post-create transitions (the
-    // 1-hour "cancelling" close window, expiry, sold-out), falling back to
-    // the create `status` for demo fixtures that carry only that field.
-    const liveStatus = String(dispenser?.current_status || dispenser?.status || '');
+    // Live status: everything that can change after the create - the 1-hour
+    // "cancelling" close window, expiry, sold-out - plus the post-edit
+    // expiration and allow/block lists. The by-action-index read path returns
+    // these in a `state` block (the create columns beside it keep their
+    // ORIGINAL values, so reading those shows stale terms after an edit).
+    // `current_status` is the list-lane spelling and demo fixtures carry only
+    // the create `status`; both stay as fallbacks. Reading `current_status`
+    // alone left liveStatus at 'valid' forever, which disabled Close / Refill /
+    // Edit on every real dispenser and hid the close-window banner (D-39).
+    const liveState = flowsLib.dispenserLiveState(dispenser);
+    const liveStatus = liveState.status;
     const isOpen = liveStatus === 'open';
     const isClosing = liveStatus === 'cancelling';
-    const currentExpiration = dispenser?.expiration;
-    const currentAllowList = dispenser?.allow_list;
-    const currentBlockList = dispenser?.block_list;
+    const currentExpiration = liveState.expiration;
+    const currentAllowList = liveState.allowList;
+    const currentBlockList = liveState.blockList;
     // Fills this dispenser can still pay out, shown as a bubble next to the
-    // dispense count. Needs both the live escrow and the per-fill give amount.
+    // dispense count and used to cap the buy panel's Max. Needs the LIVE
+    // escrow: `escrow_remaining` is the demo fixtures' spelling and the real
+    // read path serves the drawn-down figure as state.give_remaining, so
+    // reading the fixture name alone left this null on every real dispenser
+    // (no escrow shown, and Max bounded only by what the buyer could afford).
+    const escrowRemaining = liveState.giveRemaining;
     const remainingFills = useMemo(
-        () => remainingFillsFrom(dispenser?.escrow_remaining, dispenser?.give_amount),
-        [dispenser],
+        () => remainingFillsFrom(escrowRemaining, dispenser?.give_amount),
+        [escrowRemaining, dispenser],
     );
     const isTokenPaid = Boolean(getTick) && !!getAmount;
     const isCoinPaid = !getTick && Boolean(getCoin) && !!getAmount;
@@ -460,6 +495,69 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return buyerAddresses.find((a) => a.id === buyerAddressId) || null;
     }, [buyerAddressId, buyerAddresses]);
 
+    // D-37 : what the paying address actually holds of the payment
+    // token, through the same hook that backs every other form's Max +
+    // "N available" footer. Without it the buy panel was the one spending
+    // surface in the wallet with no funding check, and a buyer holding zero
+    // could sign and broadcast a SEND the chain rejected as `invalid:
+    // insufficient funds` - a network fee paid for nothing.
+    const buyBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: canBuyWithSend ? buyerAddress?.address : null,
+        tick: getTick,
+    });
+
+    // Largest whole fill count the balance covers: floor(balance / price),
+    // exact (the same reason remainingFillsFrom exists - float division
+    // misfloors ordinary token amounts).
+    const affordableFills = useMemo(
+        () => remainingFillsFrom(buyBalance, getAmount),
+        [buyBalance, getAmount],
+    );
+    // Max offers what the buyer can both afford AND actually receive: paying
+    // past the escrow's remaining fills buys nothing.
+    const maxBuyFills = useMemo(() => {
+        if (affordableFills == null) return null;
+        if (remainingFills == null) return affordableFills;
+        return affordableFills < remainingFills ? affordableFills : remainingFills;
+    }, [affordableFills, remainingFills]);
+    const onMaxFills = useCallback(() => {
+        if (maxBuyFills == null || maxBuyFills <= 0n) return;
+        setFills(maxBuyFills.toString());
+    }, [maxBuyFills]);
+
+    // Funding pre-flight, rendered through the shared PreflightPanel so the
+    // verdict chip reads exactly like Send's. It is local and funding-only,
+    // hence `restricted`: it can prove the buyer cannot pay, never that the
+    // fill will land.
+    const buyPreflight = useMemo(() => {
+        if (!canBuyWithSend || !totalPayAmount || buyBalance == null) return null;
+        const covered = compareAmounts(buyBalance, totalPayAmount);
+        if (covered == null) return null;
+        const tickLabel = String(getTick || '').toUpperCase();
+        return {
+            verdict: covered < 0 ? 'fail' : 'pass',
+            restricted: true,
+            findings: covered < 0
+                ? [{
+                    code: 'insufficient_funds',
+                    severity: 'error',
+                    overridable: false,
+                    message: `This buy pays ${formatWithThousands(totalPayAmount)} ${tickLabel},`
+                        + ` but this address holds ${formatWithThousands(buyBalance)} ${tickLabel}.`,
+                }]
+                : [],
+            unverified: [{
+                check: 'dispenser_state',
+                reason: 'Only your payment-token balance was checked. The dispenser can still'
+                    + ' close or sell out before your payment confirms.',
+            }],
+        };
+    }, [canBuyWithSend, totalPayAmount, buyBalance, getTick]);
+    const buyUnderfunded = buyPreflight?.verdict === 'fail';
+
     const buyHw = isHwSource(buyerAddress);
     const cancelHw = isHwSource(ownerAddress);
     const [buyHwStatus, setBuyHwStatus] = useState('idle');
@@ -473,6 +571,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (!buyHw && (!signerReady && buyPassword.length === 0)) return;
         if (buyHw && buyHwStatus !== 'available') return;
         if (!isTokenPaid || !dispAddr || !totalPayAmount) return;
+        // D-37: last gate before signing. The balance can also resolve (or
+        // drop) while the review screen is open, so the check is repeated
+        // here rather than trusted from the panel's disabled button.
+        if (buyUnderfunded) {
+            setBuyError('Not enough of the payment token at this address.');
+            return;
+        }
         setBuyStage('submitting');
         setBuyError(null);
         try {
@@ -768,7 +873,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={() => { setRefillStage('idle'); setRefillAmount(''); }}>
+                    <Button variant="primary" onClick={() => { setRefillStage('idle'); setRefillAmount(''); setReloadKey((k) => k + 1); }}>
                         Done
                     </Button>
                 </div>
@@ -867,6 +972,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             setEditExpiration('');
                             setEditAllowList('');
                             setEditBlockList('');
+                            setReloadKey((k) => k + 1);
                         }}
                     >
                         Done
@@ -997,7 +1103,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <dd className={styles.detailsValue}>{getAmount} {getTick}</dd>
                     <dt className={styles.detailsLabel}>Per-fill give</dt>
                     <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
+                    <dt className={styles.detailsLabel}>Your balance</dt>
+                    <dd className={styles.detailsValue}>
+                        {buyBalance == null
+                            ? 'Checking…'
+                            : `${formatWithThousands(buyBalance)} ${String(getTick).toUpperCase()}`}
+                    </dd>
                 </dl>
+                {buyPreflight ? (
+                    <PreflightPanel
+                        report={buyPreflight}
+                        acknowledged={NO_ACKNOWLEDGMENTS}
+                        onAcknowledge={() => {}}
+                    />
+                ) : null}
                 <p className={styles.hint}>
                     The dispenser triggers when your payment confirms. If the dispenser
                     closes or runs out before then, the payment reaches the creator but
@@ -1027,7 +1146,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={buyStage === 'submitting'}
-                        disabled={buyHw ? buyHwStatus !== 'available' : (!signerReady && buyPassword.length === 0)}
+                        disabled={buyUnderfunded
+                            || (buyHw ? buyHwStatus !== 'available' : (!signerReady && buyPassword.length === 0))}
                     >
                         {buyHw
                             ? `Sign buy on ${buyerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
@@ -1099,14 +1219,19 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     const source = dispenser?.source || action?.source;
     const dispAddress = dispenser?.address;
-    const matchingDispenses = dispenses.filter(
-        (d) => String(d.get_tick || dispenser?.get_tick) === String(dispenser?.get_tick)
-            && String(d.give_tick || dispenser?.give_tick) === String(dispenser?.give_tick),
-    );
+    // D-38: a fill belongs to this dispenser only when it names it (see
+    // dispensesOfDispenser for why ticks cannot decide it).
+    const matchingDispenses = flowsLib.dispensesOfDispenser(dispenses, actionIndex, dispenser);
 
     // PC-21: one chronological lifecycle timeline (newest first) merging
     // dispenses with the refill/edit, close, and expire events.
-    const LIFECYCLE_LABEL = { dispense: 'Dispensed', edits: 'Refilled / edited', closes: 'Closed', expires: 'Expired' };
+    const LIFECYCLE_LABEL = {
+        dispense: 'Dispensed',
+        edits: 'Refilled / edited',
+        cancels: 'Close requested',
+        closes: 'Closed',
+        expires: 'Expired',
+    };
     const lifecycleTimeline = [
         ...matchingDispenses.map((row) => ({ kind: 'dispense', row })),
         ...lifecycle,
@@ -1136,11 +1261,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {formatNum(getAmount)} {getTick || getCoin || '?'}
                     {getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}
                 </dd>
-                {dispenser?.escrow_remaining != null ? (
+                {escrowRemaining != null ? (
                     <>
                         <dt className={styles.detailsLabel}>Balance</dt>
                         <dd className={styles.detailsValue}>
-                            {formatNum(dispenser.escrow_remaining)} {giveTick || ''} in escrow
+                            {formatNum(escrowRemaining)} {giveTick || ''} in escrow
                         </dd>
                     </>
                 ) : null}
@@ -1386,18 +1511,41 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             Paying from <AddressText address={buyerAddress.address} />
                         </p>
                     ) : null}
-                    <Input
-                        label="Fills"
-                        hint="Multiply per-fill amounts by this number (integer ≥ 1)."
-                        inputMode="numeric"
-                        value={fills}
-                        onChange={(e) => setFills(e.target.value)}
-                        autoComplete="off"
-                    />
+                    <div className={local.buyFillsRow}>
+                        <Input
+                            label="Fills"
+                            hint="Multiply per-fill amounts by this number (integer ≥ 1)."
+                            inputMode="numeric"
+                            value={fills}
+                            onChange={(e) => setFills(e.target.value)}
+                            autoComplete="off"
+                        />
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={onMaxFills}
+                            disabled={maxBuyFills == null || maxBuyFills <= 0n}
+                        >
+                            Max
+                        </Button>
+                    </div>
+                    <p className={styles.hint} data-testid="buy-balance">
+                        {buyBalance == null
+                            ? `Checking your ${String(getTick).toUpperCase()} balance…`
+                            : `${formatWithThousands(buyBalance)} ${String(getTick).toUpperCase()} available`}
+                    </p>
+                    {buyPreflight ? (
+                        <PreflightPanel
+                            report={buyPreflight}
+                            acknowledged={NO_ACKNOWLEDGMENTS}
+                            onAcknowledge={() => {}}
+                        />
+                    ) : null}
                     <Button
                         variant="primary"
                         onClick={() => setBuyStage('confirm')}
-                        disabled={fillsNum <= 0 || !buyerAddress || !dispAddr}
+                        disabled={fillsNum <= 0 || !buyerAddress || !dispAddr || buyUnderfunded}
                     >
                         Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
                     </Button>

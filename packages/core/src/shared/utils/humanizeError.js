@@ -23,7 +23,7 @@
 // off `cause` instead of re-parsing display prose.
 
 /**
- * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'unknown'} HumanizedErrorCause
+ * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'unknown'} HumanizedErrorCause
  */
 
 /**
@@ -57,10 +57,24 @@ export function humanizeError(err, verb = 'complete this') {
     } else if (/network|timeout|timed out|econnrefused|econnreset|enotfound|etimedout|fetch failed|unreachable|offline|dns|no response/.test(hay)) {
         cause = 'network';
         message = `Couldn't ${verb}. The network is unreachable. Check your connection and try again.`;
+    } else if (/lagging|is behind|refusing to fetch|halted|resync|catching up|not synced|out of sync/.test(hay)) {
+        // A backend index (utxo-tracker / decoder / indexer) that is behind or
+        // halted cannot answer, but nothing is wrong with the user's funds or
+        // their input, and retrying later genuinely works. Tested before
+        // 'rejected' because these messages often also say "refusing".
+        cause = 'backend_behind';
+        message = `Couldn't ${verb}. The service is still catching up with the chain. Try again in a few minutes.`;
     } else if (/reject|refused|mempool|min relay|minrelay|dust|non-final|nonfinal|bad-txns|txn-|would exceed|already known|conflict/.test(hay)) {
         cause = 'rejected';
         message = `Couldn't ${verb}. The network rejected this transaction.`;
     }
+
+    // An unrecognized error must still say SOMETHING about what happened. Every
+    // caller renders `message` alone, so dropping `raw` here left dead-end
+    // copy - "Couldn't mint." on screen while the console held "utxo-tracker is
+    // lagging by 97 blocks" (D-42). Appending it keeps the house-voice opener
+    // and hands the user (or whoever they paste it to) the actual cause.
+    if (cause === 'unknown' && raw) message = `${message} ${raw}`;
 
     return { message, cause, raw };
 }

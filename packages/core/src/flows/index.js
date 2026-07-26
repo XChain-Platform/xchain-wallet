@@ -185,6 +185,8 @@ export {
     dispensersForToken,
     dispenserByActionIndex,
     dispensesFor,
+    dispensesOfDispenser,
+    dispenserLiveState,
     dispenserLifecycleFor,
 } from './dispenserQueries.js';
 export {

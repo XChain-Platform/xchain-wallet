@@ -117,6 +117,18 @@ export async function dispenserAction(opts) {
         actionData: { action: 'DISPENSER', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // The owner's address is both the funding source and the change sink,
+            // so it goes in twice on purpose: `sourceAddress` is what makes the SDK
+            // select UTXOs by address, `change` supplies the change output, and the
+            // SDK states outright that `change` is "deliberately NOT a fallback" for
+            // `sourceAddress` (xchain-sdk/src/encoder.js createTx). Passing neither
+            // left the encoder resolving UTXOs from the raw `pubkey`, which fails as
+            // "<pubkey> has no matching Script" - the same D-36/ shape found in
+            // sendToken. It surfaced here only once Refill/Edit/Close became
+            // reachable ; the create lane composes through the confirm modal,
+            // which passes the address, so only these three were affected (D-43).
+            change: source.address,
+            sourceAddress: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),

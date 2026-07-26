@@ -86,9 +86,69 @@ export async function dispenserByActionIndex({ sdkRegistry, chainId, actionIndex
 }
 
 /**
- * List dispense events (fill receipts) for a source / address / token.
+ * The terms a dispenser is running under RIGHT NOW (D-39).
+ *
+ * A dispenser's create columns are frozen at creation, so status stays
+ * 'valid' and expiration / allow / block keep their original values however
+ * the dispenser later behaves. Everything that moves - the 1-hour
+ * 'cancelling' close window, expiry, sold-out, an edited expiration or
+ * list, escrow drawn down by fills - arrives in the `state` block the
+ * by-action-index read path returns beside them.
+ *
+ * Reading the create columns instead left the detail page's status at
+ * 'valid' forever, which disabled Close / Refill / Edit on every real
+ * dispenser and hid the close-window banner. `current_status` is the
+ * list-lane spelling of the same thing; demo fixtures carry only `status`.
+ *
+ * @param {any} dispenser dispenser row / flattened DISPENSER action
+ * @returns {{ status: string, expiration: any, allowList: any, blockList: any, giveRemaining: any }}
+ */
+export function dispenserLiveState(dispenser) {
+    const state = dispenser?.state || {};
+    return {
+        status: String(state.status || dispenser?.current_status || dispenser?.status || ''),
+        expiration: state.expiration ?? dispenser?.expiration,
+        allowList: state.allow_list ?? dispenser?.allow_list,
+        blockList: state.block_list ?? dispenser?.block_list,
+        giveRemaining: state.give_remaining
+            ?? dispenser?.escrow_remaining
+            ?? dispenser?.give_remaining
+            ?? null,
+    };
+}
+
+/**
+ * Keep only the fills that belong to ONE dispenser (D-38).
+ *
+ * A dispense row names its dispenser through `dispenser_action_index`, and
+ * that is the only key that separates two dispensers sharing an address -
+ * the normal case, because a dispenser opens on its creator's source. Ticks
+ * cannot do it: the pair may be identical, and a coin-paid fill carries
+ * `get_tick` NULL, which an `||` fallback lets match any dispenser.
+ *
+ * Explorers older than the `dispenser` query lane omit the key. Those rows
+ * fall back to the tick comparison, which over-reports rather than showing a
+ * dispenser no history at all.
+ *
+ * @param {any[]} rows              dispense rows as returned by the explorer
+ * @param {string|number} actionIndex  the dispenser's action index
+ * @param {{ give_tick?: string, get_tick?: string|null }} [dispenser] for the fallback
+ * @returns {any[]} the rows belonging to this dispenser
+ */
+export function dispensesOfDispenser(rows, actionIndex, dispenser) {
+    if (!Array.isArray(rows)) return [];
+    return rows.filter((d) => (
+        d?.dispenser_action_index != null
+            ? String(d.dispenser_action_index) === String(actionIndex)
+            : String(d?.get_tick || dispenser?.get_tick) === String(dispenser?.get_tick)
+                && String(d?.give_tick || dispenser?.give_tick) === String(dispenser?.give_tick)
+    ));
+}
+
+/**
+ * List dispense events (fill receipts) for a dispenser / source / address / token.
  * Used by the detail page's "Recent dispenses" list.
- * @param {{ sdkRegistry: any, chainId: string, query: string, type: 'address' | 'source' | 'destination' | 'token' | 'block', opts?: object }} params
+ * @param {{ sdkRegistry: any, chainId: string, query: string, type: 'address' | 'source' | 'destination' | 'token' | 'block' | 'dispenser', opts?: object }} params
  */
 export async function dispensesFor({ sdkRegistry, chainId, query, type, opts }) {
     if (!sdkRegistry) throw new Error('dispensesFor: sdkRegistry is required');
@@ -105,13 +165,22 @@ export async function dispensesFor({ sdkRegistry, chainId, query, type, opts }) 
  * for a source / address / token. `kind` selects the event stream; the
  * caller merges these with dispensesFor() into one chronological timeline
  * on the detail page. Thin passthrough to the PC-55 SDK wrappers.
- * @param {{ sdkRegistry: any, chainId: string, kind: 'closes' | 'edits' | 'expires', query: string, type?: string, opts?: object }} params
+ * 'cancels' is the OWNER's cancel action (the one that opens the 1-hour close
+ * window); 'closes' is the completion the chain writes when that window ends.
+ * Fetching only 'closes' left the owner's own cancel missing from the timeline
+ * for the whole hour after they took it (D-45).
+ * @param {{ sdkRegistry: any, chainId: string, kind: 'cancels' | 'closes' | 'edits' | 'expires', query: string, type?: string, opts?: object }} params
  */
 export async function dispenserLifecycleFor({ sdkRegistry, chainId, kind, query, type, opts }) {
     if (!sdkRegistry) throw new Error('dispenserLifecycleFor: sdkRegistry is required');
     if (!chainId) throw new Error('dispenserLifecycleFor: chainId is required');
     if (!query) throw new Error('dispenserLifecycleFor: query is required');
-    const fn = { closes: 'getDispenserCloses', edits: 'getDispenserEdits', expires: 'getDispenserExpires' }[kind];
+    const fn = {
+        cancels: 'getDispenserCancels',
+        closes: 'getDispenserCloses',
+        edits: 'getDispenserEdits',
+        expires: 'getDispenserExpires',
+    }[kind];
     if (!fn) throw new Error(`dispenserLifecycleFor: unknown kind ${kind}`);
     const sdk = sdkRegistry.get(chainId);
     return sdk[fn](query, type || 'address', opts);

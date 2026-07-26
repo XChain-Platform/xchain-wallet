@@ -509,7 +509,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     if (tokenPickerOpen) {
         return (
             <TokenPicker
-                purpose="send"
+                // 'receive', not 'send': the send list is spendable balances,
+                // which is the wrong question for MINT - you mint precisely
+                // what you do NOT hold. With the send list this form could not
+                // reach a mint-by-anyone token (XCHAIN on regtest/testnet), nor
+                // let an issuer top up a supply they had spent to zero: the
+                // picker answered "No matching balances" and there was no other
+                // way in. 'receive' runs the platform-wide token discovery,
+                // which is the same "meaningful at zero balance" case (D-41).
+                purpose="receive"
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {

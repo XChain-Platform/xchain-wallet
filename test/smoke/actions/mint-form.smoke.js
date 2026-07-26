@@ -266,6 +266,15 @@ for (const [shell, appPath] of [
     );
 }
 
+// D-41: the token picker must run platform-wide discovery ('receive'), not the
+// spendable-balance list ('send'). MINT is the action you take for a token you
+// do not hold - a mint-by-anyone token, or a supply you spent to zero - and the
+// balance list made those unreachable, with no other way into the form.
+assert.ok(
+    src.includes('purpose="receive"') && !src.includes('purpose="send"'),
+    'MintForm opens the token picker with purpose="receive" so zero-balance tokens are selectable',
+);
+
 console.log(
-    'OK: mint form smoke (MintForm §40.3 + mintToken core flow + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web wiring)',
+    'OK: mint form smoke (MintForm §40.3 + mintToken core flow + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web wiring + zero-balance token reachable)',
 );

@@ -32,15 +32,43 @@ describe('humanizeError', () => {
         expect(out.message).to.match(/network rejected/i);
     });
 
-    it('falls back to a generic message for unrecognized errors', () => {
+    // D-42: a backend index that is behind is neither a funds problem nor a
+    // rejection - the transaction was never built. Observed live as
+    // "Encoder RPC error: utxo-tracker is lagging by 97 blocks; refusing to
+    // fetch UTXOs", which the Mint form reduced to a bare "Couldn't mint."
+    it('recognizes a backend index that is behind or halted', () => {
+        const out = humanizeError(
+            new Error('Encoder RPC error: utxo-tracker is lagging by 97 blocks; refusing to fetch UTXOs'),
+            'mint',
+        );
+        expect(out.cause).to.equal('backend_behind');
+        expect(out.message).to.match(/catching up with the chain/i);
+        expect(out.message).to.match(/try again/i);
+    });
+
+    it('classifies a halted decoder as behind, not as a rejection', () => {
+        // "refusing" would otherwise match the rejected branch and tell the
+        // user the network rejected a transaction that was never broadcast.
+        const out = humanizeError(new Error('decoder is HALTED; refusing to roll back further'), 'send');
+        expect(out.cause).to.equal('backend_behind');
+    });
+
+    // D-42: the module's contract is that the raw message is "never lost", but
+    // every call site renders `message` alone, so an unrecognized error used to
+    // reach the user as a dead end with no cause at all.
+    it('keeps the raw detail in the message for unrecognized errors', () => {
         const out = humanizeError(new Error('sendToken: params.TICK is required'), 'send');
         expect(out.cause).to.equal('unknown');
-        expect(out.message).to.equal("Couldn't send.");
+        expect(out.message).to.equal("Couldn't send. sendToken: params.TICK is required");
         expect(out.raw).to.equal('sendToken: params.TICK is required');
     });
 
     it('uses the verb in the fallback copy', () => {
-        expect(humanizeError(new Error('boom'), 'stake').message).to.equal("Couldn't stake.");
+        expect(humanizeError(new Error('boom'), 'stake').message).to.equal("Couldn't stake. boom");
+    });
+
+    it('says only the generic line when there is no detail to add', () => {
+        expect(humanizeError(null, 'stake').message).to.equal("Couldn't stake.");
     });
 
     it('handles null / undefined / non-Error inputs without throwing', () => {

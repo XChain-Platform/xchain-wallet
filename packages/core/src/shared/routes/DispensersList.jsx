@@ -340,11 +340,18 @@ function DispenserRow({ row, label, onSelect }) {
                     {label ? `${label}: ` : ''}{row.give_tick || '?'}
                 </div>
                 <div className={local.subtitle}>{rateLabel(row)}</div>
-                <div className={local.subtitle}>
-                    {row.escrow_remaining != null
-                        ? `${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()
-                        : 'Escrow pending'}
-                </div>
+                {/* Escrow is only stated when it is known. The explorer's
+                    dispenser LIST lane carries no escrow column (remaining is
+                    derived per action, in the detail read path), so on real
+                    dispensers this is absent - and the old 'Escrow pending'
+                    fallback then told every owner their fully-escrowed
+                    dispenser had not funded yet (D-40). Open the dispenser to
+                    see its live balance. */}
+                {row.escrow_remaining != null ? (
+                    <div className={local.subtitle}>
+                        {`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}
+                    </div>
+                ) : null}
             </div>
             <div className={local.trailing}>
                 <span className={`${local.status} ${local[`status_${status}`] || ''}`}>{status}</span>
