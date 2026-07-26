@@ -84,6 +84,7 @@ import { createDesktopMessageHost } from './messageHost.js';
  *   notificationService: import('@xchain-wallet/core').notifications.NotificationService | null,
  *   priceAlertWatcher: import('@xchain-wallet/core').notifications.PriceAlertWatcher | null,
  *   governancePollWatcher: import('@xchain-wallet/core').notifications.GovernancePollWatcher | null,
+ *   deadlineWatcher: import('@xchain-wallet/core').notifications.DeadlineWatcher | null,
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  * }} DesktopRuntime
@@ -116,6 +117,7 @@ export function createRuntime(deps) {
         notificationService: null,
         priceAlertWatcher: null,
         governancePollWatcher: null,
+        deadlineWatcher: null,
         coinpayAutopayWatcher: null,
         // PC-16: pre-unlocked software signers, populated by the shared
         // wallet.unlock handler while the password is in scope (wallet
@@ -211,6 +213,28 @@ export async function ensureHost(runtime) {
             runtime.governancePollWatcher.start();
         }
 
+        // PC-45 deadline watcher (my orders/swaps/dispensers nearing
+        // EXPIRATION, polls I created or voted in nearing their close block).
+        // Seen-state is in-memory here for the same reason as above.
+        // COINPAY obligations (PC-15) and unstake cooldowns (PC-47) keep their
+        // own timers; this deep-links rather than duplicating them.
+        if (runtime.notify && !runtime.deadlineWatcher) {
+            runtime.deadlineWatcher = new notificationsLib.DeadlineWatcher({
+                getActiveAddresses: async () => {
+                    const settings = await flowsLib.getSettings(vault);
+                    return notificationsLib.getActiveAddresses(vault, runtime.chainRegistry, {
+                        activeNetwork: settings.activeNetwork,
+                    });
+                },
+                getSdkForChain: (chainId) => runtime.sdkRegistry.get(chainId),
+                getSettings: () => flowsLib.getSettings(vault),
+                coinForChain: (chainId) => runtime.chainRegistry.get(chainId)?.coin || null,
+                notify: runtime.notify,
+                logger: console,
+            });
+            runtime.deadlineWatcher.start();
+        }
+
         // PC-16 CoinPay auto-pay engine. Desktop main is the spec's best
         // fire-and-forget home (tray-capable, no worker eviction). Pays
         // only when the signer pool holds the wallet's signer, i.e. after
@@ -266,6 +290,10 @@ export function tearDownHost(runtime) {
     if (runtime.governancePollWatcher) {
         try { runtime.governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
         runtime.governancePollWatcher = null;
+    }
+    if (runtime.deadlineWatcher) {
+        try { runtime.deadlineWatcher.stop(); } catch (_err) { /* best-effort */ }
+        runtime.deadlineWatcher = null;
     }
     if (runtime.coinpayAutopayWatcher) {
         try { runtime.coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }

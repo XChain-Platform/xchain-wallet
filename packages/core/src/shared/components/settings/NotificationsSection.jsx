@@ -120,6 +120,14 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
         defaultOn: true,
     },
     {
+        key: 'deadlines',
+        label: 'Deadlines',
+        hint: 'Notify before one of your orders, swaps or dispensers expires, or a poll you created or voted in closes.',
+        // Same v2-tolerant default as governancePolls: the watcher treats an
+        // absent flag as ON, so a pre-flag settings record renders ON here too.
+        defaultOn: true,
+    },
+    {
         key: 'dispenserFills',
         label: 'Dispenser fills',
         hint: 'Notify when a dispenser you authored is hit.',

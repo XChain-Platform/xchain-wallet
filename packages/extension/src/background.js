@@ -176,7 +176,9 @@ let priceAlertWatcher = null;
 // MV3 worker eviction doesn't re-baseline and drop pending announcements.
 let governancePollWatcher = null;
 let coinpayAutopayWatcher = null;
+let deadlineWatcher = null;
 const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
+const DEADLINE_SEEN_KEY = 'deadlinesSeen';
 
 // §46 delivery adapter for the extension: chrome.notifications works with the
 // popup closed (it's the service worker firing, not a page). type 'basic'
@@ -350,6 +352,37 @@ async function ensureHost() {
         governancePollWatcher.start();
     }
 
+    // PC-45: start the deadline watcher (my orders/swaps/dispensers nearing
+    // EXPIRATION, and polls I created or voted in nearing their close block).
+    // COINPAY obligations and unstake cooldowns are deliberately excluded:
+    // PC-15 and PC-47 own those timers, and this deep-links to them instead.
+    if (!deadlineWatcher) {
+        deadlineWatcher = new notificationsLib.DeadlineWatcher({
+            getActiveAddresses: async () => {
+                const settings = await flowsLib.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: () => flowsLib.getSettings(vault),
+            coinForChain: (chainId) => chainRegistry.get(chainId)?.coin || null,
+            notify: chromeNotify,
+            loadSeen: async () => {
+                try {
+                    const stored = await chrome.storage.local.get(DEADLINE_SEEN_KEY);
+                    return stored?.[DEADLINE_SEEN_KEY] || null;
+                } catch (_err) { return null; }
+            },
+            saveSeen: async (seen) => {
+                try { await chrome.storage.local.set({ [DEADLINE_SEEN_KEY]: seen }); }
+                catch (_err) { /* best-effort: fall back to in-session only */ }
+            },
+            logger: console,
+        });
+        deadlineWatcher.start();
+    }
+
     // PC-16: start the CoinPay auto-pay engine. Signs with the pool's
     // pre-unlocked signers only (unlocked session = armed); shares the
     // host's reservation ledger so its funds holds and the confirm
@@ -390,6 +423,10 @@ function tearDownHost() {
     if (governancePollWatcher) {
         try { governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
         governancePollWatcher = null;
+    }
+    if (deadlineWatcher) {
+        try { deadlineWatcher.stop(); } catch (_err) { /* best-effort */ }
+        deadlineWatcher = null;
     }
     if (coinpayAutopayWatcher) {
         try { coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }

@@ -43,7 +43,7 @@ assert.match(src, /<PermissionRow \/>/, 'mounts the permission row above the tog
 const schemaFlagsBlock = schemaSrc.match(/notifications:\s*\{[\s\S]*?\}\s*,/);
 assert.ok(schemaFlagsBlock, 'extract notifications object from schema source');
 const flagKeys = [...schemaFlagsBlock[0].matchAll(/(\w+):\s*(?:true|false)/g)].map((m) => m[1]);
-assert.equal(flagKeys.length, 7, `schema defines exactly 7 notification flags (got ${flagKeys.length})`);
+assert.equal(flagKeys.length, 8, `schema defines exactly 8 notification flags (got ${flagKeys.length})`);
 for (const key of flagKeys) {
     assert.ok(
         src.includes(`key: '${key}'`),

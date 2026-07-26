@@ -368,7 +368,15 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 const amountBase = amount * 1e8;
                 if (row && Number.isFinite(amount) && amountBase > Number(row.quantity ?? row.amount ?? 0)) {
                     verdict = 'fail';
-                    findings.push({ code: 'BALANCE_INSUFFICIENT', severity: 'error', overridable: false, source: 'client', message: `Insufficient ${tick}: you don't have ${amount} ${tick}.`, data: { tick, amount } });
+                    // overridable: TRUE, mirroring the real engine. The SDK
+                    // registers BALANCE_INSUFFICIENT as `network` in
+                    // preflight/constants.js - the check is only as trustworthy
+                    // as the explorer balance it read, so §4.2's censorship
+                    // argument covers it. A mock that hard-blocks instead would
+                    // make the dev shell render a variant with NO "Sign anyway"
+                    // control, and every dev-server spec would learn the wrong
+                    // trust model from it.
+                    findings.push({ code: 'BALANCE_INSUFFICIENT', severity: 'error', overridable: true, source: 'client', message: `Insufficient ${tick}: you don't have ${amount} ${tick}.`, data: { tick, amount } });
                 }
             } catch { /* pass by default */ }
             return { schemaVersion: 1, verdict, restricted: false, checksRun: ['BALANCE_INSUFFICIENT'], findings, unverified: [], quote: null, stateHeight: null, elapsedMs: 0 };
@@ -474,11 +482,14 @@ let notificationService = null;
 let priceAlertWatcher = null;
 let governancePollWatcher = null;
 let coinpayAutopayWatcher = null;
+let deadlineWatcher = null;
 let priceOracleInstance = null;
 
 // Seen-state key for the governance-poll watcher (localStorage): notify-once
 // bookkeeping only (chain → open-poll ids already announced), no secrets.
 const GOV_POLL_SEEN_KEY = 'xchain.governancePolls.seen';
+// Same for the PC-45 deadline watcher (chain -> announced kind:actionIndex).
+const DEADLINE_SEEN_KEY = 'xchain.deadlines.seen';
 
 // §46: start the live notification watcher once a vault + host exist. All
 // three host-creation paths (create / import / unlock) call this; lock stops
@@ -564,6 +575,37 @@ function startNotifications() {
         governancePollWatcher.start();
     }
 
+    // PC-45: deadline watcher. COINPAY obligations (PC-15) and unstake
+    // cooldowns (PC-47) own their own timers; this deep-links to them.
+    if (!deadlineWatcher) {
+        deadlineWatcher = new notificationsLib.DeadlineWatcher({
+            getActiveAddresses: async () => {
+                const flowsNs = await getFlows();
+                const settings = await flowsNs.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: async () => {
+                const flowsNs = await getFlows();
+                return flowsNs.getSettings(vault);
+            },
+            coinForChain: (chainId) => chainRegistry.get(chainId)?.coin || null,
+            notify: createWebNotifyAdapter(),
+            loadSeen: () => {
+                try { return JSON.parse(globalThis.localStorage?.getItem(DEADLINE_SEEN_KEY) || 'null'); }
+                catch (_err) { return null; }
+            },
+            saveSeen: (seen) => {
+                try { globalThis.localStorage?.setItem(DEADLINE_SEEN_KEY, JSON.stringify(seen)); }
+                catch (_err) { /* quota/private-mode: fall back to in-session only */ }
+            },
+            logger: console,
+        });
+        deadlineWatcher.start();
+    }
+
     // PC-16 CoinPay auto-pay engine. Web caveat (stated in the order
     // form's one-time acknowledgment): it only runs while this tab is
     // open. The payer lease in the vault keeps two tabs from paying the
@@ -596,6 +638,10 @@ function stopNotifications() {
     if (governancePollWatcher) {
         try { governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
         governancePollWatcher = null;
+    }
+    if (deadlineWatcher) {
+        try { deadlineWatcher.stop(); } catch (_err) { /* best-effort */ }
+        deadlineWatcher = null;
     }
     if (coinpayAutopayWatcher) {
         try { coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }
