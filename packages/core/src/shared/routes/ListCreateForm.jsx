@@ -232,7 +232,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // page; hardware + watcher keep the legacy review stage (same split
     // as CreatePollForm / AirdropForm).
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     // : hardware signs the SAME prebuilt PSBT through the same host

@@ -166,28 +166,32 @@ assert.match(
     'refusal keys on the decode reason so ordinary payments are not false-blocked',
 );
 
-// --- 6. Flag-gated, with the legacy path retained for one release -------
+// --- 6. Unconditional, with the legacy path DELETED (slice 5) -----------
 
-assert.match(
+// The flags are gone (operator decision 2026-07-26): the confirm surface is
+// the only path, so there is no slice to read and no legacy summary to fall
+// back to. A reintroduced flag or a second local intent component would be a
+// regression, not a rollout.
+assert.doesNotMatch(
     signSrc,
-    /isConfirmModalSliceEnabled\(s, 'extensionApproval'\)/,
-    'reads the extensionApproval slice flag from settings',
+    /confirmModalSlices|isConfirmModalSliceEnabled|confirmSlice/,
+    'no slice flag survives in the approval window',
 );
 assert.match(
     signSrc,
-    /confirmSlice \?[\s\S]{0,400}<PsbtIntentPanel/,
-    'the shared panel renders when the slice is on',
+    /kind === 'signPsbt' \? \([\s\S]{0,200}<PsbtIntentPanel/,
+    'the shared panel is what signPsbt renders, unconditionally',
 );
-assert.match(
+assert.doesNotMatch(
     signSrc,
-    /<PsbtIntentSummary/,
-    'the legacy summary is retained as the flag-off path (§5.6: a flag holds one release)',
+    /PsbtIntentSummary/,
+    'the legacy local summary is deleted, not retained behind a flag',
 );
 
 console.log(
     'OK: sign-approval confirm-reuse smoke ( §5.6 slice 4: PsbtIntentPanel + '
     + 'PreflightPanel + ActionIntentSummary reused from core; modal shell deliberately '
     + 'not nested; preflight host-side and absent from bridge-spec; shared '
-    + 'canApproveWithReport gate; new gates additive; reason-keyed refusal; flag-gated '
-    + 'with the legacy summary retained)',
+    + 'canApproveWithReport gate; new gates additive; reason-keyed refusal; '
+    + 'unconditional with the legacy summary deleted)',
 );

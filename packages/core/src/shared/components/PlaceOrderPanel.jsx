@@ -268,7 +268,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // legacy review stage (they need their own signing gates).
     // (isWatcherMode is read above for the auto-pay eligibility gate.)
     const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     // : hardware signs the SAME prebuilt PSBT through the same host

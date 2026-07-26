@@ -42,7 +42,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
@@ -219,7 +218,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // hardware onto it; watcher sends stay on the legacy review->submit
     // stage machine below (they encode, they never sign).
     const confirmAction = useConfirmAction();
-    const singleEncodeSend = isConfirmModalSliceEnabled(settings, 'send');
 
     // §34.2: Cmd/Ctrl+Enter submits the visible stage's form (compose ->
     // review, review -> sign). requestSubmit (not submit()) so the form's
@@ -1071,7 +1069,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         //  slice 1: with the flag on, sends go straight to the
         // single-encode confirm modal instead of the legacy review stage.
         //  brought hardware in with them; watcher still branches.
-        if (singleEncodeSend && !isWatcherMode) {
+        if (!isWatcherMode) {
             openConfirmModal();
             return;
         }

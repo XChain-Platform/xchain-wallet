@@ -65,7 +65,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
-import { isConfirmModalSliceEnabled } from '../../schemas/settings.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { decodeBbqrPsbt } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
@@ -504,7 +503,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     const { settings } = useSettings();
     const developerMode = Boolean(settings?.developerMode);
     const confirmAction = useConfirmAction();
-    const useConfirmPage = isConfirmModalSliceEnabled(settings, 'bespokeFlows') && !isHwSource;
+    const useConfirmPage = !isHwSource;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
 

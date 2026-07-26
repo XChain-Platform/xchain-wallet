@@ -61,23 +61,28 @@ assert.doesNotMatch(signSrc, /function truncate\(/, 'the now-unused truncate hel
 
 // --- 4. Decoded intent renders, gated on signPsbt ------------------------
 
-assert.match(signSrc, /<PsbtIntentSummary/, 'renders the PsbtIntentSummary component');
+//  slice 5: the window's local PsbtIntentSummary is DELETED. The
+// approval surface now renders core's <PsbtIntentPanel>, the same component
+// the in-wallet PSBT variant uses, so these properties are asserted where
+// they now live. Two copies of "what does this transaction do to my money"
+// was the drift §5.5 exported the panel separately to prevent.
+assert.match(signSrc, /<PsbtIntentPanel/, 'renders the shared PsbtIntentPanel');
 const psbtGateIdx = signSrc.indexOf("kind === 'signPsbt' ? (");
-assert.ok(psbtGateIdx > 0, 'PsbtIntentSummary is gated behind a signPsbt ternary');
-assert.match(signSrc, /function PsbtIntentSummary\(/, 'defines PsbtIntentSummary');
+assert.ok(psbtGateIdx > 0, 'the panel is gated behind a signPsbt ternary');
+assert.doesNotMatch(signSrc, /PsbtIntentSummary/, 'the legacy local summary is gone');
+
+const panelSrc = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'PsbtIntentPanel.jsx'), 'utf8');
 
 // Surfaces the security-relevant totals.
-assert.match(signSrc, /Leaving wallet/, 'shows how much leaves the wallet');
-assert.match(signSrc, /Network fee/, 'shows the fee');
-assert.match(signSrc, /Change \(back to you\)/, 'labels change returning to own addresses');
+assert.match(panelSrc, /Leaving this wallet/, 'shows how much leaves the wallet');
+assert.match(panelSrc, /Network fee/, 'shows the fee');
+assert.match(panelSrc, /Change \(back to you\)/, 'labels change returning to own addresses');
 
 // --- 5. Fails loud when decode is impossible -----------------------------
 
 // A parse failure must warn (role="alert"), never silently fall back to hex.
-const intentFnIdx = signSrc.indexOf('function PsbtIntentSummary(');
-const intentFnSrc = signSrc.slice(intentFnIdx, intentFnIdx + 1600);
-assert.match(intentFnSrc, /role="alert"/, 'undecodable PSBT renders an alert');
-assert.match(intentFnSrc, /could not be decoded/, 'alert explains the transaction could not be decoded');
+assert.match(panelSrc, /role="alert"/, 'undecodable PSBT renders an alert');
+assert.match(panelSrc, /could not be decoded/, 'alert explains the transaction could not be decoded');
 
 // --- 6. Approval is held until the decode settles (F1) -------------------
 // Approving before the intent renders would be approving un-verified

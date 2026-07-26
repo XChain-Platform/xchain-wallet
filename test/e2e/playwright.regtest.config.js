@@ -46,9 +46,14 @@ export default defineConfig({
     // something (a race, a stale utxo view) that a retry would hide.
     retries: 0,
     workers: 1,
-    // Onboarding (Argon2id) + a network switch + funding + a real
-    // round trip to the chain. The long pole is the chain, not the app.
-    timeout: 240_000,
+    // Onboarding (Argon2id) + a network switch + funding + a real round trip
+    // to the chain. The long pole is the chain, not the app - and on a SHARED
+    // venue it is specifically the INDEXER, which can run minutes behind the
+    // tip while another session loads it. 240s failed a healthy send that way:
+    // the action was on chain the whole time, just not indexed yet. Must stay
+    // above the longest fixture budget (waitForValidAction, 300s) or the test
+    // times out before the fixture can report the lag that explains it.
+    timeout: 420_000,
     expect: { timeout: 30_000 },
     globalSetup: './global-setup.regtest.js',
     reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',

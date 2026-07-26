@@ -191,7 +191,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     // unverified. Hardware included ; watcher still branches, because it
     // encodes and never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     const submitConfirmed = useConfirmSubmit({

@@ -165,7 +165,6 @@ export function TokenWizard({ walletId, onBack }) {
     // slice flag alone decides between the shared confirm page and the
     // legacy preview + sign stages.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled;
     // An already-unlocked wallet does not re-prompt on the confirm page.
     const signerReady = useSignerReady(walletId);
     // The confirm page's password field writes `password` state; the approve
@@ -247,7 +246,8 @@ export function TokenWizard({ walletId, onBack }) {
             }
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        openConfirmScreen();
+        return;
         setStage('preview');
     }
 
@@ -415,7 +415,7 @@ export function TokenWizard({ walletId, onBack }) {
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
-            submitLabel: singleEncode ? 'Issue token' : 'Preview',
+            submitLabel: 'Issue token',
             submitLoading: actionConfirm.composing,
         }));
     }

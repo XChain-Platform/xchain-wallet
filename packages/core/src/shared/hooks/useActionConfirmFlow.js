@@ -26,7 +26,6 @@ import { useCallback } from 'react';
 import { useSettings } from './useSettings.js';
 import { useConfirmAction, isConfirmOpenPhase } from './useConfirmAction.js';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 
@@ -79,7 +78,6 @@ export function useConfirmSubmit({ messaging, isHw, signerId, passwordRef, softw
 export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms' }) {
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
-    const enabled = isConfirmModalSliceEnabled(settings, slice);
     const open = isConfirmOpenPhase(confirmAction.phase);
 
     /**
@@ -137,7 +135,6 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
 
     return {
         /** slice flag: is the single-encode confirm pipeline on for this surface? */
-        enabled,
         /** is the confirm page currently rendered in place of the form? */
         open,
         /** pre-open compose is in flight (drives the action button's spinner) */

@@ -28,7 +28,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -195,7 +194,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
-    const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms') && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
     const passwordValueRef = useRef('');

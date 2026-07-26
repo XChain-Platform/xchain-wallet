@@ -129,20 +129,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // raw view (consistent with the spec's "developer mode hidden by
     // default" stance).
     const [developerMode, setDeveloperMode] = useState(false);
-    //  §5.6 slice 4 flag, read from the SAME settings fetch (a second
-    // round trip for one boolean would be waste). Defaults to the code default
-    // via isConfirmModalSliceEnabled, so a release flipping that default flips
-    // existing users too - the flag is never stamped into the vault.
-    const [confirmSlice, setConfirmSlice] = useState(
-        () => schemasLib.settings.isConfirmModalSliceEnabled(null, 'extensionApproval'),
-    );
     useEffect(() => {
         let cancelled = false;
         getSettings()
             .then((s) => {
                 if (cancelled) return;
                 setDeveloperMode(Boolean(s?.developerMode));
-                setConfirmSlice(schemasLib.settings.isConfirmModalSliceEnabled(s, 'extensionApproval'));
             })
             .catch(() => { /* keep developerMode false on failure */ });
         return () => { cancelled = true; };
@@ -323,7 +315,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // checkbox a one-way latch on the dApp approval surface too.
     const acknowledge = (code) => setAcknowledged((prev) => toggleAcknowledged(prev, code));
     useEffect(() => {
-        if (!confirmSlice || kind !== 'signAction' || !chainId) return undefined;
+        if (kind !== 'signAction' || !chainId) return undefined;
         // The action string the dApp supplied IS the payload for this kind, so
         // it is what gets checked (never a re-serialization of form state).
         const actionString = payload?.payload?.actionString || payload?.actionString || null;
@@ -345,7 +337,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 if (!cancelled) setPreflightState({ loading: false, report: null });
             });
         return () => { cancelled = true; };
-    }, [confirmSlice, kind, chainId, payload, previewBalances.fromAddress]);
+    }, [kind, chainId, payload, previewBalances.fromAddress]);
 
     // §22 / P4 co-sign preview: decode the action the agent wants co-signed and
     // dry-run the account policy, so the user approves a legible request (which
@@ -447,7 +439,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         && psbtIntent.decomposed.inputs.some(
             (i) => i.address && psbtIntent.ownAddresses.has(i.address),
         );
-    const psbtRefusal = confirmSlice && kind === 'signPsbt' && !psbtIntent.loading
+    const psbtRefusal = kind === 'signPsbt' && !psbtIntent.loading
         ? psbtRefusalReason({
             spendsOwnInputs: psbtSpendsOwnInputs,
             actionDecoded: !!psbtIntent.action,
@@ -461,8 +453,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // §4.2 pre-flight gate, using the SAME predicate the in-wallet confirm page
     // uses: a locally-provable error hard-blocks, a network-sourced one blocks
     // until the user acknowledges that specific finding.
-    const preflightBlocked = confirmSlice
-        && kind === 'signAction'
+    const preflightBlocked = kind === 'signAction'
         && !canApproveWithReport(preflightState.report, acknowledged);
 
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
@@ -548,24 +539,15 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 action-decode loudly. Legacy summary stays as the flag-off path
                 for one release per §5.6. */}
             {kind === 'signPsbt' ? (
-                confirmSlice ? (
-                    <PsbtIntentPanel
-                        loading={psbtIntent.loading}
-                        decomposed={psbtIntent.error ? null : psbtIntent.decomposed}
-                        ownAddresses={psbtIntent.ownAddresses}
-                        decodedAction={psbtIntent.action
-                            ? { ...psbtIntent.action, summary: psbtActionSummary(psbtIntent.action) }
-                            : null}
-                        decodeError={psbtIntent.error || psbtIntent.actionDecodeReason}
-                    />
-                ) : (
-                    <PsbtIntentSummary
-                        loading={psbtIntent.loading}
-                        error={psbtIntent.error}
-                        decomposed={psbtIntent.decomposed}
-                        ownAddresses={psbtIntent.ownAddresses}
-                    />
-                )
+                <PsbtIntentPanel
+                    loading={psbtIntent.loading}
+                    decomposed={psbtIntent.error ? null : psbtIntent.decomposed}
+                    ownAddresses={psbtIntent.ownAddresses}
+                    decodedAction={psbtIntent.action
+                        ? { ...psbtIntent.action, summary: psbtActionSummary(psbtIntent.action) }
+                        : null}
+                    decodeError={psbtIntent.error || psbtIntent.actionDecodeReason}
+                />
             ) : null}
 
             {/* §5.5 fail-closed refusal: Approve is already disabled by
@@ -583,7 +565,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         co-signer's own; the ACTION intent now renders through
                         the shared summary so an agent request and a hand-signed
                         one describe themselves identically. */}
-                    {confirmSlice && coSignPreview.preview?.decodeOk ? (
+                    {coSignPreview.preview?.decodeOk ? (
                         <ActionIntentSummary
                             decoded={decoderLib.decodeAction({
                                 action: coSignPreview.preview.action,
@@ -605,14 +587,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 <>
                     {/* The indexer's own verdict for the dApp's action, on the
                         same panel the in-wallet confirm page renders. */}
-                    {confirmSlice ? (
-                        <PreflightPanel
-                            report={preflightState.report}
-                            loading={preflightState.loading}
-                            acknowledged={acknowledged}
-                            onAcknowledge={acknowledge}
-                        />
-                    ) : null}
+                    <PreflightPanel
+                        report={preflightState.report}
+                        loading={preflightState.loading}
+                        acknowledged={acknowledged}
+                        onAcknowledge={acknowledge}
+                    />
                     <BalanceChanges
                         result={previewResult}
                         loading={previewBalances.loading}
@@ -686,9 +666,9 @@ function SignSummary({ kind, payload }) {
                 </div>
             );
         case 'signPsbt':
-            // The decoded destinations/amounts/fee render in
-            // <PsbtIntentSummary> below; the raw hex stays available in the
-            // developer-mode RawPsbtViewer. Here we surface only the signing
+            // The full input/output enumeration renders in <PsbtIntentPanel>
+            // below; the raw hex stays available in the developer-mode
+            // RawPsbtViewer. Here we surface only the signing
             // paths (when the dApp scoped the request to specific inputs).
             return Array.isArray(inner.signingPaths) && inner.signingPaths.length > 0 ? (
                 <div className={shared.summary}>
@@ -832,105 +812,6 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     Above the policy confirm-threshold: review carefully before approving.
                 </p>
             ) : null}
-        </div>
-    );
-}
-
-function PsbtIntentSummary({ loading, error, decomposed, ownAddresses }) {
-    if (loading) {
-        return (
-            <div className={shared.summary}>
-                <p className={shared.summaryLabel}>Transaction</p>
-                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                    Decoding transaction…
-                </p>
-            </div>
-        );
-    }
-
-    if (error || !decomposed) {
-        // Fail loud: a transaction we can't decode is exactly the case
-        // where the user most needs to be cautious. Never silently fall
-        // back to an unreadable hex blob.
-        return (
-            <ul className={styles.warnings} role="alert">
-                <li>
-                    {error
-                        ? `This transaction could not be decoded (${error}). `
-                        : 'This transaction could not be decoded. '}
-                    Only approve it if you trust the source. The raw transaction
-                    is viewable in developer mode.
-                </li>
-            </ul>
-        );
-    }
-
-    const own = ownAddresses instanceof Set ? ownAddresses : new Set();
-    const outputs = Array.isArray(decomposed.outputs) ? decomposed.outputs : [];
-    const inputs = Array.isArray(decomposed.inputs) ? decomposed.inputs : [];
-
-    const external = outputs.filter((o) => !o.address || !own.has(o.address));
-    const change = outputs.filter((o) => o.address && own.has(o.address));
-
-    const sending = external.reduce((acc, o) => acc + (o.value || 0), 0);
-    const changeTotal = change.reduce((acc, o) => acc + (o.value || 0), 0);
-
-    const totalOut = outputs.reduce((acc, o) => acc + (o.value || 0), 0);
-    const inputsHaveValue = inputs.length > 0 && inputs.every((i) => typeof i.value === 'number');
-    const totalIn = inputsHaveValue
-        ? inputs.reduce((acc, i) => acc + (i.value || 0), 0)
-        : null;
-    const fee = totalIn != null ? totalIn - totalOut : null;
-
-    return (
-        <div className={shared.summary}>
-            <p className={shared.summaryLabel}>This transaction</p>
-
-            {external.length === 0 ? (
-                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                    All outputs return to your own addresses (no funds leave this wallet).
-                </p>
-            ) : (
-                <dl className={styles.detailsList} style={{ marginTop: 4 }}>
-                    {external.map((o, i) => (
-                        <div className={styles.detailsRow} key={`ext-${i}`}>
-                            <dt className={styles.detailsLabel}>
-                                {o.address ? 'To' : 'To (unrecognized script)'}
-                            </dt>
-                            <dd className={styles.detailsValue}>
-                                {formatSats(o.value)}
-                                {o.address ? (
-                                    <>
-                                        <br />
-                                        <span style={{ fontFamily: 'var(--xc-font-mono)', fontSize: 12 }}>
-                                            {ellipsizeMiddle(o.address)}
-                                        </span>
-                                    </>
-                                ) : null}
-                            </dd>
-                        </div>
-                    ))}
-                </dl>
-            )}
-
-            <dl className={styles.detailsList} style={{ marginTop: 6 }}>
-                <div className={styles.detailsRow}>
-                    <dt className={styles.detailsLabel}>Leaving wallet</dt>
-                    <dd className={styles.detailsValue}>{formatSats(sending)}</dd>
-                </div>
-                {changeTotal > 0 ? (
-                    <div className={styles.detailsRow}>
-                        <dt className={styles.detailsLabel}>Change (back to you)</dt>
-                        <dd className={styles.detailsValue}>{formatSats(changeTotal)}</dd>
-                    </div>
-                ) : null}
-                <div className={styles.detailsRow}>
-                    <dt className={styles.detailsLabel}>Network fee</dt>
-                    <dd className={styles.detailsValue}>
-                        {fee != null ? formatSats(fee) : 'unavailable'}
-                    </dd>
-                </div>
-            </dl>
         </div>
     );
 }

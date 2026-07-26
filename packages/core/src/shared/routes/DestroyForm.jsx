@@ -26,7 +26,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -178,7 +177,6 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     // page's credentials block.
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
-    const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms');
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
     // The modal's password field writes `password` state; the approve
@@ -285,7 +283,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         //  slice 2: with the flag on, software destroys go straight
         // to the single-encode confirm modal instead of the legacy review
         // stage. Hardware + watcher keep the legacy path for this slice.
-        if (singleEncode && !isWatcherMode) {
+        if (!isWatcherMode) {
             openConfirmModal();
             return;
         }
@@ -640,7 +638,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     loading={confirmAction.composing}
                     disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
                 >
-                    {singleEncode && !isWatcherMode ? 'Destroy' : 'Preview'}
+                    {!isWatcherMode ? 'Destroy' : 'Preview'}
                 </Button>
             </div>
         </form>,

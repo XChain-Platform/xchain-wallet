@@ -26,7 +26,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -188,7 +187,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // encodes, it never signs.
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
-    const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms');
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
     // The modal's password field writes `password` state; the approve
@@ -299,7 +297,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         setFormError(null);
         //  slice 2: with the flag on, mints go straight to the
         // single-encode confirm page instead of the legacy review stage.
-        if (singleEncode && !isWatcherMode) {
+        if (!isWatcherMode) {
             openConfirmModal();
             return;
         }
@@ -641,7 +639,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     loading={confirmAction.composing}
                     disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
                 >
-                    {singleEncode && !isWatcherMode ? 'Mint' : 'Preview'}
+                    {!isWatcherMode ? 'Mint' : 'Preview'}
                 </Button>
             </div>
         </form>,

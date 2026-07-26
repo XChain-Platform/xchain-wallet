@@ -389,7 +389,7 @@ const HD_ADDRESS = Object.freeze({
 // make, capturing every dispatch in `calls`. Any other host call (privacy
 // gate, locale sync, signer status) falls through to a resolving no-op so
 // the render still settles.
-function recordingMessaging({ walletMode = 'full', slices } = {}) {
+function recordingMessaging({ walletMode = 'full' } = {}) {
     const calls = [];
     const record = (method) => (args) => {
         calls.push({ method, args });
@@ -406,7 +406,6 @@ function recordingMessaging({ walletMode = 'full', slices } = {}) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({
             walletMode,
-            ...(slices ? { confirmModalSlices: slices } : {}),
         }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         mintToken: record('mintToken'),
@@ -440,8 +439,8 @@ function recordingMessaging({ walletMode = 'full', slices } = {}) {
 // Mount a single-action form with a locked token context (the ticker
 // input became a picker-driven TokenField in 0375b8f, so tests seed the
 // tick via initialChainId+initialTick) and fill the amount.
-async function mountActionForm(Form, { walletMode, slices } = {}) {
-    const { messaging, calls } = recordingMessaging({ walletMode, slices });
+async function mountActionForm(Form, { walletMode } = {}) {
+    const { messaging, calls } = recordingMessaging({ walletMode });
     let utils;
     await domAct(async () => {
         utils = render(
@@ -467,17 +466,16 @@ async function mountActionForm(Form, { walletMode, slices } = {}) {
     return { utils, calls };
 }
 
-// Drive a single-action form through the LEGACY review stage to submit,
-// returning the recorded dispatches. Legacy is pinned via an explicit
-// actionForms:false slice override (watcher/HW always take this path;
-// the software default is the confirm modal, covered separately below).
+// Drive a single-action form through the legacy review stage to submit,
+// returning the recorded dispatches.
+//
+//  slice 5: this path is now reached ONLY by watcher mode, which
+// encodes and never signs, so there is nothing to confirm. The
+// `actionForms:false` override that used to pin it is gone with the flags.
 // `confirm` is the typed-confirmation string some forms gate on
 // (DestroyForm needs "DESTROY").
 async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
-    const { utils, calls } = await mountActionForm(Form, {
-        walletMode,
-        slices: { actionForms: false },
-    });
+    const { utils, calls } = await mountActionForm(Form, { walletMode });
 
     // Preview -> review stage.
     await domAct(async () => {
@@ -545,23 +543,6 @@ async function driveActionFormThroughConfirmModal(Form, { actionLabel, confirm }
 }
 
 describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => {
-    it('MintForm (software) dispatches mintToken with the from descriptor + composed params', async () => {
-        const calls = await driveActionFormToSubmit(MintForm, { walletMode: 'full' });
-        const mint = calls.find((c) => c.method === 'mintToken');
-        expect(mint, 'mintToken was dispatched').toBeTruthy();
-        expect(calls.some((c) => c.method === 'buildActionPsbtRequest')).toBe(false);
-        expect(mint.args.chainId).toBe('bitcoin-mainnet');
-        expect(mint.args.from).toMatchObject({
-            address: HD_ADDRESS.address,
-            addressId: 'addr-hd-0',
-            source: 'hd',
-            signerId: 'signer-1',
-            derivationPath: HD_ADDRESS.derivationPath,
-        });
-        expect(mint.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
-        // Signer-ready path sends an empty password, never undefined.
-        expect(mint.args.password).toBe('');
-    });
 
     it('MintForm (watcher) routes the encode-only buildActionPsbtRequest with action MINT', async () => {
         const calls = await driveActionFormToSubmit(MintForm, { walletMode: 'watcher' });
@@ -576,18 +557,6 @@ describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => 
         });
     });
 
-    it('DestroyForm (software) dispatches destroyToken with the from descriptor + composed params', async () => {
-        const calls = await driveActionFormToSubmit(DestroyForm, {
-            walletMode: 'full',
-            confirm: 'DESTROY',
-        });
-        const destroy = calls.find((c) => c.method === 'destroyToken');
-        expect(destroy, 'destroyToken was dispatched').toBeTruthy();
-        expect(calls.some((c) => c.method === 'buildActionPsbtRequest')).toBe(false);
-        expect(destroy.args.from.addressId).toBe('addr-hd-0');
-        expect(destroy.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
-        expect(destroy.args.password).toBe('');
-    });
 
     it('DestroyForm (watcher) routes the encode-only buildActionPsbtRequest with action DESTROY', async () => {
         const calls = await driveActionFormToSubmit(DestroyForm, {
@@ -619,6 +588,17 @@ describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => 
         expect(mint, 'mintToken was dispatched on Approve').toBeTruthy();
         expect(mint.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
         expect(mint.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
+        // Carried over from the deleted legacy-path case ( slice 5): the
+        // signing descriptor and the empty-not-undefined password are properties
+        // of the DISPATCH, not of which surface produced it.
+        expect(mint.args.from).toMatchObject({
+            address: HD_ADDRESS.address,
+            addressId: 'addr-hd-0',
+            source: 'hd',
+            signerId: 'signer-1',
+            derivationPath: HD_ADDRESS.derivationPath,
+        });
+        expect(mint.args.password).toBe('');
     });
 
     it('DestroyForm (software, default) gates the modal on typed DESTROY and signs the prebuilt PSBT', async () => {
@@ -635,5 +615,8 @@ describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => 
         const destroy = calls.find((c) => c.method === 'destroyToken');
         expect(destroy, 'destroyToken was dispatched on Approve').toBeTruthy();
         expect(destroy.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+        expect(destroy.args.from.addressId).toBe('addr-hd-0');
+        expect(destroy.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
+        expect(destroy.args.password).toBe('');
     });
 });

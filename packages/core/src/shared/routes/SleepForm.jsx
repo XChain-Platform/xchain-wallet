@@ -29,7 +29,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -194,7 +193,6 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
-    const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms');
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
     const passwordValueRef = useRef('');
@@ -294,7 +292,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         setFormError(null);
         // Address self-lock always uses the legacy review stage so the typed
         // confirm + irreversibility warning sit in front of the signature.
-        if (singleEncode && !isWatcherMode && isTick) { openConfirmModal(); return; }
+        if (!isWatcherMode && isTick) { openConfirmModal(); return; }
         setStage('review');
     }
 
@@ -598,7 +596,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     loading={confirmAction.composing}
                     disabled={!fromAddress || (isTick && sleepLocked) || (resumeMode === 'until' && !resumeBlockInput) || confirmAction.composing}
                 >
-                    {(singleEncode && !isWatcherMode && isTick) ? titleNoun : 'Preview'}
+                    {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
                 </Button>
             </div>
         </form>,

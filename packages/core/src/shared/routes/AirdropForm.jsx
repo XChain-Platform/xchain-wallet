@@ -667,7 +667,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // action preview, and the confirm page is what gates each signature.
     // : hardware comes through here too, on both legs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     const hwDispatch = {

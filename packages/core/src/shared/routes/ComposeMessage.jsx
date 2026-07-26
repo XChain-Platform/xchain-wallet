@@ -357,7 +357,7 @@ export function ComposeMessage({
     const isDemo = flowsLib.isDemoWallet(walletId);
     const needsKeyToCompose = !sendUnencrypted && encryptionChoice === 'ecdh' && !hw;
     const actionConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'bespokeFlows' });
-    const singleEncode = actionConfirm.enabled && !isDemo
+    const singleEncode = !isDemo
         && (!needsKeyToCompose || signerReady);
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;

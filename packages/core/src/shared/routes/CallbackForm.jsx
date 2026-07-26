@@ -30,7 +30,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
-    isConfirmModalSliceEnabled,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -209,7 +208,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
-    const singleEncode = isConfirmModalSliceEnabled(settings, 'actionForms');
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
     const passwordValueRef = useRef('');
@@ -358,7 +356,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         event.preventDefault();
         if (!guardBeforeSign()) return;
         setFormError(null);
-        if (singleEncode && !isWatcherMode) {
+        if (!isWatcherMode) {
             openConfirmModal();
             return;
         }
@@ -694,7 +692,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     loading={confirmAction.composing}
                     disabled={!fromAddress || !configComplete || !blockReached || confirmAction.composing}
                 >
-                    {singleEncode && !isWatcherMode ? 'Execute callback' : 'Preview'}
+                    {!isWatcherMode ? 'Execute callback' : 'Preview'}
                 </Button>
             </div>
         </form>,

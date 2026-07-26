@@ -284,7 +284,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     // tamper check - and the modal's own hardware note tells them this screen is
     // where action intent gets verified, since the device can only show native
     // outputs. Watcher mode still branches (it encodes, it never signs).
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
 

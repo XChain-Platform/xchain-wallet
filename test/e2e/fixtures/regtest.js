@@ -269,12 +269,23 @@ export async function assertNoActionRecorded(txid) {
  *
  * Mines while it waits: the indexer only records an action once its block
  * lands, and the regtest miner's own timer is too slow to wait out.
+ *
+ * The default budget is deliberately generous. Mining is instant but INDEXING
+ * is not, and on a busy shared venue the indexer can run minutes behind the
+ * chain tip - at which point "no action recorded" means "not indexed yet", not
+ * "the wallet sent something wrong". A 120s budget failed exactly that way
+ * while the action in question was sitting on chain, so the timeout message
+ * now reports the lag rather than leaving the next reader to guess.
  */
-export async function waitForValidAction(txid, timeoutMs = 120_000) {
+export async function waitForValidAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         await minerRpc('generate_blocks', { count: 1 });
-        const list = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/actions?limit=200`, {
+        // limit=100 because that is the explorer's REAL page cap: it silently
+        // clamps anything larger, so asking for 200 bought imaginary headroom.
+        // The list is newest-first, so one page is ample for an action just
+        // broadcast - the risk here was never page depth, it was lag.
+        const list = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/actions?limit=100`, {
             signal: AbortSignal.timeout(15_000),
         }).then((r) => r.json()).catch(() => null);
         const row = (list?.data || []).find((r) => r.tx_hash === txid);
@@ -292,7 +303,16 @@ export async function waitForValidAction(txid, timeoutMs = 120_000) {
         }
         await new Promise((r) => setTimeout(r, 2_000));
     }
-    throw new Error(`No XChain action was ever recorded for ${txid}`);
+    const status = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
+        signal: AbortSignal.timeout(10_000),
+    }).then((r) => r.json()).catch(() => null);
+    throw new Error(
+        `No XChain action recorded for ${txid} within ${Math.round(timeoutMs / 1000)}s. `
+        + `Chain tip ${status?.chain_tip?.[REGTEST_COIN]}, indexer lag `
+        + `${status?.chain_lag_blocks?.[REGTEST_COIN]}, decoder lag `
+        + `${status?.decoder_lag_blocks?.[REGTEST_COIN]}. A non-zero lag means the `
+        + `venue is behind, not that the wallet sent something wrong.`,
+    );
 }
 
 /**

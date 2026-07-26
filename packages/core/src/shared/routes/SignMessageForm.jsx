@@ -43,7 +43,6 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
-import { isConfirmModalSliceEnabled } from '../../schemas/settings.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -166,7 +165,6 @@ export function SignMessageForm({ walletId, onBack }) {
     // (sync Approve disable, exits locked once a signature exists, credential
     // re-prompt on a bad password, terminal states).
     const confirmAction = useConfirmAction();
-    const useConfirmPage = isConfirmModalSliceEnabled(settings, 'bespokeFlows');
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
 
@@ -214,30 +212,10 @@ export function SignMessageForm({ walletId, onBack }) {
             setError('messaging.signMessageRequest is not available in this shell.');
             return;
         }
-        if (useConfirmPage) {
-            // The password is collected ON the confirm page, so the credential
-            // guard below must not gate getting there.
-            openConfirmScreen();
-            return;
-        }
-        if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
-        setBusy(true);
-        try {
-            const result = await messaging.signMessageRequest({
-                walletId,
-                addressId,
-                password,
-                message,
-            });
-            applySigned(result);
-        } catch (err) {
-            const msg = err?.name === 'InvalidPasswordError'
-                ? 'Incorrect password.'
-                : err?.message || 'Signing failed.';
-            setError(msg);
-        } finally {
-            setBusy(false);
-        }
+        // The password is collected ON the confirm page (§5.5 message
+        // variant), so there is no credential guard here.
+        openConfirmScreen();
+        return;
     }
 
     const header = (
@@ -428,27 +406,12 @@ export function SignMessageForm({ walletId, onBack }) {
                     }}
                 />
             </div>
-            {/* On the confirm-page path the password lives on that page, so the
-                form does not ask for it twice. Errors still surface here (the
-                page is gone by the time we render them). */}
-            {useConfirmPage ? (
-                error ? (
-                    <p role="alert" className={styles.error}>{error}</p>
-                ) : null
-            ) : signerReady ? (
-                <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                    <span aria-hidden="true">🔓</span> Wallet unlocked, no password needed.
-                </p>
-            ) : (
-                <Input
-                    type="password"
-                    label="Wallet password"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    autoComplete="current-password"
-                    error={error || undefined}
-                />
-            )}
+            {/* The password lives on the confirm page, so the form does not ask
+                for it twice. Errors still surface here: the page is gone by the
+                time we render them. */}
+            {error ? (
+                <p role="alert" className={styles.error}>{error}</p>
+            ) : null}
             <Button
                 type="submit"
                 variant="primary"
@@ -457,7 +420,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 disabled={busy
                     || message.length === 0
                     || !addressId
-                    || (useConfirmPage ? false : (!signerReady && password.length === 0))}
+                    }
             >
                 Sign message
             </Button>

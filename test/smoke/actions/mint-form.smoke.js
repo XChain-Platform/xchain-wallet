@@ -108,12 +108,14 @@ assert.ok(
 // byte-identical prebuilt PSBT.  brought hardware onto it (the device
 // block replaces the password field); watcher still keeps review, because it
 // encodes and never signs.
+//  slice 5: the flags are gone, so the confirm path is unconditional
+// for anything that signs. Watcher is the only branch left.
 assert.ok(
-    /isConfirmModalSliceEnabled\(settings, 'actionForms'\)/.test(src),
-    'MintForm reads the actionForms slice flag with code default',
+    /if \(!isWatcherMode\) \{/.test(src),
+    'MintForm takes the confirm path for everything that signs',
 );
 assert.ok(
-    /singleEncode && !isWatcherMode\b(?! && !isHwSource)/.test(src),
+    /if \(!isWatcherMode\)(?! && !isHwSource)/.test(src),
     'the confirm page covers hardware too ; only watcher branches',
 );
 assert.ok(

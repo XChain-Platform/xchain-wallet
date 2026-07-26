@@ -58,47 +58,12 @@ export const ADS_DEFAULT_ENABLED = true;
 export const ADS_DEFAULT_PER_TX_SATS = 1;
 export const ADS_DEFAULT_TRIGGER_SATS = 1000;
 
-// ConfirmActionModal migration slices ( §5.6). Each slice's flag
-// is READ WITH THESE CODE DEFAULTS and persisted ONLY on an explicit
-// user/build override - never stamped into the vault at creation - so a
-// release that flips a default flips existing users too (a vault-stamped
-// flag would freeze the rollout). Flip a value to `true` here to enable
-// the confirm modal for that slice fleet-wide without a schema change.
-export const CONFIRM_MODAL_SLICE_DEFAULTS = Object.freeze({
-    send: true,
-    actionForms: true,
-    // Slice 3 ( §5.6): PlaceOrderPanel + ComposeMessage on the
-    // single-encode pipeline, and the two §5.5 non-action variants
-    // (PsbtSignForm -> PSBT variant, SignMessageForm -> message variant).
-    bespokeFlows: true,
-    // Slice 4 ( §5.6): the extension's dApp-approval window and the
-    // co-signer preview reuse the confirm surface's panels (§5.5 exports them
-    // separately precisely so this window can keep its own approval chrome).
-    extensionApproval: true,
-});
-export const CONFIRM_MODAL_SLICE_KEYS = Object.freeze(Object.keys(CONFIRM_MODAL_SLICE_DEFAULTS));
-
 // Pre-flight privacy control (§4.8): two-state. 'full' (default) runs both
 // tiers; 'local' runs Tier-2 local checks only (zero network). There is no
 // 'off' state - local checks cost zero privacy and zero network, so 'off'
 // would only discard free protection.
 export const PREFLIGHT_PRIVACY_MODES = /** @type {const} */ (['full', 'local']);
 export const PREFLIGHT_PRIVACY_DEFAULT = 'full';
-
-/**
- * Read a confirm-modal slice flag with the code default (never assumes a
- * vault-stamped value). This is the ONLY sanctioned way to read a slice.
- *
- * @param {import('./settings.js').Settings | null | undefined} settings
- * @param {keyof typeof CONFIRM_MODAL_SLICE_DEFAULTS} slice
- * @returns {boolean}
- */
-export function isConfirmModalSliceEnabled(settings, slice) {
-    const override = settings && settings.confirmModalSlices
-        ? settings.confirmModalSlices[slice]
-        : undefined;
-    return typeof override === 'boolean' ? override : CONFIRM_MODAL_SLICE_DEFAULTS[slice] === true;
-}
 
 /**
  * Resolve the pre-flight privacy mode with its code default.
@@ -515,19 +480,10 @@ export function validateSettings(record) {
             'must be an array of origin strings',
         );
     }
-    // v2-tolerant : confirm-modal migration slices. Absent by
-    // default (read via CONFIRM_MODAL_SLICE_DEFAULTS); when present, each
-    // known key must be boolean.
-    if (r.confirmModalSlices !== undefined) {
-        check(
-            errors,
-            'confirmModalSlices',
-            isPlainObject(r.confirmModalSlices) &&
-                CONFIRM_MODAL_SLICE_KEYS.every((k) =>
-                    r.confirmModalSlices[k] === undefined || isBoolean(r.confirmModalSlices[k])),
-            'malformed',
-        );
-    }
+    //  slice 5: `confirmModalSlices` is GONE. The confirm pipeline is
+    // unconditional, so the field is neither read nor validated. An existing
+    // vault may still carry it; the validator checks named fields rather than
+    // rejecting unknown ones, so a leftover key is inert.
     // v2-tolerant ( §4.8): pre-flight privacy mode.
     if (r.preflightPrivacy !== undefined) {
         check(

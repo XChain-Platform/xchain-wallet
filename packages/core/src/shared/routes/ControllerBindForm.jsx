@@ -200,7 +200,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // helper lives there), so the built pair is stashed for the confirm
     // page's decoded intent.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     // : hardware signs the SAME prebuilt PSBT through the same host

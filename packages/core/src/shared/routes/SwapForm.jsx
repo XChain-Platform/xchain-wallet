@@ -296,7 +296,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // host-side and confirms it on the shared confirm page; hardware +
     // watcher keep the legacy review stage.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     // : hardware signs the SAME prebuilt PSBT through the same host

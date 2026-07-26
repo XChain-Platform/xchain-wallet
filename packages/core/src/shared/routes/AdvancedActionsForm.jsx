@@ -354,7 +354,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     // included . Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     // The confirm page's password field writes `password` state; the approve
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');

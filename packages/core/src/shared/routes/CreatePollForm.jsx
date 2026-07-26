@@ -299,7 +299,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     // confirm page, hardware included . Watcher mode still
     // branches: it encodes, it never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     // : hardware signs the SAME prebuilt PSBT through the same host

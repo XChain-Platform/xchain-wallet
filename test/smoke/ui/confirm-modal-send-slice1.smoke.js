@@ -87,14 +87,16 @@ assert.match(permanenceSrc, /export function broadcastFailureKindFromError/, 'pe
 const sendSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');
 assert.match(sendSrc, /import \{ ActionConfirmScreen \}/, 'renders through the SHARED confirm screen, not a hand-rolled modal copy: that adapter is where the §5.2.5 exact fee and §5.2.3 deltas live');
 assert.match(sendSrc, /useConfirmAction\(\)/, 'uses the confirm hook');
-assert.match(sendSrc, /isConfirmModalSliceEnabled\(settings, 'send'\)/, 'reads the send slice flag with code default');
+//  slice 5: the flag is gone; only the watcher carve-out branches.
+assert.match(sendSrc, /if \(!isWatcherMode\) \{/, 'the confirm path is unconditional for anything that signs');
+assert.doesNotMatch(sendSrc, /confirmModalSlices|isConfirmModalSliceEnabled/, 'no slice flag survives');
 assert.match(sendSrc, /messaging\.composeForConfirm\(/, 'compose() calls the host compose route');
 assert.match(sendSrc, /messaging\.preflight\(/, 'preflight streams from the host route');
 assert.match(sendSrc, /const prebuiltPsbt = \{/, 'Approve signs the prebuilt PSBT via sendToken / sendAssetHw');
 // : hardware confirms here too; watcher still branches (it encodes,
 // it never signs). The §18.5 cross-check has to survive the move onto the
 // shared screen, or a HW gate would be silently dropped.
-assert.match(sendSrc, /singleEncodeSend && !isWatcherMode\b(?! && !isHwSource)/, 'confirm path covers hardware');
+assert.match(sendSrc, /if \(!isWatcherMode\)(?! && !isHwSource)/, 'confirm path covers hardware');
 assert.match(sendSrc, /hwSource=\{isHwSource \? fromAddress : null\}/, 'HW source hands the confirm screen its device block');
 assert.match(sendSrc, /hwRequireExplicitConfirm=\{signRisk\.requireExplicitConfirm\}/, '§18.5 cross-check reaches the confirm screen');
 assert.match(sendSrc, /messaging\.sendAssetHw\(\{/, 'the HW lane signs the prebuilt PSBT through the same send flow');
