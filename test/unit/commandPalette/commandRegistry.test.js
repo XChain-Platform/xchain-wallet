@@ -63,6 +63,38 @@ describe('buildCommands', () => {
         expect(findById(gated, 'nav-governance')).toBeDefined();
     });
 
+    // The betting views shipped with no palette entry at all, so the only route
+    // to them was More -> More actions -> Betting: two clicks deep in a
+    // catalogue, for a surface whose whole point is coming back to check a
+    // market. Every comparable destination (Governance, Staking, Dispensers, My
+    // orders) has an entry, and a returning user reaches for the palette.
+    it('routes the three betting views, ungated like the actions-menu entry', () => {
+        const navigate = vi.fn();
+        // No context flags: betting must be findable in a bare wallet, because
+        // the hub itself explains when no chain here supports BET. A gate would
+        // make the destination silently missing instead.
+        const commands = buildCommands({ navigate });
+
+        findById(commands, 'nav-betting').run();
+        expect(navigate).toHaveBeenCalledWith('bet-markets');
+        findById(commands, 'nav-my-bets').run();
+        expect(navigate).toHaveBeenCalledWith('my-bets');
+        findById(commands, 'nav-bet-oracle-console').run();
+        expect(navigate).toHaveBeenCalledWith('bet-oracle-console');
+    });
+
+    it('finds betting by the words users actually type', () => {
+        // The titles are "Betting" / "My bets" / "My markets", so a search for
+        // "wager", "odds" or "oracle" only lands via keywords. Those are the
+        // words a Counterparty-era user brings with them.
+        const commands = buildCommands({ navigate() {} });
+        const hub = findById(commands, 'nav-betting');
+        for (const word of ['bet', 'wager', 'odds', 'oracle']) {
+            expect(hub.keywords, `"${word}" should find the betting hub`).toContain(word);
+        }
+        expect(findById(commands, 'nav-bet-oracle-console').keywords).toContain('resolve');
+    });
+
     it('omits verb commands whose handler the shell did not supply', () => {
         const bare = buildCommands({ navigate() {} });
         expect(findById(bare, 'wallet-lock')).toBeUndefined();

@@ -163,6 +163,16 @@ export function buildCommands(ctx) {
     if (ctx.hasGovernanceAddress) {
         list.push({ id: 'nav-governance', category: 'Navigate', title: 'Governance', subtitle: 'Polls and voting', keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });
     }
+    // Betting, on the DEX pattern: the browse hub plus the two views a user comes
+    // back to rather than browses to. Ungated like the actions-menu entry it
+    // mirrors, because the hub itself reports when no chain in this wallet
+    // supports BET; gating here would make the destination silently unfindable
+    // instead of explaining itself.
+    list.push(
+        { id: 'nav-betting', category: 'Navigate', title: 'Betting', subtitle: 'Browse betting markets', keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
+        { id: 'nav-my-bets', category: 'Navigate', title: 'My bets', subtitle: 'Bets you have placed', keywords: ['bet', 'stake', 'wager', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: go('my-bets') },
+        { id: 'nav-bet-oracle-console', category: 'Navigate', title: 'My markets', subtitle: 'Markets you run as oracle: publish a result or cancel', keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: go('bet-oracle-console') },
+    );
 
     // ---- Create: authoring forms that open free-entry (no ref needed) ---
     list.push(
