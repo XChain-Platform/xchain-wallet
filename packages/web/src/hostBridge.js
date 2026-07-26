@@ -483,6 +483,7 @@ let priceAlertWatcher = null;
 let governancePollWatcher = null;
 let coinpayAutopayWatcher = null;
 let deadlineWatcher = null;
+let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
 
 // Seen-state key for the governance-poll watcher (localStorage): notify-once
@@ -490,6 +491,8 @@ let priceOracleInstance = null;
 const GOV_POLL_SEEN_KEY = 'xchain.governancePolls.seen';
 // Same for the PC-45 deadline watcher (chain -> announced kind:actionIndex).
 const DEADLINE_SEEN_KEY = 'xchain.deadlines.seen';
+// PC-46: chain -> announced `actionIndex:bucket` keys.
+const DISPENSER_ESCROW_SEEN_KEY = 'xchain.dispenserEscrow.seen';
 
 // §46: start the live notification watcher once a vault + host exist. All
 // three host-creation paths (create / import / unlock) call this; lock stops
@@ -606,6 +609,36 @@ function startNotifications() {
         deadlineWatcher.start();
     }
 
+    // PC-46: low-escrow alert. Auto-refill stays deferred (no per-event
+    // consent); this deep-links to PC-19's refill stage instead.
+    if (!dispenserEscrowWatcher) {
+        dispenserEscrowWatcher = new notificationsLib.DispenserEscrowWatcher({
+            getActiveAddresses: async () => {
+                const flowsNs = await getFlows();
+                const settings = await flowsNs.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: async () => {
+                const flowsNs = await getFlows();
+                return flowsNs.getSettings(vault);
+            },
+            notify: createWebNotifyAdapter(),
+            loadSeen: () => {
+                try { return JSON.parse(globalThis.localStorage?.getItem(DISPENSER_ESCROW_SEEN_KEY) || 'null'); }
+                catch (_err) { return null; }
+            },
+            saveSeen: (seen) => {
+                try { globalThis.localStorage?.setItem(DISPENSER_ESCROW_SEEN_KEY, JSON.stringify(seen)); }
+                catch (_err) { /* quota/private-mode: fall back to in-session only */ }
+            },
+            logger: console,
+        });
+        dispenserEscrowWatcher.start();
+    }
+
     // PC-16 CoinPay auto-pay engine. Web caveat (stated in the order
     // form's one-time acknowledgment): it only runs while this tab is
     // open. The payer lease in the vault keeps two tabs from paying the
@@ -642,6 +675,10 @@ function stopNotifications() {
     if (deadlineWatcher) {
         try { deadlineWatcher.stop(); } catch (_err) { /* best-effort */ }
         deadlineWatcher = null;
+    }
+    if (dispenserEscrowWatcher) {
+        try { dispenserEscrowWatcher.stop(); } catch (_err) { /* best-effort */ }
+        dispenserEscrowWatcher = null;
     }
     if (coinpayAutopayWatcher) {
         try { coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }

@@ -17,6 +17,7 @@ export { NotificationService } from './NotificationService.js';
 export { PriceAlertWatcher } from './PriceAlertWatcher.js';
 export { GovernancePollWatcher } from './GovernancePollWatcher.js';
 export { DeadlineWatcher, describeWindow } from './DeadlineWatcher.js';
+export { DispenserEscrowWatcher } from './DispenserEscrowWatcher.js';
 export { CoinpayAutopayWatcher, pendingTxReferencesMatch } from './CoinpayAutopayWatcher.js';
 export { getActiveAddresses } from './getActiveAddresses.js';
 export { getBroadcastTxids, markPendingTxIndexed } from './pendingTxBridge.js';

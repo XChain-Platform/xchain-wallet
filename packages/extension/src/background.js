@@ -177,8 +177,10 @@ let priceAlertWatcher = null;
 let governancePollWatcher = null;
 let coinpayAutopayWatcher = null;
 let deadlineWatcher = null;
+let dispenserEscrowWatcher = null;
 const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 const DEADLINE_SEEN_KEY = 'deadlinesSeen';
+const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
 
 // §46 delivery adapter for the extension: chrome.notifications works with the
 // popup closed (it's the service worker firing, not a page). type 'basic'
@@ -383,6 +385,35 @@ async function ensureHost() {
         deadlineWatcher.start();
     }
 
+    // PC-46: warn the operator before a dispenser runs dry. Auto-refill is
+    // deliberately NOT built (it would move value with no per-event consent,
+    // the PC-16 problem); this deep-links to PC-19's refill stage.
+    if (!dispenserEscrowWatcher) {
+        dispenserEscrowWatcher = new notificationsLib.DispenserEscrowWatcher({
+            getActiveAddresses: async () => {
+                const settings = await flowsLib.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: () => flowsLib.getSettings(vault),
+            notify: chromeNotify,
+            loadSeen: async () => {
+                try {
+                    const stored = await chrome.storage.local.get(DISPENSER_ESCROW_SEEN_KEY);
+                    return stored?.[DISPENSER_ESCROW_SEEN_KEY] || null;
+                } catch (_err) { return null; }
+            },
+            saveSeen: async (seen) => {
+                try { await chrome.storage.local.set({ [DISPENSER_ESCROW_SEEN_KEY]: seen }); }
+                catch (_err) { /* best-effort: fall back to in-session only */ }
+            },
+            logger: console,
+        });
+        dispenserEscrowWatcher.start();
+    }
+
     // PC-16: start the CoinPay auto-pay engine. Signs with the pool's
     // pre-unlocked signers only (unlocked session = armed); shares the
     // host's reservation ledger so its funds holds and the confirm
@@ -427,6 +458,10 @@ function tearDownHost() {
     if (deadlineWatcher) {
         try { deadlineWatcher.stop(); } catch (_err) { /* best-effort */ }
         deadlineWatcher = null;
+    }
+    if (dispenserEscrowWatcher) {
+        try { dispenserEscrowWatcher.stop(); } catch (_err) { /* best-effort */ }
+        dispenserEscrowWatcher = null;
     }
     if (coinpayAutopayWatcher) {
         try { coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }

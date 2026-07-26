@@ -85,6 +85,7 @@ import { createDesktopMessageHost } from './messageHost.js';
  *   priceAlertWatcher: import('@xchain-wallet/core').notifications.PriceAlertWatcher | null,
  *   governancePollWatcher: import('@xchain-wallet/core').notifications.GovernancePollWatcher | null,
  *   deadlineWatcher: import('@xchain-wallet/core').notifications.DeadlineWatcher | null,
+ *   dispenserEscrowWatcher: import('@xchain-wallet/core').notifications.DispenserEscrowWatcher | null,
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  * }} DesktopRuntime
@@ -118,6 +119,7 @@ export function createRuntime(deps) {
         priceAlertWatcher: null,
         governancePollWatcher: null,
         deadlineWatcher: null,
+        dispenserEscrowWatcher: null,
         coinpayAutopayWatcher: null,
         // PC-16: pre-unlocked software signers, populated by the shared
         // wallet.unlock handler while the password is in scope (wallet
@@ -235,6 +237,24 @@ export async function ensureHost(runtime) {
             runtime.deadlineWatcher.start();
         }
 
+        // PC-46 low-escrow alert. Auto-refill deferred (no per-event consent);
+        // deep-links to PC-19's refill stage.
+        if (runtime.notify && !runtime.dispenserEscrowWatcher) {
+            runtime.dispenserEscrowWatcher = new notificationsLib.DispenserEscrowWatcher({
+                getActiveAddresses: async () => {
+                    const settings = await flowsLib.getSettings(vault);
+                    return notificationsLib.getActiveAddresses(vault, runtime.chainRegistry, {
+                        activeNetwork: settings.activeNetwork,
+                    });
+                },
+                getSdkForChain: (chainId) => runtime.sdkRegistry.get(chainId),
+                getSettings: () => flowsLib.getSettings(vault),
+                notify: runtime.notify,
+                logger: console,
+            });
+            runtime.dispenserEscrowWatcher.start();
+        }
+
         // PC-16 CoinPay auto-pay engine. Desktop main is the spec's best
         // fire-and-forget home (tray-capable, no worker eviction). Pays
         // only when the signer pool holds the wallet's signer, i.e. after
@@ -294,6 +314,10 @@ export function tearDownHost(runtime) {
     if (runtime.deadlineWatcher) {
         try { runtime.deadlineWatcher.stop(); } catch (_err) { /* best-effort */ }
         runtime.deadlineWatcher = null;
+    }
+    if (runtime.dispenserEscrowWatcher) {
+        try { runtime.dispenserEscrowWatcher.stop(); } catch (_err) { /* best-effort */ }
+        runtime.dispenserEscrowWatcher = null;
     }
     if (runtime.coinpayAutopayWatcher) {
         try { runtime.coinpayAutopayWatcher.stop(); } catch (_err) { /* best-effort */ }

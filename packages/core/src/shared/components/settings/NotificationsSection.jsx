@@ -128,6 +128,13 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
         defaultOn: true,
     },
     {
+        key: 'dispenserEscrow',
+        label: 'Dispenser running low',
+        hint: 'Notify when a dispenser you run is nearly out of stock, so you can top it up before it turns buyers away.',
+        // v2-tolerant default, like the sibling watcher flags.
+        defaultOn: true,
+    },
+    {
         key: 'dispenserFills',
         label: 'Dispenser fills',
         hint: 'Notify when a dispenser you authored is hit.',
