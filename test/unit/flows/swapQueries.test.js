@@ -16,6 +16,7 @@ import {
     swapsForAddress,
     swapCancelsForAddress,
     swapDetail,
+    swapLifecycleFor,
 } from '../../../packages/core/src/flows/marketQueries.js';
 
 function fakeRegistry(sdk) {
@@ -45,5 +46,36 @@ describe('swap query passthroughs', () => {
         await expect(swapsForAddress({ sdkRegistry: {}, chainId: 'c' })).rejects.toThrow(/address is required/);
         await expect(swapCancelsForAddress({ sdkRegistry: {}, chainId: 'c' })).rejects.toThrow(/address is required/);
         await expect(swapDetail({ sdkRegistry: {}, chainId: 'c' })).rejects.toThrow(/actionIndex is required/);
+    });
+});
+
+// PC-21 trade lifecycle: swapLifecycleFor dispatches kind -> SDK method.
+describe('swapLifecycleFor (PC-21)', () => {
+    it('dispatches address-scoped kinds with type "address"', async () => {
+        const sdk = {
+            getSwapEdits: vi.fn(async () => ({ data: [] })),
+            getSwapExpires: vi.fn(async () => ({ data: [] })),
+            getSwapCancels: vi.fn(async () => ({ data: [] })),
+        };
+        const reg = fakeRegistry(sdk);
+        await swapLifecycleFor({ sdkRegistry: reg, chainId: 'c', kind: 'edits', query: 'addr-1', opts: { limit: 3 } });
+        expect(sdk.getSwapEdits).toHaveBeenCalledWith('addr-1', 'address', { limit: 3 });
+        await swapLifecycleFor({ sdkRegistry: reg, chainId: 'c', kind: 'expires', query: 'addr-1' });
+        expect(sdk.getSwapExpires).toHaveBeenCalledWith('addr-1', 'address', undefined);
+        await swapLifecycleFor({ sdkRegistry: reg, chainId: 'c', kind: 'cancels', query: 'addr-1' });
+        expect(sdk.getSwapCancels).toHaveBeenCalledWith('addr-1', 'address', undefined);
+    });
+
+    it('matches read the recent block feed with an empty query allowed', async () => {
+        const sdk = { getSwapMatches: vi.fn(async () => ({ data: [] })) };
+        await swapLifecycleFor({ sdkRegistry: fakeRegistry(sdk), chainId: 'c', kind: 'matches' });
+        expect(sdk.getSwapMatches).toHaveBeenCalledWith('', 'block', undefined);
+    });
+
+    it('requires a query for non-match kinds and rejects unknown kinds', async () => {
+        await expect(swapLifecycleFor({ sdkRegistry: { get: () => ({}) }, chainId: 'c', kind: 'edits' }))
+            .rejects.toThrow(/query is required/);
+        await expect(swapLifecycleFor({ sdkRegistry: { get: () => ({}) }, chainId: 'c', kind: 'bogus', query: 'x' }))
+            .rejects.toThrow(/unknown kind/);
     });
 });

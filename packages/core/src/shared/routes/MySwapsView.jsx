@@ -33,6 +33,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -83,6 +84,8 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     const [byChain, setByChain] = useState(/** @type {Record<string, any[]>} */ ({}));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [activeAction, setActiveAction] = useState(/** @type {{ type: 'cancel' | 'edit', item: any } | null} */ (null));
+    // PC-21: which swap's lifecycle timeline is expanded inline (by row key).
+    const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
     useEffect(() => {
@@ -205,11 +208,31 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     </div>
                     {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
                 </div>
-                {status === 'open' ? (
-                    <div className={L.rowActions}>
-                        <Button variant="secondary" size="sm" onClick={() => setActiveAction({ type: 'edit', item: it })}>Edit</Button>
-                        <Button variant="danger" size="sm" onClick={() => setActiveAction({ type: 'cancel', item: it })}>Cancel</Button>
-                    </div>
+                <div className={L.rowActions}>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-expanded={timelineKey === it.key}
+                        onClick={() => setTimelineKey(timelineKey === it.key ? null : it.key)}
+                    >
+                        {timelineKey === it.key ? 'Hide timeline' : 'Timeline'}
+                    </Button>
+                    {status === 'open' ? (
+                        <>
+                            <Button variant="secondary" size="sm" onClick={() => setActiveAction({ type: 'edit', item: it })}>Edit</Button>
+                            <Button variant="danger" size="sm" onClick={() => setActiveAction({ type: 'cancel', item: it })}>Cancel</Button>
+                        </>
+                    ) : null}
+                </div>
+                {timelineKey === it.key ? (
+                    <MarketLifecycleTimeline
+                        messaging={messaging}
+                        kind="swap"
+                        chainId={it.chainId}
+                        address={it.owner.address}
+                        actionIndex={it.row.action_index}
+                        createdBlock={it.row.block_index}
+                    />
                 ) : null}
             </li>
         );

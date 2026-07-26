@@ -34,6 +34,7 @@ import {
     ordersForAddress,
     orderCancelsForAddress,
     orderDetail,
+    orderLifecycleFor,
 } from '../../../packages/core/src/flows/marketQueries.js';
 
 const FROM = { address: 'addr-1', publicKey: '02ab', derivationPath: "m/84'/1'/0'/0/0", addressId: 'a1' };
@@ -144,5 +145,40 @@ describe('order query passthroughs', () => {
         await expect(ordersForAddress({ sdkRegistry: {}, chainId: 'c' })).rejects.toThrow(/address is required/);
         await expect(orderCancelsForAddress({ sdkRegistry: {}, chainId: 'c' })).rejects.toThrow(/address is required/);
         await expect(orderDetail({ sdkRegistry: {}, chainId: 'c' })).rejects.toThrow(/actionIndex is required/);
+    });
+});
+
+// PC-21 trade lifecycle: orderLifecycleFor dispatches kind -> SDK method.
+describe('orderLifecycleFor (PC-21)', () => {
+    function fakeRegistry(sdk) {
+        return { get: vi.fn(() => sdk) };
+    }
+
+    it('dispatches address-scoped kinds with type "address"', async () => {
+        const sdk = {
+            getOrderEdits: vi.fn(async () => ({ data: [] })),
+            getOrderExpires: vi.fn(async () => ({ data: [] })),
+            getOrderCancels: vi.fn(async () => ({ data: [] })),
+        };
+        const reg = fakeRegistry(sdk);
+        await orderLifecycleFor({ sdkRegistry: reg, chainId: 'c', kind: 'edits', query: 'addr-1', opts: { limit: 5 } });
+        expect(sdk.getOrderEdits).toHaveBeenCalledWith('addr-1', 'address', { limit: 5 });
+        await orderLifecycleFor({ sdkRegistry: reg, chainId: 'c', kind: 'expires', query: 'addr-1' });
+        expect(sdk.getOrderExpires).toHaveBeenCalledWith('addr-1', 'address', undefined);
+        await orderLifecycleFor({ sdkRegistry: reg, chainId: 'c', kind: 'cancels', query: 'addr-1' });
+        expect(sdk.getOrderCancels).toHaveBeenCalledWith('addr-1', 'address', undefined);
+    });
+
+    it('matches read the recent block feed with an empty query allowed', async () => {
+        const sdk = { getOrderMatches: vi.fn(async () => ({ data: [] })) };
+        await orderLifecycleFor({ sdkRegistry: fakeRegistry(sdk), chainId: 'c', kind: 'matches' });
+        expect(sdk.getOrderMatches).toHaveBeenCalledWith('', 'block', undefined);
+    });
+
+    it('requires a query for non-match kinds and rejects unknown kinds', async () => {
+        await expect(orderLifecycleFor({ sdkRegistry: { get: () => ({}) }, chainId: 'c', kind: 'edits' }))
+            .rejects.toThrow(/query is required/);
+        await expect(orderLifecycleFor({ sdkRegistry: { get: () => ({}) }, chainId: 'c', kind: 'bogus', query: 'x' }))
+            .rejects.toThrow(/unknown kind/);
     });
 });

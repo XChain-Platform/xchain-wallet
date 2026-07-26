@@ -234,6 +234,54 @@ export async function swapDetail({ sdkRegistry, chainId, actionIndex }) {
 }
 
 /**
+ * PC-21 trade lifecycle: the non-order-row ORDER lifecycle events -
+ * edits (ORDER v2), matches/fills (auto-matched counter-orders),
+ * expirations, and cancels. `kind` selects the stream; the caller
+ * (MyOrdersView's per-order timeline) merges these with the order's own
+ * creation into one chronological rail. Thin passthrough to the PC-55
+ * SDK wrappers, mirroring dispenserLifecycleFor.
+ *
+ * `type` semantics differ by kind: edits/expires/cancels accept
+ * {block, address}, so the per-owner-address lane is cheap and the caller
+ * filters client-side by `order_action_index`. Matches are block-keyed
+ * only (no per-order query exists), so the caller passes an empty query
+ * to read RECENT matches and filters by give_action_index/get_action_index
+ * - a best-effort fills view that can miss an old order's matches.
+ *
+ * @param {SdkCtx & { kind: 'edits' | 'matches' | 'expires' | 'cancels', query?: string, type?: string, opts?: object }} params
+ */
+export async function orderLifecycleFor({ sdkRegistry, chainId, kind, query, type, opts }) {
+    if (!sdkRegistry) throw new Error('orderLifecycleFor: sdkRegistry is required');
+    if (!chainId) throw new Error('orderLifecycleFor: chainId is required');
+    const fn = { edits: 'getOrderEdits', matches: 'getOrderMatches', expires: 'getOrderExpires', cancels: 'getOrderCancels' }[kind];
+    if (!fn) throw new Error(`orderLifecycleFor: unknown kind ${kind}`);
+    // Matches read the recent global feed with an empty query; every other
+    // lane must be scoped to an address (or block) query.
+    if (kind !== 'matches' && !query) throw new Error('orderLifecycleFor: query is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk[fn](query || '', type || (kind === 'matches' ? 'block' : 'address'), opts);
+}
+
+/**
+ * PC-21 trade lifecycle: the SWAP-side twin of orderLifecycleFor. Same
+ * kinds and `type` semantics (edits/expires/cancels by address filtered
+ * on `swap_action_index`; matches read the recent block-keyed feed and
+ * filter on give_action_index/get_action_index). Forwards to the PC-55
+ * SDK swap wrappers.
+ *
+ * @param {SdkCtx & { kind: 'edits' | 'matches' | 'expires' | 'cancels', query?: string, type?: string, opts?: object }} params
+ */
+export async function swapLifecycleFor({ sdkRegistry, chainId, kind, query, type, opts }) {
+    if (!sdkRegistry) throw new Error('swapLifecycleFor: sdkRegistry is required');
+    if (!chainId) throw new Error('swapLifecycleFor: chainId is required');
+    const fn = { edits: 'getSwapEdits', matches: 'getSwapMatches', expires: 'getSwapExpires', cancels: 'getSwapCancels' }[kind];
+    if (!fn) throw new Error(`swapLifecycleFor: unknown kind ${kind}`);
+    if (kind !== 'matches' && !query) throw new Error('swapLifecycleFor: query is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk[fn](query || '', type || (kind === 'matches' ? 'block' : 'address'), opts);
+}
+
+/**
  * Recent on-chain history for a token: every action that mentions
  * the tick. Powers §40.5 ManageToken's Activity tab.
  *

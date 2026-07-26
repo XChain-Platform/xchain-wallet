@@ -210,6 +210,8 @@ const {
     swapsForAddress,
     swapCancelsForAddress,
     swapDetail,
+    orderLifecycleFor,
+    swapLifecycleFor,
     historyForToken,
     genesisForToken,
     subtokensForTick,
@@ -3032,6 +3034,10 @@ export function createBackgroundHost(deps) {
     host.register('orders.detail', async (req, { sdkRegistry }) => {
         return orderDetail({ ...req, sdkRegistry });
     });
+    // PC-21: order lifecycle events (edits / matches / expires / cancels).
+    host.register('orders.lifecycle', async (req, { sdkRegistry }) => {
+        return orderLifecycleFor({ ...req, sdkRegistry });
+    });
     host.register('swaps.forToken', async (req, { sdkRegistry }) => {
         return swapsForToken({ ...req, sdkRegistry });
     });
@@ -3044,6 +3050,10 @@ export function createBackgroundHost(deps) {
     });
     host.register('swaps.detail', async (req, { sdkRegistry }) => {
         return swapDetail({ ...req, sdkRegistry });
+    });
+    // PC-21: swap lifecycle events (edits / matches / expires / cancels).
+    host.register('swaps.lifecycle', async (req, { sdkRegistry }) => {
+        return swapLifecycleFor({ ...req, sdkRegistry });
     });
     host.register('history.forToken', async (req, { sdkRegistry }) => {
         return historyForToken({ ...req, sdkRegistry });

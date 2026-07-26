@@ -871,6 +871,11 @@ export function getOrderDetail(req) {
     return /** @type {any} */ (sendMessage('orders.detail', req));
 }
 
+/** @param {{ chainId: string, kind: 'edits' | 'matches' | 'expires' | 'cancels', query?: string, type?: string, opts?: object }} req */
+export function getOrderLifecycle(req) {
+    return /** @type {any} */ (sendMessage('orders.lifecycle', req));
+}
+
 /** @param {{ chainId: string, tick: string, opts?: object }} req */
 export function getSwapsForToken(req) {
     return /** @type {any} */ (sendMessage('swaps.forToken', req));
@@ -886,6 +891,11 @@ export function getSwapCancelsForAddress(req) {
 
 export function getSwapDetail(req) {
     return /** @type {any} */ (sendMessage('swaps.detail', req));
+}
+
+/** @param {{ chainId: string, kind: 'edits' | 'matches' | 'expires' | 'cancels', query?: string, type?: string, opts?: object }} req */
+export function getSwapLifecycle(req) {
+    return /** @type {any} */ (sendMessage('swaps.lifecycle', req));
 }
 
 /** @param {{ chainId: string, tick: string, opts?: object }} req */

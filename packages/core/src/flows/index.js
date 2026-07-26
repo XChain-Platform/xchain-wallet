@@ -268,6 +268,8 @@ export {
     swapsForAddress,
     swapCancelsForAddress,
     swapDetail,
+    orderLifecycleFor,
+    swapLifecycleFor,
     historyForToken,
     genesisForToken,
     subtokensForTick,
