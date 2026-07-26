@@ -36,6 +36,7 @@ import { useContractManifest } from '../hooks/useContractManifest.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { contractBalanceRows, contractBalanceOf } from './contractResponseShape.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -146,6 +147,31 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         tick: tick,
     });
 
+    // D-23: a WITHDRAW spends the CONTRACT's custody, not the user's wallet, so
+    // the wallet balance is the wrong ceiling for it - the form used to offer
+    // "635,000 MEMEVALID available" and a Max of the same while the contract
+    // held 5,000, and the excess only failed on-chain as `invalid: insufficient
+    // contract balance` after a signed, fee-paying transaction. DEPOSIT keeps
+    // reading the wallet (that IS what it spends).
+    const [contractBalances, setContractBalances] = useState(/** @type {any} */ (null));
+    useEffect(() => {
+        if (isDeposit) return undefined;
+        let cancelled = false;
+        messaging.getContractBalance({ chainId, contractActionIndex })
+            .then((res) => { if (!cancelled) setContractBalances(res); })
+            // Custody stays null on a read failure, which leaves the form
+            // ungated rather than blocking every withdrawal on a hiccup.
+            .catch(() => { if (!cancelled) setContractBalances(null); });
+        return () => { cancelled = true; };
+    }, [isDeposit, chainId, contractActionIndex, messaging]);
+
+    const heldByContract = useMemo(
+        () => (isDeposit ? null : contractBalanceOf(contractBalances, tick)),
+        [isDeposit, contractBalances, tick],
+    );
+    // What the Max button and the "available" line speak for in this mode.
+    const spendableBalance = isDeposit ? tickAmtBalance : heldByContract;
+
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -157,7 +183,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     // included . Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = actionConfirm.enabled && !isWatcherMode;
+    const singleEncode = !isWatcherMode;
     // The confirm page's password field writes `password` state; the approve
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
@@ -260,6 +286,16 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         const q = String(quantity).trim();
         if (!q || Number.isNaN(Number(q)) || Number(q) <= 0) {
             setFormError('Quantity must be a positive number.');
+            return;
+        }
+        // D-23: refuse a withdrawal the contract cannot cover, rather than
+        // paying a fee to learn it on-chain. Only gates when the custody is
+        // actually known (null = unread, so the chain stays the judge).
+        if (!isDeposit && heldByContract != null && Number(q) > Number(heldByContract)) {
+            setFormError(
+                `The contract only holds ${formatWithThousands(heldByContract)} `
+                + `${String(tick).trim().toUpperCase()}.`,
+            );
             return;
         }
         setFormError(null);
@@ -511,6 +547,48 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         );
     }
 
+    // D-23: withdrawing offers the CONTRACT's holdings, not the wallet's. The
+    // wallet TokenPicker would list tokens the contract does not hold (and hide
+    // ones it does), so this mode gets a plain list of the custody rows.
+    if (tokenPickerOpen && !isDeposit) {
+        const rows = contractBalanceRows(contractBalances);
+        return wrap(
+            <div>
+                <p className={styles.pickerLabel}>Tokens held by the contract</p>
+                {rows.length === 0 ? (
+                    <p className={styles.hint}>
+                        This contract holds no tokens right now.
+                    </p>
+                ) : (
+                    <ul className={styles.detailsList}>
+                        {rows.map((row) => (
+                            <li key={row.tick}>
+                                <Button
+                                    variant="ghost"
+                                    block
+                                    onClick={() => {
+                                        setTick(String(row.tick).toUpperCase());
+                                        setTokenPickerOpen(false);
+                                        setFormError(null);
+                                    }}
+                                >
+                                    {String(row.tick).toUpperCase()}
+                                    {' - '}
+                                    {formatWithThousands(String(row.quantity))}
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <div className={styles.actions}>
+                    <Button variant="secondary" block onClick={() => setTokenPickerOpen(false)}>
+                        Back
+                    </Button>
+                </div>
+            </div>,
+        );
+    }
+
     // Token picker (spendable balances, locked to the contract's chain),
     // rendered in place of the form.
     if (tokenPickerOpen) {
@@ -523,6 +601,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 onSelect={(sel) => {
                     setTick(String(sel.tick || '').toUpperCase());
                     setTokenPickerOpen(false);
+                    setFormError(null);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
             />
@@ -560,13 +639,18 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setQuantity(stripped);
+                    // Editing the amount answers whatever the last error complained
+                    // about; leaving "The contract only holds 300 XCHAIN." on screen
+                    // next to a corrected 300 reads as a still-blocked form.
+                    setFormError(null);
                 }}
-                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
-                    ? () => setQuantity(tickAmtBalance)
+                onMax={spendableBalance && Number(spendableBalance) > 0
+                    ? () => setQuantity(spendableBalance)
                     : undefined}
-                maxDisabled={!tickAmtBalance}
-                balanceText={tickAmtBalance != null && (tick)
-                    ? `${formatWithThousands(tickAmtBalance)} ${String(tick).toUpperCase()} available`
+                maxDisabled={!spendableBalance}
+                balanceText={spendableBalance != null && (tick)
+                    ? `${formatWithThousands(spendableBalance)} ${String(tick).toUpperCase()} `
+                        + `${isDeposit ? 'available' : 'held by the contract'}`
                     : null}
             />
 

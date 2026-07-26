@@ -18,7 +18,7 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { extractSingle } from './contractResponseShape.js';
+import { extractSingle, contractBalanceRows } from './contractResponseShape.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -373,7 +373,7 @@ function StateTable({ state }) {
 }
 
 function BalancesTable({ balances }) {
-    const rows = toBalanceRows(balances);
+    const rows = contractBalanceRows(balances);
     if (rows.length === 0) {
         return <p className={styles.entryDescription}>Contract holds no tokens.</p>;
     }
@@ -453,27 +453,6 @@ function toKeyValueEntries(state) {
         return Object.entries(state);
     }
     return [];
-}
-
-function toBalanceRows(balances) {
-    if (!balances) return [];
-    if (Array.isArray(balances)) return balances.map(normalizeBalance);
-    if (Array.isArray(balances.data)) return balances.data.map(normalizeBalance);
-    if (Array.isArray(balances.balances)) return balances.balances.map(normalizeBalance);
-    // Shape: { TICK: amount, ... }
-    if (typeof balances === 'object') {
-        return Object.entries(balances)
-            .filter(([k]) => k !== 'data' && k !== 'total')
-            .map(([tick, quantity]) => ({ tick, quantity }));
-    }
-    return [];
-}
-
-function normalizeBalance(row) {
-    return {
-        tick: row.tick || row.TICK || row.ticker || '?',
-        quantity: row.quantity ?? row.amount ?? row.AMOUNT ?? '?',
-    };
 }
 
 function renderStateValue(v) {
