@@ -169,10 +169,100 @@ assert.match(decoderSrc, /if \(action === 'BET'\)/,
     'decodeAction has a BET branch, so a BET confirm is not raw params');
 assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
 
+// --- 9. the create form composes through the route, and prices the market ---
+
+{
+    const src = read('packages', 'core', 'src', 'shared', 'routes', 'CreateBetFeedForm.jsx');
+    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+        'CreateBetFeedForm composes through the BET builder route');
+    assert.ok(src.includes("builder: 'createMarketParams'"),
+        'CreateBetFeedForm names the createMarketParams builder');
+    assert.ok(!/actionData: \{ action: 'BET'/.test(src),
+        'CreateBetFeedForm does not feed a client-side wire mirror into the signing path');
+    // One derivation feeding both compose and submit, as in BetFeedDetail.
+    assert.match(src, /params: marketParams,[\s\S]{0,400}params: marketParams,/,
+        'CreateBetFeedForm composes and submits the same marketParams');
+
+    // The §11.3 live duration-fee display, which the spec calls load-bearing
+    // rather than polish: the charge is keyed on expire_at, so extending only
+    // the refund window (which a user reads as a safety margin, not a price) is
+    // what pushes a market past the free window.
+    assert.match(src, /messaging\.betProjectFeedCreateFee\(\{/,
+        'CreateBetFeedForm quotes the market cost through the SDK helper');
+    assert.match(src, /refundWindow: refundSeconds/,
+        'the quote is keyed on the refund window, not only the betting deadline');
+
+    // OUTCOMES and DETAILS are composed together so they cannot disagree (the
+    // indexer rejects a create whose DETAILS.outcomes differ from OUTCOMES).
+    assert.match(src, /title: label\.trim\(\)/,
+        "the DETAILS title is derived from the market's own label");
+}
+
+// --- 10. every BET surface RENDERS the confirm page it opens -------------
+
+// The confirm flow opens a phase and waits for Approve. A screen that opens it
+// without drawing it strands the action AND holds the module-level confirm
+// singleton, which makes every other form in the wallet reject as busy. All
+// three BET write surfaces must therefore render it, and must read the password
+// through a real ref: Approve runs from the closure captured when the page
+// OPENED, so `{ current: password }` (a fresh object per render) hands the
+// submit an empty string.
+for (const route of ['BetFeedDetail', 'OracleConsole', 'CreateBetFeedForm']) {
+    const src = read('packages', 'core', 'src', 'shared', 'routes', `${route}.jsx`);
+    assert.match(src, /import \{ ActionConfirmScreen \}/, `${route} imports the confirm page`);
+    assert.match(src, /if \(actionConfirm\.open\)/, `${route} renders the confirm page it opens`);
+    assert.match(src, /<ActionConfirmScreen/, `${route} renders ActionConfirmScreen`);
+    assert.match(src, /passwordRef: passwordValueRef/,
+        `${route} reads the confirm-page password through a live ref`);
+    assert.ok(!/passwordRef: \{ current: password \}/.test(src),
+        `${route} does not capture a stale password object`);
+}
+
+// --- 11. the shells route the whole family, and BET is authorable --------
+
+for (const [shell, ...p] of [
+    ['extension', 'packages', 'extension', 'src', 'popup', 'App.jsx'],
+    ['web', 'packages', 'web', 'src', 'App.jsx'],
+    ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],
+]) {
+    const src = read(...p);
+    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole']) {
+        assert.ok(src.includes(`import { ${c} }`), `${shell}: imports ${c}`);
+        assert.ok(src.includes(`<${c}`), `${shell}: renders ${c}`);
+    }
+    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console']) {
+        assert.ok(src.includes(`'${view}'`), `${shell}: routes the ${view} view`);
+    }
+    // Reachable from the menu, not merely present in the bundle.
+    assert.match(src, /onBetting: \(\) => setUnlockedView\('bet-markets'\)/,
+        `${shell}: the actions menu opens the betting hub`);
+    assert.match(src, /onSelect: onBetting/, `${shell}: the betting menu entry is wired`);
+}
+
+{
+    // The registry moves in lockstep with the manifest's walletForm flag; the
+    // ActionManifestConformance unit guard fails if these two ever disagree.
+    const reg = read('packages', 'core', 'src', 'registry', 'actions.js');
+    const commonIdx = reg.indexOf('export const COMMON_ACTIONS');
+    const protocolIdx = reg.indexOf('export const PROTOCOL_ONLY_ACTIONS');
+    assert.ok(reg.slice(commonIdx, protocolIdx).includes("'BET'"),
+        'BET is an authorable action now that it has a form');
+    assert.ok(!reg.slice(protocolIdx).includes("'BET'"),
+        'BET is no longer listed as protocol-only');
+
+    const manifest = JSON.parse(read('test', 'fixtures', 'action-manifest.json'));
+    assert.equal(manifest.actions.BET.walletForm, true,
+        'the manifest records the BET wallet form');
+}
+
 console.log(
     'OK: bet compose-for-confirm smoke ( P8: action.bet.composeForConfirm runs the real '
     + 'sdk.betting builder host-side with an allow-listed builder name and returns betParams; all 4 '
     + 'formats have their own software + hardware routes; all 3 shells export the read and write '
     + 'surfaces; each composer is nailed to one builder so a place-bet can never reach the resolve '
-    + 'builder; and decodeAction has a BET branch so the confirm screen is not raw params)',
+    + 'builder; and decodeAction has a BET branch so the confirm screen is not raw params. Plus the '
+    + 'P8 completion legs: CreateBetFeedForm composes through the same route and quotes the market '
+    + 'cost off the REFUND deadline; all three write surfaces render the confirm page they open and '
+    + 'read its password through a live ref; all three shells route the five views and reach them '
+    + 'from the actions menu; and BET is authorable in the registry in lockstep with the manifest)',
 );

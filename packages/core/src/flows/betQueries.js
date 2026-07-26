@@ -100,6 +100,43 @@ export async function projectBetPayout({ sdkRegistry, chainId, pools, outcome, s
 }
 
 /**
+ * Project what OPENING a market will cost in protocol fees, before the user signs.
+ *
+ * Creation is duration-priced on the ORDER/DISPENSER expiration mechanism, measured
+ * over the market's whole pass-eligible life (`deadline + refundWindow - blockTime`),
+ * so a longer refund window costs money even though a user reads that field as a
+ * safety margin rather than a price. Delegated to the SDK for the same reason as
+ * projectBetPayout: the on-chain day count rounds half-up, and a UI that floored it
+ * would under-quote by a whole day's fee at every fractional-day boundary.
+ *
+ * Returns `{ durationSeconds, days, billableDays, free, fee }` (fee as an XCHAIN
+ * decimal string).
+ * @param {{ sdkRegistry: object, chainId: string, deadline?: number|string,
+ *           refundWindow?: number|string, blockTime?: number|string,
+ *           durationSeconds?: number|string, freeDays?: number, perDay?: number,
+ *           gasPrice?: string|number }} params
+ */
+export async function projectBetFeedCreateFee({
+    sdkRegistry, chainId, deadline, refundWindow, blockTime, durationSeconds,
+    freeDays, perDay, gasPrice,
+}) {
+    const sdk = requireSdk({ sdkRegistry, chainId }, 'projectBetFeedCreateFee');
+    if (typeof sdk?.betting?.projectFeedCreateFee !== 'function') {
+        throw new Error('projectBetFeedCreateFee: sdk.betting.projectFeedCreateFee is unavailable');
+    }
+    const set = (v) => v !== undefined && v !== null && v !== '';
+    return sdk.betting.projectFeedCreateFee({
+        ...(set(durationSeconds) && { durationSeconds }),
+        ...(set(deadline) && { deadline }),
+        ...(set(refundWindow) && { refundWindow }),
+        ...(set(blockTime) && { blockTime }),
+        ...(set(freeDays) && { freeDays }),
+        ...(set(perDay) && { perDay }),
+        ...(set(gasPrice) && { gasPrice }),
+    });
+}
+
+/**
  * Fetch an oracle's track record (markets created, resolved, cancelled, expired).
  *
  * This is the v0 reputation system and it is NOT backed by any stake: the record

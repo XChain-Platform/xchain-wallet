@@ -161,6 +161,7 @@ const {
     betsForQuery,
     oracleStats,
     projectBetPayout,
+    projectBetFeedCreateFee,
     pollsForChain,
     pollDetail,
     pollResults,
@@ -2997,6 +2998,13 @@ export function createBackgroundHost(deps) {
     // number shown before signing cannot disagree with the number settled.
     host.register('bet.projectPayout', async (req, { sdkRegistry }) => {
         return projectBetPayout({ ...req, sdkRegistry });
+    });
+
+    // What opening a market costs in protocol fees. Same reason as above: the
+    // charge is duration-priced with a half-up day count, so the quote has to come
+    // from the SDK's arithmetic rather than the form's.
+    host.register('bet.projectFeedCreateFee', async (req, { sdkRegistry }) => {
+        return projectBetFeedCreateFee({ ...req, sdkRegistry });
     });
 
     // Contract-targeted staking: parallel to the capability staking passthroughs above.

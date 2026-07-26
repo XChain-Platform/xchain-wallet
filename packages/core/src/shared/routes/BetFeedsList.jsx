@@ -76,9 +76,11 @@ function extractRows(resp) {
  * @param {string} props.walletId
  * @param {(chainId: string, feedIndex: string | number) => void} props.onOpenMarket
  * @param {(chainId: string) => void} [props.onCreate]
+ * @param {() => void} [props.onMyBets]      the bets this wallet has placed, across every address
+ * @param {() => void} [props.onMyMarkets]   the oracle console for markets this wallet runs
  * @param {() => void} props.onBack
  */
-export function BetFeedsList({ walletId, onOpenMarket, onCreate, onBack }) {
+export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyMarkets, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -141,6 +143,16 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onBack }) {
                 <Button variant={openOnly ? 'ghost' : 'primary'} onClick={() => setOpenOnly(false)}>All markets</Button>
                 {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
             </div>
+
+            {/* This screen is the whole family's entry point (the GovernancePolls
+                pattern), so the two personal views hang off it rather than each
+                needing its own slot in the actions menu. */}
+            {onMyBets || onMyMarkets ? (
+                <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                    {onMyBets ? <Button variant="ghost" onClick={onMyBets}>My bets</Button> : null}
+                    {onMyMarkets ? <Button variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
+                </div>
+            ) : null}
 
             {error ? <div role="alert" className={styles.error}>{error}</div> : null}
             {chainId && !rows && !error ? <p>Loading markets…</p> : null}

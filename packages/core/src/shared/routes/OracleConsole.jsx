@@ -8,13 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Input } from '@xchain-wallet/core/ui';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -60,9 +64,10 @@ function countdown(targetSec, nowSec) {
  * @param {string} props.walletId
  * @param {string} [props.accountId]
  * @param {(chainId: string, feedIndex: string | number) => void} [props.onOpenMarket]
+ * @param {(chainId: string, feedIndex: string | number) => void} [props.onDuplicate]  open a new market pre-filled from this one
  * @param {() => void} props.onBack
  */
-export function OracleConsole({ walletId, accountId, onOpenMarket, onBack }) {
+export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -122,14 +127,22 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onBack }) {
     const fromAddress = active?.owner || null;
     const isHw = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const signerReady = useSignerReady(walletId);
+    const [hwStatus, setHwStatus] = useState('idle');
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    // A real ref, not `{ current: password }`: Approve runs from the closure
+    // captured when the confirm page OPENED, which is before the password on that
+    // page has been typed. A fresh object per render leaves that closure holding
+    // the empty string, so resolve and cancel both fail as a wrong password.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
     const submitResolve = useConfirmSubmit({
-        messaging, isHw, signerId: fromAddress?.signerId, passwordRef: { current: password },
+        messaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
         software: 'resolveMarketAction', hardware: 'resolveMarketActionHw',
     });
     const submitCancel = useConfirmSubmit({
-        messaging, isHw, signerId: fromAddress?.signerId, passwordRef: { current: password },
+        messaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
         software: 'cancelMarketAction', hardware: 'cancelMarketActionHw',
     });
 
@@ -178,6 +191,43 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onBack }) {
     const header = <PageHeader onBack={onBack} title="My markets" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
+    // Resolve and cancel both settle real money, so they go through the same
+    // confirm page every other action form uses. Without this branch
+    // `actionConfirm.run` opens a phase nothing draws: the oracle action never
+    // reaches Approve, and the held confirm singleton makes every other form's
+    // confirm reject as busy until this screen unmounts.
+    //
+    // Decoded from what the HOST composed, so the screen names the format that
+    // will actually broadcast rather than the row that was clicked.
+    if (actionConfirm.open) {
+        const composedParams = actionConfirm.confirmAction.composed?.betParams;
+        const cid = active?.chainId;
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={composedParams
+                    ? decoderLib.decodeAction({
+                        action: 'BET',
+                        params: composedParams,
+                        chainId: cid || undefined,
+                        chainRegistry,
+                    })
+                    : null}
+                chainLabel={chainRegistry.get(cid)?.displayName || cid}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+                hwSource={isHw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={cid}
+                getSignerStatus={messaging.getSignerStatus}
+            />
+        );
+    }
+
     if (error) {
         return wrap(
             <>
@@ -212,9 +262,17 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onBack }) {
                             <div className={styles.hint}>
                                 Betting closes {countdown(f.deadline, nowSec)} · refunds everyone {countdown(f.expire_at, nowSec)} if unresolved
                             </div>
-                            {onOpenMarket ? (
-                                <Button variant="ghost" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
-                            ) : null}
+                            <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                                {onOpenMarket ? (
+                                    <Button variant="ghost" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
+                                ) : null}
+                                {/* A market cannot be edited, so fixing wrong terms means
+                                    cancelling and opening a corrected copy. This is that
+                                    path: it pre-fills the create form from these terms. */}
+                                {onDuplicate ? (
+                                    <Button variant="ghost" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a new market</Button>
+                                ) : null}
+                            </div>
 
                             {!isWatcherMode && (canResolve || canCancel) ? (
                                 <div className={styles.actions} style={{ gap: '0.5rem' }}>

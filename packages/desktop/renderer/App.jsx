@@ -109,6 +109,11 @@ import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
 import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
 import { GovernancePolls } from '@xchain-wallet/core/shared/routes/GovernancePolls.jsx';
+import { BetFeedsList } from '@xchain-wallet/core/shared/routes/BetFeedsList.jsx';
+import { BetFeedDetail } from '@xchain-wallet/core/shared/routes/BetFeedDetail.jsx';
+import { CreateBetFeedForm } from '@xchain-wallet/core/shared/routes/CreateBetFeedForm.jsx';
+import { MyBets } from '@xchain-wallet/core/shared/routes/MyBets.jsx';
+import { OracleConsole } from '@xchain-wallet/core/shared/routes/OracleConsole.jsx';
 import { CreatePollForm } from '@xchain-wallet/core/shared/routes/CreatePollForm.jsx';
 import { PollDetail } from '@xchain-wallet/core/shared/routes/PollDetail.jsx';
 import { DelegateVoteForm } from '@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx';
@@ -350,6 +355,12 @@ function AppInner() {
     const [stakeContractPickerActive, setStakeContractPickerActive] = useState(false);
     const [governanceRef, setGovernanceRef] = useState(
         /** @type {{ chainId: string, pollIndex?: string | number } | null} */ (null),
+    );
+    // Betting navigation. `duplicateFeedIndex` carries the cancel-and-recreate
+    // path: markets are immutable, so a corrected market is a NEW market
+    // pre-filled from the old one.
+    const [betRef, setBetRef] = useState(
+        /** @type {{ chainId: string, feedIndex?: string | number, duplicateFeedIndex?: string | number } | null} */ (null),
     );
     const [stakingRef, setStakingRef] = useState(
         /** @type {{ kind: 'validator' | 'contract', chainId: string, address: string, contractActionIndex?: string } | null} */ (null),
@@ -1181,6 +1192,58 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'bet-markets' && activeWalletId) {
+                return (
+                    <BetFeedsList
+                        walletId={activeWalletId}
+                        onOpenMarket={(chainId, feedIndex) => { setBetRef({ chainId, feedIndex }); setUnlockedView('bet-market-detail'); }}
+                        onCreate={(chainId) => { setBetRef({ chainId }); setUnlockedView('bet-create'); }}
+                        onMyBets={() => setUnlockedView('my-bets')}
+                        onMyMarkets={() => setUnlockedView('bet-oracle-console')}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'bet-market-detail' && activeWalletId && betRef) {
+                return (
+                    <BetFeedDetail
+                        walletId={activeWalletId}
+                        chainId={betRef.chainId}
+                        feedIndex={betRef.feedIndex}
+                        onBack={() => setUnlockedView('bet-markets')}
+                    />
+                );
+            }
+            if (unlockedView === 'bet-create' && activeWalletId && betRef) {
+                return (
+                    <CreateBetFeedForm
+                        walletId={activeWalletId}
+                        chainId={betRef.chainId}
+                        duplicateFeedIndex={betRef.duplicateFeedIndex}
+                        onBack={() => setUnlockedView(betRef.duplicateFeedIndex ? 'bet-oracle-console' : 'bet-markets')}
+                        onCreated={() => setUnlockedView('bet-oracle-console')}
+                    />
+                );
+            }
+            if (unlockedView === 'my-bets' && activeWalletId) {
+                return (
+                    <MyBets
+                        walletId={activeWalletId}
+                        onOpenMarket={(chainId, feedIndex) => { setBetRef({ chainId, feedIndex }); setUnlockedView('bet-market-detail'); }}
+                        onBack={() => setUnlockedView('bet-markets')}
+                    />
+                );
+            }
+            if (unlockedView === 'bet-oracle-console' && activeWalletId) {
+                return (
+                    <OracleConsole
+                        walletId={activeWalletId}
+                        onOpenMarket={(chainId, feedIndex) => { setBetRef({ chainId, feedIndex }); setUnlockedView('bet-market-detail'); }}
+                        onDuplicate={(chainId, feedIndex) => { setBetRef({ chainId, duplicateFeedIndex: feedIndex }); setUnlockedView('bet-create'); }}
+                        onBack={() => setUnlockedView('bet-markets')}
+                    />
+                );
+            }
             if (unlockedView === 'governance-polls' && activeWalletId) {
                 return (
                     <GovernancePolls
@@ -1762,6 +1825,7 @@ function AppInner() {
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
+                            onBetting: () => setUnlockedView('bet-markets'),
                             onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -2157,6 +2221,7 @@ function buildActionEntries({
     onMultisigSign,
     onCoSignerAccounts,
     onVoteGovernance,
+    onBetting,
     onContacts,
 }) {
     return [
@@ -2321,6 +2386,12 @@ function buildActionEntries({
             label: 'Governance',
             description: 'Create and vote on token-weighted polls, and delegate your voting weight.',
             onSelect: onVoteGovernance,
+        },
+        {
+            id: 'bet-markets',
+            label: 'Betting',
+            description: 'Browse betting markets and place a bet, track your bets, or run a market of your own as its oracle.',
+            onSelect: onBetting,
         },
         {
             id: 'cosigner-accounts',

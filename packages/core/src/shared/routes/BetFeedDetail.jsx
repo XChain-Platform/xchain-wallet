@@ -8,14 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Input } from '@xchain-wallet/core/ui';
+import { registry as registryLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 function unwrap(resp) {
     if (!resp) return null;
@@ -113,13 +117,21 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const [hwStatus, setHwStatus] = useState('idle');
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    // A real ref, not `{ current: password }`: Approve runs from the closure
+    // captured when the confirm page OPENED, which is before the password on that
+    // page has been typed. A fresh object per render leaves that closure holding
+    // the empty string, so the bet fails as a wrong password.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
     const submitConfirmed = useConfirmSubmit({
         messaging,
         isHw: isHwSource,
         signerId: fromAddress?.signerId,
-        passwordRef: { current: password },
+        passwordRef: passwordValueRef,
         software: 'placeBetAction',
         hardware: 'placeBetActionHw',
     });
@@ -191,6 +203,42 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
 
     const header = <PageHeader onBack={onBack} title="Market" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+
+    // The confirm page, rendered in place of the market while the single-encode
+    // pipeline is live. Without this branch `actionConfirm.run` opens a confirm
+    // phase nothing draws, so the bet never reaches Approve AND the confirm
+    // singleton stays held, which makes every other form's confirm reject as
+    // busy until this screen unmounts.
+    //
+    // The intent is decoded from the params the HOST composed, never from the
+    // form state: a place-bet and a resolve differ on the wire only by AMOUNT.
+    if (actionConfirm.open) {
+        const composedParams = actionConfirm.confirmAction.composed?.betParams;
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                decoded={composedParams
+                    ? decoderLib.decodeAction({
+                        action: 'BET',
+                        params: composedParams,
+                        chainId: chainId || undefined,
+                        chainRegistry,
+                    })
+                    : null}
+                chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hintClassName={styles.hint}
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+            />
+        );
+    }
 
     if (error) {
         return wrap(

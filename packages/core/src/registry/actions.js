@@ -28,6 +28,7 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'ADDRESS',
     'AIRDROP',
     'BATCH',
+    'BET',
     'BROADCAST',
     'CALLBACK',
     'COINPAY',
@@ -69,11 +70,17 @@ export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
 // (ControllerBindForm), so it is authorable on every chain. (The old note
 // claiming the messaging flows emit ADDRESS was wrong; only controllerBind
 // composed it.)
-// BET  is mid-rollout: encoder/SDK accept it (userEncodable) but the
-// wallet form is package P7, which moves BET out of this list when it lands.
-export const PROTOCOL_ONLY_ACTIONS = /** @type {const} */ ([
-    'BET',
-]);
+// BET  moved OUT with its P8 authoring surface (CreateBetFeedForm plus
+// the place-bet flow and the oracle console), in lockstep with the manifest's
+// walletForm flag.
+//
+// The list is EMPTY today, and that is a valid state rather than a leftover:
+// every user-encodable action currently has a form. It stays because the two
+// contracts above must not re-conflate, and the next protocol-accepted-but
+// -formless action belongs here rather than in COMMON_ACTIONS. The conformance
+// guard pins it either way, comparing this list against the manifest's
+// userEncodable-without-walletForm slice.
+export const PROTOCOL_ONLY_ACTIONS = /** @type {const} */ ([]);
 
 export const BITCOIN_ACTIONS = [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS, ...PROTOCOL_ONLY_ACTIONS]
     .slice()
