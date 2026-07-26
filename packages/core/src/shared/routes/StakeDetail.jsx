@@ -24,6 +24,7 @@ import {
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { unclaimedRewards } from '../../flows/stakingDashboard.js';
 import styles from './IssueTokenForm.module.css';
 import local from './StakeDetail.module.css';
 
@@ -88,6 +89,7 @@ export function StakeDetail({
     const [stakes, setStakes] = useState(/** @type {any[]} */ ([]));
     const [delegations, setDelegations] = useState(/** @type {any[]} */ ([]));
     const [rewards, setRewards] = useState(/** @type {any[]} */ ([]));
+    const [rewardClaims, setRewardClaims] = useState(/** @type {any[]} */ ([]));
     // Contract lane.
     const [contract, setContract] = useState(/** @type {any} */ (null));
     const [contractStakes, setContractStakes] = useState(/** @type {any[]} */ ([]));
@@ -141,15 +143,21 @@ export function StakeDetail({
                 }
 
                 if (kind === 'validator') {
-                    const [s, d, r] = await Promise.all([
+                    const [s, d, r, c] = await Promise.all([
                         messaging.getStakesForAddress({ chainId, address }),
                         messaging.getDelegationsForAddress({ chainId, address }),
                         messaging.getRewardsForAddress({ chainId, address }),
+                        // PC-47: the claim ledger. Without it "pending" cannot
+                        // be computed at all (see splitRewards).
+                        typeof messaging.getRewardClaimsForAddress === 'function'
+                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => null)
+                            : Promise.resolve(null),
                     ]);
                     if (cancelled) return;
                     setStakes(extractRows(s));
                     setDelegations(extractRows(d));
                     setRewards(extractRows(r));
+                    setRewardClaims(extractRows(c));
                 } else {
                     const idx = String(contractActionIndex ?? '');
                     // Contract metadata (cooldown, slash destination) is
@@ -185,7 +193,10 @@ export function StakeDetail({
     const descriptor = chainRegistry.get(chainId);
     const primaryStake = stakes[0];
     const primaryDelegation = delegations[0];
-    const { pending, lifetime } = useMemo(() => splitRewards(rewards), [rewards]);
+    const { pending, lifetime } = useMemo(
+        () => splitRewards(rewards, rewardClaims),
+        [rewards, rewardClaims],
+    );
     const totalContractStaked = useMemo(() => {
         let sum = 0;
         for (const s of contractStakes) {
@@ -594,17 +605,25 @@ function extractRows(resp) {
     return [];
 }
 
-function splitRewards(rows) {
-    let pending = 0;
-    let lifetime = 0;
-    for (const r of rows) {
-        const amt = Number(r.amount ?? r.AMOUNT ?? r.reward ?? 0);
-        if (!Number.isFinite(amt)) continue;
-        const status = String(r.status || '').toLowerCase();
-        if (status === 'pending' || status === 'unclaimed') pending += amt;
-        lifetime += amt;
-    }
-    return { pending, lifetime };
+// PC-47: `pending` is accrued minus successfully-claimed, the same sum the
+// indexer's getUnclaimedRewardTotal computes.
+//
+// It used to read a per-row `status` and count 'pending'/'unclaimed' rows.
+// The validator_rewards projection has NO status column (it is a pure accrual
+// ledger: id, source, signing_pubkey, reward_type, round_reference, amount,
+// block_index, timestamp), so that test never matched and `pending` was always
+// 0 - which left the Claim button permanently disabled for every real
+// validator. The claim side lives in a separate table (reward_claims), and only
+// claims the chain marked VALID subtract: a COLLECT the chain refused (an
+// under-funded reward pool being the useful case) leaves a row behind but moved
+// nothing, and the rewards stay claimable.
+function splitRewards(rows, claimRows) {
+    const totals = unclaimedRewards({ rewards: rows, claims: claimRows });
+    return {
+        pending: Number(totals.unclaimed),
+        lifetime: Number(totals.accrued),
+        hasRejectedClaim: totals.hasRejectedClaim,
+    };
 }
 
 function shortPubkey(pk) {

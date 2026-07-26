@@ -1215,6 +1215,12 @@ export function getRewardsForAddress(req) {
     return /** @type {any} */ (sendMessage('rewards.forAddress', req));
 }
 
+/** PC-47: COLLECT events, the subtrahend in the unclaimed-rewards sum.
+ *  @param {object} req */
+export function getRewardClaimsForAddress(req) {
+    return /** @type {any} */ (sendMessage('rewardClaims.forAddress', req));
+}
+
 export function getValidatorsForChain(req) {
     return /** @type {any} */ (sendMessage('validators.forChain', req));
 }

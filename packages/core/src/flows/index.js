@@ -219,6 +219,7 @@ export {
     stakesForAddress,
     delegationsForAddress,
     rewardsForAddress,
+    rewardClaimsForAddress,
     validatorsForChain,
     capabilityThresholds,
     contractStakesForAddress,
@@ -369,6 +370,7 @@ export {
 export { dispenserAddress } from './dispenserAddress.js';
 export { resolveActiveAddresses, setActiveAddress } from './activeAddress.js';
 export { isBindingPoll, bindingPollErrors, CALLBACK_ON_VALUES } from './bindingPoll.js';
+export { unclaimedRewards, cooldownStatus, cooldownText, toBaseUnits, fromBaseUnits } from './stakingDashboard.js';
 export {
     addressBalances,
     addressHistory,

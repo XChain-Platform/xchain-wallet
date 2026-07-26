@@ -138,6 +138,7 @@ const {
     stakesForAddress,
     delegationsForAddress,
     rewardsForAddress,
+    rewardClaimsForAddress,
     validatorsForChain,
     capabilityThresholds,
     contractStakesForAddress,
@@ -2839,6 +2840,11 @@ export function createBackgroundHost(deps) {
 
     host.register('rewards.forAddress', async (req, { sdkRegistry }) => {
         return rewardsForAddress({ ...req, sdkRegistry });
+    });
+
+    // PC-47: the claim side of the unclaimed-rewards sum.
+    host.register('rewardClaims.forAddress', async (req, { sdkRegistry }) => {
+        return rewardClaimsForAddress({ ...req, sdkRegistry });
     });
 
     host.register('validators.forChain', async (req, { sdkRegistry }) => {

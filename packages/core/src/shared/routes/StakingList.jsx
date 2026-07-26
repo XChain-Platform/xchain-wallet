@@ -13,6 +13,7 @@ import {
     Screen,
     PageHeader,
     Icon,
+    Button,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
@@ -25,6 +26,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { unclaimedRewards, cooldownStatus, cooldownText } from '../../flows/stakingDashboard.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
 
@@ -147,7 +149,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
 
         const initial = {};
         for (const cid of btcChainsWithAddresses) {
-            initial[cid] = { loading: true, rows: [], rewards: [], error: null };
+            initial[cid] = { loading: true, rows: [], rewards: [], rewardClaims: [], error: null };
         }
         setStateByChain(initial);
 
@@ -160,6 +162,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     stakes: [],
                     delegations: [],
                     rewards: [],
+                    rewardClaims: [],
                     contractStakes: [],
                     contractUnstakes: [],
                     errors: /** @type {string[]} */ ([]),
@@ -175,6 +178,16 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     messaging.getRewardsForAddress({ chainId: cid, address: addr })
                         .then((r) => { out.rewards = extractRows(r); })
                         .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                    // PC-47: the claim side of the unclaimed sum. Best-effort:
+                    // a build without the route degrades to "nothing claimed
+                    // yet", which OVERSTATES what is claimable, so the header
+                    // labels the figure as accrued-minus-claimed rather than
+                    // promising it will all pay out.
+                    (typeof messaging.getRewardClaimsForAddress === 'function'
+                        ? messaging.getRewardClaimsForAddress({ chainId: cid, address: addr })
+                        : Promise.resolve(null))
+                        .then((r) => { out.rewardClaims = extractRows(r); })
+                        .catch(() => {}),
                     // Contract lane: endpoints are a Phase 7 follow-up and
                     // throw for live wallets; degrade silently to empty.
                     messaging.getContractStakesForAddress({ chainId: cid, address: addr })
@@ -189,7 +202,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             Promise.all(perAddress).then((results) => {
                 if (cancelled) return;
                 const merged = {
-                    stakes: [], delegations: [], rewards: [],
+                    stakes: [], delegations: [], rewards: [], rewardClaims: [],
                     contractStakes: [], contractUnstakes: [],
                 };
                 const errs = [];
@@ -197,6 +210,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     merged.stakes.push(...r.stakes);
                     merged.delegations.push(...r.delegations);
                     merged.rewards.push(...r.rewards);
+                    merged.rewardClaims.push(...r.rewardClaims);
                     merged.contractStakes.push(...r.contractStakes);
                     merged.contractUnstakes.push(...r.contractUnstakes);
                     errs.push(...r.errors);
@@ -207,6 +221,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         loading: false,
                         rows: buildRows({ chainId: cid, ...merged }),
                         rewards: merged.rewards,
+                        rewardClaims: merged.rewardClaims,
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
                 }));
@@ -214,6 +229,46 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         }
         return () => { cancelled = true; };
     }, [btcChainsWithAddresses, addressesByChain, messaging, walletId]);
+
+    // PC-47: chain tip per chain, for the cooldown countdown. One cheap read
+    // per chain; a failure leaves the height null and every countdown falls
+    // back to the bare end-block text.
+    const [heightByChain, setHeightByChain] = useState(/** @type {Record<string, number|null>} */ ({}));
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
+        for (const cid of btcChainsWithAddresses) {
+            messaging.getIndexerWatermark({ chainId: cid })
+                .then((r) => {
+                    if (cancelled) return;
+                    setHeightByChain((prev) => ({ ...prev, [cid]: Number.isFinite(r?.watermark) ? r.watermark : null }));
+                })
+                .catch(() => { /* countdown degrades to the end block alone */ });
+        }
+        return () => { cancelled = true; };
+    }, [btcChainsWithAddresses, messaging]);
+
+    // PC-47: what every validator address on every chain can claim right now.
+    const claimable = useMemo(() => {
+        const rewards = [];
+        const claims = [];
+        for (const state of Object.values(stateByChain)) {
+            rewards.push(...(state.rewards || []));
+            claims.push(...(state.rewardClaims || []));
+        }
+        return unclaimedRewards({ rewards, claims });
+    }, [stateByChain]);
+
+    // PC-47: the Claim button deep-links to the validator detail page,
+    // which already owns the COLLECT flow and its own preconditions. Picking a
+    // surface rather than composing a claim here keeps one code path signing.
+    const firstValidatorRef = useMemo(() => {
+        for (const state of Object.values(stateByChain)) {
+            const row = (state.rows || []).find((r) => r.kind === 'validator');
+            if (row) return row.ref;
+        }
+        return null;
+    }, [stateByChain]);
 
     // Flatten every chain's rows into one list, newest first.
     const allRows = useMemo(() => {
@@ -303,6 +358,24 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 />
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </div>
+            {Number(claimable.unclaimed) > 0 ? (
+                <div className={local.claimable} role="status">
+                    <div>
+                        <strong>{formatWithThousands(claimable.unclaimed)} XCHAIN</strong>
+                        {' '}ready to claim
+                        <div className={styles.entryDescription}>
+                            Rewards you have earned and not yet collected.
+                            {claimable.hasRejectedClaim
+                                ? ' An earlier claim was refused by the network, so those rewards are still here to claim.'
+                                : ''}
+                            {' '}A claim can be refused if the reward pool is short; nothing moves when that happens and you can claim again once it is topped up.
+                        </div>
+                    </div>
+                    {firstValidatorRef ? (
+                        <Button variant="primary" onClick={() => onOpenStake(firstValidatorRef)}>Claim</Button>
+                    ) : null}
+                </div>
+            ) : null}
             {loadErrors.length > 0 ? (
                 <p role="alert" className={styles.entryDescription}>
                     Couldn't load some staking data. {loadErrors.join('; ')}
@@ -322,6 +395,11 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         <StakeRow
                             key={row.key}
                             row={row}
+                            cooldown={cooldownText(cooldownStatus({
+                                unstake: { cooldown_end_block: row.cooldownEndBlock },
+                                height: heightByChain[row.chainId],
+                                coin: chainRegistry.get(row.chainId)?.coin,
+                            }))}
                             onSelect={() => onOpenStake(row.ref)}
                         />
                     ))}
@@ -331,7 +409,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     );
 }
 
-function StakeRow({ row, onSelect }) {
+function StakeRow({ row, cooldown, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     return (
         <button
@@ -363,6 +441,7 @@ function StakeRow({ row, onSelect }) {
                 <div className={local.name}>{row.name}</div>
                 <div className={local.subtitle}>{row.subtitle}</div>
                 {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
+                {cooldown ? <div className={local.subtitle}>{cooldown}</div> : null}
             </div>
             <div className={local.trailing}>
                 <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
@@ -434,9 +513,15 @@ function buildRows({ chainId, stakes, delegations, rewards, contractStakes, cont
         const tick = s.tick || '?';
         // A matching unstake still before its cooldown end means part of
         // this position is releasing; flag the whole row as cooldown.
-        const inCooldown = (contractUnstakes || []).some(
+        const matchingUnstakes = (contractUnstakes || []).filter(
             (u) => String(u.target_contract_index ?? '') === idx,
         );
+        const inCooldown = matchingUnstakes.length > 0;
+        // Soonest maturity wins: it is the next thing that becomes withdrawable.
+        const cooldownEndBlock = matchingUnstakes
+            .map((u) => Number(u.cooldown_end_block))
+            .filter((n) => Number.isFinite(n) && n > 0)
+            .sort((a, b) => a - b)[0] ?? null;
         rows.push({
             key: `c:${chainId}:${idx}:${String(s.action_index ?? addr)}`,
             kind: 'contract',
@@ -447,6 +532,7 @@ function buildRows({ chainId, stakes, delegations, rewards, contractStakes, cont
             subtitle2: short(addr),
             amountLabel: `${fmtAmount(s.amount)} ${tick}`,
             status: inCooldown ? 'cooldown' : 'active',
+            cooldownEndBlock,
             blockIndex: s.block_index,
             ref: { kind: 'contract', chainId, address: addr, contractActionIndex: idx },
             searchHaystack: [
@@ -475,6 +561,7 @@ function buildRows({ chainId, stakes, delegations, rewards, contractStakes, cont
             name: `Contract #${idx} stake`,
             subtitle: `${fmtAmount(u.amount)} ${tick} releasing`,
             subtitle2: u.cooldown_end_block ? `until block ${formatWithThousands(String(u.cooldown_end_block))}` : short(addr),
+            cooldownEndBlock: u.cooldown_end_block ?? null,
             amountLabel: `${fmtAmount(u.amount)} ${tick}`,
             status: 'cooldown',
             blockIndex: u.block_index,

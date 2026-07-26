@@ -218,3 +218,16 @@
 .addBtn:hover {
     background: var(--xc-bg-muted);
 }
+
+/* PC-47: claimable-rewards banner above the position list. */
+.claimable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--color-border, #d6dbe1);
+    border-radius: 8px;
+    background: var(--color-surface-raised, rgba(0, 0, 0, 0.02));
+}

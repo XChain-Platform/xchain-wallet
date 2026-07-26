@@ -72,6 +72,24 @@ export async function rewardsForAddress({ sdkRegistry, chainId, address, opts })
 }
 
 /**
+ * PC-47: the COLLECT events for an address (the reward_claims table), the
+ * subtrahend in the unclaimed-rewards sum. Distinct from rewardsForAddress,
+ * which lists the ACCRUAL ledger: accrued minus successfully-claimed is what a
+ * validator can still claim, and only claims the chain marked valid count
+ * (a claim the chain refused, e.g. an under-funded reward pool, leaves a row
+ * behind but moved nothing). See flows/stakingDashboard.js.
+ *
+ * @param {StakingQueryOpts} params
+ */
+export async function rewardClaimsForAddress({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('rewardClaimsForAddress: sdkRegistry is required');
+    if (!chainId) throw new Error('rewardClaimsForAddress: chainId is required');
+    if (!address) throw new Error('rewardClaimsForAddress: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getCollects(address, 'address', opts);
+}
+
+/**
  * List every validator on a chain. Backs the §42.7.5 Operator
  * dashboard's roster view.
  *
