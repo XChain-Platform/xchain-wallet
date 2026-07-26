@@ -74,15 +74,23 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onDispensers, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onDispensers, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
-    const [activeWalletId, setActiveWalletId] = useState(
+    // The host owns the active wallet when it wires `activeWalletId`; Home's
+    // own state is a fallback for shells that don't. Home used to own this
+    // outright and only ever self-elected wallets[0], so after a switch it kept
+    // rendering wallet #1 while the host handed down the NEW wallet's account -
+    // a cross-wallet (walletId, accountId) pair that walletBalances rejects
+    // outright ("account X does not belong to wallet Y"), blanking Home.
+    const [activeWalletIdLocal, setActiveWalletIdLocal] = useState(
         /** @type {string | null} */ (null),
     );
+    const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
+    const setActiveWalletId = setActiveWalletIdLocal;
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     // Local fallback used only when the host doesn't supply
     // `activeAccountIdProp` (e.g. desktop shell pinned to an older
@@ -308,7 +316,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     setLoadError('No wallets found.');
                     return;
                 }
-                if (!activeWalletId) setActiveWalletId(list[0].id);
+                if (!activeWalletIdProp && !activeWalletIdLocal) setActiveWalletIdLocal(list[0].id);
             } catch (err) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load wallets.');
             }

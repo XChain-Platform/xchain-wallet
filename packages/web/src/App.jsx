@@ -640,6 +640,14 @@ function AppInner() {
             setActiveAccountId(null);
             return undefined;
         }
+        // The account belonging to the PREVIOUS wallet must not survive into a
+        // render that already carries the new walletId: every consumer keyed on
+        // (walletId, accountId) - balances, addresses, unread counts - would then
+        // query a cross-wallet pair, and walletBalances' guard throws on exactly
+        // that ("account X does not belong to wallet Y"), blanking Home until the
+        // async resolve below lands. Clearing first makes the in-between render
+        // wallet-wide, which is merely broader, never invalid.
+        setActiveAccountId(null);
         let cancelled = false;
         listAccounts(activeWalletId)
             .then((list) => {
@@ -2316,6 +2324,7 @@ function AppInner() {
             return (
                 <>
                     <Home
+                        activeWalletId={activeWalletId}
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
                         tokenQuery={globalTokenQuery}
