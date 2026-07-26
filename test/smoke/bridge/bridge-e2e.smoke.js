@@ -417,6 +417,43 @@ async function autoApprove(host, fakeWindows, result) {
     );
 }
 
+// --- 7. : switching the active network seeds per-chain fees -----
+
+{
+    // Regression for . `settings.setActiveNetwork` used to flip
+    // activeNetwork + derive addresses but NEVER seed settings.fees for the
+    // target network's chains, so on regtest the fee-derived active-chain set
+    // (Object.keys(settings.fees) filtered by activeNetwork) was empty, and
+    // useReachability -> reachability.check mapped empty -> 'offline', showing
+    // a false "You're offline" that suppressed the confirm pre-flight. This is
+    // the extension's ONLY path to regtest (no Settings UI, ), so it bit
+    // every second popup. Assert the host route now seeds the network's chains.
+    const { host, vault, wallet } = await buildStack();
+
+    const { settings } = await call(host, 'settings.setActiveNetwork', {
+        network: 'regtest',
+        walletId: wallet.id,
+    });
+
+    const regtestChains = ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'];
+    for (const chainId of regtestChains) {
+        assert.ok(
+            settings.fees && settings.fees[chainId],
+            `settings.setActiveNetwork must seed settings.fees[${chainId}] `,
+        );
+    }
+
+    // Persisted, not just returned: a second popup reads the vault snapshot.
+    const persisted = await vault.settings.get();
+    for (const chainId of regtestChains) {
+        assert.ok(
+            persisted.fees && persisted.fees[chainId],
+            `seeded fees[${chainId}] must be persisted to the vault `,
+        );
+    }
+    assert.equal(persisted.activeNetwork, 'regtest');
+}
+
 console.log(
-    'OK: bridge e2e smoke (connect/resolve round-trip, idempotent reconnect, reads, UNSUPPORTED_ACTION, disconnect, window-close reject, test-dapp surface intact, runbook published)',
+    'OK: bridge e2e smoke (connect/resolve round-trip, idempotent reconnect, reads, UNSUPPORTED_ACTION, disconnect, window-close reject, test-dapp surface intact, runbook published, setActiveNetwork seeds per-chain fees )',
 );
