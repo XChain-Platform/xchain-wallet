@@ -42,8 +42,8 @@ import {
 } from '../../fixtures/wallet.js';
 import { expect, openSecondPopup, test } from '../../fixtures/extension.js';
 import {
-    EXPLORER_URL, REGTEST_COIN, REGTEST_DESTINATION,
-    fundAddress, minerRpc, readReceiveAddress, switchToRegtest, unlockAfterReload,
+    REGTEST_DESTINATION, fundAddress, minerRpc, mintXchain, readReceiveAddress,
+    switchToRegtest, unlockAfterReload, waitForTokenBalance,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'extpassword1234';
@@ -54,44 +54,9 @@ const FUNDING_BTC = 1;
 const MINT_XCHAIN = 1000;
 const SEND_XCHAIN = '600';
 
-// Mint XCHAIN to the active address by driving the command palette ->
-// Advanced action -> MINT (the friendly Mint form is balance-scoped and
-// won't list a tick you hold zero of). XCHAIN is free-mintable on regtest.
-async function mintXchain(page, amount) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox');
-    await expect(combobox).toBeVisible();
-    await combobox.fill('Advanced action');
-    await page.keyboard.press('Enter');
-
-    await page.getByLabel('Action').selectOption('MINT');
-    await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
-    await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
-    await page.getByRole('button', { name: 'Sign action' }).click();
-
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
-    await page.getByTestId('confirm-approve').click();
-    // The advanced-action confirm shows a different terminal state than the
-    // Send flow; the on-chain balance is the truth we wait on below.
-    await page.waitForTimeout(4_000);
-}
-
-async function waitForTokenBalance(address, tick, min, timeoutMs = 120_000) {
-    const deadline = Date.now() + timeoutMs;
-    let last = null;
-    while (Date.now() < deadline) {
-        try {
-            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`);
-            const body = await res.json();
-            const row = (body?.data || []).find((b) => b.tick === tick);
-            last = row ? row.amount : null;
-            if (row && Number(row.amount) >= min) return row;
-        } catch { /* transient */ }
-        await minerRpc('generate_blocks', { count: 1 });
-        await new Promise((r) => setTimeout(r, 1_500));
-    }
-    throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
-}
+// `mintXchain` and `waitForTokenBalance` live in fixtures/regtest.js: they
+// are venue machinery, not properties of this scenario, and the pre-flight
+// gate walk needs the same token funding.
 
 // Compose an XCHAIN send: pick the token in the Send asset picker, then fill
 // the destination + amount and open the confirm modal.
@@ -107,6 +72,22 @@ async function composeTokenSend(page) {
 }
 
 test.describe('two-window same-balance race (extension)', () => {
+
+    // . The venue miner auto-mines every few seconds while window 2 needs
+    // ~8s to onboard and compose, so window 1's send often CONFIRMS in that gap.
+    // The  netting deliberately stops at `indexed` (a confirmed spend is
+    // supposed to be reflected in the balance) but the indexer lags a beat, so
+    // window 2 briefly sees the full balance and reports "Looks good" - a venue
+    // artifact, not a protection failure: production blocks are ~10 minutes, so a
+    // real second popup always pre-flights while the first send is unconfirmed.
+    // The race is therefore run with auto-mining PAUSED, which pins the venue to
+    // the state the protection exists for. Explicit generate_blocks still works
+    // while paused, so funding and the mint are unaffected.
+    test.afterEach(async () => {
+        // Unconditional: a failed or timed-out race must never leave the shared
+        // regtest miner parked for the next spec (or the next session).
+        await minerRpc('continue_mining', {}).catch(() => {});
+    });
 
     test('one service worker serves every popup, so the ledger can be shared', async ({ context, extensionId, page }) => {
         // The structural precondition for the whole scenario. If this ever
@@ -150,6 +131,11 @@ test.describe('two-window same-balance race (extension)', () => {
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
 
+        // From here the race must run against an UNCONFIRMED window-1 send
+        // : stop the venue's auto-miner so no block can land between
+        // window 1's broadcast and window 2's pre-flight.
+        await minerRpc('pause_mining', {});
+
         // Window 1: compose and APPROVE, which registers the reservation.
         await composeTokenSend(page);
         await page.getByTestId('confirm-approve').click();
@@ -158,7 +144,9 @@ test.describe('two-window same-balance race (extension)', () => {
         // Let window 1's broadcast settle into a durable pendingTx (status
         // signed/broadcast) before window 2 pre-flights; the netting reads the
         // shared pendingTx store, so this closes the write-vs-read race that
-        // otherwise makes the assertion timing-dependent.
+        // otherwise makes the assertion timing-dependent. Safe now that mining
+        // is paused - the settle can no longer hand a block time to land
+        // , which is what made it counterproductive before.
         await page.waitForTimeout(3_000);
 
         // Window 2: the same token balance, reserved by window 1. The shared
