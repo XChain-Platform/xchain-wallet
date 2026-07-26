@@ -154,6 +154,7 @@ const {
     betFeedDetail,
     betsForQuery,
     oracleStats,
+    projectBetPayout,
     pollsForChain,
     pollDetail,
     pollResults,
@@ -2954,6 +2955,12 @@ export function createBackgroundHost(deps) {
 
     host.register('bet.oracle', async (req, { sdkRegistry }) => {
         return oracleStats({ ...req, sdkRegistry });
+    });
+
+    // Payout projection runs through the SDK's own settlement-order math, so the
+    // number shown before signing cannot disagree with the number settled.
+    host.register('bet.projectPayout', async (req, { sdkRegistry }) => {
+        return projectBetPayout({ ...req, sdkRegistry });
     });
 
     // Contract-targeted staking: parallel to the capability staking passthroughs above.

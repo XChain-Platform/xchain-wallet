@@ -101,7 +101,35 @@ for (const [fn, builder] of [
 assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
     'betActions submits a BET action built from the SDK params');
 
-// --- 5. the confirm screen decodes BET rather than falling back --------
+// --- 5. the place-bet surface composes through the route --------------
+
+{
+    const src = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedDetail.jsx');
+    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+        'BetFeedDetail composes through the BET builder route');
+    assert.ok(src.includes("builder: 'placeBetParams'"), 'BetFeedDetail names the placeBetParams builder');
+
+    // One derivation feeding BOTH compose and submit. Two would be free to
+    // diverge, and the divergence would be signed rather than caught.
+    assert.match(src, /function betParams\(\)/, 'BetFeedDetail derives the bet input in one place');
+    assert.match(src, /params: betParams\(\),[\s\S]{0,300}params: betParams\(\),/,
+        'BetFeedDetail composes and submits the same betParams()');
+
+    // The generic compose route would mean a client-side wire mirror.
+    assert.ok(!/actionData: \{ action: 'BET'/.test(src),
+        'BetFeedDetail does not feed a client-side wire mirror into the signing path');
+
+    // §6 format 2: the feed's own source may not bet on its own market, so the
+    // form is hidden rather than left to be rejected on-chain after paying a fee.
+    assert.match(src, /feed\.source === fromAddress\.address/,
+        "BetFeedDetail hides the bet form for the market's own oracle");
+
+    // Payout projection must not be a local approximation.
+    assert.match(src, /messaging\.betProjectPayout\(/,
+        'BetFeedDetail projects payout through the SDK, not a local estimate');
+}
+
+// --- 6. the confirm screen decodes BET rather than falling back --------
 
 const decoderSrc = read('packages', 'core', 'src', 'decoder', 'actionDecoder.js');
 assert.match(decoderSrc, /if \(action === 'BET'\)/,

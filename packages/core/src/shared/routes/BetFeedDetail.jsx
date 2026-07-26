@@ -8,9 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
-import { Screen, PageHeader, Button } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Screen, PageHeader, Button, Input } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
+import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 function unwrap(resp) {
@@ -47,17 +51,37 @@ function fmtTime(unix) {
  * parimutuel market, so every later bet moves everyone's share.
  *
  * @param {object} props
+ * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string | number} props.feedIndex
  * @param {(chainId: string, address: string) => void} [props.onOpenOracle]
  * @param {() => void} props.onBack
  */
-export function BetFeedDetail({ chainId, feedIndex, onOpenOracle, onBack }) {
+export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const signerReady = useSignerReady(walletId);
+    const { isWatcherMode } = useWalletMode();
 
     const [feed, setFeed] = useState(/** @type {any} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+
+    const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
+    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
+    const [amount, setAmount] = useState('');
+    const [password, setPassword] = useState('');
+    const [projected, setProjected] = useState(/** @type {string | null} */ (null));
+    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [result, setResult] = useState(/** @type {any} */ (null));
+
+    const reload = useCallback(() => {
+        setFeed(null);
+        setError(null);
+        messaging.betFeed({ chainId, feedIndex })
+            .then((resp) => setFeed(unwrap(resp)))
+            .catch((err) => setError(err?.message || 'Failed to load the market.'));
+    }, [chainId, feedIndex, messaging]);
 
     useEffect(() => {
         let cancelled = false;
@@ -68,6 +92,102 @@ export function BetFeedDetail({ chainId, feedIndex, onOpenOracle, onBack }) {
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load the market.'); });
         return () => { cancelled = true; };
     }, [chainId, feedIndex, messaging]);
+
+    useEffect(() => {
+        let cancelled = false;
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function' ? messaging.getActiveAddresses(walletId) : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
+                if (cancelled) return;
+                setAddressesByChain(byChain || {});
+                setFromAddressId(preferredSourceId(byChain?.[chainId] || [], active?.[chainId]));
+            })
+            .catch(() => { /* best-effort; betting requires it and is guarded at submit */ });
+        return () => { cancelled = true; };
+    }, [walletId, chainId, messaging]);
+
+    const fromAddress = useMemo(() => {
+        if (!fromAddressId || !addressesByChain) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
+    }, [chainId, fromAddressId, addressesByChain]);
+    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: isHwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: { current: password },
+        software: 'placeBetAction',
+        hardware: 'placeBetActionHw',
+    });
+
+    // Projected payout comes from the SDK's own settlement-order math over the
+    // host, never a local approximation: a projection that disagrees with the
+    // settled amount in the last decimal place reads to a user as a bug.
+    useEffect(() => {
+        let cancelled = false;
+        setProjected(null);
+        if (!feed || outcome === null || !amount) return undefined;
+        if (typeof messaging.betProjectPayout !== 'function') return undefined;
+        messaging.betProjectPayout({
+            chainId, pools: feed.pools || [], outcome, stake: amount, feePct: feed.fee || 0,
+        })
+            .then((v) => { if (!cancelled) setProjected(v === null || v === undefined ? null : String(v)); })
+            .catch(() => { if (!cancelled) setProjected(null); });
+        return () => { cancelled = true; };
+    }, [feed, outcome, amount, chainId, messaging]);
+
+    // The UI-level params, derived in ONE place so the object handed to compose is
+    // byte-for-byte the object handed to submit. Two derivations could diverge and
+    // the divergence would be signed rather than caught.
+    function betParams() {
+        return { feedActionIndex: feedIndex, outcome, amount: String(amount).trim() };
+    }
+
+    function sourceDescriptor() {
+        return {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+    }
+
+    // Compose through the SDK's own placeBetParams builder, host-side. A
+    // client-side wire mirror would be SIGNED rather than caught, and for BET the
+    // stakes are literal: a place-bet and a resolve differ on the wire only by
+    // AMOUNT ('s rule, sharper here).
+    async function placeBet() {
+        if (!fromAddress) { setFormError('No address on this chain to bet from.'); return; }
+        setFormError(null);
+        const from = sourceDescriptor();
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                compose: () => messaging.composeBetForConfirm({
+                    walletId, chainId, from, builder: 'placeBetParams', params: betParams(),
+                }),
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId, chainId, from, params: betParams(), prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setAmount('');
+            setOutcome(null);
+            // Re-read so the pool split reflects the bet that was just placed.
+            reload();
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(err?.message || 'Bet failed.');
+        }
+    }
 
     const header = <PageHeader onBack={onBack} title="Market" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
@@ -142,6 +262,71 @@ export function BetFeedDetail({ chainId, feedIndex, onOpenOracle, onBack }) {
                 Bets are final once placed, and payouts round down, so a very small stake can win and
                 still pay nothing.
             </p>
+
+            {/* Place-bet flow. Hidden outright when it could only produce a rejected
+                transaction: a closed market takes no bets, and the feed's own source
+                may not bet on its own market (§6 format 2). Showing a doomed form and
+                letting the chain refuse it would cost the user a fee for nothing. */}
+            {feed.feed_status === 'open' && !isWatcherMode ? (
+                fromAddress && feed.source === fromAddress.address ? (
+                    <p className={styles.hint}>
+                        You run this market, so you cannot bet on it. That rule exists because an oracle
+                        who could bet on its own result would decide the result.
+                    </p>
+                ) : (
+                    <>
+                        <h4>Place a bet</h4>
+                        <div className={styles.card}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                                {outcomes.map((label, i) => (
+                                    <Button
+                                        key={i}
+                                        variant={outcome === i ? 'primary' : 'ghost'}
+                                        onClick={() => setOutcome(i)}
+                                    >
+                                        {label}
+                                    </Button>
+                                ))}
+                            </div>
+                            <Input
+                                label={`Stake${feed.tick ? ` (${feed.tick})` : ''}`}
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                inputMode="decimal"
+                                placeholder={feed.min_amount ? `min ${feed.min_amount}` : '0.0'}
+                            />
+                            {projected ? (
+                                <p className={styles.hint}>
+                                    If this outcome wins, this stake pays about <strong>{projected}</strong> at
+                                    the current split. That is not a locked-in price: later bets change it.
+                                </p>
+                            ) : null}
+                            {!isHwSource && !signerReady ? (
+                                <Input
+                                    label="Password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                            ) : null}
+                            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+                            {result ? <p className={styles.hint}>Bet placed.</p> : null}
+                            <div className={styles.actions}>
+                                <Button
+                                    variant="primary"
+                                    disabled={outcome === null || !amount}
+                                    onClick={placeBet}
+                                >
+                                    Review bet
+                                </Button>
+                            </div>
+                            <p className={styles.hint}>
+                                Once confirmed, a bet cannot be cancelled or moved to another outcome.
+                            </p>
+                        </div>
+                    </>
+                )
+            ) : null}
 
             <h4>History</h4>
             {timeline.length === 0 ? <p className={styles.hint}>No history yet.</p> : (

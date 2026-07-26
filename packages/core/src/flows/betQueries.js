@@ -74,6 +74,32 @@ export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) 
 }
 
 /**
+ * Project what a prospective stake would pay if its outcome won, at the pools as
+ * they stand right now.
+ *
+ * Deliberately delegated to the SDK rather than approximated in the UI:
+ * settlement floors in a specific order, and a projection that disagrees with the
+ * settled amount in the last decimal place reads to a user as a bug. The number
+ * is still only current, not locked: this is a parimutuel market and every later
+ * bet moves it.
+ * @param {{ sdkRegistry: object, chainId: string, pools: any[], outcome: number|string,
+ *           stake: string|number, feePct?: string|number, decimals?: number }} params
+ */
+export async function projectBetPayout({ sdkRegistry, chainId, pools, outcome, stake, feePct, decimals }) {
+    const sdk = requireSdk({ sdkRegistry, chainId }, 'projectBetPayout');
+    if (typeof sdk?.betting?.projectPayout !== 'function') {
+        throw new Error('projectBetPayout: sdk.betting.projectPayout is unavailable');
+    }
+    return sdk.betting.projectPayout({
+        pools,
+        outcome,
+        stake,
+        ...(feePct !== undefined && feePct !== null && { feePct }),
+        ...(decimals !== undefined && decimals !== null && { decimals }),
+    });
+}
+
+/**
  * Fetch an oracle's track record (markets created, resolved, cancelled, expired).
  *
  * This is the v0 reputation system and it is NOT backed by any stake: the record

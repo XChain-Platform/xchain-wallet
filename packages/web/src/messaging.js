@@ -984,6 +984,10 @@ export function betOracle(req) {
     return /** @type {any} */ (sendMessage('bet.oracle', req));
 }
 
+export function betProjectPayout(req) {
+    return /** @type {any} */ (sendMessage('bet.projectPayout', req));
+}
+
 export function governancePoll(req) {
     return /** @type {any} */ (sendMessage('governance.poll', req));
 }

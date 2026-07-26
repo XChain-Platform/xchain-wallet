@@ -232,6 +232,7 @@ export {
     betFeedDetail,
     betsForQuery,
     oracleStats,
+    projectBetPayout,
 } from './betQueries.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
