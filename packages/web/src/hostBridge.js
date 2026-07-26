@@ -159,7 +159,43 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         get(_target, prop) {
             if (typeof prop !== 'string') return undefined;
             if (prop === 'getBalances') {
-                return async (address /* , opts */) => fakeBalanceFor(address, chainId);
+                // : return the EXPLORER's `/balances/` wire shape
+                // (`{ data: [...] }`), not the pre-shaped `{ native, tokens }`
+                // object. D-6 moved normalization into
+                // `flows/balances.js#tokensFromBalances`, which reads
+                // `balResp.data` and silently yields [] for anything else - so
+                // the dev shell rendered "No coins yet" on every wallet, and
+                // the command palette had no token rows to search ('s
+                // spec is what caught it). The mock was simply left behind by
+                // that refactor.
+                return async (address /* , opts */) => ({
+                    data: fakeBalanceFor(address, chainId).tokens.map((t) => ({
+                        tick: t.tick,
+                        quantity: t.quantity,
+                        divisibility: t.divisibility,
+                        displayName: t.displayName,
+                    })),
+                });
+            }
+            if (prop === 'getAddress') {
+                // The other half of D-6: the token ledger omits the chain's
+                // native coin, which the flow reads from `/address/` as
+                // `balances.confirmed` (a DECIMAL string, converted to sats by
+                // `nativeFromAddress`). Without this the dev shell showed
+                // "0 BTC available" and a disabled Max on a funded wallet.
+                return async (address) => {
+                    const { native } = fakeBalanceFor(address, chainId);
+                    if (!native) return { address, balances: { confirmed: '0' } };
+                    const div = Number(native.divisibility ?? 8);
+                    const q = String(native.quantity ?? '0');
+                    const padded = q.padStart(div + 1, '0');
+                    const whole = padded.slice(0, padded.length - div) || '0';
+                    const frac = div > 0 ? padded.slice(padded.length - div) : '';
+                    return {
+                        address,
+                        balances: { confirmed: frac ? `${whole}.${frac}` : whole },
+                    };
+                };
             }
             if (prop === 'getToken') {
                 // Single-token lookup powering useTokenInfo + the chart
