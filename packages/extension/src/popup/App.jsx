@@ -24,7 +24,7 @@
 // MessagingProvider context (shell="popup"). Popup-local wiring boils
 // down to session-state polling and sub-route navigation.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 
@@ -41,6 +41,13 @@ import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm
 import { WalletPicker } from '@xchain-wallet/core/shared/routes/WalletPicker.jsx';
 import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.jsx';
 import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
+// : the extension had NO Settings surface at all - no options page, no
+// route here, and the side panel mounts this same App - so an extension user
+// could not switch networks, turn on Developer Mode, manage connected sites,
+// or reach the pre-flight privacy control that the confirm spec (§4.8) makes a
+// requirement. The host already registered every route Settings calls; only
+// the mount was missing, so this is the shared core screen, not a popup fork.
+import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
@@ -48,7 +55,7 @@ import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -74,6 +81,7 @@ import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm
 import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { SleepForm } from '@xchain-wallet/core/shared/routes/SleepForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
+import { OracleForm } from '@xchain-wallet/core/shared/routes/OracleForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
@@ -166,7 +174,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -276,6 +284,14 @@ function AppInner() {
         /** @type {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
+        /** @type {string | null} */ (null),
+    );
+    // : the wallet RECORDS, not just the active id. `<Settings>` renders
+    // the wallet's name and gates its account row on the object, so an id
+    // alone would show "No wallet" on a perfectly good wallet.
+    const [wallets, setWallets] = useState(/** @type {Array<{id: string, name: string}>} */ ([]));
+    // Which Settings section a palette deep-link should open; cleared on exit.
+    const [settingsInitialSection, setSettingsInitialSection] = useState(
         /** @type {string | null} */ (null),
     );
     const [activeAccountId, setActiveAccountId] = useState(
@@ -413,12 +429,20 @@ function AppInner() {
             .then((list) => {
                 if (cancelled) return;
                 if (Array.isArray(list) && list.length > 0) {
+                    setWallets(list);
                     setActiveWalletId(list[0].id);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
     }, [status.state]);
+
+    // Resolved from the loaded list rather than tracked as its own state, so
+    // the wallet picker's `setActiveWalletId` stays the single writer.
+    const activeWallet = useMemo(
+        () => wallets.find((w) => w.id === activeWalletId) || null,
+        [wallets, activeWalletId],
+    );
 
     // Load BIP44 accounts for the active wallet and pick the first
     // (lowest-index) one as active. The popover's account picker calls
@@ -500,6 +524,12 @@ function AppInner() {
             .catch(() => { /* palette still works without token rows */ });
         return () => { cancelled = true; };
     }, [palette.open, status.state, activeWalletId, activeAccountId]);
+    // : deep-link into a Settings section, mirroring the web shell.
+    const openSettingsSection = (sectionId) => {
+        setSettingsInitialSection(sectionId || null);
+        setUnlockedView('settings');
+    };
+
     // Shared catalogue + lazily-loaded contacts; each run() closes over this
     // shell's setUnlockedView (see the web shell for reference wiring). The
     // popup locks via messaging.lockWallet (Home owns the visible Lock button).
@@ -515,16 +545,20 @@ function AppInner() {
             hasGovernanceAddress,
         }),
         // : token rows open TokenDetail with the full ref the row
-        // carries. Connected-sites and settings-section commands are omitted
-        // in the popup (no such views here).
+        // carries. : settings-section and settings-backed help commands
+        // are no longer omitted - the popup HAS a Settings route now, and
+        // these are its entry points in a shell with no navigation surface.
+        // Connected sites deep-link to their section rather than a standalone
+        // view, which the popup still does not have.
         ...balancesToCommands(paletteTokenRows, {
             openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
         }),
         ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
-        // With only openHelp supplied this emits just the shortcut-help topic
-        // (settings-backed help topics are omitted; the popup has no Settings
-        // route).
-        ...helpToCommands({ openHelp: () => setShortcutHelpOpen(true) }),
+        ...settingsSectionsToCommands({ openSettings: openSettingsSection }),
+        ...helpToCommands({
+            openSettings: openSettingsSection,
+            openHelp: () => setShortcutHelpOpen(true),
+        }),
     ];
     // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send resolves
     // the chain from the first available when the prefill carries none). A
@@ -815,6 +849,17 @@ function AppInner() {
             if (unlockedView === 'broadcast' && activeWalletId) {
                 return (
                     <BroadcastForm
+                        walletId={activeWalletId}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'oracle' && activeWalletId) {
+                return (
+                    <OracleForm
                         walletId={activeWalletId}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
@@ -1736,6 +1781,7 @@ function AppInner() {
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
                             onBroadcast: () => setUnlockedView('broadcast'),
+                            onPublishOraclePrice: () => setUnlockedView('oracle'),
                             onCreateDispenser: () => setUnlockedView('dispenser'),
                             onMyDispensers: () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); },
                             onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
@@ -1787,6 +1833,21 @@ function AppInner() {
                             setUnlockedView('wallet-details');
                         }}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'settings') {
+                return (
+                    <Settings
+                        key={settingsInitialSection || 'root'}
+                        onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
+                        activeWallet={activeWallet}
+                        activeAccount={null}
+                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        onOpenAccountPicker={
+                            activeWalletId ? () => setUnlockedView('account-picker') : undefined
+                        }
+                        initialSubpageId={settingsInitialSection}
                     />
                 );
             }
@@ -2003,6 +2064,7 @@ function buildActionEntries({
     onIssue, onMint, onDestroy, onSweep,
     onLock, onUpdateDescription, onTransferOwnership,
     onBroadcast,
+    onPublishOraclePrice,
     onCreateDispenser,
     onMyDispensers,
     onBrowseDispensers,
@@ -2078,6 +2140,12 @@ function buildActionEntries({
             label: 'Broadcast',
             description: 'Publish text, oracle value, or feed reference on-chain.',
             onSelect: onBroadcast,
+        },
+        {
+            id: 'oracle',
+            label: 'My oracle',
+            description: 'Publish what your token is worth in a currency so dispensers can sell at that rate.',
+            onSelect: onPublishOraclePrice,
         },
         {
             id: 'dispenser',

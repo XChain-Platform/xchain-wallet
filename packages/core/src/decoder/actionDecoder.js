@@ -179,6 +179,10 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeBroadcast(p, chainSuffix);
     }
 
+    if (action === 'PRICE') {
+        return decodePrice(p, chainSuffix);
+    }
+
     if (action === 'DISPENSER') {
         return decodeDispenser(p, chainSuffix);
     }
@@ -519,6 +523,78 @@ function decodeDispenser(p, chainSuffix) {
     ];
 
     return { summary, details, warnings };
+}
+
+/**
+ * PRICE decoder (PC-30). PRICE.md defines two versions and only one of
+ * them is authorable here: v0 is the validator federation's COIN/FIAT
+ * snapshot, PBFT-broadcast and not user-encodable, so a v0 reaching this
+ * decoder came from a pasted or imported action and is flagged rather
+ * than summarized as something the user can sign.
+ *
+ * v1 is the permissionless user oracle: VERSION|COIN|TICK|FIAT|VALUE|FEE|MEMO.
+ * Two warnings ride on every v1 because they are the two things that
+ * surprise publishers, and both are properties of the protocol rather
+ * than of this particular publish (see flows/oracleQueries.js):
+ * the quote is inert for 24h and cannot be retracted in that window, and
+ * dispensers pointing at this address will settle real money against it.
+ *
+ * Note this is NOT the legacy BROADCAST v1/v2 "oracle" lane, which is a
+ * free-text feed with a percentage fee. They share the word and nothing
+ * else: only a PRICE v1 row can price a Mode B dispenser.
+ */
+function decodePrice(p, chainSuffix) {
+    const version = str(p.VERSION) || '1';
+    const coin = str(p.COIN).toUpperCase();
+    const tick = str(p.TICK).toUpperCase();
+    const fiat = str(p.FIAT).toUpperCase();
+    const value = str(p.VALUE);
+    const fee = str(p.FEE);
+    const memo = str(p.MEMO);
+
+    if (version === '0') {
+        return {
+            summary: `Validator price snapshot${chainSuffix}`,
+            details: [
+                ...(coin ? [{ label: 'Coin', value: coin }] : []),
+                ...(fiat ? [{ label: 'Currency', value: fiat }] : []),
+                ...(value ? [{ label: 'Value', value }] : []),
+            ],
+            warnings: [
+                'PRICE v0 is published by the validator federation, not by a wallet. The network will reject this transaction.',
+            ],
+        };
+    }
+
+    // FEE is a fraction on the wire (0.01 = 1%); show both so a publisher
+    // who typed one and meant the other notices before signing.
+    const feePct = fee && Number.isFinite(Number(fee))
+        ? `${fee} (${(Number(fee) * 100).toFixed(2).replace(/\.?0+$/, '')}% of a dispenser's projected proceeds)`
+        : fee;
+
+    return {
+        summary: `Publish oracle price 1 ${tick || '?'} = ${value || '?'} ${fiat || '?'}${chainSuffix}`,
+        details: [
+            { label: 'Token', value: coin && tick ? `${coin}:${tick}` : tick },
+            { label: 'Currency', value: fiat },
+            { label: 'Price per unit', value: value ? `${value} ${fiat}`.trim() : '' },
+            ...(fee ? [{ label: 'Oracle usage fee', value: feePct }] : []),
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
+        warnings: [
+            'This price takes effect 24 hours from now and cannot be changed or withdrawn before then. A correction is another publish, which also takes 24 hours.',
+            'Dispensers that name this address as their oracle will sell at this price once it takes effect.',
+            ...(!tick ? ['Token ticker is empty.'] : []),
+            ...(!fiat ? ['Currency is empty.'] : []),
+            ...(!value || Number(value) <= 0 ? ['Price is not a positive number.'] : []),
+            ...(fee && Number(fee) > 1
+                ? ['Oracle usage fee is above 1 (100%): the protocol will reject this transaction.']
+                : []),
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
+        ],
+    };
 }
 
 /**

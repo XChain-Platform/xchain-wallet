@@ -449,4 +449,57 @@ describe('decodeAction extended', () => {
             expect(d.warnings.some((w) => /positive/i.test(w))).toBe(true);
         });
     });
+    // PC-30. The two standing warnings are the point of this case: they
+    // are properties of the protocol (the 24h delay with no retraction,
+    // and third parties settling against the quote) rather than of any
+    // particular publish, so they must reach the confirm screen no matter
+    // which surface composed the action, including the raw one.
+    describe('PRICE', () => {
+        const v1 = { VERSION: '1', COIN: 'BTC', TICK: 'PEPECASH', FIAT: 'USD', VALUE: '0.05', FEE: '0.01' };
+
+        it('v1 summarizes the published price per unit', () => {
+            const d = decodeAction({ action: 'PRICE', params: v1 });
+            expect(d.summary).toBe('Publish oracle price 1 PEPECASH = 0.05 USD');
+        });
+
+        it('v1 always warns that the price is inert and irrevocable for 24 hours', () => {
+            const d = decodeAction({ action: 'PRICE', params: v1 });
+            expect(d.warnings.some((w) => /24 hours/.test(w) && /cannot be changed or withdrawn/.test(w))).toBe(true);
+        });
+
+        it('v1 always warns that dispensers will sell at this price', () => {
+            const d = decodeAction({ action: 'PRICE', params: v1 });
+            expect(d.warnings.some((w) => /Dispensers that name this address/.test(w))).toBe(true);
+        });
+
+        // FEE is a fraction on the wire; somebody typing 1 meaning "1%"
+        // has actually asked for 100%, so show both readings.
+        it('v1 renders the usage fee as both fraction and percentage', () => {
+            const d = decodeAction({ action: 'PRICE', params: v1 });
+            expect(d.details.find((r) => r.label === 'Oracle usage fee').value).toMatch(/0\.01 \(1% of/);
+        });
+
+        it('v1 warns on a fee above 1', () => {
+            const d = decodeAction({ action: 'PRICE', params: { ...v1, FEE: '1.5' } });
+            expect(d.warnings.some((w) => /above 1 \(100%\)/.test(w))).toBe(true);
+        });
+
+        it('v1 warns on a non-positive price', () => {
+            const d = decodeAction({ action: 'PRICE', params: { ...v1, VALUE: '0' } });
+            expect(d.warnings.some((w) => /not a positive number/.test(w))).toBe(true);
+        });
+
+        it('v1 warns on a memo with forbidden chars', () => {
+            const d = decodeAction({ action: 'PRICE', params: { ...v1, MEMO: 'bad|memo' } });
+            expect(d.warnings.some((w) => /Memo contains/.test(w))).toBe(true);
+        });
+
+        // v0 is the validator federation snapshot; a wallet cannot publish
+        // one, so the confirm screen must say so rather than imply it can.
+        it('v0 is flagged as validator-only rather than summarized as signable', () => {
+            const d = decodeAction({ action: 'PRICE', params: { VERSION: '0', COIN: 'BTC', FIAT: 'USD', VALUE: '100000' } });
+            expect(d.summary).toBe('Validator price snapshot');
+            expect(d.warnings.some((w) => /published by the validator federation/.test(w))).toBe(true);
+        });
+    });
 });

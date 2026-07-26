@@ -152,7 +152,10 @@ for (const shell of shells) {
         `${shell.name} App.jsx routes receive outcomes to the Receive view`);
     assert.ok(/outcome\.kind === 'psbt'[\s\S]*?setUnlockedView\('sign-psbt'\)/.test(src),
         `${shell.name} App.jsx routes psbt outcomes to the Sign PSBT view`);
-    assert.ok(/'scan'} \*\/ \('home'\)/.test(src),
+    // Membership, not position. This asserted `'scan'` was the LAST member of
+    // the union, so any later view (PC-30's 'oracle', 's 'settings')
+    // read as a missing scan route.
+    assert.ok(/@type \{[^}]*'scan'[^}]*\} \*\/ \('home'\)/.test(src),
         `${shell.name} App.jsx unlockedView union covers 'scan'`);
 }
 

@@ -822,6 +822,52 @@ export function broadcastAction(opts) {
 }
 
 /**
+ * Publish a PRICE v1 user oracle quote (PC-30). Effective 24h after the
+ * block it lands in, with no way to retract it in between.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params   PRICE field map (VERSION, COIN, TICK, FIAT, VALUE, optional FEE, MEMO)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function oraclePriceAction(opts) {
+    return /** @type {any} */ (sendMessage('action.oraclePrice', opts));
+}
+
+/** @param {object} opts hardware-signer PRICE v1 publish */
+export function oraclePriceActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.oraclePrice.hw', opts));
+}
+
+/**
+ * Oracle feeds published by an address, each with its live quote and any
+ * still-maturing one.
+ *
+ * @param {{ chainId: string, address: string }} req
+ * @returns {Promise<any>}
+ */
+export function oracleFeeds(req) {
+    return /** @type {any} */ (sendMessage('oracle.feeds', req));
+}
+
+/**
+ * Dispensers currently priced by an oracle address.
+ *
+ * @param {{ chainId: string, address: string }} req
+ * @returns {Promise<any>}
+ */
+export function oracleConsumers(req) {
+    return /** @type {any} */ (sendMessage('oracle.consumers', req));
+}
+
+/**
  * Build, sign, and broadcast a DISPENSER action : opens a vending-
  * machine that dispenses GIVE_TICK when triggered by a GET_COIN or
  * GET_TICK payment (§40.7). Version: '0' create, '1' cancel, '2' edit.
@@ -2000,6 +2046,12 @@ export function advancedAction(opts) {
  */
 export function listActions(req) {
     return /** @type {any} */ (sendMessage('sdk.listActions', req));
+}
+
+/** PC-36: build a BATCH COMMAND from queued sub-actions (compose only, no signing).
+ * @param {{ chainId: string, subActions: Array<{ action: string, params: Record<string, unknown> }> }} req */
+export function buildBatchCommand(req) {
+    return /** @type {any} */ (sendMessage('batch.buildCommand', req));
 }
 
 /**

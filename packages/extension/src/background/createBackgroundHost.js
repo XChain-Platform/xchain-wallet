@@ -48,6 +48,7 @@ const {
     unlockWallet,
     receiveAddress,
     ensureNetworkAddresses,
+    ensureSettings,
     verifyReceiveAddress,
     dispenserAddress,
     resolveActiveAddresses,
@@ -69,6 +70,9 @@ const {
     sleepAction,
     sleepStateFor,
     broadcastAction,
+    oraclePriceAction,
+    myOracleFeeds,
+    oracleConsumers,
     dispenserAction,
     orderAction,
     cancelOrder,
@@ -179,6 +183,7 @@ const {
     updatePendingAirdrop,
     clearPendingAirdrop,
     advancedAction,
+    buildBatchCommand,
     listActions,
     getActionFormats,
     getActionFields,
@@ -885,7 +890,7 @@ export function createBackgroundHost(deps) {
         if (typeof network !== 'string' || !network) {
             throw new Error('settings.setActiveNetwork: network is required');
         }
-        const settings = await updateSettings(vault, { activeNetwork: network });
+        let settings = await updateSettings(vault, { activeNetwork: network });
 
         let addresses = { created: [], existing: [], failed: [], skipped: 'no-wallet' };
         const walletId = req?.walletId;
@@ -896,6 +901,21 @@ export function createBackgroundHost(deps) {
             addresses = await ensureNetworkAddresses({
                 vault, chainRegistry, sdkRegistry, walletId, network, signer: signer || undefined,
             });
+            // : switching the active network must also seed per-chain
+            // Settings (fees + ads.perChain) for that network's chains, the
+            // same contract activateChain honours ("consumers key off
+            // settings.fees"). ensureNetworkAddresses derives addresses only,
+            // so without this a host-driven switch - the extension's ONLY path
+            // to regtest, since it has no Settings UI  - leaves
+            // settings.fees mainnet-only. useReachability then derives an empty
+            // active-chain set on regtest and reachability.check maps empty ->
+            // offline, so a second popup shows a false "You're offline" and its
+            // confirm pre-flight never runs. ensureSettings is idempotent and
+            // never overwrites a user's customized fee strategy.
+            const networkChainIds = chainRegistry.byNetworkKind(network).map((d) => d.id);
+            if (networkChainIds.length > 0) {
+                settings = await ensureSettings(vault, chainRegistry, networkChainIds);
+            }
         }
         return { settings, addresses };
     });
@@ -2256,6 +2276,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.callback.hw', callbackAction);
     registerHwHandler('action.sleep.hw', sleepAction);
     registerHwHandler('action.broadcast.hw', broadcastAction);
+    registerHwHandler('action.oraclePrice.hw', oraclePriceAction);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
     registerHwHandler('action.createList.hw', createList);
@@ -2366,6 +2387,23 @@ export function createBackgroundHost(deps) {
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return broadcastAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-30: publish a PRICE v1 user oracle quote.
+    host.register('action.oraclePrice', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return oraclePriceAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-30: this address's published oracle feeds, each with its live and
+    // still-maturing quote.
+    host.register('oracle.feeds', async (req, { sdkRegistry }) => {
+        return myOracleFeeds({ sdkRegistry, chainId: req.chainId, address: req.address });
+    });
+
+    // PC-30: dispensers currently priced by this oracle address, shown before
+    // a republish because they settle at whatever price matures.
+    host.register('oracle.consumers', async (req, { sdkRegistry }) => {
+        return oracleConsumers({ sdkRegistry, chainId: req.chainId, address: req.address });
     });
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -3102,6 +3140,13 @@ export function createBackgroundHost(deps) {
 
     host.register('action.advanced', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return advancedAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // PC-36: assemble a BATCH's COMMAND string from queued sub-actions (read-
+    // only compose; no signing). The composer previews this, then signs the
+    // BATCH via the generic action.advanced path with { action:'BATCH', params:{ COMMAND } }.
+    host.register('batch.buildCommand', async (req, { sdkRegistry }) => {
+        return buildBatchCommand({ ...req, sdkRegistry });
     });
 
     host.register('sdk.listActions', async (req, { sdkRegistry }) => {

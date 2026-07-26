@@ -399,6 +399,37 @@ export function broadcastAction(opts) {
     return /** @type {any} */ (sendMessage('action.broadcast', opts));
 }
 
+/**
+ * Publish a PRICE v1 user oracle quote (PC-30). Effective 24h after the
+ * block it lands in, with no way to retract it in between.
+ * @param {object} opts
+ */
+export function oraclePriceAction(opts) {
+    return /** @type {any} */ (sendMessage('action.oraclePrice', opts));
+}
+
+/** @param {object} opts hardware-signer PRICE v1 publish */
+export function oraclePriceActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.oraclePrice.hw', opts));
+}
+
+/**
+ * Oracle feeds published by an address, each with its live quote and any
+ * still-maturing one.
+ * @param {{ chainId: string, address: string }} req
+ */
+export function oracleFeeds(req) {
+    return /** @type {any} */ (sendMessage('oracle.feeds', req));
+}
+
+/**
+ * Dispensers currently priced by an oracle address.
+ * @param {{ chainId: string, address: string }} req
+ */
+export function oracleConsumers(req) {
+    return /** @type {any} */ (sendMessage('oracle.consumers', req));
+}
+
 /** @param {object} opts */
 export function dispenserAction(opts) {
     return /** @type {any} */ (sendMessage('action.dispenser', opts));
@@ -1137,6 +1168,12 @@ export function advancedAction(opts) {
 /** @param {object} req */
 export function listActions(req) {
     return /** @type {any} */ (sendMessage('sdk.listActions', req));
+}
+
+/** PC-36: build a BATCH COMMAND from queued sub-actions (compose only, no signing).
+ * @param {{ chainId: string, subActions: Array<{ action: string, params: Record<string, unknown> }> }} req */
+export function buildBatchCommand(req) {
+    return /** @type {any} */ (sendMessage('batch.buildCommand', req));
 }
 
 /** @param {object} req */

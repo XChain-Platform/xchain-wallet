@@ -89,6 +89,7 @@ import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm
 import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { SleepForm } from '@xchain-wallet/core/shared/routes/SleepForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
+import { OracleForm } from '@xchain-wallet/core/shared/routes/OracleForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
 import { MyLists } from '@xchain-wallet/core/shared/routes/MyLists.jsx';
@@ -145,6 +146,7 @@ import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx
 import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey.jsx';
 import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
+import { BatchComposerForm } from '@xchain-wallet/core/shared/routes/BatchComposerForm.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
 import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate.jsx';
@@ -219,7 +221,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -995,6 +997,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'oracle' && activeWalletId) {
+                return (
+                    <OracleForm
+                        walletId={activeWalletId}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
+                    />
+                );
+            }
             if (unlockedView === 'dispenser' && activeWalletId) {
                 return (
                     <DispenserForm
@@ -1376,6 +1389,14 @@ function AppInner() {
                     <PsbtSignForm
                         walletId={activeWalletId}
                         onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'batch-compose' && activeWalletId) {
+                return (
+                    <BatchComposerForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
                     />
                 );
             }
@@ -2004,6 +2025,7 @@ function AppInner() {
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
                             onBroadcast: () => setUnlockedView('broadcast'),
+                            onPublishOraclePrice: () => setUnlockedView('oracle'),
                             onCreateDispenser: () => setUnlockedView('dispenser'),
                             onMyDispensers: () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); },
                             onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
@@ -2026,6 +2048,7 @@ function AppInner() {
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
+                            onBatch: () => setUnlockedView('batch-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
@@ -2297,6 +2320,7 @@ function AppInner() {
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
+                            onBatch: () => setUnlockedView('batch-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
@@ -2513,6 +2537,7 @@ function buildActionEntries({
     onIssue, onMint, onDestroy, onSweep,
     onLock, onUpdateDescription, onTransferOwnership,
     onBroadcast,
+    onPublishOraclePrice,
     onCreateDispenser,
     onMyDispensers,
     onBrowseDispensers,
@@ -2529,6 +2554,7 @@ function buildActionEntries({
     onPublishFile,
     onLink,
     onParallel,
+    onBatch,
     onCrossChainSwap,
     onCrossChainTemplates,
     onMultisigCreate,
@@ -2588,6 +2614,12 @@ function buildActionEntries({
             label: 'Broadcast',
             description: 'Publish text, oracle value, or feed reference on-chain.',
             onSelect: onBroadcast,
+        },
+        {
+            id: 'oracle',
+            label: 'My oracle',
+            description: 'Publish what your token is worth in a currency so dispensers can sell at that rate.',
+            onSelect: onPublishOraclePrice,
         },
         {
             id: 'dispenser',
@@ -2666,6 +2698,12 @@ function buildActionEntries({
             label: 'Parallel cross-chain actions',
             description: 'Compose multiple independent actions across any chains and sign them sequentially. Not all-or-nothing: if one side fails, the sides that already went through are not undone.',
             onSelect: onParallel,
+        },
+        {
+            id: 'batch',
+            label: 'Atomic batch',
+            description: 'Bundle several actions on one chain into a single transaction that settles all-or-nothing. At most one ISSUE, MINT, or FILE; no nested batches or deploys.',
+            onSelect: onBatch,
         },
         {
             id: 'cross-chain-swap',

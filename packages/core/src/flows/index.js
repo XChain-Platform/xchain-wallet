@@ -43,6 +43,22 @@ export { tokenHolderSummary, mulFloorDecimal, addDecimal } from './tokenHolders.
 export { sleepAction } from './sleepAction.js';
 export { sleepStateFor, interpretSleep } from './sleepQueries.js';
 export { broadcastAction } from './broadcastAction.js';
+export {
+    buildBatchCommand,
+    validateBatchConstraints,
+    BATCH_FORBIDDEN_ACTIONS,
+    BATCH_SINGLETON_ACTIONS,
+} from './batchCommand.js';
+export { oraclePriceAction } from './oraclePriceAction.js';
+export {
+    myOracleFeeds,
+    oracleConsumers,
+    toQuote,
+    pairKey,
+    quoteDeviationPct,
+    activationCountdownText,
+    ORACLE_ACTIVATION_DELAY_S,
+} from './oracleQueries.js';
 export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder, editOrder } from './orderAction.js';
 export {

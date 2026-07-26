@@ -118,6 +118,13 @@ assert.ok(!/doesn't\s+exist yet/.test(migrate) && !/SweepForm surface that doesn
 const palette = read('packages', 'core', 'src', 'shared', 'commandPalette', 'commandRegistry.js');
 assert.match(palette, /id: 'create-sweep'/, 'command palette reaches the sweep form');
 const advanced = read('packages', 'core', 'src', 'shared', 'routes', 'AdvancedActionsForm.jsx');
-assert.match(advanced, /'LINK', 'SWEEP',?\s*\]\)/, 'SWEEP restored to ACTIONS_WITH_DEDICATED_FORMS (PC-56 stale-label fix closed)');
+// Membership, not position: the set grows as forms land (PC-30 appended
+// PRICE), and pinning SWEEP as the last entry made an unrelated addition
+// look like this regression.
+assert.match(
+    advanced,
+    /const ACTIONS_WITH_DEDICATED_FORMS = new Set\(\[[^\]]*'SWEEP'/s,
+    'SWEEP restored to ACTIONS_WITH_DEDICATED_FORMS (PC-56 stale-label fix closed)',
+);
 
 console.log('sweep-form smoke: all assertions passed');
