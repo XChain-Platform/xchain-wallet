@@ -19,6 +19,7 @@
 // for the failing rows.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { importedAddressIdsFor } from './_importedAddressIds.js';
 
 // D-6: the explorer `/balances/` endpoint is the XChain TOKEN ledger only; it
 // never carries the chain's NATIVE coin (BTC/LTC/DOGE) balance, which lives at
@@ -294,8 +295,15 @@ export async function walletBalances({
         scopedAccountIds = new Set(accounts.map((a) => a.id));
     }
     const accountIds = scopedAccountIds;
-    if (accountIds.size === 0) {
-        // No accounts for this walletId; nothing to fetch.
+
+    // Imported-WIF addresses hang off the WALLET, not an account, so the
+    // account filter below cannot see them (D-66). They are included even
+    // when the caller scoped to one account - AddressList always passes an
+    // accountId, and it is the surface that must show them.
+    const importedIds = await importedAddressIdsFor(vault, walletId);
+
+    if (accountIds.size === 0 && importedIds.size === 0) {
+        // No accounts and no imported keys for this walletId; nothing to fetch.
         return {};
     }
 
@@ -309,7 +317,10 @@ export async function walletBalances({
     const byChain = {};
     const allAddrs = await vault.addresses.list();
     for (const a of allAddrs) {
-        if (!a.accountId || !accountIds.has(a.accountId)) continue;
+        const owned = a.accountId
+            ? accountIds.has(a.accountId)
+            : importedIds.has(a.id);
+        if (!owned) continue;
         const cid = chainRegistry.chainIdFor(a.chain, a.network);
         if (!cid) continue;
         if (chainId && cid !== chainId) continue;

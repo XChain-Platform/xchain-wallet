@@ -62,3 +62,60 @@ describe('buildBalanceRows active-address scoping', () => {
         expect(rows.find((r) => r.tick === 'FOO')).toBeUndefined();
     });
 });
+
+// D-67 (session 17): two Address RECORDS can name one address - importing a
+// WIF twice creates a second record, and importing a key the wallet already
+// derives collides with its HD record. Each entry carries that address's whole
+// chain balance, so summing per record reports money the wallet does not have.
+// Found live: an imported address holding 0.59998404 BTC read 1.19996808 on
+// Home, exactly double, once D-66 made imported addresses visible at all.
+describe('buildBalanceRows deduplicates repeated addresses', () => {
+    const dupEntry = {
+        address: 'addr_A',
+        balances: {
+            native: { quantity: '100', divisibility: 8, tick: 'BTC' },
+            tokens: [{ tick: 'FOO', quantity: '5', divisibility: 0 }],
+        },
+    };
+    const withDuplicate = {
+        'bitcoin-regtest': [
+            dupEntry,
+            // Same address, second record: a different label and id in the
+            // vault, identical on-chain balance.
+            { ...dupEntry, label: 'Imported Address' },
+            {
+                address: 'addr_B',
+                balances: { native: { quantity: '50', divisibility: 8, tick: 'BTC' }, tokens: [] },
+            },
+        ],
+    };
+
+    it('counts a duplicated address once in active-address mode', () => {
+        const rows = buildBalanceRows(withDuplicate, chainRegistry, {
+            'bitcoin-regtest': { address: 'addr_A' },
+        });
+        expect(rows.find((r) => r.kind === 'native').quantity).toBe('100');
+    });
+
+    it('counts a duplicated address once in the whole-wallet aggregate', () => {
+        const rows = buildBalanceRows(withDuplicate, chainRegistry);
+        expect(rows.find((r) => r.kind === 'native').quantity).toBe('150');
+    });
+
+    it('does not double-count the duplicated address\'s TOKENS', () => {
+        const rows = buildBalanceRows(withDuplicate, chainRegistry);
+        expect(rows.find((r) => r.tick === 'FOO').quantity).toBe('5');
+    });
+
+    it('lets a later good record fill in for one that failed to fetch', () => {
+        // A failed fetch yields balances:null. That record must not consume
+        // the address's slot, or one flaky read would zero a real balance.
+        const rows = buildBalanceRows({
+            'bitcoin-regtest': [
+                { address: 'addr_A', balances: null, error: 'timeout' },
+                dupEntry,
+            ],
+        }, chainRegistry);
+        expect(rows.find((r) => r.kind === 'native').quantity).toBe('100');
+    });
+});

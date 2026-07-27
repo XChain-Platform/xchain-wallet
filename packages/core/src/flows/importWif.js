@@ -42,6 +42,22 @@ export class WrongPasswordError extends Error {
     }
 }
 
+// D-67: re-importing a key the wallet already holds used to append a SECOND
+// Address record for the same address, because `createAddress` always mints a
+// fresh id. Two records for one address then double-counted that address's
+// balance everywhere `buildBalanceRows` runs (Home showed 1.19996808 BTC for
+// an address holding 0.59998404). Rejecting is deliberate over silently
+// re-importing: nothing is mutated, and the user is told why no new row
+// appeared. Message is user-facing per D-52/D-64 - no flow name, no library
+// internals.
+export class DuplicateImportError extends Error {
+    constructor(address) {
+        super(`This private key is already in this wallet (${address}).`);
+        this.name = 'DuplicateImportError';
+        this.address = address;
+    }
+}
+
 /**
  * @typedef {Object} ImportWifOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -122,6 +138,11 @@ export async function importWif({
         type,
     });
 
+    // Reject a re-import BEFORE the Argon2id master-key derivation below:
+    // D-50's lesson is that a rejection the user can cause by hand must not
+    // cost them a 6-8s freeze first.
+    await assertNotAlreadyImported(vault, walletRecord, descriptor, derivedAddress);
+
     // Derive (or take) the master key; verify it against the seed blob;
     // encrypt the WIF with the same key. A derived key is zeroed on exit;
     // a session-supplied key belongs to the signer and is left alone.
@@ -177,4 +198,43 @@ export async function importWif({
     await vault.wallets.put(updatedWallet);
 
     return { wallet: updatedWallet, address: addressRecord };
+}
+
+/**
+ * Throw when this wallet already holds an imported key for `address` on this
+ * chain. Scoped to the wallet's own `importedKeys`, so the same key may still
+ * be imported into a DIFFERENT wallet (a separate vault container, separate
+ * user intent), and an HD address that happens to match is left alone - that
+ * collision is handled by the address-level dedupe in `buildBalanceRows`,
+ * because refusing it here would block a user importing a key they only
+ * partially control through the HD tree.
+ *
+ * Fails OPEN: an unreadable address record cannot prove a duplicate, and
+ * blocking a legitimate import on a storage hiccup is the worse outcome -
+ * the duplicate's only consequence is a display one, already defended.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {import('../schemas/wallet.js').Wallet} walletRecord
+ * @param {{ coin: string, networkKind: string }} descriptor
+ * @param {string} address
+ */
+async function assertNotAlreadyImported(vault, walletRecord, descriptor, address) {
+    const keys = Array.isArray(walletRecord.importedKeys) ? walletRecord.importedKeys : [];
+    for (const k of keys) {
+        if (typeof k?.addressId !== 'string') continue;
+        let existing;
+        try {
+            existing = await vault.addresses.get(k.addressId);
+        } catch {
+            continue;
+        }
+        if (!existing) continue;
+        if (
+            existing.address === address
+            && existing.chain === descriptor.coin
+            && existing.network === descriptor.networkKind
+        ) {
+            throw new DuplicateImportError(address);
+        }
+    }
 }

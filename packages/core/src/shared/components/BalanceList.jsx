@@ -343,13 +343,23 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
 
         let nativeAcc = null;
         const tokenAcc = new Map();
+        // D-67: sum each distinct ADDRESS once, not each Address RECORD. Two
+        // records can name one address - importing a WIF twice makes a second
+        // record, and importing a key the wallet already derives collides with
+        // its HD record - and the entries here carry one chain balance per
+        // record, so summing them reports money the wallet does not have.
+        // Observed live: an address holding 0.59998404 BTC displayed as
+        // 1.19996808 on Home after a duplicate import.
+        const seenAddresses = new Set();
 
         for (const entry of entries) {
             // Active-address mode: only the active address contributes to the
             // chain's balance, so the user sees one address per coin.
             if (activeAddr && entry.address !== activeAddr) continue;
+            if (seenAddresses.has(entry.address)) continue;
             const b = entry.balances;
             if (!b || typeof b !== 'object') continue;
+            seenAddresses.add(entry.address);
 
             if (b.native && b.native.quantity != null) {
                 if (!nativeAcc) {
