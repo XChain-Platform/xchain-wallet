@@ -47,6 +47,7 @@ import { registry as registryLib } from '../../packages/core/src/index.js';
 import { SDKRegistry } from '../../packages/core/src/sdk/SDKRegistry.js';
 import { adaptXChainSDK } from '../../packages/core/src/sdk/defaultFactory.js';
 import { submitWithSigner } from '../../packages/core/src/sdk/submitWithSigner.js';
+import { composeActionForConfirm } from '../../packages/core/src/flows/composeActionForConfirm.js';
 
 const require = createRequire(import.meta.url);
 // Resolved by PATH, not by package name: xchain-sdk is a dependency of the
@@ -64,6 +65,11 @@ const CHAINS = {
 
 const EXPLORER = process.env.XCHAIN_EXPLORER_URL || 'http://localhost:18080';
 const chainId = process.argv[2] || 'litecoin-regtest';
+// --confirm drives the CONFIRM path (compose -> preview -> approve a prebuilt
+// PSBT), which is the one every wallet form actually takes; without it the
+// driver takes the direct-submit path.  had to be fixed on BOTH, and
+// only one can be exercised per run, so both are drivable here.
+const viaConfirm = process.argv.includes('--confirm');
 const cfg = CHAINS[chainId];
 if (!cfg) {
     console.error(`unknown chain "${chainId}"; expected one of ${Object.keys(CHAINS).join(', ')}`);
@@ -183,23 +189,55 @@ async function main() {
         },
     };
 
+    const actionData = {
+        action: 'DEPLOY',
+        // Exactly the shape DeployContractForm builds (VERSION 0, raw CODE,
+        // stringified GAS_LIMIT, optional NAME). Composing a different shape
+        // here would test the driver, not the wallet.
+        params: {
+            VERSION: '0',
+            CODE: CONTRACT_CODE,
+            GAS_LIMIT: '100000',
+            NAME: 'xc775' + Date.now().toString(36),
+        },
+    };
+
+    // The CONFIRM path: compose + tamper-check host-side, then approve the
+    // PREBUILT psbt. That is the exact pair of steps a form takes, and it is a
+    // different branch of submitWithSigner from the direct path, so  had
+    // to be fixed in both. The vault is stubbed to default settings because the
+    // only thing compose reads from it is the ADS donation snapshot.
+    let prebuiltPsbt;
+    if (viaConfirm) {
+        console.log('composing for confirm (the form path) ...');
+        const composed = await composeActionForConfirm({
+            vault: { settings: { get: async () => ({}) } },
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            actionData,
+            encoderOpts: { pubkey: publicKey, sourceAddress: address, change: address, payFeeInNativeCoin: true },
+            source: address,
+            ownAddresses: [address],
+        });
+        console.log('  composed encoding:', composed.encoding,
+            '| deferredFeeOutput:', JSON.stringify(composed.deferredFeeOutput));
+        prebuiltPsbt = {
+            psbtHex: composed.psbt,
+            encoding: composed.encoding,
+            actionString: composed.actionString,
+            version: composed.version,
+            deferredFeeOutput: composed.deferredFeeOutput || null,
+        };
+    }
+
     console.log('composing + submitting DEPLOY with payFeeInNativeCoin ...');
     const result = await submitWithSigner({
+        ...(prebuiltPsbt ? { prebuiltPsbt } : {}),
         sdkRegistry,
         chainRegistry,
         chainId,
-        actionData: {
-            action: 'DEPLOY',
-            // Exactly the shape DeployContractForm builds (VERSION 0, raw
-            // CODE, stringified GAS_LIMIT, optional NAME). Composing a
-            // different shape here would test the driver, not the wallet.
-            params: {
-                VERSION: '0',
-                CODE: CONTRACT_CODE,
-                GAS_LIMIT: '100000',
-                NAME: `xc775ms3f1yqa`,
-            },
-        },
+        actionData,
         // sourceAddress + change mirror what the wallet's composeForConfirm
         // passes (flows/composeForConfirm.js): without sourceAddress the
         // encoder resolves the funding set from the pubkey, and the
