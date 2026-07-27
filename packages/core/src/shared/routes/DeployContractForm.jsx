@@ -23,6 +23,14 @@ import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import {
+    nativeFeeErrorMessage,
+    NATIVE_FEE_WARNING,
+    NATIVE_FEE_UNVERIFIED_NOTICE,
+} from '../../sdk/nativeFeePreflight.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -39,14 +47,19 @@ import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-const PROTOCOL_COIN_TICKER = {
-    bitcoin: 'BTC',
-    litecoin: 'LTC',
-    dogecoin: 'DOGE',
-};
-
-// VM is BTC-only at launch; BITCOIN_ACTIONS carries DEPLOY.
-const VM_COIN = 'bitcoin';
+// Which chains this form may deploy on, asked of the registry instead of
+// pinned to a coin here . The gate has ONE home,
+// registry/actions.js BTC_EXCLUSIVE_ACTIONS, which today keeps DEPLOY on
+// Bitcoin; a second hard-coded copy in this form would mean the day the
+// registry opens contracts to LTC/DOGE, the form silently does not. Same
+// descriptor-driven pattern as StakingList and BetFeedsList. Today this
+// resolves to exactly the Bitcoin chains, so nothing about what the form
+// offers changes with the switch.
+const DEPLOY_CHAINS = chainRegistry.supportedChains()
+    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY'));
+// Coin ids read as 'bitcoin'; users read "Bitcoin".
+const DEPLOY_CHAIN_COINS = [...new Set(DEPLOY_CHAINS.map((d) => d.coin))]
+    .map((c) => String(c).charAt(0).toUpperCase() + String(c).slice(1));
 
 /**
  * DEPLOY authoring form: §42.6.
@@ -85,10 +98,7 @@ export function DeployContractForm({ walletId, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const btcChainIds = useMemo(
-        () => chainRegistry.byCoin(VM_COIN).map((d) => d.id),
-        [],
-    );
+    const deployChainIds = useMemo(() => DEPLOY_CHAINS.map((d) => d.id), []);
 
     const [activeByChain, setActiveByChain] = useState(
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
@@ -161,22 +171,26 @@ export function DeployContractForm({ walletId, onBack }) {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
-                const firstBtc = btcChainIds.find(
+                const firstDeployable = deployChainIds.find(
                     (cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0,
                 );
-                if (!firstBtc) {
+                if (!firstDeployable) {
+                    // Names the chains the registry actually allows, so the
+                    // sentence stays true the day that list grows.
+                    const where = DEPLOY_CHAIN_COINS.join(' or ');
                     setLoadError(
-                        'Contracts are BTC-only at launch. Use Receive on a Bitcoin network to generate an address before deploying.',
+                        `Contracts can only be deployed on ${where}. Use Receive on one of those `
+                        + 'networks to generate an address before deploying.',
                     );
                     return;
                 }
-                setChainId(firstBtc);
+                setChainId(firstDeployable);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, btcChainIds]);
+    }, [walletId, messaging, deployChainIds]);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
@@ -190,8 +204,17 @@ export function DeployContractForm({ walletId, onBack }) {
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+
+    // : DEPLOY is fee-bearing, and this form had no fee lane at all
+    // because BTC could always settle the protocol fee from an XCHAIN balance.
+    // On every other protocol coin there is no XCHAIN lane, so the hook forces
+    // the native output on rather than offering a choice that does not exist.
+    // The quote behind it is 's schedule price, which carries no verdict
+    // (`valid:null`), hence `unverified` on the row: the amount is exact, the
+    // acceptance is not pre-judged, and the fee is spent either way.
+    const nativeFee = useNativeFee(chainId);
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -220,10 +243,10 @@ export function DeployContractForm({ walletId, onBack }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    const btcChainsWithAddresses = useMemo(() => {
+    const deployChainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
-        return btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0);
-    }, [btcChainIds, addressesByChain]);
+        return deployChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0);
+    }, [deployChainIds, addressesByChain]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -354,7 +377,7 @@ export function DeployContractForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!chainId || !fromAddress) {
-            setFormError('No Bitcoin address available to deploy from.');
+            setFormError('No address available to deploy from on this chain.');
             return;
         }
         if (!code.trim()) {
@@ -425,12 +448,19 @@ export function DeployContractForm({ walletId, onBack }) {
                 chainId,
                 from,
                 actionData: { action: 'DEPLOY', params: actionParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                // The fee mode must reach COMPOSE, not just submit: the
+                // FEE_DESTINATION output has to be inside the PSBT the user
+                // approves and the tamper check verifies.
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: actionParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -440,7 +470,9 @@ export function DeployContractForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Deploy failed.');
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
+                : err?.message || 'Deploy failed.');
         }
     }
 
@@ -464,6 +496,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -490,6 +523,9 @@ export function DeployContractForm({ walletId, onBack }) {
                     constructorParams: constructorParams.trim() || undefined,
                     cooldownBlocks: cooldownBlocks.trim() || undefined,
                     slashDestination: slashDestination.trim() || undefined,
+                    // Every leg of a chunked run is its own priced DEPLOY, so the
+                    // flag rides the whole run rather than the assembler alone.
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     ...(resumeId ? { resumeId } : {}),
                 };
@@ -504,7 +540,12 @@ export function DeployContractForm({ walletId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action: 'DEPLOY', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // The watcher lane builds the PSBT the signer wallet will
+                    // sign blind, so the fee output has to be in it here.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.deployActionHw({ ...base, signerId: fromAddress.signerId });
@@ -519,7 +560,9 @@ export function DeployContractForm({ walletId, onBack }) {
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Deploy failed.',
+                    : err?.name === 'NativeFeeForfeitError'
+                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
+                        : err?.message || 'Deploy failed.',
             );
             setChunkProgress(null);
             // PC-38: a failed chunked run leaves its record behind on purpose -
@@ -641,7 +684,22 @@ export function DeployContractForm({ walletId, onBack }) {
                             <dd className={styles.detailsValue}>{actionParams.SLASH_DESTINATION}</dd>
                         </>
                     ) : null}
+                    <dt className={styles.detailsLabel}>Protocol fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {nativeFee.payFeeInNativeCoin
+                            ? `Paid in ${coinTicker || 'the native coin'}`
+                            : 'Paid from your XCHAIN balance'}
+                    </dd>
                 </dl>
+                {/* The review stage is the watcher lane's last stop before the
+                    PSBT leaves for a signer wallet, so the forfeiture terms are
+                    stated here rather than only on the confirm page. */}
+                {nativeFee.payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
+                    </div>
+                ) : null}
                 {validation?.warnings && validation.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {validation.warnings.map((w, i) => (
@@ -741,7 +799,7 @@ export function DeployContractForm({ walletId, onBack }) {
             <NetworkField
                 value={chainId}
                 onChange={setChainId}
-                chainIds={btcChainsWithAddresses.length ? btcChainsWithAddresses : (chainId ? [chainId] : [])}
+                chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])}
                 chainRegistry={chainRegistry}
             />
 
@@ -757,7 +815,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 />
             ) : (
                 <div role="alert" className={styles.error}>
-                    No address on this Bitcoin chain yet. Use Receive to generate one first.
+                    No address on this chain yet. Use Receive to generate one first.
                 </div>
             )}
 
@@ -985,6 +1043,8 @@ export function DeployContractForm({ walletId, onBack }) {
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

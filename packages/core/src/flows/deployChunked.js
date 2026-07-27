@@ -204,6 +204,9 @@ export async function verifyRecordedChunks({ sdkRegistry, chainId, record }) {
  * @param {string} [opts.cooldownBlocks]
  * @param {string} [opts.slashDestination]
  * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.payFeeInNativeCoin]  : pay each leg's protocol fee in the native
+ *   coin. Every leg is its own priced DEPLOY (the carriers per CODE_PART byte, the assembler at
+ *   VM_DEPLOY_BASE), so the flag belongs on all of them or the run stalls partway through.
  * @param {string} [opts.resumeId]   existing pendingDeploy id to continue
  * @param {(phase: string, data: object) => void} [opts.onProgress]
  * @param {(txid: string, opts?: object) => Promise<unknown>} [opts.waitForTxid]
@@ -304,6 +307,10 @@ export async function deployChunkedRun(opts) {
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            // Per leg, not once for the run: each carrier and the assembler is a
+            // separate DEPLOY the chain prices and checks on its own, so a flag
+            // applied to only some of them buys N paid chunks and no contract.
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
         },
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }

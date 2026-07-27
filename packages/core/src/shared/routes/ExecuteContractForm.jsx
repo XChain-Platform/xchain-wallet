@@ -23,6 +23,14 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import {
+    nativeFeeErrorMessage,
+    NATIVE_FEE_WARNING,
+    NATIVE_FEE_UNVERIFIED_NOTICE,
+} from '../../sdk/nativeFeePreflight.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -42,12 +50,6 @@ import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-const PROTOCOL_COIN_TICKER = {
-    bitcoin: 'BTC',
-    litecoin: 'LTC',
-    dogecoin: 'DOGE',
-};
 
 /**
  * EXECUTE contract method form (§42.4).
@@ -186,8 +188,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     }, [chainId, contractActionIndex, messaging]);
 
     const descriptor = chainRegistry.get(chainId);
-    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+
+    // : EXECUTE is fee-bearing, and this form had no fee lane at all
+    // because BTC could always settle the protocol fee from an XCHAIN balance.
+    // On every other protocol coin there is no XCHAIN lane, so the hook forces
+    // the native output on rather than offering a choice that does not exist.
+    // The quote behind it is 's schedule price, which carries no verdict
+    // (`valid:null`), hence `unverified` on the row: the amount is exact, the
+    // acceptance is not pre-judged, and the fee is spent either way.
+    const nativeFee = useNativeFee(chainId);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -264,12 +275,19 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 chainId,
                 from,
                 actionData: { action: 'EXECUTE', params: actionParams },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                // The fee mode must reach COMPOSE, not just submit: the
+                // FEE_DESTINATION output has to be inside the PSBT the user
+                // approves and the tamper check verifies.
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
                     params: actionParams,
+                    payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -279,7 +297,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Execute failed.');
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
+                : err?.message || 'Execute failed.');
         }
     }
 
@@ -396,6 +416,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -404,7 +425,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     chainId,
                     from: base.from,
                     actionData: { action: 'EXECUTE', params: actionParams },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    // The watcher lane builds the PSBT the signer wallet will
+                    // sign blind, so the fee output has to be in it here.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (isHwSource) {
                 res = await messaging.executeActionHw({ ...base, signerId: fromAddress.signerId });
@@ -419,7 +445,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Contract call failed.',
+                    : err?.name === 'NativeFeeForfeitError'
+                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
+                        : err?.message || 'Contract call failed.',
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -525,12 +553,27 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                             : 'Estimate unavailable'}
                     </dd>
+                    <dt className={styles.detailsLabel}>Protocol fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {nativeFee.payFeeInNativeCoin
+                            ? `Paid in ${coinTicker || 'the native coin'}`
+                            : 'Paid from your XCHAIN balance'}
+                    </dd>
                     <ContractConsentPanel
                         manifest={manifest}
                         labelClassName={styles.detailsLabel}
                         valueClassName={styles.detailsValue}
                     />
                 </dl>
+                {/* The review stage is the watcher lane's last stop before the
+                    PSBT leaves for a signer wallet, so the forfeiture terms are
+                    stated here rather than only on the confirm page. */}
+                {nativeFee.payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
+                    </div>
+                ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction.
@@ -723,6 +766,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
+
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

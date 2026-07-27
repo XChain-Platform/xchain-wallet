@@ -165,6 +165,71 @@ assert.match(
     );
 }
 
+// ---- : the contract lane (DEPLOY/EXECUTE) ----
+//
+// These two were the last fee-bearing forms with no lane at all, for a reason
+// that expired: BTC could always settle their fee from an XCHAIN balance, and
+// they were unquotable everywhere else.  gave them a schedule-priced
+// quote with no verdict (`valid:null`), which is payable, so the lane has to
+// exist BEFORE BTC_EXCLUSIVE_ACTIONS can open them to LTC/DOGE, where the
+// native output is the only fee lane there is.
+const CONTRACT_FORMS = ['DeployContractForm.jsx', 'ExecuteContractForm.jsx'];
+for (const f of CONTRACT_FORMS) {
+    const src = routes(f);
+    assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
+    assert.doesNotMatch(src, /useNativeFee\(\s*\)/, `${f} passes its chain to useNativeFee`);
+    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\}/,
+        `${f} renders the toggle with the whole toggleProps (so mandatory survives)`);
+    // The valid:null caveat. Without `unverified` the row promises a pre-flight
+    // verdict these two never get, which is the one thing their user must know
+    // before spending a non-refundable fee.
+    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\} coinTicker=\{coinTicker\} unverified/,
+        `${f} marks the quote unverified (DEPLOY/EXECUTE are priced without a dry-run)`);
+    assert.match(src, /NATIVE_FEE_UNVERIFIED_NOTICE/,
+        `${f} states the unverified caveat on its review stage too`);
+    assert.match(src, /nativeFeeErrorMessage\(err, \{ coinTicker, mandatory: nativeFee\.mandatory \}\)/,
+        `${f} explains a refused native-fee quote in chain-aware wording`);
+    // Three submit lanes, and a form that threaded only some of them would
+    // preview a fee output it never pays for, or pay for one nobody previewed.
+    // Compose (confirm page), submit (deploy/executeAction) and the watcher
+    // encode-only build each carry it.
+    assert.ok(
+        (src.match(/payFeeInNativeCoin: nativeFee\.flag/g) || []).length >= 4,
+        `${f} threads the flag into compose, approve-submit, legacy submit and the watcher build`,
+    );
+    const watcherIdx = src.indexOf('messaging.buildActionPsbtRequest({');
+    assert.ok(watcherIdx !== -1, `${f} has a watcher encode-only lane`);
+    assert.match(src.slice(watcherIdx, watcherIdx + 500), /payFeeInNativeCoin: nativeFee\.flag/,
+        `${f} threads the flag into the watcher-mode build`);
+}
+
+// The chunked DEPLOY run is N+1 separate priced DEPLOYs, so the flag has to
+// reach that lane as well; funding only the assembler buys paid chunks and no
+// contract.
+{
+    const deploySrc = routes('DeployContractForm.jsx');
+    const idx = deploySrc.indexOf('const chunkedBase = {');
+    assert.ok(idx !== -1, 'DeployContractForm has a chunked lane');
+    assert.match(deploySrc.slice(idx, idx + 900), /payFeeInNativeCoin: nativeFee\.flag/,
+        'the chunked deploy run carries the fee mode');
+}
+
+for (const f of ['deployAction.js', 'executeAction.js', 'deployChunked.js']) {
+    assert.match(
+        flows(f),
+        /opts\.payFeeInNativeCoin !== undefined && \{ payFeeInNativeCoin: opts\.payFeeInNativeCoin \}/,
+        `${f} forwards payFeeInNativeCoin into encoderOpts`,
+    );
+}
+
+// The toggle's own doc must not still call DEPLOY/EXECUTE unquotable: that
+// claim is what justified leaving these two forms lane-less.
+assert.doesNotMatch(
+    read('packages', 'core', 'src', 'shared', 'components', 'NativeFeeToggle.jsx'),
+    /denied set \{DEPLOY, EXECUTE/,
+    'NativeFeeToggle no longer lists DEPLOY/EXECUTE as unquotable ( prices them)',
+);
+
 // ---- the gated (BATCH) lane stays toggle-free: BATCH is fee-quote DENIED ----
 const gated = routes('GatedPublishForm.jsx');
 assert.doesNotMatch(gated, /<NativeFeeToggle/, 'GatedPublishForm (BATCH lane) has no toggle');
@@ -173,5 +238,5 @@ assert.doesNotMatch(batchComposer, /<NativeFeeToggle/, 'BatchComposerForm (BATCH
 
 console.log(
     'native-fee-sweep smoke: all assertions passed (PC-51 sweep +  mandatory-chain '
-    + 'derivation +  BET lane, form/flow/host)',
+    + 'derivation +  BET lane, form/flow/host +  contract lane)',
 );

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { ToggleRow, ROW, ROW_HINT } from './settings/_settingsPrimitives.jsx';
+import { NATIVE_FEE_UNVERIFIED_NOTICE } from '../../sdk/nativeFeePreflight.js';
 
 /**
  * How this action's protocol fee gets paid, in the one place a form shows it.
@@ -31,23 +32,37 @@ import { ToggleRow, ROW, ROW_HINT } from './settings/_settingsPrimitives.jsx';
  *
  * Mount this on any QUOTABLE authoring action. Per the indexer's
  * classifyFeeQuoteAction (xchain-indexer/src/actions.js), every action is
- * quotable EXCEPT the denied set {DEPLOY, EXECUTE, XEXEC, BATCH} and the
- * exempt settlement/emitted set {COINPAY, DISPENSE, *_MATCH, *_EXPIRE,
+ * quotable EXCEPT the denied set {XEXEC, BATCH} and the exempt
+ * settlement/emitted set {COINPAY, DISPENSE, *_MATCH, *_EXPIRE,
  * DISPENSER_CLOSE, CROSS_SETTLE, XCALL, ATTEST}; denied/exempt actions reject
  * the flag as unsupported. Forms hold the state via the useNativeFee hook,
  * which is also what sets `mandatory`.
+ *
+ * DEPLOY and EXECUTE sit in the denylist too but are NOT unquotable: 
+ * gives them a schedule-priced quote with no verdict (`valid:null`), which is
+ * payable, and on LTC/DOGE it is the only way they are payable at all. Their
+ * forms pass `unverified` so the row says the amount is exact while acceptance
+ * is not pre-judged. Do not set it anywhere else: on a verdict-bearing action
+ * it would understate what the pre-flight actually checked.
  *
  * @param {object} props
  * @param {boolean} props.checked
  * @param {(next: boolean) => void} props.onChange
  * @param {string} props.coinTicker   Native coin ticker (BTC/LTC/DOGE); empty hides the row.
  * @param {boolean} [props.mandatory] Chain has no XCHAIN fee lane; no choice to offer.
+ * @param {boolean} [props.unverified] Action is priced without a verdict (DEPLOY/EXECUTE).
  * @param {boolean} [props.disabled]
  */
-export function NativeFeeToggle({ checked, onChange, coinTicker, mandatory = false, disabled = false }) {
+export function NativeFeeToggle({
+    checked, onChange, coinTicker, mandatory = false, unverified = false, disabled = false,
+}) {
     if (!coinTicker) return null;
     const forfeitHint =
-        'The fee is sent on-chain and is not refunded if the network rejects this transaction.';
+        'The fee is sent on-chain and is not refunded if the network rejects this transaction.'
+        // Only when the fee is actually being paid in coin: on Bitcoin with the
+        // toggle off the fee is an XCHAIN balance debit that costs nothing when
+        // the action is rejected, so there is no unverified risk to warn about.
+        + (unverified && (mandatory || checked) ? ` ${NATIVE_FEE_UNVERIFIED_NOTICE}` : '');
 
     if (mandatory) {
         return (

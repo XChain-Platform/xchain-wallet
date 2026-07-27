@@ -22,6 +22,15 @@
 // When the quote is good we size the FEE_DESTINATION output to `requiredFeeSats` so the on-chain
 // check lands inside the tolerance band.
 //
+//  added a THIRD answer, `valid === null` (`staticQuote:true, validated:false`): the VM
+// actions (DEPLOY/EXECUTE) are priced from the indexer's gas schedule WITHOUT a dry-run, because
+// the public pre-flight will not run caller-supplied VM code. The fee is authoritative, so the
+// output can be sized and the transaction broadcast; what was never judged is whether the action
+// ITSELF will be accepted. That is a payable answer, not a refusal, and it is the only way those
+// two are payable at all on LTC/DOGE (no XCHAIN fee lane to fall back to). The forfeiture risk is
+// real and unhedged there, so a form that submits on a null verdict must SAY so:
+// NATIVE_FEE_UNVERIFIED_NOTICE is that sentence.
+//
 // Both build paths (submitWithSigner for sign+broadcast; buildActionPsbt for watcher/unsigned) call
 // this single helper, so the guardrail covers every action surface.
 
@@ -65,6 +74,20 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
         : 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off ' +
           'native-coin fee payment.';
 }
+
+/**
+ * The caveat a form must show when its action is priced WITHOUT a verdict (`valid:null`).
+ *
+ * : DEPLOY and EXECUTE are the two actions in that class. Every other action's quote
+ * carries an accept/reject verdict, so "the quote came back good" also means "the indexer would
+ * have taken it"; for these two it only means "this is the amount". The fee is spent on
+ * broadcast either way, so the difference is entirely the user's to price in, and hiding it
+ * would read as a guarantee the pre-flight never gave.
+ */
+export const NATIVE_FEE_UNVERIFIED_NOTICE =
+    'The amount is exact, but the network does not check contract actions in advance, so it '
+    + 'cannot tell you beforehand whether this one will be accepted. If it is rejected, the fee '
+    + 'is still spent.';
 
 /**
  * User-facing warning to surface on the review/sign screen whenever native-coin fee mode is on.

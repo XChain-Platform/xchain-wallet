@@ -79,13 +79,18 @@ for (const call of [
     assert.ok(formSrc.includes(call), `DeployContractForm calls ${call}`);
 }
 
-// BTC-only gate
-assert.ok(/VM_COIN\s*=\s*['"]bitcoin['"]/.test(formSrc),
-    'DeployContractForm pins VM_COIN=bitcoin (VM is BTC-only at launch)');
-assert.ok(/byCoin\(VM_COIN\)/.test(formSrc),
-    'DeployContractForm resolves BTC chain IDs from the registry');
-assert.ok(/Contracts are BTC-only at launch/.test(formSrc),
-    'DeployContractForm explains the BTC-only constraint in the no-BTC state');
+// Chain gate.  moved this off a hard-coded VM_COIN='bitcoin' and onto
+// the descriptor's supportedActions, which is the SAME list
+// (registry/actions.js BTC_EXCLUSIVE_ACTIONS) that decides where DEPLOY is
+// offered everywhere else. Two copies of one policy is how a flip lands in the
+// registry and silently not in this form, so the hard-coded coin must not
+// come back.
+assert.ok(/supportedActions\.includes\('DEPLOY'\)/.test(formSrc),
+    'DeployContractForm derives its chain list from supportedActions, not a pinned coin');
+assert.ok(!/VM_COIN/.test(formSrc),
+    'DeployContractForm keeps no second hard-coded copy of the contract chain gate');
+assert.ok(/Contracts can only be deployed on \$\{where\}/.test(formSrc),
+    'DeployContractForm names the allowed chains from the registry in the no-address state');
 
 // Action buttons
 for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {

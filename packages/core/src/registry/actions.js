@@ -95,16 +95,25 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 //
 //  closed the INDEXER half of that gap (FEE_QUOTE_STATIC gives
 // DEPLOY/EXECUTE a schedule-priced, verdict-free quote), and the SDK
-// already treats its `valid:null` as payable-but-unverified. These two
-// stay here anyway, because two other legs are still open :
-// the LTC/DOGE regtest indexers still run PRE- code (measured
-// 2026-07-26 via feequote on both: `supported:false`, "native fee
-// pre-flight not supported"), and DeployContractForm/ExecuteContractForm
-// still have no native-fee lane at all (no useNativeFee/NativeFeeToggle),
-// because BTC could always settle in XCHAIN. Flipping this list before
-// BOTH land would ship the exact hazard it was created to prevent.
+// already treats its `valid:null` as payable-but-unverified.  then
+// wired the WALLET half: DeployContractForm and ExecuteContractForm carry
+// the useNativeFee/NativeFeeToggle lane (mandatory wherever there is no
+// XCHAIN fee lane) and surface the verdict-free caveat, and the DEPLOY
+// form now takes its chain list from THIS list instead of a second
+// hard-coded 'bitcoin', so a flip here moves the form with it.
+// ContractsList still pins VM_COIN='bitcoin' for its browse/entry surface
+// and is the one remaining wallet site a flip has to visit by hand.
 //
-// That second leg used to claim those two forms were the ONLY fee-bearing
+// These two stay here anyway, because the VENUE leg is still open: the
+// LTC/DOGE regtest indexers still run PRE- code (measured
+// 2026-07-26 via feequote on both: `supported:false`, "native fee
+// pre-flight not supported"), so the payability exists in git and on no
+// venue. Flipping before that lands would ship the exact hazard this list
+// was created to prevent. The gate is a live `feequote` for DEPLOY
+// answering supported:true with a staticQuote on both chains, then a
+// wallet-composed DEPLOY that indexes valid there.
+//
+// The forms leg used to claim those two were the ONLY fee-bearing
 // forms without the lane. They were not:  found the BET authoring
 // surfaces (CreateBetFeedForm, BetFeedDetail's place-bet flow) in the same
 // state, and BET is in COMMON_ACTIONS, so it was already offered on
