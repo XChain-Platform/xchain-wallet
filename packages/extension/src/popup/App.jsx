@@ -2079,10 +2079,7 @@ function AppInner() {
                         } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
-                        onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
-                        onMarketActivity={activeWalletId ? () => setUnlockedView('market-activity') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
-                        onDispensers={activeWalletId ? () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); } : undefined}
                         onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
@@ -2102,9 +2099,6 @@ function AppInner() {
                             setUnlockedView('coinpay');
                         } : undefined}
                         onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
-                        onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
-                        onContacts={activeWalletId ? () => { setFormReturnView('home'); setUnlockedView('contacts'); } : undefined}
-                        onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSelectToken={activeWalletId ? (tok) => {
                             setTokenDetailRef(tok);
                             setUnlockedView('token-detail');

@@ -18,6 +18,11 @@
 // same external change=0 index space; dispenser-ness is metadata, not
 // a separate branch.
 //
+// The coin list is the union of the account's own chains and the chains
+// active on the current network . Building it from the account's
+// chains alone made the screen a dead end for an account with none: no
+// options, so no way to derive a first address anywhere.
+//
 // Generation is SEQUENTIAL: each generateReceiveAddress call computes the
 // next BIP44 index from the already-persisted records, so running them in
 // parallel would make several derive the same index. We await each before
@@ -27,8 +32,9 @@
 
 import { useMemo, useState } from 'react';
 import { Button, ChainPicker, Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -38,7 +44,7 @@ const MAX_ADDRESSES = 25;
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]              active account; new addresses are scoped to it
- * @param {string[]} props.chainIds               the account's active chainIds (the coin options)
+ * @param {string[]} props.chainIds               the chains the account is already on; the coin options are these UNION the chains active on the current network 
  * @param {() => void} props.onClose
  * @param {(count: number) => void} [props.onGenerated]   called after a successful batch
  */
@@ -72,9 +78,20 @@ export function addressTypeHint(descriptor, type) {
 export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGenerated }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { settings } = useSettings();
 
-    // Coin options come from the chains the account is already on.
-    const coinOptions = useMemo(() => (chainIds || [])
+    // Coin options: the chains the account is already on, PLUS every chain
+    // active on the current network . Offering only occupied chains
+    // meant an account with no addresses had no options at all - "No chains
+    // are active for this account yet." with a Close button, and no other
+    // surface could break the tie. An account can only get its first address
+    // on a chain if this list can name that chain.
+    const offeredChainIds = useMemo(
+        () => flowsLib.offerableChainIds({ occupied: chainIds, settings, chainRegistry }),
+        [chainIds, settings],
+    );
+
+    const coinOptions = useMemo(() => offeredChainIds
         .map((cid) => chainRegistry.get(cid))
         .filter(Boolean)
         .map((d) => ({
@@ -84,11 +101,17 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             defaultAddressType: d.defaultAddressType,
             coin: d.coin,
             networkKind: d.networkKind,
-        })), [chainIds]);
+        })), [offeredChainIds]);
 
     const [chainId, setChainId] = useState(coinOptions[0]?.chainId || '');
+    // Settings land after the first render, so the option list can grow from
+    // empty. Fall back to the first option until the user picks one.
     const selected = coinOptions.find((c) => c.chainId === chainId) || coinOptions[0] || null;
+    const effectiveChainId = chainId || selected?.chainId || '';
     const [addressType, setAddressType] = useState(selected?.defaultAddressType || '');
+    // Same late-arrival guard as the coin: an untouched type field follows the
+    // selected chain's default rather than staying empty.
+    const effectiveAddressType = addressType || selected?.defaultAddressType || '';
     const [purpose, setPurpose] = useState(/** @type {'receive' | 'dispenser'} */ ('receive'));
     const [count, setCount] = useState('1');
     const [busy, setBusy] = useState(false);
@@ -108,7 +131,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         event.preventDefault();
         if (busy) return;
         const n = Math.floor(Number(count));
-        if (!chainId) { setError('Pick a coin.'); return; }
+        if (!effectiveChainId) { setError('Pick a coin.'); return; }
         if (!Number.isInteger(n) || n < 1 || n > MAX_ADDRESSES) {
             setError(`Enter a number between 1 and ${MAX_ADDRESSES}.`);
             return;
@@ -122,7 +145,12 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                 : messaging.generateReceiveAddress;
             for (let i = 0; i < n; i += 1) {
                 // eslint-disable-next-line no-await-in-loop -- sequential by design (see header)
-                await generate({ walletId, chainId, accountId, addressType });
+                await generate({
+                    walletId,
+                    chainId: effectiveChainId,
+                    accountId,
+                    addressType: effectiveAddressType,
+                });
                 setDone(i + 1);
             }
             onGenerated?.(n);
@@ -151,7 +179,10 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             <>
                 {coinOptions.length === 0 ? (
                     <>
-                        <p className={styles.empty}>No chains are active for this account yet.</p>
+                        <p className={styles.empty}>
+                            No coins are available yet. Unlock the wallet, or turn on a network
+                            under Settings.
+                        </p>
                         <div className={styles.actions}>
                             <Button type="button" variant="primary" size="md" onClick={onClose}>Close</Button>
                         </div>
@@ -160,7 +191,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                     <form onSubmit={handleGenerate} noValidate>
                         <ChainPicker
                             label="Coin"
-                            value={chainId}
+                            value={effectiveChainId}
                             onChange={changeCoin}
                             chainIds={coinOptions.map((c) => c.chainId)}
                             chainRegistry={chainRegistry}
@@ -170,7 +201,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             <span className={styles.label}>Type</span>
                             <select
                                 className={styles.select}
-                                value={addressType}
+                                value={effectiveAddressType}
                                 onChange={(e) => { setAddressType(e.target.value); setError(null); }}
                                 disabled={busy || !selected}
                             >
@@ -223,7 +254,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                         {error ? <div role="alert" className={styles.error}>{error}</div> : null}
                         {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         <div className={styles.actions}>
-                            <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !chainId}>
+                            <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !effectiveChainId}>
                                 {generateLabel}
                             </Button>
                         </div>

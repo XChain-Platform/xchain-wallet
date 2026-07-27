@@ -55,8 +55,17 @@ assert.ok(/for \(let i = 0; i < n; i \+= 1\)/.test(modal),
     'generates count addresses in a sequential loop');
 assert.ok(/purpose === 'dispenser'[\s\S]*?messaging\.generateDispenserAddress[\s\S]*?messaging\.generateReceiveAddress/.test(modal),
     'the generate call branches on purpose between dispenser and receive flows');
-assert.ok(/await generate\(\{ walletId, chainId, accountId, addressType \}\)/.test(modal),
+assert.ok(/await generate\(\{[\s\S]*?walletId,[\s\S]*?chainId: effectiveChainId,[\s\S]*?accountId,[\s\S]*?addressType: effectiveAddressType,[\s\S]*?\}\)/.test(modal),
     'each iteration awaits the selected flow with walletId + chainId + accountId + addressType');
+
+// : an account with no addresses must still be offered the chains
+// that are active on the current network, or it can never derive a first
+// address anywhere.  moved the union into flows.offerableChainIds so
+// the Import-WIF picker can share it instead of re-deriving it.
+assert.ok(/flowsLib\.offerableChainIds\(\{ occupied: chainIds, settings, chainRegistry \}\)/.test(modal),
+    'coin options are the union of the account chains and the active chains');
+assert.ok(/offeredChainIds/.test(modal),
+    'the union feeds the coin option list');
 
 // Page semantics (0375b8f): renders as its own Screen with a back-arrow
 // PageHeader, same pattern as Import address, not an overlay dialog.
@@ -72,5 +81,26 @@ assert.ok(/import \{ AddAddressModal[^}]*\}/.test(al), 'AddressList imports AddA
 assert.ok(/setShowAddModal\(true\)/.test(al), 'the Add-address menu item opens the modal');
 assert.ok(/<AddAddressModal[\s\S]*?onGenerated=\{\(\) => setReloadKey/.test(al),
     'AddressList renders the modal and refreshes the list on generate');
+
+// : the Import-WIF picker offered only occupied chains, so import
+// dead-ended on an empty account exactly as Add-address used to.
+assert.ok(/flowsLib\.offerableChainIds\(\{[\s\S]*?occupied: Object\.keys\(addressesByChain \|\| \{\}\)/.test(al),
+    'the Import-WIF chain picker offers the active chains too');
+assert.ok(/chainIds=\{wifChainIds\}/.test(al),
+    'the Import-WIF ChainPicker is fed the widened list');
+
+// : Home and Receive both name the empty state; both must now
+// offer the cure rather than pointing at each other.
+const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
+assert.ok(!/Use Receive to generate one/.test(home),
+    'Home no longer dead-ends the empty state on a pointer to Receive');
+assert.ok(/<AddAddressModal[\s\S]*?onGenerated=\{\(\) => setHomeReloadKey/.test(home),
+    'Home opens Add addresses and refetches balances once one lands');
+
+const receive = readFileSync(join(sharedRoutes, 'Receive.jsx'), 'utf8');
+assert.ok(/noAddresses \?[\s\S]*?Generate an address/.test(receive),
+    'Receive renders a generate CTA when the account holds no address anywhere');
+assert.ok(/<AddAddressModal[\s\S]*?onGenerated=\{\(\) => setReloadKey/.test(receive),
+    'Receive opens Add addresses and reloads its chain list on generate');
 
 console.log('add-address-modal smoke OK');

@@ -40,6 +40,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { AddAddressModal } from './AddAddressModal.jsx';
 import {
     formatWithThousands,
     countNonCommaBefore,
@@ -102,6 +103,18 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
+    // : "the account holds no address anywhere" is a state, not an
+    // error. It used to render as a red alert string and nothing else, so
+    // Receive - the very screen Home tells you to use to generate one -
+    // dead-ended. It now carries the cure: a CTA onto Add addresses,
+    // whose coin list reaches past the (empty) occupied set .
+    // Unreachable while seeding works; this is the fallback surface for
+    // when it doesn't.
+    const [noAddresses, setNoAddresses] = useState(false);
+    const [addAddressOpen, setAddAddressOpen] = useState(false);
+    // Bumped after a generate so the chain list + newest address reload.
+    const [reloadKey, setReloadKey] = useState(0);
+
     // §17.6 hardware receive-address confirmation. HW addresses are
     // host-mediated, so a compromised computer could swap the deposit
     // address the wallet shows. The user confirms it on the device's
@@ -131,13 +144,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 const byChain = await messaging.getAddressesByChain(walletId, accountId);
                 if (cancelled) return;
                 setChainsByWallet(byChain);
-                const firstChain = Object.keys(byChain)[0];
+                const firstChain = Object.keys(byChain || {})[0];
                 if (firstChain) {
                     // Preserve a chainId set by ReceivePicker prefill so
                     // the user lands on the chain they actually picked.
                     setActiveChainId((prev) => prev || firstChain);
+                    setNoAddresses(false);
                 } else {
-                    setLoadError('No addresses yet on any chain.');
+                    setNoAddresses(true);
                 }
             } catch (err) {
                 if (!cancelled) {
@@ -146,7 +160,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, accountId, messaging, reloadKey]);
 
     useEffect(() => {
         if (!activeChainId) return undefined;
@@ -166,7 +180,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, accountId, activeChainId, messaging]);
+        // reloadKey: a generate lands a new newest-index address on the
+        // chain already selected, which the chain-list effect alone would
+        // not pick up.
+    }, [walletId, accountId, activeChainId, messaging, reloadKey]);
 
     // §17.6: is the shown address backed by a hardware signer? Only those
     // need (and support) on-device confirmation. Reset the verify state
@@ -518,11 +535,38 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             />
         );
     }
+    if (addAddressOpen) {
+        return (
+            <AddAddressModal
+                walletId={walletId}
+                accountId={accountId}
+                chainIds={Object.keys(chainsByWallet || {})}
+                onClose={() => setAddAddressOpen(false)}
+                onGenerated={() => setReloadKey((k) => k + 1)}
+            />
+        );
+    }
 
     const body = (
         <>
             {loadError ? (
                 <div role="alert" className={styles.error}>{loadError}</div>
+            ) : null}
+
+            {noAddresses ? (
+                <div className={styles.emptyState}>
+                    <p className={styles.hint}>
+                        No addresses yet on any chain. Generate one to start receiving.
+                    </p>
+                    <Button
+                        variant="primary"
+                        size="md"
+                        onClick={() => setAddAddressOpen(true)}
+                        icon={<Icon.PlusIcon />}
+                    >
+                        Generate an address
+                    </Button>
+                </div>
             ) : null}
 
             {address && qrDataUrl ? (

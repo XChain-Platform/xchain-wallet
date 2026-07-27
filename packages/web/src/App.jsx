@@ -2342,10 +2342,7 @@ function AppInner() {
                         } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
-                        onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
-                        onMarketActivity={() => setUnlockedView('market-activity')}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
-                        onDispensers={activeWalletId ? () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); } : undefined}
                         onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
@@ -2365,9 +2362,6 @@ function AppInner() {
                             setUnlockedView('coinpay');
                         } : undefined}
                         onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
-                        onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
-                        onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
-                        onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSelectToken={activeWalletId ? (tok) => {
                             setTokenDetailRef(tok);
                             setUnlockedView('token-detail');
@@ -2384,50 +2378,6 @@ function AppInner() {
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
-                        extraActions={activeWalletId ? buildActionEntries({
-                            onIssue: () => setUnlockedView('issue'),
-                            onMint: () => setUnlockedView('mint'),
-                            onDestroy: () => setUnlockedView('destroy'),
-                            onSweep: () => { setSweepCtx(null); setUnlockedView('sweep'); },
-                            onLock: () => setUnlockedView('lock'),
-                            onUpdateDescription: () => setUnlockedView('description'),
-                            onTransferOwnership: () => setUnlockedView('transfer'),
-                            onBroadcast: () => setUnlockedView('broadcast'),
-                            onCreateDispenser: () => setUnlockedView('dispenser'),
-                            onMyDispensers: () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); },
-                            onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
-                            onPayDividend: () => setUnlockedView('dividend'),
-                            onAirdrop: () => {
-                                setResumeAirdropId(null);
-                                setUnlockedView('airdrop');
-                            },
-                            onAdvanced: () => setUnlockedView('advanced'),
-                            onLockAddress: () => setUnlockedView('lock-address'),
-                            onPairSigner: () => setUnlockedView('pair-signer'),
-                            onPayCoinpay: () => {
-                                setResumeCoinpay(null);
-                                setUnlockedView('coinpay');
-                            },
-                            onSwap: () => setUnlockedView('swap'),
-                            onCreateOrder: () => setUnlockedView('create-order'),
-                            onMyOrders: () => setUnlockedView('my-orders'),
-                            onMySwaps: () => setUnlockedView('my-swaps'),
-                            onPublishFile: () => setUnlockedView('publish-file'),
-                            onLink: () => setUnlockedView('link-form'),
-                            onParallel: () => setUnlockedView('parallel-compose'),
-                            onBatch: () => setUnlockedView('batch-compose'),
-                            onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
-                            onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
-                            onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
-                            onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
-                            onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
-                            onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
-                            onBetting: () => setUnlockedView('bet-markets'),
-                            onContacts: () => setUnlockedView('contacts'),
-                            onSignMessage: () => setUnlockedView('sign-message'),
-                            onVerifySignature: () => setUnlockedView('verify-signature'),
-                            onSignPsbt: () => setUnlockedView('sign-psbt'),
-                        }) : undefined}
                     />
                 </>
             );

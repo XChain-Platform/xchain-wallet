@@ -20,7 +20,7 @@ import {
     Icon,
     ChainPicker,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
@@ -353,6 +353,21 @@ export function AddressList({
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
+    // : the Import-WIF chain picker offered only the chains the
+    // account already occupies, so an account with no addresses had no
+    // chain to import onto - the same dead end  fixed for Add
+    // address. Import is the recovery route when derivation is not an
+    // option (a paper key, a swept address), so it has to reach every
+    // chain the wallet is live on.
+    const wifChainIds = useMemo(
+        () => flowsLib.offerableChainIds({
+            occupied: Object.keys(addressesByChain || {}),
+            settings,
+            chainRegistry,
+        }),
+        [addressesByChain, settings],
+    );
+
     const rows = useMemo(() => {
         if (!addressesByChain) return [];
         const multisigByAddress = new Map(
@@ -465,7 +480,7 @@ export function AddressList({
                                 setWifAddressType(chainRegistry.get(cid)?.defaultAddressType || '');
                                 if (wifError) setWifError(null);
                             }}
-                            chainIds={Object.keys(addressesByChain || {})}
+                            chainIds={wifChainIds}
                             chainRegistry={chainRegistry}
                             disabled={wifBusy}
                         />
@@ -597,7 +612,7 @@ export function AddressList({
                                     onClick={() => {
                                         setAddMenuOpen(false);
                                         setWifNotice(null);
-                                        const first = Object.keys(addressesByChain || {})[0] || '';
+                                        const first = wifChainIds[0] || '';
                                         if (!wifChainId && first) {
                                             setWifChainId(first);
                                             setWifAddressType(chainRegistry.get(first)?.defaultAddressType || '');

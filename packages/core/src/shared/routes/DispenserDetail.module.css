@@ -235,3 +235,22 @@
     color: var(--xc-warning, #b8860b);
     font-size: var(--xc-text-sm);
 }
+
+/* Buy panel: fill-count field with an inline Max, mirroring the
+   AmountField layout the Send/refill forms use. The button aligns to
+   the input's baseline rather than the label's. */
+.buyFillsRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+}
+
+.buyFillsRow > *:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.buyFillsRow > button {
+    margin-block-start: 1.6rem;
+    flex: 0 0 auto;
+}

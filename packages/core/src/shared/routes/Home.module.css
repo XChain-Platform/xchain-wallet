@@ -87,6 +87,20 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+/* : the "no addresses yet" state carries its own CTA, so it needs
+   to sit as a block rather than a stray line of muted text. */
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    margin-bottom: var(--xc-space-3);
+}
+
+.emptyState .hint {
+    margin-bottom: var(--xc-space-1);
+}
+
 .stack {
     display: flex;
     flex-direction: column;

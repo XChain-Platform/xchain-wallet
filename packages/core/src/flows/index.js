@@ -589,6 +589,7 @@ export {
 // whose only addresses are on a network the user is not looking at.
 export {
     activeChainIdsFromSettings,
+    offerableChainIds,
     resolveSeedChainIds,
     seedChainIdsForVault,
 } from './seedChainIds.js';

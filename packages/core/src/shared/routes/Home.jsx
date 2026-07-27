@@ -25,6 +25,7 @@ import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { Settings } from './Settings.jsx';
+import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import styles from './Home.module.css';
 
@@ -54,9 +55,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route (quick action #3)
  * @param {() => void} [props.onExchange]      navigate to the Decentralized Exchange list with BTC preselected (quick action #4)
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
- * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+)
- * @param {() => void} [props.onMyTokens]      navigate to the My Tokens page (tokens this wallet has issued)
- * @param {() => void} [props.onMarketActivity] navigate to the Marketplace activity page (recent open offers + sales)
+ * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+); full mode only, see the §40 note below
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
@@ -72,9 +71,17 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
  * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
- * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
+ *
+ * §40 actions are NOT a Home prop. Home used to accept an `extraActions`
+ * array "for the small-mode drawer" and never rendered it, so the web
+ * shell built 24 entries per render that no user could ever reach from
+ * this component . Both variants route to the same dedicated
+ * ActionsMenu screen instead: full mode via the "More actions" button in
+ * the action grid below (`onActions`), small mode via the pancake menu's
+ * "More actions" row (MenuRoute) or the command palette. Add entries
+ * there, not here.
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onDispensers, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -169,6 +176,13 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
     const [settingsSubpage, setSettingsSubpage] = useState(/** @type {string | null} */ (null));
+    // : the "no addresses yet" hint pointed at Receive but offered
+    // no way to get there, so the emptiest possible Home was also the most
+    // inert. The hint now carries an Add-address CTA; `homeReloadKey`
+    // refetches balances once the address lands, so Home fills in without
+    // a wallet switch.
+    const [addAddressOpen, setAddAddressOpen] = useState(false);
+    const [homeReloadKey, setHomeReloadKey] = useState(0);
     // §27.3 / G072: pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
@@ -479,7 +493,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         })();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeWalletId, activeAccountId, messaging]);
+    }, [activeWalletId, activeAccountId, messaging, homeReloadKey]);
 
     const handleLock = useCallback(async () => {
         if (locking) return;
@@ -616,6 +630,18 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 onOpenWalletPicker={onOpenWalletPicker}
                 onOpenAccountPicker={onOpenAccountPicker}
                 initialSubpageId={settingsSubpage}
+            />
+        );
+    }
+
+    if (addAddressOpen && activeWalletId) {
+        return (
+            <AddAddressModal
+                walletId={activeWalletId}
+                accountId={activeAccountId || undefined}
+                chainIds={Object.keys(balances || {})}
+                onClose={() => setAddAddressOpen(false)}
+                onGenerated={() => setHomeReloadKey((k) => k + 1)}
             />
         );
     }
@@ -829,9 +855,19 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
 
 
                 {balances && Object.keys(balances).length === 0 ? (
-                    <p className={styles.hint}>
-                        No addresses yet. Use Receive to generate one.
-                    </p>
+                    <div className={styles.emptyState}>
+                        <p className={styles.hint}>
+                            No addresses yet. Generate one to start receiving.
+                        </p>
+                        <Button
+                            variant="primary"
+                            size="md"
+                            onClick={() => setAddAddressOpen(true)}
+                            icon={<Icon.PlusIcon />}
+                        >
+                            Generate an address
+                        </Button>
+                    </div>
                 ) : null}
 
                 {/* Action button grid is full-mode only. In small mode the
