@@ -82,10 +82,35 @@ assert.equal(
     'MigrateToBip39.jsx only exports the component',
 );
 assert.ok(/IssueTokenForm\.module\.css/.test(migrate), 'MigrateToBip39 reuses IssueTokenForm CSS');
-for (const stage of ['explain', 'create', 'submitting', 'done']) {
+for (const stage of ['explain', 'create', 'submitting', 'backup', 'done']) {
     assert.ok(migrate.includes(`'${stage}'`), `MigrateToBip39 tracks stage "${stage}"`);
 }
-assert.ok(/messaging\.createWallet\s*\(/.test(migrate), 'MigrateToBip39 calls messaging.createWallet');
+// This wizard runs on a device that ALREADY holds the legacy wallet, so the
+// fresh-install `wallet.create` handler refuses it outright ("a wallet
+// already exists"). It must persist through the add path instead .
+assert.ok(
+    !/messaging\.createWallet\s*\(/.test(migrate),
+    'MigrateToBip39 does NOT call the fresh-install messaging.createWallet',
+);
+assert.ok(
+    /messaging\.addImportedWallet\s*\(/.test(migrate),
+    'MigrateToBip39 persists via messaging.addImportedWallet (add path)',
+);
+// It generates the phrase itself, and must SHOW it: the next screen tells the
+// user to sweep real balances into this wallet, and the phrase is the only
+// way to restore it.
+assert.ok(
+    /generateBip39Mnemonic\s*\(/.test(migrate),
+    'MigrateToBip39 generates the new BIP39 phrase',
+);
+assert.ok(
+    /MnemonicGrid/.test(migrate),
+    'MigrateToBip39 displays the new recovery phrase before the sweep step',
+);
+assert.ok(
+    /wroteItDown/.test(migrate),
+    'MigrateToBip39 gates the sweep step on a written-down confirmation',
+);
 assert.ok(/messaging\.getAddressesByChain\s*\(/.test(migrate), 'MigrateToBip39 fetches addresses for the side-by-side preview');
 assert.ok(/Legacy FreeWallet format|Counterwallet/.test(migrate), 'MigrateToBip39 references the legacy format in copy');
 

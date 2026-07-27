@@ -950,12 +950,26 @@ function AppInner() {
                     <MigrateToBip39
                         legacyWalletId={targetId}
                         onBack={() => {
+                            // Refresh on the way OUT, not on creation: refresh()
+                            // resets unlockedView to home, which would abandon
+                            // the wizard mid-flow. The later setUnlockedView
+                            // below wins, so the intended destination stands.
+                            refresh();
                             setMigrateLegacyWalletId(null);
                             setUnlockedView(migrateLegacyWalletId ? 'wallet-details' : 'home');
                         }}
                         onMigrated={() => {
-                            setMigrateLegacyWalletId(null);
-                            refresh();
+                            // Deliberately does NOT navigate or refresh. The
+                            // wizard stays mounted so its remaining stages can
+                            // show the new recovery phrase and then the
+                            // per-chain sweep rows - the whole point of the
+                            // flow. Clearing the id (or calling refresh, which
+                            // resets unlockedView to home) dropped the user on
+                            // Home the instant the wallet was created, so
+                            // neither screen was ever reachable . The
+                            // wizard reads the new wallet through messaging,
+                            // not App state, so nothing here needs refreshing;
+                            // onBack refreshes on the way out.
                         }}
                         onSweepChain={(s) => {
                             setSweepCtx({

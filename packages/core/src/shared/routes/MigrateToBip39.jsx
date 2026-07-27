@@ -30,8 +30,9 @@ const explainParagraphStyle = {
     lineHeight: 1.55,
     margin: '0 0 var(--xc-space-3)',
 };
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, crypto as cryptoLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -65,7 +66,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'explain' | 'create' | 'submitting' | 'done'} */ ('explain'),
+        /** @type {'explain' | 'create' | 'submitting' | 'backup' | 'done'} */ ('explain'),
     );
     const [name, setName] = useState('XChain BIP39 Wallet');
     const [password, setPassword] = useState('');
@@ -75,6 +76,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [newWalletId, setNewWalletId] = useState(/** @type {string | null} */ (null));
+    // The generated phrase is held only until the user confirms they wrote
+    // it down, then dropped. It is the ONLY copy: the wizard tells them to
+    // sweep real funds into this wallet, so it must not reach the sweep
+    // stage without showing them how to restore it .
+    const [mnemonic, setMnemonic] = useState(/** @type {string | null} */ (null));
+    const [wroteItDown, setWroteItDown] = useState(false);
     const [newAddrs, setNewAddrs] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -137,13 +144,25 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         setStage('submitting');
         setError(null);
         try {
-            const result = await messaging.createWallet({ password, name });
+            // Generate here and persist through the ADD path. `wallet.create`
+            // is the fresh-install handler: it builds a new vault and refuses
+            // outright once one exists, so this wizard - which by definition
+            // runs on a device that already holds the legacy wallet - could
+            // never complete through it .
+            const phrase = cryptoLib.generateBip39Mnemonic(128);
+            if (typeof messaging.addImportedWallet !== 'function') {
+                throw new Error('messaging.addImportedWallet is not available in this shell.');
+            }
+            const result = await messaging.addImportedWallet({ password, mnemonic: phrase, name });
             const id = result?.walletId || result?.id || result?.wallet?.id;
-            if (!id) throw new Error('createWallet did not return a walletId.');
+            if (!id) throw new Error('Adding the BIP39 wallet did not return a walletId.');
             setNewWalletId(id);
+            setMnemonic(phrase);
             setPassword('');
             setConfirm('');
-            setStage('done');
+            // Show the phrase BEFORE the sweep screen: the next step tells the
+            // user to move real balances into this wallet.
+            setStage('backup');
             if (onMigrated) onMigrated(id);
         } catch (err) {
             setError(err?.message || 'Failed to create BIP39 wallet.');
@@ -188,6 +207,41 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     <Button variant="ghost" onClick={onBack} icon={<Icon.BackIcon />}>Not now</Button>
                     <Button variant="primary" onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
                         Continue
+                    </Button>
+                </div>
+            </>,
+        );
+    }
+
+    // Between creation and the sweep screen: the phrase is the only way to
+    // restore the wallet the user is about to move funds into, and this is
+    // the only moment it exists outside the vault.
+    if (stage === 'backup') {
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Write down your recovery phrase</h2>
+                <p style={explainParagraphStyle}>
+                    These 12 words are the only way to restore your new BIP39
+                    wallet on another device. Write them down and keep them
+                    somewhere safe. Anyone who has them can spend your funds,
+                    and nobody can recover them for you.
+                </p>
+                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={isFull ? 'full' : 'small'} /> : null}
+                <label className={styles.hint} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', margin: 'var(--xc-space-3) 0' }}>
+                    <input
+                        type="checkbox"
+                        checked={wroteItDown}
+                        onChange={(e) => setWroteItDown(e.target.checked)}
+                    />
+                    I have written down my recovery phrase.
+                </label>
+                <div className={styles.actions}>
+                    <Button
+                        variant="primary"
+                        disabled={!wroteItDown}
+                        onClick={() => { setMnemonic(null); setStage('done'); }}
+                    >
+                        Continue to sweep
                     </Button>
                 </div>
             </>,
