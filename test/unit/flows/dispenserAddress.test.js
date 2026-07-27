@@ -219,3 +219,45 @@ describe('dispenserAddress (§16)', () => {
         expect(second.label).toBe('BTC Dispenser #2');
     });
 });
+
+// Same index-space rule as receiveAddress : a counterwallet-legacy
+// wallet derives m/0'/C/I for every address type, so a dispenser allocated
+// per type would land on the key already serving as a personal receive
+// address - defeating the isolation this flow exists to provide.
+describe('dispenserAddress index space by wallet format ', () => {
+    const LEGACY_RECEIVE = createAddress({
+        accountId: 'acct-a',
+        chain: 'bitcoin',
+        network: 'regtest',
+        source: 'hd',
+        addressType: 'p2pkh',
+        derivationPath: "m/0'/0/0",
+        address: 'n2XDwu_legacy_0',
+        publicKey: 'pub0',
+        label: 'BTC Address #1',
+        signerId: 'signer-software',
+    });
+
+    function vaultWithFormat(format) {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: [LEGACY_RECEIVE] });
+        vault.wallets = memCollection([{ id: 'w1', format }]);
+        return vault;
+    }
+
+    it('does not reuse the legacy receive index for a p2wpkh dispenser', async () => {
+        const vault = vaultWithFormat('counterwallet-legacy');
+        const rec = await dispenserAddress(
+            base(vault, makeSigner(), { addressType: 'p2wpkh' }),
+        );
+        expect(rec.derivationPath.endsWith('/1')).toBe(true);
+        expect(rec.address).not.toBe(LEGACY_RECEIVE.address);
+    });
+
+    it('keeps per-type index spaces for a BIP39 wallet', async () => {
+        const vault = vaultWithFormat('bip39');
+        const rec = await dispenserAddress(
+            base(vault, makeSigner(), { addressType: 'p2wpkh' }),
+        );
+        expect(rec.derivationPath.endsWith('/0')).toBe(true);
+    });
+});

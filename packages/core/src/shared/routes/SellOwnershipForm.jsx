@@ -37,6 +37,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
+import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -116,10 +117,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     const match = all.find((a) => a.address === initialFromAddress);
                     if (match) { setFromAddressId(match.id); return; }
                 }
-                const hd = all.filter((a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0');
+                const hd = all.filter((a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null);
                 const pick = (hd.length > 0 ? hd : all).slice().sort((a, b) => {
-                    const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                    const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                    const ai = (externalIndexOf(a.derivationPath) ?? -1);
+                    const bi = (externalIndexOf(b.derivationPath) ?? -1);
                     return bi - ai;
                 })[0];
                 setFromAddressId(pick.id);

@@ -35,6 +35,7 @@ import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
+import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
 
 /**
  * @typedef {Object} DispenserAddressOpts
@@ -117,6 +118,12 @@ export async function dispenserAddress({
     //                     never collides with a personal receive index.
     //   dispenserCount -> how many of those are already dispensers, used
     //                     only for the human "Dispenser #N" default label.
+    // A counterwallet-legacy wallet derives m/0'/C/I for EVERY address
+    // type, so its types share one index space and the addressType filter
+    // below must not apply. Partitioning by type there would hand the
+    // dispenser the key already in use as a personal receive address -
+    // the exact collision the "never collides" note above rules out.
+    const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
     let highest = -1;
     let dispenserCount = 0;
@@ -124,7 +131,7 @@ export async function dispenserAddress({
         if (a.accountId !== account.id) continue;
         if (a.chain !== descriptor.coin) continue;
         if (a.network !== descriptor.networkKind) continue;
-        if (a.addressType !== type) continue;
+        if (!sharedIndexSpace && a.addressType !== type) continue;
         // Count every HD-derived address regardless of signer kind:
         // software ('hd') and hardware ('trezor'/'ledger') share one
         // external index space per account, so a Trezor account keeps

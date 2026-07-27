@@ -33,6 +33,7 @@ const explainParagraphStyle = {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
+import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
@@ -108,10 +109,10 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         ]);
         for (const chainId of chains) {
             const legacy = (legacyAddrs?.[chainId] || []).find(
-                (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+                (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
             );
             const next = (newAddrs?.[chainId] || []).find(
-                (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+                (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
             );
             rows.push({
                 chainId,

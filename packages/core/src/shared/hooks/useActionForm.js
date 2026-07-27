@@ -40,6 +40,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useSignerReady } from './useSignerReady.js';
 import { useWalletMode } from './useWalletMode.js';
+import { newestHdExternalId } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -124,19 +125,9 @@ export function useActionForm({
             const match = all.find((a) => a.address === initialFromAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
-        const addrs = all.filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
+        // Shared helper: reads change/index from the END of the path, so a
+        // counterwallet-legacy m/0'/C/I wallet resolves too .
+        setFromAddressId(newestHdExternalId(all));
     }, [chainId, addressesByChain, initialFromAddress]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;

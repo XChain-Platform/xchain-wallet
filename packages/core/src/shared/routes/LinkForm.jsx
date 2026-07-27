@@ -35,6 +35,7 @@ import {
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
+import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -147,13 +148,13 @@ export function LinkForm({ walletId, onBack }) {
         }
         const addrs = addressesByChain[submitChainId] || [];
         const hd = addrs.filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
         );
         const pool = hd.length > 0 ? hd : addrs;
         if (pool.length > 0) {
             const sorted = [...pool].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                const ai = (externalIndexOf(a.derivationPath) ?? -1);
+                const bi = (externalIndexOf(b.derivationPath) ?? -1);
                 return bi - ai;
             });
             setFromAddressId(sorted[0].id);

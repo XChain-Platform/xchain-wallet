@@ -75,6 +75,7 @@ import {
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
 import styles from './IssueTokenForm.module.css';
+import { externalIndexOf } from '../addressSelection.js';
 
 function arrayBufferToHex(buf) {
     const view = new Uint8Array(buf);
@@ -375,8 +376,8 @@ export function PsbtSignForm({ walletId, onBack }) {
             return;
         }
         const sorted = [...addrs].sort((a, b) => {
-            const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-            const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+            const ai = (externalIndexOf(a.derivationPath) ?? -1);
+            const bi = (externalIndexOf(b.derivationPath) ?? -1);
             return bi - ai;
         });
         setAddressId(sorted[0].id);

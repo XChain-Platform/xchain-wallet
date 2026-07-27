@@ -43,6 +43,7 @@ import * as branding from '../../branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
+import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -309,13 +310,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 // matching the convention used by Send / MintForm.
                 const spendable = onChain.filter(
                     (a) => a.source === 'hd'
-                        && a.derivationPath?.split('/')?.[4] === '0',
+                        && externalIndexOf(a.derivationPath) !== null,
                 );
                 setBuyerAddresses(spendable);
                 if (spendable.length > 0) {
                     const sorted = [...spendable].sort((a, b) => {
-                        const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                        const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                        const ai = (externalIndexOf(a.derivationPath) ?? -1);
+                        const bi = (externalIndexOf(b.derivationPath) ?? -1);
                         return bi - ai;
                     });
                     setBuyerAddressId(sorted[0].id);

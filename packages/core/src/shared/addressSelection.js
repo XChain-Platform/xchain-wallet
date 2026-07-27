@@ -18,7 +18,32 @@
 // NOT use these: they must source from the token's owner address instead.
 
 /**
- * Newest HD external address (BIP44 change-depth 0), highest derivation index.
+ * The external (change=0) index a derivation path ends on, or null when the
+ * path is internal or unparseable.
+ *
+ * Read from the END of the path, never by fixed position. A BIP44 path is
+ * m/purpose'/coin'/account'/change/index, so change sat at [4] - but a
+ * counterwallet-legacy wallet derives m/0'/change/index, where [4] does not
+ * exist at all. Testing position 4 there matched NOTHING, so every form that
+ * picks a funding address this way reported that a fully funded legacy wallet
+ * had "no address on this chain" . The allocating side
+ * (flows/receiveAddress.js) already reads change/index end-relative; this is
+ * the selecting side agreeing with it.
+ *
+ * @param {string | undefined} derivationPath
+ * @returns {number | null}
+ */
+export function externalIndexOf(derivationPath) {
+    const parts = String(derivationPath || '').split('/');
+    // Need at least m / change / index for the tail to mean anything.
+    if (parts.length < 3) return null;
+    if (parts[parts.length - 2] !== '0') return null;
+    const index = Number(parts[parts.length - 1]);
+    return Number.isFinite(index) ? index : null;
+}
+
+/**
+ * Newest HD external address (change-depth 0), highest derivation index.
  * This is the long-standing default these forms used before the active-address
  * model; it remains the fallback when no active address is resolvable.
  *
@@ -26,15 +51,12 @@
  * @returns {string | null} the chosen address id, or null when none qualifies
  */
 export function newestHdExternalId(addresses) {
-    const hd = (addresses || []).filter(
-        (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-    );
+    const hd = (addresses || [])
+        .map((a) => ({ a, index: externalIndexOf(a.derivationPath) }))
+        .filter(({ a, index }) => a.source === 'hd' && index !== null);
     if (hd.length === 0) return null;
-    const sorted = [...hd].sort((a, b) => (
-        Number(b.derivationPath?.split('/')?.[5] ?? -1)
-        - Number(a.derivationPath?.split('/')?.[5] ?? -1)
-    ));
-    return sorted[0].id;
+    const sorted = [...hd].sort((x, y) => y.index - x.index);
+    return sorted[0].a.id;
 }
 
 /**

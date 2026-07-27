@@ -38,6 +38,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -166,12 +167,12 @@ export function TokenWizard({ walletId, onBack }) {
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
         const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
         );
         if (addrs.length > 0) {
             const sorted = [...addrs].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                const ai = (externalIndexOf(a.derivationPath) ?? -1);
+                const bi = (externalIndexOf(b.derivationPath) ?? -1);
                 return bi - ai;
             });
             setFromAddressId(sorted[0].id);

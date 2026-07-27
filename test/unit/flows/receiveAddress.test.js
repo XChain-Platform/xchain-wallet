@@ -226,3 +226,57 @@ describe('receiveAddress hardware confirmation (§17.6)', () => {
         expect(sw.calls[0].verify).toBeFalsy();
     });
 });
+
+// A counterwallet-legacy wallet derives m/0'/C/I for EVERY address type,
+// so its types share ONE index space. Allocating per type there re-issued
+// the key already held at that index under a different encoding, and
+// disagreed with the wallet the user migrated from, whose "first segwit"
+// address is index 1 (see crypto/counterwallet-interop.test.js).
+describe('receiveAddress index space by wallet format ', () => {
+    const LEGACY_ADDR = createAddress({
+        accountId: 'acct-a',
+        chain: 'bitcoin',
+        network: 'regtest',
+        source: 'hd',
+        addressType: 'p2pkh',
+        derivationPath: "m/0'/0/0",
+        address: 'n2XDwu_legacy_0',
+        publicKey: 'pub0',
+        label: 'BTC Address #1',
+        signerId: 'signer-software',
+    });
+
+    function vaultWithFormat(format) {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: [LEGACY_ADDR] });
+        vault.wallets = memCollection([{ id: 'w1', format }]);
+        return vault;
+    }
+
+    it('continues past a p2pkh address when deriving p2wpkh for a legacy wallet', async () => {
+        const vault = vaultWithFormat('counterwallet-legacy');
+        const rec = await receiveAddress(
+            base(vault, makeSigner('software'), { addressType: 'p2wpkh' }),
+        );
+        // Index 1, NOT a second copy of the key at index 0.
+        expect(rec.derivationPath.endsWith('/1')).toBe(true);
+        expect(rec.address).not.toBe(LEGACY_ADDR.address);
+        expect(rec.label).toBe('BTC Address #2');
+    });
+
+    it('keeps per-type index spaces for a BIP39 wallet', async () => {
+        const vault = vaultWithFormat('bip39');
+        const rec = await receiveAddress(
+            base(vault, makeSigner('software'), { addressType: 'p2wpkh' }),
+        );
+        // p2wpkh lives on its own BIP44 branch, so index 0 is unused there.
+        expect(rec.derivationPath.endsWith('/0')).toBe(true);
+    });
+
+    it('falls back to per-type spaces when the wallet record is unreadable', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: [LEGACY_ADDR] });
+        const rec = await receiveAddress(
+            base(vault, makeSigner('software'), { addressType: 'p2wpkh' }),
+        );
+        expect(rec.derivationPath.endsWith('/0')).toBe(true);
+    });
+});

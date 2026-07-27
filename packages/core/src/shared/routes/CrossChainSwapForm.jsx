@@ -182,13 +182,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         const hd = addrs.filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
         );
         const pool = hd.length > 0 ? hd : addrs;
         if (pool.length > 0) {
             const sorted = [...pool].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                const ai = (externalIndexOf(a.derivationPath) ?? -1);
+                const bi = (externalIndexOf(b.derivationPath) ?? -1);
                 return bi - ai;
             });
             setFromAddressId(sorted[0].id);

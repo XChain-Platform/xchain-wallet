@@ -30,7 +30,7 @@
 // session signer (no password); for hardware wallets each derivation is a
 // device round-trip.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, ChainPicker, Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -91,6 +91,23 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         [chainIds, settings],
     );
 
+    // Which type to pre-select depends on the WALLET, not just the chain:
+    // a counterwallet-legacy wallet holds its balances on p2pkh, so
+    // offering the chain's modern default would default a migrating user
+    // into an address format their old wallet never showed them .
+    const [walletFormat, setWalletFormat] = useState(undefined);
+    useEffect(() => {
+        let live = true;
+        if (typeof messaging.listWallets !== 'function') return undefined;
+        messaging.listWallets()
+            .then((list) => {
+                if (!live) return;
+                setWalletFormat((list || []).find((w) => w.id === walletId)?.format);
+            })
+            .catch(() => { /* fall back to the chain default */ });
+        return () => { live = false; };
+    }, [messaging, walletId]);
+
     const coinOptions = useMemo(() => offeredChainIds
         .map((cid) => chainRegistry.get(cid))
         .filter(Boolean)
@@ -98,17 +115,21 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             chainId: d.id,
             displayName: d.displayName,
             addressTypes: d.addressTypes,
-            defaultAddressType: d.defaultAddressType,
+            defaultAddressType: flowsLib.defaultAddressTypeForFormat(d, walletFormat),
             coin: d.coin,
             networkKind: d.networkKind,
-        })), [offeredChainIds]);
+        })), [offeredChainIds, walletFormat]);
 
     const [chainId, setChainId] = useState(coinOptions[0]?.chainId || '');
     // Settings land after the first render, so the option list can grow from
     // empty. Fall back to the first option until the user picks one.
     const selected = coinOptions.find((c) => c.chainId === chainId) || coinOptions[0] || null;
     const effectiveChainId = chainId || selected?.chainId || '';
-    const [addressType, setAddressType] = useState(selected?.defaultAddressType || '');
+    // Left empty on purpose: both the coin options and the wallet format
+    // land after the first render, so seeding this from that render's
+    // `selected` would freeze in a default computed before either arrived.
+    // `effectiveAddressType` below supplies the default until the user picks.
+    const [addressType, setAddressType] = useState('');
     // Same late-arrival guard as the coin: an untouched type field follows the
     // selected chain's default rather than staying empty.
     const effectiveAddressType = addressType || selected?.defaultAddressType || '';

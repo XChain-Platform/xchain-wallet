@@ -47,6 +47,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -67,12 +68,12 @@ const newRowId = () => `brow-${++nextRowId}`;
 function pickDefaultAddressId(addrs) {
     if (!Array.isArray(addrs) || addrs.length === 0) return null;
     const hd = addrs.filter(
-        (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+        (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
     );
     const pool = hd.length > 0 ? hd : addrs;
     const sorted = [...pool].sort((a, b) => {
-        const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-        const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+        const ai = (externalIndexOf(a.derivationPath) ?? -1);
+        const bi = (externalIndexOf(b.derivationPath) ?? -1);
         return bi - ai;
     });
     return sorted[0].id;
