@@ -92,8 +92,26 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 // quoteNativeFee answers `supported:false`. Advertising them would hand
 // the user a form that burns a network fee on a guaranteed-invalid
 // action. They open when that fee-quote gap closes (see the ledger).
-// (BATCH is denylisted the same way but predates this and already sits
-// in COMMON_ACTIONS; it is called out in the ledger, not changed here.)
+//
+//  closed the INDEXER half of that gap (FEE_QUOTE_STATIC gives
+// DEPLOY/EXECUTE a schedule-priced, verdict-free quote), and the SDK
+// already treats its `valid:null` as payable-but-unverified. These two
+// stay here anyway, because two other legs are still open :
+// the LTC/DOGE regtest indexers still run PRE- code (measured
+// 2026-07-26 via feequote on both: `supported:false`, "native fee
+// pre-flight not supported"), and DeployContractForm/ExecuteContractForm
+// have no native-fee lane at all - they are the only fee-bearing forms
+// with no useNativeFee/NativeFeeToggle, because BTC could always settle
+// in XCHAIN. Flipping this list before BOTH land would ship the exact
+// hazard it was created to prevent.
+//
+// BATCH is NOT the same shape, contrary to the note this replaces.
+// Measured 2026-07-26: batch.js runs every sub-action through
+// processAction, so each one validates its OWN native fee and BATCH
+// itself never calls validateNativeCoinFee and carries no protocol fee.
+// Its denylisting is a QUOTING limit (a compound action can't be priced
+// without running the engine), not a payability one, so it correctly
+// stays in COMMON_ACTIONS on every chain.
 export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
     'COLLECT',
     'DEPLOY',
