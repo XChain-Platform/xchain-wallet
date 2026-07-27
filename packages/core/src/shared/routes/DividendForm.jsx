@@ -46,6 +46,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { extractHolderRows } from '../utils/holderRows.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -816,10 +817,7 @@ function DetailRow({ label, value }) {
     );
 }
 
-function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    return [];
-}
+// The explorer's holder envelope is normalized in one place now
+// (utils/holderRows.js), after ManageToken shipped without an equivalent
+// and reported zero holders for every token - D-76.
+const extractRows = extractHolderRows;

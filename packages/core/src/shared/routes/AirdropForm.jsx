@@ -47,6 +47,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { extractHolderRows } from '../utils/holderRows.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -1642,17 +1643,6 @@ function extractActionIndex(resp) {
     if (raw === null || raw === undefined) return null;
     const s = String(raw);
     return s.length > 0 ? s : null;
-}
-
-// Normalizes messaging.getHoldersForToken's response into a row array;
-// same defensive envelope-unwrapping as DividendForm's extractRows.
-function extractHolderRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.holders)) return resp.holders;
-    return [];
 }
 
 // Normalizes messaging.getListsForSource's response into a row array;

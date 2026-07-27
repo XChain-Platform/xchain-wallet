@@ -20,6 +20,8 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
+import { extractHolderRows } from '../utils/holderRows.js';
+import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './ManageToken.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -167,7 +169,7 @@ export function ManageToken({
         if (typeof messaging?.getHoldersForToken !== 'function') return undefined;
         let cancelled = false;
         messaging.getHoldersForToken({ chainId, tick })
-            .then((rows) => { if (!cancelled) setHolders(Array.isArray(rows) ? rows : []); })
+            .then((resp) => { if (!cancelled) setHolders(extractHolderRows(resp)); })
             .catch((err) => { if (!cancelled) setHoldersError(err?.message || 'Failed to load holders.'); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick]);
@@ -180,23 +182,13 @@ export function ManageToken({
         if (typeof messaging?.getWalletBalances !== 'function') return undefined;
         let cancelled = false;
         messaging.getWalletBalances(walletId)
-            .then((resp) => {
+            .then((byChain) => {
                 if (cancelled) return;
-                // The wallet balances payload is `{ rows: [{ chainId, tick, quantity, ... }] }`
-                // in some shells and a flat array in others. Be tolerant.
-                const rows = Array.isArray(resp)
-                    ? resp
-                    : (Array.isArray(resp?.rows) ? resp.rows : (Array.isArray(resp?.data) ? resp.data : []));
-                let total = 0n;
-                for (const r of rows) {
-                    if (!r) continue;
-                    if (r.chainId && r.chainId !== chainId) continue;
-                    const rowTick = typeof r.tick === 'string' ? r.tick.toUpperCase() : null;
-                    if (rowTick !== tick) continue;
-                    const q = r.quantity ?? r.amount ?? r.balance ?? '0';
-                    try { total += BigInt(String(q)); } catch { /* skip non-numeric */ }
-                }
-                setYourBalance(String(total));
+                // getWalletBalances returns `Record<chainId, entry[]>` with raw
+                // atomic quantities - never the flat row array this used to
+                // parse for, which is why "You hold" read 0 for every token
+                // (D-75). sumTickOnChain owns that shape for every reader.
+                setYourBalance(sumTickOnChain(byChain, chainId, tick));
             })
             .catch(() => { if (!cancelled) setYourBalance('0'); });
         return () => { cancelled = true; };
