@@ -27,17 +27,26 @@ import {
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { wifFailureMessage } from './_wifFailureMessage.js';
 
+// D-64: the message is what the user reads, so it is written for them (see
+// _wifFailureMessage.js). The library's own text is kept on `.raw` for logs
+// and bug reports, never rendered.
 export class InvalidWifError extends Error {
-    constructor(reason) {
-        super(`importWif: ${reason}`);
+    constructor(reason, code) {
+        super(wifFailureMessage(reason, code));
         this.name = 'InvalidWifError';
+        this.code = code || null;
+        this.raw = reason == null ? '' : String(reason);
     }
 }
 
 export class WrongPasswordError extends Error {
     constructor() {
-        super('importWif: wrong password');
+        // D-64: user-facing. The old text was 'importWif: wrong password',
+        // and this is an error a user causes by mistyping, so it is the one
+        // most likely of all of them to be read.
+        super('That is not the password for this wallet.');
         this.name = 'WrongPasswordError';
     }
 }
@@ -132,7 +141,10 @@ export async function importWif({
     try {
         keyInfo = sdk.wallet.importWIF(wif);
     } catch (e) {
-        throw new InvalidWifError(e && e.message ? e.message : String(e));
+        throw new InvalidWifError(
+            e && e.message ? e.message : String(e),
+            e && typeof e.code === 'string' ? e.code : undefined,
+        );
     }
     const derivedAddress = sdk.wallet.deriveAddress(keyInfo.publicKeyHex, {
         type,

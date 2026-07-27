@@ -432,7 +432,9 @@ export {
     importWif,
     InvalidWifError,
     WrongPasswordError,
+    DuplicateImportError,
 } from './importWif.js';
+export { wifFailureMessage } from './_wifFailureMessage.js';
 export { importSingleWif } from './importSingleWif.js';
 export {
     exportPrivateKey,

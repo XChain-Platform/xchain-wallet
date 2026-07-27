@@ -36,11 +36,18 @@ import {
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
+import { wifFailureMessage } from './_wifFailureMessage.js';
 
+// D-64: shares importWif's copy. This lane onboards a wif-only wallet from
+// the welcome screen, so its rejection is the very first thing a new user
+// can be told, and it used to be told as "importSingleWif: Failed to import
+// WIF: Non-base58 character".
 export class InvalidWifError extends Error {
-    constructor(reason) {
-        super(`importSingleWif: ${reason}`);
+    constructor(reason, code) {
+        super(wifFailureMessage(reason, code));
         this.name = 'InvalidWifError';
+        this.code = code || null;
+        this.raw = reason == null ? '' : String(reason);
     }
 }
 
@@ -109,7 +116,10 @@ export async function importSingleWif({
     try {
         keyInfo = sdk.wallet.importWIF(wif);
     } catch (e) {
-        throw new InvalidWifError(e && e.message ? e.message : String(e));
+        throw new InvalidWifError(
+            e && e.message ? e.message : String(e),
+            e && typeof e.code === 'string' ? e.code : undefined,
+        );
     }
     const derivedAddress = sdk.wallet.deriveAddress(keyInfo.publicKeyHex, { type });
 

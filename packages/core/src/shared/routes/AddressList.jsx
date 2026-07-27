@@ -30,6 +30,7 @@ import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
@@ -43,6 +44,34 @@ import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// D-64: the WIF field's placeholder was a fixed "L1aW…" - a Bitcoin MAINNET
+// key - shown unchanged on every chain, so the only format hint the screen
+// offered was wrong on testnet and regtest, which is where a user is most
+// likely to be pasting an unfamiliar key. Derived from the descriptor's own
+// `wifVersionByte` rather than a per-chain table, so a chain added later
+// cannot pick up a stale hint. The characters are the base58 encodings a
+// 38-byte (compressed) or 37-byte (uncompressed) payload can begin with.
+const WIF_PREFIX_BY_VERSION = {
+    0x80: 'K, L or 5',      // bitcoin mainnet
+    0xef: 'c or 9',         // bitcoin / litecoin / dogecoin test + regtest
+    0xb0: 'T or 6',         // litecoin mainnet
+    0x9e: 'Q or 6',         // dogecoin mainnet
+    0xf1: 'c or 9',         // dogecoin testnet
+};
+
+/**
+ * "starts with ..." hint for a chain's WIF keys, or null when the chain
+ * declares a version byte we have no encoding for (the field then falls back
+ * to generic copy rather than showing a wrong example).
+ *
+ * @param {{ wifVersionByte?: number } | null | undefined} descriptor
+ * @returns {string | null}
+ */
+export function wifPrefixHint(descriptor) {
+    const v = descriptor?.wifVersionByte;
+    return typeof v === 'number' ? (WIF_PREFIX_BY_VERSION[v] || null) : null;
+}
 
 // Format a fiat value in the user's selected currency (symbol + amount),
 // e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
@@ -139,7 +168,9 @@ export function AddressList({
         if (typeof messaging.getAddressPreferences !== 'function') return undefined;
         messaging.getAddressPreferences({ chainId: selected.chainId, address: selected.address })
             .then((p) => { if (!cancelled) setChainPrefs(p); })
-            .catch((err) => { if (!cancelled) setChainPrefsError(err?.message || 'Preferences unavailable.'); });
+            .catch((err) => {
+                if (!cancelled) setChainPrefsError(userFacingMessage(err, 'Preferences unavailable.'));
+            });
         return () => { cancelled = true; };
     }, [messaging, selected?.address, selected?.chainId]);
 
@@ -260,11 +291,41 @@ export function AddressList({
     const [wifRevealed, setWifRevealed] = useState(false);
     const [wifLabel, setWifLabel] = useState('');
     const [wifPassword, setWifPassword] = useState('');
+    // Left empty until the user picks: '' means "untouched, follow the
+    // default", and `effectiveWifAddressType` below resolves that default at
+    // render time. Seeding it eagerly is what produced D-64's wrong default,
+    // because the wallet format that decides the answer arrives after the
+    // first render (same trap AddAddressModal hit in ).
     const [wifAddressType, setWifAddressType] = useState('');
     const [wifWarningAck, setWifWarningAck] = useState(false);
     const [wifBusy, setWifBusy] = useState(false);
     const [wifError, setWifError] = useState(/** @type {string | null} */ (null));
     const [wifNotice, setWifNotice] = useState(/** @type {string | null} */ (null));
+
+    // D-64: which address type to pre-select depends on the WALLET, not just
+    // the chain. A counterwallet-legacy wallet keeps its balances on p2pkh,
+    // so offering the chain's modern default sat this form on P2WPKH while
+    // the sibling Add-address modal - fixed for exactly this in  - sat
+    // on P2PKH. Two screens in one app disagreeing about a migrating user's
+    // address format is the defect; the answer is the same resolver.
+    const [walletFormat, setWalletFormat] = useState(undefined);
+    useEffect(() => {
+        let live = true;
+        if (typeof messaging.listWallets !== 'function') return undefined;
+        messaging.listWallets()
+            .then((list) => {
+                if (!live) return;
+                setWalletFormat((list || []).find((w) => w.id === walletId)?.format);
+            })
+            .catch(() => { /* fall back to the chain default */ });
+        return () => { live = false; };
+    }, [messaging, walletId]);
+
+    // '' from the select means "untouched"; resolve the default here so it
+    // tracks both the picked chain and the late-arriving wallet format.
+    const wifDescriptor = wifChainId ? chainRegistry.get(wifChainId) : null;
+    const effectiveWifAddressType = wifAddressType
+        || (wifDescriptor ? flowsLib.defaultAddressTypeForFormat(wifDescriptor, walletFormat) : '');
 
     function resetWifForm() {
         setWifAddressType('');
@@ -303,7 +364,10 @@ export function AddressList({
         setWifError(null);
         try {
             const r = await messaging.importWifRequest({
-                addressType: wifAddressType || undefined,
+                // Always explicit: omitting it lets the flow fall back to
+                // `descriptor.defaultAddressType`, which is the chain
+                // default and not this wallet's.
+                addressType: effectiveWifAddressType || undefined,
                 ...(signerReady ? {} : { password: wifPassword }),
                 walletId,
                 password: wifPassword,
@@ -318,7 +382,16 @@ export function AddressList({
             const byChain = await messaging.getAddressesByChain(walletId, accountId);
             setAddressesByChain(byChain || {});
         } catch (err) {
-            setWifError(err?.message || 'Failed to import WIF.');
+            // D-64: this used to render `err.message` verbatim, so an SDK
+            // rejection reached the user as "importWif: Failed to import WIF:
+            // Non-base58 character". The flow now writes plain copy for the
+            // failures a user can cause; the guard is for everything else -
+            // precondition strings from the flow or the host, which name a
+            // function the user has never heard of.
+            setWifError(userFacingMessage(
+                err,
+                'Could not import that private key. Check the key and the chain, then try again.',
+            ));
         } finally {
             setWifBusy(false);
         }
@@ -332,7 +405,7 @@ export function AddressList({
                 setAddressesByChain(byChain || {});
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Could not load the addresses for this wallet. Try again.'));
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, reloadKey]);
@@ -481,7 +554,11 @@ export function AddressList({
                             value={wifChainId}
                             onChange={(cid) => {
                                 setWifChainId(cid);
-                                setWifAddressType(chainRegistry.get(cid)?.defaultAddressType || '');
+                                // Back to "untouched" so the new chain's own
+                                // default applies; pinning the previous
+                                // chain's type here is how the wrong one used
+                                // to survive a chain switch.
+                                setWifAddressType('');
                                 if (wifError) setWifError(null);
                             }}
                             chainIds={wifChainIds}
@@ -492,13 +569,13 @@ export function AddressList({
                             <label className={wifStyles.wifField}>
                                 <span className={wifStyles.wifLabel}>Address type</span>
                                 <select
-                                    value={wifAddressType}
+                                    value={effectiveWifAddressType}
                                     onChange={(e) => setWifAddressType(e.target.value)}
                                     disabled={wifBusy}
                                     className={wifStyles.wifSelect}
                                 >
-                                    {(chainRegistry.get(wifChainId)?.addressTypes || []).map((t) => {
-                                        const hint = addressTypeHint(chainRegistry.get(wifChainId), t);
+                                    {(wifDescriptor?.addressTypes || []).map((t) => {
+                                        const hint = addressTypeHint(wifDescriptor, t);
                                         return (
                                             <option key={t} value={t}>
                                                 {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
@@ -516,7 +593,9 @@ export function AddressList({
                                 setWifInput(e.target.value);
                                 if (wifError) setWifError(null);
                             }}
-                            placeholder="L1aW…"
+                            placeholder={wifPrefixHint(wifDescriptor)
+                                ? `Starts with ${wifPrefixHint(wifDescriptor)}`
+                                : 'Paste your WIF private key'}
                             autoComplete="off"
                             spellCheck={false}
                             disabled={wifBusy}
@@ -626,10 +705,11 @@ export function AddressList({
                                         setAddMenuOpen(false);
                                         setWifNotice(null);
                                         const first = wifChainIds[0] || '';
-                                        if (!wifChainId && first) {
-                                            setWifChainId(first);
-                                            setWifAddressType(chainRegistry.get(first)?.defaultAddressType || '');
-                                        }
+                                        // Only the chain is seeded; the
+                                        // address type stays '' so
+                                        // `effectiveWifAddressType` resolves
+                                        // it against this wallet's format.
+                                        if (!wifChainId && first) setWifChainId(first);
                                         setShowWifForm(true);
                                     }}
                                 >
@@ -704,7 +784,7 @@ export function AddressList({
                 setSelected({ ...selected, label: next, record: { ...selected.record, label: next } });
                 setReloadKey((k) => k + 1);
             } catch (err) {
-                setLoadError(err?.message || 'Failed to save label.');
+                setLoadError(userFacingMessage(err, 'Could not save that label. Try again.'));
             } finally {
                 setLabelSaving(false);
             }
@@ -729,7 +809,7 @@ export function AddressList({
                 setSelected(null);
                 setReloadKey((k) => k + 1);
             } catch (err) {
-                setLoadError(err?.message || 'Failed to delete address.');
+                setLoadError(userFacingMessage(err, 'Could not delete that address. Try again.'));
             }
         };
         const setAsActive = async () => {
@@ -741,7 +821,13 @@ export function AddressList({
                 // fresh mount refetches balances against the new active address.
                 onBack?.();
             } catch (err) {
-                setLoadError(err?.message || 'Failed to set active address.');
+                // D-64/D-65: this is the site that told a user
+                // "setActiveAddress: address does not belong to this account"
+                // when they pressed Use on an imported key. The cause is
+                // fixed, but any future rejection from this call arrives the
+                // same way - a flow name and an internal - so the copy is
+                // guarded here rather than left to the next one.
+                setLoadError(userFacingMessage(err, 'Could not switch to that address. Try again.'));
             }
         };
         return (
