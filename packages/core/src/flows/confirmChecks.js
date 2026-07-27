@@ -24,9 +24,16 @@
 //
 //   2. Action-byte cross-check (inline OP_RETURN only): the decoded
 //      action string in the PSBT must equal the intended action string.
-//      The two-phase P2SH/P2WSH reveal cannot be cross-checked pre-
-//      broadcast (the params live in a reveal tx that doesn't exist
-//      yet), documented as residual encoder trust in the threat model.
+//
+//   3. Carrier-script check (P2SH/P2WSH chunk lanes): the redeem scripts
+//      the encoder committed to must hash to outputs actually present in
+//      this PSBT, AND their data pushes must concatenate to the intended
+//      action. This used to be residual encoder trust, because check 2
+//      skips these encodings and the commit output is only a hash - so
+//      the lane carrying the LARGEST payloads was the least verified.
+//      Closed by having the encoder RETURN the scripts (spec §5.3.2)
+//      rather than re-deriving them here, which would need a byte-parity
+//      gate against the encoder forever.
 //
 // Pure and advisory-capable: the functions RETURN structured results;
 // the caller decides whether to throw. The action-variant hook throws a
@@ -239,15 +246,50 @@ export function checkActionByteMatch({ psbtHex, actionString, encoding, decodeAc
 }
 
 /**
- * Run BOTH checks and THROW a TamperDetectedError on any failure. This is
- * the action-variant hook's blocking path; the PSBT variant calls the
+ * Check 3: carrier-script verification for the P2SH/P2WSH chunk lanes.
+ *
+ * checkActionByteMatch covers inline OP_RETURN and skips everything else,
+ * which left the encoding that carries the LARGEST payloads verified by
+ * nothing but the output-set shape. The encoder now returns the redeem
+ * scripts it committed to, so the client can hash them against the PSBT's
+ * own outputs and read the payload back out (spec §5.3.2).
+ *
+ * Delegates to the SDK rather than re-deriving the script here: a second
+ * copy of the encoder's construction would need a byte-parity gate forever.
+ *
+ * @param {function} verifyCarrierScripts  sdk.decoder.verifyCarrierScripts
+ * @param {string[]} carrierScripts        as create_tx returned them
+ */
+export function checkCarrierScripts({ psbt, carrierScripts, encoding, actionString, network, verifyCarrierScripts }) {
+    // Encoding first, THEN wiring. A non-chunk encoding genuinely has nothing
+    // to check here (inline OP_RETURN has its own byte-match, MULTISIGN is
+    // covered by the output-set shape), so skipping is honest.
+    const enc = String(encoding || '').toUpperCase();
+    if (enc !== 'P2SH' && enc !== 'P2WSH') {
+        return { ok: true, skipped: true };
+    }
+    // But a CHUNK lane with no verifier injected is a wiring failure, and
+    // returning ok there would be "cannot verify" reading as "verified" - the
+    // exact shape of the §5.4 session store and the §8.5 drift gate, both of
+    // which sat inert for months looking like shipped features. Fail closed:
+    // the PSBT variant never reaches this, because it skips on encoding above.
+    if (typeof verifyCarrierScripts !== 'function') {
+        return { ok: false, reason: 'no-verifier', checked: 0 };
+    }
+    return verifyCarrierScripts({ psbt, carrierScripts, encoding: enc, actionString, network });
+}
+
+/**
+ * Run ALL THREE checks and THROW a TamperDetectedError on any failure. This
+ * is the action-variant hook's blocking path; the PSBT variant calls the
  * individual functions directly in report-only mode.
  *
  * @param {Object} args   see checkOutputSet + checkActionByteMatch args, plus:
  * @param {string} args.actionString
- * @returns {{ outputSet: object, actionBytes: object }}
+ * @returns {{ outputSet: object, actionBytes: object, carrier: object }}
  */
-export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt, actionString, decodeActionFromPsbt }) {
+export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt, actionString, decodeActionFromPsbt,
+                                 psbt, carrierScripts, network, verifyCarrierScripts }) {
     const outputSet = checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt });
     if (!outputSet.ok) {
         throw new TamperDetectedError(
@@ -260,5 +302,16 @@ export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt,
             'The action encoded in the transaction does not match what you approved.',
             { decoded: actionBytes.decoded, reason: actionBytes.reason });
     }
-    return { outputSet, actionBytes };
+    const carrier = checkCarrierScripts({
+        psbt, carrierScripts, encoding: expected.encoding, actionString, network, verifyCarrierScripts,
+    });
+    if (!carrier.ok) {
+        // Same copy as the action-byte mismatch on purpose: from the user's
+        // seat these are the same event (the bytes are not what was approved),
+        // and the encoding that produced it is not their concern.
+        throw new TamperDetectedError(
+            'The action encoded in the transaction does not match what you approved.',
+            { reason: carrier.reason, checked: carrier.checked });
+    }
+    return { outputSet, actionBytes, carrier };
 }

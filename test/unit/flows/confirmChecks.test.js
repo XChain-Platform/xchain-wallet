@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildExpectedOutputs, checkOutputSet, checkActionByteMatch, assertNoTamper, TamperDetectedError,
+    checkCarrierScripts,
 } from '../../../packages/core/src/flows/confirmChecks.js';
 
 // A decomposePsbt stub keyed by hex -> outputs.
@@ -214,6 +215,64 @@ describe('confirmChecks', () => {
             });
             expect(out.outputSet.ok).toBe(true);
             expect(out.actionBytes.ok).toBe(true);
+        });
+    });
+
+    // Check 3: the P2SH/P2WSH chunk lanes (spec 5.3.2). The verification
+    // itself lives in the SDK and is tested there against real scripts; what
+    // matters here is the GATING - that a bad carrier result blocks signing,
+    // and that a chunk lane with no verifier wired does not read as a pass.
+    describe('carrier-script check (chunk lanes)', () => {
+
+        const chunkExpected = () => buildExpectedOutputs({ customOutputs: [], encoding: 'P2WSH' });
+        // A P2WSH-shaped carrier: the OP_RETURN fixture would be rejected by
+        // the OUTPUT-SET check first, and the carrier assertions below would
+        // then pass for the wrong reason.
+        const CARRIER_P2WSH = { address: null, scriptType: 'p2wsh', scriptPubKeyHex: '0020' + 'ab'.repeat(32), value: 1000 };
+
+        it('skips non-chunk encodings instead of demanding scripts', () => {
+            const r = checkCarrierScripts({
+                psbt: 'x', carrierScripts: [], encoding: 'OP_RETURN',
+                actionString: 'SEND|0|JDOG|1|addr', verifyCarrierScripts: () => ({ ok: false }),
+            });
+            expect(r.ok).toBe(true);
+            expect(r.skipped).toBe(true);
+        });
+
+        // A chunk lane whose verifier was never injected is a WIRING failure.
+        // Returning ok there is how an inert check ends up looking shipped.
+        it('FAILS CLOSED on a chunk lane with no verifier wired', () => {
+            const r = checkCarrierScripts({
+                psbt: 'x', carrierScripts: ['aa'], encoding: 'P2WSH',
+                actionString: 'SEND|0|JDOG|1|addr', verifyCarrierScripts: undefined,
+            });
+            expect(r.ok).toBe(false);
+            expect(r.reason).toBe('no-verifier');
+        });
+
+        it('throws TamperDetectedError when the carrier check fails', () => {
+            const psbt = 'chunked';
+            expect(() => assertNoTamper({
+                psbtHex: psbt, expected: chunkExpected(), ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [CARRIER_P2WSH, CHANGE] }),
+                actionString: 'SEND|0|JDOG|1|addr',
+                decodeActionFromPsbt: () => ({ ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
+                psbt, carrierScripts: ['deadbeef'],
+                verifyCarrierScripts: () => ({ ok: false, reason: 'PAYLOAD_MISMATCH', checked: 1 }),
+            })).toThrow(TamperDetectedError);
+        });
+
+        it('passes when the carrier check holds', () => {
+            const psbt = 'chunked-ok';
+            const out = assertNoTamper({
+                psbtHex: psbt, expected: chunkExpected(), ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [CARRIER_P2WSH, CHANGE] }),
+                actionString: 'SEND|0|JDOG|1|addr',
+                decodeActionFromPsbt: () => ({ ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
+                psbt, carrierScripts: ['deadbeef'],
+                verifyCarrierScripts: () => ({ ok: true, reason: null, checked: 2 }),
+            });
+            expect(out.carrier.ok).toBe(true);
         });
     });
 });

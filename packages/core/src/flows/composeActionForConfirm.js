@@ -104,6 +104,14 @@ export async function composeActionForConfirm({
         // would wrongly flag rest-field actions (EXECUTE, LIST) as tampered even
         // when the bytes are correct.
         decodeActionFromPsbt: (hex) => sdk.decoder.decodeActionStringFromPsbt(hex),
+        // §5.3.2 check 3: the chunk lanes, which the byte-match above skips.
+        // The scripts ride on the encoder's create_tx response, so they are
+        // the ones it actually committed to, not a re-derivation. Passed as
+        // the PSBT hex, which is what survives the host messaging boundary.
+        psbt: composed.psbt,
+        carrierScripts: composed.carrierScripts,
+        network: sdk.config && sdk.config.network,
+        verifyCarrierScripts: sdk.decoder.verifyCarrierScripts,
     });
 
     // §5.2.3 balance deltas. Computed HERE, not per-form, for the same reason
