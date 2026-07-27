@@ -28,6 +28,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
+import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import styles from './Locked.module.css';
 
 /**
@@ -105,7 +106,7 @@ export function Locked({ onUnlocked }) {
                 // user clicking through it.
                 clearDemoWalletId();
                 clearLastView(demoWalletId);
-                await deleteWalletDatabase();
+                await wipeWalletStorage();
                 if (typeof window !== 'undefined') window.location.reload();
             }
         } catch (err) {
@@ -126,7 +127,7 @@ export function Locked({ onUnlocked }) {
         setWipeBusy(true);
         setWipeError(null);
         try {
-            await deleteWalletDatabase();
+            await wipeWalletStorage();
             if (typeof window !== 'undefined') window.location.reload();
         } catch (err) {
             setWipeError(err?.message || 'Could not wipe wallet data.');
@@ -427,47 +428,6 @@ export function Locked({ onUnlocked }) {
     );
 }
 
-/**
- * Nuke the wallet's IndexedDB database AND localStorage meta entry.
- * Used as the last-resort escape from a locked demo wallet. The demo
- * password is unrecoverable, so surgical deletion of just the demo
- * record is impossible (the vault blob is one encrypted unit).
- *
- * Two stores to clear:
- *   - IndexedDB `xchain-wallet` (matches DEFAULT_DB_NAME in
- *     IndexedDBStorageBackend.js): holds the encrypted vault blob.
- *   - localStorage `xchain-wallet:vault-meta` (matches DEFAULT_META_KEY
- *     in WebMetaBackend.js): holds the kdfParams metadata that the
- *     bridge's "a wallet already exists" check reads. Without this
- *     clear, a fresh `wallet.import` call after the IDB wipe still
- *     trips the existence check and the demo flow can't restart.
- *
- * Best-effort: we resolve as soon as the delete completes (or errors)
- * because the caller is going to reload the page either way.
- *
- * @returns {Promise<void>}
- */
-function deleteWalletDatabase() {
-    // Clear the localStorage meta entry first (synchronous, can't fail).
-    try {
-        globalThis.localStorage?.removeItem('xchain-wallet:vault-meta');
-    } catch { /* ignore */ }
-    return new Promise((resolve) => {
-        try {
-            const idb = typeof globalThis !== 'undefined' ? globalThis.indexedDB : null;
-            if (!idb || typeof idb.deleteDatabase !== 'function') {
-                resolve();
-                return;
-            }
-            const req = idb.deleteDatabase('xchain-wallet');
-            req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
-            req.onblocked = () => resolve();
-        } catch {
-            resolve();
-        }
-    });
-}
 
 /**
  * Format a remaining-ms value as a short, screen-reader-friendly string.

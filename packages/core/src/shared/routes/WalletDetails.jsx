@@ -13,8 +13,28 @@ import { Screen, Button, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { isDemoWallet, clearDemoWalletId, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
+import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
+
+/**
+ * True when the vault holds no wallet records. Fails CLOSED (returns
+ * false) if the list can't be read: not wiping leaves a recoverable
+ * mess, wiping a vault we could not inspect does not.
+ *
+ * @param {any} messaging
+ * @returns {Promise<boolean>}
+ */
+export async function isVaultEmpty(messaging) {
+    if (typeof messaging?.listWallets !== 'function') return false;
+    try {
+        const list = await messaging.listWallets();
+        const arr = Array.isArray(list) ? list : list?.wallets;
+        return Array.isArray(arr) && arr.length === 0;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * WalletDetails: read-only display of a Wallet record's metadata.
@@ -57,6 +77,25 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             }
             clearDemoWalletId();
             clearLastView(walletId);
+            // Removing the record does not remove the vault, and the
+            // vault meta is what the shell reads to decide a wallet
+            // exists. If the demo was the only wallet, leaving the meta
+            // behind boots the user into an unlock screen for an empty
+            // vault, holding a throwaway password we just deleted - and
+            // the Locked screen's demo escape is gated on that same
+            // deleted id, so their only way out is the "Forgot password"
+            // wipe, under copy about permanently losing funds. Clear the
+            // store so they land back on Welcome instead.
+            // Only when nothing else is left: a real wallet alongside the
+            // demo means the vault is still the user's, and wiping it
+            // would destroy it.
+            if (await isVaultEmpty(messaging)) {
+                await wipeWalletStorage();
+                if (typeof globalThis !== 'undefined' && globalThis.location?.reload) {
+                    globalThis.location.reload();
+                    return;
+                }
+            }
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setExitError(err?.message || 'Could not exit demo mode.');
