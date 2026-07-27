@@ -13,13 +13,20 @@
 //
 // WHY THESE SPECS ARE SEPARATE FROM THE REST OF THE SUITE
 //
-// `playwright.config.js` drives the Vite DEV server, and the dev server
-// CANNOT load the real SDK in a browser: xchain-sdk is CommonJS, vite
-// dev throws `require is not defined` on the dynamic import, and
-// `resolveSdkFactory` then falls back to the dev mock - whose signing
-// path throws by design. So no spec run that way can ever exercise
-// signing or broadcast, on any chain. That, not "missing regtest
-// wiring", is why §8.6's signing legs went unrun for months.
+// `playwright.config.js` drives the Vite DEV server, which runs the
+// dev-mock SDK - whose signing path throws by design. So no spec run
+// that way can ever exercise signing or broadcast, on any chain. That,
+// not "missing regtest wiring", is why §8.6's signing legs went unrun
+// for months.
+//
+// : the dev server runs the mock because it is TOLD to
+// (`VITE_XCHAIN_REAL_SDK=0`, pinned in `playwright.config.js`), not
+// because the real SDK fails to load there. It used to be the latter -
+// vite dev threw `require is not defined` on the CJS import and
+// `resolveSdkFactory` caught it - and when vite learned to pre-bundle
+// the SDK that venue silently became a real-SDK-against-mainnet venue,
+// where every compose fails "unreachable". Same venue as before, chosen
+// on purpose now.
 //
 // `playwright.regtest.config.js` serves a `vite preview` of the
 // PRODUCTION build instead, which rollup bundles the CJS into - the

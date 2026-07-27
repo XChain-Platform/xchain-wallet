@@ -161,7 +161,7 @@ for (const [shell, path] of [
 ]) {
     const src = readFileSync(path, 'utf8');
     assert.ok(
-        /await import\(['"]xchain-sdk['"]\)/.test(src),
+        /import\(['"]xchain-sdk['"]\)/.test(src),
         `${shell} sdkFactory dynamic-imports xchain-sdk`,
     );
     assert.ok(
@@ -170,13 +170,34 @@ for (const [shell, path] of [
     );
     assert.ok(
         src.includes("'dev-mock'"),
-        `${shell} sdkFactory returns a 'dev-mock' source string on fallback`,
-    );
-    assert.ok(
-        /falling back to dev-mock SDK/.test(src),
-        `${shell} sdkFactory emits the console.warn the release gate greps for`,
+        `${shell} sdkFactory names the dev-mock source string`,
     );
 }
+
+// : the WEB shell no longer decides its venue by catching the import.
+// It reads the venue off the environment first, so the mock cannot be reached
+// by a bundling change - and a failed real-SDK load is an error, not a quiet
+// downgrade to fabricated balances. The old fallback warning is gone with it,
+// which is why the release gate's web-side evidence is the mock IMPLEMENTATION
+// markers ("Dev SDK stub" / "devmockpsbt", ), checked in section 6.
+const webFactorySrc = readFileSync(join(web, 'src', 'sdkFactory.js'), 'utf8');
+assert.ok(
+    /export function selectSdkVenue/.test(webFactorySrc),
+    'web sdkFactory chooses its venue from the environment ',
+);
+assert.ok(
+    !/falling back to dev-mock SDK/.test(webFactorySrc),
+    'web sdkFactory has no silent fallback left to warn about ',
+);
+
+// The extension resolver keeps the injected-class fallback (: a service
+// worker cannot dynamic-import), so its warning string still ships and the
+// release gate still greps for it.
+const extFactorySrc = readFileSync(join(ext, 'src', 'background', 'sdkFactory.js'), 'utf8');
+assert.ok(
+    /falling back to dev-mock SDK/.test(extFactorySrc),
+    'extension sdkFactory emits the console.warn the release gate greps for',
+);
 
 // --- 5. core exports map surfaces shims -----------------------------
 

@@ -62,5 +62,13 @@ export default defineConfig({
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',
+        // : name the venue instead of inheriting it. This suite runs on
+        // the dev-mock SDK; the real one talks to mainnet explorers no test
+        // browser can reach, and when the dev server quietly started serving it
+        // (Vite began pre-bundling the linked CJS SDK) every compose died on
+        // "the network is unreachable" and five specs went red for a reason
+        // that had nothing to do with their subject. Anything needing a real
+        // compose belongs in playwright.regtest.config.js.
+        env: { ...process.env, VITE_XCHAIN_REAL_SDK: '0' },
     },
 });

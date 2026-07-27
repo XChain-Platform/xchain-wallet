@@ -18,9 +18,10 @@
 //     dynamic import (legal in a page); the extension CANNOT (:
 //     `import()` is disallowed on ServiceWorkerGlobalScope) and injects a
 //     statically imported class instead.
-//   - When the package isn't resolvable, the resolver falls back to a
-//     dev-mock factory and emits a single console.warn so the state
-//     is visibly cheap to spot.
+//   - : WHICH SDK runs is read off the environment before anything is
+//     imported. Dev/test run the dev-mock factory (one console.warn, naming
+//     the opt-in flag); production, and dev with VITE_XCHAIN_REAL_SDK=1, run
+//     the real one and REFUSE to substitute the mock if it fails to load.
 //   - hostBridge (web) + background (extension) each export an
 //     `sdkResolved` promise that settles with `'real'` or `'dev-mock'`
 //     so callers can gate sign / broadcast work on real availability.
@@ -55,7 +56,21 @@ assert.ok(
 );
 assert.ok(
     /console\.warn/.test(webFactory),
-    'web sdkFactory warns on fallback',
+    'web sdkFactory warns when it serves the dev mock',
+);
+// : the venue must be decided from the environment BEFORE anything is
+// imported. It used to be decided by catching the import failure, so the day
+// Vite learned to pre-bundle the linked CJS SDK the dev shell silently moved
+// to the real SDK (against unreachable mainnet explorers) and five e2e specs
+// went red. A catch block must never hand back the mock again.
+assert.ok(
+    /export function selectSdkVenue/.test(webFactory),
+    'web sdkFactory selects its venue from the environment ',
+);
+const webCatchBody = webFactory.slice(webFactory.indexOf('} catch (err) {'));
+assert.ok(
+    webCatchBody.length > 0 && !/devMockFactory/.test(webCatchBody),
+    'web sdkFactory never resolves to the dev mock from a catch branch ',
 );
 
 const extFactory = readFileSync(
@@ -139,55 +154,103 @@ const extPkg = JSON.parse(
 assert.ok(webPkg.dependencies?.['xchain-sdk'], 'web depends on xchain-sdk');
 assert.ok(extPkg.dependencies?.['xchain-sdk'], 'extension depends on xchain-sdk');
 
-// --- 3. resolveSdkFactory fallback behaviour -------------------------
+// --- 3. resolveSdkFactory venue selection  --------------------
 
-// Load the web resolver directly. `xchain-sdk` is linked into the
-// monorepo (package.json `link:../../../xchain-sdk`), so under the Node
-// harness the resolver's `import('xchain-sdk')` may now succeed and
-// return the real factory. (A bare probe here would resolve from a
-// different module context, so branch on the resolver's actual result.)
-// Either way the resolver must behave consistently: the real factory
-// when xchain-sdk loads, or the dev-mock fallback + one-shot warn.
-const { resolveSdkFactory } = await import(
+// The resolver runs whichever SDK the ENVIRONMENT names, and the SDK import
+// is injectable here so the two venues can be exercised without an installed
+// xchain-sdk (and so "did it even try to import?" is observable).
+const { resolveSdkFactory, selectSdkVenue, REAL_SDK_ENV_FLAG } = await import(
     '../../../packages/web/src/sdkFactory.js'
 );
+
+assert.equal(REAL_SDK_ENV_FLAG, 'VITE_XCHAIN_REAL_SDK');
+assert.equal(selectSdkVenue({ PROD: true }), 'real', 'a production build always runs the real SDK');
+assert.equal(selectSdkVenue({ PROD: false }), 'dev-mock', 'dev defaults to the mock');
+assert.equal(
+    selectSdkVenue({ PROD: false, [REAL_SDK_ENV_FLAG]: '1' }),
+    'real',
+    `${REAL_SDK_ENV_FLAG}=1 opts dev into the real SDK`,
+);
+assert.equal(
+    selectSdkVenue({ PROD: true, [REAL_SDK_ENV_FLAG]: '0' }),
+    'real',
+    'the dev flag cannot talk a production build into the mock',
+);
+
 const warnings = [];
 const originalWarn = console.warn;
 console.warn = (...args) => { warnings.push(args.join(' ')); };
 
 const devMock = () => ({ wallet: {}, auth: {} });
+let importAttempts = 0;
+const importSdk = async () => {
+    importAttempts += 1;
+    return { XChainSDK: class FakeXChainSDK {} };
+};
 try {
-    const resultA = await resolveSdkFactory({ devMockFactory: devMock });
-    if (resultA.source === 'real') {
-        assert.notEqual(resultA.factory, devMock, 'real factory is not the dev mock');
-        assert.ok(typeof resultA.factory === 'function', 'real source yields a factory');
-    } else {
-        assert.equal(resultA.source, 'dev-mock');
-        assert.equal(resultA.factory, devMock, 'returns the same devMock reference');
+    // dev-mock venue: the mock is handed back WITHOUT touching xchain-sdk, so
+    // no change in how (or how well) the SDK bundles can move the venue.
+    const resultA = await resolveSdkFactory({
+        devMockFactory: devMock, venue: 'dev-mock', importSdk,
+    });
+    assert.equal(resultA.source, 'dev-mock');
+    assert.equal(resultA.factory, devMock, 'returns the same devMock reference');
+    assert.equal(
+        importAttempts,
+        0,
+        'the dev-mock venue never imports xchain-sdk (the venue is chosen, not caught)',
+    );
 
-        // Second call: warn should NOT fire again (single-shot diagnostic).
-        const warnCountAfterA = warnings.length;
-        const resultB = await resolveSdkFactory({ devMockFactory: devMock });
-        assert.equal(resultB.source, 'dev-mock');
-        assert.equal(
-            warnings.length,
-            warnCountAfterA,
-            'warn fires once across repeated fallbacks',
-        );
-        assert.ok(
-            warnings.some((w) => /xchain-sdk unavailable/.test(w)),
-            'fallback warning mentions xchain-sdk unavailable',
-        );
-    }
+    // Second call: warn should NOT fire again (single-shot diagnostic).
+    const warnCountAfterA = warnings.length;
+    const resultB = await resolveSdkFactory({
+        devMockFactory: devMock, venue: 'dev-mock', importSdk,
+    });
+    assert.equal(resultB.source, 'dev-mock');
+    assert.equal(warnings.length, warnCountAfterA, 'warn fires once across repeated calls');
+    assert.ok(
+        warnings.some((w) => /dev-mock SDK selected/.test(w)),
+        'the dev-mock warning says the mock was selected, and names the flag that turns it off',
+    );
+    assert.ok(
+        warnings.some((w) => w.includes(REAL_SDK_ENV_FLAG)),
+        'the dev-mock warning names the opt-in flag',
+    );
+
+    // real venue: the injected import is used and adapted.
+    const resultReal = await resolveSdkFactory({
+        devMockFactory: devMock, venue: 'real', importSdk,
+    });
+    assert.equal(resultReal.source, 'real');
+    assert.equal(importAttempts, 1, 'the real venue imports the SDK exactly once per call');
+    assert.notEqual(resultReal.factory, devMock, 'real factory is not the dev mock');
+    assert.equal(typeof resultReal.factory, 'function', 'real source yields a factory');
 } finally {
     console.warn = originalWarn;
 }
+
+// A failed load on the REAL venue is a hard failure in every build. Falling
+// back here is what made the venue an accident: whoever asked for the real SDK
+// would silently get fabricated balances that cannot sign.
+let refused = false;
+try {
+    await resolveSdkFactory({
+        devMockFactory: devMock,
+        venue: 'real',
+        importSdk: async () => { throw new Error('bundle broke'); },
+    });
+} catch (err) {
+    refused = true;
+    assert.match(err.message, /refusing to fall back to the dev-mock SDK/);
+    assert.match(err.message, /bundle broke/, 'the refusal names the underlying reason');
+}
+assert.ok(refused, 'a failed real-SDK load rejects instead of returning the mock');
 
 // --- 4. Safety guard on missing devMockFactory ----------------------
 
 let threw = false;
 try {
-    await resolveSdkFactory({});
+    await resolveSdkFactory({ venue: 'dev-mock' });
 } catch (err) {
     threw = true;
     assert.match(err.message, /devMockFactory is required/);
@@ -269,6 +332,34 @@ for (const shell of ['web', 'extension']) {
     );
 }
 
+// : the dev server's pre-bundling must hang off the SAME flag as the
+// venue, in BOTH directions. Vite's scanner finds the bare import('xchain-sdk')
+// by itself, so without an explicit `exclude` the dev shell acquires a working
+// real SDK (aimed at mainnet explorers) whether anyone asked for it or not.
+const webCfg = readFileSync(
+    join(wsRoot, 'packages', 'web', 'vite.config.js'),
+    'utf8',
+);
+assert.ok(
+    /include:\s*\['xchain-sdk'\]/.test(webCfg) && /exclude:\s*\['xchain-sdk'\]/.test(webCfg),
+    'web vite config both includes and excludes xchain-sdk from optimizeDeps, on the flag',
+);
+assert.ok(
+    /VITE_XCHAIN_REAL_SDK/.test(webCfg),
+    'web vite config gates SDK pre-bundling on VITE_XCHAIN_REAL_SDK',
+);
+
+// The dev-server e2e config states its venue rather than inheriting whatever
+// the bundler happens to do that week.
+const e2eCfg = readFileSync(
+    join(wsRoot, 'test', 'e2e', 'playwright.config.js'),
+    'utf8',
+);
+assert.ok(
+    /VITE_XCHAIN_REAL_SDK:\s*'0'/.test(e2eCfg),
+    'the dev-server e2e config pins the dev-mock venue explicitly ',
+);
+
 // --- 6. : the worker bundle must contain no dynamic import ------
 
 // Behavioural half: an injected class is used verbatim and the dynamic
@@ -326,5 +417,5 @@ if (existsSync(bgDist)) {
 }
 
 console.log(
-    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK,  static worker SDK)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved,  venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK,  static worker SDK)',
 );

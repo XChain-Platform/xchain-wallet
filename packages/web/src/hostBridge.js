@@ -454,18 +454,19 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
     })
     .catch((err) => {
         // : never swallow the production refusal. sdkFactory.js throws
-        // under import.meta.env.PROD precisely so a shipped wallet cannot
-        // silently run without the real SDK; discarding that here (the old
-        // `.catch(() => 'dev-mock')`) left the registry on the mock with no
-        // symptom. In production: log loudly and re-throw so every
-        // `sdkResolved` consumer sees the failure, leaving the registry on
-        // the throwing placeholder (the mock does not exist in this build).
-        // In dev / Node harnesses the mock fallback is expected and fine.
-        if (import.meta.env?.PROD) {
-            console.error('[xchain-wallet/web] SDK resolution failed:', err);
-            throw err;
-        }
-        return 'dev-mock';
+        // precisely so a shipped wallet cannot silently run without the real
+        // SDK; discarding that here (the old `.catch(() => 'dev-mock')`) left
+        // the registry on the mock with no symptom.
+        //
+        // : the dev branch that returned 'dev-mock' here is gone too.
+        // resolveSdkFactory now picks its venue up front and only rejects when
+        // the venue it was TOLD to use could not be built - asking for the real
+        // SDK and quietly getting fake balances instead is the exact failure
+        // this item was raised for. Log loudly and re-throw in every build; the
+        // registry stays on its boot factory (the dev mock in a dev build, the
+        // throwing placeholder in production, where the mock does not exist).
+        console.error('[xchain-wallet/web] SDK resolution failed:', err);
+        throw err;
     });
 
 /** Default active chains for onboarding. Users can change later via Settings. */

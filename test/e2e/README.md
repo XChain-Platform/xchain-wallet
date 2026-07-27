@@ -31,9 +31,9 @@ must agree on what counts as a violation:
 - `tests/a11y/a11y.spec.js` (dev config) scans every screen up to the Send
   form.
 - `tests/a11y/confirm-a11y.regtest.spec.js` (regtest config) scans the
-  **confirm surface** in both §4.2 verdict states at both widths. It has to
-  run there: the confirm page only exists after a successful compose, and the
-  dev shell can no longer compose .
+  **confirm surface** in both §4.2 verdict states at both widths. It runs
+  there because those verdicts have to come from a real compose + preflight
+  against a chain, which only the regtest venue has.
 
 ## Start from the fixture
 
@@ -96,8 +96,24 @@ Two defects are recorded as tests rather than hidden. Both are written so they
 ## What's NOT covered here
 
 Real signing + broadcast: the dev server serves the dev-mock SDK, so specs stop
-at the confirm stage. Wiring the suite to a real regtest stack (`tools/regtest/`
-probes it; the platform stack lives in `xchain-node`) is still open as G163.
+at the confirm stage. Those flows live in the regtest venue
+(`playwright.regtest.config.js`), which serves a production build against a
+real chain.
+
+## Which SDK this venue runs on 
+
+The dev config pins the venue with `VITE_XCHAIN_REAL_SDK: '0'` on its
+`webServer`, and `packages/web/src/sdkFactory.js` reads that flag before it
+imports anything. Set `VITE_XCHAIN_REAL_SDK=1` to run the dev shell on the real
+`xchain-sdk` instead; the same flag is what tells Vite to pre-bundle it.
+
+Say the venue out loud, always. It used to be decided by *catching* the SDK
+import failure: the dev server could not transform the linked CJS SDK, so the
+mock got used by accident. The day Vite learned to pre-bundle it, the import
+started succeeding, the dev shell silently moved onto the real SDK against
+mainnet explorers this browser cannot reach, and five specs went red with
+"Couldn't send. The network is unreachable." A test venue that flips when a
+bundler improves is not a venue.
 
 Hardware-signer flows (Trezor / Ledger): need a paired device. Test
 in person; doc the path in the runbook at

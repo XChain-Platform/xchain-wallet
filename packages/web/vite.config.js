@@ -195,17 +195,16 @@ export default defineConfig({
     // root and Vite does not treat it like a normal CJS package under
     // node_modules. Left alone, `import('xchain-sdk')` yields a module whose
     // inner `require('./src/XChainSDK.js')` calls survive verbatim; `require`
-    // is undefined in a browser, so evaluating it throws, resolveSdkFactory
-    // catches, and the wallet silently runs on the DEV-MOCK SDK (fabricated
-    // addresses/balances, signing a no-op). That is G163 / 's root cause.
-    //
-    // Forcing it into the dep optimizer makes esbuild do the CJS -> ESM
-    // transform properly (verified: .vite/deps/xchain-sdk.js is ~5 MB, carries
-    // the real decoder + preflight code, and contains zero literal requires).
+    // is undefined in a browser, so evaluating it throws. Forcing it into the
+    // dep optimizer makes esbuild do the CJS -> ESM transform properly
+    // (verified: .vite/deps/xchain-sdk.js is ~5 MB, carries the real decoder +
+    // preflight code, and contains zero literal requires). That is G163 /
+    // 's root cause.
     //
     // NOTE this covers the DEV SERVER only, which is what Playwright drives.
     // The production `vite build` path is handled separately :
     // build.commonjsOptions.include below plus polyfillShimResolver above.
+    //
     // GATED: opt in with VITE_XCHAIN_REAL_SDK=1. Unconditionally pre-bundling
     // the real SDK makes the app talk to a live backend at boot, and when none
     // is reachable (the default for dev + the e2e suite) wallet creation HANGS
@@ -213,9 +212,18 @@ export default defineConfig({
     // after 7min on the real SDK against a half-configured regtest stack. So
     // the real SDK is opt-in until the wallet degrades gracefully on an
     // unreachable backend (that hang is its own defect, ).
-    optimizeDeps: {
-        include: process.env.VITE_XCHAIN_REAL_SDK === '1' ? ['xchain-sdk'] : [],
-    },
+    //
+    // : `exclude` is the other half of that gate. Vite's dep SCANNER
+    // finds the bare `import('xchain-sdk')` in src/sdkFactory.js on its own and
+    // pre-bundles it whether or not it is listed in `include` - which is how
+    // the dev shell silently acquired a working real SDK (pointed at mainnet
+    // explorers a test browser cannot reach) and five e2e specs went red.
+    // Naming it here keeps the flag the ONLY thing that decides. The venue
+    // itself is chosen in src/sdkFactory.js off the same flag, so the two
+    // halves cannot disagree.
+    optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
+        ? { include: ['xchain-sdk'] }
+        : { exclude: ['xchain-sdk'] },
     build: {
         outDir: 'dist',
         emptyOutDir: true,
