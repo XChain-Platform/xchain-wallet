@@ -1006,16 +1006,28 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         <>
             <ul className={styles.list} role="list">
                 {activity.slice(0, 20).map((a, i) => {
-                    const type = a.type || a.action_type || a.kind || 'EVENT';
+                    // `action` is the key the explorer's /history/<tick>/token rows
+                    // actually carry (ActionDetail reads the same one). The three
+                    // aliases below never matched it, so every row fell through to
+                    // the 'EVENT' default and the whole tab read "Event · <date>"
+                    // regardless of what had happened - D-80.
+                    const type = a.action || a.type || a.action_type || a.kind || 'EVENT';
                     const ts = Number(a.timestamp || a.block_time || 0);
                     const when = ts > 0
                         ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
                         : '';
+                    const block = a.block_index != null ? Number(a.block_index) : null;
+                    const sub = [
+                        Number.isFinite(block) && block > 0
+                            ? `Block ${block.toLocaleString('en-US')}`
+                            : null,
+                        when,
+                    ].filter(Boolean).join(' · ');
                     return (
                         <li key={String(a.action_index || a.tx_hash || i)}>
                             <div className={styles.row}>
                                 <span className={styles.rowMain}>{actionDisplayLabel(type)}</span>
-                                <span className={styles.rowSub}>{when}</span>
+                                <span className={styles.rowSub}>{sub}</span>
                             </div>
                         </li>
                     );
