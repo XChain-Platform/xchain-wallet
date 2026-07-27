@@ -29,6 +29,22 @@ export function tickerForCoin(coin) {
     return COIN_TICKER[coin] || String(coin || '').toUpperCase();
 }
 
+/** Every native ticker the XChain protocol runs on (mirrors xchain-sdk VALID_COINS). */
+const PROTOCOL_TICKERS = new Set(Object.values(COIN_TICKER));
+
+/**
+ * True when `ticker` is a chain the XChain protocol itself runs on, as opposed
+ * to a custom/unknown chain a user added. Callers that must reason about
+ * protocol rules (fees, action support) need this distinction: an unrecognized
+ * chain gets no protocol behavior applied to it at all.
+ *
+ * @param {string} ticker   native ticker, e.g. 'LTC'
+ * @returns {boolean}
+ */
+export function isProtocolCoinTicker(ticker) {
+    return PROTOCOL_TICKERS.has(String(ticker || '').toUpperCase());
+}
+
 // : the coin-path segment the platform routes explorer requests by, e.g.
 // bitcoin-mainnet -> BTC, bitcoin-testnet -> TBTC, dogecoin-regtest -> RDOGE.
 // Mirrors xchain-sdk endpoints.coinPrefix + explorer.js COIN_PREFIX_MAP. The

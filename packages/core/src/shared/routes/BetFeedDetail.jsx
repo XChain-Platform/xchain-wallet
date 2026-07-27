@@ -14,6 +14,10 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -120,6 +124,14 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
+    // : placing a bet is fee-bearing (BET v2 pre-funds one payout credit),
+    // so it carries the same fee lane as every other fee-bearing action. On
+    // LTC/DOGE the hook forces it on: there is no XCHAIN fee lane on those
+    // chains, so a bet placed without the native output is broadcast, costs a
+    // miner fee, and never joins the pool.
+    const coinTicker = protocolCoinTickerFor(chainId);
+    const nativeFee = useNativeFee(chainId);
+
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     // A real ref, not `{ current: password }`: Approve runs from the closure
     // captured when the confirm page OPENED, which is before the password on that
@@ -184,9 +196,14 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 from,
                 compose: () => messaging.composeBetForConfirm({
                     walletId, chainId, from, builder: 'placeBetParams', params: betParams(),
+                    // The fee mode must reach COMPOSE, not just submit: the
+                    // FEE_DESTINATION output has to be inside the PSBT the user
+                    // approves and the tamper check verifies.
+                    payFeeInNativeCoin: nativeFee.flag,
                 }),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId, chainId, from, params: betParams(), prebuiltPsbt,
+                    payFeeInNativeCoin: nativeFee.flag,
                 }),
             });
             setResult(res);
@@ -197,7 +214,9 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             reload();
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Bet failed.');
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
+                : err?.message || 'Bet failed.');
         }
     }
 
@@ -340,6 +359,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                     the current split. That is not a locked-in price: later bets change it.
                                 </p>
                             ) : null}
+                            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
                             {!isHwSource && !signerReady ? (
                                 <Input
                                     label="Password"

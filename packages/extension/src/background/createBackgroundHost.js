@@ -3109,6 +3109,12 @@ export function createBackgroundHost(deps) {
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
+                // : the native-coin fee mode has to reach COMPOSE, not just
+                // submit, so the FEE_DESTINATION output sits inside the PSBT the
+                // user approves and is covered by the tamper check. BET is
+                // fee-bearing on create (v0) and place (v2), and on LTC/DOGE a
+                // native output is the ONLY way to pay it.
+                ...(req?.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: req.payFeeInNativeCoin }),
             },
             source: source.address,
             ownAddresses,

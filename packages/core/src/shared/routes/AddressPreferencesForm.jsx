@@ -90,9 +90,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (ADDRESS is quotable); the
+    // PC-51: native-coin protocol fee (ADDRESS is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     const [stage, setStage] = useState(/** @type {'form'|'review'|'submitting'|'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));

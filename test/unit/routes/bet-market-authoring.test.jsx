@@ -34,6 +34,9 @@ import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedD
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
+// : a chain with NO XCHAIN fee lane, where a native-coin output is the
+// only way to pay a protocol fee.
+const LTC_CHAIN = 'litecoin-regtest';
 const OWN = 'bc1qexampleexampleexampleexampleexampleex';
 const ORACLE = 'bc1qoracleoracleoracleoracleoracleoraclex';
 
@@ -425,5 +428,158 @@ describe(' every BET surface renders the confirm page it opens', () => {
         expect(submit).toBeTruthy();
         expect(submit.args.password).toBe('hunter2');
         expect(submit.args.params).toMatchObject({ feedActionIndex: '2343', outcome: 0 });
+    });
+});
+
+// : the native-coin fee lane on the two FEE-BEARING BET formats.
+//
+// BET charges on create (v0, duration-priced) and on place (v2, one pre-funded
+// payout credit), and it is a COMMON_ACTION, so both are offered on LTC and
+// DOGE. Those chains have no XCHAIN fee lane at all: the indexer answers
+// `rejected` for a fee-bearing action carrying no FEE_DESTINATION output. So a
+// market opened or a bet placed there without the native output is broadcast,
+// spends a real miner fee, and never indexes. These surfaces shipped with no
+// toggle, no hook and no encoderOpts, which made that the ONLY outcome.
+//
+// The flag has to travel on BOTH lanes. Compose is where it matters most: the
+// FEE_DESTINATION output has to be inside the PSBT the user previews and the
+// tamper check verifies, not added afterwards.
+describe(' BET carries the native-coin fee lane', () => {
+    const ltcHarness = () => harness({
+        getAddressesByChain: () => Promise.resolve({ [LTC_CHAIN]: [HD_ADDRESS] }),
+    });
+
+    it('CreateBetFeedForm forces the fee on LTC and states it rather than offering a choice', async () => {
+        const { messaging, calls } = ltcHarness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: LTC_CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        // A statement, not a switch: there is nothing to choose between.
+        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
+        expect(utils.queryByLabelText(/Pay protocol fee in LTC instead of XCHAIN/)).toBeNull();
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+        const compose = calls.find((c) => c.method === 'composeBetForConfirm');
+        expect(compose.args.payFeeInNativeCoin).toBe(true);
+
+        await domAct(async () => {
+            typeIn(utils, 'Password', 'hunter2');
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drain();
+        });
+        // Signing lane too: a compose-only thread would preview a fee output the
+        // submit never rebuilt.
+        expect(calls.find((c) => c.method === 'createMarketAction').args.payFeeInNativeCoin).toBe(true);
+    });
+
+    it('CreateBetFeedForm keeps it an opt-in on Bitcoin, off by default and honoured when ticked', async () => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+        // Bitcoin settles the fee from an XCHAIN balance unless asked otherwise,
+        // and the flag is absent rather than false so the payload is untouched.
+        expect(calls.find((c) => c.method === 'composeBetForConfirm').args.payFeeInNativeCoin)
+            .toBeUndefined();
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-reject'));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Pay protocol fee in BTC instead of XCHAIN'));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+        expect(calls.filter((c) => c.method === 'composeBetForConfirm').pop().args.payFeeInNativeCoin)
+            .toBe(true);
+    });
+
+    it('BetFeedDetail pays the place-bet fee natively on LTC, through compose and submit', async () => {
+        const { messaging, calls } = ltcHarness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(BetFeedDetail, messaging, { chainId: LTC_CHAIN, feedIndex: '2308' });
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /^Home$/));
+            await drain();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Stake (PEPECREATURE)', '5');
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review bet/i));
+            await drain();
+        });
+        const compose = calls.find((c) => c.method === 'composeBetForConfirm');
+        expect(compose.args.builder).toBe('placeBetParams');
+        expect(compose.args.payFeeInNativeCoin).toBe(true);
+
+        await domAct(async () => {
+            typeIn(utils, 'Password', 'hunter2');
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drain();
+        });
+        expect(calls.find((c) => c.method === 'placeBetAction').args.payFeeInNativeCoin).toBe(true);
+    });
+
+    it('leaves the FREE formats alone: an LTC resolve pays no protocol fee', async () => {
+        // Resolve (v3) and cancel (v1) emit only credits that were pre-funded at
+        // place time, so the chain charges nothing. Forcing a fee output there
+        // would spend a user's coin on a fee that does not exist.
+        const { messaging, calls } = harness({
+            getAddressesByChain: () => Promise.resolve({ [LTC_CHAIN]: [HD_ADDRESS] }),
+            betFeeds: () => Promise.resolve({ data: [OWN_CLOSED_FEED] }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(OracleConsole, messaging, {});
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /^Resolve$/));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /^Yes$/));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review resolve/i));
+            await drain();
+        });
+        const compose = calls.find((c) => c.method === 'composeBetForConfirm');
+        expect(compose.args.builder).toBe('resolveMarketParams');
+        expect(compose.args.payFeeInNativeCoin).toBeUndefined();
+        expect(utils.container.textContent).not.toContain('Protocol fee is paid in');
     });
 });

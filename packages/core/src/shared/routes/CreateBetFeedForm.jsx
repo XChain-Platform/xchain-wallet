@@ -23,6 +23,10 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -230,6 +234,14 @@ export function CreateBetFeedForm({
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
+    // : opening a market is fee-bearing (BET v0 is duration-priced over the
+    // market's full life), so it needs the same fee lane every other fee-bearing
+    // form has. On LTC/DOGE the hook forces it on, because a native-coin output
+    // is the only way to pay a protocol fee there: without it the create is
+    // broadcast, the miner fee is spent, and the market never exists.
+    const coinTicker = protocolCoinTickerFor(descriptor || chainId);
+    const nativeFee = useNativeFee(chainId);
+
     const cleanOutcomes = useMemo(
         () => outcomes.map((o) => o.trim()).filter((o) => o.length > 0),
         [outcomes],
@@ -400,16 +412,23 @@ export function CreateBetFeedForm({
                 from,
                 compose: () => messaging.composeBetForConfirm({
                     walletId, chainId, from, builder: 'createMarketParams', params: marketParams,
+                    // The fee mode must reach COMPOSE, not just submit: the
+                    // FEE_DESTINATION output has to be inside the PSBT the user
+                    // approves and the tamper check verifies.
+                    payFeeInNativeCoin: nativeFee.flag,
                 }),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId, chainId, from, params: marketParams, prebuiltPsbt,
+                    payFeeInNativeCoin: nativeFee.flag,
                 }),
             });
             setResult(res);
             setPassword('');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Creating the market failed.');
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
+                : err?.message || 'Creating the market failed.');
         }
     }
 
@@ -530,7 +549,14 @@ export function CreateBetFeedForm({
         }
         return (
             <p className={styles.hint}>
-                <strong>Opening this market costs about {quote.fee} XCHAIN.</strong> It stays on the network for
+                <strong>Opening this market costs about {quote.fee} XCHAIN.</strong>
+                {/* The schedule prices every chain in XCHAIN; paying in the coin
+                    converts that figure at the current rate, so the quote is the
+                    same number either way and only the settlement lane differs. */}
+                {nativeFee.payFeeInNativeCoin && coinTicker
+                    ? ` It is charged as the equivalent in ${coinTicker} at the rate when you submit.`
+                    : ''}
+                {' '}It stays on the network for
                 about {days} days: {freeDays} of those are free and {quote.billableDays} are charged.
                 {' '}The charge is measured to the refund deadline, not to when betting closes, so a longer
                 window to publish the result costs more.
@@ -640,6 +666,8 @@ export function CreateBetFeedForm({
             ) : null}
 
             {quoteBlock}
+
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
             <Input
                 label="Your fee (optional)"

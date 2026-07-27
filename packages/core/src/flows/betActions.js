@@ -42,6 +42,8 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {boolean} [payFeeInNativeCoin]   pay the protocol fee with a native-coin
+ *   output instead of an XCHAIN-balance debit (the only lane on LTC/DOGE)
  * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
@@ -83,6 +85,11 @@ function submitBet(opts, builderName, buildInput, summary) {
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            // : the native-coin protocol fee. Only the two fee-bearing
+            // formats set it (create, place); resolve and cancel are free by
+            // design, so their surfaces leave it undefined and nothing is
+            // quoted or paid for them.
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
         },
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }

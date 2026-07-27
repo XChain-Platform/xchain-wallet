@@ -100,10 +100,19 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 // the LTC/DOGE regtest indexers still run PRE- code (measured
 // 2026-07-26 via feequote on both: `supported:false`, "native fee
 // pre-flight not supported"), and DeployContractForm/ExecuteContractForm
-// have no native-fee lane at all - they are the only fee-bearing forms
-// with no useNativeFee/NativeFeeToggle, because BTC could always settle
-// in XCHAIN. Flipping this list before BOTH land would ship the exact
-// hazard it was created to prevent.
+// still have no native-fee lane at all (no useNativeFee/NativeFeeToggle),
+// because BTC could always settle in XCHAIN. Flipping this list before
+// BOTH land would ship the exact hazard it was created to prevent.
+//
+// That second leg used to claim those two forms were the ONLY fee-bearing
+// forms without the lane. They were not:  found the BET authoring
+// surfaces (CreateBetFeedForm, BetFeedDetail's place-bet flow) in the same
+// state, and BET is in COMMON_ACTIONS, so it was already offered on
+// LTC/DOGE while being unpayable there. Both are wired now, and the
+// superlative is gone rather than re-asserted: it is a claim about every
+// form in the wallet, which no comment can keep true, and asserting it is
+// what let BET hide. The native-fee-sweep smoke is where that property is
+// actually enforced, form by named form.
 //
 // BATCH is NOT the same shape, contrary to the note this replaces.
 // Measured 2026-07-26: batch.js runs every sub-action through

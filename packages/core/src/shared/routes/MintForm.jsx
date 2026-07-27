@@ -139,7 +139,8 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // a quotable fee-bearing action; the authoritative price/validity check
     // runs at submit time (applyNativeFeePreflight) and forfeit-warns if the
     // action can't be priced.
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(coinTicker);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -634,6 +635,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
             />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

@@ -164,6 +164,12 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     // Both flows compose through the SDK's own builder host-side, so the confirm
     // screen decodes what was actually composed. Params are derived once per
     // flow and handed to both compose and submit.
+    //
+    // No native-fee lane here on purpose : resolve (v3) and cancel (v1)
+    // are FREE by protocol design, because every credit they emit was pre-funded
+    // when the bet was placed. Only the two fee-bearing formats carry the toggle
+    // (create in CreateBetFeedForm, place in BetFeedDetail); adding it here would
+    // ask a user to pay a fee the chain never charges.
     async function runOracleAction(feed, builder, submit, params) {
         const from = sourceDescriptor(feed.owner);
         setFormError(null);

@@ -258,9 +258,9 @@ export function LinkForm({ walletId, onBack }) {
         ? (COIN_DISPLAY_TICKER[submitDescriptor.coin] || submitDescriptor.coin)
         : null;
 
-    // PC-51: opt-in native-coin protocol fee (LINK is quotable); the
+    // PC-51: native-coin protocol fee (LINK is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(submitDescriptor);
 
     // Form submit goes to the review stage, not directly to broadcast.
     // Runs the same guards that previously gated signing so nothing

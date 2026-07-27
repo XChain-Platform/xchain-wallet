@@ -112,7 +112,10 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
     // One derivation feeding BOTH compose and submit. Two would be free to
     // diverge, and the divergence would be signed rather than caught.
     assert.match(src, /function betParams\(\)/, 'BetFeedDetail derives the bet input in one place');
-    assert.match(src, /params: betParams\(\),[\s\S]{0,300}params: betParams\(\),/,
+    // The window is a proximity heuristic for "compose and submit are handed the
+    // SAME derivation", not a line budget; it widened when  threaded the
+    // native-fee flag (and its comment) through both calls.
+    assert.match(src, /params: betParams\(\),[\s\S]{0,600}params: betParams\(\),/,
         'BetFeedDetail composes and submits the same betParams()');
 
     // The generic compose route would mean a client-side wire mirror.
@@ -179,8 +182,9 @@ assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
         'CreateBetFeedForm names the createMarketParams builder');
     assert.ok(!/actionData: \{ action: 'BET'/.test(src),
         'CreateBetFeedForm does not feed a client-side wire mirror into the signing path');
-    // One derivation feeding both compose and submit, as in BetFeedDetail.
-    assert.match(src, /params: marketParams,[\s\S]{0,400}params: marketParams,/,
+    // One derivation feeding both compose and submit, as in BetFeedDetail (same
+    // proximity heuristic, same  widening).
+    assert.match(src, /params: marketParams,[\s\S]{0,600}params: marketParams,/,
         'CreateBetFeedForm composes and submits the same marketParams');
 
     // The §11.3 live duration-fee display, which the spec calls load-bearing

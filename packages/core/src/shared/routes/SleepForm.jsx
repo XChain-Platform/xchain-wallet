@@ -129,9 +129,9 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (SLEEP is quotable); the
+    // PC-51: native-coin protocol fee (SLEEP is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     // Tick record: LOCK_SLEEP gate (tick mode only).
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: !isTick || !ticker });

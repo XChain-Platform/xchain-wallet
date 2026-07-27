@@ -35,7 +35,7 @@ import {
     advancedIssueWarnings,
 } from '../utils/issueAdvancedFields.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
@@ -134,7 +134,8 @@ export function TokenWizard({ walletId, onBack }) {
     const [callbackTickDecimals, setCallbackTickDecimals] = useState(
         /** @type {number | null} */ (null),
     );
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(chainId);
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
@@ -422,10 +423,8 @@ export function TokenWizard({ walletId, onBack }) {
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr && err?.reason === 'unsupported'
-                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
                     : isNativeFeeErr
-                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
+                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
                     : err?.message || 'Sign failed.',
             );
             setStage('preview');
@@ -530,7 +529,7 @@ export function TokenWizard({ walletId, onBack }) {
             perAddressMax, setPerAddressMax,
             mintStartBlock, setMintStartBlock,
             mintStopBlock, setMintStopBlock,
-            payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
+            payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
             advancedPanel: {
                 showAdvanced, setShowAdvanced,
                 lockChecks, setLockChecks,
@@ -967,7 +966,7 @@ function renderDetailsStage({
     perAddressMax, setPerAddressMax,
     mintStartBlock, setMintStartBlock,
     mintStopBlock, setMintStopBlock,
-    payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
+    payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
     advancedPanel,
     formError, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
@@ -1127,6 +1126,7 @@ function renderDetailsStage({
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
             />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

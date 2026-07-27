@@ -132,9 +132,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (PRICE is quotable); the
+    // PC-51: native-coin protocol fee (PRICE is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [fiat, setFiat] = useState('USD');

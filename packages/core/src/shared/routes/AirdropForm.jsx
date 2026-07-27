@@ -450,10 +450,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (LIST and AIRDROP are both
+    // PC-51: native-coin protocol fee (LIST and AIRDROP are both
     // quotable, so the opt-in rides BOTH legs); the authoritative price
     // check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     // Stable reference (only changes when chainId/addressesByChain actually
     // do) so ExistingListPickerScreen's data-fetch effect below doesn't see

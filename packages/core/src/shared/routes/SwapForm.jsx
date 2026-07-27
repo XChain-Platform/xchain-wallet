@@ -40,7 +40,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
 import {
     estimateNativeSendFee,
@@ -128,7 +128,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [getAddress, setGetAddress] = useState('');
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     const [showAdvanced, setShowAdvanced] = useState(false);
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(chainId);
     const [password, setPassword] = useState('');
     const [givePickerOpen, setGivePickerOpen] = useState(false);
     const [getPickerOpen, setGetPickerOpen] = useState(false);
@@ -419,10 +420,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr && err?.reason === 'unsupported'
-                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
                     : isNativeFeeErr
-                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
+                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
                     : err?.message || 'Sign failed.',
             );
             // Stay on review rather than dropping back to the form so the
@@ -863,6 +862,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
             />
 
             {validationError ? (

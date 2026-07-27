@@ -210,9 +210,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (DIVIDEND is quotable); the
+    // PC-51: native-coin protocol fee (DIVIDEND is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     // Source balance of the dividend ticker, backing the per-unit
     // AmountField's Max button + "available" footer.

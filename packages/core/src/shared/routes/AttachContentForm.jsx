@@ -248,11 +248,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
 
-    // PC-51: opt-in native-coin protocol fee; every leg this form signs
+    // PC-51: native-coin protocol fee; every leg this form signs
     // (FILE artwork, LINK, FILE token-info, ISSUE v1 describe) is quotable,
     // so the one opt-in rides all of them. Authoritative price check runs
     // at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;

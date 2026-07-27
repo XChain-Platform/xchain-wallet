@@ -41,6 +41,32 @@ export class NativeFeeForfeitError extends Error {
 }
 
 /**
+ * The sentence to show a user when a NativeFeeForfeitError stopped their submission.
+ *
+ * : the advice depends on whether the chain HAS another fee lane. On Bitcoin the fee can
+ * fall back to an XCHAIN balance, so "turn it off" is a real fix. On LTC/DOGE the native-coin
+ * output is the only way to pay a protocol fee, so telling the user to turn it off would send
+ * them to build a transaction the network rejects outright.
+ *
+ * @param {{ reason?: string } | null | undefined} err   the NativeFeeForfeitError
+ * @param {{ coinTicker?: string, mandatory?: boolean }} [chain]
+ * @returns {string}
+ */
+export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {}) {
+    const coin = coinTicker || 'the native coin';
+    if (err && err.reason === 'unsupported') {
+        return mandatory
+            ? `This action cannot be submitted on this chain: its protocol fee has no ${coin} price, ` +
+              `and ${coin} is the only way to pay a protocol fee here.`
+            : `Paying the protocol fee in ${coin} is not available for this action. Turn it off to pay in XCHAIN.`;
+    }
+    return mandatory
+        ? `The ${coin} fee price is temporarily unavailable. Try again in a moment.`
+        : 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off ' +
+          'native-coin fee payment.';
+}
+
+/**
  * User-facing warning to surface on the review/sign screen whenever native-coin fee mode is on.
  */
 export const NATIVE_FEE_WARNING =

@@ -15,6 +15,7 @@ import {
     applyNativeFeePreflight,
     NativeFeeForfeitError,
     NATIVE_FEE_WARNING,
+    nativeFeeErrorMessage,
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 
 // Minimal SDK stub whose quoteNativeFee returns a canned quote and records its args.
@@ -100,5 +101,31 @@ describe('applyNativeFeePreflight', () => {
 
     it('exposes a non-empty forfeiture warning string', () => {
         expect(NATIVE_FEE_WARNING).toMatch(/forfeit/i);
+    });
+});
+
+// : "turn it off to pay in XCHAIN" is only actionable advice on a chain
+// that HAS an XCHAIN fee lane. On LTC/DOGE it sends the user to build a
+// transaction the network rejects outright.
+describe('nativeFeeErrorMessage', () => {
+    it('offers the XCHAIN fallback only where one exists', () => {
+        const err = { reason: 'unsupported' };
+        expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))
+            .toMatch(/Turn it off to pay in XCHAIN/);
+        const ltc = nativeFeeErrorMessage(err, { coinTicker: 'LTC', mandatory: true });
+        expect(ltc).not.toMatch(/turn it off/i);
+        expect(ltc).toMatch(/only way to pay a protocol fee here/);
+    });
+
+    it('drops the turn-it-off suggestion from the stale-price message too', () => {
+        const err = { reason: 'invalid' };
+        expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))
+            .toMatch(/turn off native-coin fee payment/);
+        expect(nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true }))
+            .toBe('The DOGE fee price is temporarily unavailable. Try again in a moment.');
+    });
+
+    it('falls back to a generic coin name when the ticker is unknown', () => {
+        expect(nativeFeeErrorMessage({ reason: 'unsupported' }, {})).toMatch(/the native coin/);
     });
 });

@@ -46,7 +46,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
-import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -160,7 +160,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         /** @type {string | null} */ (null),
     );
     const [password, setPassword] = useState('');
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(chainId);
 
     // §16 extension: where the dispenser itself lives (GET_ADDRESS).
     //   'new'      derive a fresh dispenser address at review (default)
@@ -731,10 +732,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             let submitMsg;
             if (isBadPassword) {
                 submitMsg = 'Incorrect password.';
-            } else if (err?.name === 'NativeFeeForfeitError' && err?.reason === 'unsupported') {
-                submitMsg = `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`;
             } else if (err?.name === 'NativeFeeForfeitError') {
-                submitMsg = 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.';
+                submitMsg = nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory });
             } else {
                 submitMsg = err?.message || 'Dispenser creation failed.';
             }
@@ -1304,6 +1303,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     checked={payFeeInNativeCoin}
                     onChange={setPayFeeInNativeCoin}
                     coinTicker={coinTicker}
+                    mandatory={nativeFeeMandatory}
                 />
             </div>
 

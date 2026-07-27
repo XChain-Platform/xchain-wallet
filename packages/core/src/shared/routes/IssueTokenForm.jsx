@@ -40,7 +40,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -89,7 +89,8 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [description, setDescription] = useState('');
     const [lockSupply, setLockSupply] = useState(false);
     const [transferTo, setTransferTo] = useState('');
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(chainId);
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
@@ -402,10 +403,8 @@ export function IssueTokenForm({ walletId, onBack }) {
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr && err?.reason === 'unsupported'
-                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
                     : isNativeFeeErr
-                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
+                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
                     : err?.message || 'Issue failed.',
             );
             setStage('review');
@@ -740,6 +739,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
             />
             {formError ? (
                 // Cluster P FOLLOWUP 4: formError surfaces field-level

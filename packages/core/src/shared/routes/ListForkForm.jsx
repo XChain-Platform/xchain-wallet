@@ -191,10 +191,10 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
 
     const coinTicker = descriptor ? { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (LIST is quotable; both fork
+    // PC-51: native-coin protocol fee (LIST is quotable; both fork
     // legs are LIST creates so the opt-in rides both). Authoritative price
     // check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );

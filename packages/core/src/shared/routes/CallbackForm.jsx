@@ -122,9 +122,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (CALLBACK is quotable); the
+    // PC-51: native-coin protocol fee (CALLBACK is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     // Token record: the callback config (CALLBACK_TICK/AMOUNT/BLOCK) and
     // owner, used for the payout preview and the block-height gate.

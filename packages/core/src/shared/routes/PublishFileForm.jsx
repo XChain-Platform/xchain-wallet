@@ -75,11 +75,6 @@ export function PublishFileForm({ walletId, onBack }) {
 
     const [mode, setMode] = useState(/** @type {'public' | 'gated'} */ ('public'));
 
-    // PC-51: opt-in native-coin protocol fee for the PUBLIC lane only
-    // (standalone FILE is quotable; the gated lane composes a BATCH, which
-    // is fee-quote DENIED, so GatedPublishForm has no toggle by design).
-    const nativeFee = useNativeFee();
-
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -189,6 +184,14 @@ export function PublishFileForm({ walletId, onBack }) {
     }, [addressesByChain, chainId]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+
+    // PC-51: native-coin protocol fee for the PUBLIC lane only (standalone
+    // FILE is quotable; the gated lane composes a BATCH, which is fee-quote
+    // DENIED, so GatedPublishForm has no toggle by design). : declared
+    // after `descriptor` because the hook needs the chain to know whether the
+    // native fee is an opt-in (BTC) or the only way to pay (LTC/DOGE).
+    const nativeFee = useNativeFee(descriptor);
+
     const hw = isHwSource(fromAddress);
 
     const [feePick, setFeePick] = useState(

@@ -14,6 +14,15 @@
 // would turn an intended stake into a payout decision (or the reverse).
 
 import { describe, it, expect, vi } from 'vitest';
+
+// The builder-selection tests below never reach submitAction (they stop at the
+// missing signing source), so stubbing it here only affects the  block,
+// which is the one that needs to read the encoderOpts the flow builds.
+const { submitCalls } = vi.hoisted(() => ({ submitCalls: [] }));
+vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
+    submitAction: async (opts) => { submitCalls.push(opts); return { txid: 'tx' }; },
+}));
+
 import {
     createMarketAction,
     placeBetAction,
@@ -108,5 +117,52 @@ describe('flows/betActions up-front guards', () => {
         const sdkRegistry = { get: () => ({ betting: {} }) };
         await expect(placeBetAction({ sdkRegistry, chainId: 'c', params: { feedActionIndex: '1' } }))
             .rejects.toThrow(/sdk\.betting\.placeBetParams is unavailable/);
+    });
+});
+
+// : the native-coin protocol fee. BET charges on create (v0) and place
+// (v2), and on LTC/DOGE a native-coin output is the ONLY way to pay a protocol
+// fee, so a flow that dropped this flag composed a guaranteed-invalid action
+// that still cost a miner fee.
+describe('flows/betActions native-coin fee mode', () => {
+    const FROM = { address: 'ltc1qexample', publicKey: '02aabbcc', derivationPath: "m/84'/2'/0'/0/0" };
+    const base = (h) => ({
+        sdkRegistry: h.sdkRegistry,
+        chainRegistry: {},
+        chainId: 'litecoin-regtest',
+        from: FROM,
+        password: 'pw',
+        trackPendingTx: false,
+    });
+
+    it('forwards the flag into encoderOpts for both fee-bearing formats', async () => {
+        submitCalls.length = 0;
+        const h = harness();
+        await createMarketAction({
+            ...base(h),
+            params: { label: 'L', tick: 'T', outcomes: ['A', 'B'], deadline: 1 },
+            payFeeInNativeCoin: true,
+        });
+        await placeBetAction({
+            ...base(h),
+            params: { feedActionIndex: '5', outcome: 0, amount: '1' },
+            payFeeInNativeCoin: true,
+        });
+        expect(submitCalls).toHaveLength(2);
+        for (const call of submitCalls) {
+            expect(call.encoderOpts.payFeeInNativeCoin).toBe(true);
+            // The flag is the flow's own, never a wire field: it must not reach
+            // the BET params the SDK builder produced.
+            expect(call.actionData.params.payFeeInNativeCoin).toBeUndefined();
+        }
+    });
+
+    it('omits the key entirely when the caller leaves the fee in XCHAIN', async () => {
+        submitCalls.length = 0;
+        const h = harness();
+        await placeBetAction({ ...base(h), params: { feedActionIndex: '5', outcome: 0, amount: '1' } });
+        // Absent rather than false: the encoder contract treats the key's
+        // presence as the request, and a literal false is a payload change.
+        expect('payFeeInNativeCoin' in submitCalls[0].encoderOpts).toBe(false);
     });
 });

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import {
     Screen,
     PageHeader,
@@ -143,7 +143,8 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         /** @type {{ valid: boolean, errors: any[] } | null} */ (null),
     );
 
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(chainId);
 
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'),
@@ -468,10 +469,8 @@ export function AdvancedActionsForm({ walletId, onBack }) {
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr && err?.reason === 'unsupported'
-                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
                     : isNativeFeeErr
-                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
+                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
                     : err?.message || 'Action failed.',
             );
             setStage('review');
@@ -808,6 +807,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
             />
 
             {formError ? (

@@ -38,7 +38,7 @@ import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
@@ -100,7 +100,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin } = useNativeFee();
+    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
+        useNativeFee(chainId);
 
     // PC-16 CoinPay auto-pay consent. Checked by default (operator-ratified):
     // a coin-GIVE order that is not auto-paid is not fire-and-forget.
@@ -400,11 +401,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             if (err?.name === 'InvalidPasswordError') {
                 errorMessage = 'Incorrect password.';
             } else if (err?.name === 'NativeFeeForfeitError') {
-                if (err?.reason === 'unsupported') {
-                    errorMessage = `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`;
-                } else {
-                    errorMessage = 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.';
-                }
+                errorMessage = nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory });
             } else {
                 errorMessage = err?.message || 'Order placement failed.';
             }
@@ -765,6 +762,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
             />
             {payFeeInNativeCoin ? (
                 <p

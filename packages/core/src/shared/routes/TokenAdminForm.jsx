@@ -235,10 +235,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: opt-in native-coin protocol fee (every ISSUE edit version this
+    // PC-51: native-coin protocol fee (every ISSUE edit version this
     // form signs is quotable); authoritative check at submit via
     // applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     // Current on-chain lock state, read via the same useTokenInfo hook
     // ManageToken uses. Shared by `'mint-settings'` (PC-01, four of the

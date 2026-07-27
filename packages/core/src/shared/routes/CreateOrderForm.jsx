@@ -119,9 +119,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
 
-    // PC-51: opt-in native-coin protocol fee (ORDER is quotable); the
+    // PC-51: native-coin protocol fee (ORDER is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee();
+    const nativeFee = useNativeFee(coinTicker);
 
     // GIVE / GET side state. type: 'token' (a tick) or 'coin' (native).
     const [giveType, setGiveType] = useState(/** @type {'token' | 'coin'} */ ('token'));

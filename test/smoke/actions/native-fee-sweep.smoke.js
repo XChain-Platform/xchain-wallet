@@ -40,6 +40,10 @@ for (const f of SWEEP_FORMS) {
     assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
     assert.match(src, /<NativeFeeToggle/, `${f} renders the toggle`);
     assert.match(src, /payFeeInNativeCoin: nativeFee\.flag/, `${f} threads nativeFee.flag into its payloads`);
+    // : the spread is what carries `mandatory` to the toggle; hand-picking
+    // checked/onChange instead would silently drop it and re-open the opt-in on
+    // a chain that has no other fee lane.
+    assert.match(src, /\{\.\.\.nativeFee\.toggleProps\}/, `${f} spreads the whole toggleProps`);
 }
 
 // ---- pre-PC-51 toggle forms migrated onto the shared hook ----
@@ -51,12 +55,35 @@ const MIGRATED = [
 ];
 for (const [dir, f] of MIGRATED) {
     const src = read('packages', 'core', 'src', 'shared', dir, f);
-    assert.match(src, /useNativeFee\(\)/, `${f} state comes from useNativeFee`);
+    assert.match(src, /useNativeFee\(/, `${f} state comes from useNativeFee`);
     assert.doesNotMatch(
         src, /useState\(false\);?\s*\/\/.*native/i,
         `${f} no longer hand-rolls the toggle state`,
     );
+    // : a form that hides `mandatory` would render an unticked opt-in on
+    // LTC/DOGE, which is the pre-fix bug wearing the post-fix hook.
+    assert.match(src, /mandatory=\{nativeFeeMandatory\}/, `${f} passes mandatory to the toggle`);
 }
+
+// ---- : no form may call the hook without naming its chain ----
+// A bare useNativeFee() cannot know whether the native fee is an opt-in (BTC)
+// or the only fee lane (LTC/DOGE), so it defaults to Bitcoin's answer and every
+// fee-bearing action composed on LTC/DOGE indexes `insufficient fee (native
+// coin output required)` after paying a real miner fee.
+const HOOK_CALLERS = [
+    ...SWEEP_FORMS.map((f) => ['routes', f]),
+    ...MIGRATED,
+];
+for (const [dir, f] of HOOK_CALLERS) {
+    const src = read('packages', 'core', 'src', 'shared', dir, f);
+    assert.doesNotMatch(src, /useNativeFee\(\s*\)/, `${f} passes its chain to useNativeFee`);
+}
+
+// ---- the hook and the rule it reads ----
+const hook = read('packages', 'core', 'src', 'shared', 'hooks', 'useNativeFee.js');
+assert.match(hook, /isNativeFeeMandatory/, 'useNativeFee derives the default from the chain');
+const rule = read('packages', 'core', 'src', 'registry', 'nativeFee.js');
+assert.match(rule, /detectFeePaymentMode/, 'the rule cites the indexer function it mirrors');
 
 // ---- flows: the encoder opt reaches submitAction ----
 const SWEEP_FLOWS = [
@@ -80,10 +107,71 @@ assert.doesNotMatch(
     'stale four-action mount rule removed',
 );
 
+// ---- : the BET lane, which the PC-51 sweep never covered ----
+//
+// BET is fee-bearing on two of its four formats and sits in COMMON_ACTIONS, so
+// it is offered on LTC/DOGE, where the native output is the ONLY fee lane. Its
+// two authoring surfaces had no toggle, no hook and no encoderOpts at all, so
+// every market opened and every bet placed on those chains was guaranteed
+// invalid. The wiring is a background/messaging-layer change as well as a form
+// one, which is why the flow and the host route are asserted here too.
+const BET_FORMS = ['CreateBetFeedForm.jsx', 'BetFeedDetail.jsx'];
+for (const f of BET_FORMS) {
+    const src = routes(f);
+    assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
+    assert.doesNotMatch(src, /useNativeFee\(\s*\)/, `${f} passes its chain to useNativeFee`);
+    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\}/,
+        `${f} renders the toggle with the whole toggleProps (so `
+        + 'mandatory survives)');
+    // BOTH lanes: the flag has to be in the composed PSBT the user approves AND
+    // in the submit that signs it. A form that threaded only one would preview
+    // a fee output it never pays for, or pay for one nobody previewed.
+    const composeIdx = src.indexOf('messaging.composeBetForConfirm({');
+    assert.ok(composeIdx !== -1, `${f} composes through the BET route`);
+    const both = src.slice(composeIdx, composeIdx + 900);
+    assert.equal(
+        (both.match(/payFeeInNativeCoin: nativeFee\.flag/g) || []).length, 2,
+        `${f} threads the flag into BOTH compose and submit`,
+    );
+    // The LTC/DOGE-aware wording, not the BTC-era "turn it off" advice.
+    assert.match(src, /nativeFeeErrorMessage\(err, \{ coinTicker, mandatory: nativeFee\.mandatory \}\)/,
+        `${f} explains a refused native-fee quote in chain-aware wording`);
+}
+
+// The two FREE formats stay toggle-free: resolve (v3) and cancel (v1) emit only
+// credits that were pre-funded at place time, so the chain charges nothing and a
+// toggle there would ask for a fee that does not exist.
+const oracleConsole = routes('OracleConsole.jsx');
+assert.doesNotMatch(oracleConsole, /<NativeFeeToggle/,
+    'OracleConsole (resolve/cancel, both free) has no toggle');
+assert.match(oracleConsole, //,
+    'OracleConsole records WHY it has no toggle, so a later sweep does not add one');
+
+assert.match(
+    flows('betActions.js'),
+    /opts\.payFeeInNativeCoin !== undefined && \{ payFeeInNativeCoin: opts\.payFeeInNativeCoin \}/,
+    'betActions forwards payFeeInNativeCoin into encoderOpts',
+);
+{
+    // BET composes host-side through its own route (the builder runs there), so
+    // that route is the only place the flag can enter the previewed PSBT.
+    const host = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
+    const idx = host.indexOf("host.register('action.bet.composeForConfirm'");
+    assert.ok(idx !== -1, 'the BET compose route exists');
+    assert.match(
+        host.slice(idx, idx + 3000),
+        /req\?\.payFeeInNativeCoin !== undefined && \{ payFeeInNativeCoin: req\.payFeeInNativeCoin \}/,
+        'action.bet.composeForConfirm threads payFeeInNativeCoin into encoderOpts',
+    );
+}
+
 // ---- the gated (BATCH) lane stays toggle-free: BATCH is fee-quote DENIED ----
 const gated = routes('GatedPublishForm.jsx');
 assert.doesNotMatch(gated, /<NativeFeeToggle/, 'GatedPublishForm (BATCH lane) has no toggle');
 const batchComposer = routes('BatchComposerForm.jsx');
 assert.doesNotMatch(batchComposer, /<NativeFeeToggle/, 'BatchComposerForm (BATCH) has no toggle');
 
-console.log('native-fee-sweep smoke: all assertions passed');
+console.log(
+    'native-fee-sweep smoke: all assertions passed (PC-51 sweep +  mandatory-chain '
+    + 'derivation +  BET lane, form/flow/host)',
+);
