@@ -254,6 +254,10 @@ export function AddressList({
     const [showWifForm, setShowWifForm] = useState(false);
     const [wifChainId, setWifChainId] = useState('');
     const [wifInput, setWifInput] = useState('');
+    // D-68: a WIF is a spending key, so it is masked like a password by
+    // default. It still needs a reveal, because the one thing a user must be
+    // able to do here is check that what they pasted is what they meant.
+    const [wifRevealed, setWifRevealed] = useState(false);
     const [wifLabel, setWifLabel] = useState('');
     const [wifPassword, setWifPassword] = useState('');
     const [wifAddressType, setWifAddressType] = useState('');
@@ -506,6 +510,7 @@ export function AddressList({
                         ) : null}
                         <Input
                             label="WIF private key"
+                            type={wifRevealed ? 'text' : 'password'}
                             value={wifInput}
                             onChange={(e) => {
                                 setWifInput(e.target.value);
@@ -516,6 +521,14 @@ export function AddressList({
                             spellCheck={false}
                             disabled={wifBusy}
                         />
+                        <button
+                            type="button"
+                            className={wifStyles.wifToggle}
+                            onClick={() => setWifRevealed((s) => !s)}
+                            aria-pressed={wifRevealed}
+                        >
+                            {wifRevealed ? 'Hide private key' : 'Show private key'}
+                        </button>
                         <Input
                             label="Label (optional)"
                             value={wifLabel}
