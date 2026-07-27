@@ -58,20 +58,26 @@ const LEDGER_IDENTITY_PATH = "m/44'/0'/0'";
  * @property {import('../sdk/index.js').SDKRegistry} [sdkRegistry]   REQUIRED for signPsbt; see the note below
  */
 
-// That `sdkRegistry` parameter is UNWIRED today, and without it the
-// signer this factory builds cannot sign a PSBT at all.
-// `LedgerSigner.signPsbt` needs an SDKRegistry (it calls
-// `sdk.wallet.decomposePsbt` + `txidOf`), and the signer this factory
-// returns is the exact instance the shells register with signerBridge,
-// which is what `auth.signPsbt.hw` forwards to. No shell passes one
-// today, so every hardware PSBT signing attempt fails with
+// `sdkRegistry` used to be UNWIRED, and without it the signer this factory
+// builds could not sign a PSBT at all: every hardware attempt failed with
 // "requires an sdkRegistry" (, reproduced against a real device).
 //
-// Left as a parameter rather than fixed here because WHICH registry the
-// shells hand over is an architecture call, not a bug fix: the web
-// shell's lives in hostBridge.js, while the extension keeps its
-// registry in the background service worker and the live signer in the
-// popup, so the popup would need its own instance. Operator decision.
+// It looked like an architecture call - the web shell's registry lives in
+// hostBridge.js, while the extension keeps its registry in the background
+// service worker and the live signer in the popup, so the popup would need an
+// instance of its own - but the question dissolves once you look at what the
+// signer actually ASKS the registry for. `signPsbt` calls exactly two things:
+// `wallet.decomposePsbt` and `wallet.txidOf`. Both are pure PSBT/transaction
+// parsing with no endpoint, no credentials and no network, so there is nothing
+// shell-specific about them and nothing to reach across contexts for.
+//
+// So each shell hands over a decompose-only registry built by
+// `walletOnlyRegistry()` below, from the SDK's own WalletUtils. Core does not
+// import xchain-sdk (it takes the SDK by injection everywhere, and the shells
+// own that import - the extension's is the MV3 static one from ), so the
+// builder takes the class rather than reaching for it. Nothing it returns can
+// touch the network, which is what makes it safe to construct in the popup:
+// the context slice 1 established has no SDK of its own.
 
 /**
  * Build a `pairLedgerSigner` function bound to shell-specific
@@ -169,5 +175,33 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
                 firmwareVersion,
             },
         };
+    };
+}
+
+/**
+ * A minimal SDKRegistry that can answer ONLY the pure wallet-utility calls a
+ * hardware signer makes (`decomposePsbt`, `txidOf`). Constructed lazily per
+ * chainId and cached, because WalletUtils resolves a network descriptor on
+ * construction and a signer signs for one chain many times.
+ *
+ * It deliberately exposes nothing but `wallet`: if a signer path ever starts
+ * needing an explorer or an encoder, it should fail loudly here rather than
+ * quietly acquire network access in a context that is not supposed to have any.
+ *
+ * Takes the class instead of importing it, because core reaches the SDK only
+ * through injection and the shells own that import.
+ *
+ * @param {any} WalletUtils   the SDK's WalletUtils class
+ * @returns {{ get: (chainId: string) => { wallet: any } }}
+ */
+export function walletOnlyRegistry(WalletUtils) {
+    const cache = new Map();
+    return {
+        get(chainId) {
+            if (!cache.has(chainId)) {
+                cache.set(chainId, { wallet: new WalletUtils(chainId) });
+            }
+            return cache.get(chainId);
+        },
     };
 }

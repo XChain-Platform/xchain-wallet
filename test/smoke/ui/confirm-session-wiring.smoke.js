@@ -85,9 +85,94 @@ const storeFiles = readdirSync(bgDir)
 assert.ok(storeFiles.includes('confirmActionSessionStorage.js'),
     'the confirm-session adapter must still own storage.session');
 
+// --- 6. the CLIENT half is wired on every shell ------------------------
+//
+// The host half alone was the same defect one level up: three routes nobody
+// called. The handover for this item said it in as many words - "do not
+// half-wire it, it is end-to-end or not at all" - so every link in that chain
+// is asserted here, from the shell method to the screen the user taps.
+
+for (const shell of [
+    ['packages', 'extension', 'src', 'popup', 'messaging.js'],
+    ['packages', 'web', 'src', 'messaging.js'],
+    ['packages', 'desktop', 'renderer', 'messaging.js'],
+]) {
+    const src = read(...shell);
+    for (const route of ['action.confirmSession.put', 'action.confirmSession.list', 'action.confirmSession.clear', 'action.inputLiveness']) {
+        assert.ok(src.includes(`'${route}'`),
+            `${shell.join('/')} must expose ${route}`);
+    }
+}
+
+// --- 7. the hook writes on open and clears on EVERY terminal -----------
+//
+// `clear` lives in teardown rather than beside each terminal branch because
+// teardown is the ONE path approve, reject, error and unmount all pass
+// through; a per-branch clear is a list someone will add a branch to.
+
+const hook = read('packages', 'core', 'src', 'shared', 'hooks', 'useConfirmAction.js');
+assert.match(hook, /persistSession\(args, sessionIdRef\.current, built, null\)/,
+    'the hook must persist the confirm when the modal opens');
+assert.match(hook, /session\.clear\(id\)/,
+    'the hook must clear the stored confirm');
+assert.ok(/const teardown = useCallback\(\(\) => \{[\s\S]*?session\.clear\(id\)/.test(hook),
+    'clear must live in teardown, the single path every terminal state passes through');
+
+// The §4.6 gate: a resumed confirm may never be approved without proving its
+// inputs are still unspent.
+assert.match(hook, /alwaysCheckInputs/,
+    'the hook must support forcing the liveness probe (the resume path)');
+assert.match(hook, /reason: 'inputs-spent'/,
+    'spent inputs must interrupt rather than sign');
+
+// --- 8. the user can actually reach it ---------------------------------
+
+const home = read('packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
+assert.match(home, /ResumeConfirmCard/, 'Home must render the resume card');
+assert.match(home, /listConfirmSessions/, 'Home must load the stored confirms');
+
+const popup = read('packages', 'extension', 'src', 'popup', 'App.jsx');
+assert.match(popup, /ResumeConfirm/, 'the popup must route to the resume screen');
+assert.match(popup, /onResumeConfirm=/, 'Home must be given the resume navigation');
+
+const resume = read('packages', 'core', 'src', 'shared', 'routes', 'ResumeConfirm.jsx');
+assert.match(resume, /alwaysCheckInputs: true/,
+    'the resume screen must force the §4.6 liveness gate: a stored PSBT is the oldest in the wallet');
+assert.match(resume, /clearConfirmSession/,
+    'the resume screen must clear the session it consumed');
+assert.match(resume, /resumeDispatch/,
+    'the resume screen must dispatch through the allow-list, never a stored name directly');
+assert.ok(!/password:\s*session/.test(resume),
+    'a credential must never come from the stored session');
+
+// --- 9. at least one form opts in --------------------------------------
+//
+// Persistence is opt-in per form (a stored confirm has to be finishable
+// without its form, and not every Approve can be). Opt-in with no opters is
+// the inert-module shape this whole smoke exists to prevent.
+
+const optedIn = ['Send.jsx', 'AirdropForm.jsx'].filter((f) => {
+    const src = read('packages', 'core', 'src', 'shared', 'routes', f);
+    return /resume:\s*\{/.test(src) && /software:/.test(src);
+});
+assert.ok(optedIn.length >= 2,
+    `at least two forms must opt into confirm persistence (found: ${optedIn.join(', ') || 'none'})`);
+
+// AirdropForm is the form that proves the bookkeeping hazard is solved rather
+// than dodged: its pending record is written AFTER Approve, so a resume that
+// broadcast the LIST without it would orphan the airdrop mid-flight.
+const airdrop = read('packages', 'core', 'src', 'shared', 'routes', 'AirdropForm.jsx');
+assert.match(airdrop, /after:\s*\{[\s\S]*?savePendingAirdrop/,
+    'AirdropForm must carry its post-broadcast bookkeeping in the resume descriptor');
+assert.match(airdrop, /txidPath/,
+    'the follow-up must receive the broadcast txid it could not know in advance');
+
 console.log(
     'OK: confirm session wiring smoke (: putSession/loadSessions/removeSession all have production '
     + 'callers in createBackgroundHost; put/list/clear routes registered; clear is mandatory so a stale session '
     + 'cannot invite a re-approve of an already-broadcast tx; reservations and sessions share one storage.session '
-    + 'adapter; the dispatch descriptor crosses the boundary as an allow-listable name, not a closure)',
+    + 'adapter; the dispatch descriptor crosses the boundary as an allow-listable name, not a closure; the CLIENT '
+    + 'half is wired on all three shells, the hook persists on open and clears in teardown, the §4.6 liveness gate '
+    + 'is forced on resume, Home + the popup route reach the screen, and two forms opt in - one of them carrying '
+    + 'its own post-broadcast bookkeeping)',
 );

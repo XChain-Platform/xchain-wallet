@@ -96,16 +96,37 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      *   Must resolve with the same tamper-verified envelope
      *   `action.composeForConfirm` returns. Defaults to the generic route.
      * @param {(prebuiltPsbt: { psbtHex: string, encoding: string, actionString: string, version: any }, composed: object) => Promise<any>} args.onApprove
+     * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
+     *    §5.4 opt-in. Supply it only when this form's Approve can be
+     *   completed away from the form: `software`/`hardware` name the same
+     *   messaging methods `useConfirmSubmit` dispatches, `base` is the request
+     *   body minus `prebuiltPsbt`/credentials, and `after` carries any
+     *   post-broadcast bookkeeping the form would otherwise have done itself.
      * @returns {Promise<any>}   resolves with onApprove's return value; rejects with the
      *   documented reasons from useConfirmAction (`busy`, `user-rejected`).
      */
-    const run = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove }) => (
+    const run = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume }) => (
         confirmAction.confirm({
             chainId,
             source: from?.address,
             preflightOpts: {
                 mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
             },
+            // §4.6: every migrated form gets the input-liveness half of the
+            // Approve-time re-check, not just the pre-flight half.
+            checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+            //  §5.4: persistence is opt-in per form, via `resume`. The
+            // store is wired for all of them so opting in is one argument, but
+            // a form that has not said how its Approve completes without it
+            // stores nothing - see the `resume` contract in useConfirmAction.
+            ...(resume ? {
+                resume,
+                resumeRequest: { chainId, from, actionData, encoderOpts },
+                session: {
+                    put: (payload) => messaging.putConfirmSession(payload),
+                    clear: (id) => messaging.clearConfirmSession({ id }),
+                },
+            } : {}),
             compose: compose || (() => messaging.composeForConfirm({
                 walletId,
                 chainId,

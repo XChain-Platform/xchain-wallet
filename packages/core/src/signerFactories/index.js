@@ -16,4 +16,4 @@
 // Intended call-sites: `packages/{extension,web,desktop}/…/signerFactories/`.
 
 export { makeTrezorFactory } from './trezor.js';
-export { makeLedgerFactory } from './ledger.js';
+export { makeLedgerFactory, walletOnlyRegistry } from './ledger.js';

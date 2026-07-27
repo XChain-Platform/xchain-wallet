@@ -294,6 +294,38 @@ await assert.rejects(
     /different outpoint than this PSBT names/,
     'a witnessUtxo-only input is refused, not signed against a synthesized prev tx',
 );
+
+// ...and the SAME segwit input signs correctly once the real prev tx rides
+// along (, the completing fix). The encoder now attaches it on request
+// (`attachPrevTx`, set when the source is a device) so the PSBT the user
+// previews already carries it - hydrating it after the preview would sign
+// bytes the §5.3.2 tamper check never saw.
+//
+// This is the leg that could not be faked: it proves the device accepts the
+// envelope AND that the outpoint it signs is the one the PSBT names. The
+// refusal above and this pass are the same input differing only by the prev
+// tx, which is what makes the pair meaningful.
+const hydratedPsbt = new bitcoin.Psbt({ network: bitcoin.networks.bitcoin });
+hydratedPsbt.addInput({
+    hash: prevTxid,
+    index: 0,
+    witnessUtxo: { script: p2pkh.output, value: 100000 },
+    nonWitnessUtxo: prevTx.toBuffer(),
+});
+hydratedPsbt.addOutput({ script: p2pkh.output, value: 90000 });
+
+const hydratedSigned = await withApproval(() => signingSigner.signPsbt({
+    psbtHex: hydratedPsbt.toHex(),
+    chainId: 'bitcoin-mainnet',
+    signingPaths: [{ inputIndex: 0, path: LEGACY_PATH }],
+}));
+const hydratedTx = bitcoin.Transaction.fromHex(hydratedSigned.txHex);
+assert.equal(
+    Buffer.from(hydratedTx.ins[0].hash).reverse().toString('hex'),
+    prevTxid,
+    'an input carrying BOTH utxo fields signs the outpoint the PSBT names',
+);
+assert.ok(hydratedTx.ins[0].script.length > 100, 'the hydrated input carries a real scriptSig');
 }
 
 // --- 6. the Bitcoin Test app must be refused by name ------------------
@@ -315,7 +347,7 @@ console.log(
     + 'identity xpub, getStatus available/wrong-app, address derivation, message signed and '
     + 'approved on-device with the path + message shown on screen'
     + (WalletUtils ? ', PSBT signed on-device spending the outpoint the PSBT named, '
-        + 'witnessUtxo-only input refused' : '')
+        + 'witnessUtxo-only input refused, the SAME input signed once its real prev tx rides along ( completing fix)' : '')
     + (TESTNET_API ? ', Test app refused by name)' : ')'),
 );
 console.log(`  device: ${pairingInfo.model} / app ${pairingInfo.firmwareVersion} / id ${pairingInfo.deviceIdentifier}`);

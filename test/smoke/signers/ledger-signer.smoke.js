@@ -560,6 +560,34 @@ for (const sym of [
     );
 }
 
+// --- 13. every shell hands the paired signer an sdkRegistry  ---
+//
+// Defect 4: makeLedgerFactory is the ONLY construction site, and no shell
+// passed one, so every hardware PSBT attempt threw "requires an sdkRegistry" -
+// on the default path, for the default address type. Invisible to any test
+// that stopped at the wallet's own boundary, and it stayed that way until a
+// device was put in front of it.
+//
+// The registry is deliberately wallet-only (decomposePsbt + txidOf are pure),
+// which is what makes it constructible in the popup, the context that has no
+// SDK of its own. Asserted per shell rather than once, because the whole class
+// of defect here is one shell being wired and another not.
+
+for (const [label, rel] of [
+    ['extension', ['packages', 'extension', 'src', 'signers', 'ledgerFactory.js']],
+    ['desktop', ['packages', 'desktop', 'renderer', 'signerFactories', 'ledgerFactory.js']],
+]) {
+    const src = readFileSync(join(wsRoot, ...rel), 'utf8');
+    assert.match(src, /sdkRegistry:\s*walletOnlyRegistry\(/,
+        `${label} must hand the paired Ledger signer an sdkRegistry (: none did, so no hardware PSBT could be signed)`);
+    // The deep module path, not the package index: importing the index puts it
+    // in the popup graph, which makes the worker's fallback import() a real
+    // dynamic chunk it cannot execute . The sdk-wiring smoke asserts
+    // the artifact; this asserts the cause, where the fix is readable.
+    assert.match(src, /from 'xchain-sdk\/src\/wallet\.js'/,
+        `${label} must import the wallet MODULE, not the package index`);
+}
+
 console.log(
     'OK: ledger signer smoke (class conforms to Signer interface against DI mock; getStatus distinguishes wrong-app / disconnected / available; getAddresses path derivation for BTC/LTC/DOGE; deriveLedgerDeviceIdentifier deterministic; signPsbt pipes through sdk.decomposePsbt -> Ledger envelope builder -> createPaymentTransaction; signMessage composes base64 compact sig with address-type header base; factories declared in both shells; core has zero Ledger SDK imports)',
 );

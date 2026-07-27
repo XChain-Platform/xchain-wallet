@@ -1330,6 +1330,29 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 },
                 compose: () => messaging.composeForConfirm(sendBase),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // §4.6: the input-liveness half of the Approve-time re-check.
+                // A send left on the confirm page past a competing spend used
+                // to sign a PSBT whose coins were already gone and find out at
+                // broadcast, in the permanent terminal §5.3.4 forbids
+                // re-signing out of.
+                checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                //  §5.4: Send opts into confirm persistence. It is the
+                // form the popup-close hazard costs the most (most-used, and a
+                // hardware prompt closes the popup by taking focus), and its
+                // Approve is a bare dispatch - everything it does afterwards is
+                // this screen's own display state, so finishing it from Home
+                // loses nothing but the draft clear below.
+                session: {
+                    put: (payload) => messaging.putConfirmSession(payload),
+                    clear: (id) => messaging.clearConfirmSession({ id }),
+                },
+                resume: {
+                    software: 'sendToken',
+                    hardware: 'sendAssetHw',
+                    base: sendBase,
+                    label: `send ${String(amount).trim()} ${tick.trim().toUpperCase()}`,
+                },
+                resumeRequest: sendBase,
                 // : the HW route runs the SAME send flow with a remote
                 // signer, so it signs the prebuilt PSBT byte-identically.
                 onApprove: (_creds, composed) => {

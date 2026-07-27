@@ -1735,6 +1735,22 @@ export function createBackgroundHost(deps) {
             };
         }
 
+        // : a device source needs each segwit input's FULL previous
+        // transaction in the PSBT. Ledger takes the outpoint it signs from
+        // those bytes rather than from the PSBT's own txid, so a
+        // witnessUtxo-only input - which is what the encoder builds by default,
+        // for the default address type - cannot be signed on hardware at all.
+        //
+        // Requested HERE, at the single compose, rather than hydrated later:
+        // §5.3's guarantee is that the PSBT the user previewed is the one that
+        // gets signed, and adding inputs' prev txs after the tamper check would
+        // mean signing bytes nobody checked. Software sources do not ask for
+        // it, so they keep today's PSBT size on a path that crosses the
+        // messaging boundary and now also lands in storage.session (§5.4).
+        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
+            encoderOpts = { ...encoderOpts, attachPrevTx: true };
+        }
+
         // Own addresses on this chain: change back to any of them is not a
         // tamper. Best-effort - the source address is always added by the
         // flow, so a resolve failure only loosens change detection to that.
@@ -1957,6 +1973,50 @@ export function createBackgroundHost(deps) {
             bypassCache: req.bypassCache === true,
             preflight: req.mode || 'report',
         });
+    });
+
+    // §4.6 input liveness: are the coins this PSBT spends still unspent?
+    //
+    // The other half of the Approve-time re-check, and the one that was never
+    // built: only the pre-flight re-run shipped, so a confirm page held open
+    // past a competing spend signed a dead PSBT and discovered it at broadcast,
+    // in the permanent terminal §5.3.4 forbids re-signing out of. A RESUMED
+    // confirm (§5.4) is the same hazard aged deliberately, which is why the
+    // resume path gates on this before it will let anyone approve.
+    //
+    // Fails to `unknown`, never to `spent` (see flows/inputLiveness.js): an
+    // address that did not answer is absent from the map rather than
+    // present-and-empty, because present-and-empty is what PROVES a spend.
+    host.register('action.inputLiveness', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.inputLiveness: chainId is required');
+        }
+        if (typeof req?.psbtHex !== 'string' || !req.psbtHex) {
+            throw new Error('action.inputLiveness: psbtHex is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
+            throw new Error(`action.inputLiveness: SDK for "${chainId}" lacks wallet.decomposePsbt`);
+        }
+        const { inputs } = sdk.wallet.decomposePsbt(req.psbtHex);
+        const addresses = flows.inputAddresses(inputs);
+        const encoder = sdk.encoder;
+        /** @type {Record<string, Array<{txid: string, vout: number}>>} */
+        const utxosByAddress = {};
+        if (encoder && typeof encoder.getUTXOs === 'function') {
+            // Per address, and only the ones that answer. Queried in parallel:
+            // this runs inside the Approve-time budget, where a serial walk of
+            // a multi-address input set would spend it on round trips.
+            await Promise.all(addresses.map(async (address) => {
+                try {
+                    const res = await encoder.getUTXOs(address);
+                    const list = Array.isArray(res?.utxos) ? res.utxos : Array.isArray(res) ? res : null;
+                    if (list) utxosByAddress[address] = list;
+                } catch { /* absent => unknown, never spent */ }
+            }));
+        }
+        return flows.checkInputLiveness({ inputs, utxosByAddress });
     });
 
     // §4.7: register / release an in-flight approval reservation. The hook

@@ -102,3 +102,39 @@ describe('@ledgerhq/hw-app-btc surface the wallet depends on', () => {
         expect(helper.getAppAndVersion.length).toBe(1);
     });
 });
+
+//  defect 4: `makeLedgerFactory` never passed an sdkRegistry, and it is
+// the only construction site, so EVERY hardware PSBT attempt threw "requires an
+// sdkRegistry". It looked like an architecture call - which shell's registry? -
+// until you look at what the signer asks for: decomposePsbt and txidOf, both
+// pure parsing. `walletOnlyRegistry` is the answer to that question, and these
+// pin the two properties that make it safe to build in a popup.
+describe('walletOnlyRegistry ', () => {
+
+    it('answers per chainId and caches the instance', async () => {
+        const { walletOnlyRegistry } = await import('../../../packages/core/src/signerFactories/ledger.js');
+        let built = 0;
+        class FakeWalletUtils {
+            constructor(chainId) { this.chainId = chainId; built += 1; }
+        }
+        const registry = walletOnlyRegistry(FakeWalletUtils);
+
+        const a = registry.get('bitcoin-mainnet');
+        const b = registry.get('bitcoin-mainnet');
+        expect(a).toBe(b);                       // a signer signs for one chain many times
+        expect(a.wallet.chainId).toBe('bitcoin-mainnet');
+        expect(built).toBe(1);
+
+        registry.get('litecoin-mainnet');
+        expect(built).toBe(2);
+    });
+
+    it('exposes ONLY wallet, so no signer path can quietly acquire network access', async () => {
+        const { walletOnlyRegistry } = await import('../../../packages/core/src/signerFactories/ledger.js');
+        class FakeWalletUtils {}
+        const entry = walletOnlyRegistry(FakeWalletUtils).get('bitcoin-mainnet');
+        expect(Object.keys(entry)).toEqual(['wallet']);
+        expect(entry.explorer).toBeUndefined();
+        expect(entry.encoder).toBeUndefined();
+    });
+});

@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
+import { livenessMessage } from '../../flows/inputLiveness.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -68,6 +69,14 @@ export function useConfirmAction() {
     const optsRef = useRef(null);
     const composedRef = useRef(null);
     const reportStampRef = useRef(0);
+    // When the PSBT on screen was BUILT. Distinct from the report stamp
+    // because §4.6's two re-checks have different clocks: the pre-flight
+    // verdict ages against its own fetch, while the held PSBT's inputs age
+    // from the moment the encoder selected them - and a confirm that never
+    // got a report at all (pre-flight off, offline, timed out) still holds a
+    // PSBT whose coins someone else can spend.
+    const composedStampRef = useRef(0);
+    const sessionIdRef = useRef(null);
 
     const [phase, setPhase] = useState(/** @type {ConfirmPhase} */('idle'));
     const [composing, setComposing] = useState(false);
@@ -93,6 +102,21 @@ export function useConfirmAction() {
         const o = optsRef.current;
         if (o && o.reservationLedger && o.reservationId) {
             Promise.resolve(o.reservationLedger.release(o.reservationId)).catch(() => {});
+        }
+        //  §5.4: drop the stored confirm on EVERY terminal state, which
+        // is what this single teardown covers - approve, reject, error, and
+        // the unmount of a form navigated away from mid-confirm. Mandatory
+        // rather than tidy-up: a session that outlives its confirm offers the
+        // user a re-approve of a transaction that may already be signed and
+        // broadcast, the §5.3.4 double-broadcast trap.
+        //
+        // A popup CLOSE deliberately does NOT reach here - React runs no
+        // cleanup when the page is destroyed - which is precisely how the
+        // session survives the one event it exists for.
+        if (o && o.session && sessionIdRef.current) {
+            const id = sessionIdRef.current;
+            sessionIdRef.current = null;
+            Promise.resolve(o.session.clear(id)).catch(() => {});
         }
     }, []);
 
@@ -126,6 +150,18 @@ export function useConfirmAction() {
      * @param {object} [args.preflightOpts]         { mode?, localDeltas? } forwarded to preflight
      * @param {object} [args.reservationLedger]     §4.7 ledger (reserve/release/localDeltas)
      * @param {{ tick?: string, amount?: string }} [args.reserve]  the amount to reserve at Approve
+     * @param {(psbtHex: string) => Promise<{verdict: string, spent: Array<object>}>} [args.checkInputs]  §4.6 input-liveness probe (messaging.checkInputLiveness)
+     * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
+     * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session]   §5.4 confirm-session store
+     * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
+     *   How to finish this confirm WITHOUT its originating form. Supplying it is
+     *   what opts the surface into persistence: `software`/`hardware` are
+     *   allow-listed messaging method names, `base` the request body they take,
+     *   `after` an optional follow-up call (a form's own post-broadcast
+     *   bookkeeping, e.g. AirdropForm's pending record) and `returnTo` where to
+     *   drop the user afterwards. A form that does not supply one stores
+     *   nothing and keeps today's re-entry cost.
+     * @param {object} [args.resumeRequest]         the compose request, stored alongside for display/rehydration
      * @returns {Promise<any>}   resolves with onApprove's own return value; EXCEPT on a
      *   TRANSIENT post-sign broadcast failure (§5.3.4), where it resolves with
      *   `{ queued: true, broadcast: 'queued', error }` - the tx is signed and handed to the
@@ -168,9 +204,22 @@ export function useConfirmAction() {
                 // here means the built PSBT is verified. A tamper (or any
                 // compose failure) rejected above, before this point.
                 composedRef.current = built;
+                composedStampRef.current = Date.now();
                 setComposed(built);
                 setComposing(false);
                 setPhase('preflighting'); // MODAL OPENS HERE
+
+                //  §5.4: persist the composed confirm the moment it is on
+                // screen, before pre-flight, because the hazard it protects
+                // against (the popup closing on focus loss) is likeliest while
+                // the user waits for exactly that. Persisted only when the
+                // caller supplied a `resume` descriptor: a stored confirm has
+                // to be approvable WITHOUT its originating form, and a form
+                // that has not said how is one this must not offer to finish.
+                if (args.session && args.resume) {
+                    sessionIdRef.current = makeSessionId();
+                    persistSession(args, sessionIdRef.current, built, null);
+                }
 
                 // Pre-flight streams in HOST-side; Approve stays disabled until
                 // it lands. Best-effort: any failure (or no preflight backend)
@@ -195,6 +244,10 @@ export function useConfirmAction() {
                     reportStampRef.current = Date.now();
                     setReport(rpt);
                     setPhase('ready');
+                    // Re-persist with the verdict so a resumed confirm renders
+                    // the findings the user was reading instead of a blank
+                    // panel while it re-queries.
+                    if (sessionIdRef.current) persistSession(args, sessionIdRef.current, built, rpt);
                 } catch {
                     if (controller.signal.aborted) return;
                     setReport(null);
@@ -218,8 +271,31 @@ export function useConfirmAction() {
 
         setPhase('signing');
 
+        // §4.6 input liveness. Runs off the PSBT's OWN age, not the report's,
+        // so a confirm that never got a report (pre-flight off, offline, timed
+        // out) is still checked - and `alwaysCheckInputs` forces it for a
+        // resumed confirm (§5.4), which is by construction the oldest PSBT in
+        // the wallet. Spent inputs interrupt: §5.3.4 forbids re-signing this
+        // PSBT, so the only way forward is a re-compose.
+        const psbtAged = Date.now() - composedStampRef.current > STALENESS_MS;
+        if (typeof args.checkInputs === 'function' && (psbtAged || args.alwaysCheckInputs)) {
+            setPhase('rechecking');
+            let liveness = null;
+            try {
+                liveness = await args.checkInputs(built.psbt);
+            } catch { /* unreachable explorer must not block a good tx (§4.2) */ }
+            if (liveness && liveness.verdict === 'spent') {
+                const err = new Error(livenessMessage(liveness));
+                err.code = 'INPUTS_SPENT';
+                setError(err);
+                setPhase('ready');
+                return { interrupted: true, reason: 'inputs-spent', liveness };
+            }
+            setPhase('signing');
+        }
+
         // §4.6 staleness re-check: if the report is stale, re-check (bypassing
-        // the cache) + re-validate input liveness before signing.
+        // the cache) before signing.
         try {
             const stale = report && (Date.now() - reportStampRef.current > STALENESS_MS);
             if (stale && typeof args.preflight === 'function') {
@@ -342,6 +418,31 @@ function gatherLocalDeltas(args) {
 }
 
 function verdictRank(v) { return v === 'fail' ? 2 : v === 'warn' ? 1 : 0; }
+
+function makeSessionId() {
+    return `cs:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Write the confirm session ( §5.4). Best-effort by design: the store is
+ * a convenience over a re-entry, so a storage hiccup must never interrupt a
+ * confirm the user is standing in front of.
+ */
+function persistSession(args, id, built, report) {
+    if (!args.session || !args.resume) return;
+    Promise.resolve(args.session.put({
+        id,
+        request: args.resumeRequest || null,
+        composed: built,
+        report: report || null,
+        // Stored as messaging METHOD NAMES plus a request body, never a
+        // closure: a stored confirm has to be approvable without its
+        // originating form, and the resume surface allow-lists the names it
+        // will call ('s builder-name precedent).
+        dispatch: args.resume,
+        createdAt: Date.now(),
+    })).catch(() => {});
+}
 
 /**
  * A signing-phase CREDENTIAL failure (§5.3.4) - bad password / declined HW -

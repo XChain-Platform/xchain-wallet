@@ -331,4 +331,166 @@ describe('useConfirmAction', () => {
         expect(result.current.canApprove).toBe(false);
         await act(async () => { result.current.reject(); await p; });
     });
+
+    // §4.6 input liveness . The half of the Approve-time re-check that
+    // was specified in v3 and never built: the pre-flight verdict was re-run,
+    // the held PSBT's inputs never were.
+    describe('§4.6 input liveness', () => {
+
+        const RESUME = { software: 'sendToken', hardware: 'sendAssetHw', base: { walletId: 'w1' } };
+
+        it('does not probe a freshly-composed PSBT', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const checkInputs = vi.fn(async () => ({ verdict: 'live', spent: [] }));
+            let p;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove: async () => 'sent',
+                    chainId: 'btc', preflight: preflightWith(), checkInputs,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { await result.current.approve({}); await p; });
+            expect(checkInputs).not.toHaveBeenCalled();
+        });
+
+        it('interrupts instead of signing when the coins are gone', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => 'sent');
+            const checkInputs = vi.fn(async () => ({ verdict: 'spent', spent: [{ txid: 'aa', vout: 0 }], unknown: [] }));
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove,
+                    chainId: 'btc', preflight: preflightWith(),
+                    checkInputs, alwaysCheckInputs: true,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { out = await result.current.approve({}); });
+            expect(out).toMatchObject({ interrupted: true, reason: 'inputs-spent' });
+            // The signature is what must not have happened: §5.3.4 forbids
+            // re-signing this PSBT, so a dead input has to stop BEFORE onApprove.
+            expect(onApprove).not.toHaveBeenCalled();
+            expect(result.current.error?.code).toBe('INPUTS_SPENT');
+            expect(result.current.phase).toBe('ready');
+            await act(async () => { result.current.reject(); await p; });
+        });
+
+        it('an unreachable liveness probe never blocks a good transaction', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => 'sent');
+            const checkInputs = vi.fn(async () => { throw new Error('explorer down'); });
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove,
+                    chainId: 'btc', preflight: preflightWith(),
+                    checkInputs, alwaysCheckInputs: true,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { await result.current.approve({}); out = await p; });
+            expect(out.ok).toBe('sent');
+            expect(onApprove).toHaveBeenCalled();
+        });
+
+        it('an unknown verdict is not a spent verdict', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => 'sent');
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove,
+                    chainId: 'btc', preflight: preflightWith(),
+                    checkInputs: async () => ({ verdict: 'unknown', spent: [], unknown: [{ txid: 'aa', vout: 0 }] }),
+                    alwaysCheckInputs: true,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { await result.current.approve({}); out = await p; });
+            expect(out.ok).toBe('sent');
+        });
+
+        //  §5.4 lifecycle.
+        it('persists the confirm on open and re-persists it with the verdict', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const put = vi.fn(async () => ({ stored: true }));
+            const clear = vi.fn(async () => ({ cleared: true }));
+            let p;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove: async () => 'sent',
+                    chainId: 'btc', preflight: preflightWith(),
+                    session: { put, clear }, resume: RESUME, resumeRequest: { walletId: 'w1' },
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            expect(put).toHaveBeenCalledTimes(2);
+            const first = put.mock.calls[0][0];
+            expect(first.composed).toBe(COMPOSED);
+            expect(first.report).toBe(null);          // stored BEFORE pre-flight lands
+            expect(first.dispatch).toBe(RESUME);
+            expect(put.mock.calls[1][0].report).toMatchObject({ verdict: 'pass' });
+            expect(put.mock.calls[1][0].id).toBe(first.id);
+            await act(async () => { result.current.reject(); await p; });
+        });
+
+        it('stores nothing when the form declared no resume descriptor', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const put = vi.fn(async () => ({ stored: true }));
+            let p;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove: async () => 'sent',
+                    chainId: 'btc', preflight: preflightWith(), session: { put, clear: vi.fn() },
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            expect(put).not.toHaveBeenCalled();
+            await act(async () => { result.current.reject(); await p; });
+        });
+
+        // The clear contract is a safety requirement, not tidy-up: a session
+        // outliving its confirm offers a re-approve of a possibly-broadcast tx.
+        for (const [name, drive] of [
+            ['approve', async (r) => { await r.current.approve({}); }],
+            ['reject', async (r) => { r.current.reject(); }],
+        ]) {
+            it(`clears the stored confirm on ${name}`, async () => {
+                const { result } = renderHook(() => useConfirmAction());
+                const put = vi.fn(async () => ({ stored: true }));
+                const clear = vi.fn(async () => ({ cleared: true }));
+                let p;
+                await act(async () => {
+                    p = settle(result.current.confirm({
+                        compose: async () => COMPOSED, onApprove: async () => 'sent',
+                        chainId: 'btc', preflight: preflightWith(),
+                        session: { put, clear }, resume: RESUME,
+                    }));
+                });
+                await waitFor(() => expect(result.current.phase).toBe('ready'));
+                await act(async () => { await drive(result); await p; });
+                expect(clear).toHaveBeenCalledWith(put.mock.calls[0][0].id);
+            });
+        }
+
+        it('clears the stored confirm when a terminal broadcast failure rejects', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const put = vi.fn(async () => ({ stored: true }));
+            const clear = vi.fn(async () => ({ cleared: true }));
+            let p;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED,
+                    onApprove: async () => { throw new Error('node unreachable'); },
+                    chainId: 'btc', preflight: preflightWith(),
+                    session: { put, clear }, resume: RESUME,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { await result.current.approve({}); await p; });
+            expect(clear).toHaveBeenCalledWith(put.mock.calls[0][0].id);
+        });
+    });
 });

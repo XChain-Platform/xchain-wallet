@@ -54,6 +54,7 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
@@ -237,6 +238,12 @@ function AppInner() {
     // legacy wallet + locked destination.
     const [sweepCtx, setSweepCtx] = useState(
         /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
+    );
+    //  §5.4: the stored confirm the user chose to finish, held whole
+    // rather than by id so the resume screen never re-reads a store the popup
+    // may have cleared underneath it.
+    const [resumeConfirmSession, setResumeConfirmSession] = useState(
+        /** @type {any} */ (null),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -974,6 +981,21 @@ function AppInner() {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'resume-confirm' && activeWalletId && resumeConfirmSession) {
+                return (
+                    <ResumeConfirm
+                        session={resumeConfirmSession}
+                        onDone={() => {
+                            setResumeConfirmSession(null);
+                            setUnlockedView('home');
+                        }}
+                        onCancel={() => {
+                            setResumeConfirmSession(null);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -2103,6 +2125,11 @@ function AppInner() {
                             setUnlockedView('history');
                         } : undefined}
                         onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
+                        onResumeConfirm={activeWalletId ? (session) => {
+                            if (!session) return;
+                            setResumeConfirmSession(session);
+                            setUnlockedView('resume-confirm');
+                        } : undefined}
                         onResumeAirdrop={activeWalletId ? (id) => {
                             setResumeAirdropId(id);
                             setUnlockedView('airdrop');

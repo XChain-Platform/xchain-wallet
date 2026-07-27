@@ -95,7 +95,14 @@ function walkJs(dir, out = []) {
 }
 
 describe('every named/default import resolves to a real export', () => {
-    it('relative + workspace-alias imports all resolve (no rot)', () => {
+    // Explicit timeout: this walks and parses EVERY js/jsx file under
+    // packages/, so its runtime grows with the codebase and rises again under
+    // the parallel load of a full suite run. At the 20s default it began
+    // overrunning by a few hundred ms - a TIMEOUT, not an assertion failure,
+    // which reads in CI as "the import graph is broken" and sends whoever sees
+    // it hunting a defect that is not there. The budget is generous on purpose:
+    // a walk that genuinely got slow enough to hit 60s is worth investigating.
+    it('relative + workspace-alias imports all resolve (no rot)', { timeout: 60_000 }, () => {
         const root = findRoot();
         const pkgsDir = resolve(root, 'packages');
         const files = walkJs(pkgsDir);

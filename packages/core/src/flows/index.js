@@ -524,6 +524,22 @@ export {
 // same verdict: the core PendingTx drain above, and the extension host's own
 // on-demand queue, which would otherwise retry a dead transaction forever.
 export { classifyBroadcastFailure } from './broadcastPermanence.js';
+// §4.6 input liveness. The host route owns the utxo fetch; the comparison and
+// the "which addresses do I have to ask" question are pure, so both live here
+// and are unit-testable without a chain.
+export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLiveness.js';
+//  §5.4: finishing a stored confirm away from the form that made it.
+export {
+    RESUMABLE_DISPATCH_METHODS,
+    RESUMABLE_AFTER_METHODS,
+    RESUME_TTL_MS,
+    assertNoCredentials,
+    isResumable,
+    resumeDispatch,
+    resumeAfter,
+    describeResumeSession,
+    resumableSessions,
+} from './confirmResume.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
 export {
     markBackupVerified,

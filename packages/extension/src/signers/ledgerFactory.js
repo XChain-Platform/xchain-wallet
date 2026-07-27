@@ -23,7 +23,24 @@
 
 // Cross-package relative path to core; Node smoke scripts resolve
 // this without the pnpm workspace symlink.
-import { makeLedgerFactory } from '../../../core/src/signerFactories/index.js';
+import { makeLedgerFactory, walletOnlyRegistry } from '../../../core/src/signerFactories/index.js';
+//  + : import the wallet MODULE, not the package index.
+//
+// The signer needs only WalletUtils (decomposePsbt + txidOf, both pure). Going
+// through 'xchain-sdk' pulls the package INDEX into the popup graph, which
+// makes it shared between the popup and the service-worker entries - and a
+// shared index means the bundler emits sdkFactory's fallback `import()` as a
+// real dynamic chunk in the worker build, which ServiceWorkerGlobalScope
+// cannot execute. That is exactly how  shipped, and the sdk-wiring
+// smoke's artifact-level assertion caught it here.
+//
+// The deep path keeps that boundary intact: the worker's dynamic import still
+// resolves to the index, which stays background-only and inlined.
+// Namespace + interop, because wallet.js is CJS (`module.exports = WalletUtils`)
+// and a default import does not survive every shell's bundler.
+import * as walletModule from 'xchain-sdk/src/wallet.js';
+
+const WalletUtils = walletModule.default ?? walletModule;
 
 /** @type {any | null} */
 let sharedTransport = null;
@@ -78,6 +95,12 @@ export async function pairLedgerSigner({
             const mod = await appLoader();
             return mod?.default ?? mod;
         },
+        // : without this the paired signer throws "requires an
+        // sdkRegistry" on every PSBT. The popup has no SDK of its own (all SDK
+        // work is host-side, slice 1), but it does not need one: signPsbt only
+        // ever calls decomposePsbt + txidOf, both pure parsing. A registry that
+        // can do nothing else is safe to build right here.
+        sdkRegistry: walletOnlyRegistry(WalletUtils),
     });
     return factory();
 }

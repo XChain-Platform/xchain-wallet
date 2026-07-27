@@ -24,6 +24,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
+import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
@@ -57,6 +58,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+); full mode only, see the §40 note below
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
+ * @param {(session: object) => void} [props.onResumeConfirm]   §5.4: finish a confirm the popup closed on
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
  * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
@@ -81,7 +83,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -130,6 +132,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         /** @type {any[]} */ ([]),
     );
     const [pendingCoinpays, setPendingCoinpays] = useState(
+        /** @type {any[]} */ ([]),
+    );
+    //  §5.4: unfinished confirms (an UNSIGNED composed PSBT the popup
+    // closed on). Same slot as the two cards above; nothing here has moved
+    // money, which is why the card says so in as many words.
+    const [confirmSessions, setConfirmSessions] = useState(
         /** @type {any[]} */ ([]),
     );
     const [multisig, setMultisig] = useState(
@@ -395,6 +403,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         setMultisig(null);
         setPendingAirdrops([]);
         setPendingCoinpays([]);
+        setConfirmSessions([]);
         setLoadError(null);
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
@@ -488,6 +497,17 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         }
                     }
                     setPendingCoinpays(obligations);
+                } catch { /* non-fatal */ }
+            }
+
+            //  §5.4: confirms the popup closed on. Extension-only in
+            // practice (the store is chrome.storage.session), and the route
+            // answers with an empty list on the shells that have none, so no
+            // shell check is needed here.
+            if (typeof messaging.listConfirmSessions === 'function') {
+                try {
+                    const resp = await messaging.listConfirmSessions();
+                    if (!cancelled) setConfirmSessions(resp?.sessions || []);
                 } catch { /* non-fatal */ }
             }
         })();
@@ -694,6 +714,18 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 {/* Inline notice removed; now surfaces in the Alerts panel
                     of the pancake menu instead so the main view stays
                     focused on balances + work, not status banners. */}
+
+                {onResumeConfirm ? (
+                    <ResumeConfirmCard
+                        sessions={confirmSessions}
+                        className={styles.pendingAirdropCard}
+                        onResume={(id) => onResumeConfirm(confirmSessions.find((s) => s.id === id))}
+                        onDiscard={async (id) => {
+                            setConfirmSessions((prev) => prev.filter((s) => s.id !== id));
+                            try { await messaging.clearConfirmSession({ id }); } catch { /* non-fatal */ }
+                        }}
+                    />
+                ) : null}
 
                 {pendingAirdrops.length > 0 && onResumeAirdrop ? (
                     <div role="group" aria-label="Pending airdrops">

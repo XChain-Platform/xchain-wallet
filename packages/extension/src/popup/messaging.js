@@ -369,6 +369,50 @@ export function releaseReservation(opts) {
 }
 
 /**
+ *  §4.6: are the coins the held PSBT spends still unspent? The other
+ * half of the Approve-time re-check, and the gate a RESUMED confirm (§5.4)
+ * must pass before it may be approved at all - a stored session is by
+ * construction the oldest PSBT in the wallet.
+ *
+ * Answers `unknown` rather than `spent` for anything it could not observe, so
+ * a dead explorer can never hard-block a good transaction (§4.2).
+ *
+ * @param {{ chainId: string, psbtHex: string }} opts
+ * @returns {Promise<{ verdict: 'live'|'spent'|'unknown', spent: Array<{txid:string,vout:number}>, unknown: Array<{txid:string,vout:number}> }>}
+ */
+export function checkInputLiveness(opts) {
+    return /** @type {any} */ (sendMessage('action.inputLiveness', opts));
+}
+
+/**
+ *  §5.4: persist the in-flight confirm so a popup CLOSE (which MV3 does
+ * on every focus loss, including the one a hardware prompt causes) costs a tap
+ * instead of re-entering the whole form. Stored in `chrome.storage.session`,
+ * so it dies with the browser session; a no-op on shells without one.
+ *
+ * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
+ */
+export function putConfirmSession(opts) {
+    return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
+}
+
+/** : the stored confirms, for the Home resume card. */
+export function listConfirmSessions() {
+    return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
+}
+
+/**
+ * : drop a stored confirm. Called on EVERY terminal state, not as
+ * tidy-up: a session outliving its confirm invites a re-approve of a
+ * transaction that may already be signed and broadcast (§5.3.4).
+ *
+ * @param {{ id: string }} opts
+ */
+export function clearConfirmSession(opts) {
+    return /** @type {any} */ (sendMessage('action.confirmSession.clear', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5 : watcher-mode helper for the non-Send
  * action surface. Builds an unsigned PSBT for any XChain action without
  * unlocking the wallet, calling a signer, or broadcasting.

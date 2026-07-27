@@ -217,7 +217,14 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     }, [isTick, resumeBlockValue, ticker, memo]);
 
     const decoded = useMemo(() => {
-        if (stage !== 'review' && stage !== 'submitting' && !confirmModalOpen) return null;
+        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // the HOST described from the composed action string
+        // (`composed.decoded`), so this local describer serves the LEGACY
+        // review stage only - the watcher, demo and locked-ECDH path. It used
+        // to also recompute while the confirm page was open, which was work
+        // nothing read and, worse, read like the confirm surface still
+        // depended on form state.
+        if (stage !== 'review' && stage !== 'submitting') return null;
         return decoderLib.decodeAction({
             action: 'SLEEP', params: actionParams, chainId: chainId || undefined, chainRegistry,
         });

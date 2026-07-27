@@ -722,6 +722,44 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
+                //  §5.4. This leg is the reason the resume descriptor
+                // carries an `after` at all: the pending-airdrop record below
+                // is written AFTER Approve, and a resume that broadcast the
+                // LIST without it would leave the user with a published
+                // recipient list, a spent fee, and no airdrop to finish. The
+                // record travels with the session and the resume screen writes
+                // it with the txid it could not know until the broadcast
+                // returned.
+                resume: {
+                    software: 'createList',
+                    hardware: 'createListHw',
+                    base: {
+                        walletId,
+                        chainId,
+                        from,
+                        params: listParams,
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
+                    label: `airdrop recipient list (${listItems.length})`,
+                    after: {
+                        method: 'savePendingAirdrop',
+                        base: {
+                            record: schemasLib.createPendingAirdrop({
+                                walletId,
+                                chainId,
+                                fromAddress: fromAddress.address,
+                                token: token.trim().toUpperCase(),
+                                amountPer: String(amountPer).trim(),
+                                recipients: listItems,
+                                listTxid: '',
+                                listType,
+                                memo: memo.trim() || undefined,
+                            }),
+                        },
+                        txidPath: ['record', 'listTxid'],
+                    },
+                },
             });
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('LIST broadcast did not return a txid.');
