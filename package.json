@@ -37,6 +37,7 @@
         "test:bench:quick": "node test/benchmarks/harness.js --quick",
         "test:mutation": "stryker run test/mutation/stryker.config.mjs",
         "test:a11y": "vitest run --config test/vitest/a11y.config.js",
+        "test:hardware:ledger": "node test/hardware/ledger-speculos.js",
         "test:e2e": "playwright test --config test/e2e/playwright.config.js",
         "test:e2e:headed": "playwright test --config test/e2e/playwright.config.js --headed",
         "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y",
