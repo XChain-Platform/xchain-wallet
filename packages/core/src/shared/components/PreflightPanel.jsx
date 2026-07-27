@@ -48,6 +48,23 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
     return (
         <div
+            // A screen reader registers a live region's POLITENESS when it
+            // first observes the node, and does not reliably pick up an
+            // aria-live change made in place. Every branch of this component
+            // renders a div at the same position with no key, so React
+            // reconciles them to the SAME DOM node - which meant flipping
+            // polite -> assertive on a pass -> fail transition (the §4.6
+            // Approve-time re-check, or the user editing an amount) left the
+            // announcement queued politely instead of interrupting. That is
+            // the single most important thing this surface says: the network
+            // expects your transaction to fail.
+            //
+            // Keying on the POLITENESS (not the verdict) remounts the region
+            // exactly when the level changes, so the AT re-registers it, while
+            // ordinary warn/pass content updates keep the same node and behave
+            // like a normal live region. axe-core cannot see this: it checks
+            // static violations, not announcement dynamics.
+            key={isFail ? 'assertive' : 'polite'}
             className={styles.panel}
             data-testid="preflight-panel"
             data-verdict={report.verdict}
