@@ -76,19 +76,59 @@ describe('simulateAction', () => {
     });
 
     describe('SWEEP', () => {
-        it('zeros every balance row', () => {
+        it('zeros every token row', () => {
             const r = simulateAction({
                 action: 'SWEEP',
                 params: { DESTINATION: 'bc1qrecip' },
                 balances: balances('BTC', '1', [['XCP', '50'], ['FILE', '10']]),
                 feeEstimate: '0',
             });
-            for (const d of r.deltas) {
-                expect(d.after).toBe('0');
-            }
-            expect(r.deltas.find((d) => d.tick === 'XCP')).toBeDefined();
-            expect(r.deltas.find((d) => d.tick === 'FILE')).toBeDefined();
-            expect(r.deltas.find((d) => d.tick === 'BTC')).toBeDefined();
+            expect(r.deltas.find((d) => d.tick === 'XCP').after).toBe('0');
+            expect(r.deltas.find((d) => d.tick === 'FILE').after).toBe('0');
+        });
+
+        // SWEEP moves TICK balances/ownerships/escrow, never the native
+        // coin: it sits in UTXOs and the sweep tx returns change to the
+        // source. Projecting it to zero told a migrating user their whole
+        // coin balance left with the tokens, so they could drop the old
+        // seed with the coin still on it.
+        it('leaves the native coin at the source, less the fee', () => {
+            const r = simulateAction({
+                action: 'SWEEP',
+                params: { DESTINATION: 'bc1qrecip' },
+                balances: balances('BTC', '1', [['XCP', '50']]),
+                feeEstimate: '0.0001',
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            // Same shape every other fee-only action uses: one coin row,
+            // flagged isFee so the sign screen renders it as the fee line.
+            const coin = r.deltas.find((d) => d.tick === 'BTC');
+            expect(coin.isFee).toBe(true);
+            expect(coin.before).toBe('1');
+            expect(coin.after).toBe('0.9999');
+            expect(r.notes.some((n) => /not swept/i.test(n))).toBe(true);
+        });
+
+        it('emits no coin row at all when there is no fee to charge', () => {
+            const r = simulateAction({
+                action: 'SWEEP',
+                params: { DESTINATION: 'bc1qrecip' },
+                balances: balances('BTC', '1', [['XCP', '50']]),
+                feeEstimate: '0',
+            });
+            expect(r.deltas.find((d) => d.tick === 'BTC')).toBeUndefined();
+        });
+
+        it('leaves token balances put when BALANCES=0 (ownerships only)', () => {
+            const r = simulateAction({
+                action: 'SWEEP',
+                params: { DESTINATION: 'bc1qrecip', BALANCES: '0', OWNERSHIPS: '1' },
+                balances: balances('BTC', '1', [['XCP', '50']]),
+                feeEstimate: '0',
+            });
+            expect(r.deltas.find((d) => d.tick === 'XCP')).toBeUndefined();
+            expect(r.notes.some((n) => /ownerships only/i.test(n))).toBe(true);
         });
 
         it('includes the sweep note', () => {

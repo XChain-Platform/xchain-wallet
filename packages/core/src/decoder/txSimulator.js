@@ -139,30 +139,30 @@ function simulateSend(p, balMap, coinTick, feeEstimate) {
     return { deltas, sideEffects: [], notes: [] };
 }
 
-function simulateSweep(_p, balMap, coinTick, _feeEstimate) {
-    // SWEEP empties every non-coin token at the source and the coin
-    // (less the fee). The simulator can only project what it knows
-    // about; every balance row in balMap goes to zero.
+function simulateSweep(p, balMap, coinTick, feeEstimate) {
+    // SWEEP is an XChain action (SWEEP.md): it moves TICK balances,
+    // ownerships and offer escrow. The native coin is NOT swept - it
+    // lives in UTXOs, and the sweep tx pays its fee and returns change
+    // to the source. Projecting the coin to zero here told a migrating
+    // user their whole coin balance was leaving with the tokens.
+    // BALANCES=0 (ownerships only) leaves token balances put too, so
+    // the projection follows the flag rather than assuming it.
+    const sweepsBalances = str(p.BALANCES ?? '1') !== '0';
     const deltas = [];
-    for (const [tick, before] of balMap.entries()) {
-        if (tick === coinTick) continue;
-        deltas.push({ tick, before, after: '0', isCoin: false, isFee: false });
+    if (sweepsBalances) {
+        for (const [tick, before] of balMap.entries()) {
+            if (tick === coinTick) continue;
+            deltas.push({ tick, before, after: '0', isCoin: false, isFee: false });
+        }
     }
+    pushFeeRow(deltas, balMap, coinTick, feeEstimate);
+    const notes = [sweepsBalances
+        ? 'Sweep moves every token balance at the source address to the destination.'
+        : 'Sweep moves ownerships only; token balances stay at the source address.'];
     if (coinTick) {
-        const coinBefore = balMap.get(coinTick) || '0';
-        deltas.push({
-            tick: coinTick,
-            before: coinBefore,
-            after: '0',
-            isCoin: true,
-            isFee: false,
-        });
+        notes.push(`Your ${coinTick} balance is not swept - only the fee leaves this address.`);
     }
-    return {
-        deltas,
-        sideEffects: [],
-        notes: ['Sweep moves every balance at the source address to the destination.'],
-    };
+    return { deltas, sideEffects: [], notes };
 }
 
 function simulateMint(p, balMap, coinTick, feeEstimate) {

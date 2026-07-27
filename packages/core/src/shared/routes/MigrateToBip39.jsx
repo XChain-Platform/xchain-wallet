@@ -196,8 +196,10 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     This wizard creates a new BIP39 wallet. It does not touch
                     your legacy wallet (it stays intact as a reference). After
                     creation, you'll see a side-by-side list of your legacy
-                    addresses and the new BIP39 destinations. Sweep balances
-                    chain-by-chain via the normal Send flow when you're ready.
+                    addresses and the new BIP39 destinations, with a Sweep step
+                    for each chain that moves that address's tokens in one
+                    transaction. Your coin balances are not swept; send those
+                    across yourself once the tokens have landed.
                 </p>
                 <p style={explainParagraphStyle}>
                     Save your new BIP39 recovery phrase somewhere safe. It is

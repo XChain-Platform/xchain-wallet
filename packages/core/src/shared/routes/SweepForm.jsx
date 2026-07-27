@@ -772,8 +772,14 @@ export function SweepForm({
         <form onSubmit={handleReview} noValidate>
             {migrateLane ? (
                 <p className={styles.hint}>
-                    Migration sweep: moves this legacy address's holdings to{' '}
-                    {migrateTo.name || 'your new BIP39 wallet'}.
+                    Migration sweep: moves this legacy address's tokens to{' '}
+                    {migrateTo.name || 'your new BIP39 wallet'}.{' '}
+                    {/* A migrating user is the one person who must not read
+                        this as "everything moved" - SWEEP never touches the
+                        coin, so say where it stays and what is left to do. */}
+                    Your {coinTicker || 'coin'} balance stays on the legacy
+                    address; send it across separately, and keep the legacy
+                    recovery phrase until you have.
                 </p>
             ) : (
                 <div role="alert" className={styles.warnings}>

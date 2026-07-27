@@ -86,7 +86,9 @@ const balances = [
     assert.equal(feeRow.after, '');
 }
 
-// 1c. SWEEP: every non-coin tick → 0; coin → 0; "Sweep moves..." note.
+// 1c. SWEEP: every non-coin tick → 0; the coin is NOT swept (it sits in
+// UTXOs and change returns to the source), so its row is the fee debit
+// only; "Sweep moves..." note.
 {
     const r = decoderLib.simulateAction({
         action: 'SWEEP',
@@ -101,8 +103,11 @@ const balances = [
     const btc = r.deltas.find((d) => d.tick === 'BTC');
     assert.equal(my.after, '0');
     assert.equal(xcp.after, '0');
-    assert.equal(btc.after, '0');
+    assert.equal(btc.before, '0.05');
+    assert.equal(btc.after, '0.0499');
+    assert.equal(btc.isFee, true);
     assert.ok(r.notes.some((n) => /sweep moves/i.test(n)));
+    assert.ok(r.notes.some((n) => /not swept/i.test(n)));
 }
 
 // 1d. MINT to self: token increments; supply side-effect.
