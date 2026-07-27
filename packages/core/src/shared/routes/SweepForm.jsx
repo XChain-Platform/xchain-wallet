@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -199,6 +199,15 @@ export function SweepForm({
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    //  / D-58: every form-level error names the state of one field,
+    // so the moment any of them is edited the message can already be
+    // false. Leaving it up meant an emptied destination sat under "This
+    // is not a valid Bitcoin regtest address", which is not what was
+    // wrong with it. Editing clears; the next submit re-derives.
+    const clearFormError = useCallback(() => {
+        setFormError((prev) => (prev === null ? prev : null));
+    }, []);
 
     // ---- Indicative preview (sweep.preview host route) ----
     const [preview, setPreview] = useState(/** @type {any | null} */ (null));
@@ -768,6 +777,7 @@ export function SweepForm({
                 chainId={chainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
+                    clearFormError();
                     setSourcePickerOpen(false);
                 }}
                 onBack={() => setSourcePickerOpen(false)}
@@ -836,7 +846,7 @@ export function SweepForm({
                     ? `The matching address in ${migrateTo.name || 'the new wallet'}.`
                     : 'Where every selected holding (and released escrow) is credited.'}
                 value={destination}
-                onChange={(e) => setDestination(e.target.value)}
+                onChange={(e) => { setDestination(e.target.value); clearFormError(); }}
                 readOnly={migrateLane}
                 error={destTrimmed && destFormatError ? destFormatError : undefined}
                 autoComplete="off"
@@ -860,7 +870,10 @@ export function SweepForm({
                         <input
                             type="checkbox"
                             checked={flags[c.key]}
-                            onChange={(e) => setFlags((f) => ({ ...f, [c.key]: e.target.checked }))}
+                            onChange={(e) => {
+                                setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
+                                clearFormError();
+                            }}
                         />
                         {' '}{c.label}
                         {preview ? ` (${categoryCount(preview, c.key)})` : ''}
@@ -941,7 +954,10 @@ export function SweepForm({
                             <input
                                 type="checkbox"
                                 checked={ackMissingKeys}
-                                onChange={(e) => setAckMissingKeys(e.target.checked)}
+                                onChange={(e) => {
+                                    setAckMissingKeys(e.target.checked);
+                                    clearFormError();
+                                }}
                             />
                             {' '}Sweep anyway - I understand gated content for{' '}
                             {gateMissingTicks.join(', ')} may become permanently
@@ -964,7 +980,7 @@ export function SweepForm({
             <Input
                 label="Memo (optional)"
                 value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                onChange={(e) => { setMemo(e.target.value); clearFormError(); }}
                 autoComplete="off"
             />
 
@@ -988,7 +1004,14 @@ export function SweepForm({
                     variant="primary"
                     block
                     loading={confirmAction.composing}
-                    disabled={!fromAddress || !destTrimmed || selectedCount === 0 || confirmAction.composing}
+                    //  / D-58: an empty destination and a zero-category
+                    // selection used to disable this button, which hid the two
+                    // handleReview branches that name exactly those problems
+                    // and left the user with a dead button and no reason. Send
+                    // errors on an empty destination rather than disabling;
+                    // this now agrees. Only a missing source (already shown as
+                    // its own alert above) and an in-flight compose disable it.
+                    disabled={!fromAddress || confirmAction.composing}
                 >
                     {!isWatcherMode ? 'Sweep' : 'Preview'}
                 </Button>

@@ -14,7 +14,8 @@
 //
 //   1. Source loading + default selection. `getAddressesByChain`, the
 //      first-chain default (unless a token context locks the chain), and
-//      the "newest change-index-0 HD address" default-from rule.
+//      the chain's active (operating) address as the default source,
+//      falling back to the newest change-index-0 HD address.
 //   2. The `from` descriptor. The exact { address, publicKey,
 //      derivationPath, addressId, source, signerId } object handed to
 //      every submit path.
@@ -40,7 +41,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useSignerReady } from './useSignerReady.js';
 import { useWalletMode } from './useWalletMode.js';
-import { newestHdExternalId } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -80,6 +81,12 @@ export function useActionForm({
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId], loaded alongside the address list.
+    // Stays null until the load settles so the default-from effect below
+    // never picks a fallback address and then swaps it out under the user.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chainId, setChainId] = useState(
         /** @type {string | null} */ (initialChainId || null),
@@ -90,13 +97,23 @@ export function useActionForm({
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // Block 1a: load the account's addresses, default the chain.
+    // Block 1a: load the account's addresses + the active-address map,
+    // default the chain. The active map is best-effort: a host that does
+    // not implement `getActiveAddresses`, or one whose call fails, must
+    // still yield a usable form, so that leg resolves to `{}` instead of
+    // rejecting the pair.
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(noAddressMessage);
@@ -116,10 +133,13 @@ export function useActionForm({
     }, [walletId, messaging]);
 
     // Block 1b: default the fee-paying address for the chosen chain.
-    // Prefer an explicit `initialFromAddress`; otherwise the newest HD
-    // receive-branch (change index 0) address, matching Send/issue.
+    // Prefer an explicit `initialFromAddress` (a token/owner context the
+    // caller resolved); otherwise the chain's ACTIVE address, the one Home
+    // and Send operate on and the one holding the balance on a wallet that
+    // has generated more than one address ( / D-57). Falls back to
+    // the newest HD receive-branch address when no active address applies.
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (!chainId || !addressesByChain || !activeByChain) return;
         const all = addressesByChain[chainId] || [];
         if (initialFromAddress) {
             const match = all.find((a) => a.address === initialFromAddress);
@@ -127,8 +147,8 @@ export function useActionForm({
         }
         // Shared helper: reads change/index from the END of the path, so a
         // counterwallet-legacy m/0'/C/I wallet resolves too .
-        setFromAddressId(newestHdExternalId(all));
-    }, [chainId, addressesByChain, initialFromAddress]);
+        setFromAddressId(preferredSourceId(all, activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain, initialFromAddress]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const fromAddress = useMemo(() => {
