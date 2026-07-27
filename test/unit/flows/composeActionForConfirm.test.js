@@ -209,3 +209,90 @@ describe('composeActionForConfirm', () => {
             .rejects.toThrow(/pubkey is required/);
     });
 });
+
+// : the P2SH/P2WSH chunk lanes, which check 2 skips and check 3 owns.
+//
+// Found by driving a three-recipient SEND through the real form on regtest: the
+// action is past one OP_RETURN, so the encoder picks P2SH, and the confirm
+// pipeline refused it with "The action encoded in the transaction does not
+// match what you approved" before the modal ever opened. The verifier was
+// working exactly as designed (it fails CLOSED with SCRIPTS_MISSING); it was
+// being handed `undefined`, because composeForConfirm dropped the scripts the
+// encoder returned. Every existing test around check 3 supplies its own
+// scripts, so nothing in the suite could see the wiring gap.
+describe('composeActionForConfirm on a chunk lane', () => {
+    const ACTION = 'SEND|1|^1|7|alice|3|bob|1|carol';
+
+    function makeChunkHarness({ carrierScripts } = {}) {
+        const verifyCarrierScripts = vi.fn(({ carrierScripts: scripts }) => (
+            Array.isArray(scripts) && scripts.length
+                ? { ok: true, reason: null, checked: scripts.length }
+                : { ok: false, reason: 'SCRIPTS_MISSING', checked: 0 }
+        ));
+        const sdk = {
+            encoder: {
+                createTx: vi.fn(async () => ({
+                    psbt: 'PSBTHEX',
+                    encoding: 'P2SH',
+                    ...(carrierScripts ? { carrierScripts } : {}),
+                })),
+            },
+            actions: { createAction: vi.fn(() => ({ actionString: ACTION, action: 'SEND', version: 1 })) },
+            wallet: {
+                decomposePsbt: vi.fn(() => ({
+                    outputs: [
+                        // The P2SH data carrier, and change back to the source.
+                        { address: null, scriptPubKeyHex: `a914${'11'.repeat(20)}87`, scriptType: 'p2sh', value: 546 },
+                        { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100 },
+                    ],
+                })),
+            },
+            decoder: {
+                // Never consulted on this lane (check 2 skips a non-OP_RETURN
+                // encoding); present so a call would be visible if that changed.
+                decodeActionStringFromPsbt: vi.fn(() => ({ ok: true, actionString: ACTION })),
+                describe: vi.fn(() => ({ summary: 'described', details: [], warnings: [] })),
+                verifyCarrierScripts,
+            },
+            config: { network: 'regtest' },
+        };
+        return {
+            sdk,
+            verifyCarrierScripts,
+            sdkRegistry: { get: () => sdk },
+            chainRegistry: { get: () => ({ coin: 'BTC', networkKind: 'regtest', adsDonationAddress: 'XXXX' }) },
+            vault: { settings: { get: async () => ({ ads: { enabled: false, perChain: {} } }) } },
+        };
+    }
+
+    const CHUNK_ARGS = (h) => ({
+        vault: h.vault, chainRegistry: h.chainRegistry, sdkRegistry: h.sdkRegistry,
+        chainId: 'btc',
+        actionData: { action: 'SEND', params: { legs: [] } },
+        encoderOpts: { pubkey: 'pub' },
+        source: 'chg',
+        ownAddresses: ['chg'],
+    });
+
+    it('hands the verifier the scripts create_tx committed to', async () => {
+        const h = makeChunkHarness({ carrierScripts: ['aa11', 'bb22'] });
+        const composed = await composeActionForConfirm(CHUNK_ARGS(h));
+        expect(composed.tamperVerified).toBe(true);
+        expect(h.verifyCarrierScripts).toHaveBeenCalledTimes(1);
+        const args = h.verifyCarrierScripts.mock.calls[0][0];
+        expect(args.carrierScripts).toEqual(['aa11', 'bb22']);
+        // The verifier reads the outputs off the PSBT being signed, and the
+        // action it compares against is the composed one, not form params.
+        expect(args.psbt).toBe('PSBTHEX');
+        expect(args.encoding).toBe('P2SH');
+        expect(args.actionString).toBe(ACTION);
+    });
+
+    it('still fails closed when the encoder returns no scripts at all', async () => {
+        // The point of the fix is delivery, not leniency: an encoder that
+        // cannot say what it committed to is still unverifiable, and this lane
+        // carries the largest payloads in the protocol.
+        const h = makeChunkHarness();
+        await expect(composeActionForConfirm(CHUNK_ARGS(h))).rejects.toThrow(TamperDetectedError);
+    });
+});

@@ -70,6 +70,31 @@ describe('composeForConfirm', () => {
         h.sdk.encoder = null;
         await expect(composeForConfirm(BASE_ARGS(h))).rejects.toThrow(/encoder not initialized/);
     });
+
+    // . The §5.3.2 check-3 verifier fails CLOSED when it gets no scripts,
+    // so dropping them here did not weaken a check, it made every chunk-lane
+    // action impossible to send: a three-recipient SEND is past one OP_RETURN,
+    // takes the P2SH lane, and the confirm pipeline rejected it as tampered
+    // before the modal opened. Every test around the check passed its own
+    // scripts in, so this gap was invisible until a browser drove the form.
+    it('carries the encoder\'s carrier scripts through to the tamper check', async () => {
+        const h = makeHarness();
+        h.sdk.encoder.createTx = vi.fn(async () => ({
+            psbt: 'PSBTHEX', encoding: 'P2SH', carrierScripts: ['aa11', 'bb22'],
+        }));
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(composed.encoding).toBe('P2SH');
+        expect(composed.carrierScripts).toEqual(['aa11', 'bb22']);
+    });
+
+    it('reports no carrier scripts as an empty list, never undefined', async () => {
+        // An encoder that returns none (older build, stripped response) must
+        // still produce the shape the check reads, so "missing" reaches the
+        // verifier as missing rather than as a malformed argument.
+        const h = makeHarness();
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(composed.carrierScripts).toEqual([]);
+    });
 });
 
 // : a plain native-coin payment carries no XChain action.
@@ -130,5 +155,77 @@ describe('composeForConfirm bare native payments ', () => {
         expect(composed.bareNativePayment).toBe(false);
         expect(composed.actionString).toBe('SEND|0|JDOG|1|addr');
         expect(composed.expectedOutputs.encoding).toBe('OP_RETURN');
+    });
+});
+
+// : a BET composed on a chain where the native coin is the ONLY fee lane.
+//
+// This is the ledger's verify line one layer below the chain: compose a BET with
+// the native-fee mode on and confirm a FEE_DESTINATION output is present in the
+// PSBT the user is about to approve. It has to be HERE, inside the composed
+// bytes, rather than added at submit time: the confirm page previews and the
+// tamper check verifies exactly these outputs, so a fee output that appeared
+// later would either be invisible to the user or read as tampering.
+describe('composeForConfirm native-coin protocol fee ( BET on LTC)', () => {
+    const FEE_DEST = 'rltc1qfeedestination';
+
+    function betHarness({ quote } = {}) {
+        const createTx = vi.fn(async ({ data, ...opts }) => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN', _opts: opts }));
+        const createAction = vi.fn(() => ({
+            actionString: 'BET|2|2308|0|5', action: 'BET', version: 2,
+        }));
+        const sdk = {
+            encoder: { createTx },
+            actions: { createAction },
+            quoteNativeFee: vi.fn(async () => quote),
+        };
+        return {
+            createTx,
+            sdk,
+            args: {
+                sdkRegistry: { get: () => sdk },
+                chainRegistry: { get: () => ({ coin: 'LTC', networkKind: 'regtest', adsDonationAddress: 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' }) },
+                vault: { settings: { get: async () => ({ ads: { enabled: false, perChain: {} } }) } },
+                chainId: 'litecoin-regtest',
+                actionData: { action: 'BET', params: { VERSION: 2, FEED_ACTION_INDEX: '2308', OUTCOME: '0', AMOUNT: '5' } },
+                encoderOpts: { pubkey: 'pub', change: 'chg', payFeeInNativeCoin: true },
+                source: 'chg',
+            },
+        };
+    }
+
+    it('sizes a FEE_DESTINATION output from the quote and hides the flag from the encoder', async () => {
+        const h = betHarness({
+            quote: { supported: true, valid: true, feeDestination: FEE_DEST, requiredFeeSats: 31337 },
+        });
+        const composed = await composeForConfirm(h.args);
+
+        const outs = composed.encoderOpts.customOutputs || [];
+        expect(outs.some((o) => o.address === FEE_DEST && o.value === 31337)).toBe(true);
+        // The same outputs the encoder was actually handed, not a parallel list.
+        const built = h.createTx.mock.calls[0][0].customOutputs || [];
+        expect(built.some((o) => o.address === FEE_DEST && o.value === 31337)).toBe(true);
+        // `payFeeInNativeCoin` is the wallet's own control word; forwarding it
+        // to the encoder would be an unknown param on the wire path.
+        expect('payFeeInNativeCoin' in h.createTx.mock.calls[0][0]).toBe(false);
+        expect(h.sdk.quoteNativeFee).toHaveBeenCalledOnce();
+    });
+
+    it('refuses to build the transaction when the fee cannot be priced', async () => {
+        // Refusing costs nothing; building would spend a miner fee on an action
+        // the chain rejects, and the native fee itself is never refunded.
+        const h = betHarness({ quote: { supported: false, error: 'no oracle round' } });
+        await expect(composeForConfirm(h.args)).rejects.toThrow(/native-coin fee pre-flight failed/);
+        expect(h.createTx).not.toHaveBeenCalled();
+    });
+
+    it('adds nothing when the market is free (a zero-fee quote is still valid)', async () => {
+        // Short markets fall inside the shared free window, so the quote is
+        // valid with requiredFeeSats 0; a dust output there would be waste.
+        const h = betHarness({
+            quote: { supported: true, valid: true, feeDestination: FEE_DEST, requiredFeeSats: 0 },
+        });
+        const composed = await composeForConfirm(h.args);
+        expect((composed.encoderOpts.customOutputs || []).some((o) => o.address === FEE_DEST)).toBe(false);
     });
 });

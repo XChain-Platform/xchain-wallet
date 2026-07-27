@@ -14,7 +14,9 @@ test/e2e/
 │   └── wallet.js      the shared cold-browser -> unlocked-Home walk
 └── tests/
     ├── onboarding/    welcome, create/lock/unlock, import, license gate
-    ├── send/          validation, confirm stage
+    ├── send/          validation, confirm stage, and (regtest only) the
+    │                  multi-recipient round trip: three recipient rows, one
+    │                  signature, every leg read back off the chain
     ├── betting/       BET create -> bet -> resolve round trip (regtest only:
     │                  it signs four actions and reads the settled balances
     │                  back off the chain)

@@ -54,6 +54,7 @@ function byteLen(s) {
  * @property {number|string} version
  * @property {string} psbt                     the PSBT hex the modal previews and the signer signs
  * @property {string} encoding                 chosen by the encoder
+ * @property {string[]} carrierScripts         P2SH/P2WSH redeem scripts create_tx committed to; [] off the chunk lanes
  * @property {object|null} quote               native-fee quote, when native-fee mode was active
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
@@ -178,6 +179,17 @@ export async function composeForConfirm({
         bareNativePayment,
         psbt: encoded.psbt,
         encoding: bareNativePayment ? null : encoded.encoding,
+        // §5.3.2 check 3 needs the redeem scripts create_tx committed to, and
+        // this is the only place they exist: the verifier fails CLOSED when
+        // they are missing (SCRIPTS_MISSING), by design, so dropping them here
+        // did not weaken the check - it made every chunk-lane action
+        // unsendable. A three-recipient SEND is past one OP_RETURN, so it
+        // takes the P2SH lane, and the confirm pipeline refused it with "The
+        // action encoded in the transaction does not match what you approved."
+        // before the modal ever opened. Every unit test around the check
+        // passed its own scripts in, so nothing saw the gap; the UI-driven
+        // regtest round trip did, immediately .
+        carrierScripts: Array.isArray(encoded.carrierScripts) ? encoded.carrierScripts : [],
         quote: feePreflight.quote,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,

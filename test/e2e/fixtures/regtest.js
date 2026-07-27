@@ -382,6 +382,53 @@ export async function mintXchain(page, amount) {
 }
 
 /**
+ * The XCHAIN balance `address` holds right now, as a number (0 when the
+ * explorer carries no row for it at all).
+ *
+ * A plain read with no waiting and no mining, which is what a BEFORE/AFTER
+ * assertion needs: the interesting question for a multi-leg send is not "did
+ * the balance reach N" but "did it move by exactly the leg amount", and a
+ * helper that waits for a threshold cannot answer that.
+ *
+ * @param {string} address
+ * @param {string} tick
+ * @returns {Promise<number>}
+ */
+export async function tokenBalance(address, tick) {
+    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`, {
+        signal: AbortSignal.timeout(15_000),
+    });
+    const body = await res.json();
+    const row = (body?.data || []).find((b) => b.tick === tick);
+    return row ? Number(row.amount) : 0;
+}
+
+/**
+ * Mines one block, but ONLY while the decode/index pipeline is keeping up.
+ *
+ * Promoted from the BET round-trip spec, which found the hazard the hard way:
+ * a poll loop that mines unconditionally outruns the decoder, so the state it
+ * is waiting for never indexes and the loop responds by mining harder. One run
+ * left the decoder 157 blocks behind the node with every balance read empty,
+ * which presents as "the wallet's action vanished" and is really the harness
+ * flooding the venue. Blocks are only ever needed to ADVANCE state, never to
+ * make an already-mined action visible, so skipping the mine while the pipeline
+ * catches up costs nothing.
+ *
+ * Never throws: a poll loop must keep polling when the status read blips.
+ */
+export async function nudgeChain() {
+    try {
+        const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
+            signal: AbortSignal.timeout(10_000),
+        });
+        const status = await res.json();
+        if (Number(status?.decoder_lag_blocks?.[REGTEST_COIN] ?? 0) > 3) return;
+        await minerRpc('generate_blocks', { count: 1 });
+    } catch { /* the venue check in global setup reports real unreachability */ }
+}
+
+/**
  * Polls the explorer until `address` holds at least `min` of `tick`.
  *
  * Mines on each pass for the same reason `fundAddress` does: the wallet and

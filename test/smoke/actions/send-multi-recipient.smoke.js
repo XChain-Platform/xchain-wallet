@@ -106,9 +106,35 @@ assert.match(form, /gatedMultiSendBlock/, 'the form mirrors the gated refusal be
 assert.match(form, /recipientNovel = sendLegs\.some\(/,
     'the HW cross-check treats ANY novel recipient as novel, not just the first');
 
+// --- 5. The live UI round trip exists and asks the CHAIN ( residual a) --
+//
+// PC-52 shipped with an SDK-driven drill (tools/regtest/multiSendRoundtrip.cjs)
+// that proves the FLOW composes and broadcasts, and mounted-component tests
+// that drive the form to the messaging boundary. Neither can prove the form
+// and the chain agree, because both stop before the other side. The regtest
+// Playwright spec pinned here is the only place the recipient rows, one
+// signature and the explorer's own decomposition meet.
+//
+// Pinned at the source level because the suite it belongs to needs a live
+// chain and cannot run in `pnpm test`. Deleting or gutting that spec would
+// otherwise be invisible until someone next opened the venue - which is
+// exactly how the e2e suite rotted before.
+const live = read('test', 'e2e', 'tests', 'send', 'multi-recipient.regtest.spec.js');
+assert.match(live, /from '\.\.\/\.\.\/fixtures\/wallet\.js'/,
+    'the live spec onboards through the shared fixture rather than inlining the walk');
+assert.match(live, /\+ Add recipient/, 'the live spec drives the real add-recipient control');
+assert.match(live, /Recipient \$\{n\} address/, 'the live spec fills the added rows');
+assert.match(live, /toMatch\(\/\^SEND\\\|1\\\|\/\)/,
+    'the live spec pins the v1 wire format, not merely that the money arrived');
+assert.match(live, /waitForExactBalance/,
+    'the live spec asserts an EXACT per-recipient balance, so a doubled leg fails');
+assert.match(live, /senderBefore - TOTAL_SENT/,
+    'the live spec also asserts the sender paid the sum once');
+
 console.log(
     'OK: send multi-recipient smoke (PC-52: flows/sendLegs owns the recipient list and all 3 '
     + 'SEND-composing paths use it; one leg still emits flat v0 params; native-coin, gated-tick '
     + 'and leg-cap refusals present on every path; Send.jsx sends `legs` only for a real '
-    + 'multi-recipient send, on both the confirm-modal and watcher paths)',
+    + 'multi-recipient send, on both the confirm-modal and watcher paths; the regtest '
+    + 'Playwright round trip drives the rows and reads every leg back off the chain)',
 );
