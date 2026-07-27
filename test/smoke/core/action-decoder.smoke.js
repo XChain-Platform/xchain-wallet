@@ -110,22 +110,61 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 1e. Unknown / not-yet-decoded action falls back with the "no
-// plain-English" warning. Using ORDER (Step 24 adds LIST + AIRDROP,
-// so the fallback now exercises ORDER / SWAP / etc.
+// 1e. The generic fallback.  gave every protocol ACTION a
+// describer, so this can no longer be probed with a real action (it used
+// to use ORDER, which now reads "Create order on Bitcoin: give ..."). An
+// action name outside the protocol is the only case that should still
+// land here, and it must: telling a user to read the raw parameters is
+// the honest answer for something the wallet cannot describe.
 {
     const d = decoderLib.decodeAction({
-        action: 'ORDER',
+        action: 'NOT_AN_ACTION',
         params: { GIVE_TICK: 'XCP', GIVE_AMOUNT: '10', GET_COIN: 'BTC', GET_AMOUNT: '1' },
         chainId: 'bitcoin-mainnet',
         chainRegistry,
     });
-    assert.match(d.summary, /Sign Order on Bitcoin/);
+    assert.match(d.summary, /^Sign Not an action on Bitcoin$/);
     assert.ok(
         d.warnings.some((w) => /no plain-english summary is available/i.test(w)),
         'fallback surfaces the "not decoded" warning',
     );
     assert.equal(d.details.length, 4, 'fallback pretty-prints every param');
+}
+
+// 1e-bis. ORDER and SWAP, the two actions D-16/ caught rendering
+// that fallback on a signing surface, now read as sentences.
+{
+    const order = decoderLib.decodeAction({
+        action: 'ORDER',
+        params: { GIVE_TICK: 'XCP', GIVE_AMOUNT: '10', GET_COIN: 'BTC', GET_AMOUNT: '1' },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.equal(order.summary, 'Create order on Bitcoin: give 10 XCP for 1 BTC (native coin)');
+    assert.ok(
+        !order.warnings.some((w) => /no plain-english summary is available/i.test(w)),
+        'ORDER no longer shows the fallback banner',
+    );
+
+    const swap = decoderLib.decodeAction({
+        action: 'SWAP',
+        params: { GIVE_TICK: 'XCP', GIVE_AMOUNT: '10', GET_TICK: 'PEPE', GET_AMOUNT: '250' },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.equal(swap.summary, 'Create swap on Bitcoin: give 10 XCP for 250 PEPE');
+
+    const stake = decoderLib.decodeAction({
+        action: 'STAKE',
+        params: { VERSION: '1', AMOUNT: '50', SIGNING_PUBKEY: 'f223ca100' },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.equal(stake.summary, 'Stake 50 on Bitcoin (new validator stake)');
+    assert.ok(
+        stake.warnings.some((w) => /locked until unstake/i.test(w)),
+        'STAKE states the lock-up rather than a fallback banner',
+    );
 }
 
 // 1f. Missing chain registry still yields a sensible summary.
@@ -303,19 +342,25 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2i. DESTROY multi-version falls through to generic but keeps the
-//     irreversibility warning.
+// 2i. DESTROY multi-version. : it used to fall through to the
+//     generic describer, so the protocol's most irreversible action lost
+//     its plain-English summary as soon as it burned a second token. It
+//     is described leg by leg now and still leads with irreversibility.
 {
     const d = decoderLib.decodeAction({
         action: 'DESTROY',
-        params: { VERSION: '1', TICK: 'MYTOKEN', AMOUNT: '10' },
+        params: { VERSION: '1', TICK: ['MYTOKEN', 'OTHER'], AMOUNT: ['10', '4'] },
         chainId: 'bitcoin-mainnet',
         chainRegistry,
     });
-    assert.match(d.summary, /Sign Destroy/);
+    assert.equal(d.summary, 'Destroy on Bitcoin: 10 MYTOKEN, 4 OTHER');
     assert.ok(
         d.warnings[0] && /irreversible/i.test(d.warnings[0]),
         'multi-destroy still leads with the irreversibility warning',
+    );
+    assert.ok(
+        !d.warnings.some((w) => /no plain-english summary is available/i.test(w)),
+        'multi-destroy no longer shows the fallback banner',
     );
 }
 

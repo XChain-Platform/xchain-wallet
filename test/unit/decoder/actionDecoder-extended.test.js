@@ -74,10 +74,15 @@ describe('decodeAction extended', () => {
             expect(d.summary).toMatch(/^Destroy/);
         });
 
-        it('multi-destroy (non-v0 VERSION) falls back to generic + irreversibility warning', () => {
+        // : this used to assert the generic "Sign Destroy" fallback.
+        // Multi-destroy is described leg by leg now, so the summary names
+        // what is being burned instead of telling the user to go read raw
+        // params on the screen where they approve an irreversible burn.
+        it('multi-destroy names each leg and keeps the irreversibility warning', () => {
             const d = decodeAction({ action: 'DESTROY', params: { TICK: 'XCP', AMOUNT: '5', VERSION: '1' } });
-            expect(d.summary).toMatch(/^Sign Destroy/);
+            expect(d.summary).toBe('Destroy: 5 XCP');
             expect(d.warnings.some((w) => /irreversible/i.test(w))).toBe(true);
+            expect(d.warnings.join('\n')).not.toMatch(/No plain-English summary is available/);
         });
 
         it('warns empty ticker + non-positive amount in v0', () => {

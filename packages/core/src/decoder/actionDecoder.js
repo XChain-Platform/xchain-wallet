@@ -22,22 +22,20 @@
 // window describes attacker-supplied params through the same SDK over
 // the `action.describe` host route. Two reasons not to reunify them
 // here: this copy has no §3.5 display hardening (no bidi/zero-width
-// neutralization, no amount flagging), and it covers 13 actions where
-// the SDK's covers 30. It survives only because a draft preview must
-// be synchronous and the React tree holds no SDK - a host round trip
-// per keystroke is not a preview. `test/smoke/ui/confirm-intent-
-// provenance.smoke.js` holds that boundary.
+// neutralization, no amount flagging). It survives only because a draft
+// preview must be synchronous and the React tree holds no SDK - a host
+// round trip per keystroke is not a preview. `test/smoke/ui/confirm-
+// intent-provenance.smoke.js` holds that boundary.
 //
-// Phase 1 covers SEND and SWEEP per §39.1. Phase 2 adds ISSUE (all 6
-// format versions: create, edit-description, edit-mint-params, lock-
-// params, edit-callback, edit-lists), MINT, DESTROY (v0 single; v1/v2
-// multi-destroy falls through to the generic decoder), and BATCH (which
-// recurses into its COMMANDS array and composes sub-decoder output).
-// Step 20 adds BROADCAST (v0/v1/v2/v3), Step 21 adds DISPENSER
-// (v0/v1/v2), Step 23 adds DIVIDEND (v0), and Step 24 adds LIST
-// (v0/v1) + AIRDROP (v0/v1/v2/v3). Every other ACTION type still gets
-// the generic fallback; dedicated decoders for the remaining kinds
-// land alongside their authoring forms in later phases.
+// COVERAGE, since : every protocol ACTION, matching the SDK
+// describer sentence for sentence. It used to cover 13, so a user
+// reviewing a SWAP, STAKE, VOTE, EXECUTE draft (or any of 14 others)
+// read "No plain-English summary is available for X yet" plus a warning
+// banner on the screen they use to decide whether to sign. The
+// describers below the BET decoder are verbatim ports of
+// `xchain-sdk/src/decoder/describe.js`, and
+// `test/unit/decoder/actionDecoder-coverage.test.js` enumerates the
+// action list so a new protocol action cannot quietly reopen the gap.
 
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
@@ -174,13 +172,46 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                 ],
             };
         }
-        // Multi-destroy: pass through to the generic path but prepend
-        // the irreversibility warning so the user still sees it.
-        const generic = genericFallback(action, p, chainSuffix);
-        generic.warnings.unshift(
-            'Destroying is irreversible. The tokens cannot be recovered.',
-        );
-        return generic;
+        // Multi-destroy (v1 repeats TICK/AMOUNT, v2 adds a per-leg MEMO).
+        // : described leg by leg rather than dropped on the generic
+        // path, which showed the protocol's most irreversible action as
+        // "no plain-English summary available" the moment it burned more
+        // than one token.
+        const ticks = toArray(p.TICK);
+        const amounts = toArray(p.AMOUNT);
+        const memos = toArray(p.MEMO);
+        const perLegMemo = version === '2';
+        const legCount = Math.max(ticks.length, amounts.length, 1);
+        const legs = [];
+        for (let i = 0; i < legCount; i += 1) {
+            legs.push({
+                tick: str(ticks[i] ?? ''),
+                amount: str(amounts[i] ?? ''),
+                memo: perLegMemo ? str(memos[i] ?? '') : '',
+            });
+        }
+        const sharedMemo = perLegMemo ? '' : memo;
+        const anyMemo = sharedMemo || legs.map((l) => l.memo).join('');
+        return {
+            summary: `Destroy${chainSuffix}: ${legs.map((l) => `${l.amount || '?'} ${l.tick || '?'}`).join(', ')}`,
+            details: [
+                ...legs.flatMap((l, i) => [
+                    { label: `Burn ${i + 1}`, value: `${l.amount || '?'} ${l.tick || '?'}` },
+                    ...(l.memo ? [{ label: '  Memo', value: l.memo }] : []),
+                ]),
+                ...(sharedMemo ? [{ label: 'Memo', value: sharedMemo }] : []),
+            ],
+            warnings: [
+                'Destroying is irreversible. The tokens cannot be recovered.',
+                ...(legs.some((l) => !l.tick) ? ['One or more token tickers are empty.'] : []),
+                ...(legs.some((l) => !l.amount || Number(l.amount) <= 0)
+                    ? ['One or more amounts are not positive.']
+                    : []),
+                ...(anyMemo && /[|;]/.test(anyMemo)
+                    ? ['A memo contains | or ;: the protocol will reject this transaction.']
+                    : []),
+            ],
+        };
     }
 
     if (action === 'BATCH') {
@@ -215,7 +246,553 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeBet(p, chainSuffix);
     }
 
+    // . Everything below is a verbatim port of the SDK describer
+    // (`xchain-sdk/src/decoder/describe.js`), summary text included, so the
+    // review stage and the confirm screen say the SAME sentence about the
+    // same draft. They previously did not: 18 of the 31 protocol actions
+    // reached the review stage as "No plain-English summary is available
+    // for X yet" plus a warning banner, which is exactly the wrong thing to
+    // show on the surface a user reads to decide whether to sign. If a port
+    // and its SDK original ever disagree, the SDK is right - it describes
+    // the composed bytes, this describes a draft.
+    if (action === 'ADDRESS') return decodeAddress(p, chainSuffix);
+    if (action === 'ORDER' || action === 'SWAP') return decodeOrderSwap(action, p, chainSuffix);
+    if (action === 'STAKE') return decodeStake(p, chainSuffix);
+    if (action === 'UNSTAKE') return decodeUnstake(p, chainSuffix);
+    if (action === 'DELEGATE') return decodeDelegate(p, chainSuffix);
+    if (action === 'VOTE') return decodeVote(p, chainSuffix);
+    if (action === 'DEPLOY') return decodeDeploy(p, chainSuffix);
+    if (action === 'EXECUTE') return decodeExecute(p, chainSuffix);
+    if (action === 'DEPOSIT' || action === 'WITHDRAW') return decodeContractFunds(action, p, chainSuffix);
+    if (action === 'COINPAY') return decodeCoinpay(p, chainSuffix);
+    if (action === 'COLLECT') return decodeCollect(p, chainSuffix);
+    if (action === 'MESSAGE') return decodeMessage(p, chainSuffix);
+    if (action === 'FILE') return decodeFile(p, chainSuffix);
+    if (action === 'LINK') return decodeLink(p, chainSuffix);
+    if (action === 'SLEEP') return decodeSleep(p, chainSuffix);
+    if (action === 'CALLBACK') return decodeCallback(p, chainSuffix);
+
     return genericFallback(action, p, chainSuffix);
+}
+
+/*
+ * ADDRESS decoder. v0 sets per-address options (fee disposition,
+ * received-SEND memo requirement, who may open a dispenser here); v1
+ * binds or unbinds a controller contract for one action class.
+ *
+ * A blank v0 field is not "off": a blank DISPENSER_PREFERENCE keeps the
+ * previous value while a blank FEE_PREFERENCE resets to the default
+ * (ADDRESS.md Notes), so the summary lists only what this action changes.
+ */
+function decodeAddress(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const memo = str(p.MEMO);
+    const memoWarnings = memo && /[|;]/.test(memo)
+        ? ['Memo contains | or ;: the protocol will reject this transaction.']
+        : [];
+
+    if (version === '1') {
+        const controller = str(p.CONTROLLER);
+        const actionClass = str(p.ACTION_CLASS);
+        const cooldown = str(p.COOLDOWN_BLOCKS);
+        const unbind = str(p.UNBIND) === '1';
+        return {
+            summary: unbind
+                ? `Unbind controller from this address${actionClass ? ` (${actionClass})` : ''}${chainSuffix}`
+                : `Bind this address to controller${controller ? ` #${controller}` : ''}${actionClass ? ` (${actionClass})` : ''}${chainSuffix}`,
+            details: [
+                ...(controller ? [{ label: 'Controller contract', value: `#${controller}` }] : []),
+                ...(actionClass ? [{ label: 'Action class', value: actionClass }] : []),
+                ...(cooldown ? [{ label: 'Cooldown blocks', value: cooldown }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                unbind
+                    ? 'Unbinding removes the controller policy after the cooldown elapses.'
+                    : 'A controller contract will be able to veto or gate this address\'s actions for the bound class. A transfer binding gates BOTH sends from and sends to this address.',
+                ...(!unbind && !controller ? ['Controller contract index is empty.'] : []),
+                ...(!actionClass ? ['Action class is empty.'] : []),
+                ...memoWarnings,
+            ],
+        };
+    }
+
+    const feePref = str(p.FEE_PREFERENCE);
+    const requireMemo = str(p.REQUIRE_MEMO);
+    const dispenserPref = str(p.DISPENSER_PREFERENCE);
+
+    const feeLabel = feePref === '1' ? 'fees destroyed (lowers supply)'
+        : feePref === '2' ? 'fees donated to protocol development'
+            : feePref === '0' ? 'fees at the default disposition'
+                : '';
+    const memoLabel = requireMemo === '1' ? 'a memo required on every incoming send'
+        : requireMemo === '0' ? 'no memo required on incoming sends'
+            : '';
+    const dispenserLabel = dispenserPref === '2' ? 'anyone may open a dispenser on this address'
+        : dispenserPref === '1' ? 'only the owner may open a dispenser on this address'
+            : '';
+
+    const changes = [feeLabel, memoLabel, dispenserLabel].filter(Boolean);
+
+    return {
+        summary: changes.length
+            ? `Set address options${chainSuffix}: ${changes.join(', ')}`
+            : `Set address options${chainSuffix} (no options changed)`,
+        details: [
+            ...(feeLabel ? [{ label: 'Fee preference', value: feeLabel }] : []),
+            ...(memoLabel ? [{ label: 'Memo requirement', value: memoLabel }] : []),
+            ...(dispenserLabel ? [{ label: 'Dispenser preference', value: dispenserLabel }] : []),
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
+        warnings: [
+            ...(changes.length === 0
+                ? ['This action sets no address options. Every option field is blank.']
+                : []),
+            ...(feePref !== '' && !['0', '1', '2'].includes(feePref)
+                ? ['Fee preference must be 0, 1 or 2: the protocol will reject this transaction.']
+                : []),
+            ...(feePref === '1'
+                ? ['Destroyed fees are burned permanently and cannot be recovered.']
+                : []),
+            ...(dispenserPref === '2'
+                ? ['Anyone will be able to open a dispenser on this address.']
+                : []),
+            ...memoWarnings,
+        ],
+    };
+}
+
+/*
+ * ORDER / SWAP decoder. v0 create, v1 cancel, v2 edit. The two actions
+ * share a wire shape; SWAP settles atomically on match while ORDER
+ * creates a match obligation settled by COINPAY.
+ */
+function decodeOrderSwap(action, p, chainSuffix) {
+    const noun = action === 'SWAP' ? 'swap' : 'order';
+    const properNoun = action === 'SWAP' ? 'Swap' : 'Order';
+    const version = str(p.VERSION) || '0';
+    const memo = str(p.MEMO);
+    const idx = str(p[action === 'SWAP' ? 'SWAP_ACTION_INDEX' : 'ORDER_ACTION_INDEX']);
+    const memoWarnings = memo && /[|;]/.test(memo)
+        ? ['Memo contains | or ;: the protocol will reject this transaction.'] : [];
+
+    if (version === '1') {
+        return {
+            summary: `Cancel ${noun}${chainSuffix}${idx ? ` (#${idx})` : ''}`,
+            details: [
+                ...(idx ? [{ label: `${properNoun} action index`, value: idx }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [...(!idx ? [`${properNoun} action index is empty.`] : []), ...memoWarnings],
+        };
+    }
+
+    if (version === '2') {
+        const expiration = str(p.EXPIRATION);
+        const allowList = str(p.ALLOW_LIST);
+        const blockList = str(p.BLOCK_LIST);
+        return {
+            summary: `Edit ${noun}${chainSuffix}${idx ? ` (#${idx})` : ''}`,
+            details: [
+                ...(idx ? [{ label: `${properNoun} action index`, value: idx }] : []),
+                ...(expiration ? [{ label: 'Expiration', value: expiration }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
+                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [...(!idx ? [`${properNoun} action index is empty.`] : []), ...memoWarnings],
+        };
+    }
+
+    const giveTick = str(p.GIVE_TICK);
+    const giveCoin = str(p.GIVE_COIN);
+    const giveAmount = str(p.GIVE_AMOUNT);
+    const giveOwnership = str(p.GIVE_OWNERSHIP) === '1';
+    const getTick = str(p.GET_TICK);
+    const getCoin = str(p.GET_COIN);
+    const getAmount = str(p.GET_AMOUNT);
+    const getOwnership = str(p.GET_OWNERSHIP) === '1';
+    const getAddress = str(p.GET_ADDRESS);
+    const expiration = str(p.EXPIRATION);
+    const coinLabel = (coin) => (coin ? `${coin} (native coin)` : '');
+    const giveLabel = giveOwnership
+        ? `ownership of ${giveTick || '?'}`
+        : `${giveAmount || '?'} ${giveTick || coinLabel(giveCoin) || '?'}`;
+    const getLabel = getOwnership
+        ? `ownership of ${getTick || '?'}`
+        : `${getAmount || '?'} ${getTick || coinLabel(getCoin) || '?'}`;
+    return {
+        summary: `Create ${noun}${chainSuffix}: give ${giveLabel} for ${getLabel}`,
+        details: [
+            { label: 'Give', value: giveLabel },
+            { label: 'Get', value: getLabel },
+            ...(getAddress ? [{ label: 'Counterparty', value: getAddress }] : []),
+            ...(expiration ? [{ label: 'Expiration', value: expiration }] : []),
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
+        warnings: [
+            ...(!giveOwnership && (!giveAmount || Number(giveAmount) <= 0)
+                ? ['Give amount is not positive.'] : []),
+            ...(!getOwnership && (!getAmount || Number(getAmount) <= 0)
+                ? ['Get amount is not positive.'] : []),
+            ...memoWarnings,
+        ],
+    };
+}
+
+/*
+ * STAKE decoder. v1 new capability stake, v2 top-up, v3
+ * contract-targeted. The version IS the semantics (v1/v2 share a wire
+ * shape), so it is always named.
+ */
+function decodeStake(p, chainSuffix) {
+    const version = str(p.VERSION) || '1';
+    const amount = str(p.AMOUNT);
+    const pubkey = str(p.SIGNING_PUBKEY);
+    const target = str(p.TARGET_CONTRACT_INDEX);
+    const tick = str(p.TICK);
+    const kind = version === '3'
+        ? `to contract${target ? ` #${target}` : ''}`
+        : version === '2' ? '(top-up)' : '(new validator stake)';
+    return {
+        summary: `Stake ${amount || '?'}${version === '3' && tick ? ` ${tick}` : ''}${chainSuffix} ${kind}`,
+        details: [
+            { label: 'Amount', value: amount },
+            ...(version === '3' && tick ? [{ label: 'Token', value: tick }] : []),
+            ...(target ? [{ label: 'Target contract', value: `#${target}` }] : []),
+            { label: 'Signing public key', value: pubkey },
+        ],
+        warnings: [
+            ...(!amount || Number(amount) <= 0 ? ['Stake amount is not positive.'] : []),
+            ...(!pubkey ? ['Signing public key is empty.'] : []),
+            'Staked funds are locked until unstake plus the cooldown period.',
+        ],
+    };
+}
+
+/* UNSTAKE decoder. v0 capability, v1 contract-targeted. */
+function decodeUnstake(p, chainSuffix) {
+    const target = str(p.TARGET_CONTRACT_INDEX);
+    const tick = str(p.TICK);
+    const pubkey = str(p.SIGNING_PUBKEY);
+    return {
+        summary: `Unstake${tick ? ` ${tick}` : ''}${target ? ` from contract #${target}` : ''}${chainSuffix}`,
+        details: [
+            ...(tick ? [{ label: 'Token', value: tick }] : []),
+            ...(target ? [{ label: 'Target contract', value: `#${target}` }] : []),
+            { label: 'Signing public key', value: pubkey },
+        ],
+        warnings: [
+            ...(!pubkey ? ['Signing public key is empty.'] : []),
+            'Unstaked funds enter a cooldown before they are spendable.',
+        ],
+    };
+}
+
+/*
+ * DELEGATE decoder: validator signing-key rotation (v0/v1 rotate, v2/v3
+ * revoke), NOT poll vote delegation (that is VOTE v3).
+ */
+function decodeDelegate(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const isRevoke = version === '2' || version === '3';
+    const newKey = str(p.NEW_SIGNING_PUBKEY);
+    const key = str(p.SIGNING_PUBKEY);
+    const target = str(p.TARGET_CONTRACT_INDEX);
+    const tick = str(p.TICK);
+    return {
+        summary: isRevoke
+            ? `Revoke validator signing key${target ? ` for contract #${target}` : ''}${chainSuffix}`
+            : `Rotate validator signing key${target ? ` for contract #${target}` : ''}${chainSuffix}`,
+        details: [
+            ...(isRevoke
+                ? [{ label: 'Signing public key', value: key }]
+                : [{ label: 'New signing public key', value: newKey }]),
+            ...(target ? [{ label: 'Target contract', value: `#${target}` }] : []),
+            ...(tick ? [{ label: 'Token', value: tick }] : []),
+        ],
+        warnings: [
+            ...((isRevoke ? !key : !newKey) ? ['Signing public key is empty.'] : []),
+            'This changes which key signs for your stake. Verify the key belongs to you.',
+        ],
+    };
+}
+
+/*
+ * VOTE decoder: token-weighted governance. v0 create poll, v1 cast
+ * ballot, v3 delegate standing vote (v2 finalize is system-only).
+ */
+function decodeVote(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const memo = str(p.MEMO);
+    if (version === '1') {
+        const pollRef = str(p.POLL_REF);
+        const ballot = str(p.BALLOT);
+        return {
+            summary: `Cast ballot "${ballot || '?'}" on poll${pollRef ? ` #${pollRef}` : ''}${chainSuffix}`,
+            details: [
+                { label: 'Poll', value: pollRef ? `#${pollRef}` : '' },
+                { label: 'Ballot', value: ballot },
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                ...(!pollRef ? ['Poll reference is empty.'] : []),
+                ...(!ballot ? ['Ballot is empty.'] : []),
+                'A later ballot on the same poll overwrites this one.',
+            ],
+        };
+    }
+    if (version === '3') {
+        const tick = str(p.TICK);
+        const delegateTo = str(p.DELEGATE_TO);
+        return {
+            summary: delegateTo
+                ? `Delegate ${tick || '?'} voting power to ${delegateTo}${chainSuffix}`
+                : `Clear ${tick || '?'} vote delegation${chainSuffix}`,
+            details: [
+                { label: 'Token', value: tick },
+                ...(delegateTo ? [{ label: 'Delegate to', value: delegateTo }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: delegateTo
+                ? ['The delegate votes with your token weight until you clear the delegation.']
+                : [],
+        };
+    }
+    const tick = str(p.TICK);
+    const endBlock = str(p.END_BLOCK);
+    const question = str(p.QUESTION);
+    const options = str(p.OPTIONS);
+    return {
+        summary: `Create poll for ${tick || '?'} holders${chainSuffix}${question ? `: ${question}` : ''}`,
+        details: [
+            { label: 'Token', value: tick },
+            ...(question ? [{ label: 'Question', value: question }] : []),
+            ...(options ? [{ label: 'Options', value: options }] : []),
+            ...(endBlock ? [{ label: 'End block', value: endBlock }] : []),
+        ],
+        warnings: [
+            ...(!tick ? ['Token ticker is empty.'] : []),
+            ...(!endBlock ? ['End block is empty.'] : []),
+        ],
+    };
+}
+
+/*
+ * DEPLOY decoder. v0/v1 inline source (CODE_ENCODING = base64), v2/v3
+ * chunked assembly by CODE_HASH, v4 chunk carrier.
+ */
+function decodeDeploy(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const gasLimit = str(p.GAS_LIMIT);
+    if (version === '4') {
+        const idx = str(p.CHUNK_INDEX);
+        const total = str(p.TOTAL_CHUNKS);
+        return {
+            summary: `Upload contract code chunk ${idx || '?'} of ${total || '?'}${chainSuffix}`,
+            details: [
+                { label: 'Chunk', value: `${idx || '?'} / ${total || '?'}` },
+                { label: 'Code hash', value: str(p.CODE_HASH) },
+            ],
+            warnings: [],
+        };
+    }
+    const chunked = version === '2' || version === '3';
+    const stakeable = version === '1' || version === '3';
+    const codeLen = str(p.CODE_ENCODING).length;
+    return {
+        summary: `Deploy ${stakeable ? 'stakeable ' : ''}smart contract${chainSuffix}${chunked ? ' (from uploaded chunks)' : ''}`,
+        details: [
+            ...(chunked
+                ? [{ label: 'Code hash', value: str(p.CODE_HASH) }]
+                : [{ label: 'Code size (base64)', value: String(codeLen) }]),
+            ...(gasLimit ? [{ label: 'Gas limit', value: gasLimit }] : []),
+            ...(stakeable && str(p.COOLDOWN_BLOCKS) ? [{ label: 'Cooldown blocks', value: str(p.COOLDOWN_BLOCKS) }] : []),
+            ...(stakeable && str(p.SLASH_DESTINATION) ? [{ label: 'Slash destination', value: str(p.SLASH_DESTINATION) }] : []),
+        ],
+        warnings: [
+            'Deployed contract code is immutable and its constructor runs once at deploy.',
+            ...(!gasLimit ? ['Gas limit is empty.'] : []),
+        ],
+    };
+}
+
+/* EXECUTE decoder: call a deployed contract method (gas is the fee). */
+function decodeExecute(p, chainSuffix) {
+    const idx = str(p.CONTRACT_ACTION_INDEX);
+    const method = str(p.METHOD);
+    const params = toArray(p.PARAMS);
+    return {
+        summary: `Call ${method || '?'}() on contract${idx ? ` #${idx}` : ''}${chainSuffix}`,
+        details: [
+            { label: 'Contract', value: idx ? `#${idx}` : '' },
+            { label: 'Method', value: method },
+            ...(params.length ? [{ label: 'Arguments', value: params.join(', ') }] : []),
+        ],
+        warnings: [
+            ...(!idx ? ['Contract action index is empty.'] : []),
+            ...(!method ? ['Method name is empty.'] : []),
+            'Gas is charged even if the contract call fails at runtime.',
+        ],
+    };
+}
+
+/* DEPOSIT / WITHDRAW decoder: move tokens into/out of a contract. */
+function decodeContractFunds(action, p, chainSuffix) {
+    const idx = str(p.CONTRACT_ACTION_INDEX);
+    const tick = str(p.TICK);
+    const qty = str(p.QUANTITY);
+    const verb = action === 'DEPOSIT' ? 'Deposit' : 'Withdraw';
+    const prep = action === 'DEPOSIT' ? 'into' : 'from';
+    return {
+        summary: `${verb} ${qty || '?'} ${tick || '?'} ${prep} contract${idx ? ` #${idx}` : ''}${chainSuffix}`,
+        details: [
+            { label: 'Contract', value: idx ? `#${idx}` : '' },
+            { label: 'Token', value: tick },
+            { label: 'Amount', value: qty },
+        ],
+        warnings: [
+            ...(!idx ? ['Contract action index is empty.'] : []),
+            ...(!qty || Number(qty) <= 0 ? ['Amount is not positive.'] : []),
+            ...(action === 'WITHDRAW' ? ['Only the contract deployer can withdraw contract credit.'] : []),
+        ],
+    };
+}
+
+/* COINPAY decoder: settle a matched order with native coin. */
+function decodeCoinpay(p, chainSuffix) {
+    const idx = str(p.ORDER_MATCH_ACTION_INDEX);
+    return {
+        summary: `Pay native coin to settle order match${idx ? ` #${idx}` : ''}${chainSuffix}`,
+        details: [{ label: 'Order match', value: idx ? `#${idx}` : '' }],
+        warnings: [
+            ...(!idx ? ['Order match action index is empty.'] : []),
+            'This transaction moves native coin to the order counterparty.',
+        ],
+    };
+}
+
+/* COLLECT decoder: claim accrued validator rewards. */
+function decodeCollect(p, chainSuffix) {
+    return {
+        summary: `Collect validator rewards${chainSuffix}`,
+        details: [],
+        warnings: [],
+    };
+}
+
+/*
+ * MESSAGE decoder. v0/v1 key exchange, v2 encrypted payload, v3
+ * plaintext. Encrypted bodies are unreadable by design; say so rather
+ * than render ciphertext.
+ */
+function decodeMessage(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const dest = str(p.DESTINATION);
+    const coin = str(p.COIN);
+    if (version === '3') {
+        const text = str(p.PLAINTEXT_MESSAGE);
+        return {
+            summary: `Send public message to ${dest || '?'}${chainSuffix}`,
+            details: [
+                { label: 'To', value: dest },
+                ...(coin ? [{ label: 'Chain', value: coin }] : []),
+                { label: 'Message', value: text },
+            ],
+            warnings: ['This message is PUBLIC and permanent on the blockchain.'],
+        };
+    }
+    if (version === '2') {
+        return {
+            summary: `Send encrypted message to ${dest || '?'}${chainSuffix}`,
+            details: [
+                { label: 'To', value: dest },
+                ...(coin ? [{ label: 'Chain', value: coin }] : []),
+                { label: 'Body', value: '(encrypted)' },
+            ],
+            warnings: [...(!dest ? ['Destination is empty.'] : [])],
+        };
+    }
+    return {
+        summary: `Publish messaging key for ${dest || '?'}${chainSuffix}`,
+        details: [
+            { label: 'Address', value: dest },
+            ...(str(p.ENCRYPTION_METHOD) ? [{ label: 'Encryption method', value: str(p.ENCRYPTION_METHOD) }] : []),
+        ],
+        warnings: [],
+    };
+}
+
+/* FILE decoder: publish a (possibly gated) file record. */
+function decodeFile(p, chainSuffix) {
+    const name = str(p.NAME);
+    const type = str(p.TYPE);
+    const title = str(p.TITLE);
+    const gate = str(p.GATE_TICKER);
+    return {
+        summary: `Publish file ${name || '?'}${chainSuffix}${gate ? ` (gated by ${gate})` : ''}`,
+        details: [
+            { label: 'Name', value: name },
+            { label: 'Type', value: type },
+            ...(title ? [{ label: 'Title', value: title }] : []),
+            ...(gate ? [{ label: 'Gate token', value: gate }] : []),
+            ...(str(p.ENCRYPTION_METHOD) ? [{ label: 'Encryption', value: str(p.ENCRYPTION_METHOD) }] : []),
+        ],
+        warnings: [
+            ...(!name ? ['File name is empty.'] : []),
+            'File contents are permanent and public on the blockchain (encrypted if gated).',
+        ],
+    };
+}
+
+/* LINK decoder: bind two actions across chains. */
+function decodeLink(p, chainSuffix) {
+    const coin1 = str(p.COIN1);
+    const idx1 = str(p.COIN1_ACTION_INDEX);
+    const coin2 = str(p.COIN2);
+    const idx2 = str(p.COIN2_ACTION_INDEX);
+    return {
+        summary: `Link ${coin1 || '?'} action #${idx1 || '?'} to ${coin2 || '?'} action #${idx2 || '?'}${chainSuffix}`,
+        details: [
+            { label: 'Chain 1', value: coin1 },
+            { label: 'Action 1', value: idx1 ? `#${idx1}` : '' },
+            { label: 'Chain 2', value: coin2 },
+            { label: 'Action 2', value: idx2 ? `#${idx2}` : '' },
+        ],
+        warnings: [
+            ...(!coin1 || !coin2 ? ['Both chains must be specified.'] : []),
+        ],
+    };
+}
+
+/* SLEEP decoder: pause a token until a resume block. */
+function decodeSleep(p, chainSuffix) {
+    const resumeBlock = str(p.RESUME_BLOCK);
+    const tick = str(p.TICK);
+    return {
+        summary: `Pause ${tick || 'token activity'}${chainSuffix} until block ${resumeBlock || '?'}`,
+        details: [
+            ...(tick ? [{ label: 'Token', value: tick }] : []),
+            { label: 'Resume block', value: resumeBlock },
+        ],
+        warnings: [
+            'While asleep, transfers of the affected token are rejected.',
+            ...(!resumeBlock ? ['Resume block is empty.'] : []),
+        ],
+    };
+}
+
+/* CALLBACK decoder: force-redeem a token per its callback terms. */
+function decodeCallback(p, chainSuffix) {
+    const tick = str(p.TICK);
+    return {
+        summary: `Trigger callback redemption of ${tick || '?'}${chainSuffix}`,
+        details: [{ label: 'Token', value: tick }],
+        warnings: [
+            'Callback redeems ALL holders\' tokens at the configured callback terms. This cannot be undone.',
+            ...(!tick ? ['Token ticker is empty.'] : []),
+        ],
+    };
 }
 
 /**
