@@ -51,10 +51,31 @@ function mkAddr(id, idx, over = {}) {
     };
 }
 
-function makeVault({ account, addresses }) {
+function makeVault({ account, addresses, wallets }) {
     return {
         accounts: memCollection([account]),
         addresses: memCollection(addresses),
+        ...(wallets ? { wallets: memCollection(wallets) } : {}),
+    };
+}
+
+// An imported-WIF address: wallet-scoped, so accountId is null and there
+// is no derivation path (§11.3.3).
+function mkImported(id, over = {}) {
+    return {
+        schemaVersion: 4,
+        id,
+        accountId: null,
+        chain: 'bitcoin',
+        network: 'regtest',
+        source: 'imported-wif',
+        addressType: 'p2pkh',
+        derivationPath: null,
+        address: `addr_${id}`,
+        publicKey: `pub_${id}`,
+        label: '',
+        role: 'receive',
+        ...over,
     };
 }
 
@@ -118,5 +139,81 @@ describe('setActiveAddress', () => {
         await expect(
             setActiveAddress({ vault, accountId: 'acct-a', chainId: 'bitcoin-regtest', addressId: 'other' }),
         ).rejects.toThrow(/does not belong/);
+    });
+
+    // Wallet E2E session 16 / D-65. An imported key has accountId=null, so
+    // the account check refused it and "Use" always failed - and because
+    // Send spends the ACTIVE address and has no source picker, that made
+    // an imported key unspendable through the UI entirely.
+    it('activates an imported key linked through the wallet importedKeys', async () => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [mkAddr('a0', 0), mkImported('wif1')],
+            wallets: [{ id: 'w1', importedKeys: [{ addressId: 'wif1' }] }],
+        });
+        const res = await setActiveAddress({ vault, accountId: 'acct-a', chainId: 'bitcoin-regtest', addressId: 'wif1' });
+        expect(res).toEqual({ ok: true });
+        const stored = await vault.accounts.get('acct-a');
+        expect(stored.activeAddressByChainId['bitcoin-regtest']).toBe('wif1');
+    });
+
+    it('rejects an imported key belonging to a DIFFERENT wallet', async () => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [mkAddr('a0', 0), mkImported('wif-other')],
+            wallets: [
+                { id: 'w1', importedKeys: [] },
+                { id: 'w2', importedKeys: [{ addressId: 'wif-other' }] },
+            ],
+        });
+        await expect(
+            setActiveAddress({ vault, accountId: 'acct-a', chainId: 'bitcoin-regtest', addressId: 'wif-other' }),
+        ).rejects.toThrow(/does not belong/);
+    });
+
+    it('fails closed when the wallet record cannot be read', async () => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [mkAddr('a0', 0), mkImported('wif1')],
+        });
+        await expect(
+            setActiveAddress({ vault, accountId: 'acct-a', chainId: 'bitcoin-regtest', addressId: 'wif1' }),
+        ).rejects.toThrow(/does not belong/);
+    });
+});
+
+// D-65 (session 16): "Use" on an imported key wrote an override that
+// resolveActiveAddresses could never find, because the same account
+// filter skipped the address - so the UI silently kept the old active
+// address and the key stayed unspendable.
+describe('resolveActiveAddresses with imported keys', () => {
+    it('resolves an override that points at an imported key', async () => {
+        const vault = makeVault({
+            account: { ...baseAccount, activeAddressByChainId: { 'bitcoin-regtest': 'wif1' } },
+            addresses: [mkAddr('a0', 0), mkImported('wif1')],
+            wallets: [{ id: 'w1', importedKeys: [{ addressId: 'wif1' }] }],
+        });
+        const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
+        expect(out['bitcoin-regtest']).toEqual({ id: 'wif1', address: 'addr_wif1' });
+    });
+
+    it('never makes an imported key the DEFAULT active address', async () => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [mkAddr('a0', 0), mkImported('wif1')],
+            wallets: [{ id: 'w1', importedKeys: [{ addressId: 'wif1' }] }],
+        });
+        const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
+        expect(out['bitcoin-regtest'].id).toBe('a0');
+    });
+
+    it('ignores an imported key belonging to another wallet', async () => {
+        const vault = makeVault({
+            account: { ...baseAccount, activeAddressByChainId: { 'bitcoin-regtest': 'wif-other' } },
+            addresses: [mkAddr('a0', 0), mkImported('wif-other')],
+            wallets: [{ id: 'w1', importedKeys: [] }, { id: 'w2', importedKeys: [{ addressId: 'wif-other' }] }],
+        });
+        const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
+        expect(out['bitcoin-regtest'].id).toBe('a0');
     });
 });

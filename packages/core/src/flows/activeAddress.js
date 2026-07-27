@@ -78,14 +78,39 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
     const overrides = (account && account.activeAddressByChainId) || {};
     const accId = account?.id;
 
+    // Imported-WIF addresses are wallet-scoped (accountId=null), so the
+    // account filter below skips them. They must still be resolvable as
+    // an OVERRIDE - otherwise "Use" writes an active address that this
+    // function can never find, and the UI silently keeps the old one -
+    // but they stay out of the default pool: an imported key becomes the
+    // active address only when the user picks it.
+    /** @type {Set<string>} */
+    let importedIds = new Set();
+    if (account?.walletId) {
+        try {
+            const wallet = await vault.wallets?.get(account.walletId);
+            const keys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
+            importedIds = new Set(
+                keys.map((k) => k?.addressId).filter((id) => typeof id === 'string' && id.length > 0),
+            );
+        } catch { /* no wallet record readable: overrides stay account-only */ }
+    }
+
     // Group this account's addresses by chainId.
     const all = await vault.addresses.list();
     /** @type {Map<string, import('../schemas/address.js').Address[]>} */
     const byChain = new Map();
+    /** @type {Map<string, import('../schemas/address.js').Address>} */
+    const importedById = new Map();
     for (const a of all) {
-        if (accId && a.accountId !== accId) continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
+        if (a.accountId == null && importedIds.has(a.id)) {
+            importedById.set(a.id, a);
+            if (!byChain.has(chainId)) byChain.set(chainId, []);
+            continue;
+        }
+        if (accId && a.accountId !== accId) continue;
         if (!byChain.has(chainId)) byChain.set(chainId, []);
         byChain.get(chainId).push(a);
     }
@@ -95,11 +120,41 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
     for (const [chainId, addrs] of byChain) {
         let chosen = null;
         const overrideId = overrides[chainId];
-        if (overrideId) chosen = addrs.find((a) => a.id === overrideId) || null;
+        if (overrideId) {
+            chosen = addrs.find((a) => a.id === overrideId)
+                || importedById.get(overrideId)
+                || null;
+        }
         if (!chosen) chosen = defaultActiveFor(addrs);
         if (chosen) out[chainId] = { id: chosen.id, address: chosen.address };
     }
     return out;
+}
+
+/**
+ * An imported-WIF address carries accountId=null by design (§11.3.3):
+ * it is scoped to the WALLET, through that wallet's `importedKeys`, not
+ * to any one account. "Belongs to this account" therefore has to mean
+ * "belongs to this account's wallet" for those addresses. Without this,
+ * an imported key can never be made active - and since Send spends the
+ * ACTIVE address and offers no source picker, it could never be spent.
+ * Fails closed: an unreadable wallet record denies the activation.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {{ walletId?: string }} account
+ * @param {{ id: string, accountId: string | null }} addr
+ * @returns {Promise<boolean>}
+ */
+async function isImportedKeyOfAccount(vault, account, addr) {
+    if (addr.accountId != null) return false;
+    if (!account?.walletId) return false;
+    try {
+        const wallet = await vault.wallets.get(account.walletId);
+        const keys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
+        return keys.some((k) => k?.addressId === addr.id);
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -123,7 +178,7 @@ export async function setActiveAddress({ vault, accountId, chainId, addressId })
     if (!account) throw new Error(`setActiveAddress: account "${accountId}" not found`);
     const addr = await vault.addresses.get(addressId);
     if (!addr) throw new Error(`setActiveAddress: address "${addressId}" not found`);
-    if (addr.accountId !== accountId) {
+    if (addr.accountId !== accountId && !(await isImportedKeyOfAccount(vault, account, addr))) {
         throw new Error('setActiveAddress: address does not belong to this account');
     }
 
