@@ -230,17 +230,25 @@ for (const [shell, ...p] of [
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],
 ]) {
     const src = read(...p);
-    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole']) {
+    for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole', 'OracleRecord']) {
         assert.ok(src.includes(`import { ${c} }`), `${shell}: imports ${c}`);
         assert.ok(src.includes(`<${c}`), `${shell}: renders ${c}`);
     }
-    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console']) {
+    for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console', 'bet-oracle-record']) {
         assert.ok(src.includes(`'${view}'`), `${shell}: routes the ${view} view`);
     }
     // Reachable from the menu, not merely present in the bundle.
     assert.match(src, /onBetting: \(\) => setUnlockedView\('bet-markets'\)/,
         `${shell}: the actions menu opens the betting hub`);
     assert.match(src, /onSelect: onBetting/, `${shell}: the betting menu entry is wired`);
+    // The oracle record has no menu entry by design: it is a question about ONE
+    // oracle and needs an address as its subject, so the market page is its only
+    // door. That makes this handler the whole reachability story - the route
+    // shipped once already with the prop declared and nobody passing it.
+    assert.match(src, /onOpenOracle=\{\(chainId, address\) =>/,
+        `${shell}: the market page hands the oracle address to the record view`);
+    assert.ok(src.includes("setUnlockedView('bet-oracle-record')"),
+        `${shell}: nothing opens the oracle record`);
 }
 
 {

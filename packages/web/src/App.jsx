@@ -135,6 +135,7 @@ import { BetFeedDetail } from '@xchain-wallet/core/shared/routes/BetFeedDetail.j
 import { CreateBetFeedForm } from '@xchain-wallet/core/shared/routes/CreateBetFeedForm.jsx';
 import { MyBets } from '@xchain-wallet/core/shared/routes/MyBets.jsx';
 import { OracleConsole } from '@xchain-wallet/core/shared/routes/OracleConsole.jsx';
+import { OracleRecord } from '@xchain-wallet/core/shared/routes/OracleRecord.jsx';
 import { CreatePollForm } from '@xchain-wallet/core/shared/routes/CreatePollForm.jsx';
 import { PollDetail } from '@xchain-wallet/core/shared/routes/PollDetail.jsx';
 import { DelegateVoteForm } from '@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx';
@@ -1563,7 +1564,21 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={betRef.chainId}
                         feedIndex={betRef.feedIndex}
+                        onOpenOracle={(chainId, address) => { setBetRef({ ...betRef, chainId, oracleAddress: address }); setUnlockedView('bet-oracle-record'); }}
                         onBack={() => setUnlockedView('bet-markets')}
+                    />
+                );
+            }
+            // Who is running this market, and what their record is. Reached from a
+            // market rather than the menu: it is a check you make about one oracle,
+            // and it needs the address as its subject.
+            if (unlockedView === 'bet-oracle-record' && activeWalletId && betRef?.oracleAddress) {
+                return (
+                    <OracleRecord
+                        chainId={betRef.chainId}
+                        address={betRef.oracleAddress}
+                        onOpenMarket={(chainId, feedIndex) => { setBetRef({ chainId, feedIndex }); setUnlockedView('bet-market-detail'); }}
+                        onBack={() => setUnlockedView(betRef.feedIndex ? 'bet-market-detail' : 'bet-markets')}
                     />
                 );
             }
