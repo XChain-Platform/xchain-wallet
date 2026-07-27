@@ -15,7 +15,7 @@
 //     - ThisWalletSection imports `clearLastView` and calls it after a
 //       successful messaging.removeWallet.
 //     - DemoBanner does the same when the user (or auto-expire) exits
-//       demo mode.
+//       demo mode, now via the shared `exitDemoWallet` teardown .
 //   FU 6: multi-wallet threading:
 //     - useLastView guards the persist effect with a per-walletId
 //       lastResumedFor + lastPersistedFor pair so a wallet switch
@@ -38,6 +38,10 @@ const demoBannerSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'DemoBanner.jsx'),
     'utf8',
 );
+const demoGraduationSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'utils', 'demoGraduation.js'),
+    'utf8',
+);
 const useLastViewSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'hooks', 'useLastView.js'),
     'utf8',
@@ -56,15 +60,24 @@ assert.match(
     'ThisWalletSection clears last-view AFTER removeWallet',
 );
 
+// : the demo teardown moved into one shared helper so the three
+// escapes (Wallet details, the 24h auto-expire, and the add-wallet
+// graduation) cannot drift. DemoBanner now reaches clearLastView +
+// clearDemoWalletId through it, so pin the call site and the helper.
 assert.match(
     demoBannerSrc,
-    /import \{ clearLastView \} from '\.\.\/utils\/lastViewMemory\.js'/,
-    'DemoBanner imports clearLastView',
+    /import \{ exitDemoWallet \} from '\.\.\/utils\/demoGraduation\.js'/,
+    'DemoBanner routes its exit through the shared demo teardown',
 );
 assert.match(
     demoBannerSrc,
-    /flowsLib\.clearDemoWalletId\(\);[\s\S]+?clearLastView\(activeWalletId\)/,
-    'DemoBanner clears last-view alongside the demo flag on exit',
+    /exitDemoWallet\(\{[\s\S]+?walletId: activeWalletId,/,
+    'DemoBanner tears down the active demo wallet on exit',
+);
+assert.match(
+    demoGraduationSrc,
+    /clearDemoWalletId\(\);\s*\n\s*clearLastView\(walletId\);/,
+    'the shared teardown clears last-view alongside the demo flag',
 );
 
 // ─── FU 6: multi-wallet last-view threading ──────────────────────────

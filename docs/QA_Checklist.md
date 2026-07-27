@@ -97,7 +97,9 @@ Run on a clean profile (extension: fresh install / clear `chrome.storage`; web: 
 
 ## Lock, unlock, panic
 
-- ⬜ Auto-lock fires after the configured timeout (default 5 min); session key cleared.
+- ⬜ Auto-lock fires after the configured timeout (default 15 min); session key cleared.
+- ⬜ Auto-lock still fires when the wallet is left on a screen other than Home: set the timeout to 1 minute, open Send and half-fill it, idle 90 seconds, confirm it locks. Repeat on Receive, History and Settings .
+- ⬜ Auto-lock set to "Never" does not lock, however long the wallet idles.
 - ⬜ Manual lock action returns to Locked screen.
 - ⬜ Failed-attempts escalating delay kicks in after 3 failed unlocks; banner counts down.
 - ⬜ Caps-lock warning appears when caps is active in the password field.

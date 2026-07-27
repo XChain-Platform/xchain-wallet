@@ -14,6 +14,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -128,13 +129,19 @@ function markAccepted() {
  * @param {() => void} [props.onPairPartner]          §20.5 / : enters the watcher/signer pairing lane (shared recovery phrase across two devices)
  * @param {() => void} [props.onDemoEntered]          fires after the demo wallet persists; caller refreshes App state into the unlocked tree
  * @param {() => void} [props.onBack]                 rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
+ * @param {'fresh' | 'add'} [props.mode]              'fresh' = no wallet on the device; 'add' = adds to an already-open vault. Defaults to 'fresh'.
  */
-export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onBack }) {
+export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onBack, mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const [demoBusy, setDemoBusy] = useState(false);
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
+    //  leg 2: adding to a vault the demo created would put a real
+    // wallet behind the demo's throwaway password. Graduate out first.
+    const [graduated, setGraduated] = useState(false);
+    const [gradBusy, setGradBusy] = useState(/** @type {string | null} */ (null));
+    const [gradError, setGradError] = useState(/** @type {string | null} */ (null));
     // §25.1 / G061: license-acceptance gate. Persisted to localStorage so
     // a returning user (e.g. after wiping a demo wallet) doesn't have to
     // re-accept. Cluster J FOLLOWUP 4: a `LICENSE_VERSION` constant tracks
@@ -256,6 +263,59 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         }
     }
 
+    //  leg 2. The vault has ONE password: `meta.kdfParams` is
+    // written when the vault is created and the master key that opens
+    // every record inside it comes from that password alone. In the demo
+    // funnel the vault was created by the demo, so a wallet added here
+    // would carry the user's chosen password on its own encryptedSeed
+    // while the container around it still answered only to the demo's
+    // throwaway one - and that one is deleted the moment the demo exits
+    // or its 24h auto-wipe fires. The user's password is then refused
+    // with a bare "Incorrect password" and only the recovery phrase can
+    // get the funds back. So we do not grow a demo vault: clear the demo
+    // first, then let the chosen lane create a vault keyed to the user's
+    // own password. Nothing real is lost; demo balances are synthetic.
+    //
+    // The id is latched at mount: the teardown clears the demo flag as
+    // its first act, so re-reading it every render would pull the screen
+    // (and any error on it) out from under the user mid-flow. The gate
+    // lifts only when `graduated` says so.
+    const [demoWalletId] = useState(() => flowsLib.getDemoWalletId());
+    const mustGraduate = !graduated && demoOwnsVaultPassword({ mode, demoWalletId });
+
+    async function handleGraduate(intent, next) {
+        if (gradBusy) return;
+        setGradBusy(intent);
+        setGradError(null);
+        try {
+            const { reloaded, remaining } = await exitDemoWallet({
+                messaging,
+                walletId: demoWalletId,
+                intent,
+            });
+            if (reloaded) return;
+            if (remaining === 'unknown') {
+                // We could not read the vault, so we neither wiped it nor
+                // know what is in it. Say so instead of waving the user
+                // into a lane that may repeat the trap.
+                setGradError(
+                    'Could not confirm the demo wallet was cleared. Reload and try again.',
+                );
+                return;
+            }
+            // A real wallet is already in this vault (a device the older
+            // build put in that state). Wiping would destroy it, and
+            // blocking here would dead-end the user, so let the lane they
+            // picked continue.
+            setGraduated(true);
+            if (typeof next === 'function') next();
+        } catch (err) {
+            setGradError(err?.message || 'Could not clear the demo wallet.');
+        } finally {
+            setGradBusy(null);
+        }
+    }
+
     const header = onBack ? (
         <div className={pickerStyles.header}>
             <button
@@ -327,6 +387,85 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             Accept and continue
                         </Button>
                     </div>
+                </div>
+            </Screen>
+        );
+    }
+
+    if (mustGraduate) {
+        return (
+            <Screen variant={variant} header={header}>
+                <div className={isFull ? styles.heroFull : styles.heroPopup}>
+                    <img
+                        src={branding.logoUrl()}
+                        alt={branding.PRODUCT_NAME}
+                        className={isFull ? styles.logoFull : styles.logoPopup}
+                    />
+                    <h1 className={isFull ? styles.nameFull : styles.namePopup}>
+                        Leave the demo first
+                    </h1>
+                </div>
+                <div className={styles.demoGraduateNotice}>
+                    <p>
+                        The demo set this device up with a temporary password you never
+                        chose, and that password is what unlocks everything stored here.
+                    </p>
+                    <p>
+                        A real wallet made inside the demo would still be locked behind
+                        that temporary password, and the demo throws it away when it
+                        ends. So the demo has to go first: your new wallet then starts
+                        clean, and the password you pick is the one that opens it.
+                    </p>
+                    <p>
+                        Nothing in the demo is real. The balances and history are made
+                        up and no coins are at stake, so there is nothing to lose by
+                        clearing it.
+                    </p>
+                </div>
+                <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
+                    <Button
+                        variant="primary"
+                        block
+                        onClick={() => handleGraduate('create', onCreate)}
+                        loading={gradBusy === 'create'}
+                        disabled={!!gradBusy || !onCreate}
+                        icon={<Icon.PlusIcon />}
+                    >
+                        Clear demo &amp; create new wallet
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        onClick={() => handleGraduate('import', onImport)}
+                        loading={gradBusy === 'import'}
+                        disabled={!!gradBusy || !onImport}
+                        icon={<Icon.KeyIcon />}
+                    >
+                        Clear demo &amp; import wallet
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        block
+                        onClick={() => handleGraduate('import-freewallet', onImportFromFreeWallet)}
+                        loading={gradBusy === 'import-freewallet'}
+                        disabled={!!gradBusy || !onImportFromFreeWallet}
+                        icon={<Icon.MigrateIcon />}
+                    >
+                        Clear demo &amp; import from FreeWallet
+                    </Button>
+                    {onBack ? (
+                        <Button
+                            variant="ghost"
+                            block
+                            onClick={onBack}
+                            disabled={!!gradBusy}
+                        >
+                            Keep exploring the demo
+                        </Button>
+                    ) : null}
+                    {gradError ? (
+                        <p role="alert" className={styles.demoError}>{gradError}</p>
+                    ) : null}
                 </div>
             </Screen>
         );

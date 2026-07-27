@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
-import { clearLastView } from '../utils/lastViewMemory.js';
+import { exitDemoWallet } from '../utils/demoGraduation.js';
 import styles from './DemoBanner.module.css';
 
 /**
@@ -45,13 +45,16 @@ export function DemoBanner({ activeWalletId, onExited }) {
         setBusy(true);
         setError(null);
         try {
-            if (typeof messaging?.removeWallet === 'function') {
-                await messaging.removeWallet({ walletId: activeWalletId });
-            } else if (typeof messaging?.sendMessage === 'function') {
-                await messaging.sendMessage('wallet.remove', { walletId: activeWalletId });
-            }
-            flowsLib.clearDemoWalletId();
-            clearLastView(activeWalletId);
+            // Same teardown as the Wallet-details exit. Dropping the
+            // record alone leaves the vault meta behind, so the 24h
+            // auto-expire below used to hand the user an unlock screen
+            // for an empty vault whose throwaway password it had just
+            // deleted (wallet E2E session 16, D-61).
+            const { reloaded } = await exitDemoWallet({
+                messaging,
+                walletId: activeWalletId,
+            });
+            if (reloaded) return;
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setError(err?.message || 'Could not exit demo mode.');

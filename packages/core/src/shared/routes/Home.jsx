@@ -13,7 +13,6 @@ import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useAutoLock } from '../hooks/useAutoLock.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
@@ -34,20 +33,19 @@ const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the
- * wallet name + Lock button; body renders a per-chain balance card
- * grid; footer exposes Send / Receive / Create-a-token action buttons.
+ * wallet name; body renders a per-chain balance card grid; footer
+ * exposes Send / Receive / Create-a-token action buttons.
  *
  * When the wallet has pending §40.9 airdrops (LIST signed but AIRDROP
  * still pending, either waiting for the LIST to be indexed or ready
  * to sign), Home surfaces a resume card above the balance grid so the
  * user can pick up where they left off.
  *
- * Auto-lock is foreground-only and enabled for the popup + web shells.
- * Web was opted out historically on the assumption that tab-close
- * implicitly locks; in practice users leave the tab open for hours, and
- * a backgrounded tab still benefits from idle timeout. Desktop manages
- * its own OS-keychain-backed lock cadence and stays opted out here.
- * See `useAutoLock` for the foreground-only scope limitation.
+ * Locking is a shell concern, not a route concern: idle auto-lock runs
+ * from each shell's AppInner via `useAutoLockPolicy`, and the manual
+ * Lock affordance lives in the shell's menu + keyboard shortcut.
+ *  found that wiring the idle timer here meant navigating off
+ * Home cancelled it, so a wallet left on Send or Settings never locked.
  *
  * @param {object} props
  * @param {() => void} [props.onLocked]        refresh upstream state machine
@@ -146,7 +144,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
     );
-    const [locking, setLocking] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
     // Network filter can be controlled by the parent shell (web AppHeader
     // owns the toolbar filter button) or self-managed when the parent
@@ -515,67 +512,27 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeWalletId, activeAccountId, messaging, homeReloadKey]);
 
-    const handleLock = useCallback(async () => {
-        if (locking) return;
-        setLocking(true);
-        try {
-            await messaging.lockWallet();
-            onLocked?.();
-        } catch (err) {
-            setLoadError(err?.message || 'Lock failed.');
-            setLocking(false);
-        }
-    }, [locking, onLocked, messaging]);
-
-    // Read autolockMinutes from settings; clamp to a sane floor (1 min)
-    // and ceiling (1440 min / 24h) so a corrupt or out-of-range value
-    // can't disable the hook by overflowing or underflowing. The
-    // Settings UI already only offers values inside that range; this
-    // guard handles a hand-edited storage record.
+    // : Home does not lock, in either sense. The idle timer lives
+    // in each shell's AppInner via `useAutoLockPolicy`, because this
+    // route unmounts the moment the user navigates to Send / Receive /
+    // History / Settings, and useAutoLock's effect cleanup cancelled the
+    // pending timer with it - a wallet parked on one of those screens
+    // never locked. The manual lock affordance is the shell's too (the
+    // pancake menu's Lock entry and the §34 keyboard shortcut), so the
+    // local `handleLock` that used to sit here had exactly one consumer,
+    // the auto-lock hook, and left with it. Do not re-add a
+    // `useAutoLock` call to any route.
     const settings = useSettings();
-    const autolockMinutes = Math.max(
-        1,
-        Math.min(1440, Number(settings?.autolockMinutes) || 5),
-    );
     // §20 / G041: wallet-mode aware. The hook's return is the wrapper
     // `{ settings, loading, error, refresh, update }`, so the actual
     // Settings record lives at `.settings`. Read with the explicit
     // default so v2 records without the field behave like 'full'.
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
-    // §26 / G064: auto-lock runs in every shell. The hook listens for
-    // user-input events on `window`, which is identical in the Electron
-    // renderer and the browser, so a user-idle desktop wallet now locks
-    // on the same cadence as web + popup. Cluster O FOLLOWUP 1 closes
-    // here. Future hardening could complement this with a
-    // `powerMonitor.getSystemIdleTime()` driver in the desktop main
-    // process so the wallet locks on OS-level lock / sleep too.
-    // Demo wallets use a randomly-generated 64-char hex password that
-    // lives only in the session-password cache; there is no human-typed
-    // password to fall back on. Auto-locking a demo wallet strands the
-    // user (no recoverable password, only the nuclear "wipe wallet
-    // data" escape on the Locked screen). Skip auto-lock when the
-    // active wallet is the demo wallet so a normal browse session
-    // doesn't accidentally lock them out.
+    // Demo-wallet detection stays here for the proof-verification gate
+    // below (synthetic balances have no real SPV proofs). The auto-lock
+    // side of this check moved to useAutoLockPolicy with the rest.
     const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-    const autoLockEnabled = (shell === 'popup' || shell === 'web' || shell === 'desktop')
-        && !locking
-        && !isDemoActive;
-    const autoLockIdleMs = autolockMinutes * 60 * 1000;
-    useAutoLock(handleLock, { enabled: autoLockEnabled, idleMs: autoLockIdleMs });
-
-    // §26 background backstop (extension only): the foreground hook above only
-    // runs while the popup is open, so report whether auto-lock applies to the
-    // active wallet (armed, honouring the demo-wallet skip) and the idle
-    // threshold, letting the service worker lock after the popup closes.
-    // `reportAutoLock` is implemented by the extension shell only; web/desktop
-    // keep a long-lived window, so their foreground hook is sufficient.
-    useEffect(() => {
-        if (typeof messaging?.reportAutoLock !== 'function') return;
-        Promise.resolve(
-            messaging.reportAutoLock({ armed: autoLockEnabled, idleMs: autoLockIdleMs }),
-        ).catch(() => { /* best-effort */ });
-    }, [messaging, autoLockEnabled, autoLockIdleMs]);
 
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via

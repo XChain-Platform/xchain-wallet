@@ -127,6 +127,26 @@
     }
 }
 
+/* : the add-a-wallet lane, entered from inside the demo, explains
+   why the demo has to be cleared before a real wallet can be made. */
+.demoGraduateNotice {
+    margin: 0 var(--xc-space-3) var(--xc-space-3);
+    padding: var(--xc-space-3);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.demoGraduateNotice p {
+    margin: 0 0 var(--xc-space-2);
+}
+
+.demoGraduateNotice p:last-child {
+    margin-bottom: 0;
+}
+
 .demoError {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-xs);

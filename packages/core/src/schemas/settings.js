@@ -82,6 +82,15 @@ export const CLIPBOARD_AUTO_CLEAR_MIN = 0;
 export const CLIPBOARD_AUTO_CLEAR_MAX = 600;
 export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
 
+// §26: auto-lock idle timeout, in minutes. The Settings Safety panel
+// offers 1 / 5 / 15 / 30 / 60 / 240 and "Never", where "Never" is the
+// sentinel 0. Anything above the ceiling is a hand-edited record, not a
+// choice the UI can produce. useAutoLockPolicy is the single reader.
+export const AUTOLOCK_NEVER = 0;
+export const AUTOLOCK_MINUTES_MIN = 1;
+export const AUTOLOCK_MINUTES_MAX = 1440;
+export const AUTOLOCK_MINUTES_DEFAULT = 15;
+
 /**
  * @typedef {Object} SdkEndpoint
  * @property {string} explorerUrl
@@ -195,7 +204,7 @@ export function createDefaultSettings() {
         schemaVersion: CURRENT_VERSION,
         theme: 'system',
         reducedMotion: 'auto',
-        autolockMinutes: 15,
+        autolockMinutes: AUTOLOCK_MINUTES_DEFAULT,
         fiatCurrency: 'USD',
         language: 'en',
         sdkEndpoints: {},

@@ -29,6 +29,7 @@
 // isn't injected, or when the user dismisses it for the session.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
@@ -44,6 +45,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -225,8 +227,12 @@ function AppInner() {
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    // : a demo graduation wipes the vault and reloads, so the lane
+    // the user picked (create / import / FreeWallet) is handed across the
+    // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
-        /** @type {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */ ('welcome'),
+        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */
+        () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
         /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
@@ -708,6 +714,19 @@ function AppInner() {
         walletId: activeWalletId,
         currentView: unlockedView,
         onResume: setUnlockedView,
+    });
+
+    //  / §26: idle auto-lock. Mounted HERE, above the view switch,
+    // so one timer spans the whole unlocked session. It used to live in
+    // Home.jsx, and since exactly one route renders at a time, navigating
+    // to Send / Receive / History / Settings unmounted Home and cancelled
+    // the timer: a wallet parked on those screens never locked. The policy
+    // hook owns the timeout, the demo-wallet skip and the extension
+    // service-worker backstop report. Do not move it into a route.
+    useAutoLockPolicy({
+        sessionState: status.state,
+        activeWalletId,
+        onLocked: refresh,
     });
 
     switch (status.state) {
@@ -2350,6 +2369,7 @@ function AppInner() {
                 }
                 return (
                     <Onboarding
+                        mode="add"
                         onCreate={() => setOnboardingStep('create')}
                         onImport={() => setOnboardingStep('import')}
                         onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}

@@ -112,8 +112,10 @@ const home = readFileSync(
     join(webPkg, '..', 'core', 'src', 'shared', 'routes', 'Home.jsx'),
     'utf8',
 );
+// Locking is not in this list:  moved both the idle timer and the
+// manual Lock entry out of Home and into the shell, because a route
+// unmounts on navigation and cancelled the auto-lock timer with it.
 for (const call of [
-    'messaging.lockWallet',
     'messaging.listWallets',
     'messaging.getWalletBalances',
 ]) {

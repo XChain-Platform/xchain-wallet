@@ -17,9 +17,11 @@
 //   2. With no session, wallet.lock is still idempotent. It returns
 //      `locked: true` without error.
 //
-// Static coverage asserts Home.jsx wires lockWallet + listWallets +
-// getWalletBalances + useAutoLock, and that messaging.js exposes the
-// full set.
+// Static coverage asserts Home.jsx wires listWallets + getWalletBalances,
+// that every shell wires lockWallet, and that messaging.js exposes the
+// full set.  moved both lock paths (idle + manual) out of Home and
+// into the shells, so Home itself no longer calls lockWallet; the shell
+// mount point is asserted in auto-lock-shell.smoke.js.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -49,20 +51,35 @@ assert.ok(
 );
 
 // Home lives at @xchain-wallet/core/shared/routes/Home.jsx now. It
-// resolves lockWallet / listWallets / getWalletBalances off the
-// messaging module passed into <MessagingProvider>, and uses the
-// shared useAutoLock hook (balances render via HomeTabs/BalanceList).
+// resolves listWallets / getWalletBalances off the messaging module
+// passed into <MessagingProvider> (balances render via
+// HomeTabs/BalanceList).
 const sharedHome = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 const home = readFileSync(sharedHome, 'utf8');
 for (const call of [
-    'messaging.lockWallet',
     'messaging.listWallets',
     'messaging.getWalletBalances',
 ]) {
     assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }
-for (const symbol of ['useAutoLock', 'HomeTabs']) {
-    assert.ok(home.includes(symbol), `shared Home.jsx imports ${symbol}`);
+assert.ok(home.includes('HomeTabs'), 'shared Home.jsx imports HomeTabs');
+
+// : locking is a shell concern now. Home must not carry its own
+// lock path, and each shell must still have one.
+assert.ok(
+    !/messaging\.lockWallet/.test(home),
+    'shared Home.jsx no longer owns a lock path ( moved it to the shells)',
+);
+for (const rel of [
+    ['packages', 'web', 'src', 'App.jsx'],
+    ['packages', 'desktop', 'renderer', 'App.jsx'],
+    ['packages', 'extension', 'src', 'popup', 'App.jsx'],
+]) {
+    const shellSrc = readFileSync(join(wsRoot, ...rel), 'utf8');
+    assert.ok(
+        /lockWallet\(\)/.test(shellSrc),
+        `${rel.join('/')} keeps a manual lock path`,
+    );
 }
 assert.ok(
     /registry as registryLib/.test(home),

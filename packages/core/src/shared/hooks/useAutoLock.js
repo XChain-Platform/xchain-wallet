@@ -28,8 +28,15 @@ import { useEffect, useRef } from 'react';
  * Pass `enabled: false` to make the hook a no-op; the React hook
  * rules forbid skipping the call itself, so callers pass a flag when
  * they want auto-lock off (e.g. while a lock action is already
- * in-flight). All three shells (popup, web, desktop) opt in via the
- * Home route's `useAutoLock` call.
+ * in-flight). All three shells (popup, web, desktop) opt in through
+ * `useAutoLockPolicy`, which owns the enable decision and the timeout.
+ *
+ *  - MOUNT POINT IS LOAD-BEARING: the effect cleanup cancels the
+ * pending timer, so this hook only counts idle time while its caller is
+ * mounted. Call it (via useAutoLockPolicy) from a shell-level component
+ * that outlives navigation, never from a route: wiring it into Home
+ * meant a wallet left on Send / Receive / History / Settings never
+ * locked at all.
  *
  * @param {() => void} onLock
  * @param {object} [opts]
@@ -57,7 +64,12 @@ export function useAutoLock(
             if (cancelled) return;
             if (Date.now() - lastActivity.current >= idleMs) {
                 try { onLockRef.current?.(); } catch (_err) { /* ignore */ }
-                return;
+                // Re-arm instead of stopping. `onLock` is async and can
+                // fail (a messaging round-trip), and bailing here left the
+                // session unlocked with no timer for the rest of its life.
+                // The successful case tears the hook down anyway: the shell
+                // flips to `locked` and passes `enabled: false`.
+                lastActivity.current = Date.now();
             }
             window.setTimeout(tick, tickMs);
         };
