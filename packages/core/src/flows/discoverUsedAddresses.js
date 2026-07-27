@@ -50,6 +50,7 @@
 import {
     bip39MnemonicToSeed,
     counterwalletMnemonicToSeedBytes,
+    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
     derive,
     hdKeyFromSeed,
     isValidBip39Mnemonic,
@@ -184,7 +185,7 @@ export async function discoverUsedAddresses(opts) {
             if (!descriptor) {
                 throw new Error(`discoverUsedAddresses: unknown chain "${chainId}"`);
             }
-            const types = resolveAddressTypes(descriptor, addressTypes);
+            const types = resolveAddressTypes(descriptor, addressTypes, format);
             for (const addressType of types) {
                 let chainResult;
                 try {
@@ -192,6 +193,7 @@ export async function discoverUsedAddresses(opts) {
                         chainId,
                         descriptor,
                         addressType,
+                        format,
                         chainRegistry,
                         sdkRegistry,
                         hdRoot,
@@ -239,6 +241,7 @@ async function scanChainType({
     chainId,
     descriptor,
     addressType,
+    format,
     chainRegistry,
     sdkRegistry,
     hdRoot,
@@ -276,6 +279,7 @@ async function scanChainType({
             accountIndex,
             change,
             index,
+            { format },
         );
         if (!path) {
             error = `no derivation path for ${chainId}/${addressType}`;
@@ -358,8 +362,15 @@ async function scanChainType({
     };
 }
 
-function resolveAddressTypes(descriptor, addressTypes) {
-    if (addressTypes === 'default') return [descriptor.defaultAddressType];
+function resolveAddressTypes(descriptor, addressTypes, format) {
+    if (addressTypes === 'default') {
+        // A legacy wallet's own default is the address type Counterwallet
+        // showed first; scanning the chain's modern default would miss
+        // every address the user actually funded.
+        return [format === 'counterwallet-legacy'
+            ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
+            : descriptor.defaultAddressType];
+    }
     if (addressTypes === 'all') return descriptor.addressTypes.slice();
     if (Array.isArray(addressTypes)) {
         for (const t of addressTypes) {

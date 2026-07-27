@@ -24,6 +24,7 @@ import {
 import {
     counterwalletMnemonicToSeedBytes,
     isValidCounterwalletMnemonic,
+    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/counterwallet.js';
 import { sha256 } from '@noble/hashes/sha2';
 import { derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
@@ -287,7 +288,13 @@ export class SoftwareSigner extends Signer {
         if (!descriptor) {
             throw new Error(`SoftwareSigner.getAddresses: unknown chain "${chainId}"`);
         }
-        const type = addressType ?? descriptor.defaultAddressType;
+        const walletFormat = this._walletEncryption?.format ?? 'bip39';
+        // A restored Counterwallet wallet defaults to the legacy address
+        // its old wallet showed first, not the chain's modern default.
+        const type = addressType
+            ?? (walletFormat === 'counterwallet-legacy'
+                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
+                : descriptor.defaultAddressType);
         if (!descriptor.addressTypes.includes(type)) {
             throw new Error(
                 `SoftwareSigner.getAddresses: addressType "${type}" not supported on ${chainId}`,
@@ -299,7 +306,9 @@ export class SoftwareSigner extends Signer {
         const out = [];
         for (let i = 0; i < count; i++) {
             const index = startIndex + i;
-            const path = this._chainRegistry.derivationPathFor(chainId, type, accountIndex, change, index);
+            const path = this._chainRegistry.derivationPathFor(
+                chainId, type, accountIndex, change, index, { format: walletFormat },
+            );
             if (!path) {
                 throw new Error(
                     `SoftwareSigner.getAddresses: no derivation path for ${chainId}/${type}`,

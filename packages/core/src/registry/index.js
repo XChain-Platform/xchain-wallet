@@ -15,6 +15,7 @@
 
 import { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
 import { validateChainDescriptor } from './validate.js';
+import { counterwalletDerivationPath } from '../crypto/counterwallet.js';
 
 export class ChainRegistry {
     /**
@@ -105,15 +106,38 @@ export class ChainRegistry {
      * account, change, index) tuple. Returns null if the chain or address
      * type isn't registered.
      *
+     * A `counterwallet-legacy` wallet does not use the descriptor's
+     * templates at all: it derives one chain, `m/0'/<change>/<index>`,
+     * shared by every address type (§19.7). Resolving that here rather
+     * than at each call site is deliberate - address derivation,
+     * restore-discovery and the dry-run restore check all ask this one
+     * function, and a legacy wallet whose three answers disagreed would
+     * report a correct backup as broken.
+     *
      * @param {string} chainId
      * @param {string} addressType
      * @param {number} accountIndex
      * @param {0 | 1} change   BIP44 branch: 0 external (receive/dispenser), 1 internal change (§16)
      * @param {number} index
+     * @param {{ format?: 'bip39' | 'counterwallet-legacy' | 'wif-only' }} [opts]
      */
-    derivationPathFor(chainId, addressType, accountIndex, change, index) {
+    derivationPathFor(chainId, addressType, accountIndex, change, index, opts = {}) {
         const d = this._entries.get(chainId);
         if (!d) return null;
+        if (opts.format === 'counterwallet-legacy') {
+            // Counterwallet had a single account, so there is no path
+            // level to put a second one on. Deriving account 1 from the
+            // account-0 path would hand back addresses that already
+            // belong to account 0 - silently, and with real funds on
+            // them - so refuse instead.
+            if (accountIndex !== 0) {
+                throw new Error(
+                    'derivationPathFor: counterwallet-legacy wallets have a single account (m/0\'/C/I); '
+                    + `cannot derive account ${accountIndex}`,
+                );
+            }
+            return counterwalletDerivationPath(change, index);
+        }
         const template = d.derivationPaths[addressType];
         if (!template) return null;
         // Anchored expansion of the fixed `A'/C/I` tail (validateChainDescriptor

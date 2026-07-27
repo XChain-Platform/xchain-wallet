@@ -8,6 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+// Exported for the shells' background hosts, which resolve the same
+// "which address type does this wallet use" question the flows do.
+export {
+    defaultAddressTypeForFormat,
+    defaultAddressTypeForWallet,
+} from './_defaultAddressType.js';
 export { createWallet } from './createWallet.js';
 export { createAccount } from './createAccount.js';
 export { activateChain } from './activateChain.js';

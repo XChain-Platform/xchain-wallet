@@ -21,6 +21,7 @@ import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 
 /**
  * @typedef {Object} CreateAccountOpts
@@ -119,7 +120,7 @@ export async function createAccount({
         const addresses = [];
         for (const chainId of activeChainIds) {
             const descriptor = chainRegistry.get(chainId);
-            const addressType = descriptor.defaultAddressType;
+            const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
             const [derived] = await signer.getAddresses({
                 chainId,
                 accountIndex: nextIndex,

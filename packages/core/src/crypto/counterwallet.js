@@ -70,6 +70,42 @@ export function isValidCounterwalletMnemonic(mnemonic) {
 }
 
 /**
+ * The address type a Counterwallet-format wallet must default to.
+ *
+ * Counterwallet/FreeWallet presents the legacy P2PKH address first, and
+ * a migrating user's balances - Counterparty assets especially - sit on
+ * it. Defaulting a restored legacy wallet to the chain's modern p2wpkh
+ * would show them an address their old wallet never displayed.
+ */
+export const COUNTERWALLET_DEFAULT_ADDRESS_TYPE = 'p2pkh';
+
+/**
+ * Derivation path for a Counterwallet-format wallet (§19.7).
+ *
+ * Counterwallet derives one chain, `m/0'/<change>/<index>`, and chooses
+ * the address TYPE per address rather than per branch - so the legacy
+ * and segwit addresses a user sees share a single index space, and the
+ * BIP44 purpose / coin-type / account levels simply do not exist here.
+ * That is why this cannot be expressed as a chain-descriptor template:
+ * those are all `m/<purpose>'/<coin>'/A'/C/I`.
+ *
+ * Verified 2026-07-26 against a real Counterwallet server wallet, which
+ * also settled how the seed reaches BIP32: as the RAW 16 bytes, not as
+ * the 32-char hex read as ASCII. That was a genuine fork - the two
+ * yield different wallets and nothing inside this codebase could tell
+ * them apart - so the deciding vector is pinned in
+ * test/unit/crypto/counterwallet-interop.test.js. Change this path only
+ * against that test.
+ *
+ * @param {0 | 1} change    0 external, 1 internal
+ * @param {number} index
+ * @returns {string}
+ */
+export function counterwalletDerivationPath(change, index) {
+    return `m/0'/${change}/${index}`;
+}
+
+/**
  * Convert a Counterwallet mnemonic to the 16-byte seed (the raw bytes
  * that would be passed to BIP32 `HDKey.fromMasterSeed`). Note: this
  * intentionally returns *raw bytes*, not a BIP39-style 64-byte seed.

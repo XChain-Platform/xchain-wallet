@@ -34,6 +34,7 @@ import { createAddress } from '../schemas/address.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 
 /**
  * @typedef {Object} DispenserAddressOpts
@@ -86,7 +87,8 @@ export async function dispenserAddress({
     if (!descriptor) {
         throw new Error(`dispenserAddress: unknown chain "${chainId}"`);
     }
-    const type = addressType ?? descriptor.defaultAddressType;
+    const type = addressType
+        ?? await defaultAddressTypeForWallet(vault, walletId, descriptor);
     if (!descriptor.addressTypes.includes(type)) {
         throw new Error(
             `dispenserAddress: addressType "${type}" not supported on ${chainId}`,

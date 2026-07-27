@@ -14,7 +14,11 @@
 //
 // Not exported from the flows barrel. Flow modules import it directly.
 
-import { calibrateKdfParams, encryptWalletSeed } from '../crypto/index.js';
+import {
+    calibrateKdfParams,
+    encryptWalletSeed,
+    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
+} from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
 import { createAccount } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
@@ -115,7 +119,12 @@ export async function persistHdWallet({
         const addresses = [];
         for (const chainId of activeChainIds) {
             const descriptor = chainRegistry.get(chainId);
-            const addressType = descriptor.defaultAddressType;
+            // A restored Counterwallet wallet opens on the legacy address
+            // its old wallet showed first - that is where the user's
+            // balances are - not on the chain's modern default.
+            const addressType = format === 'counterwallet-legacy'
+                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
+                : descriptor.defaultAddressType;
             const [derived] = await signer.getAddresses({
                 chainId,
                 accountIndex: 0,

@@ -155,6 +155,72 @@ describe('integration/flows/backup-add-mode', () => {
         expect(r.walletId).toBe('src');
     });
 
+    // Every case above builds vaults with `settings: null`, which no
+    // real wallet ever is: the settings singleton is created at
+    // onboarding. With one present, add-mode restore used to fail 100%
+    // of the time on the default onConflict='error' - the singleton
+    // always "collides" - so "restore alongside your existing wallets"
+    // could not be done at all.
+    /** Export from a source vault that carries settings, as a real one does. */
+    async function exportWithSettings() {
+        const v = makeVault({
+            wallets: [sampleWallet('src')],
+            accounts: [sampleAccount('acc-src', 'src')],
+            addresses: [sampleAddress('addr-derived-1', 'acc-src')],
+            settings: { schemaVersion: 1, activeNetwork: 'mainnet' },
+        });
+        const r = await exportBackupFile({
+            vault: v, walletId: 'src', password, kdfParams: KDF_PARAMS,
+        });
+        return r.fileContent;
+    }
+
+    it('add mode restores into a vault that already has settings', async () => {
+        const withSettings = await exportWithSettings();
+        const targetVault = makeVault({
+            wallets: [sampleWallet('keep')],
+            settings: { schemaVersion: 1, activeNetwork: 'regtest' },
+        });
+        const r = await importBackupFile({
+            vault: targetVault, fileContent: withSettings, password, mode: 'add',
+        });
+        expect(r.walletId).not.toBe('src');
+        expect(r.skipped.settings).toBe(true);
+        expect(r.writes.settings).toBe(false);
+        const wallets = await targetVault.wallets.list();
+        expect(wallets).toHaveLength(2);
+        // The vault keeps the network the user is actually on.
+        expect((await targetVault.settings.get()).activeNetwork).toBe('regtest');
+    });
+
+    it('add mode keeps the target vault settings even under onConflict=overwrite', async () => {
+        // 'overwrite' resolves collisions for the wallet being restored;
+        // it must not hand a joining wallet the vault-wide config the
+        // user is currently running under.
+        const withSettings = await exportWithSettings();
+        const targetVault = makeVault({
+            settings: { schemaVersion: 1, activeNetwork: 'regtest' },
+        });
+        await importBackupFile({
+            vault: targetVault,
+            fileContent: withSettings,
+            password,
+            mode: 'add',
+            onConflict: 'overwrite',
+        });
+        expect((await targetVault.settings.get()).activeNetwork).toBe('regtest');
+    });
+
+    it('fresh mode still reports a settings collision', async () => {
+        const withSettings = await exportWithSettings();
+        const targetVault = makeVault({
+            settings: { schemaVersion: 1, activeNetwork: 'regtest' },
+        });
+        await expect(importBackupFile({
+            vault: targetVault, fileContent: withSettings, password,
+        })).rejects.toThrow(/settings/);
+    });
+
     it('rejects an unknown mode value', async () => {
         const targetVault = makeVault();
         await expect(importBackupFile({

@@ -815,13 +815,25 @@ export async function importMnemonicLocal(req) {
         throw new Error('wallet.import: a wallet already exists; unlock or reset first');
     }
 
+    // Reject an unusable phrase BEFORE deriving the master key. Argon2id
+    // is synchronous and pegs the main thread for seconds, and the vault
+    // open behind it costs more still - so a single typo on the recovery
+    // screen used to freeze the UI before it could say "that phrase is
+    // not valid". The format check is microseconds and importMnemonic
+    // re-validates anyway, so this is a fast path, not a second gate.
+    const flowsNs = await getFlows();
+    if (!flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
+        throw new Error(
+            'That recovery phrase is not valid. Check for typos, missing words, or a phrase from a different wallet.',
+        );
+    }
+
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     try {
         const storage = new IndexedDBStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         await v.open();
-        const flowsNs = await getFlows();
         const result = await flowsNs.importMnemonic({
             password,
             mnemonic,

@@ -231,10 +231,17 @@ export async function importBackupFile({
 
     // Collect conflicts up-front; onConflict='error' fails fast. Add
     // mode skips the wallet / account / address collisions because we
-    // just re-minted those ids; only contacts / connectedSites /
-    // settings can still conflict.
+    // just re-minted those ids; only contacts / connectedSites can
+    // still conflict.
+    //
+    // Settings is exempt in 'add' mode: it is a vault-global singleton,
+    // so an initialized vault ALWAYS has one and the incoming record
+    // would always collide - which made every restore-alongside fail on
+    // the default onConflict='error'. The joining wallet does not get to
+    // redefine the vault's network / fee / privacy choices, so its
+    // settings are simply not applied (see the write below).
     const conflicts = await collectConflicts(
-        vault, decoded, { skipWalletScoped: mode === 'add' },
+        vault, decoded, { skipWalletScoped: mode === 'add', skipSettings: mode === 'add' },
     );
     if (conflicts.length > 0 && onConflict === 'error') {
         throw new BackupConflictError(conflicts);
@@ -267,10 +274,14 @@ export async function importBackupFile({
     await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs');
 
     // Settings is a singleton; overwrite/preserve decisions apply to
-    // the whole record.
+    // the whole record. In 'add' mode the vault's own settings win even
+    // under onConflict='overwrite': that flag exists to resolve record
+    // collisions for the wallet being restored, not to hand a joining
+    // wallet the vault-wide network / fee / privacy configuration the
+    // user is currently running under.
     if (decoded.settings) {
         const existing = await vault.settings.get();
-        if (!existing || onConflict === 'overwrite') {
+        if (!existing || (onConflict === 'overwrite' && mode !== 'add')) {
             await vault.settings.put(decoded.settings);
             writes.settings = true;
         } else {
@@ -368,12 +379,12 @@ export async function restoreFromBackupPointer({
 /**
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {BackupPayload} payload
- * @param {{ skipWalletScoped?: boolean }} [opts]   when true, skip
- *                                                  wallets / accounts /
- *                                                  addresses / pendingTxs
- *                                                  (the four collections
- *                                                  whose ids `add`-mode
- *                                                  has already re-minted)
+ * @param {{ skipWalletScoped?: boolean, skipSettings?: boolean }} [opts]
+ *        skipWalletScoped: skip wallets / accounts / addresses /
+ *          pendingTxs (the four collections whose ids `add`-mode has
+ *          already re-minted).
+ *        skipSettings: skip the settings singleton, which exists in
+ *          every initialized vault and so always "collides".
  * @returns {Promise<string[]>}          conflict labels ("wallets/<id>", etc.)
  */
 async function collectConflicts(vault, payload, opts = {}) {
@@ -393,7 +404,7 @@ async function collectConflicts(vault, payload, opts = {}) {
     }
     await check(vault.contacts, payload.contacts ?? [], 'contacts');
     await check(vault.connectedSites, payload.connectedSites ?? [], 'connectedSites');
-    if (payload.settings && (await vault.settings.get())) out.push('settings');
+    if (!opts.skipSettings && payload.settings && (await vault.settings.get())) out.push('settings');
     return out;
 }
 

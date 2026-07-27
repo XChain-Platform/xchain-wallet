@@ -22,6 +22,7 @@ import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
 import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
+import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 
 export class NoMatchingAccountError extends Error {
     constructor(walletId, accountIndex) {
@@ -85,7 +86,8 @@ export async function receiveAddress({
     if (!descriptor) {
         throw new Error(`receiveAddress: unknown chain "${chainId}"`);
     }
-    const type = addressType ?? descriptor.defaultAddressType;
+    const type = addressType
+        ?? await defaultAddressTypeForWallet(vault, walletId, descriptor);
     if (!descriptor.addressTypes.includes(type)) {
         throw new Error(
             `receiveAddress: addressType "${type}" not supported on ${chainId}`,

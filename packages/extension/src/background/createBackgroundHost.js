@@ -467,7 +467,12 @@ async function newestAddress(req, { vault, chainRegistry }) {
     if (!descriptor) {
         throw new Error(`addresses.newest: unknown chain "${chainId}"`);
     }
-    const type = addressType ?? descriptor.defaultAddressType;
+    // Not `descriptor.defaultAddressType`: a counterwallet-legacy wallet
+    // stores p2pkh addresses, so the chain default matches none of them
+    // and Receive would report the wallet as having no address at all
+    // .
+    const type = addressType
+        ?? await flows.defaultAddressTypeForWallet(vault, walletId, descriptor);
 
     const accounts = await vault.accounts.findBy('walletId', walletId);
     let accountIds;

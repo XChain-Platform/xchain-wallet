@@ -40,6 +40,7 @@ import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
 import { seedSettingsForChains } from './seedSettings.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 
 /**
  * @typedef {Object} ActivateChainOpts
@@ -128,7 +129,7 @@ export async function activateChain({
     const addressSource = signer.kind === 'software' ? 'hd' : signer.kind;
 
     const descriptor = chainRegistry.get(chainId);
-    const addressType = descriptor.defaultAddressType;
+    const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
     const allAddresses = await vault.addresses.list();
 
     try {

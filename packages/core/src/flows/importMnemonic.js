@@ -38,10 +38,13 @@ export class InvalidMnemonicError extends Error {
     }
 }
 
+// The message is rendered verbatim on the import screen, so it is
+// written for the person recovering a wallet, not for a stack trace:
+// no function prefix, and it names what the user can actually check.
 export class UnknownMnemonicFormatError extends Error {
     constructor() {
         super(
-            'importMnemonic: mnemonic did not validate as BIP39 or Counterwallet; check for typos or wrong wordlist',
+            'That recovery phrase is not valid. Check for typos, missing words, or a phrase from a different wallet.',
         );
         this.name = 'UnknownMnemonicFormatError';
     }
