@@ -1723,6 +1723,64 @@ export function createBackgroundHost(deps) {
         );
     });
 
+    //  §5.4: confirm-session persistence.
+    //
+    // The store (confirmActionSessionStorage) shipped with slice 1 and its
+    // session half had NO production caller for months - only the reservation
+    // half was wired - which reads exactly like a shipped feature and is why
+    // this item existed. These routes are that caller.
+    //
+    // What this protects is a popup CLOSE, not a worker eviction: a measured
+    // CDP eviction leaves the modal on screen and Approve still signs and
+    // broadcasts. MV3 popups close on every focus loss, including the loss a
+    // hardware prompt causes, and what dies with them is an UNSIGNED composed
+    // PSBT. Nothing money-critical is at stake (signed-but-unbroadcast txs
+    // already persist in chrome.storage.local, and reservations in
+    // storage.session) - this is a re-entry the user would otherwise redo.
+    //
+    // The dispatch descriptor is stored as a messaging METHOD NAME, not a
+    // closure, because it has to cross the boundary; the name is allow-listed
+    // on resume for the same reason `action.vote.composeForConfirm` allow-lists
+    // its builder name .
+    host.register('action.confirmSession.put', async (req) => {
+        if (!confirmSessionStorage) return { stored: false };
+        const id = req?.id;
+        if (typeof id !== 'string' || !id) {
+            throw new Error('action.confirmSession.put: id is required');
+        }
+        await confirmSessionStorage.putSession(id, {
+            id,
+            request: req.request || null,
+            composed: req.composed || null,
+            report: req.report || null,
+            dispatch: req.dispatch || null,
+            createdAt: req.createdAt || null,
+        });
+        return { stored: true };
+    });
+
+    host.register('action.confirmSession.list', async () => {
+        if (!confirmSessionStorage) return { sessions: [] };
+        const all = await confirmSessionStorage.loadSessions();
+        return { sessions: Object.values(all || {}) };
+    });
+
+    // Called on EVERY terminal state (approved, rejected, errored). A session
+    // that outlives its confirm is not merely litter: resuming it would invite
+    // the user to re-approve a transaction that may already be signed and
+    // broadcast, which is the double-broadcast trap §5.3.4 forbids. The resume
+    // path additionally runs the §4.6 input-liveness re-check, so a stale one
+    // interrupts rather than signs - but clearing eagerly is the first line.
+    host.register('action.confirmSession.clear', async (req) => {
+        if (!confirmSessionStorage) return { cleared: false };
+        const id = req?.id;
+        if (typeof id !== 'string' || !id) {
+            throw new Error('action.confirmSession.clear: id is required');
+        }
+        await confirmSessionStorage.removeSession(id);
+        return { cleared: true };
+    });
+
     //  §4: run sdk.preflight HOST-side (the SDK, its explorer endpoint,
     // and Tier-2 state all live here) and return the serializable report. The
     // popup's AbortController cannot cross the boundary; a superseded report
