@@ -309,7 +309,24 @@ async function addressesByChain(req, { vault, chainRegistry }) {
     } else {
         accountIds = new Set(accounts.map((a) => a.id));
     }
-    if (accountIds.size === 0) return {};
+    // Imported-WIF addresses carry accountId=null by design (§11.3.3),
+    // so the account filter below drops them and the key becomes
+    // invisible on every surface this map feeds. The wallet's
+    // importedKeys array is the link that scopes them to THIS wallet.
+    // They are wallet-scoped, not account-scoped, so they belong in the
+    // result even when one account was asked for - AddressList always
+    // passes the active account id, and its "Imported" filter exists to
+    // show exactly these.
+    /** @type {Set<string>} */
+    let importedAddressIds = new Set();
+    try {
+        const walletRecord = await vault.wallets.get(walletId);
+        const keys = Array.isArray(walletRecord?.importedKeys) ? walletRecord.importedKeys : [];
+        importedAddressIds = new Set(
+            keys.map((k) => k?.addressId).filter((id) => typeof id === 'string' && id.length > 0),
+        );
+    } catch { /* no wallet record readable: fall through with none */ }
+    if (accountIds.size === 0 && importedAddressIds.size === 0) return {};
     // Read activeNetwork once per call so every UI surface that consumes
     // this map (Home, History, AddressList, Send, every action form's
     // chain picker) sees the same filtered set without each having to
@@ -327,7 +344,10 @@ async function addressesByChain(req, { vault, chainRegistry }) {
     /** @type {Record<string, any[]>} */
     const byChain = {};
     for (const a of all) {
-        if (!a.accountId || !accountIds.has(a.accountId)) continue;
+        const belongs = a.accountId
+            ? accountIds.has(a.accountId)
+            : importedAddressIds.has(a.id);
+        if (!belongs) continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
         if (activeNetwork) {
