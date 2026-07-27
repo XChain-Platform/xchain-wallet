@@ -871,9 +871,11 @@ describe(' §5.6 slice 3: ComposeMessage confirms the encrypted MESSAGE', () => 
         VERSION: '2',
         COIN: 'BTC',
         // `devmock` addresses are the validator's sanctioned test placeholder
-        // (addressValidation.looksLikeDevMock), so this exercises the real
+        // (sdk/devMockAddresses.isDevMockAddress), so this exercises the real
         // MESSAGE any-network recipient rule without pinning a live address.
-        DESTINATION: 'bc1qdevmockrecipient',
+        // : the tail must be the real generated shape (lowercase hex);
+        // the validator no longer takes any string mentioning "devmock".
+        DESTINATION: 'bc1qdevmock02aabbcc',
         ENCRYPTED_MESSAGE: 'deadbeefciphertext',
     });
 

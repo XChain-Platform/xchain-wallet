@@ -18,6 +18,7 @@
 
 import { base58check, bech32, bech32m } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
+import { isDevMockAddress } from '../../sdk/devMockAddresses.js';
 
 const bsc = base58check(sha256);
 
@@ -47,11 +48,13 @@ export const ADDRESS_PARAMS = {
 
 // Dev-SDK builds derive placeholder addresses like "1devmock<hex>" or
 // "bc1qdevmock<hex>" (see sdk/devMockAddresses.js). Accept them so the
-// validator doesn't reject every address while running on the stub; no real
-// on-chain address carries this marker.
-function looksLikeDevMock(address) {
-    return /devmock/i.test(address);
-}
+// validator doesn't reject every address while running on the stub.
+//
+// : this used to be a bare /devmock/i substring test, which ships in the
+// core (non-dev-gated) bundle and so let a production user paste any string
+// containing "devmock" past the recipient check. `isDevMockAddress` matches the
+// full generated shape (known prefix + up to 24 lowercase hex chars, anchored),
+// which no pasted text reaches by accident and no real address can match.
 
 // True when `address` is well-formed for one specific coin+network's params.
 function matchesParams(address, params) {
@@ -123,7 +126,7 @@ export function detectAddressCoin(address) {
 export function isValidAddressForChain(address, coin, network) {
     const a = String(address || '').trim();
     if (!a) return false;
-    if (looksLikeDevMock(a)) return true;
+    if (isDevMockAddress(a)) return true;
     const params = ADDRESS_PARAMS[coin]?.[network];
     if (!params) return false;
     return matchesParams(a, params);
@@ -144,7 +147,7 @@ export function isValidAddressForChain(address, coin, network) {
 export function isValidAddressAnyNetwork(address) {
     const a = String(address || '').trim();
     if (!a) return false;
-    if (looksLikeDevMock(a)) return true;
+    if (isDevMockAddress(a)) return true;
     for (const coin of Object.keys(ADDRESS_PARAMS)) {
         for (const network of Object.keys(ADDRESS_PARAMS[coin])) {
             if (matchesParams(a, ADDRESS_PARAMS[coin][network])) return true;
