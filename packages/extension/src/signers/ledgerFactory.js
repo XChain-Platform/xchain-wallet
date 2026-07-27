@@ -57,7 +57,7 @@ function defaultAppLoader() {
 
 /**
  * Pair a Ledger device. Core's `makeLedgerFactory` owns the pair
- * sequence (getAppAndVersion → identity xpub → deviceIdentifier →
+ * sequence (read the open app → identity xpub → deviceIdentifier →
  * construct LedgerSigner); this export binds the extension-specific
  * transport + app-class loaders.
  *

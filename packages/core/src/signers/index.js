@@ -37,6 +37,7 @@ export {
     deriveLedgerDeviceIdentifier,
     modelFromLedgerTransport,
 } from '../../../signers-ledger/src/LedgerSigner.js';
+export { readLedgerAppInfo } from '../../../signers-ledger/src/appInfo.js';
 
 export { RemoteSigner } from './RemoteSigner.js';
 

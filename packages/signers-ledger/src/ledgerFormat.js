@@ -153,6 +153,14 @@ export function serializeOutputs(outputs) {
  * Layout (non-segwit): version(4 LE) + inputCount(varint) + inputs +
  * outputCount(varint) + outputs + locktime(4 LE).
  *
+ * NOT USABLE FOR BUILDING A SPEND, and no longer used by
+ * `toLedgerCreatePayment` . Ledger takes the outpoint it signs
+ * from the bytes of the prev tx it is handed, and a synthesized tx
+ * hashes to a different txid than the real one by construction, so
+ * feeding this in makes the device sign a spend of an outpoint that
+ * does not exist. Kept only as a carrier for scriptPubKey + value in
+ * contexts where the txid is irrelevant.
+ *
  * @param {number} vout
  * @param {number} value
  * @param {string} scriptPubKeyHex
@@ -198,9 +206,29 @@ export function synthesizeMinimalPrevTx(vout, value, scriptPubKeyHex) {
  */
 function prevTxHexForInput(inp) {
     if (inp.nonWitnessUtxoHex) return inp.nonWitnessUtxoHex;
+
+    // A synthesized prev tx CANNOT be used to build a spend, and this used
+    // to do exactly that for every witnessUtxo-only input .
+    // Ledger derives the outpoint it signs from the bytes of the prev tx it
+    // is handed, and a synthesized tx hashes to a different txid than the
+    // real one by construction. The device happily produced a fully-formed,
+    // correctly-witnessed transaction that spent an outpoint which does not
+    // exist, so it could never be broadcast. Verified on a real device: the
+    // signed input matched the synthesized txid, not the PSBT's.
+    //
+    // This is the wallet's DEFAULT path, not an edge case: the encoder
+    // builds segwit inputs with witnessUtxo only (XChainEncoder.js), and
+    // p2wpkh is the default address type. Fail closed; refusing to sign is
+    // strictly better than emitting an invalid signature over the wrong
+    // outpoint. See test/README-hardware.md for the completing fix, which
+    // has to supply the real prev tx.
     if (inp.witnessUtxoScriptHex) {
-        return synthesizeMinimalPrevTx(
-            inp.prevTxIndex, inp.value, inp.witnessUtxoScriptHex,
+        throw new Error(
+            'ledgerFormat: input has only a witnessUtxo, so the previous transaction is '
+            + 'unavailable. Ledger takes the outpoint from the previous transaction it is '
+            + 'given, so signing here would spend a different outpoint than this PSBT names. '
+            + 'Supply the input\'s nonWitnessUtxo (the full previous transaction) to sign it '
+            + 'on hardware.',
         );
     }
     throw new Error(
@@ -317,7 +345,7 @@ export function addressTypeFromPath(path) {
 }
 
 /**
- * Ledger's `signMessageNew` returns `{ v, r, s }` with `v` as the
+ * Ledger's `signMessage` returns `{ v, r, s }` with `v` as the
  * recovery id (0 or 1). Bitcoin's compact message-signature format is
  * 65 bytes: [header][r:32][s:32] where the header byte encodes both
  * the recovery id and the address type. This function composes the

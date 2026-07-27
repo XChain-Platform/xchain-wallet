@@ -52,6 +52,7 @@ await assert.rejects(
 const ledger = new LedgerSigner({
     id: 'l', displayName: 'Ledger', model: 'nanoX',
     deviceIdentifier: 'y', app: {},
+    transport: { send: async () => { throw new Error('unused for these methods'); } },
 });
 await assert.rejects(
     async () => ledger.signMultisigPsbt(),

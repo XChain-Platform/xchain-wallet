@@ -186,7 +186,15 @@ describe('composeBitcoinCompactSignature', () => {
 describe('toLedgerCreatePayment', () => {
     const signingPaths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }];
 
-    function makeDecomposed(scriptType = 'p2wpkh') {
+    // A minimal but REAL previous transaction: one input, one 1000-sat
+    // p2wpkh output. Ledger derives the outpoint it signs from these
+    // bytes, so a decomposed input that lacks them cannot be signed
+    // ; the fixture carries them the way a hydrated input does.
+    const PREV_TX_HEX = '01000000010000000000000000000000000000000000000000000000000000000000000000'
+        + 'ffffffff00ffffffff01e803000000000000160014'
+        + 'b'.repeat(40) + '00000000';
+
+    function makeDecomposed(scriptType = 'p2wpkh', { hydrated = true } = {}) {
         return {
             inputs: [{
                 scriptType,
@@ -195,6 +203,7 @@ describe('toLedgerCreatePayment', () => {
                 value: 1000,
                 sequence: 0xffffffff,
                 witnessUtxoScriptHex: '0014' + 'b'.repeat(40),
+                nonWitnessUtxoHex: hydrated ? PREV_TX_HEX : null,
                 redeemScriptHex: null,
             }],
             outputs: [{
@@ -232,6 +241,28 @@ describe('toLedgerCreatePayment', () => {
         })).toThrow(/no signingPath for input index 0/);
     });
 
+    // The device takes the outpoint from the prev tx it is handed, so a
+    // synthesized stand-in makes it sign a spend of an outpoint that does
+    // not exist. This refused to be silent only after a real device was
+    // driven ; before that it produced a fully-formed, unbroadcastable
+    // transaction.
+    it('refuses a witnessUtxo-only input rather than synthesizing a prev tx', () => {
+        expect(() => toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2wpkh', { hydrated: false }),
+            chainId: 'bitcoin-mainnet',
+            signingPaths,
+        })).toThrow(/different outpoint than this PSBT names/);
+    });
+
+    it('uses the real prev tx, not a synthesized one, when the input carries it', () => {
+        const payload = toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2wpkh'),
+            chainId: 'bitcoin-mainnet',
+            signingPaths,
+        });
+        expect(payload.inputs[0].prevTxHex).toBe(PREV_TX_HEX);
+    });
+
     it('builds a valid payload for p2wpkh input', () => {
         const payload = toLedgerCreatePayment({
             decomposed: makeDecomposed('p2wpkh'),
@@ -263,7 +294,7 @@ describe('toLedgerCreatePayment', () => {
     });
 
     it('throws when input has neither witnessUtxo nor nonWitnessUtxo', () => {
-        const d = makeDecomposed('p2wpkh');
+        const d = makeDecomposed('p2wpkh', { hydrated: false });
         d.inputs[0].witnessUtxoScriptHex = undefined;
         expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
             .toThrow(/neither nonWitnessUtxoHex nor witnessUtxoScriptHex/);

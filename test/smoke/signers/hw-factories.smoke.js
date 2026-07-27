@@ -184,14 +184,13 @@ assert.throws(
 
 {
     // Mock Ledger Btc app + transport (matches the shape pairing
-    // exercises: getAppAndVersion + getWalletPublicKey.
+    // exercises: getWalletPublicKey on the app client, and the app
+    // name/version read as BOLOS bytes off the transport, since the real
+    // Btc class ships no getAppAndVersion .
     class MockBtcApp {
         constructor({ transport, currency }) {
             this.transport = transport;
             this.currency = currency;
-        }
-        async getAppAndVersion() {
-            return { name: 'Bitcoin', version: '2.2.3' };
         }
         async getWalletPublicKey(path, _opts) {
             assert.equal(path, "m/44'/0'/0'", 'identity path is m/44\'/0\'/0\'');
@@ -203,7 +202,18 @@ assert.throws(
             };
         }
     }
-    const transport = { deviceModel: { id: 'nanoX' } };
+    function appInfoTransport({ name = 'Bitcoin', version = '2.2.3', send } = {}) {
+        const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
+        const bytes = Uint8Array.from([
+            1,
+            name.length, ...ascii(name),
+            version.length, ...ascii(version),
+            1, 0,
+            0x90, 0x00,
+        ]);
+        return { deviceModel: { id: 'nanoX' }, send: send ?? (async () => bytes) };
+    }
+    const transport = appInfoTransport();
 
     const pair = makeLedgerFactory({
         getTransport: async () => transport,
@@ -242,13 +252,12 @@ assert.throws(
         'non-constructor Btc surfaces clear error',
     );
 
-    // Bitcoin app not open → getAppAndVersion throws.
-    class AppNotOpen extends MockBtcApp {
-        async getAppAndVersion() { throw new Error('app not open'); }
-    }
+    // Device unreachable → the app-info read on the transport throws.
     const wrongApp = makeLedgerFactory({
-        getTransport: async () => transport,
-        getAppClass: async () => AppNotOpen,
+        getTransport: async () => appInfoTransport({
+            send: async () => { throw new Error('app not open'); },
+        }),
+        getAppClass: async () => MockBtcApp,
     });
     await assert.rejects(
         wrongApp(),

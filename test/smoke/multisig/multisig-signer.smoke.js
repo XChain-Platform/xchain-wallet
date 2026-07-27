@@ -85,6 +85,7 @@ const ledger = new LedgerSigner({
     model: 'nanoX',
     deviceIdentifier: 'fp',
     app: { /* unused for these methods */ },
+    transport: { send: async () => { throw new Error('unused for these methods'); } },
 });
 await assert.rejects(
     async () => ledger.signMusig2Round1(),

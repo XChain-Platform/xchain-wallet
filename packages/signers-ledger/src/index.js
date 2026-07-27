@@ -31,6 +31,8 @@ export {
     modelFromLedgerTransport,
 } from './LedgerSigner.js';
 
+export { readLedgerAppInfo } from './appInfo.js';
+
 export {
     chainIdToLedgerCurrency,
     serializeOutputs,

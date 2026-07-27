@@ -32,13 +32,15 @@ function makeLedger() {
         model: 'nanoX',
         deviceIdentifier: 'abcdef01',
         app: {
-            getAppAndVersion: vi.fn().mockResolvedValue({ name: 'Bitcoin', version: '2.2.1' }),
             getWalletPublicKey: vi.fn().mockResolvedValue({
                 publicKey: '02' + 'a'.repeat(64),
                 bitcoinAddress: 'bc1qmock',
                 chainCode: 'c'.repeat(64),
             }),
         },
+        // App name/version comes off the transport, not the app client
+        // (packages/signers-ledger/src/appInfo.js).
+        transport: { send: vi.fn().mockResolvedValue(Uint8Array.from([1, 7, 66, 105, 116, 99, 111, 105, 110, 5, 50, 46, 50, 46, 49, 1, 0, 0x90, 0x00])) },
     });
 }
 

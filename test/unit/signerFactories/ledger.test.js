@@ -15,15 +15,32 @@ import { describe, it, expect, vi } from 'vitest';
 import { makeLedgerFactory } from '../../../packages/core/src/signerFactories/ledger.js';
 import { LedgerSigner } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 
-function makeValidTransport(modelId = 'nanoX') {
+/**
+ * BOLOS GET_APP_AND_VERSION bytes: the app name and version arrive on the
+ * transport, not from an app-client method (appInfo.js / ).
+ */
+function appInfoBytes(name = 'Bitcoin', version = '2.2.1') {
+    const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
+    return Uint8Array.from([
+        1,
+        name.length, ...ascii(name),
+        version.length, ...ascii(version),
+        1, 0,
+        0x90, 0x00,
+    ]);
+}
+
+function makeValidTransport({ modelId = 'nanoX', name, version, send } = {}) {
     return {
         deviceModel: { id: modelId },
+        send: send ?? vi.fn().mockResolvedValue(appInfoBytes(name, version)),
     };
 }
 
-function makeValidApp({ name = 'Bitcoin', version = '2.2.1', publicKey = '02' + 'a'.repeat(64) } = {}) {
+function makeValidApp({ publicKey = '02' + 'a'.repeat(64) } = {}) {
+    // Mirrors the real hw-app-btc `Btc` prototype; see
+    // test/unit/signers-ledger/hw-app-btc-surface.test.js.
     return {
-        getAppAndVersion: vi.fn().mockResolvedValue({ name, version }),
         getWalletPublicKey: vi.fn().mockResolvedValue({
             publicKey,
             bitcoinAddress: 'bc1qmock',
@@ -31,7 +48,7 @@ function makeValidApp({ name = 'Bitcoin', version = '2.2.1', publicKey = '02' + 
         }),
         splitTransaction: vi.fn(),
         createPaymentTransaction: vi.fn(),
-        signMessageNew: vi.fn(),
+        signMessage: vi.fn(),
     };
 }
 
@@ -53,8 +70,8 @@ describe('makeLedgerFactory', () => {
 
     describe('pairLedgerSigner (happy path)', () => {
         async function pairWithMocks({ modelId = 'nanoX', appName = 'Bitcoin', appVersion = '2.2.1' } = {}) {
-            const transport = makeValidTransport(modelId);
-            const app = makeValidApp({ name: appName, version: appVersion });
+            const transport = makeValidTransport({ modelId, name: appName, version: appVersion });
+            const app = makeValidApp();
             const getTransport = vi.fn().mockResolvedValue(transport);
             const getAppClass = vi.fn().mockResolvedValue(function Btc({ transport: t, currency }) {
                 // Return the mock app instead of constructing.
@@ -108,11 +125,12 @@ describe('makeLedgerFactory', () => {
             await expect(pair()).rejects.toThrow('constructable Btc class');
         });
 
-        it('throws when getAppAndVersion rejects', async () => {
+        it('throws when the app-info read rejects', async () => {
             const app = makeValidApp();
-            app.getAppAndVersion = vi.fn().mockRejectedValue(new Error('transport error'));
             const pair = makeLedgerFactory({
-                getTransport: vi.fn().mockResolvedValue(makeValidTransport()),
+                getTransport: vi.fn().mockResolvedValue(makeValidTransport({
+                    send: vi.fn().mockRejectedValue(new Error('transport error')),
+                })),
                 getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
             });
             await expect(pair()).rejects.toThrow('failed to read app info');
@@ -120,12 +138,53 @@ describe('makeLedgerFactory', () => {
 
         it('throws when app info has no name', async () => {
             const app = makeValidApp();
-            app.getAppAndVersion = vi.fn().mockResolvedValue({ version: '1.0.0' });
+            const pair = makeLedgerFactory({
+                getTransport: vi.fn().mockResolvedValue(makeValidTransport({ name: '' })),
+                getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
+            });
+            await expect(pair()).rejects.toThrow('app name');
+        });
+
+        // The Test app answers app-info fine and then rejects the coin-type 0'
+        // identity path with a bare 0x6a82. Name the cause at pair time
+        // instead of surfacing the device's error code.
+        // The signer this factory returns is the exact instance the shells
+        // register with signerBridge, and signPsbt needs an SDKRegistry. No
+        // shell passes one today, so hardware PSBT signing fails with
+        // "requires an sdkRegistry" . These two pin both halves:
+        // the passthrough works, and its absence is what production hits.
+        it('passes an sdkRegistry through to the signer when given one', async () => {
+            const app = makeValidApp();
+            const sdkRegistry = { get: () => ({ wallet: { decomposePsbt: vi.fn(), txidOf: vi.fn() } }) };
+            const pair = makeLedgerFactory({
+                getTransport: vi.fn().mockResolvedValue(makeValidTransport()),
+                getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
+                sdkRegistry,
+            });
+            const { signer } = await pair();
+            await expect(signer.signPsbt({ psbtHex: '', chainId: 'bitcoin-mainnet', signingPaths: [] }))
+                .rejects.toThrow(/psbtHex is required/);
+        });
+
+        it('leaves the signer unable to signPsbt when no sdkRegistry is given', async () => {
+            const app = makeValidApp();
             const pair = makeLedgerFactory({
                 getTransport: vi.fn().mockResolvedValue(makeValidTransport()),
                 getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
             });
-            await expect(pair()).rejects.toThrow('app name');
+            const { signer } = await pair();
+            await expect(signer.signPsbt({ psbtHex: 'cafe', chainId: 'bitcoin-mainnet', signingPaths: [] }))
+                .rejects.toThrow(/requires an sdkRegistry/);
+        });
+
+        it('names the Bitcoin Test app rather than failing on the identity xpub', async () => {
+            const app = makeValidApp();
+            const pair = makeLedgerFactory({
+                getTransport: vi.fn().mockResolvedValue(makeValidTransport({ name: 'Bitcoin Test', version: '2.5.0' })),
+                getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
+            });
+            await expect(pair()).rejects.toThrow(/Open the Bitcoin app to pair/);
+            expect(app.getWalletPublicKey).not.toHaveBeenCalled();
         });
 
         it('throws when getWalletPublicKey rejects', async () => {

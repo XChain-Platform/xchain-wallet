@@ -52,26 +52,33 @@
 import { sha256 } from '@noble/hashes/sha2';
 import { Signer, SignerStatusError } from '../../core/src/signers/Signer.js';
 import {
+    addressTypeFromPath,
     composeBitcoinCompactSignature,
     toLedgerCreatePayment,
 } from './ledgerFormat.js';
+import { readLedgerAppInfo } from './appInfo.js';
 
 /**
  * Minimal shape of the injected Ledger Bitcoin app instance.
  * Production code passes a real `@ledgerhq/hw-app-btc` client; tests
- * pass a hand-written fake. Every method TrezorSigner calls is
- * listed; keeping this narrow is what makes the mock surface tiny.
+ * pass a hand-written fake. Every method LedgerSigner calls is listed;
+ * keeping this narrow is what makes the mock surface tiny.
+ *
+ * Every name here must exist on the real `Btc` prototype. It did not
+ * for two releases : the fakes were written from this typedef
+ * and the typedef from our own call sites, so nothing compared either
+ * against the shipped class. `test/unit/signers-ledger/hw-app-btc-surface.test.js`
+ * now pins that comparison against the installed package.
  *
  * @typedef {Object} LedgerBtcApp
- * @property {() => Promise<{ name: string, version: string, flags?: number }>} getAppAndVersion
  * @property {(path: string, opts?: { verify?: boolean, format?: string }) => Promise<{ publicKey: string, bitcoinAddress: string, chainCode: string }>} getWalletPublicKey
- * @property {(path: string, messageHex: string) => Promise<{ v: number, r: string, s: string }>} signMessageNew
+ * @property {(path: string, messageHex: string) => Promise<{ v: number, r: string, s: string }>} signMessage
  * @property {(args: any) => Promise<string>} createPaymentTransaction
- * @property {(rawTxHex: string, isSegwitSupported?: boolean, hasTimestamp?: boolean, hasExtraData?: boolean, additionals?: string[]) => any} splitTransaction
+ * @property {(rawTxHex: string, isSegwitSupported?: boolean, hasExtraData?: boolean, additionals?: string[]) => any} splitTransaction
  */
 
 /**
- * Ledger app names exposed via `getAppAndVersion`. Keyed by chainId
+ * Ledger app names as the device reports them (see appInfo.js). Keyed by chainId
  * so getStatus can check the user has the right app open. All the
  * BIP44-coin variants the wallet supports run on Ledger's Bitcoin
  * app; the `currency` parameter inside the app handles the
@@ -141,9 +148,10 @@ export class LedgerSigner extends Signer {
      * @param {string} opts.model              Matches firmware-manifest keys (nanoS, nanoSP, nanoX, stax)
      * @param {string} opts.deviceIdentifier
      * @param {LedgerBtcApp} opts.app          Ledger Bitcoin app client
+     * @param {{ send: Function }} opts.transport   The same transport the app client talks over; getStatus reads the open app through it
      * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt
      */
-    constructor({ id, displayName, model, deviceIdentifier, app, sdkRegistry }) {
+    constructor({ id, displayName, model, deviceIdentifier, app, transport, sdkRegistry }) {
         super();
         if (!id) throw new Error('LedgerSigner: id is required');
         if (!displayName) throw new Error('LedgerSigner: displayName is required');
@@ -152,11 +160,19 @@ export class LedgerSigner extends Signer {
         if (!app || typeof app !== 'object') {
             throw new Error('LedgerSigner: app is required');
         }
+        // Required, not optional: the app client exposes no way to read the
+        // open app (see appInfo.js), so a signer without a transport cannot
+        // answer getStatus and would report every live device as
+        // 'disconnected'.
+        if (!transport || typeof transport.send !== 'function') {
+            throw new Error('LedgerSigner: transport is required');
+        }
         this._id = id;
         this._displayName = displayName;
         this._model = model;
         this._deviceIdentifier = deviceIdentifier;
         this._app = app;
+        this._transport = transport;
         this._sdkRegistry = sdkRegistry;
     }
 
@@ -174,7 +190,7 @@ export class LedgerSigner extends Signer {
      *                    UI should prompt the user to open the right one
      *   - `'unsupported-network'`: a chainId was passed that the Ledger path
      *                    cannot derive (no app / non-mainnet coin-type)
-     *   - `'disconnected'`: `getAppAndVersion` throws (cable unplugged,
+     *   - `'disconnected'`: the app-info read throws (cable unplugged,
      *                       PIN locked, transport error)
      *
      * `expectedApp` is optional: pass the chainId you care about, or
@@ -187,11 +203,13 @@ export class LedgerSigner extends Signer {
     async getStatus(opts = {}) {
         let info;
         try {
-            info = await this._app.getAppAndVersion();
+            info = await readLedgerAppInfo(this._transport);
         } catch {
             return 'disconnected';
         }
-        if (!info || typeof info.name !== 'string') {
+        // An empty name is as unusable as a missing one: it can never match
+        // an expected app, so treat it as no answer rather than 'available'.
+        if (!info || !info.name) {
             return 'disconnected';
         }
         // A provided chainId absent from the app-name map is one the Ledger
@@ -258,11 +276,20 @@ export class LedgerSigner extends Signer {
      * @param {import('./Signer.js').GetPublicKeyParams} params
      * @returns {Promise<import('./Signer.js').GetPublicKeyReturn>}
      */
-    async getPublicKey({ chainId: _chainId, path }) {
+    async getPublicKey({ chainId, path }) {
+        // The format is NOT optional in practice. Omitting it makes
+        // hw-app-btc default to 'legacy', and the Bitcoin app rejects a
+        // legacy request on a segwit path with 0x6a80 "Invalid data
+        // received" (verified on Speculos against app 2.5.0: 84' and 49'
+        // paths both fail without it, 44' is the only purpose that
+        // survives). getAddresses always passed a format, which is why
+        // only this method was broken. Derive it from the path's purpose,
+        // which is the same thing the caller already encoded there.
+        const format = ledgerFormatFor(addressTypeFromPath(path), chainId);
         const res = await runLedger(
             this._id,
             'getWalletPublicKey',
-            () => this._app.getWalletPublicKey(path, { verify: false }),
+            () => this._app.getWalletPublicKey(path, { verify: false, format }),
         );
         return {
             publicKey: res.publicKey,
@@ -298,8 +325,14 @@ export class LedgerSigner extends Signer {
         const payload = toLedgerCreatePayment({ decomposed, chainId, signingPaths });
 
         const splitInputs = payload.inputs.map((i) => {
+            // FOUR args, not five: hw-app-btc v10 dropped the `hasTimestamp`
+            // parameter, so the old call shifted `hasExtraData` into it,
+            // `false` into `additionals` (which then failed
+            // `additionals.includes`), and dropped the real additionals
+            // array entirely. Signature is now
+            // (transactionHex, isSegwitSupported, hasExtraData, additionals).
             const split = this._app.splitTransaction(
-                i.prevTxHex, true, false, false, payload.additionals,
+                i.prevTxHex, true, false, payload.additionals,
             );
             const entry = [split, i.vout];
             if (i.redeemScriptHex) entry.push(i.redeemScriptHex);
@@ -328,7 +361,7 @@ export class LedgerSigner extends Signer {
     }
 
     /**
-     * Message signing via Ledger's `signMessageNew`. The device
+     * Message signing via Ledger's `signMessage`. The device
      * returns `{ v, r, s }` as the compact ECDSA signature plus
      * recovery id; `composeBitcoinCompactSignature` packs these into
      * the 65-byte base64 envelope xchain-sdk's `auth.verifyMessage`
@@ -346,8 +379,10 @@ export class LedgerSigner extends Signer {
             throw new Error('LedgerSigner.signMessage: path is required');
         }
         const messageHex = messageToHex(message);
-        const sig = await runLedger(this._id, 'signMessageNew', () =>
-            this._app.signMessageNew(path, messageHex),
+        // `signMessage`, not `signMessageNew`: hw-app-btc v10 renamed it, and
+        // the old name is absent from the shipped class .
+        const sig = await runLedger(this._id, 'signMessage', () =>
+            this._app.signMessage(path, messageHex),
         );
         const signature = composeBitcoinCompactSignature(sig, path);
         return { signature };

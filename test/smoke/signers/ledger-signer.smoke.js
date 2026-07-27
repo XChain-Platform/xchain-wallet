@@ -52,11 +52,24 @@ const {
 
 // --- Mock Ledger app -----------------------------------------------
 
+// The open app's name/version comes off the TRANSPORT as raw BOLOS
+// GET_APP_AND_VERSION bytes, not from an app-client method: the real
+// hw-app-btc `Btc` class has no getAppAndVersion . Layout is
+// format, then length-prefixed name, version and flags.
+function makeMockTransport({ name = 'Bitcoin', version = '2.2.3', send } = {}) {
+    const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
+    const bytes = Uint8Array.from([
+        1,
+        name.length, ...ascii(name),
+        version.length, ...ascii(version),
+        1, 0,
+        0x90, 0x00,
+    ]);
+    return { send: send ?? (async () => bytes) };
+}
+
 function makeMockApp(overrides = {}) {
     return {
-        async getAppAndVersion() {
-            return { name: 'Bitcoin', version: '2.2.3', flags: 0 };
-        },
         async getWalletPublicKey(path) {
             return {
                 publicKey: `02mockpub${path.replace(/[^0-9]/g, '')}`,
@@ -87,6 +100,13 @@ assert.throws(
     () => new LedgerSigner({ id: 'x', displayName: 'y', model: 'nanoX', deviceIdentifier: 'd' }),
     /app is required/,
 );
+assert.throws(
+    () => new LedgerSigner({
+        id: 'x', displayName: 'y', model: 'nanoX', deviceIdentifier: 'd', app: makeMockApp(),
+    }),
+    /transport is required/,
+    'a signer with no transport could not answer getStatus',
+);
 
 // --- 2. Signer interface conformance ----------------------------------
 
@@ -95,7 +115,7 @@ const signer = new LedgerSigner({
     id: 'ledger-mockid',
     displayName: 'Ledger (nanoX)',
     model: 'nanoX',
-    deviceIdentifier: 'mockid',
+    deviceIdentifier: 'mockid', transport: makeMockTransport(),
     app,
 });
 assert.equal(signer.kind, 'ledger');
@@ -120,11 +140,12 @@ assert.equal(
     'no chainId → accepts any app',
 );
 
-const dcApp = makeMockApp({
-    async getAppAndVersion() { throw new Error('cable unplugged'); },
-});
 const dcSigner = new LedgerSigner({
-    id: 'ledger-dc', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid', app: dcApp,
+    id: 'ledger-dc', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    transport: makeMockTransport({
+        send: async () => { throw new Error('cable unplugged'); },
+    }),
+    app: makeMockApp(),
 });
 assert.equal(await dcSigner.getStatus(), 'disconnected');
 
@@ -167,7 +188,7 @@ const failApp = makeMockApp({
     },
 });
 const failSigner = new LedgerSigner({
-    id: 'ledger-fail', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid', app: failApp,
+    id: 'ledger-fail', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(), app: failApp,
 });
 await assert.rejects(
     failSigner.getAddresses({
@@ -207,6 +228,10 @@ function makeMockSdkRegistry({ decomposed }) {
     };
 }
 
+// One input, one 100000-sat p2wpkh output, no witness data.
+const MINIMAL_PREV_TX_HEX = '01000000010000000000000000000000000000000000000000000000000000000000000000'
+    + 'ffffffff00ffffffff01a086010000000000160014' + 'bb'.repeat(20) + '00000000';
+
 const segwitDecomposed = {
     txVersion: 2,
     locktime: 0,
@@ -220,7 +245,11 @@ const segwitDecomposed = {
             scriptPubKeyHex: '0014' + 'bb'.repeat(20),
             scriptType: 'p2wpkh',
             sighashType: null,
-            nonWitnessUtxoHex: null,
+            // A real previous transaction, because Ledger takes the outpoint
+            // it signs from these bytes. An input carrying only a
+            // witnessUtxo is now REFUSED rather than signed against a
+            // synthesized stand-in that hashes to a different txid .
+            nonWitnessUtxoHex: MINIMAL_PREV_TX_HEX,
             witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
             redeemScriptHex: null,
             witnessScriptHex: null,
@@ -254,7 +283,7 @@ const wiredSigner = new LedgerSigner({
     id: 'ledger-wired',
     displayName: 'Wired Ledger',
     model: 'nanoX',
-    deviceIdentifier: 'mockid',
+    deviceIdentifier: 'mockid', transport: makeMockTransport(),
     app: signApp,
     sdkRegistry: makeMockSdkRegistry({ decomposed: segwitDecomposed }),
 });
@@ -291,7 +320,7 @@ const legacyApp = makeMockApp({
     async createPaymentTransaction(args) { legacyCreate = args; return 'aa' + 'bb'.repeat(4); },
 });
 const legacySigner = new LedgerSigner({
-    id: 'ledger-legacy', displayName: 'L', model: 'nanoX', deviceIdentifier: 'mockid',
+    id: 'ledger-legacy', displayName: 'L', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(),
     app: legacyApp, sdkRegistry: makeMockSdkRegistry({ decomposed: legacyDecomposed }),
 });
 await legacySigner.signPsbt({
@@ -313,7 +342,7 @@ const failSignApp = makeMockApp({
     },
 });
 const failSignSigner = new LedgerSigner({
-    id: 'ledger-signfail', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    id: 'ledger-signfail', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(),
     app: failSignApp, sdkRegistry: makeMockSdkRegistry({ decomposed: segwitDecomposed }),
 });
 await assert.rejects(
@@ -331,14 +360,14 @@ await assert.rejects(
 let msgCapturedPath = null;
 let msgCapturedHex = null;
 const msgApp = makeMockApp({
-    async signMessageNew(path, messageHex) {
+    async signMessage(path, messageHex) {
         msgCapturedPath = path;
         msgCapturedHex = messageHex;
         return { v: 1, r: '11'.repeat(32), s: '22'.repeat(32) };
     },
 });
 const msgSigner = new LedgerSigner({
-    id: 'ledger-msg', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    id: 'ledger-msg', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(),
     app: msgApp,
 });
 const msgResult = await msgSigner.signMessage({
@@ -357,10 +386,10 @@ assert.equal(sigBytes.slice(33, 65).toString('hex'), '22'.repeat(32));
 
 // p2sh-p2wpkh path produces header base 35.
 const msgApp2 = makeMockApp({
-    async signMessageNew() { return { v: 0, r: '11'.repeat(32), s: '22'.repeat(32) }; },
+    async signMessage() { return { v: 0, r: '11'.repeat(32), s: '22'.repeat(32) }; },
 });
 const msgSigner2 = new LedgerSigner({
-    id: 'ledger-msg2', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    id: 'ledger-msg2', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(),
     app: msgApp2,
 });
 const msgResult2 = await msgSigner2.signMessage({

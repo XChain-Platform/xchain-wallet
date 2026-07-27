@@ -57,18 +57,40 @@ describe('coinTypeFor vs chain descriptor coin-type parity', () => {
 });
 
 function makeApp(overrides = {}) {
+    // Only methods the real hw-app-btc `Btc` class ships. The device's
+    // app name/version is NOT one of them, it is read off the transport
+    // (see appInfo.js and hw-app-btc-surface.test.js).
     return {
-        getAppAndVersion: vi.fn().mockResolvedValue({ name: 'Bitcoin', version: '2.2.1' }),
         getWalletPublicKey: vi.fn().mockResolvedValue({
             publicKey: '02' + 'a'.repeat(64),
             bitcoinAddress: 'bc1qmock',
             chainCode: 'c'.repeat(64),
         }),
-        signMessageNew: vi.fn().mockResolvedValue({ v: 0, r: 'a'.repeat(64), s: 'b'.repeat(64) }),
+        signMessage: vi.fn().mockResolvedValue({ v: 0, r: 'a'.repeat(64), s: 'b'.repeat(64) }),
         createPaymentTransaction: vi.fn().mockResolvedValue('signedtxhex'),
         splitTransaction: vi.fn().mockReturnValue({ mockSplit: true }),
         ...overrides,
     };
+}
+
+/**
+ * BOLOS GET_APP_AND_VERSION response bytes, so getStatus exercises the
+ * real parser rather than a pre-parsed object a device never sends.
+ * Layout: format, len+name, len+version, len+flags.
+ */
+function appInfoBytes(name = 'Bitcoin', version = '2.2.1') {
+    const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
+    return Uint8Array.from([
+        1,
+        name.length, ...ascii(name),
+        version.length, ...ascii(version),
+        1, 0,
+        0x90, 0x00,
+    ]);
+}
+
+function makeTransport({ name, version, send } = {}) {
+    return { send: send ?? vi.fn().mockResolvedValue(appInfoBytes(name, version)) };
 }
 
 function makeSigner(appOverrides = {}, opts = {}) {
@@ -78,6 +100,7 @@ function makeSigner(appOverrides = {}, opts = {}) {
         model: 'nanoX',
         deviceIdentifier: 'abcdef01',
         app: makeApp(appOverrides),
+        transport: makeTransport(),
         ...opts,
     });
 }
@@ -118,22 +141,39 @@ describe('LedgerSigner.getStatus', () => {
     });
 
     it('returns "available" when correct app is open for chainId', async () => {
-        const s = makeSigner({ getAppAndVersion: vi.fn().mockResolvedValue({ name: 'Bitcoin', version: '2.0' }) });
+        const s = makeSigner({}, { transport: makeTransport({ name: 'Bitcoin', version: '2.0' }) });
         expect(await s.getStatus({ chainId: 'bitcoin-mainnet' })).toBe('available');
     });
 
     it('returns "wrong-app" when a different app is open', async () => {
-        const s = makeSigner({ getAppAndVersion: vi.fn().mockResolvedValue({ name: 'Ethereum', version: '1.0' }) });
+        const s = makeSigner({}, { transport: makeTransport({ name: 'Ethereum', version: '1.0' }) });
         expect(await s.getStatus({ chainId: 'bitcoin-mainnet' })).toBe('wrong-app');
     });
 
-    it('returns "disconnected" when getAppAndVersion throws', async () => {
-        const s = makeSigner({ getAppAndVersion: vi.fn().mockRejectedValue(new Error('transport error')) });
+    // The Bitcoin Test app answers app-info happily; it is the derivation
+    // that diverges (coin-type 1'), so it must read as the wrong app rather
+    // than as an available one.
+    it('returns "wrong-app" when the Bitcoin Test app is open', async () => {
+        const s = makeSigner({}, { transport: makeTransport({ name: 'Bitcoin Test', version: '2.5.0' }) });
+        expect(await s.getStatus({ chainId: 'bitcoin-mainnet' })).toBe('wrong-app');
+    });
+
+    it('returns "disconnected" when the app-info read throws', async () => {
+        const s = makeSigner({}, {
+            transport: makeTransport({ send: vi.fn().mockRejectedValue(new Error('transport error')) }),
+        });
         expect(await s.getStatus()).toBe('disconnected');
     });
 
-    it('returns "disconnected" when getAppAndVersion returns no name', async () => {
-        const s = makeSigner({ getAppAndVersion: vi.fn().mockResolvedValue({ version: '1.0' }) });
+    it('returns "disconnected" when the device answers with no app name', async () => {
+        const s = makeSigner({}, { transport: makeTransport({ name: '' }) });
+        expect(await s.getStatus()).toBe('disconnected');
+    });
+
+    it('returns "disconnected" when the response is not BOLOS format 1', async () => {
+        const s = makeSigner({}, {
+            transport: makeTransport({ send: vi.fn().mockResolvedValue(Uint8Array.from([9, 0, 0])) }),
+        });
         expect(await s.getStatus()).toBe('disconnected');
     });
 
@@ -148,7 +188,7 @@ describe('LedgerSigner.getStatus', () => {
         'dogecoin-regtest',
     ]) {
         it(`returns "unsupported-network" for ${chainId}`, async () => {
-            const s = makeSigner({ getAppAndVersion: vi.fn().mockResolvedValue({ name: 'Bitcoin', version: '2.0' }) });
+            const s = makeSigner({}, { transport: makeTransport({ name: 'Bitcoin', version: '2.0' }) });
             expect(await s.getStatus({ chainId })).toBe('unsupported-network');
         });
     }
@@ -215,6 +255,21 @@ describe('LedgerSigner.getPublicKey', () => {
         expect(out.chainCode).toBe('c'.repeat(64));
         expect(out.fingerprint).toBe('');
     });
+
+    // Omitting the format makes hw-app-btc default to 'legacy', and the
+    // Bitcoin app answers 0x6a80 for a legacy request on a segwit path.
+    // getAddresses always passed one; getPublicKey did not, so it failed
+    // against real hardware on every purpose except 44' .
+    it.each([
+        ["m/84'/0'/0'/0/0", 'bech32'],
+        ["m/49'/0'/0'/0/0", 'p2sh'],
+        ["m/44'/0'/0'/0/0", 'legacy'],
+    ])('sends the address format implied by %s', async (path, format) => {
+        const app = makeApp();
+        const s = makeSigner(app);
+        await s.getPublicKey({ chainId: 'bitcoin-mainnet', path });
+        expect(app.getWalletPublicKey).toHaveBeenCalledWith(path, { verify: false, format });
+    });
 });
 
 describe('LedgerSigner.signMessage', () => {
@@ -238,9 +293,9 @@ describe('LedgerSigner.signMessage', () => {
     });
 
     it('propagates Ledger SDK errors as SignerStatusError', async () => {
-        const s = makeSigner({ signMessageNew: vi.fn().mockRejectedValue(new Error('user rejected')) });
+        const s = makeSigner({ signMessage: vi.fn().mockRejectedValue(new Error('user rejected')) });
         await expect(s.signMessage({ message: 'hi', path: "m/84'/0'/0'/0/0" }))
-            .rejects.toThrow(/signMessageNew failed/);
+            .rejects.toThrow(/signMessage failed/);
     });
 });
 
@@ -256,6 +311,44 @@ describe('LedgerSigner.signPsbt', () => {
         const s = makeSigner({}, { sdkRegistry: { get: () => mockSdk } });
         await expect(s.signPsbt({ psbtHex: '', chainId: 'bitcoin-mainnet', signingPaths: [] }))
             .rejects.toThrow(/psbtHex is required/);
+    });
+
+    // hw-app-btc v10 dropped `hasTimestamp`, so splitTransaction takes
+    // (hex, isSegwitSupported, hasExtraData, additionals). The old 5-arg
+    // call shifted `false` into additionals and dropped the real array,
+    // which blew up inside the library as `additionals.includes is not a
+    // function` on the first real signing attempt .
+    it('calls splitTransaction with the v10 four-argument signature', async () => {
+        const prevTxHex = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
+            + '00000000160014' + 'bb'.repeat(20) + '00000000';
+        const mockSdk = {
+            wallet: {
+                decomposePsbt: vi.fn().mockReturnValue({
+                    inputs: [{
+                        scriptType: 'p2wpkh',
+                        prevTxHash: 'a'.repeat(64),
+                        prevTxIndex: 0,
+                        value: 1000,
+                        sequence: 0xffffffff,
+                        witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                        nonWitnessUtxoHex: prevTxHex,
+                        redeemScriptHex: null,
+                    }],
+                    outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
+                    locktime: 0,
+                }),
+                txidOf: vi.fn().mockReturnValue('deadbeef'),
+            },
+        };
+        const app = makeApp();
+        const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
+        await s.signPsbt({
+            psbtHex: 'cafe',
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+        });
+        expect(app.splitTransaction).toHaveBeenCalledWith(prevTxHex, true, false, ['bech32']);
+        expect(app.splitTransaction.mock.calls[0]).toHaveLength(4);
     });
 });
 
