@@ -101,6 +101,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                         encoding: built.encoding,
                         actionString: built.actionString,
                         version: built.version,
+                        deferredFeeOutput: built.deferredFeeOutput || null,
                     };
                     return messaging[method]({
                         ...base,

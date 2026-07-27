@@ -30,6 +30,7 @@
 // rendering works unmodified (§5.6 migration keystone).
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
+import { nativeFeeOutputOf, willTakeChunkLane, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
@@ -128,9 +129,28 @@ export async function composeForConfirm({
         destination: actionData?.params?.DESTINATION,
         descriptor,
     });
-    const finalEncoderOpts = nativeOut
+    const withNativeOut = nativeOut
         ? { ...encoderOptsWithAds, customOutputs: [ ...(encoderOptsWithAds.customOutputs || []), nativeOut ] }
         : encoderOptsWithAds;
+
+    // 3c . The protocol fee must ride the transaction that carries the
+    // ACTION, which on the two-phase lane is the phase-2 REVEAL, not the
+    // phase-1 commit this function builds. Leaving it on phase 1 spends the fee
+    // on a transaction with no action and the action is rejected for not paying
+    // it - on LTC/DOGE, where native is the only fee lane, that was every
+    // DEPLOY and every large FILE, gated publish or multi-recipient SEND.
+    //
+    // Taking it out HERE (rather than at submit) is what keeps the previewed
+    // PSBT honest: the §5.3.2 output-set check reads these same customOutputs,
+    // so an output the phase-1 transaction does not contain must not be in the
+    // expected set either. The submit path re-attaches it to the reveal, and
+    // the envelope carries it so that path does not have to re-quote.
+    const deferredFeeOutput = willTakeChunkLane(createResult, withNativeOut)
+        ? nativeFeeOutputOf(feePreflight.quote)
+        : null;
+    const finalEncoderOpts = deferredFeeOutput
+        ? withoutCustomOutput(withNativeOut, deferredFeeOutput)
+        : withNativeOut;
 
     // 4. Encode to the ONE PSBT the modal previews and the signer signs.
     // D-7: give the encoder the spender address so it can build the tx:
@@ -191,6 +211,11 @@ export async function composeForConfirm({
         // regtest round trip did, immediately .
         carrierScripts: Array.isArray(encoded.carrierScripts) ? encoded.carrierScripts : [],
         quote: feePreflight.quote,
+        // : present when the protocol fee was moved off this PSBT and on
+        // to the reveal the submit path builds. The confirm surface still shows
+        // the fee (it reads the quote); this tells the submit path where to put
+        // it without re-quoting.
+        deferredFeeOutput,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,

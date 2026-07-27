@@ -1361,6 +1361,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         encoding: composed.encoding,
                         actionString: composed.actionString,
                         version: composed.version,
+                        // : see useActionConfirmFlow. A multi-recipient
+                        // send is past one OP_RETURN, so it takes the chunk
+                        // lane and its fee rides the reveal.
+                        deferredFeeOutput: composed.deferredFeeOutput || null,
                     };
                     return isHwSource
                         ? messaging.sendAssetHw({

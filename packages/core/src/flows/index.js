@@ -528,6 +528,14 @@ export { classifyBroadcastFailure } from './broadcastPermanence.js';
 // the "which addresses do I have to ask" question are pure, so both live here
 // and are unit-testable without a chain.
 export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLiveness.js';
+// : which transaction carries the native-coin protocol fee.
+export {
+    nativeFeeOutputOf,
+    willTakeChunkLane,
+    withoutCustomOutput,
+    assertFeeLane,
+    FeeLaneMismatchError,
+} from './nativeFeeLane.js';
 //  §5.4: finishing a stored confirm away from the form that made it.
 export {
     RESUMABLE_DISPATCH_METHODS,

@@ -28,6 +28,9 @@
 // or skip the wait and poll separately.
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
+import {
+    nativeFeeOutputOf, willTakeChunkLane, withoutCustomOutput, assertFeeLane,
+} from '../flows/nativeFeeLane.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
 import { isBareNativePayment } from '../flows/nativePayment.js';
@@ -174,6 +177,10 @@ export async function submitWithSigner({
     // legacy behaviour; both converge at Step 3.
     let createResult, effectiveEncoderOpts, encoded, preflight;
     let bareNativePayment = false;
+    // : set when the native-fee output has been moved off the phase-1
+    // commit and on to the phase-2 reveal, which is the transaction the
+    // indexer validates the protocol fee against.
+    let deferredNativeFeeOutput = null;
     if (prebuiltPsbt) {
         // Preserve the phase events submitAction's lifecycle tracker consumes,
         // but do NO rebuild: the PSBT is the one the user approved.
@@ -189,6 +196,12 @@ export async function submitWithSigner({
         // The fee output is already baked into the prebuilt PSBT (composeForConfirm
         // ran applyNativeFeePreflight before building), so no quote is recomputed here.
         preflight = { quote: null };
+        // ...EXCEPT on the two-phase lane, where composeForConfirm deliberately
+        // left the protocol fee OFF the previewed PSBT because it belongs on the
+        // reveal . It hands the output along so this path can attach it
+        // without re-quoting, and so the previewed bytes stay exactly what the
+        // §5.3.2 output-set check verified.
+        deferredNativeFeeOutput = prebuiltPsbt.deferredFeeOutput || null;
     } else {
         // Step 1: create action string (no network call, just formatting).
         onProgress('creating', { action: actionData.action });
@@ -221,11 +234,41 @@ export async function submitWithSigner({
         });
         effectiveEncoderOpts = oraclePreflight.encoderOpts;
 
+        // Step 1d : decide WHICH transaction carries the native-fee
+        // output. The indexer validates the protocol fee against the outputs of
+        // the transaction carrying the ACTION (`data['TX_OUTPUTS']`), and on the
+        // two-phase lane that is the phase-2 REVEAL, not the phase-1 commit.
+        // Paying it on phase 1 spends the fee on a transaction with no action,
+        // and the action is then rejected for not paying it. On LTC/DOGE, where
+        // the native fee is the only lane, that was every DEPLOY plus every
+        // large FILE, gated publish and multi-recipient SEND.
+        //
+        // The lane must be known BEFORE the build: phase 1 is signed and
+        // broadcast before phase 2 is built, and a second createTx would
+        // collide with the encoder's own outpoint reservations. So it is
+        // predicted from the action size against the SDK's carrier caps and
+        // then CHECKED against the encoding the encoder actually chose, so a
+        // wrong prediction fails loudly instead of broadcasting a doomed tx.
+        const feeOutput = nativeFeeOutputOf(preflight.quote);
+        if (feeOutput && willTakeChunkLane(createResult, effectiveEncoderOpts)) {
+            deferredNativeFeeOutput = feeOutput;
+            effectiveEncoderOpts = withoutCustomOutput(effectiveEncoderOpts, feeOutput);
+        }
+
         // Step 2: encode to PSBT via the encoder service.
         onProgress('encoding', { actionString: bareNativePayment ? null : createResult.actionString });
         encoded = await encoder.createTx({
             ...(bareNativePayment ? {} : { data: createResult.actionString }),
             ...effectiveEncoderOpts,
+        });
+
+        // The check half. A mismatch means the fee output would sit on the
+        // wrong transaction, so refuse BEFORE anything is signed rather than
+        // broadcast a transaction the indexer rejects while keeping the fee.
+        assertFeeLane({
+            encoding: encoded.encoding,
+            deferred: !!deferredNativeFeeOutput,
+            hasFeeOutput: !!feeOutput,
         });
     }
 
@@ -303,6 +346,11 @@ export async function submitWithSigner({
             change: effectiveEncoderOpts.change,
             fee: effectiveEncoderOpts.fee,
             feePerKb: effectiveEncoderOpts.feePerKb,
+            // : the protocol fee rides the REVEAL, the transaction that
+            // carries the action and therefore the one the indexer checks.
+            // spendP2sh has always accepted customOutputs (xchain-sdk
+            // encoder.js); the wallet simply never passed any.
+            ...(deferredNativeFeeOutput ? { customOutputs: [deferredNativeFeeOutput] } : {}),
         });
         const phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,

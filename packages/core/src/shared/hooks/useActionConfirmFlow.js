@@ -150,6 +150,10 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 encoding: composed.encoding,
                 actionString: composed.actionString,
                 version: composed.version,
+                // : on the two-phase lane the protocol fee was left OFF
+                // the previewed PSBT because it belongs on the reveal. Carry
+                // it so the submit path attaches it there.
+                deferredFeeOutput: composed.deferredFeeOutput || null,
             }, composed),
         })
     ), [confirmAction, messaging, settings, walletId]);

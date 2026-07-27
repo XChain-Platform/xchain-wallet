@@ -217,6 +217,10 @@ export async function composeActionForConfirm({
         psbt: composed.psbt,
         encoding: composed.encoding,
         quote: composed.quote,
+        // : the protocol fee output the two-phase lane moved to the
+        // reveal. Rides the envelope so the form can hand it back on Approve
+        // and the submit path attaches it without re-quoting.
+        deferredFeeOutput: composed.deferredFeeOutput || null,
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
