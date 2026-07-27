@@ -252,6 +252,10 @@ const {
     rearmAlert,
     getSettings,
     updateSettings,
+    collectPairingKeys,
+    buildPairingPayload,
+    encodePairingPayload,
+    pairPartner,
     exportBackupFile,
     importBackupFile,
     restoreFromBackupPointer,
@@ -975,6 +979,105 @@ export function createBackgroundHost(deps) {
             await refreshThrottleLimitsFromVault();
         }
         return result;
+    });
+
+    //  / §20.5: watcher <-> signer auto-pairing over a shared seed.
+    //
+    // `pairing.payload` exports THIS wallet's account-level public material
+    // (never any seed or private key) for the partner to scan or paste.
+    // `pairing.pair` takes the partner's payload back, proves both halves
+    // derive from one recovery phrase, and persists the verified partner
+    // record at `settings.partnerPairing`.
+    //
+    // Both routes resolve their signer the same way every other key-touching
+    // route does: the pre-unlocked pooled session signer when one exists,
+    // otherwise a password unlock we lock again on the way out. The
+    // onboarding lane hits the password path (it just imported the shared
+    // phrase and still has the password in hand); a later re-pair from
+    // Settings hits the pooled path with no prompt.
+    async function withPairingSigner(req, deps, fn) {
+        const { vault, chainRegistry, sdkRegistry, signerPool } = deps;
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || walletId.length === 0) {
+            throw new Error('pairing: walletId is required');
+        }
+        // The lane owns the mode flip. Doing it here rather than in the
+        // renderer keeps pairing atomic (a payload always reports the mode
+        // that is actually persisted) and keeps the lane working in shells
+        // that expose no settings shims of their own.
+        if (req?.walletMode === 'watcher' || req?.walletMode === 'signer') {
+            await updateSettings(vault, { walletMode: req.walletMode });
+        }
+        const pooled = await sessionSigner(req, vault, signerPool);
+        const signer = pooled
+            || await unlockWallet({
+                vault,
+                walletId,
+                password: req?.password,
+                bip39Passphrase: req?.bip39Passphrase,
+                chainRegistry,
+                sdkRegistry,
+            });
+        try {
+            return await fn(signer, await getSettings(vault));
+        } finally {
+            // The pool owns the lifecycle of a pooled signer; only a signer
+            // we unlocked ourselves gets locked here.
+            if (!pooled) signer.lock();
+        }
+    }
+
+    // Chains to publish in a pairing payload: the wallet's active chains
+    // (settings.fees is seeded per active chain by ensureSettings, the same
+    // derivation useReachability uses), narrowed to the active network so a
+    // mainnet payload never advertises regtest keys.
+    function pairingChainIds(req, settings, chainRegistry) {
+        if (Array.isArray(req?.chainIds) && req.chainIds.length > 0) return req.chainIds;
+        const network = settings?.activeNetwork || 'mainnet';
+        return Object.keys(settings?.fees || {})
+            .filter((id) => chainRegistry.descriptorFor(id)?.networkKind === network)
+            .sort();
+    }
+
+    host.register('pairing.payload', async (req, deps) => {
+        const { chainRegistry } = deps;
+        return withPairingSigner(req, deps, async (signer, settings) => {
+            const keys = await collectPairingKeys({
+                signer,
+                chainRegistry,
+                chainIds: pairingChainIds(req, settings, chainRegistry),
+            });
+            const payload = buildPairingPayload({
+                walletMode: settings?.walletMode,
+                keys,
+                label: typeof req?.label === 'string' ? req.label : '',
+            });
+            return { payload, encoded: encodePairingPayload(payload) };
+        });
+    });
+
+    host.register('pairing.pair', async (req, deps) => {
+        const { vault, chainRegistry } = deps;
+        return withPairingSigner(req, deps, async (signer, settings) => {
+            const keys = await collectPairingKeys({
+                signer,
+                chainRegistry,
+                chainIds: pairingChainIds(req, settings, chainRegistry),
+            });
+            const local = buildPairingPayload({
+                walletMode: settings?.walletMode,
+                keys,
+                label: typeof req?.label === 'string' ? req.label : '',
+            });
+            const { verification, patch } = pairPartner({ local, partner: req?.partner });
+            const updated = await updateSettings(vault, patch);
+            return { verification, partnerPairing: updated.partnerPairing, settings: updated };
+        });
+    });
+
+    host.register('pairing.unpair', async (_req, { vault }) => {
+        const updated = await updateSettings(vault, { partnerPairing: null });
+        return { settings: updated };
     });
 
     // §26: background auto-lock arm/disarm. The foreground `useAutoLock`

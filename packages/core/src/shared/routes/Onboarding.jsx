@@ -125,10 +125,11 @@ function markAccepted() {
  * @param {() => void} [props.onCreate]
  * @param {() => void} [props.onImport]
  * @param {() => void} [props.onImportFromFreeWallet]
+ * @param {() => void} [props.onPairPartner]          §20.5 / : enters the watcher/signer pairing lane (shared recovery phrase across two devices)
  * @param {() => void} [props.onDemoEntered]          fires after the demo wallet persists; caller refreshes App state into the unlocked tree
  * @param {() => void} [props.onBack]                 rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
  */
-export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoEntered, onBack }) {
+export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -391,6 +392,22 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
                 >
                     From FreeWallet
                 </Button>
+                {/*
+                  §20.5 / : the fourth lane. Create / Import both make a
+                  standalone `full` wallet; this one makes HALF of an
+                  air-gapped pair, so it needs its own entry point rather than
+                  a post-hoc mode flip in Settings that nothing verifies.
+                */}
+                {onPairPartner ? (
+                    <Button
+                        variant="ghost"
+                        block
+                        onClick={onPairPartner}
+                        icon={<Icon.LinkIcon />}
+                    >
+                        Pair a watcher or signer
+                    </Button>
+                ) : null}
                 {onDemoEntered ? (
                     <Button
                         variant="ghost"

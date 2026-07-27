@@ -27,7 +27,7 @@ import {
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/counterwallet.js';
 import { sha256 } from '@noble/hashes/sha2';
-import { derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
+import { accountXpub, derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
 import { encodeWif } from '../crypto/wif.js';
 import {
     NotImplementedError,
@@ -748,6 +748,27 @@ export class SoftwareSigner extends Signer {
         } finally {
             zeroDerivedKey(derived);
         }
+    }
+
+    /**
+     * Extended PUBLIC key at an account-level path (§20.5 pairing lane).
+     *
+     * Optional across the Signer interface: hardware signers reach their
+     * xpub through their own vendor transport, so `collectPairingKeys`
+     * feature-detects this method and falls back to the publicKey +
+     * chainCode pair (which every signer can produce) when it's absent.
+     * Nothing here touches private material beyond the seed already held
+     * for the unlocked session.
+     *
+     * @param {{ path: string }} params
+     * @returns {Promise<string>}
+     */
+    async getAccountXpub({ path }) {
+        this._assertUnlocked();
+        if (typeof path !== 'string' || !path.startsWith('m/')) {
+            throw new Error(`SoftwareSigner.getAccountXpub: invalid path "${path}"`);
+        }
+        return accountXpub(hdKeyFromSeed(this._unlocked.seed), path);
     }
 }
 

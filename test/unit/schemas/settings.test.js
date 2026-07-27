@@ -519,6 +519,71 @@ describe('validateSettings', () => {
         expect(validateSettings(without).ok).toBe(true);
     });
 
+    //  / §20.5: the verified watcher <-> signer partner record.
+    describe('partnerPairing', () => {
+        const validRecord = {
+            walletMode: 'signer',
+            label: 'Cold laptop',
+            keySetId: 'ab'.repeat(32),
+            keys: [{
+                chainId: 'bitcoin-mainnet',
+                addressType: 'p2wpkh',
+                path: "m/84'/0'/0'",
+                publicKey: '02'.repeat(33),
+                chainCode: 'cd'.repeat(32),
+                xpub: null,
+                keyId: 'ef'.repeat(32),
+            }],
+            sharedChainIds: ['bitcoin-mainnet'],
+            pairedAt: '2026-07-26T00:00:00.000Z',
+        };
+
+        it('defaults to null (unpaired)', () => {
+            expect(createDefaultSettings().partnerPairing).toBeNull();
+        });
+
+        it('accepts a well-formed record', () => {
+            const s = createDefaultSettings();
+            expect(validateSettings({ ...s, partnerPairing: validRecord }).ok).toBe(true);
+        });
+
+        it('accepts null and a missing field', () => {
+            const s = createDefaultSettings();
+            expect(validateSettings({ ...s, partnerPairing: null }).ok).toBe(true);
+            const { partnerPairing, ...without } = s;
+            expect(validateSettings(without).ok).toBe(true);
+        });
+
+        it('rejects a non-pairable partner mode', () => {
+            const s = createDefaultSettings();
+            expect(validateSettings({
+                ...s, partnerPairing: { ...validRecord, walletMode: 'full' },
+            }).ok).toBe(false);
+        });
+
+        it('rejects an empty key set', () => {
+            const s = createDefaultSettings();
+            expect(validateSettings({ ...s, partnerPairing: { ...validRecord, keys: [] } }).ok).toBe(false);
+        });
+
+        it('rejects a key entry missing its key material', () => {
+            const s = createDefaultSettings();
+            expect(validateSettings({
+                ...s,
+                partnerPairing: {
+                    ...validRecord,
+                    keys: [{ chainId: 'bitcoin-mainnet', path: "m/84'/0'/0'" }],
+                },
+            }).ok).toBe(false);
+        });
+
+        it('rejects a record with no pairedAt timestamp', () => {
+            const s = createDefaultSettings();
+            const { pairedAt, ...without } = validRecord;
+            expect(validateSettings({ ...s, partnerPairing: without }).ok).toBe(false);
+        });
+    });
+
     it('rejects invalid activeNetwork when present', () => {
         const s = createDefaultSettings();
         expect(validateSettings({ ...s, activeNetwork: 'devnet' }).ok).toBe(false);

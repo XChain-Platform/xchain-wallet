@@ -55,6 +55,30 @@ export function derive(root, path) {
     };
 }
 
+/**
+ * Extended PUBLIC key (xpub) at `path`. Used by the §20.5 watcher /
+ * signer pairing lane so a wallet can hand its account-level public
+ * material to its partner without exposing any private key.
+ *
+ * The version bytes come from @scure/bip32's defaults (BIP32 mainnet
+ * `xpub`), deliberately: the pairing payload also carries the raw
+ * publicKey + chainCode, and those are what the family check compares.
+ * The xpub string is the human/interop-facing rendering, not the
+ * comparison key, so a per-chain version-byte variant (ypub/zpub/tpub)
+ * would add ambiguity without adding information.
+ *
+ * @param {HDKey} root
+ * @param {string} path       account-level path, e.g. "m/84'/0'/0'"
+ * @returns {string}
+ */
+export function accountXpub(root, path) {
+    const child = root.derive(path);
+    if (!child.publicKey) {
+        throw new Error(`hd: derivation produced no public key for ${path}`);
+    }
+    return child.publicExtendedKey;
+}
+
 function fingerprintHex(fp) {
     // @scure/bip32 exposes `fingerprint` as a Number32. Render as 4-byte hex.
     if (typeof fp === 'number') {

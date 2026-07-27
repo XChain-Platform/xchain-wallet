@@ -12,7 +12,7 @@
 // seed-to-root and path-walking; this test pins the wrapper contract.
 
 import { describe, it, expect } from 'vitest';
-import { hdKeyFromSeed, derive, zeroDerivedKey } from '../../../packages/core/src/crypto/hd.js';
+import { hdKeyFromSeed, derive, zeroDerivedKey, accountXpub } from '../../../packages/core/src/crypto/hd.js';
 import { mnemonicToSeedSync } from '@scure/bip39';
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -84,6 +84,28 @@ describe('crypto/hd', () => {
             // zeroing twice doesn't throw.
             zeroDerivedKey(child);
             expect(() => zeroDerivedKey(child)).not.toThrow();
+        });
+    });
+
+    //  / §20.5: the pairing lane hands an account-level xpub to the
+    // partner wallet, so the wrapper must neuter (never leak xprv).
+    describe('accountXpub', () => {
+        it('returns the account-level extended PUBLIC key', () => {
+            const root = hdKeyFromSeed(SEED);
+            const xpub = accountXpub(root, "m/84'/0'/0'");
+            expect(xpub.startsWith('xpub')).toBe(true);
+            expect(xpub).not.toMatch(/xprv/);
+        });
+
+        it('is deterministic for the same seed and path', () => {
+            expect(accountXpub(hdKeyFromSeed(SEED), "m/84'/0'/0'"))
+                .toBe(accountXpub(hdKeyFromSeed(SEED), "m/84'/0'/0'"));
+        });
+
+        it('differs per path', () => {
+            const root = hdKeyFromSeed(SEED);
+            expect(accountXpub(root, "m/84'/0'/0'"))
+                .not.toBe(accountXpub(root, "m/84'/2'/0'"));
         });
     });
 });

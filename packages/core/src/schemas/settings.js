@@ -137,7 +137,8 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant: ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant: per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant: `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
- * @property {typeof NETWORKS[number]} [activeNetwork]                                                       v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
+ * @property {{ walletMode: 'watcher' | 'signer', label: string, keySetId: string, keys: object[], sharedChainIds: string[], pairedAt: string } | null} [partnerPairing]   v2-tolerant:  / §20.5. The verified other half of a watcher/signer pair, holding that partner's account-level PUBLIC key set (never any seed or private key). Written only by `flows.pairPartner` after `verifyPartnerPairing` proves both halves derive from one recovery phrase. null / absent = unpaired, which is the only valid state for a `full` wallet.
+ * @property {typeof NETWORKS[number]} [activeNetwork]                                                     v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
  * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
  * @property {boolean} [showFiatInHistory]                                                                   v2-tolerant: . When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
  * @property {{ enabled: boolean, start: string, end: string }} [quietHours]                                 v2-tolerant: . Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
@@ -245,6 +246,7 @@ export function createDefaultSettings() {
         keyboard: { bindings: {} },
         showVariantBadge: false,
         walletMode: WALLET_MODE_DEFAULT,
+        partnerPairing: null,
         activeNetwork: NETWORK_DEFAULT,
     };
 }
@@ -533,6 +535,35 @@ export function validateSettings(record) {
             'walletMode',
             isOneOf(r.walletMode, WALLET_MODES),
             `must be one of ${WALLET_MODES.join(', ')}`,
+        );
+    }
+    //  / §20.5: the verified watcher<->signer partner record.
+    // Shape-checked only (no re-derivation of keyIds): `pairPartner` is the
+    // sole writer and it validates the payload cryptographically before the
+    // record ever reaches here. The point of this check is that a corrupt
+    // persisted blob can't crash the settings read.
+    if (r.partnerPairing !== undefined && r.partnerPairing !== null) {
+        const pp = /** @type {any} */ (r.partnerPairing);
+        check(
+            errors,
+            'partnerPairing',
+            isPlainObject(pp)
+                && (pp.walletMode === 'watcher' || pp.walletMode === 'signer')
+                && isString(pp.label)
+                && isNonEmptyString(pp.keySetId)
+                && Array.isArray(pp.keys)
+                && pp.keys.length > 0
+                && pp.keys.every((k) =>
+                    isPlainObject(k)
+                    && isNonEmptyString(k.chainId)
+                    && isNonEmptyString(k.path)
+                    && isNonEmptyString(k.publicKey)
+                    && isNonEmptyString(k.chainCode)
+                    && isNonEmptyString(k.keyId))
+                && (pp.sharedChainIds === undefined
+                    || (Array.isArray(pp.sharedChainIds) && pp.sharedChainIds.every(isString)))
+                && isNonEmptyString(pp.pairedAt),
+            'must be null or a verified partner-pairing record',
         );
     }
     if (r.activeNetwork !== undefined) {

@@ -38,6 +38,7 @@ import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
 import { ImportWallet } from '@xchain-wallet/core/shared/routes/ImportWallet.jsx';
+import { PairPartnerWallet } from '@xchain-wallet/core/shared/routes/PairPartnerWallet.jsx';
 import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm.jsx';
 import { WalletPicker } from '@xchain-wallet/core/shared/routes/WalletPicker.jsx';
 import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.jsx';
@@ -175,7 +176,7 @@ function AppInner() {
     // settings; null-safe reads below tolerate the pre-load window.
     const { settings } = useSettings();
     const [onboardingStep, setOnboardingStep] = useState(
-        /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
+        /** @type {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
         /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
@@ -559,11 +560,23 @@ function AppInner() {
                     />
                 );
             }
+            // §20.5 / : watcher/signer pairing lane. Fresh-install
+            // only: it imports the shared recovery phrase itself, so the
+            // add-wallet-to-an-open-vault path below does not offer it.
+            if (onboardingStep === 'pair-partner') {
+                return (
+                    <PairPartnerWallet
+                        onBack={() => setOnboardingStep('welcome')}
+                        onPaired={refresh}
+                    />
+                );
+            }
             return (
                 <Onboarding
                     onCreate={() => setOnboardingStep('create')}
                     onImport={() => setOnboardingStep('import')}
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                    onPairPartner={() => setOnboardingStep('pair-partner')}
                     onDemoEntered={refresh}
                 />
             );

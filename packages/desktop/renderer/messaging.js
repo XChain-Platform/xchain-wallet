@@ -230,6 +230,31 @@ export function broadcastSignedTxRequest(opts) {
 }
 
 /**
+ * §20.5 / : export this wallet's pairing payload (account-level
+ * PUBLIC key material only) for its watcher/signer partner to scan.
+ * @param {{ walletId: string, walletMode?: 'watcher' | 'signer', password?: string, bip39Passphrase?: string, label?: string, chainIds?: string[] }} opts
+ */
+export function pairingPayloadRequest(opts) {
+    return /** @type {any} */ (sendMessage('pairing.payload', opts));
+}
+
+/**
+ * §20.5 / : verify the partner's payload against this wallet and
+ * persist the pairing.
+ * @param {{ walletId: string, walletMode?: 'watcher' | 'signer', partner: string | object, password?: string, bip39Passphrase?: string, label?: string }} opts
+ */
+export function pairPartnerRequest(opts) {
+    return /** @type {any} */ (sendMessage('pairing.pair', opts));
+}
+
+/**
+ * §20.5 / : forget the paired partner wallet.
+ */
+export function unpairPartnerRequest() {
+    return /** @type {any} */ (sendMessage('pairing.unpair', {}));
+}
+
+/**
  * §30.4 / G088: read-only PSBT decompose for the paste-in form.
  * @param {{ chainId: string, psbtHex: string }} opts
  */

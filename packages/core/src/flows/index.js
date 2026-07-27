@@ -49,6 +49,30 @@ export {
 export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { createReservationLedger } from './reservationLedger.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
+// §20.5 / : watcher + signer auto-pairing over a shared seed.
+export {
+    PARTNER_PAIRING_VERSION,
+    PARTNER_PAIRING_KIND,
+    PARTNER_PAIRING_PREFIX,
+    PAIRABLE_WALLET_MODES,
+    PartnerPairingError,
+    partnerModeFor,
+    describePairingLane,
+    accountPathOf,
+    pairingKeyId,
+    keySetIdOf,
+    collectPairingKeys,
+    buildPairingPayload,
+    validatePairingPayload,
+    encodePairingPayload,
+    parsePairingPayload,
+    verifyPartnerPairing,
+    toPartnerPairingRecord,
+    pairPartner,
+    partnerPairingOf,
+    isPartnerPaired,
+    partnerPairingSourceKeys,
+} from './pairPartner.js';
 export { sweepToken } from './sweepToken.js';
 export { sweepPreview } from './sweepPreview.js';
 export { issueToken } from './issueToken.js';
