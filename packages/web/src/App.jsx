@@ -258,13 +258,24 @@ function AppInner() {
     // (chainId, tick) so it can prefill + visually lock its ticker
     // field. Forms opened from ActionsMenu pass undefined and behave
     // as free-entry.
-    const fromManage = formReturnView === 'manage-token';
+    // 'settings' covers the Developer Mode regtest-faucet "Mint test
+    // XCHAIN" button (handleFaucetMint below): it stashes a synthetic
+    // tokenDetailRef the same way ManageToken does, so MintForm gets the
+    // same chainId/tick prefill treatment from either entry point.
+    const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     // Issuer address stashed by ManageToken via `onIssuerResolved`.
     // When set, each prefill-enabled form defaults its From row to the
     // creator address instead of the newest receive-chain HD address.
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
+    // Developer Mode's regtest faucet "Mint test XCHAIN" button: reuses
+    // the ManageToken prefill plumbing above instead of a parallel path.
+    const handleFaucetMint = ({ chainId, tick }) => {
+        setTokenDetailRef({ chainId, tick });
+        setFormReturnView('settings');
+        setUnlockedView('mint');
+    };
     // Coin family to scope History's chain filter to on entry (mirror
     // of popup wiring). Empty = no scoping.
     const [historyInitialChainCoin, setHistoryInitialChainCoin] = useState('');
@@ -2269,6 +2280,7 @@ function AppInner() {
                             activeWalletId ? () => setUnlockedView('account-picker') : undefined
                         }
                         initialSubpageId={settingsSubpage}
+                        onNavigateToMint={handleFaucetMint}
                     />
                 );
             }

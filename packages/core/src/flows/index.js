@@ -17,6 +17,7 @@ export {
 export { createWallet } from './createWallet.js';
 export { createAccount } from './createAccount.js';
 export { activateChain } from './activateChain.js';
+export { fundBtcFromMiner } from './regtestFaucet.js';
 export { renameWallet } from './renameWallet.js';
 export { renameAccount } from './renameAccount.js';
 export {
