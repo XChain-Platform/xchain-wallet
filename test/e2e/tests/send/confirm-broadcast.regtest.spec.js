@@ -111,7 +111,7 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         // §1.7 / wallet spec §21.7: the last place the user sees which network
         // is about to move their money.
-        await expect(page.getByTestId('confirm-approve')).toHaveText(/Approve & Sign on Bitcoin/);
+        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
 
         // Approvable outright: no "Sign anyway" override, because there is no
         // failure to override. This is what regressed users' most common

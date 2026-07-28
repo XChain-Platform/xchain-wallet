@@ -12,10 +12,11 @@
 //
 // Cross-cuts SignApproval.jsx (extension approval window) and
 // Send.jsx (user-initiated send). Asserts:
-//   - Approve button label reads "Approve & Sign on <chain>" for
-//     signAction / signPsbt; "Sign in" for signIn; bare "Approve"
-//     for signMessage. Send.jsx uses "Sign on <chain>" (user-initiated
-//     verb per §21.7: "Sign", not "Approve & Sign").
+//   - Approve/Reject footer reads a bare "Approve" (thumbs up) and
+//     "Reject" (thumbs down) on every kind but signIn, which keeps its
+//     own "Sign in" verb. The chain suffix that used to ride on the
+//     approve button is retired by operator decision; the chain is shown
+//     by the ChainBadge and the request details instead.
 //   - dApp Source block renders when an origin is present (Origin +
 //     optional App name).
 //   - Action details collapsed by default behind a <details> toggle.
@@ -45,25 +46,29 @@ assert.match(
     /const approveLabel\s*=/,
     'derives a per-kind approve label',
 );
-assert.match(
+// Operator decision: the footer is Approve / Reject, thumbs up and thumbs down,
+// with NO chain suffix. The retired form appended the chain to a
+// balance-committing signature ("Approve & Sign on Litecoin"); the chain is
+// carried by the ChainBadge and the request details instead.
+assert.doesNotMatch(
     signSrc,
-    /kind === 'signAction' \|\| kind === 'signPsbt'/,
-    'signAction + signPsbt take the value-committing label',
+    /Approve & Sign/,
+    'the retired "Approve & Sign" label has not come back',
 );
 assert.match(
     signSrc,
-    /Approve & Sign on \$\{chainName\}/,
-    'value-committing label carries the chain name',
+    /kind === 'signIn' \? 'Sign in' : 'Approve'/,
+    'every kind but signIn approves with a bare "Approve"',
 );
 assert.match(
     signSrc,
-    /'Approve & Sign'/,
-    'falls back to bare "Approve & Sign" when no chain',
+    /Icon\.ThumbsUpIcon/,
+    'approve carries the thumbs-up icon',
 );
 assert.match(
     signSrc,
-    /'Sign in'/,
-    'signIn keeps a "Sign in" label',
+    /Icon\.ThumbsDownIcon/,
+    'reject carries the thumbs-down icon',
 );
 // Bare "Approve" remains for signMessage. The button JSX renders {approveLabel}
 // (no longer a hardcoded "Approve"); confirm both the literal fallback exists
@@ -91,20 +96,15 @@ assert.match(
         join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
         'utf8',
     );
-    assert.match(
+    assert.doesNotMatch(
         confirmSrc,
-        /Approve & Sign on \$\{chainLabel\}/,
-        'confirm surface: the value-committing label carries the chain name',
+        /const defaultApproveLabel[\s\S]{0,120}Approve & Sign/,
+        'confirm surface: the retired "Approve & Sign on <chain>" label has not come back',
     );
     assert.match(
         confirmSrc,
-        /variant === 'message'\s*\n?\s*\? 'Approve'/,
-        'confirm surface: the message variant keeps a bare "Approve" (no balance commits)',
-    );
-    assert.match(
-        confirmSrc,
-        /'Approve & Sign'/,
-        'confirm surface: falls back to bare "Approve & Sign" when no chain is known',
+        /const defaultApproveLabel = 'Approve';/,
+        'confirm surface: every variant approves with a bare "Approve"',
     );
     assert.match(
         confirmSrc,

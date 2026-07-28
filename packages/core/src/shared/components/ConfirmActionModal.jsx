@@ -31,6 +31,7 @@ import { Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
+import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -49,12 +50,9 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  * @param {{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }} props.decoded
  * @param {object|null} [props.simulation]
  * @param {string} props.chainLabel
- * @param {string} [props.approveLabel]   overrides the footer verb. Defaults to the
- *   §21.7 balance-committing form, "Approve & Sign on <chain>": the chain name on
- *   the signing button is the last place a user sees WHICH network is about to
- *   move their money, and every form reaches this page several screens after the
- *   chain was picked. The message variant passes a bare "Approve" - no signature
- *   there commits balance, so the chain suffix would mislead.
+ * @param {string} [props.approveLabel]   overrides the footer verb. Defaults to a
+ *   bare "Approve" on every variant, paired with "Reject": thumbs up, thumbs down,
+ *   no chain suffix. The earlier "Approve & Sign on <chain>" form is retired.
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
  * @param {'small'|'full'} [props.screenVariant]             Screen sizing, the caller's shell variant (defaults to 'small')
@@ -84,23 +82,32 @@ export function ConfirmActionModal({
     const headlineText = headline !== undefined
         ? headline
         : decoded?.summary?.split('\n')[0];
-    // §21.7 button-label convention, the same rule the dApp approval window
-    // applies (SignApproval.jsx): a signature that commits balance names the
-    // chain, because the confirm page is reached several screens after the
-    // chain was picked and this is the last place the user sees which network
-    // is about to move their money. The message variant commits no balance, so
-    // the chain suffix would mislead. Derived from `variant` rather than passed
-    // per adapter: three adapters each remembering the rule is three chances to
-    // forget it, and the one that forgets ships a signing button that never
-    // says what it signs.
-    const defaultApproveLabel = variant === 'message'
-        ? 'Approve'
-        : (chainLabel ? `Approve & Sign on ${chainLabel}` : 'Approve & Sign');
+    // The footer is a plain Approve / Reject pair, thumbs up and thumbs down, on
+    // every variant. This REPLACES the older §21.7 convention where a
+    // balance-committing signature appended the chain ("Approve & Sign on
+    // Litecoin"): operator decision, the verb is the decision the user is making
+    // and the chain belongs in the intent above, not on the button. The chain is
+    // still named on this screen - in the headline, the balance rows and the
+    // network-fee line - so nothing about which network moves the money is lost.
+    // Do not reintroduce the suffix here or in SignApproval.jsx.
+    const defaultApproveLabel = 'Approve';
     // . Read off the composed envelope rather than taken as a prop, for
     // the same reason as the label above: a rule every adapter has to remember
     // is a rule one of them will forget, and the one that forgets shows a
     // "pre-flight unavailable" warning on an ordinary payment.
     const preflightNotApplicable = !!composed?.bareNativePayment;
+    // : the protocol fee in the DEFAULT (XCHAIN) payment lane, read from
+    // the pre-flight report the panel above already renders. The native lane
+    // discloses its own fee as a coin debit , so the helper returns
+    // null there rather than charging the user twice on screen.
+    //
+    // Action variant only. A caller-supplied PSBT (the psbt variant) was built
+    // elsewhere and the wallet cannot tell which lane paid its fee, so a line
+    // claiming "from your XCHAIN balance" could be flatly wrong; a bare native
+    // payment has no protocol fee at all.
+    const protocolFee = (variant === 'action' && !preflightNotApplicable)
+        ? xchainProtocolFeeLine({ report, composed })
+        : null;
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
@@ -187,6 +194,13 @@ export function ConfirmActionModal({
 
                     {feeText ? (
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
+                    ) : null}
+
+                    {/* Directly under the miner fee so the two costs read as
+                        one section, and named as itself so neither passes for
+                        the other (the same rule the  delta rows follow). */}
+                    {protocolFee ? (
+                        <div className={styles.fee} data-testid="confirm-protocol-fee">{protocolFee.text}</div>
                     ) : null}
 
                     {/* Fail-closed refusal (§5.5): no credentials, no Approve,

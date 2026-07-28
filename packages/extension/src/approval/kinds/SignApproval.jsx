@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, Input, ChainBadge } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -415,20 +415,17 @@ export function SignApproval({ id, kind, payload, onReject }) {
         kind === 'signAction' ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);
 
-    // §21.7 button-label conventions. Action / PSBT signing reads
-    // "Approve & Sign on <chain>" so the user sees which chain is
-    // about to commit a signature; mitigates approval-drift between
-    // tabs (§21.3). Message / sign-in keep "Approve"; no signature
-    // commits balance, so the chain suffix would mislead.
-    const chainName = descriptor?.displayName || '';
-    const approveLabel =
-        kind === 'signAction' || kind === 'signPsbt'
-            ? chainName
-                ? `Approve & Sign on ${chainName}`
-                : 'Approve & Sign'
-            : kind === 'signIn'
-                ? 'Sign in'
-                : 'Approve';
+    // Approve / Reject, thumbs up and thumbs down, matching the in-wallet confirm
+    // screen (ConfirmActionModal.jsx). This REPLACES the older §21.7 convention
+    // where action and PSBT signing appended the chain name to the approve verb:
+    // operator decision, the verb is the decision being made and the chain belongs
+    // in the request details, not on the button. The chain is still named on this
+    // screen by its own ChainBadge, so approval-drift between tabs (§21.3) stays
+    // addressed by the badge rather than by the button text. The smoke test
+    // asserts the retired wording never reappears in this file.
+    // Sign-in keeps its own verb: it is not an approval of a balance-moving
+    // action, and "Approve" would understate what signing in to a site does.
+    const approveLabel = kind === 'signIn' ? 'Sign in' : 'Approve';
 
     // §21.3 dApp Source block: Origin + App name (when the dApp
     // attached one). Only renders when an origin is present; in
@@ -542,6 +539,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     <Button
                         variant="ghost"
                         block
+                        icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
                         disabled={busy}
                     >
@@ -552,6 +550,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         form="sign-approval-form"
                         variant="primary"
                         block
+                        icon={<Icon.ThumbsUpIcon />}
                         loading={busy}
                         disabled={password.length === 0 || !walletId || approvalBlocked}
                     >

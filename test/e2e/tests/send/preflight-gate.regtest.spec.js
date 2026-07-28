@@ -180,7 +180,7 @@ test.describe('pre-flight gate on regtest', () => {
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
 
         const approve = page.getByTestId('confirm-approve');
-        await expect(approve).toHaveText(/Approve & Sign on Bitcoin/);
+        await expect(approve).toHaveText(/^Approve$/);
         await expect(approve).toBeEnabled();
         await approve.click();
 
