@@ -86,10 +86,38 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
               `and ${coin} is the only way to pay a protocol fee here.`
             : `Paying the protocol fee in ${coin} is not available for this action. Turn it off to pay in XCHAIN.`;
     }
+    // `invalid` is two different situations wearing one name (see the class doc:
+    // "stale price / bad sizing"). Only the price half is temporary. The indexer's own
+    // verdict rides in the message, so read it back and let it decide: a rejection that
+    // is not about price must not be reported as one, or the user is told to wait for a
+    // feed that is working while the thing they could actually fix goes unmentioned.
+    // Found live: a stake larger than the balance answered `invalid: insufficient funds
+    // (AMOUNT)`, and the wallet said the LTC fee price was temporarily unavailable.
+    const detail = invalidDetailFromMessage(err);
+    if (detail && !PRICE_REJECTION.test(detail)) {
+        return `The network would refuse this action as it stands: ${detail}. Nothing was signed or ` +
+               'sent. Waiting will not change this, so adjust the action and try again.';
+    }
     return mandatory
         ? `The ${coin} fee price is temporarily unavailable. Try again in a moment.`
         : 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off ' +
           'native-coin fee payment.';
+}
+
+// Whether an indexer verdict is about the price feed, which is the only part of the
+// `invalid` bucket that a user fixes by waiting.
+const PRICE_REJECTION = /price|oracle|stale/i;
+
+// The indexer's verdict, recovered from the message the constructor built. Same
+// boundary-survival reason as dustAmountFromMessage: the popup receives only
+// { name, message }, so `quote` is gone by the time a form renders this. The leading
+// "invalid: " the indexer prefixes its own verdicts with is stripped, since the sentence
+// around it already says the action was refused.
+function invalidDetailFromMessage(err) {
+    const m = /pre-flight failed \(invalid\): (.+)$/s.exec(String((err && err.message) || ''));
+    if (!m) return null;
+    const detail = m[1].trim().replace(/^invalid:\s*/i, '');
+    return detail && detail !== 'invalid' ? detail : null;
 }
 
 // The refusal reason, read from the error however it reached us. A form running in the

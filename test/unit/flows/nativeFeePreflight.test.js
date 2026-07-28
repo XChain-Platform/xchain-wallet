@@ -200,6 +200,44 @@ describe('nativeFeeErrorMessage', () => {
             .toBe('The DOGE fee price is temporarily unavailable. Try again in a moment.');
     });
 
+    // `invalid` is two situations under one name, and only the price half is
+    // temporary. Found live (wallet E2E session 24): a stake larger than the balance
+    // answered `invalid: insufficient funds (AMOUNT)` and the wallet told the user the
+    // LTC fee price was temporarily unavailable and to try again in a moment. The price
+    // was fine, the stake was not, and waiting could never fix it.
+    it('reports a non-price rejection as itself instead of blaming the price feed', () => {
+        const err = new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { valid: false, error: 'invalid: insufficient funds (AMOUNT)' },
+        });
+        const msg = nativeFeeErrorMessage(err, { coinTicker: 'LTC', mandatory: true });
+
+        expect(msg).not.toMatch(/temporarily unavailable/);
+        expect(msg).not.toMatch(/try again in a moment/i);
+        expect(msg).toMatch(/insufficient funds \(AMOUNT\)/);
+        // The doubled "invalid:" the indexer prefixes its verdict with is not user copy.
+        expect(msg).not.toMatch(/invalid: insufficient/);
+        expect(msg).toMatch(/Nothing was signed or sent/);
+        expect(msg).toMatch(/Waiting will not change this/);
+    });
+
+    it('keeps the temporary wording when the rejection really is the price feed', () => {
+        for (const detail of [
+            'invalid: no current oracle price for LTC/USD (missing or stale beyond 1800s)',
+            'invalid: price snapshot is stale',
+        ]) {
+            const err = new NativeFeeForfeitError({ reason: 'invalid', quote: { valid: false, error: detail } });
+            expect(nativeFeeErrorMessage(err, { coinTicker: 'LTC', mandatory: true }))
+                .toBe('The LTC fee price is temporarily unavailable. Try again in a moment.');
+        }
+    });
+
+    // A bare reason with no indexer verdict must not invent one.
+    it('still says "temporarily unavailable" when there is no detail to report', () => {
+        expect(nativeFeeErrorMessage({ reason: 'invalid' }, { coinTicker: 'LTC', mandatory: true }))
+            .toBe('The LTC fee price is temporarily unavailable. Try again in a moment.');
+    });
+
     it('falls back to a generic coin name when the ticker is unknown', () => {
         expect(nativeFeeErrorMessage({ reason: 'unsupported' }, {})).toMatch(/the native coin/);
     });
