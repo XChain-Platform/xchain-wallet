@@ -66,6 +66,7 @@ import {
     ensureHost,
     handleIpcMessage,
     tearDownHost,
+    wipeRuntimeStores,
 } from './runtime.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -482,6 +483,33 @@ app.whenReady().then(async () => {
         try {
             const win = createWindow({ initialView, initialContext });
             return { ok: true, windowId: win.id };
+        } catch (err) {
+            return { ok: false, error: String(err?.message ?? err) };
+        }
+    });
+
+    // : renderer-driven wipe of the shell's own stores. The
+    // renderer's wipeWalletStorage clears localStorage + IndexedDB,
+    // neither of which this shell uses, so without this channel both
+    // wipe paths (demo exit, Locked "forgot password") are silent
+    // no-ops and the user is handed an unlock screen for the vault
+    // they just destroyed. Same trusted-sender gate as every other
+    // channel: a remote frame cannot nuke someone's wallet.
+    ipcMain.handle('xchain:wipe-storage', async (event) => {
+        if (!isTrustedSenderEvent(event)) {
+            return { ok: false, error: 'wipe-storage: rejected from untrusted frame' };
+        }
+        if (!runtime) {
+            return { ok: false, error: 'wipe-storage: runtime not initialized' };
+        }
+        try {
+            const result = await wipeRuntimeStores(runtime);
+            if (result.ok) return { ok: true, cleared: result.cleared };
+            return {
+                ok: false,
+                cleared: result.cleared,
+                error: result.errors.map((e) => `${e.store}: ${e.message}`).join('; '),
+            };
         } catch (err) {
             return { ok: false, error: String(err?.message ?? err) };
         }

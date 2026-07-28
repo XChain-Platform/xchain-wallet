@@ -19,6 +19,15 @@
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
 //     extension popup + web shell wire format.
 //
+//   - `xchainWalletBridge.wipeStorage()`: . The shared
+//     `wipeWalletStorage` helper can only reach localStorage +
+//     IndexedDB, and this shell keeps its vault, kdfParams meta,
+//     session key and unlock throttle in files under userData. Without
+//     this call the demo exit and the Locked "forgot password" wipe are
+//     silent no-ops. Deliberately takes no arguments: the renderer says
+//     "wipe", main decides what that means, so a compromised renderer
+//     cannot aim it at an arbitrary path.
+//
 //   - `xchainWalletSignerBridge.{postMessage,onMessage,onDisconnect}`:
 //     duplex port for the hardware-signer RPC. Renderer-hosted
 //     Trezor/Ledger signers expose their status + sign methods back
@@ -49,6 +58,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const MESSAGE_CHANNEL = 'xchain-wallet:message';
 const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
+const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
@@ -58,6 +68,17 @@ contextBridge.exposeInMainWorld('xchainWalletBridge', {
      */
     sendMessage(message) {
         return ipcRenderer.invoke(MESSAGE_CHANNEL, message);
+    },
+    /**
+     * Clear every wallet store this shell owns under userData (vault
+     * blob, kdfParams meta, cached session key, unlock throttle) and
+     * drop the in-memory host. `{ ok: false, error }` means at least
+     * one store survived, and the caller must surface that rather than
+     * reload into a stale unlock screen.
+     * @returns {Promise<{ ok: true, cleared: string[] } | { ok: false, cleared?: string[], error: string }>}
+     */
+    wipeStorage() {
+        return ipcRenderer.invoke(WIPE_STORAGE_CHANNEL);
     },
 });
 

@@ -99,8 +99,11 @@ export function Locked({ onUnlocked }) {
                 // password cache is gone, and the vault blob is one
                 // encrypted unit, so there's no way to surgically remove
                 // a single wallet record without the master key. Fall
-                // back to deleting the whole IndexedDB database so the
-                // App reboots into clean onboarding. The demo-exit
+                // back to clearing every store this shell keeps a vault
+                // in (: on desktop that includes files only the
+                // main process can reach) so the App reboots into clean
+                // onboarding rather than an unlock screen for a vault
+                // that is no longer usable. The demo-exit
                 // affordance only renders when a demo wallet exists,
                 // so the destructive scope is acknowledged by the
                 // user clicking through it.

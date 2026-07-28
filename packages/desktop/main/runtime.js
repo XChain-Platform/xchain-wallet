@@ -335,6 +335,71 @@ export function tearDownHost(runtime) {
 }
 
 /**
+ * @typedef {Object} WipeResult
+ * @property {boolean} ok                              every store with a backend was cleared
+ * @property {string[]} cleared                        store names that were cleared
+ * @property {{ store: string, message: string }[]} errors
+ */
+
+/**
+ * : clear every wallet store the desktop shell owns, so a wipe
+ * from the renderer actually lands.
+ *
+ * The renderer's `wipeWalletStorage` can only reach localStorage and
+ * IndexedDB, neither of which the desktop shell uses. Its four stores
+ * are files under `app.getPath('userData')`, reachable only from main:
+ *
+ *   - storage        `vault.bin`            encrypted vault document
+ *   - meta           `meta.json`            kdfParams: the "a wallet
+ *                                           already exists" signal that
+ *                                           decides unlock vs onboarding
+ *   - session        cached session key     an auto-unlock into a vault
+ *                                           that no longer exists
+ *   - unlockThrottle attempt counters       a lockout inherited by the
+ *                                           *next* wallet, punishing the
+ *                                           user for the old one's typos
+ *
+ * The throttle is cleared deliberately. It exists to slow password
+ * guessing against a vault; once that vault is gone there is nothing
+ * left to guess at, and a caller who wipes to escape a lockout has
+ * destroyed the very thing they wanted to break into.
+ *
+ * The in-memory host is torn down FIRST so no watcher or autosave can
+ * write a store back after it was unlinked.
+ *
+ * Per-store failures are collected rather than thrown so one unwritable
+ * file cannot leave the other three behind; the caller reports `ok`.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<WipeResult>}
+ */
+export async function wipeRuntimeStores(runtime) {
+    if (!runtime) throw new Error('wipeRuntimeStores: runtime is required');
+    tearDownHost(runtime);
+
+    /** @type {string[]} */
+    const cleared = [];
+    /** @type {{ store: string, message: string }[]} */
+    const errors = [];
+    const targets = [
+        ['storage', runtime.storageBackend],
+        ['meta', runtime.metaBackend],
+        ['session', runtime.sessionBackend],
+        ['unlockThrottle', runtime.unlockThrottleStore],
+    ];
+    for (const [name, backend] of targets) {
+        if (!backend || typeof backend.clear !== 'function') continue;
+        try {
+            await backend.clear();
+            cleared.push(name);
+        } catch (err) {
+            errors.push({ store: name, message: String(err?.message ?? err) });
+        }
+    }
+    return { ok: errors.length === 0, cleared, errors };
+}
+
+/**
  * Route an IPC message to the pre-host dispatcher or the MessageHost,
  * returning the standard `{ ok, result } | { ok, error }` envelope.
  *
