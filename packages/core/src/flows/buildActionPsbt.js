@@ -33,6 +33,7 @@
 import { normalizeSource } from './sendToken.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
+import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 
 /**
@@ -114,11 +115,18 @@ export async function buildActionPsbt(opts) {
         level: 'info',
         message: `createTx action=${opts.actionData.action} chain=${opts.chainId}`,
     });
-    const encoded = await encoder.createTx({
-        data: createResult.actionString,
-        pubkey: source.publicKey,
-        ...encoderOpts,
-    });
+    // : carry the quoted protocol fee out with a failed build, so the
+    // "this address has nothing to spend" sentence can name the amount.
+    let encoded;
+    try {
+        encoded = await encoder.createTx({
+            data: createResult.actionString,
+            pubkey: source.publicKey,
+            ...encoderOpts,
+        });
+    } catch (err) {
+        throw annotateEncoderFeeRequirement(err, preflight.quote);
+    }
     logConsole.record({
         source: 'encoder',
         level: 'info',

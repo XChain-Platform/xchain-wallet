@@ -45,6 +45,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -483,7 +484,6 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
         return wrap(
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
@@ -498,13 +498,16 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                     transaction did not set a cooldown duration. Staking is only
                     available on contracts that explicitly opted in at deploy time.
                 </div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
+        // : a queued result is SIGNED and not broadcast. The confirm
+        // pipeline resolves that case rather than throwing, so without this
+        // branch the done screen below reports it as a completed action.
+        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel

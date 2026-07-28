@@ -42,6 +42,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -522,6 +523,11 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed but not broadcast. "sent" is the claim this case
+        // cannot make.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what={actionDisplayLabel(action).toLowerCase()} />);
         }
         return wrap(
             <>

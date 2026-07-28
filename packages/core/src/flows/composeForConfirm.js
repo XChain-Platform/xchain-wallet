@@ -30,6 +30,7 @@
 // rendering works unmodified (§5.6 migration keystone).
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
+import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
 import { nativeFeeOutputOf, willTakeChunkLane, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
@@ -161,11 +162,20 @@ export async function composeForConfirm({
     //    change sink. Without it the encoder refuses to build ("CHANGE_ADDRESS_REQUIRED"
     //    rather than burn the change as fee). An explicit change in encoderOpts wins
     //    (the spread below overrides this default).
-    const encoded = await sdk.encoder.createTx({
-        ...(bareNativePayment ? {} : { data: createResult.actionString }),
-        ...(source ? { sourceAddress: source, change: source } : {}),
-        ...finalEncoderOpts,
-    });
+    // : the quote taken moments ago is the one thing that makes an
+    // "address has no coin" failure actionable ("it needs about 20 DOGE"), and
+    // this is the last frame that still has it. Stamp it on the way out so the
+    // form's message can say the amount.
+    let encoded;
+    try {
+        encoded = await sdk.encoder.createTx({
+            ...(bareNativePayment ? {} : { data: createResult.actionString }),
+            ...(source ? { sourceAddress: source, change: source } : {}),
+            ...finalEncoderOpts,
+        });
+    } catch (err) {
+        throw annotateEncoderFeeRequirement(err, feePreflight.quote);
+    }
 
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }

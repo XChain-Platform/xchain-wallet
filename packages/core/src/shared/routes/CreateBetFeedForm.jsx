@@ -36,6 +36,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { BET_CHAIN_IDS } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -497,7 +498,6 @@ export function CreateBetFeedForm({
                     This wallet is in watcher mode, so it cannot open a market. Opening one commits you
                     to publishing the result, which needs the key that will later resolve it.
                 </p>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
@@ -506,7 +506,6 @@ export function CreateBetFeedForm({
         return wrap(
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
@@ -514,6 +513,10 @@ export function CreateBetFeedForm({
 
     if (result) {
         const txid = result?.txid || result?.tx_hash;
+        // : a queued result is SIGNED and not broadcast. The confirm
+        // pipeline resolves that case rather than throwing, so without this
+        // branch the done screen below reports it as a completed action.
+        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
         return wrap(
             <>
                 <p className={styles.summary}>
@@ -546,12 +549,16 @@ export function CreateBetFeedForm({
         }
         if (!quote) return <p className={styles.hint}>Working out the cost…</p>;
         const days = Number(quote.days || 0);
-        const freeDays = days - Number(quote.billableDays || 0);
+        const billableDays = Number(quote.billableDays || 0);
+        const freeDays = days - billableDays;
+        // (b): a one-day market read "about 1 days". The counts here are
+        // computed, so any of them can land on 1.
+        const dayWord = (n) => `${n} day${n === 1 ? '' : 's'}`;
         if (quote.free) {
             return (
                 <p className={styles.hint}>
-                    <strong>Opening this market is free.</strong> It stays on the network for about {days} days,
-                    and the first {freeDays} days of any market cost nothing.
+                    <strong>Opening this market is free.</strong> It stays on the network for
+                    about {dayWord(days)}, and the first {dayWord(freeDays)} of any market cost nothing.
                 </p>
             );
         }
@@ -565,7 +572,8 @@ export function CreateBetFeedForm({
                     ? ` It is charged as the equivalent in ${coinTicker} at the rate when you submit.`
                     : ''}
                 {' '}It stays on the network for
-                about {days} days: {freeDays} of those are free and {quote.billableDays} are charged.
+                about {dayWord(days)}: {freeDays} of those {freeDays === 1 ? 'is' : 'are'} free
+                and {billableDays} {billableDays === 1 ? 'is' : 'are'} charged.
                 {' '}The charge is measured to the refund deadline, not to when betting closes, so a longer
                 window to publish the result costs more.
             </p>

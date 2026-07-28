@@ -39,6 +39,7 @@ import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePr
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -567,6 +568,10 @@ export function TokenWizard({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        // : signed but not broadcast, so the token does not exist yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="token creation" />);
+        }
         return wrap(
             <>
                 <h2 className={styles.successTitle}>Token created</h2>

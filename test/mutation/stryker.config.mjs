@@ -25,11 +25,19 @@
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
-    packageManager: 'npm',
+    // pnpm workspace: Stryker copies the project into a sandbox, so it must
+    // reinstall with the same manager the lockfile belongs to.
+    packageManager: 'pnpm',
     reporters: ['progress', 'clear-text', 'html'],
+    // pnpm's non-flat node_modules defeats Stryker's default
+    // `@stryker-mutator/*` plugin glob, so name the runner explicitly.
+    plugins: ['@stryker-mutator/vitest-runner'],
     testRunner: 'vitest',
     vitest: {
-        configFile: 'test/vitest/unit.config.js',
+        // Narrowed to the crypto + util tests that cover `mutate` below; see
+        // the header of vitest.mutation.config.js for why the full unit
+        // config is not reused here.
+        configFile: 'test/mutation/vitest.mutation.config.js',
     },
     coverageAnalysis: 'perTest',
     mutate: [

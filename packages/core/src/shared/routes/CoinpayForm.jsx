@@ -32,6 +32,7 @@ import {
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 import styles from './IssueTokenForm.module.css';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -360,6 +361,10 @@ export function CoinpayForm({
 
     if (stage === 'done') {
         const txid = result?.txid;
+        // : a queued result is SIGNED and not broadcast. The confirm
+        // pipeline resolves that case rather than throwing, so without this
+        // branch the done screen below reports it as a completed action.
+        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel

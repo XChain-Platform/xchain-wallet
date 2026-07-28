@@ -551,7 +551,15 @@ describe(': action forms confirm via the single-encode pipeline', () => {
                     setValue(utils, /^Per-recipient amount/, '5');
                     const box = utils.container.querySelector('textarea');
                     if (!box) throw new Error('no recipients textarea');
-                    fireEvent.change(box, { target: { value: 'bc1qrecipientone\nbc1qrecipienttwo' } });
+                    // Real bitcoin-mainnet addresses:  made the
+                    // recipient parser network-aware, so placeholder strings
+                    // are now skipped (that is the whole point of the fix).
+                    fireEvent.change(box, {
+                        target: {
+                            value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4\n'
+                                + '1FWDonkMbC6hL64JiysuggHnUAw2CKWszs',
+                        },
+                    });
                 },
                 // The recipient-list review stage is kept: it is a data
                 // review, and its button is what opens the confirm page.

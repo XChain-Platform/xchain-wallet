@@ -21,6 +21,8 @@ import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { trimAmountTail, sumDecimalStrings } from '../utils/amountFormat.js';
+import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -33,6 +35,32 @@ function unwrap(resp) {
     return resp;
 }
 
+/** Is this market still live, i.e. can its pools still change? */
+export function isLiveFeedStatus(status) {
+    return status === 'open' || status === 'closed' || !status;
+}
+
+// Rebuild the per-outcome split from the bets themselves, in the shape the
+// explorer's `pools` rows use, so the renderer needs no second code path.
+export function splitFromBets(rows) {
+    const byOutcome = new Map();
+    for (const b of Array.isArray(rows) ? rows : []) {
+        // `Number(null)` is 0, so a row with no outcome would otherwise be
+        // silently counted as a bet on outcome 0 - a wrong pool, not a
+        // missing one.
+        if (b?.outcome === null || b?.outcome === undefined || b?.outcome === '') continue;
+        const outcome = Number(b.outcome);
+        if (!Number.isFinite(outcome)) continue;
+        const cur = byOutcome.get(outcome) || { outcome, amounts: [], bet_count: 0 };
+        cur.amounts.push(b?.amount);
+        cur.bet_count += 1;
+        byOutcome.set(outcome, cur);
+    }
+    return [...byOutcome.values()].map(({ outcome, amounts, bet_count }) => ({
+        outcome, bet_count, pool: sumDecimalStrings(amounts),
+    }));
+}
+
 function statusLabel(status) {
     if (status === 'open') return 'Taking bets';
     if (status === 'closed') return 'Betting closed, waiting on the result';
@@ -41,6 +69,14 @@ function statusLabel(status) {
     if (status === 'cancelled') return 'Cancelled, everyone refunded';
     if (status === 'expired') return 'Expired unresolved, everyone refunded';
     return status ? String(status) : 'Unknown';
+}
+
+// The SDK carries implied odds at 8 decimals because it is a ratio rather than
+// an amount. "1.386x your stake" reads; "1.38600000x your stake" does not.
+function trimZeros(v) {
+    const s = String(v === null || v === undefined ? '' : v);
+    if (!s.includes('.')) return s;
+    return s.replace(/0+$/, '').replace(/\.$/, '');
 }
 
 function fmtTime(unix) {
@@ -79,9 +115,10 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
-    const [projected, setProjected] = useState(/** @type {string | null} */ (null));
+    const [projected, setProjected] = useState(/** @type {any} */ (null));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
+    const [settledSplit, setSettledSplit] = useState(/** @type {any[] | null} */ (null));
 
     const reload = useCallback(() => {
         setFeed(null);
@@ -100,6 +137,35 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load the market.'); });
         return () => { cancelled = true; };
     }, [chainId, feedIndex, messaging]);
+
+    // A settled market's split has to be rebuilt from its bets, because the
+    // explorer sums `pools` over OPEN bets only. That predicate is right for
+    // payout math and wrong as a record: the moment a market resolves,
+    // cancels or expires, every bet leaves `open` and the market renders with
+    // an empty pool list - so a market that took real money and paid it out
+    // reported "no bets yet" on the very screen a bettor opens to check what
+    // happened, directly above a history saying it settled.
+    //
+    // Only for terminal markets: while a market is live the explorer's own
+    // aggregate is the authority (it is what settlement will use), and asking
+    // for every bet row on a busy market would be a worse read of the same
+    // number.
+    useEffect(() => {
+        let cancelled = false;
+        setSettledSplit(null);
+        if (!feed || isLiveFeedStatus(feed.feed_status)) return undefined;
+        if (typeof messaging.bets !== 'function') return undefined;
+        messaging.bets({ chainId, query: String(feedIndex), type: 'feed', opts: { limit: 500 } })
+            .then((resp) => {
+                if (cancelled) return;
+                const rows = Array.isArray(resp) ? resp : (resp?.data || []);
+                setSettledSplit(splitFromBets(rows));
+            })
+            // Falling back to the live-pool rows keeps the screen readable; it
+            // shows zeros rather than a wrong total.
+            .catch(() => { if (!cancelled) setSettledSplit(null); });
+        return () => { cancelled = true; };
+    }, [feed, chainId, feedIndex, messaging]);
 
     useEffect(() => {
         let cancelled = false;
@@ -148,21 +214,35 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         hardware: 'placeBetActionHw',
     });
 
+    // Wire order of the market's outcomes. Derived up here rather than at render
+    // because the projection needs the COUNT: the explorer's pools only carry
+    // outcomes that already have a bet, so the count is the only thing that tells
+    // the payout math an unbacked outcome exists at all.
+    const outcomeLabels = useMemo(() => outcomeLabelsOf(feed), [feed]);
+
     // Projected payout comes from the SDK's own settlement-order math over the
     // host, never a local approximation: a projection that disagrees with the
     // settled amount in the last decimal place reads to a user as a bug.
+    //
+    // Failures stay silent on purpose: a stake half-typed ("0.", "") is not an
+    // error the user needs told about, it just has no projection yet.
     useEffect(() => {
         let cancelled = false;
         setProjected(null);
         if (!feed || outcome === null || !amount) return undefined;
         if (typeof messaging.betProjectPayout !== 'function') return undefined;
         messaging.betProjectPayout({
-            chainId, pools: feed.pools || [], outcome, stake: amount, feePct: feed.fee || 0,
+            chainId,
+            pools: feed.pools || [],
+            outcomeCount: outcomeLabels.length,
+            outcome,
+            stake: amount,
+            feePct: feed.fee || 0,
         })
-            .then((v) => { if (!cancelled) setProjected(v === null || v === undefined ? null : String(v)); })
+            .then((v) => { if (!cancelled) setProjected(v && typeof v === 'object' ? v : null); })
             .catch(() => { if (!cancelled) setProjected(null); });
         return () => { cancelled = true; };
-    }, [feed, outcome, amount, chainId, messaging]);
+    }, [feed, outcome, amount, chainId, messaging, outcomeLabels]);
 
     // The UI-level params, derived in ONE place so the object handed to compose is
     // byte-for-byte the object handed to submit. Two derivations could diverge and
@@ -246,6 +326,12 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 onHwStatusChange={onHwStatusChange}
                 chainId={chainId}
                 getSignerStatus={messaging.getSignerStatus}
+                // (c): the composed bytes carry the outcome as an INDEX,
+                // so the host's decode can only say "outcome 0". These labels
+                // are the market's own, and they annotate that index without
+                // replacing it, so the screen that verifies intent names the
+                // side being backed.
+                outcomeLabels={outcomeLabels}
             />
         );
     }
@@ -254,16 +340,17 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         return wrap(
             <>
                 <div role="alert" className={styles.error}>{error}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
     if (!feed) return wrap(<p>Loading market…</p>);
 
-    const outcomes = Array.isArray(feed.outcome_labels)
-        ? feed.outcome_labels
-        : (typeof feed.outcomes === 'string' ? feed.outcomes.split(',') : []);
-    const pools = Array.isArray(feed.pools) ? feed.pools : [];
+    const outcomes = outcomeLabels;
+    const live = isLiveFeedStatus(feed.feed_status);
+    const livePools = Array.isArray(feed.pools) ? feed.pools : [];
+    // On a settled market the rebuilt split is the one that describes what
+    // happened; the live rows are empty there by construction.
+    const pools = live ? livePools : (settledSplit || livePools);
     const byOutcome = {};
     for (const p of pools) byOutcome[Number(p.outcome)] = p;
     const total = pools.reduce((a, p) => a + Number(p.pool || 0), 0);
@@ -297,28 +384,53 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 ) : null}
             </div>
 
-            <h4>Current split</h4>
+            <h4>{live ? 'Current split' : 'Final split'}</h4>
             {outcomes.length === 0 ? <p className={styles.hint}>No outcomes recorded.</p> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {outcomes.map((label, i) => {
                         const p = byOutcome[i] || { pool: 0, bet_count: 0 };
-                        const share = total > 0 ? ((Number(p.pool || 0) / total) * 100).toFixed(1) + '%' : 'no bets yet';
+                        // "no bets yet" only reads as true while betting can
+                        // still happen; on a market that is over it asserts
+                        // that nobody ever bet, which may be false and is
+                        // never something this screen can promise.
+                        const share = total > 0
+                            ? ((Number(p.pool || 0) / total) * 100).toFixed(1) + '%'
+                            : (live ? 'no bets yet' : 'no bets');
+                        // (a): the pool is a DECIMAL(65,18) SUM, so it
+                        // arrives with an 18-place tail whatever the token's
+                        // own decimals are. A market denominated in a
+                        // 0-decimal token read "300.000000000000000000".
+                        const pool = trimAmountTail(p.pool ?? 0) || '0';
+                        const bets = Number(p.bet_count || 0);
                         return (
                             <div key={i} className={styles.card} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
                                 <span>{i}: {label}</span>
-                                <span>{String(p.pool || 0)} ({share}, {String(p.bet_count || 0)} bets)</span>
+                                <span>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
                             </div>
                         );
                     })}
                 </div>
             )}
 
-            {/* The three things that actually surprise people, stated plainly. */}
+            {/* The three things that actually surprise people, stated plainly.
+                Past tense once the market is over: "every later bet changes it"
+                is advice for a decision nobody can still make, on a split that
+                can no longer move. */}
             <p className={styles.hint}>
-                This is a parimutuel market: everyone backing the winning outcome shares the whole pot,
-                so the split above is only how things stand right now and every later bet changes it.
-                Bets are final once placed, and payouts round down, so a very small stake can win and
-                still pay nothing.
+                {live ? (
+                    <>
+                        This is a parimutuel market: everyone backing the winning outcome shares the whole
+                        pot, so the split above is only how things stand right now and every later bet
+                        changes it. Bets are final once placed, and payouts round down, so a very small
+                        stake can win and still pay nothing.
+                    </>
+                ) : (
+                    <>
+                        This was a parimutuel market: everyone backing the winning outcome shared the whole
+                        pot. The split above is final, and payouts rounded down, so a very small stake could
+                        win and still pay nothing.
+                    </>
+                )}
             </p>
 
             {/* Place-bet flow. Hidden outright when it could only produce a rejected
@@ -353,11 +465,41 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                 inputMode="decimal"
                                 placeholder={feed.min_amount ? `min ${feed.min_amount}` : '0.0'}
                             />
+                            {/* The one number the decision turns on. A parimutuel stake has no
+                                price the user can reason about on their own: it buys a share of a
+                                pot that every later bet re-divides, so the pool split above is not
+                                an answer to "what would I win". Payout, profit and odds all come
+                                back from the same SDK call that settlement's arithmetic follows.
+                                Zero is called out in words because it is the case the abstract
+                                rounding warning below is really about . */}
                             {projected ? (
-                                <p className={styles.hint}>
-                                    If this outcome wins, this stake pays about <strong>{projected}</strong> at
-                                    the current split. That is not a locked-in price: later bets change it.
-                                </p>
+                                <div className={styles.hint} data-testid="bet-projection">
+                                    {Number(projected.payout) > 0 ? (
+                                        <p>
+                                            If <strong>{outcomes[outcome] ?? `outcome ${outcome}`}</strong> wins, this
+                                            stake pays about{' '}
+                                            <strong>{projected.payout}{feed.tick ? ` ${feed.tick}` : ''}</strong>
+                                            {projected.profit !== undefined ? (
+                                                Number(projected.profit) < 0
+                                                    ? <>, which is {trimZeros(projected.profit).replace('-', '')} less than you staked</>
+                                                    : <>, a profit of {trimZeros(projected.profit)}</>
+                                            ) : null}
+                                            {projected.impliedOdds !== undefined
+                                                ? <> ({trimZeros(projected.impliedOdds)}x your stake)</>
+                                                : null}.
+                                        </p>
+                                    ) : (
+                                        <p>
+                                            At the current split this stake would win and still pay{' '}
+                                            <strong>nothing</strong>, because payouts round down. Stake more, or
+                                            wait for the pot to move.
+                                        </p>
+                                    )}
+                                    <p>
+                                        That is the split as it stands right now, not a locked-in price: every
+                                        later bet moves it, in either direction.
+                                    </p>
+                                </div>
                             ) : null}
                             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
                             {!isHwSource && !signerReady ? (
@@ -401,7 +543,6 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 </div>
             )}
 
-            <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
         </>,
     );
 }

@@ -41,6 +41,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -378,7 +380,9 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Broadcast failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Broadcast failed.',
+            }));
         }
     }
 
@@ -429,7 +433,11 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Broadcast failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker: coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Broadcast failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -475,6 +483,12 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed, but the broadcast leg never landed. The confirm
+        // pipeline resolves that case rather than throwing, so without this
+        // branch it renders as a completed broadcast.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="broadcast" />);
         }
         return wrap(
             <>

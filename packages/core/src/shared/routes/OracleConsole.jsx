@@ -16,6 +16,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -146,9 +147,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         software: 'cancelMarketAction', hardware: 'cancelMarketActionHw',
     });
 
-    const outcomesOf = useMemo(() => (feed) => (
-        typeof feed?.outcomes === 'string' ? feed.outcomes.split(',') : []
-    ), []);
+    const outcomesOf = useMemo(() => (feed) => outcomeLabelsOf(feed), []);
 
     function sourceDescriptor(owner) {
         return {
@@ -221,6 +220,11 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 onHwStatusChange={onHwStatusChange}
                 chainId={cid}
                 getSignerStatus={messaging.getSignerStatus}
+                // (c): a resolve pays the pot out, and the composed bytes
+                // name the winning outcome only by index. The labels come from
+                // the market row being resolved, so the confirm screen states
+                // which side the oracle is about to pay.
+                outcomeLabels={outcomesOf(active)}
             />
         );
     }
@@ -229,7 +233,6 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         return wrap(
             <>
                 <div role="alert" className={styles.error}>{error}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
@@ -256,9 +259,16 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 <strong>#{String(f.action_index)} {f.label || '(untitled)'}</strong>
                                 <span className={styles.hint}>{f.feed_status}</span>
                             </div>
-                            <div className={styles.hint}>
-                                Betting closes {countdown(f.deadline, nowSec)} · refunds everyone {countdown(f.expire_at, nowSec)} if unresolved
-                            </div>
+                            {/* Only while those two clocks still mean something. A
+                                terminal market kept counting down to a close that
+                                cannot happen and a refund that already did:
+                                "Betting closes in 1h 12m · refunds everyone in 1d 1h
+                                if unresolved", printed beside the word `cancelled`. */}
+                            {canCancel ? (
+                                <div className={styles.hint}>
+                                    Betting closes {countdown(f.deadline, nowSec)} · refunds everyone {countdown(f.expire_at, nowSec)} if unresolved
+                                </div>
+                            ) : null}
                             <div className={styles.actions} style={{ gap: '0.5rem' }}>
                                 {onOpenMarket ? (
                                     <Button variant="ghost" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>

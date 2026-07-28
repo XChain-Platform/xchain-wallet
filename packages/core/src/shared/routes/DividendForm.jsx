@@ -57,6 +57,7 @@ import {
 import { extractHolderRows } from '../utils/holderRows.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -513,7 +514,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Dividend failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker: coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Dividend failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -559,6 +564,12 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     onDone={onBack}
                 />,
             );
+        }
+        // : this is the form the campaign proved it on. A queued result
+        // means signed and NOT broadcast; "Dividend sent" told a user whose
+        // node was briefly unreachable that their holders had been paid.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="dividend" />);
         }
         return wrap(
             <>

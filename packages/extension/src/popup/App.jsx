@@ -50,6 +50,9 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 // requirement. The host already registered every route Settings calls; only
 // the mount was missing, so this is the shared core screen, not a popup fork.
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
+// : dApp permissions are a destination of their own in the popup, not
+// a drilldown nested inside Settings. Same shared section body, own header.
+import { ConnectedSites } from '@xchain-wallet/core/shared/routes/ConnectedSites.jsx';
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
@@ -59,7 +62,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -189,7 +192,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -545,10 +548,12 @@ function AppInner() {
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
     //  entity search: token balances join contacts in the palette's
-    // searchable surface (the popup has no connected-sites view, so sites are
-    // omitted here). Same lazy contract: loaded on each open, and a failed
-    // load just leaves the token rows out of the results.
+    // searchable surface.  added connected sites, which the popup used
+    // to omit for want of a view to send them to. Same lazy contract for all
+    // three: loaded on each open, and a failed load just leaves that group
+    // out of the results.
     const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
+    const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
         let cancelled = false;
@@ -561,10 +566,20 @@ function AppInner() {
                 setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
             })
             .catch(() => { /* palette still works without token rows */ });
+        messaging.listConnectedSites()
+            .then((sites) => { if (!cancelled) setPaletteSites(Array.isArray(sites) ? sites : []); })
+            .catch(() => { /* palette still works without sites */ });
         return () => { cancelled = true; };
     }, [palette.open, status.state, activeWalletId, activeAccountId]);
     // : deep-link into a Settings section, mirroring the web shell.
+    // : 'connected-sites' is the exception - it has a top-level route,
+    // so send it there rather than one level down inside Settings.
     const openSettingsSection = (sectionId) => {
+        if (sectionId === 'connected-sites') {
+            setSettingsInitialSection(null);
+            setUnlockedView('connected-sites');
+            return;
+        }
         setSettingsInitialSection(sectionId || null);
         setUnlockedView('settings');
     };
@@ -587,12 +602,13 @@ function AppInner() {
         // carries. : settings-section and settings-backed help commands
         // are no longer omitted - the popup HAS a Settings route now, and
         // these are its entry points in a shell with no navigation surface.
-        // Connected sites deep-link to their section rather than a standalone
-        // view, which the popup still does not have.
+        // : connected sites land on the popup's own Connected Sites
+        // route, so the "Sites" palette category works here too.
         ...balancesToCommands(paletteTokenRows, {
             openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
         }),
         ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+        ...sitesToCommands(paletteSites, { openConnectedSites: () => setUnlockedView('connected-sites') }),
         ...settingsSectionsToCommands({ openSettings: openSettingsSection }),
         ...helpToCommands({
             openSettings: openSettingsSection,
@@ -2013,6 +2029,13 @@ function AppInner() {
                         initialSubpageId={settingsInitialSection}
                     />
                 );
+            }
+            if (unlockedView === 'connected-sites') {
+                // : a top-level screen, not a Settings drilldown. Back
+                // returns Home because that is where the popup entered from;
+                // the Settings row into the same panel still exists for users
+                // who go looking under Settings.
+                return <ConnectedSites onBack={() => setUnlockedView('home')} />;
             }
             if (unlockedView === 'wallet-details' && walletDetailsId) {
                 return (

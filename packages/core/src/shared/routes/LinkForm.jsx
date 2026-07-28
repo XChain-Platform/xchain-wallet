@@ -36,6 +36,7 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -338,7 +339,11 @@ export function LinkForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
+            setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker: feeCoinTicker || '',
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Sign failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();

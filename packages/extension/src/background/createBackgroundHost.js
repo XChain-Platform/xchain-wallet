@@ -1959,6 +1959,32 @@ export function createBackgroundHost(deps) {
         return { cleared: true };
     });
 
+    // : re-price a composed action's native-coin protocol fee at Approve
+    // time. The fee output was sized at COMPOSE from an oracle price, and the
+    // amount consensus requires moves inversely with the coin price, so a move
+    // of a little over 5 % (FEE_TOLERANCE_MIN) while the confirm screen sits
+    // open leaves the attached output short - and a short native fee is
+    // forfeited on-chain, with the action rejected.
+    //
+    // Quoted from the composed ACTION STRING, not from the form params that
+    // produced it: these are the bytes about to be broadcast, and re-deriving
+    // them here would price a second, independently built action.
+    host.register('action.requoteNativeFee', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.requoteNativeFee: chainId is required');
+        }
+        const actionString = req?.actionString;
+        if (typeof actionString !== 'string' || !actionString) {
+            throw new Error('action.requoteNativeFee: actionString is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.quoteNativeFee !== 'function') {
+            throw new Error(`action.requoteNativeFee: SDK for "${chainId}" lacks quoteNativeFee`);
+        }
+        return sdk.quoteNativeFee(actionString, { source: req?.source });
+    });
+
     //  §4: run sdk.preflight HOST-side (the SDK, its explorer endpoint,
     // and Tier-2 state all live here) and return the serializable report. The
     // popup's AbortController cannot cross the boundary; a superseded report

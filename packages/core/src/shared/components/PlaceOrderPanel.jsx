@@ -439,6 +439,30 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        // : a queued result is SIGNED and not broadcast. This panel is
+        // inline rather than a screen, so it keeps its own frame and only
+        // swaps the copy; "Place another" is deliberately not offered, since
+        // a signed copy already exists (the §5.3.4 double-broadcast trap).
+        if (result?.queued) {
+            return (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                        border: '1px solid var(--xc-warning)',
+                        borderRadius: '4px',
+                        padding: '0.75rem',
+                    }}
+                >
+                    <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>Signed. Broadcast will retry.</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                        Your order is signed but couldn&apos;t reach the network just now. It&apos;s
+                        queued and will be broadcast automatically; track it from the
+                        queued-transactions banner, and don&apos;t place it again.
+                    </p>
+                </div>
+            );
+        }
         return (
             <div
                 style={{

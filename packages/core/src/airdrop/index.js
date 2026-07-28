@@ -12,5 +12,7 @@ export {
     parsePaste,
     parseCsv,
     isPlausibleAddress,
+    isRecipientForChain,
     classifyRecipients,
+    reconcileStoredList,
 } from './parseRecipients.js';

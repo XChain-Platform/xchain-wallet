@@ -29,6 +29,67 @@ export function formatWithThousands(value) {
     return `${negative ? '-' : ''}${grouped}${fracPart}`;
 }
 
+// (a): strip the zero tail a DECIMAL sum leaves behind
+// ('0.175000000000000000' -> '0.175'), leaving a whole number bare
+// ('300.000000000000000000' -> '300').
+//
+// The indexer sums amounts in DECIMAL(65,18), so an aggregate arrives with
+// an 18-place tail whatever the TOKEN's own DECIMALS are - a market priced
+// in a 0-decimal token showed its pool as "300.000000000000000000".
+// xchain-explorer's db.js trims the same shape at its own read boundary and
+// says the trim belongs in one place "rather than in each renderer"; this
+// is the wallet-side equal for the sums that reach it untrimmed.
+//
+// Display only, and never touches a significant digit: a value that is not
+// a plain decimal (already trimmed, exponential, non-numeric) comes back
+// unchanged rather than guessed at.
+export function trimAmountTail(value) {
+    if (value === null || value === undefined) return '';
+    const s = String(value);
+    if (!/^-?\d+\.\d+$/.test(s)) return s;
+    return s.replace(/0+$/, '').replace(/\.$/, '');
+}
+
+// Add decimal amount strings without going through a float. Token amounts
+// arrive as strings precisely because they can carry 18 places, and a
+// `reduce((a, b) => a + Number(b))` over them re-introduces the binary
+// rounding the string form exists to avoid.
+//
+// Used where the wallet has to aggregate raw rows itself rather than read an
+// aggregate the indexer computed - the settled-market split, where the
+// explorer's own pool sums cover open bets only.
+//
+// A value that is not a plain decimal is skipped rather than guessed at,
+// matching trimAmountTail's rule: on a screen about money, a number we cannot
+// parse must not silently become one we invented.
+export function sumDecimalStrings(values) {
+    const list = Array.isArray(values) ? values : [];
+    const parsed = [];
+    let scale = 0;
+    for (const v of list) {
+        if (v === null || v === undefined) continue;
+        const s = String(v).trim();
+        if (!/^-?\d+(\.\d+)?$/.test(s)) continue;
+        const negative = s.startsWith('-');
+        const abs = negative ? s.slice(1) : s;
+        const [int, frac = ''] = abs.split('.');
+        if (frac.length > scale) scale = frac.length;
+        parsed.push({ negative, int, frac });
+    }
+    if (parsed.length === 0) return '0';
+    let total = 0n;
+    for (const { negative, int, frac } of parsed) {
+        const scaled = BigInt(int + frac.padEnd(scale, '0'));
+        total += negative ? -scaled : scaled;
+    }
+    if (scale === 0) return String(total);
+    const negative = total < 0n;
+    const digits = (negative ? -total : total).toString().padStart(scale + 1, '0');
+    const int = digits.slice(0, digits.length - scale);
+    const frac = digits.slice(digits.length - scale);
+    return `${negative ? '-' : ''}${int}.${frac}`;
+}
+
 // Count non-comma characters before `cursorPos`, used to map cursor
 // position across a reformat.
 export function countNonCommaBefore(value, cursorPos) {

@@ -30,7 +30,13 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import {
+    perUnitMax,
+    multiplyDecimal,
+    exceedsBalance,
+} from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -51,6 +57,7 @@ import { extractHolderRows } from '../utils/holderRows.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -158,8 +165,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // 'paste' mode: paste/upload addresses -> new ADDRESS list (TYPE=2).
     const [pasteText, setPasteText] = useState('');
     const [recipients, setRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number }} */
-        ({ valid: [], invalid: [], duplicates: 0 }),
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
     );
     const [showInvalid, setShowInvalid] = useState(false);
 
@@ -199,6 +206,17 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [listTxid, setListTxid] = useState(/** @type {string | null} */ (null));
     const [listActionIndex, setListActionIndex] = useState(
         /** @type {string | null} */ (null),
+    );
+    // : what the chain actually stored for the LIST this flow just
+    // published, read back once it is indexed and BEFORE step 2 is priced.
+    // The indexer drops items it rejects into `list_items_invalid` and still
+    // marks the LIST valid, so a shorter stored list is the only signal that
+    // the recipient count (and therefore the per-recipient AIRDROP cost) the
+    // user was shown is wrong. `null` means "not read yet / read failed",
+    // which leaves the pre-existing behaviour untouched.
+    const [listReconcile, setListReconcile] = useState(
+        /** @type {{ storedCount: number, expectedCount: number, missing: string[] } | null} */
+        (null),
     );
     const [airdropTxid, setAirdropTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
@@ -249,7 +267,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setTicksText(rec.recipients.join('\n'));
                 } else {
                     setSourceMode('paste');
-                    setRecipients({ valid: [...rec.recipients], invalid: [], duplicates: 0 });
+                    setRecipients({
+                        valid: [...rec.recipients], invalid: [], duplicates: 0, wrongNetwork: [],
+                    });
                 }
                 setMemo(rec.memo || '');
                 setPendingId(rec.id);
@@ -293,11 +313,24 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
     }, [chainId, addressesByChain, fromAddressId, initialFromAddress]);
 
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    // : the chain the recipients have to be spendable ON. Passing it to
+    // the parser is what makes a mainnet address pasted into a regtest wallet
+    // count as skipped instead of valid; without it the form only checked
+    // length + charset and the chain silently dropped the address after the
+    // user had already paid for it. Split out as a plain object so the parse
+    // effect can depend on the two fields rather than the descriptor identity.
+    const recipientCoin = descriptor?.coin || null;
+    const recipientNetwork = descriptor?.networkKind || null;
+
     useEffect(() => {
         if (stage !== 'compose') return;
         const parts = airdropLib.parsePaste(pasteText);
-        setRecipients(airdropLib.classifyRecipients(parts));
-    }, [pasteText, stage]);
+        setRecipients(airdropLib.classifyRecipients(
+            parts,
+            { coin: recipientCoin, network: recipientNetwork },
+        ));
+    }, [pasteText, stage, recipientCoin, recipientNetwork]);
 
     // 'holders' mode tick parsing: identical shape to ListCreateForm's
     // TYPE=1 memberTicks/invalidTicks so validation matches exactly.
@@ -396,6 +429,35 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
     }, [stage]);
 
+    //  reconcile: once the LIST this flow published is indexed, read the
+    // membership the chain actually stored and compare it with what the wallet
+    // submitted. The indexer accepts a LIST whose items it partly rejected (it
+    // writes the rejects to `list_items_invalid` and still marks the action
+    // valid), so without this read the wallet keeps quoting a per-recipient
+    // AIRDROP cost for recipients that are not on the list. Deliberately runs
+    // before step 2 is signed. 'existing' mode already reads its list through
+    // existingListDetail, and 'holders' publishes ticks, not addresses.
+    const submittedKey = recipients.valid.join('|');
+    useEffect(() => {
+        if (sourceMode !== 'paste' || !listActionIndex || !chainId) return undefined;
+        if (typeof messaging.getListByActionIndex !== 'function') return undefined;
+        const submitted = submittedKey ? submittedKey.split('|') : [];
+        if (submitted.length === 0) return undefined;
+        let cancelled = false;
+        messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
+            .then((row) => {
+                if (cancelled) return;
+                const stored = Array.isArray(row?.list) ? row.list : [];
+                setListReconcile(airdropLib.reconcileStoredList(submitted, stored));
+            })
+            .catch(() => {
+                // Non-fatal: a failed read must not block a paid-for airdrop.
+                // Leaving it null keeps the pre-reconcile display.
+                if (!cancelled) setListReconcile(null);
+            });
+        return () => { cancelled = true; };
+    }, [sourceMode, listActionIndex, chainId, submittedKey, messaging]);
+
     // Stage-4 polling: waits for the LIST to be indexed and resolves
     // its ACTION_INDEX. Pauses when the tab is hidden to avoid burning
     // explorer bandwidth for off-screen windows.
@@ -434,19 +496,29 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return () => { cancelled = true; clearInterval(handle); };
     }, [stage, listTxid, chainId, pendingId, messaging]);
 
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
-    // Balance of the amount tick at the source address (Max + "available").
+    // Balance of the amount tick at the source address, backing the
+    // AmountField's "available" footer. It is NOT the Max: the field is
+    // per-recipient, so see `maxPerRecipient` below .
     const tickAmtBalance = useTickBalance({
         messaging,
         walletId,
         chainId,
         address: fromAddress?.address,
         tick: token,
+    });
+
+    // Divisibility of the dropped token, so the per-recipient Max floors
+    // to an amount the token can actually express (an indivisible token
+    // cannot pay 16.6666 to each of three addresses).
+    const dropInfo = useTokenInfo({
+        chainId,
+        tick: token.trim().toUpperCase(),
+        skip: !token.trim(),
     });
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
@@ -545,7 +617,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // doc comment for the full honesty rationale).
     const recipientPreview = useMemo(() => {
         if (sourceMode === 'paste') {
-            return { kind: 'address', count: recipients.valid.length, loading: false, error: null, volatile: false };
+            // : once the published list has been read back, the chain's
+            // count is the truth - it is what the AIRDROP will actually pay
+            // and be charged for. Before that (and if the read failed) fall
+            // back to what was submitted.
+            const count = listReconcile ? listReconcile.storedCount : recipients.valid.length;
+            return { kind: 'address', count, loading: false, error: null, volatile: false };
         }
         if (sourceMode === 'holders') {
             return { kind: 'tick', count: holderPreview.total, loading: holderPreview.loading, error: holderPreview.error, volatile: true };
@@ -561,14 +638,38 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return { kind: 'address', count: existingListDetail.items.length, loading: false, error: null, volatile: false };
         }
         return { kind: 'tick', count: holderPreview.total, loading: holderPreview.loading, error: holderPreview.error, volatile: true };
-    }, [sourceMode, recipients.valid.length, holderPreview, existingListDetail]);
+    }, [sourceMode, recipients.valid.length, holderPreview, existingListDetail, listReconcile]);
 
+    // : exact decimal math, not a float product. This number both
+    // prices the preview and gates submit, so an ulp of drift is the
+    // difference between a payable drop and one the chain rejects.
     const totalDistribution = useMemo(() => {
-        const amt = Number(String(amountPer).trim());
-        if (!Number.isFinite(amt) || amt <= 0) return null;
+        const amt = String(amountPer).trim();
+        if (!(Number(amt) > 0)) return null;
         if (!recipientPreview.count || recipientPreview.count <= 0) return null;
-        return amt * recipientPreview.count;
+        return multiplyDecimal(amt, String(recipientPreview.count));
     }, [amountPer, recipientPreview.count]);
+
+    //  (E2E D-86, second form): the amount field is PER RECIPIENT,
+    // so filling the whole balance into it proposes a payout of balance x
+    // recipients - N times the total the form itself prints one row below.
+    // Same defect and the same shape as Pay dividend's Max, whose divisor
+    // was eligible units rather than a recipient count. The payable
+    // ceiling is balance / recipients, floored to the token's
+    // divisibility so the product can never round back above the balance.
+    //
+    // For a token-holder list the count is a live preview, not a promise
+    // (holders can join before the AIRDROP lands), so this is a ceiling on
+    // what is knowable now, exactly like the total distribution beside it.
+    const maxPerRecipient = useMemo(
+        () => perUnitMax({
+            balance: tickAmtBalance,
+            eligibleUnits: recipientPreview.count != null ? String(recipientPreview.count) : null,
+            divisibility: dropInfo?.divisibility ?? null,
+        }),
+        [tickAmtBalance, recipientPreview.count, dropInfo],
+    );
+    const maxPayable = maxPerRecipient !== null && Number(maxPerRecipient) > 0;
 
     const handleFile = useCallback((event) => {
         const file = event.target?.files?.[0];
@@ -617,6 +718,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         const amt = String(amountPer).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Per-recipient amount must be a positive number.');
+            return;
+        }
+        // : stop a drop the balance cannot cover here, not several
+        // screens and one broadcast LIST later. Only fires when both the
+        // projected total and the balance are known, so an explorer
+        // hiccup leaves the form ungated.
+        if (totalDistribution && exceedsBalance(totalDistribution, tickAmtBalance)) {
+            const TICK = token.trim().toUpperCase();
+            setFormError(
+                `This pays ~${formatWithThousands(totalDistribution)} ${TICK} in total, more than the `
+                + `${formatWithThousands(tickAmtBalance)} ${TICK} this address holds.`
+                + (maxPayable ? ` Up to ${formatWithThousands(maxPerRecipient)} each is payable.` : ''),
+            );
             return;
         }
         if (memo && /[|;]/.test(memo)) {
@@ -764,6 +878,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 },
             });
             const txid = res?.txid || res?.broadcast?.txid;
+            // : a TRANSIENT post-sign broadcast failure RESOLVES as
+            // `queued` rather than throwing. The LIST is signed and the queue
+            // will land it, but it has no txid yet, so the pending-airdrop
+            // record that anchors leg 2 cannot be written. Say that, instead
+            // of the "did not return a txid" internal that fell out below.
+            if (res?.queued) {
+                setSubmitError(`${SIGNED_NOT_BROADCAST_MESSAGE} Come back and finish the airdrop `
+                    + 'once the recipient list has confirmed.');
+                return;
+            }
             if (!txid) throw new Error('LIST broadcast did not return a txid.');
             const record = schemasLib.createPendingAirdrop({
                 walletId,
@@ -783,7 +907,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setStage('wait-index');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setSubmitError(err?.message || 'LIST broadcast failed.');
+            setSubmitError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'LIST broadcast failed.',
+            }));
         }
     }
 
@@ -812,6 +938,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 }),
             });
             const txid = res?.txid || res?.broadcast?.txid;
+            // : signed, queued, no txid yet (see leg 1). The pending
+            // record stays at its current stage so the queue's eventual
+            // broadcast is what completes the airdrop.
+            if (res?.queued) {
+                setSubmitError(SIGNED_NOT_BROADCAST_MESSAGE);
+                return;
+            }
             if (!txid) throw new Error('AIRDROP broadcast did not return a txid.');
             setAirdropTxid(txid);
             if (pendingId) {
@@ -826,7 +959,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setSubmitError(err?.message || 'AIRDROP broadcast failed.');
+            setSubmitError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'AIRDROP broadcast failed.',
+            }));
         }
     }
 
@@ -880,7 +1015,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'LIST broadcast failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'LIST broadcast failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -936,7 +1075,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'AIRDROP broadcast failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'AIRDROP broadcast failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -994,9 +1137,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     author an airdrop, or use a Full-mode wallet that holds
                     the same seed.
                 </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Back</Button>
-                </div>
             </>,
         );
     }
@@ -1195,7 +1335,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <>
                             <dt className={styles.detailsLabel}>Total distribution</dt>
                             <dd className={styles.detailsValue}>
-                                ~{totalDistribution} {token.trim().toUpperCase()}
+                                ~{formatWithThousands(totalDistribution)} {token.trim().toUpperCase()}
                             </dd>
                         </>
                     ) : null}
@@ -1211,6 +1351,26 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         {airdropDecoded.warnings.map((w, i) => (
                             <p key={i} className={styles.warning}>{w}</p>
                         ))}
+                    </div>
+                ) : null}
+                {/* : the chain kept fewer items than the wallet published.
+                    Say so here, on the screen that prices step 2, because the
+                    LIST was already paid for at the larger count and the AIRDROP
+                    will only pay (and only be charged for) what survived. */}
+                {listReconcile && listReconcile.missing.length > 0 ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            The published list holds {listReconcile.storedCount} of the
+                            {' '}{listReconcile.expectedCount} addresses you submitted:
+                            {' '}{listReconcile.missing.length} {listReconcile.missing.length === 1 ? 'was' : 'were'}
+                            {' '}rejected by the network, most often because
+                            {' '}{listReconcile.missing.length === 1 ? 'it is' : 'they are'} not
+                            {' '}{descriptor?.displayName || chainId} address
+                            {listReconcile.missing.length === 1 ? '' : 'es'}. This airdrop pays
+                            {' '}{listReconcile.storedCount}. The rejected
+                            {' '}{listReconcile.missing.length === 1 ? 'address' : 'addresses'}:
+                            {' '}{listReconcile.missing.join(', ')}.
+                        </p>
                     </div>
                 ) : null}
                 {/* PC-11 holder-snapshot honesty: a TICK list's holder set
@@ -1421,12 +1581,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmountPer(stripped);
                 }}
-                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
-                    ? () => setAmountPer(tickAmtBalance)
-                    : undefined}
-                maxDisabled={!tickAmtBalance}
+                onMax={maxPayable ? () => setAmountPer(maxPerRecipient) : undefined}
+                maxDisabled={!maxPayable}
                 balanceText={tickAmtBalance != null && (token)
-                    ? `${formatWithThousands(tickAmtBalance)} ${String(token).toUpperCase()} available`
+                    ? `${formatWithThousands(tickAmtBalance)} ${String(token).toUpperCase()} available${
+                        maxPayable ? ` · up to ${formatWithThousands(maxPerRecipient)} each` : ''}`
                     : null}
             />
 
@@ -1472,7 +1631,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 ? ` · ${recipients.invalid.length} invalid skipped`
                                 : ''}
                             {totalDistribution !== null
-                                ? ` · total ~${totalDistribution} ${token.trim().toUpperCase() || 'TOKEN'}`
+                                ? ` · total ~${formatWithThousands(totalDistribution)} ${token.trim().toUpperCase() || 'TOKEN'}`
                                 : ''}
                         </p>
                     ) : null}
@@ -1493,6 +1652,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                     ))}
                                 </ul>
                             ) : null}
+                        </div>
+                    ) : null}
+
+                    {/* : a well-formed address for the wrong chain is not a
+                        typo, and calling it "invalid" hides what went wrong. Name
+                        it, and name the chain this airdrop pays on. */}
+                    {recipients.wrongNetwork.length > 0 ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                {recipients.wrongNetwork.length} address
+                                {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for
+                                another network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'}
+                                {' '}skipped. This airdrop pays on
+                                {' '}{descriptor?.displayName || chainId}, which cannot deliver to
+                                {' '}{recipients.wrongNetwork.length === 1 ? 'it' : 'them'}.
+                            </p>
                         </div>
                     ) : null}
                 </>

@@ -16,7 +16,8 @@
 // and resolves with an already-verified ComposedAction; `preflight` runs
 // sdk.preflight in the background. The hook itself is a pure UI state
 // machine: compose PRE-OPEN, open the modal, stream pre-flight, and on
-// Approve re-check staleness before signing the byte-identical PSBT. One
+// Approve re-check staleness (and, , the native-coin protocol fee this
+// PSBT already pays) before signing the byte-identical PSBT. One
 // modal per window, enforced by a module-level singleton (React context
 // would miss independently-mounted trees). Each invocation owns one
 // AbortController; Reject/close aborts everything and a superseded report
@@ -31,6 +32,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
+import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -151,6 +153,11 @@ export function useConfirmAction() {
      * @param {object} [args.reservationLedger]     §4.7 ledger (reserve/release/localDeltas)
      * @param {{ tick?: string, amount?: string }} [args.reserve]  the amount to reserve at Approve
      * @param {(psbtHex: string) => Promise<{verdict: string, spent: Array<object>}>} [args.checkInputs]  §4.6 input-liveness probe (messaging.checkInputLiveness)
+     * @param {(req: { actionString: string, source?: string }) => Promise<object>} [args.requoteNativeFee]
+     *    Approve-time native-fee re-quote (messaging.requoteNativeFee).
+     *   Called only when the composed action actually attaches a native-coin
+     *   fee output; a composed amount outside the fresh band interrupts
+     *   instead of signing.
      * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
      * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session]   §5.4 confirm-session store
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
@@ -317,6 +324,48 @@ export function useConfirmAction() {
                 setPhase('signing');
             }
         } catch { /* re-check best-effort: proceed under the old report */ }
+
+        //  §4.6, the third Approve-time re-check: is the native-coin
+        // protocol fee this PSBT already pays still the amount the chain will
+        // accept? The output was sized at COMPOSE, and the amount consensus
+        // requires moves INVERSELY with the coin's USD price, so an adverse
+        // move of a little over 5 % (FEE_TOLERANCE_MIN) is enough to make it
+        // short - and a short native fee is not a retry, it is a real on-chain
+        // payment kept by FEE_DESTINATION while the action indexes invalid.
+        //
+        // Ungated by staleness, unlike the two re-checks above: those protect
+        // against something that becomes MORE likely with age (a spent coin, a
+        // changed verdict), while an oracle round can land one block after the
+        // compose, and the thing at stake here is money already committed to
+        // the transaction rather than an attempt that can simply be repeated.
+        //
+        // Refuses rather than re-composing: the user approved specific bytes,
+        // and swapping in a differently-priced transaction under a screen they
+        // have already read is the one thing an authorization surface must not
+        // do. The message tells them to start the action again.
+        if (typeof args.requoteNativeFee === 'function' && Number(built.quote?.requiredFeeSats) > 0) {
+            setPhase('rechecking');
+            let fresh = null;
+            try {
+                fresh = await args.requoteNativeFee({
+                    actionString: built.actionString,
+                    source: args.source,
+                });
+            } catch {
+                // Unreachable explorer / missing route: judged `unavailable`
+                // below, which proceeds. A dead network must not hard-block a
+                // transaction that is probably still correctly priced (§4.2).
+                fresh = null;
+            }
+            const requote = compareNativeFeeQuote({ composed: built.quote, fresh });
+            if (isNativeFeeRefusal(requote)) {
+                const err = nativeFeeChangedError(requote);
+                setError(err);
+                setPhase('ready');
+                return { interrupted: true, reason: 'fee-changed', requote };
+            }
+            setPhase('signing');
+        }
 
         // §4.7 reservation at Approve (post sync-disable, before async signing).
         // Guarded on reservationId: a credential re-prompt (§5.3.4) calls

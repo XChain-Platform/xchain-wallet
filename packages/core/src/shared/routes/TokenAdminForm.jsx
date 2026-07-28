@@ -50,6 +50,8 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -668,7 +670,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Update failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Update failed.',
+            }));
         }
     }
 
@@ -719,7 +723,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || `${MODE_LABEL[mode] || 'Action'} failed.`,
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || `${MODE_LABEL[mode] || 'Action'} failed.`,
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -765,6 +773,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed, not broadcast. The confirm pipeline resolves this
+        // case, so the done screen has to tell them apart.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="update" />);
         }
         return wrap(
             <>

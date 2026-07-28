@@ -47,6 +47,8 @@ import {
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -325,6 +327,14 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // : re-price the native-coin protocol fee at Approve.
+                // The output was sized at compose, and the amount consensus
+                // requires moves inversely with the coin price, so a move while
+                // the confirm screen sits open leaves it short - which the
+                // chain rejects while keeping the fee.
+                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                    chainId, actionString, source,
+                }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
@@ -338,7 +348,11 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Create order (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(humanizeError(err, 'order').message);
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: humanizeError(err, 'order').message,
+            }));
         }
     }
 
@@ -375,7 +389,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'Order failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Order failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }
@@ -402,6 +418,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+        }
+        // : signed but not broadcast. No order exists to match yet, so
+        // the auto-pay note below would be describing a thing that is not
+        // on the chain.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="order" />);
         }
         const autopayNote = autopayArm
             ? (result?.autopayArmed === false

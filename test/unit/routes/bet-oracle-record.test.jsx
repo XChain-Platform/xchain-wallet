@@ -83,7 +83,12 @@ function harness(overrides = {}) {
         betOracle: (args) => { calls.push({ method: 'betOracle', args }); return Promise.resolve({ data: [RECORD] }); },
         betFeeds: (args) => { calls.push({ method: 'betFeeds', args }); return Promise.resolve({ data: MARKETS.slice() }); },
         betFeed: (args) => { calls.push({ method: 'betFeed', args }); return Promise.resolve({ data: [FEED] }); },
-        betProjectPayout: () => Promise.resolve('13.86000000'),
+        // The SDK returns a projection OBJECT, not a bare amount. Mocked at the
+        // real shape so nothing here quietly re-asserts the  mismatch.
+        betProjectPayout: () => Promise.resolve({
+            payout: '13.86000000', profit: '3.86000000', impliedOdds: '1.38600000',
+            total: '14.00000000', winningPool: '5.00000000', fee: '0.14000000',
+        }),
     };
     Object.assign(target, overrides);
     const messaging = new Proxy(target, {

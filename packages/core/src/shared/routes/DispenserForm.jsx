@@ -49,6 +49,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -788,6 +789,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed but not broadcast, so no dispenser is open yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="dispenser" />);
         }
         return wrap(
             <>

@@ -17,6 +17,12 @@
 // floored to the dividend token's divisibility so the product can never
 // round back above the balance.
 //
+// AIRDROP has the same shape and shares this math: its AMOUNT is per
+// RECIPIENT, so the divisor is the recipient count instead of the units
+// held, and Max had the identical whole-balance bug (same , found
+// as the second half of E2E D-86). `perUnitMax` is written in terms of
+// "balance / divisor", not dividends, for that reason.
+//
 // Balances and holder amounts arrive as pre-formatted decimal strings, so
 // every step here is exact BigInt decimal math (same reasoning as
 // utils/mintHeadroom.js: float division would hand back a rate whose

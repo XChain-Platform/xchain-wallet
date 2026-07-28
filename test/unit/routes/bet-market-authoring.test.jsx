@@ -32,6 +32,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
+import { projectBetPayout } from '../../../packages/core/src/flows/betQueries.js';
 
 const CHAIN = 'bitcoin-mainnet';
 // : a chain with NO XCHAIN fee lane, where a native-coin output is the
@@ -75,6 +76,47 @@ const FEED = Object.freeze({
     pools: [{ outcome: 0, pool: '10.00000000', bet_count: 1 }],
     timeline: [{ status: 'open', block_index: 4217 }],
 });
+
+// A lopsided market: the D-97 shape, one side heavily backed and the other
+// carrying no pool row at all, with a stake too small to survive the floor.
+const WHALE_FEED = Object.freeze({
+    ...FEED,
+    action_index: '1169',
+    pools: [{ outcome: 0, pool: '1000000.00000000', bet_count: 40 }],
+});
+
+// A stand-in for sdk.betting.projectPayout. It keeps the two rules the real one
+// enforces and that the pool ROWS broke on: the outcome must be in range of the
+// pools handed in, and every pool must parse as a number. Floats are fine at
+// this size; the point under test is the shape reaching the SDK, not the last
+// decimal place (the bignumber ordering is the SDK's own test).
+function sdkProjectPayout({ pools, outcome, stake, feePct = 0 }) {
+    if (!Array.isArray(pools)) throw new Error('projectPayout: pools must be an array');
+    const index = Number(outcome);
+    if (!Number.isInteger(index) || index < 0 || index >= pools.length) {
+        throw new Error('projectPayout: outcome is out of range for the pools given');
+    }
+    const num = (v) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) throw new Error(`projectPayout: pool is not a number: ${String(v)}`);
+        return n;
+    };
+    const floor8 = (n) => Math.floor(n * 1e8) / 1e8;
+    const staked = Number(stake);
+    const totalIn = pools.reduce((sum, p) => sum + num(p), 0) + staked;
+    const winning = num(pools[index]) + staked;
+    if (!(winning > 0)) return null;
+    const fee = floor8((totalIn * Number(feePct)) / 100);
+    const payout = floor8((staked * (totalIn - fee)) / winning);
+    return {
+        payout: payout.toFixed(8),
+        profit: (payout - staked).toFixed(8),
+        impliedOdds: (payout / staked).toFixed(8),
+        total: totalIn.toFixed(8),
+        winningPool: winning.toFixed(8),
+        fee: fee.toFixed(8),
+    };
+}
 
 // A market this wallet's own address runs, past its deadline and inside the
 // refund window: the one state where resolve is legal.
@@ -138,7 +180,16 @@ function harness(overrides = {}) {
             calls.push({ method: 'betFeeds', args });
             return Promise.resolve({ data: [OWN_CLOSED_FEED] });
         },
-        betProjectPayout: () => Promise.resolve('13.86000000'),
+        // Driven through the REAL flow helper, not a canned answer: the whole of
+        //  was a shape mismatch BETWEEN the screen and the SDK, and a mock
+        // that returns a ready-made string is exactly what hid it.
+        betProjectPayout: (args) => {
+            calls.push({ method: 'betProjectPayout', args });
+            return projectBetPayout({
+                ...args,
+                sdkRegistry: { get: () => ({ betting: { projectPayout: sdkProjectPayout } }) },
+            });
+        },
     };
     Object.assign(target, overrides);
     const messaging = new Proxy(target, {
@@ -352,6 +403,121 @@ describe(' CreateBetFeedForm: compose and submit', () => {
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
         expect(compose).toBeTruthy();
         expect(compose.args.params.outcomes).toEqual(['Home team wins', 'Away team wins']);
+    });
+});
+
+// . A parimutuel stake has no price the bettor can work out for themselves:
+// it buys a share of a pot that every later bet re-divides. The projected payout
+// is therefore the one number the decision turns on, and it reached the screen as
+// nothing at all, because the explorer's pool ROWS were handed to payout math
+// that indexes amounts BY outcome. The failure was silent in both directions, so
+// what is pinned here is that the number REACHES the user.
+describe(' BetFeedDetail states what a win would pay', () => {
+    async function openMarket(messaging, feedIndex = '2308') {
+        let utils;
+        await domAct(async () => {
+            utils = mount(BetFeedDetail, messaging, { chainId: CHAIN, feedIndex });
+            await drain();
+        });
+        return utils;
+    }
+
+    async function stakeOn(utils, outcomeLabel, amount) {
+        await domAct(async () => {
+            fireEvent.click(button(utils, new RegExp(`^${outcomeLabel}$`)));
+            await drain();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Stake (PEPECREATURE)', amount);
+            await drain();
+        });
+    }
+
+    it('projects a payout for the outcome NOBODY has backed yet', async () => {
+        // The reported case exactly: the pool sits on outcome 0 and the user
+        // backs outcome 1, which the explorer does not return a row for. Before
+        // the fix the SDK rejected outcome 1 as past the end of a one-row list
+        // and the screen fell back to silence.
+        const { messaging, calls } = harness();
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '5');
+
+        const call = calls.filter((c) => c.method === 'betProjectPayout').pop();
+        expect(call).toBeTruthy();
+        // The count is what tells the payout math the unbacked outcome exists.
+        expect(call.args.outcomeCount).toBe(2);
+        expect(call.args.outcome).toBe(1);
+        expect(call.args.stake).toBe('5');
+        expect(call.args.feePct).toBe('1.00');
+
+        // 10 already staked + 5 = 15 in, 1% oracle fee floors to 0.15, and the
+        // lone winner takes the whole 14.85 pot.
+        const shown = utils.getByTestId('bet-projection').textContent;
+        expect(shown).toMatch(/If\s+Away\s+wins/);
+        expect(shown).toContain('14.85000000 PEPECREATURE');
+        expect(shown).toMatch(/profit of 9\.85/);
+        expect(shown).toMatch(/2\.97x your stake/);
+        // Never presented as a price: the pot is re-divided by every later bet.
+        expect(shown).toMatch(/not a locked-in price/i);
+    });
+
+    it('projects the crowded side too, where the payout is barely above the stake', async () => {
+        const { messaging } = harness();
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Home', '5');
+        const shown = utils.getByTestId('bet-projection').textContent;
+        expect(shown).toMatch(/If\s+Home\s+wins/);
+        expect(shown).toContain('4.95000000 PEPECREATURE');
+        // Backing the favourite at a 1% fee LOSES money if nobody joins the
+        // other side. Saying so is the entire point of showing the number.
+        expect(shown).toMatch(/0\.05 less than you staked/);
+    });
+
+    it('says in words when a stake would win and still pay nothing', async () => {
+        // The screen already warned that payouts round down. That told the user
+        // the risk exists without ever telling them they were in it.
+        const { messaging } = harness({ betFeed: () => Promise.resolve({ data: [WHALE_FEED] }) });
+        const utils = await openMarket(messaging, '1169');
+        await stakeOn(utils, 'Home', '0.00000001');
+        const shown = utils.getByTestId('bet-projection').textContent;
+        expect(shown).toMatch(/would win and still pay/i);
+        expect(shown).toMatch(/nothing/i);
+        expect(shown).toMatch(/round down/i);
+    });
+
+    it('shows nothing at all until an outcome AND a stake are both chosen', async () => {
+        const { messaging, calls } = harness();
+        const utils = await openMarket(messaging);
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /^Away$/));
+            await drain();
+        });
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+        expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
+
+        await stakeOn(utils, 'Away', '5');
+        expect(utils.queryByTestId('bet-projection')).toBeTruthy();
+
+        // Clearing the stake retracts the number rather than leaving a stale one
+        // on screen next to an empty field.
+        await domAct(async () => {
+            typeIn(utils, 'Stake (PEPECREATURE)', '');
+            await drain();
+        });
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+    });
+
+    it('stays quiet rather than erroring when the projection is unavailable', async () => {
+        // A host that predates the projection, and a half-typed stake, are both
+        // normal. Neither is something to shout at the user about, and neither
+        // may take the place-bet form down with it.
+        const { messaging } = harness({ betProjectPayout: undefined });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '5');
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+        expect(button(utils, /Review bet/i)).toBeTruthy();
     });
 });
 

@@ -50,6 +50,7 @@ import {
     dispenserPreferenceLabel,
 } from '../../flows/addressPreferences.js';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
@@ -212,7 +213,11 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : humanizeError(err, 'address preferences').message,
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: humanizeError(err, 'address preferences').message,
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {

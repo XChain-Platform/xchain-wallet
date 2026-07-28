@@ -15,7 +15,34 @@ import {
     formatWithThousands,
     countNonCommaBefore,
     indexAfterNonCommaCount,
+    trimAmountTail,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
+
+// (a): the indexer sums in DECIMAL(65,18), so an aggregate reaches the
+// wallet with an 18-place tail whatever the token's own decimals are.
+describe('shared/amountFormat trimAmountTail', () => {
+    it('strips the zero tail a DECIMAL sum leaves behind', () => {
+        expect(trimAmountTail('300.000000000000000000')).toBe('300');
+        expect(trimAmountTail('0.175000000000000000')).toBe('0.175');
+        expect(trimAmountTail('1000000.00000000')).toBe('1000000');
+    });
+
+    it('never touches a significant digit', () => {
+        expect(trimAmountTail('0.00000001')).toBe('0.00000001');
+        expect(trimAmountTail('12.305')).toBe('12.305');
+        expect(trimAmountTail('-4.500')).toBe('-4.5');
+        expect(trimAmountTail('300')).toBe('300');
+    });
+
+    it('returns anything that is not a plain decimal unchanged', () => {
+        expect(trimAmountTail('1e-8')).toBe('1e-8');
+        expect(trimAmountTail('n/a')).toBe('n/a');
+        expect(trimAmountTail('')).toBe('');
+        expect(trimAmountTail(null)).toBe('');
+        expect(trimAmountTail(undefined)).toBe('');
+        expect(trimAmountTail(0)).toBe('0');
+    });
+});
 
 describe('shared/amountFormat formatWithThousands', () => {
     it('groups the integer part and preserves the fraction verbatim', () => {

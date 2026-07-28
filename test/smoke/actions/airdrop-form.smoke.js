@@ -181,7 +181,45 @@ assert.ok(/POLL_INTERVAL_MS\s*=\s*10_?000/.test(src), 'poll interval is 10 secon
     assert.equal(classified.valid.length, 2);
     assert.equal(classified.invalid.length, 1);
     assert.equal(classified.duplicates, 1);
+
+    // : with a chain, validation is network-aware. A mainnet address
+    // pasted into a regtest wallet used to be counted, priced, paid for and
+    // then dropped by the indexer.
+    const onRegtest = airdropLib.classifyRecipients([
+        'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080',
+        'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
+        'garbage',
+    ], { coin: 'bitcoin', network: 'regtest' });
+    assert.equal(onRegtest.valid.length, 1, 'regtest chain keeps only the regtest address');
+    assert.deepEqual(onRegtest.wrongNetwork, ['bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu'],
+        'the mainnet address is reported as wrong-network, not as garbage');
+    assert.equal(onRegtest.invalid.length, 2, 'wrong-network entries still count as skipped');
+
+    // Post-index reconcile: the list the chain stored vs the list submitted.
+    const rec = airdropLib.reconcileStoredList(
+        ['bcrt1qa', 'bcrt1qb', 'bc1qmainnet'],
+        ['bcrt1qa', 'bcrt1qb'],
+    );
+    assert.equal(rec.storedCount, 2, 'reconcile reads the stored count off the chain');
+    assert.deepEqual(rec.missing, ['bc1qmainnet'], 'reconcile names what the chain dropped');
+    assert.equal(rec.ok, false);
 }
+
+// --- 6b. Network-aware wiring at the call sites  ---------------
+
+assert.ok(/classifyRecipients\(\s*\n?\s*parts,\s*\n?\s*\{\s*coin: recipientCoin, network: recipientNetwork\s*\}/m.test(src),
+    'AirdropForm passes the ACTIVE chain to classifyRecipients');
+assert.ok(/const recipientCoin = descriptor\?\.coin/.test(src)
+    && /const recipientNetwork = descriptor\?\.networkKind/.test(src),
+    'AirdropForm derives the recipient chain from the active chain descriptor');
+assert.ok(/airdropLib\.reconcileStoredList\(/.test(src),
+    'AirdropForm reconciles the published list against its own count');
+assert.ok(/messaging\.getListByActionIndex\(\{ chainId, actionIndex: listActionIndex \}\)/.test(src),
+    'AirdropForm reads the published list back once it is indexed');
+assert.ok(/listReconcile \? listReconcile\.storedCount : recipients\.valid\.length/.test(src),
+    'the recipient count that prices step 2 prefers the chain-stored count');
+assert.ok(/recipients\.wrongNetwork\.length > 0/.test(src),
+    'AirdropForm calls out wrong-network recipients separately from garbage');
 
 // --- 7. Core flow guard-rails -----------------------------------------
 

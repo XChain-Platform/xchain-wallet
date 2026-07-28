@@ -297,6 +297,7 @@ export {
     oracleStats,
     projectBetPayout,
     projectBetFeedCreateFee,
+    betPoolAmounts,
 } from './betQueries.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
@@ -541,6 +542,17 @@ export {
     assertFeeLane,
     FeeLaneMismatchError,
 } from './nativeFeeLane.js';
+// : the Approve-time re-check of an already-sized native-coin fee. The
+// host route owns the quote fetch; the band comparison and its sentence are
+// pure, so they live here and are unit-testable without a chain.
+export {
+    NATIVE_FEE_CHANGED,
+    compareNativeFeeQuote,
+    isNativeFeeRefusal,
+    nativeFeeChangedError,
+    nativeFeeRequoteMessage,
+    satsFromNativeDecimal,
+} from './nativeFeeRequote.js';
 //  §5.4: finishing a stored confirm away from the form that made it.
 export {
     RESUMABLE_DISPATCH_METHODS,

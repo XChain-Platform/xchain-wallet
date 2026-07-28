@@ -45,6 +45,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -332,7 +333,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'Publishing the price failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publishing the price failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }

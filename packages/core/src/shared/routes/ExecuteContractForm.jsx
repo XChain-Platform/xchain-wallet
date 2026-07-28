@@ -48,6 +48,7 @@ import { extractSingle, sanitizeAbi } from './contractResponseShape.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -479,7 +480,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         return wrap(
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
@@ -489,6 +489,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
+        // : a queued result is SIGNED and not broadcast. The confirm
+        // pipeline resolves that case rather than throwing, so without this
+        // branch the done screen below reports it as a completed action.
+        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel

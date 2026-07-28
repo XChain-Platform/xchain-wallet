@@ -23,6 +23,7 @@ import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
+import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -66,6 +67,11 @@ function nativeTickerFor(chainId) {
  * @param {string|null} [props.hwRequireExplicitConfirmReason]
  * @param {(confirmed: boolean) => void} [props.onHwConfirmedChange]
  * @param {boolean} [props.hwExplicitConfirmed]        the caller's tick state
+ * @param {string[]} [props.outcomeLabels]   : a BET market's outcome labels, in
+ *   wire order. The composed bytes carry the outcome as an index, so the host's decode
+ *   can only say "outcome 0"; supplying the market's own labels NAMES that index
+ *   without replacing it. Display-only annotation, and the only caller-supplied text
+ *   this screen renders - see withOutcomeLabels for why it is neutralized first.
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -90,6 +96,7 @@ export function ActionConfirmScreen({
     hwRequireExplicitConfirmReason = null,
     onHwConfirmedChange,
     hwExplicitConfirmed = false,
+    outcomeLabels = null,
 }) {
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
@@ -112,6 +119,12 @@ export function ActionConfirmScreen({
     const exactFeeText = Number.isFinite(exactSats)
         ? `Network fee: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
         : null;
+
+    // (c): still the host's decode of the composed bytes, with the
+    // outcome INDEX annotated by the market's own label for it. The index
+    // survives verbatim, and a decode carrying no outcome row (every action
+    // that is not a bet or a resolve) comes back untouched.
+    const decoded = withOutcomeLabels(composed?.decoded, outcomeLabels);
 
     return (
         <ConfirmActionModal
@@ -138,7 +151,7 @@ export function ActionConfirmScreen({
             // silently seat form state on the screen that says what you are
             // signing. Now an undescribable action shows no intent line, which
             // is a visible absence rather than a plausible substitute.
-            decoded={composed?.decoded}
+            decoded={decoded}
             // §5.2.3: the host computes deltas from the PARSED COMPOSED action
             // (one canonical source with the intent above). A caller-supplied
             // simulation still wins, for surfaces that have a better one.

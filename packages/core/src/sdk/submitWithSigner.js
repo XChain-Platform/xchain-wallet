@@ -32,6 +32,7 @@ import {
     nativeFeeOutputOf, willTakeChunkLane, withoutCustomOutput, assertFeeLane,
 } from '../flows/nativeFeeLane.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
+import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
 import { isBareNativePayment } from '../flows/nativePayment.js';
 
@@ -257,10 +258,17 @@ export async function submitWithSigner({
 
         // Step 2: encode to PSBT via the encoder service.
         onProgress('encoding', { actionString: bareNativePayment ? null : createResult.actionString });
-        encoded = await encoder.createTx({
-            ...(bareNativePayment ? {} : { data: createResult.actionString }),
-            ...effectiveEncoderOpts,
-        });
+        // : a build that fails here fails BEFORE signing, and the
+        // pre-flight quote is the amount the user is short. Stamp it on so the
+        // form's message can say how much, not just that something is missing.
+        try {
+            encoded = await encoder.createTx({
+                ...(bareNativePayment ? {} : { data: createResult.actionString }),
+                ...effectiveEncoderOpts,
+            });
+        } catch (err) {
+            throw annotateEncoderFeeRequirement(err, preflight.quote);
+        }
 
         // The check half. A mismatch means the fee output would sit on the
         // wrong transaction, so refuse BEFORE anything is signed rather than

@@ -43,6 +43,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -507,6 +508,10 @@ export function IssueTokenForm({ walletId, onBack }) {
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed but not broadcast, so the token does not exist yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="issuance" />);
         }
         return wrap(
             <>

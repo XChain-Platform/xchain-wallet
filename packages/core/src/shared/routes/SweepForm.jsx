@@ -49,6 +49,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -421,6 +423,14 @@ export function SweepForm({
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // : re-price the native-coin protocol fee at Approve.
+                // The output was sized at compose, and the amount consensus
+                // requires moves inversely with the coin price, so a move while
+                // the confirm screen sits open leaves it short - which the
+                // chain rejects while keeping the fee.
+                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                    chainId, actionString, source,
+                }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
@@ -441,7 +451,11 @@ export function SweepForm({
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Sweep (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(humanizeError(err, 'sweep').message);
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: humanizeError(err, 'sweep').message,
+            }));
         }
     }
 
@@ -514,7 +528,11 @@ export function SweepForm({
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Sweep failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Sweep failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -562,6 +580,11 @@ export function SweepForm({
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed but not broadcast. None of the post-sweep effects
+        // below (auto-pay disarmed, dispensers closing) have happened.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="sweep" />);
         }
         const forceClose = result?.forceClose;
         return wrap(

@@ -306,8 +306,8 @@ export function balancesToCommands(rows, ctx) {
  * Convert connected-site records into palette commands (§33.2 "Connected
  * sites"). Each command opens the Connected Sites settings surface; a
  * per-site detail deep-link would need selection state that surface doesn't
- * expose yet. Skipped when the shell can't open that surface (extension
- * popup, which has no connected-sites view).
+ * expose yet. Skipped when the shell can't open that surface; as of 
+ * every shell can, the popup included.
  *
  * @param {Array<{ id: string, appName?: string, origin?: string }>} sites
  * @param {{ openConnectedSites?: () => void }} ctx

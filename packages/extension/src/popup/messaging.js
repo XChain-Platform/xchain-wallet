@@ -385,6 +385,23 @@ export function checkInputLiveness(opts) {
 }
 
 /**
+ * : re-price a composed action's native-coin protocol fee at Approve
+ * time. The fee output was sized at COMPOSE from an oracle price, and the
+ * amount consensus requires moves inversely with the coin price, so a move of
+ * a little over 5 % while the confirm screen sits open leaves the attached
+ * output short - which the chain rejects while KEEPING the fee.
+ *
+ * Quoted from the composed action string, so the answer prices the exact bytes
+ * about to be broadcast.
+ *
+ * @param {{ chainId: string, actionString: string, source?: string }} opts
+ * @returns {Promise<object>}   an sdk.quoteNativeFee answer
+ */
+export function requoteNativeFee(opts) {
+    return /** @type {any} */ (sendMessage('action.requoteNativeFee', opts));
+}
+
+/**
  *  §5.4: persist the in-flight confirm so a popup CLOSE (which MV3 does
  * on every focus loss, including the one a hardware prompt causes) costs a tap
  * instead of re-entering the whole form. Stored in `chrome.storage.session`,

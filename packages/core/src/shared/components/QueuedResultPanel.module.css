@@ -1,0 +1,41 @@
+/*  leg (a). Visual idiom matches the broadcast-success card, in the
+ * warning colour rather than the success colour: the transaction is safe,
+ * but nothing has been broadcast yet. */
+
+.queuedCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    align-items: center;
+    padding: var(--xc-space-4);
+    border: 1px solid var(--xc-warning, #b8860b);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
+.queuedIcon {
+    font-size: var(--xc-text-2xl, 1.5rem);
+    line-height: 1;
+}
+
+.queuedTitle {
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    margin: 0;
+    text-align: center;
+    color: var(--xc-warning, #b8860b);
+}
+
+.queuedHint {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    text-align: center;
+}
+
+.actions {
+    display: flex;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
+    margin-top: var(--xc-space-4);
+}

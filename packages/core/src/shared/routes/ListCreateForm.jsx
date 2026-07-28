@@ -41,6 +41,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -89,8 +91,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // detection, drag-and-drop) matches exactly.
     const [pasteText, setPasteText] = useState('');
     const [recipients, setRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number }} */
-        ({ valid: [], invalid: [], duplicates: 0 }),
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
     );
     const [showInvalid, setShowInvalid] = useState(false);
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -125,13 +127,23 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
 
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    // : an ADDRESS list is only useful on the chain it is published to -
+    // the indexer rejects items that are not addresses for that coin+network
+    // (into `list_items_invalid`) while still storing the list. Validate here so
+    // the count the form shows is the count the chain will keep.
+    const recipientCoin = descriptor?.coin || null;
+    const recipientNetwork = descriptor?.networkKind || null;
+
     useEffect(() => {
         if (listType !== '2') return;
         const parts = airdropLib.parsePaste(pasteText);
-        setRecipients(airdropLib.classifyRecipients(parts));
-    }, [pasteText, listType]);
+        setRecipients(airdropLib.classifyRecipients(
+            parts,
+            { coin: recipientCoin, network: recipientNetwork },
+        ));
+    }, [pasteText, listType, recipientCoin, recipientNetwork]);
 
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain || !chainId) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -286,7 +298,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Create list failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Create list failed.',
+            }));
         }
     }
 
@@ -361,7 +375,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'Create list failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Create list failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }
@@ -390,6 +406,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         const txid = result?.txid || result?.tx_hash;
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
+        }
+        // : signed but never broadcast. "List published ... is on its
+        // way" is the one thing that did not happen.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="list" />);
         }
         return wrap(
             <>
@@ -618,6 +639,18 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             {showInvalid ? (
                                 <ul>{recipients.invalid.map((a, i) => (<li key={i}><code>{a}</code></li>))}</ul>
                             ) : null}
+                        </div>
+                    ) : null}
+                    {/* : a real address for a different chain is not a typo;
+                        say which chain this list is being published to. */}
+                    {recipients.wrongNetwork.length > 0 ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                {recipients.wrongNetwork.length} address
+                                {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
+                                network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
+                                This list is published on {descriptor?.displayName || chainId}.
+                            </p>
                         </div>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent

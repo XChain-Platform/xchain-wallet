@@ -50,6 +50,8 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -272,6 +274,14 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // : re-price the native-coin protocol fee at Approve.
+                // The output was sized at compose, and the amount consensus
+                // requires moves inversely with the coin price, so a move while
+                // the confirm screen sits open leaves it short - which the
+                // chain rejects while keeping the fee.
+                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                    chainId, actionString, source,
+                }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
@@ -293,7 +303,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Mint (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(humanizeError(err, 'mint').message);
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: humanizeError(err, 'mint').message,
+            }));
         }
     }
 
@@ -366,7 +380,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Mint failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFeeMandatory,
+                        fallback: err?.message || 'Mint failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -413,6 +431,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     onDone={onBack}
                 />,
             );
+        }
+        // : a queued result is signed and NOT broadcast, so "Minted"
+        // would claim the one thing that has not happened yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="mint" />);
         }
         return wrap(
             <>

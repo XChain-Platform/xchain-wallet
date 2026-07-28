@@ -17,6 +17,8 @@ import {
     betFeedDetail,
     betsForQuery,
     oracleStats,
+    projectBetPayout,
+    betPoolAmounts,
 } from '../../../packages/core/src/flows/betQueries.js';
 
 function fakeRegistry(sdk) {
@@ -86,5 +88,117 @@ describe('BET query passthroughs', () => {
         await expect(betFeedDetail({ sdkRegistry: reg, chainId: 'c', feedIndex: 1 })).rejects.toThrow(/sdk.getBetFeed is unavailable/);
         await expect(betsForQuery({ sdkRegistry: reg, chainId: 'c' })).rejects.toThrow(/sdk.getBets is unavailable/);
         await expect(oracleStats({ sdkRegistry: reg, chainId: 'c', address: 'a' })).rejects.toThrow(/sdk.getOracleStats is unavailable/);
+    });
+});
+
+// . The projection is the ONE number a parimutuel bettor decides on, and it
+// reached the screen as nothing at all: BetFeedDetail forwarded the explorer's
+// pool ROWS straight into payout math that indexes amounts BY outcome. Both ways
+// that fails are silent, so these tests pin the shape rather than the arithmetic.
+describe('projectBetPayout pool normalization', () => {
+    // The explorer's getBetFeedPools is a GROUP BY outcome: rows, in outcome
+    // order, and ONLY for outcomes that already carry an open bet.
+    const EXPLORER_ROWS = Object.freeze([
+        { outcome: 0, bet_count: 3, pool: '300.00000000' },
+    ]);
+
+    function projectingSdk() {
+        return { betting: { projectPayout: vi.fn(async () => ({ payout: '1.0', profit: '0.0' })) } };
+    }
+
+    it('keys the explorer rows by outcome instead of forwarding them', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: EXPLORER_ROWS, outcomeCount: 2, outcome: 0, stake: '100', feePct: '1.00',
+        });
+        const arg = sdk.betting.projectPayout.mock.calls[0][0];
+        // Rows forwarded unchanged stringify to "[object Object]" inside the
+        // bignumber parse, which throws where the UI can only swallow it.
+        expect(arg.pools).toEqual(['300.00000000', '0']);
+        expect(arg.outcome).toBe(0);
+        expect(arg.stake).toBe('100');
+        expect(arg.feePct).toBe('1.00');
+    });
+
+    it('projects for an outcome nobody has backed yet, which is the reported bug', async () => {
+        // The exact D-97 case: a 300-token pool on outcome 0, the user selects the
+        // opposing outcome 1. Unnormalized, index 1 sits past the end of a
+        // one-row list and the SDK rejects it as out of range.
+        const sdk = projectingSdk();
+        const out = await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: EXPLORER_ROWS, outcomeCount: 2, outcome: 1, stake: '100',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['300.00000000', '0']);
+        expect(out).toEqual({ payout: '1.0', profit: '0.0' });
+    });
+
+    it('reaches the backed outcome even when the market outcome count is unknown', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: [], outcome: 2, stake: '5',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['0', '0', '0']);
+    });
+
+    it('leaves the SDK range check meaningful for an outcome off the end of the market', async () => {
+        // A declared count is authoritative: outcome 7 of a 2-outcome market must
+        // still reach the SDK as out of range rather than be padded into legality.
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: EXPLORER_ROWS, outcomeCount: 2, outcome: 7, stake: '5',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toHaveLength(2);
+    });
+
+    it('omits feePct and decimals rather than passing null through', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: EXPLORER_ROWS, outcomeCount: 2, outcome: 0, stake: '1', feePct: null, decimals: null,
+        });
+        const arg = sdk.betting.projectPayout.mock.calls[0][0];
+        expect('feePct' in arg).toBe(false);
+        expect('decimals' in arg).toBe(false);
+    });
+
+    it('names the missing method on an SDK that predates the projection', async () => {
+        await expect(projectBetPayout({ sdkRegistry: fakeRegistry({}), chainId: 'c', pools: [], outcome: 0, stake: '1' }))
+            .rejects.toThrow(/sdk.betting.projectPayout is unavailable/);
+    });
+});
+
+describe('betPoolAmounts', () => {
+    it('passes a dense amount list through untouched', () => {
+        // The SDK's own callers already hand it one; re-keying by a non-existent
+        // `outcome` field would zero the whole thing out.
+        expect(betPoolAmounts(['10', '20'], 2)).toEqual(['10', '20']);
+    });
+
+    it('fills gaps between non-contiguous outcomes', () => {
+        const rows = [{ outcome: 0, pool: '5' }, { outcome: 3, pool: '7' }];
+        expect(betPoolAmounts(rows, 4)).toEqual(['5', '0', '0', '7']);
+    });
+
+    it('reads a null or absent pool as zero rather than as NaN downstream', () => {
+        expect(betPoolAmounts([{ outcome: 0, pool: null }, { outcome: 1 }], 2)).toEqual(['0', '0']);
+    });
+
+    it('grows to the declared outcome count and never shrinks below the rows', () => {
+        expect(betPoolAmounts([{ outcome: 0, pool: '1' }], 3)).toEqual(['1', '0', '0']);
+        expect(betPoolAmounts([{ outcome: 4, pool: '1' }], 2)).toHaveLength(5);
+    });
+
+    it('survives a missing or non-array pools field', () => {
+        expect(betPoolAmounts(undefined, 2)).toEqual(['0', '0']);
+        expect(betPoolAmounts(null, 0)).toEqual([]);
+    });
+
+    it('ignores a row with an unusable outcome index instead of misplacing it', () => {
+        const rows = [{ outcome: 'x', pool: '9' }, { outcome: -1, pool: '9' }, { outcome: 1, pool: '4' }];
+        expect(betPoolAmounts(rows, 2)).toEqual(['0', '4']);
     });
 });

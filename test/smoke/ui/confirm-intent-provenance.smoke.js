@@ -85,8 +85,23 @@ assert.ok(confirmScreens >= 25,
 // --- 3. the screen prefers the envelope, and has no other source -----
 
 const screenSrc = read('packages', 'core', 'src', 'shared', 'components', 'ActionConfirmScreen.jsx');
-assert.match(screenSrc, /decoded=\{composed\?\.decoded\}/,
-    'the confirm screen renders the intent the HOST described, with no caller override');
+// (c) narrowed this from "the envelope verbatim" to "the envelope, or a
+// derivation of it that adds nothing of its own". A BET action carries its
+// outcome as an INDEX, so the host's decode can only ever say "outcome 0",
+// and a market's own labels are the one thing a caller genuinely knows that
+// the composed bytes do not. withOutcomeLabels annotates that index and
+// cannot replace it - the index stays in the sentence, the label is
+// neutralized and quoted, and a decode with no outcome row comes back
+// untouched (test/unit/shared/utils/betOutcomeLabels.test.js).
+assert.match(screenSrc, /const decoded = withOutcomeLabels\(composed\?\.decoded, outcomeLabels\);/,
+    'the intent the screen renders is derived from the HOST envelope and nothing else');
+assert.match(screenSrc, /decoded=\{decoded\}/,
+    'the confirm screen passes that derived intent down');
+// No OTHER source may reach the prop: the whole of  was a caller-
+// supplied intent standing in for the composed one.
+const decodedSources = screenSrc.match(/^\s*(const decoded|decoded=).*$/gm) || [];
+assert.equal(decodedSources.length, 2,
+    `exactly one derivation and one use of \`decoded\`, saw:\n  ${decodedSources.join('\n  ')}`);
 
 // --- 4. the dApp approval window describes host-side too -------------
 

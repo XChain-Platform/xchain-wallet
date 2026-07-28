@@ -74,6 +74,56 @@ export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) 
 }
 
 /**
+ * Turn the explorer's pool rows into the dense per-outcome amount list the SDK's
+ * payout math expects.
+ *
+ * THE MISMATCH THIS EXISTS TO CLOSE: `betFeedDetail` returns `pools` as the
+ * explorer's `GROUP BY outcome` result, so it is a list of ROWS
+ * (`{ outcome, pool, bet_count }`) and it only carries outcomes that already have
+ * an open bet. `sdk.betting.projectPayout` wants amounts indexed BY outcome. Hand
+ * it the rows unchanged and both failure modes are silent: an outcome nobody has
+ * backed yet sits past the end of the short row list and is rejected as out of
+ * range, and a row that IS in range stringifies to "[object Object]" inside the
+ * bignumber parse. Either way the projection throws and the screen just shows
+ * nothing, which is the state a bettor cannot tell apart from "no projection is
+ * offered here" .
+ *
+ * `outcomeCount` is the market's declared outcome count. Passing it keeps every
+ * outcome present at zero, so backing the empty side of a market still projects,
+ * and it keeps the SDK's own range check meaningful for an outcome index that is
+ * genuinely off the end of the market.
+ *
+ * @param {any[]} pools               explorer rows, or an already-dense amount list
+ * @param {number} [outcomeCount]     the market's outcome count, when known
+ * @returns {string[]} amounts indexed by outcome, missing outcomes as '0'
+ */
+export function betPoolAmounts(pools, outcomeCount) {
+    const rows = Array.isArray(pools) ? pools : [];
+    const amount = (v) => (v === null || v === undefined || v === '' ? '0' : String(v));
+
+    // A dense list is passed through: the SDK's own callers already hand it one,
+    // and re-keying it by a non-existent `outcome` field would zero it out.
+    const isRows = rows.some((p) => p !== null && typeof p === 'object');
+    const dense = [];
+    if (!isRows) {
+        for (let i = 0; i < rows.length; i += 1) dense[i] = amount(rows[i]);
+    } else {
+        for (const row of rows) {
+            if (!row || typeof row !== 'object') continue;
+            const i = Number(row.outcome);
+            if (!Number.isInteger(i) || i < 0) continue;
+            dense[i] = amount(row.pool ?? row.amount);
+        }
+    }
+
+    const declared = Number(outcomeCount);
+    const size = Math.max(dense.length, Number.isInteger(declared) && declared > 0 ? declared : 0);
+    const out = new Array(size);
+    for (let i = 0; i < size; i += 1) out[i] = dense[i] === undefined ? '0' : dense[i];
+    return out;
+}
+
+/**
  * Project what a prospective stake would pay if its outcome won, at the pools as
  * they stand right now.
  *
@@ -82,16 +132,32 @@ export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) 
  * settled amount in the last decimal place reads to a user as a bug. The number
  * is still only current, not locked: this is a parimutuel market and every later
  * bet moves it.
+ *
+ * `pools` may be the explorer rows exactly as `betFeedDetail` returned them; see
+ * betPoolAmounts for why they cannot be forwarded unchanged.
+ *
+ * Returns the SDK's `{ payout, profit, impliedOdds, total, winningPool, fee }`,
+ * or null when the projection is undefined.
  * @param {{ sdkRegistry: object, chainId: string, pools: any[], outcome: number|string,
- *           stake: string|number, feePct?: string|number, decimals?: number }} params
+ *           stake: string|number, feePct?: string|number, decimals?: number,
+ *           outcomeCount?: number }} params
  */
-export async function projectBetPayout({ sdkRegistry, chainId, pools, outcome, stake, feePct, decimals }) {
+export async function projectBetPayout({
+    sdkRegistry, chainId, pools, outcome, stake, feePct, decimals, outcomeCount,
+}) {
     const sdk = requireSdk({ sdkRegistry, chainId }, 'projectBetPayout');
     if (typeof sdk?.betting?.projectPayout !== 'function') {
         throw new Error('projectBetPayout: sdk.betting.projectPayout is unavailable');
     }
+    // With no declared outcome count, size the list to at least reach the outcome
+    // being backed: an unbacked outcome is a normal thing to project on, and the
+    // caller has not given us anything to range-check it against.
+    const index = Number(outcome);
+    const floor = Number.isInteger(Number(outcomeCount)) && Number(outcomeCount) > 0
+        ? Number(outcomeCount)
+        : (Number.isInteger(index) && index >= 0 ? index + 1 : 0);
     return sdk.betting.projectPayout({
-        pools,
+        pools: betPoolAmounts(pools, floor),
         outcome,
         stake,
         ...(feePct !== undefined && feePct !== null && { feePct }),

@@ -49,6 +49,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -242,6 +244,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // : re-price the native-coin protocol fee at Approve.
+                // The output was sized at compose, and the amount consensus
+                // requires moves inversely with the coin price, so a move while
+                // the confirm screen sits open leaves it short - which the
+                // chain rejects while keeping the fee.
+                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                    chainId, actionString, source,
+                }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
@@ -263,7 +273,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Destroy (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(humanizeError(err, 'destroy').message);
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: humanizeError(err, 'destroy').message,
+            }));
         }
     }
 
@@ -332,7 +346,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Destroy failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Destroy failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -379,6 +397,10 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     onDone={onBack}
                 />,
             );
+        }
+        // : signed but not broadcast. Nothing has been destroyed yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="destroy" />);
         }
         return wrap(
             <>

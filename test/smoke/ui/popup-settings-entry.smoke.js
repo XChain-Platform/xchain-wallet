@@ -53,8 +53,10 @@ assert.ok(
     /unlockedView === 'settings'/.test(popupApp),
     'popup renders a settings view',
 );
+//  appended 'connected-sites' after 'settings', so match the member
+// rather than the end of the union.
 assert.ok(
-    /\| 'settings'\}/.test(popupApp),
+    /\| 'settings'(?: \||\})/.test(popupApp),
     "popup's route union includes 'settings'",
 );
 assert.ok(

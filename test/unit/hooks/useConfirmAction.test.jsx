@@ -493,4 +493,116 @@ describe('useConfirmAction', () => {
             expect(clear).toHaveBeenCalledWith(put.mock.calls[0][0].id);
         });
     });
+
+    //  §4.6, the third Approve-time re-check. A native-coin protocol fee
+    // is sized at compose and forfeited on-chain if the action is rejected, and
+    // the amount consensus requires moves inversely with the coin's USD price,
+    // so a move of a little over 5 % while the confirm screen sits open turns
+    // the attached output into a short one. Measured on LTC regtest: the wallet
+    // broadcast the stale PSBT and 0.02 LTC was spent for nothing.
+    describe(' native-fee re-quote at Approve', () => {
+
+        // The composed envelope as it looks in native-fee mode: the quote that
+        // sized the FEE_DESTINATION output rides on it.
+        const COMPOSED_WITH_FEE = { ...COMPOSED, quote: { requiredFeeSats: 2000000, feeDestination: 'feeDest' } };
+
+        function freshQuote(overrides) {
+            return {
+                supported: true, valid: true, coin: 'LTC',
+                requiredFeeSats: 2000000, minAcceptable: '0.01900000', maxAcceptable: '0.02200000',
+                ...overrides,
+            };
+        }
+
+        it('refuses to sign when the fee moved out of the band, and says so', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => ({ txid: 'T' }));
+            // The price halved: the requirement doubled to 0.04 LTC.
+            const requoteNativeFee = vi.fn(async () => freshQuote({
+                requiredFeeSats: 4000000, minAcceptable: '0.03800000', maxAcceptable: '0.04400000',
+            }));
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED_WITH_FEE, onApprove,
+                    chainId: 'ltc', source: 'src1', preflight: preflightWith(), requoteNativeFee,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { out = await result.current.approve({}); });
+
+            // Nothing was signed: this is the whole point of the rail.
+            expect(onApprove).not.toHaveBeenCalled();
+            expect(out).toMatchObject({ interrupted: true, reason: 'fee-changed' });
+            expect(out.requote).toMatchObject({ verdict: 'short', paidSats: 2000000, expectedSats: 4000000 });
+            expect(result.current.error?.code).toBe('NATIVE_FEE_CHANGED');
+            expect(result.current.error?.message).toContain('0.04 LTC');
+            expect(result.current.phase).toBe('ready');
+            // Re-quoted from the COMPOSED bytes, not from form params.
+            expect(requoteNativeFee).toHaveBeenCalledWith({
+                actionString: COMPOSED.actionString, source: 'src1',
+            });
+            await act(async () => { result.current.reject(); await p; });
+        });
+
+        it('signs when the fee is still inside the band', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => ({ txid: 'T' }));
+            const requoteNativeFee = vi.fn(async () => freshQuote({ requiredFeeSats: 2050000 }));
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED_WITH_FEE, onApprove,
+                    chainId: 'ltc', preflight: preflightWith(), requoteNativeFee,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { await result.current.approve({}); out = await p; });
+            expect(onApprove).toHaveBeenCalled();
+            expect(out.ok).toEqual({ txid: 'T' });
+        });
+
+        it('never asks when the action attaches no native fee', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const requoteNativeFee = vi.fn(async () => freshQuote());
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED, onApprove: async () => 'sent',
+                    chainId: 'btc', preflight: preflightWith(), requoteNativeFee,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { await result.current.approve({}); out = await p; });
+            expect(requoteNativeFee).not.toHaveBeenCalled();
+            expect(out.ok).toBe('sent');
+        });
+
+        // Same posture as the liveness probe (§4.2): a dead explorer must not
+        // hard-block a transaction that is probably still correctly priced.
+        for (const [label, requote] of [
+            ['an unreachable quote', vi.fn(async () => { throw new Error('explorer down'); })],
+            ['a missing host route', undefined],
+            ['a busy indexer', vi.fn(async () => ({ supported: true, valid: false, busy: true, retryable: true }))],
+        ]) {
+            it(`${label} never blocks a good transaction`, async () => {
+                const { result } = renderHook(() => useConfirmAction());
+                const onApprove = vi.fn(async () => 'sent');
+                let p, out;
+                await act(async () => {
+                    p = settle(result.current.confirm({
+                        compose: async () => COMPOSED_WITH_FEE, onApprove,
+                        chainId: 'ltc', preflight: preflightWith(),
+                        // The wired shells always pass a function; `undefined`
+                        // stands in for a shell whose messaging lacks the route.
+                        ...(requote ? { requoteNativeFee: requote } : {}),
+                    }));
+                });
+                await waitFor(() => expect(result.current.phase).toBe('ready'));
+                await act(async () => { await result.current.approve({}); out = await p; });
+                expect(onApprove).toHaveBeenCalled();
+                expect(out.ok).toBe('sent');
+            });
+        }
+    });
 });

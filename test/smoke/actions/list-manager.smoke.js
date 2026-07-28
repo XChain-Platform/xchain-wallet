@@ -68,6 +68,11 @@ for (const call of [
 assert.ok(/VERSION:\s*'0'/.test(createSrc), 'ListCreateForm submits LIST v0 (create)');
 assert.ok(/airdropLib\.parsePaste|airdropLib\.classifyRecipients/.test(createSrc),
     'ListCreateForm reuses the AirdropForm address-paste parser');
+// : an ADDRESS list is only valid on the chain it is published to, so the
+// parser has to be told which chain that is (the indexer drops items that are
+// not addresses for that coin+network while still storing the list).
+assert.ok(/classifyRecipients\(\s*\n?\s*parts,\s*\n?\s*\{\s*coin: recipientCoin, network: recipientNetwork\s*\}/m.test(createSrc),
+    'ListCreateForm validates pasted addresses against the active chain');
 assert.ok(/permanent public on-chain data/.test(createSrc),
     'ListCreateForm shows the pasted/contact-book address privacy line');
 assert.ok(/bigger transaction/.test(createSrc),

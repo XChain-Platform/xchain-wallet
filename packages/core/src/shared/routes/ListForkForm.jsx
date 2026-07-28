@@ -33,6 +33,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -230,10 +231,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             }
             return out;
         }
+        // : validate additions against the chain this fork is published
+        // to, not just against address shape, so a wrong-network paste cannot
+        // ride into the new list and be dropped by the indexer afterwards.
         const parts = airdropLib.parsePaste(addText);
-        const { valid } = airdropLib.classifyRecipients(parts);
+        const { valid } = airdropLib.classifyRecipients(parts, {
+            coin: descriptor?.coin || null,
+            network: descriptor?.networkKind || null,
+        });
         return valid.filter((a) => !currentSet.has(a));
-    }, [addText, currentItems, isTick]);
+    }, [addText, currentItems, isTick, descriptor?.coin, descriptor?.networkKind]);
 
     const toRemove = useMemo(
         () => currentItems.filter((i) => !keep.has(i)),
@@ -343,7 +350,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             setStage(twoPhase ? 'wait-index' : 'repoint');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'List fork broadcast failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'List fork broadcast failed.',
+            }));
             if (!hw && !isWatcherMode) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         } finally {
             setSubmitting(false);
@@ -370,7 +379,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             setStage('repoint');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'List fork broadcast failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'List fork broadcast failed.',
+            }));
             if (!hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         } finally {
             setSubmitting(false);

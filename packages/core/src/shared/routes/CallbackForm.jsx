@@ -50,6 +50,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -309,6 +311,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // : re-price the native-coin protocol fee at Approve.
+                // The output was sized at compose, and the amount consensus
+                // requires moves inversely with the coin price, so a move while
+                // the confirm screen sits open leaves it short - which the
+                // chain rejects while keeping the fee.
+                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                    chainId, actionString, source,
+                }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
@@ -330,7 +340,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Callback (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(humanizeError(err, 'callback').message);
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: humanizeError(err, 'callback').message,
+            }));
         }
     }
 
@@ -401,7 +415,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
-                isBadPassword ? 'Incorrect password.' : err?.message || 'Callback failed.',
+                isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                    coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Callback failed.',
+                }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -442,6 +458,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             return wrap(
                 <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
             );
+        }
+        // : signed but not broadcast, so nothing is on its way to
+        // confirming and no holder is being paid yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="callback" />);
         }
         return wrap(
             <>

@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Screen, PageHeader, Button } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
 
 function extractRows(resp) {
@@ -19,6 +20,20 @@ function extractRows(resp) {
     if (Array.isArray(resp.data)) return resp.data;
     return [];
 }
+
+function unwrap(resp) {
+    if (!resp) return null;
+    if (Array.isArray(resp)) return resp[0] || null;
+    if (Array.isArray(resp.data)) return resp.data[0] || null;
+    if (resp.data && typeof resp.data === 'object') return resp.data;
+    return resp;
+}
+
+// How many distinct markets this screen will ever read for their outcome
+// labels. One round trip each, so the ceiling keeps a long bet history from
+// opening a request storm for what is an annotation: rows past it keep the
+// index they always showed.
+const MAX_MARKET_READS = 25;
 
 function statusLabel(status) {
     if (status === 'open') return 'Waiting on the result';
@@ -57,6 +72,9 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
 
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Outcome labels per market, keyed `${chainId}:${feedActionIndex}`. Empty
+    // array = asked, nothing to show (see the effect below).
+    const [labelsByMarket, setLabelsByMarket] = useState(/** @type {Record<string, string[]>} */ ({}));
 
     const load = useCallback(async () => {
         if (typeof messaging?.getAddressesByChain !== 'function' || typeof messaging?.bets !== 'function') {
@@ -104,6 +122,52 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
 
     useEffect(() => { load(); }, [load]);
 
+    // (c): a bet row names its outcome by INDEX only - the explorer's
+    // bets query joins the wager, not the market that declared the labels - so
+    // every row read "Outcome 1" while the market itself carries "Yes"/"No".
+    // One market read per DISTINCT market in the list fills that in.
+    //
+    // Best-effort by design: a failed or slow read leaves the row on its index,
+    // which is what it showed before, so the money-bearing part of the screen
+    // never waits on cosmetics. Capped because this is a per-market round trip
+    // and the bet list is paged at 100 per address.
+    useEffect(() => {
+        if (!rows || rows.length === 0) return undefined;
+        if (typeof messaging?.betFeed !== 'function') return undefined;
+        let cancelled = false;
+        const wanted = [];
+        const seen = new Set();
+        // Counted across passes, not per pass: this effect re-runs on its own
+        // result, so a per-pass cap would just fetch the next 25 each time.
+        let asked = Object.keys(labelsByMarket).length;
+        for (const b of rows) {
+            const idx = b.feed_action_index;
+            if (idx === undefined || idx === null) continue;
+            const key = `${b.chainId}:${idx}`;
+            // Attempted markets are recorded even when they came back with no
+            // labels, so a market that cannot supply them is asked once rather
+            // than on every render this effect's own setState triggers.
+            if (seen.has(key) || Object.hasOwn(labelsByMarket, key)) continue;
+            if (asked >= MAX_MARKET_READS) break;
+            seen.add(key);
+            wanted.push({ key, chainId: b.chainId, feedIndex: idx });
+            asked += 1;
+        }
+        if (wanted.length === 0) return undefined;
+        Promise.all(wanted.map((w) => messaging
+            .betFeed({ chainId: w.chainId, feedIndex: w.feedIndex })
+            .then((r) => ({ key: w.key, labels: outcomeLabelsOf(unwrap(r)) }))
+            .catch(() => ({ key: w.key, labels: [] }))))
+            .then((results) => {
+                if (cancelled) return;
+                const next = {};
+                for (const r of results) next[r.key] = r.labels;
+                setLabelsByMarket((prev) => ({ ...prev, ...next }));
+            })
+            .catch(() => { /* labels are an annotation; the index still renders */ });
+        return () => { cancelled = true; };
+    }, [rows, messaging, labelsByMarket]);
+
     const header = <PageHeader onBack={onBack} title="My bets" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
@@ -111,7 +175,6 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
         return wrap(
             <>
                 <div role="alert" className={styles.error}>{error}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }
@@ -132,6 +195,10 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                 {rows.map((b) => {
                     const c = statusColor(b.bet_status);
                     const clickable = onOpenMarket && b.feed_action_index !== undefined && b.feed_action_index !== null;
+                    // Named by the market's own label where it is known, and by
+                    // the index alone where it is not. The index is always
+                    // shown: it is what the wager actually carries.
+                    const backed = outcomePhrase(labelsByMarket[`${b.chainId}:${b.feed_action_index}`], b.outcome);
                     const body = (
                         <>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
@@ -141,7 +208,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                                 </span>
                             </div>
                             <div className={styles.hint}>
-                                Outcome {String(b.outcome)} · staked {String(b.amount)} {b.tick || ''}
+                                Backed {backed} · staked {String(b.amount)} {b.tick || ''}
                             </div>
                             {/* Payouts credit the address that PLACED the bet, so name it:
                                 a sweep does not move a bet escrow or its winnings. */}

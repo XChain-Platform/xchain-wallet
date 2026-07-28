@@ -21,13 +21,25 @@
 //     detected and skipped.
 //
 // `classifyRecipients` takes the parsed strings and returns the
-// structured split the UI renders: valid / invalid / duplicates.
+// structured split the UI renders: valid / invalid / duplicates /
+// wrongNetwork.
 //
-// Address validation is deliberately light: length + charset. This
-// matches xchain-sdk `util.isCryptoAddress` (length-only) with an
-// added charset guard to catch paste artifacts (commas, spaces,
-// zero-width chars). Anything that slips through gets caught at sign
-// time by the encoder's real validator.
+// : pass the ACTIVE chain and every candidate is decoded against
+// THAT coin+network's address parameters, the same check Send makes on
+// its destination. Without it the form only tested length + charset, so
+// a mainnet address pasted into a regtest wallet counted as valid all
+// the way through review, dry-run and broadcast - and then the indexer
+// dropped it into `list_items_invalid` (status 60, `invalid: ADDRESS
+// (format)`) while marking the LIST itself valid. The list was one item
+// short of the list the user was shown and paid for, permanently, with
+// no wallet screen ever saying so.
+//
+// Chain-less callers keep the old loose behaviour (length + charset,
+// matching xchain-sdk `util.isCryptoAddress` plus a charset guard for
+// paste artifacts), because a form that does not yet know its chain
+// still has to render something. Every real call site passes a chain.
+
+import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase before testing.
@@ -101,18 +113,64 @@ export function isPlausibleAddress(addr) {
 }
 
 /**
- * Split a raw candidate list into valid addresses, invalid entries,
- * and a duplicate count. Order-preserving; the first occurrence of a
+ * Read a coin + network pair off either shape a caller has to hand: a
+ * chain descriptor from the registry (`{ coin, networkKind }`) or a
+ * plain `{ coin, network }`. Returns null unless BOTH are present, so a
+ * half-populated descriptor falls back to the loose check rather than
+ * rejecting every address.
+ *
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null | undefined} chain
+ * @returns {{ coin: string, network: string } | null}
+ */
+function chainParams(chain) {
+    const coin = chain?.coin;
+    const network = chain?.network ?? chain?.networkKind;
+    if (!coin || !network) return null;
+    return { coin, network };
+}
+
+/**
+ * True when `addr` is a usable recipient for `chain`. With a chain, this
+ * is the real thing: a base58check checksum + version byte, or a bech32
+ * decode + human-readable prefix, for that exact coin and network - so a
+ * mainnet address on a regtest wallet, a Litecoin address on Bitcoin, and
+ * a typo that survives the leading character are all rejected. Without a
+ * chain it degrades to the legacy length + charset guess.
+ *
+ * @param {string} addr
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @returns {boolean}
+ */
+export function isRecipientForChain(addr, chain) {
+    const params = chainParams(chain);
+    if (!params) return isPlausibleAddress(addr);
+    if (typeof addr !== 'string') return false;
+    return isValidAddressForChain(addr.trim(), params.coin, params.network);
+}
+
+/**
+ * Split a raw candidate list into valid addresses, invalid entries, and
+ * a duplicate count. Order-preserving; the first occurrence of a
  * duplicate wins.
  *
+ * `wrongNetwork` is the subset of `invalid` that IS a real address, just
+ * not one this chain can pay: those are the entries worth naming
+ * separately, because "invalid" reads as a typo and this is not one.
+ * They stay inside `invalid` as well so every existing count ("N invalid
+ * skipped") keeps totalling the entries that were actually dropped.
+ *
  * @param {string[]} candidates
- * @returns {{ valid: string[], invalid: string[], duplicates: number }}
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }}
  */
-export function classifyRecipients(candidates) {
+export function classifyRecipients(candidates, chain) {
     /** @type {string[]} */
     const valid = [];
     /** @type {string[]} */
     const invalid = [];
+    /** @type {string[]} */
+    const wrongNetwork = [];
+    const params = chainParams(chain);
     const seen = new Set();
     let duplicates = 0;
     for (const raw of candidates) {
@@ -121,10 +179,60 @@ export function classifyRecipients(candidates) {
             continue;
         }
         seen.add(raw);
-        if (isPlausibleAddress(raw)) valid.push(raw);
-        else invalid.push(raw);
+        if (isRecipientForChain(raw, chain)) {
+            valid.push(raw);
+            continue;
+        }
+        invalid.push(raw);
+        // Only meaningful once a chain is known: it is the difference
+        // between "this is not an address" and "this is an address for
+        // somewhere else".
+        if (params && isPlausibleAddress(raw)) wrongNetwork.push(raw);
     }
-    return { valid, invalid, duplicates };
+    return { valid, invalid, duplicates, wrongNetwork };
+}
+
+/**
+ * Compare the recipient list the wallet believes it published against the
+ * list the chain actually stored, once the LIST action has been indexed.
+ *
+ * 's second half: the parser check is client-side, so it can still
+ * be wrong (an older wallet build, a chain rule the wallet does not model
+ * yet). The indexer silently drops items it rejects into
+ * `list_items_invalid` and marks the LIST action itself valid, so the
+ * only way to learn the real membership is to read the stored list back.
+ * Doing that BEFORE pricing step 2 is what stops the user being quoted a
+ * per-recipient AIRDROP fee for recipients that do not exist.
+ *
+ * Stored items arrive either as bare strings or as `{ address }` /
+ * `{ item }` rows depending on the read; both are accepted. Matching is
+ * exact first, then case-insensitive, since bech32 is case-folding while
+ * base58 is not.
+ *
+ * @param {string[]} expected  addresses the wallet submitted
+ * @param {Array<string|{address?: string, item?: string}>} stored  list read back from the chain
+ * @returns {{ expectedCount: number, storedCount: number, missing: string[], ok: boolean }}
+ */
+export function reconcileStoredList(expected, stored) {
+    const want = Array.isArray(expected) ? expected.map((a) => String(a ?? '').trim()) : [];
+    const got = Array.isArray(stored) ? stored : [];
+    const gotExact = new Set();
+    const gotLower = new Set();
+    for (const row of got) {
+        const s = String(
+            (row && typeof row === 'object' ? (row.address ?? row.item ?? '') : row) ?? '',
+        ).trim();
+        if (!s) continue;
+        gotExact.add(s);
+        gotLower.add(s.toLowerCase());
+    }
+    const missing = want.filter((a) => a && !gotExact.has(a) && !gotLower.has(a.toLowerCase()));
+    return {
+        expectedCount: want.length,
+        storedCount: gotExact.size,
+        missing,
+        ok: missing.length === 0,
+    };
 }
 
 function stripWrappingQuotes(s) {

@@ -36,6 +36,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -417,7 +418,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'File upload failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'File upload failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -467,7 +472,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'LINK broadcast failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'LINK broadcast failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -543,7 +552,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Token-info upload failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Token-info upload failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -595,7 +608,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Description update failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Description update failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -631,9 +648,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     on-chain, so this flow can't be split across an
                     air-gapped boundary today.
                 </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Back</Button>
-                </div>
             </>,
         );
     }

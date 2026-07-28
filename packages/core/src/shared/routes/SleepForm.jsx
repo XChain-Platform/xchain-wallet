@@ -50,6 +50,8 @@ import {
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -268,6 +270,14 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // : re-price the native-coin protocol fee at Approve.
+                // The output was sized at compose, and the amount consensus
+                // requires moves inversely with the coin price, so a move while
+                // the confirm screen sits open leaves it short - which the
+                // chain rejects while keeping the fee.
+                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                    chainId, actionString, source,
+                }),
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
@@ -289,7 +299,11 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Sleep (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(humanizeError(err, 'sleep').message);
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: humanizeError(err, 'sleep').message,
+            }));
         }
     }
 
@@ -331,7 +345,9 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'Sleep failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Sleep failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }
@@ -359,6 +375,11 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+        }
+        // : signed but not broadcast, which is the exact opposite of
+        // what "<noun> broadcast" claims.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what={titleNoun.toLowerCase()} />);
         }
         return wrap(
             <>

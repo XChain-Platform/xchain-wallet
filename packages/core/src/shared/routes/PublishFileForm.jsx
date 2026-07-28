@@ -36,6 +36,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -191,6 +192,11 @@ export function PublishFileForm({ walletId, onBack }) {
     // after `descriptor` because the hook needs the chain to know whether the
     // native fee is an opt-in (BTC) or the only way to pay (LTC/DOGE).
     const nativeFee = useNativeFee(descriptor);
+    // Same expression the NativeFeeToggle rows below render with; named here
+    // so the submit catch can tell the user WHICH coin the refused fee was in.
+    const coinTicker = descriptor
+        ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || ''
+        : '';
 
     const hw = isHwSource(fromAddress);
 
@@ -340,7 +346,9 @@ export function PublishFileForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Publish failed.');
+            setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publish failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();

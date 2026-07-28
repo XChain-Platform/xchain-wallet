@@ -115,6 +115,14 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             // §4.6: every migrated form gets the input-liveness half of the
             // Approve-time re-check, not just the pre-flight half.
             checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+            // : and the native-fee half. A fee-bearing action on LTC/DOGE
+            // pays its protocol fee as a real output sized at compose, so every
+            // migrated form needs the same "is that amount still acceptable"
+            // re-check before it signs. Quoted from the composed action string,
+            // which is what the confirm envelope carries on every surface.
+            requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
+                chainId, actionString, source,
+            }),
             //  §5.4: persistence is opt-in per form, via `resume`. The
             // store is wired for all of them so opting in is one argument, but
             // a form that has not said how its Approve completes without it
