@@ -36,7 +36,7 @@ function baseInput(overrides = {}) {
         daemonPubkey: '02' + 'b'.repeat(64),
         daemonDerivationPath: "m/86'/0'/0'/0/0",
         publicKeyOrder: ['02' + 'a'.repeat(64), '02' + 'b'.repeat(64)],
-        tweak: 'cd'.repeat(16),
+        recoveryPublicKey: '02' + 'c'.repeat(64),
         policy: { allowedActions: ['send'], maxPerWindow: { hours: 24, maxActions: 10 } },
         allowedOutputs: [{ address: 'bc1qfee', maxValue: 1000 }],
         ...overrides,

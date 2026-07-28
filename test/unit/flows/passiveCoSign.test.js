@@ -102,16 +102,20 @@ describe('passiveCoSign approval path', () => {
         expect(persistence.dump().entries[0]).toMatchObject({ action: 'SEND', tick: 'X', amount: '3', txid: 'tx1' });
     });
 
-    it('passes tweaks / network / allowedOutputs / allowConfirmable through to the CoSigner', async () => {
-        const tweaks = [{ tweak: 'ab', xOnly: true }];
+    it('passes recoveryPublicKey / network / allowedOutputs / allowConfirmable through to the CoSigner', async () => {
+        const recoveryPublicKey = '02' + 'c'.repeat(64);
         const allowedOutputs = [{ address: 'bc1qexample', maxValue: 1000 }];
         const { sdk, calls } = mockSdk({ approved: false, reason: 'POLICY_ACTION_DENIED' });
         await passiveCoSign({
             sdk, secretKey: KEY, publicKeys: PUBKEYS, policy: POLICY, request: REQUEST,
-            tweaks, network: { name: 'regtest' }, allowedOutputs, allowConfirmable: true,
+            recoveryPublicKey, network: { name: 'regtest' }, allowedOutputs, allowConfirmable: true,
         });
         const cfg = calls.find((c) => c.phase === 'construct').config;
-        expect(cfg.tweaks).toBe(tweaks);
+        expect(cfg.recoveryPublicKey).toBe(recoveryPublicKey);
+        // A raw taproot tweak is not a configuration surface at all any more: it
+        // is an unverifiable commitment to a script tree the daemon cannot
+        // inspect, so it must never be forwarded (G3).
+        expect(cfg.tweaks).toBeUndefined();
         expect(cfg.allowedOutputs).toBe(allowedOutputs);
         expect(cfg.allowConfirmable).toBe(true);
         expect(cfg.network).toEqual({ name: 'regtest' });

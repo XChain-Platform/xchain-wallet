@@ -109,9 +109,12 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
         await windowStore.load();
         windowUsage = windowStore.snapshot();
     }
+    // The decoded VERSION rides along: without it the evaluator cannot tell
+    // whether an amount cap can bind this exact format (G2), and the preview
+    // would show "allowed" for an action the daemon then refuses.
     const verdict = sdk.coSigner.evaluatePolicy(
         account.policy,
-        { action: decoded.action, params: decoded.params },
+        { action: decoded.action, version: decoded.version, params: decoded.params },
         windowUsage,
     );
 

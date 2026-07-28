@@ -106,6 +106,17 @@ export async function passiveCoSignForAccount(opts = {}) {
         return { approved: false, reason: 'ACCOUNT_DISABLED', detail: { accountId } };
     }
 
+    // A legacy record carrying a stored taproot `tweak` cannot be co-signed:
+    // an opaque tweak commits to a script tree nobody can inspect, so whoever
+    // supplied it at provisioning may have hidden a leaf that spends this
+    // account unilaterally (G3). Such records predate the recoveryPublicKey
+    // field and were never actually used for signing (this flow always passed
+    // an empty tweak list), so refusing them changes no working flow - it just
+    // stops one becoming live. Re-provision the account from public keys.
+    if (account.tweak) {
+        return { approved: false, reason: 'ACCOUNT_TWEAK_UNVERIFIABLE', detail: { accountId } };
+    }
+
     // §26.5 panic-mode freeze, checked before the expensive seed-touching
     // unlock so a frozen wallet never decrypts its seed.
     try {
@@ -145,12 +156,18 @@ export async function passiveCoSignForAccount(opts = {}) {
                     policy: account.policy,
                     windowStore,
                     // 2-of-2 MuSig2 key-path aggregate: no tweak (see module header).
-                    tweaks: [],
+                    // A 2-of-3 account names its recovery pubkey and the SDK derives
+                    // the tap tree itself; a raw tweak is never accepted (G3).
+                    recoveryPublicKey: account.recoveryPublicKey ?? null,
                     network: resolvedNetwork,
                     allowedOutputs: account.allowedOutputs,
                     allowConfirmable,
                     request,
                     now,
+                    // Serialize the whole window bracket per account (G4): the store
+                    // is rebuilt per request, so concurrent requests would otherwise
+                    // both decide against the same pre-charge snapshot.
+                    lockKey: accountId,
                 });
             } finally {
                 privateKey.fill(0);

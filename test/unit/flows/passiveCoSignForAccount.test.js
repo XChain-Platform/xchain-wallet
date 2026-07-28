@@ -75,6 +75,7 @@ function mockSdkRegistry(verdict, { recordBudget = false } = {}) {
                     seen.publicKeys = config.publicKeys;
                     seen.windowStore = config.windowStore;
                     seen.tweaks = config.tweaks;
+                    seen.recoveryPublicKey = config.recoveryPublicKey;
                 }
                 process() {
                     if (recordBudget && seen.windowStore) {
@@ -155,7 +156,11 @@ describe('passiveCoSignForAccount decision path', () => {
         // the co-signer received the decoded 32-byte daemon key and the account's pubkeys.
         expect(seen.secretKeyHex).toBe(TEST_KEY_HEX);
         expect(seen.publicKeys).toBe(account.publicKeyOrder);
-        expect(seen.tweaks).toEqual([]); // 2-of-2 key-path: no tweak
+        // 2-of-2 key path: no tweak, and no tweak SURFACE at all (G3) - a raw tweak
+        // is an unverifiable commitment to an arbitrary script tree.
+        expect(seen.tweaks).toBeUndefined();
+        // Omitted entirely for a 2-of-2 account (only a 2-of-3 names a third party).
+        expect(seen.recoveryPublicKey).toBeUndefined();
         // budget flushed onto the account record.
         const reloaded = await vault.coSignerAccounts.get(account.id);
         expect(reloaded.window.entries).toHaveLength(1);

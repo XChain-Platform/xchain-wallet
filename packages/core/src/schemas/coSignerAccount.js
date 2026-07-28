@@ -134,7 +134,11 @@ function isAllowedOutput(o) {
  * @property {string} daemonPubkey                      hex; this wallet's key in the group
  * @property {string} daemonDerivationPath              BIP32 path to derive the daemon key
  * @property {string[]} publicKeyOrder                  full signer set incl. ours, in agreed order
- * @property {string|null} tweak                        taproot tweak hex from address setup, or null
+ * @property {string|null} tweak                        LEGACY, always null on new records: a supplied
+ *           taproot tweak is an unverifiable commitment to an arbitrary script tree (G3). A record
+ *           still carrying one is refused at sign time.
+ * @property {string|null} recoveryPublicKey            hex; 2-of-3 only. The SDK derives the tap tree
+ *           (and its own tweak) from [agent, daemon, recovery], so nothing opaque is ever trusted.
  * @property {CoSignerAccountPolicy} policy
  * @property {Array<{ address?: string, script?: string, maxValue?: number }>} allowedOutputs
  * @property {{ version: number, entries: object[] }|null} window  embedded spending-window state
@@ -171,6 +175,20 @@ export function createCoSignerAccount(input) {
     if (!input.policy || !isArray(input.policy.allowedActions) || input.policy.allowedActions.length === 0) {
         throw new Error('createCoSignerAccount: policy.allowedActions is required');
     }
+    // A raw taproot tweak is an opaque 32-byte commitment to a script tree
+    // nobody downstream can inspect, so whoever supplies it CHOOSES the tree: a
+    // tweak computed over a tree holding `<agentPubkey> OP_CHECKSIG` derives
+    // exactly the funded address and then lets the agent spend the account
+    // alone, with no daemon, no policy and no window (G3). Name the recovery
+    // PUBLIC KEY instead and let the SDK derive the tree.
+    if (input.tweak) {
+        throw new Error('createCoSignerAccount: a raw taproot tweak is not accepted (it is an ' +
+            'unverifiable commitment to an arbitrary script tree). Pass recoveryPublicKey for a ' +
+            '2-of-3 account; a plain 2-of-2 needs no tweak.');
+    }
+    if (input.recoveryPublicKey && !isHex(String(input.recoveryPublicKey).toLowerCase())) {
+        throw new Error('createCoSignerAccount: recoveryPublicKey must be hex');
+    }
 
     const now = new Date().toISOString();
     return {
@@ -184,7 +202,10 @@ export function createCoSignerAccount(input) {
         daemonPubkey: String(input.daemonPubkey).toLowerCase(),
         daemonDerivationPath: input.daemonDerivationPath,
         publicKeyOrder: input.publicKeyOrder.map((p) => String(p).toLowerCase()),
-        tweak: input.tweak ? String(input.tweak).toLowerCase() : null,
+        // Retained (always null on new records) so a legacy record carrying one
+        // still validates and can be recognized and refused at sign time.
+        tweak: null,
+        recoveryPublicKey: input.recoveryPublicKey ? String(input.recoveryPublicKey).toLowerCase() : null,
         policy: normalizeStoredPolicy(input.policy),
         allowedOutputs: isArray(input.allowedOutputs) ? input.allowedOutputs : [],
         window: null,
@@ -233,7 +254,11 @@ export function validateCoSignerAccount(record) {
         isArray(r.publicKeyOrder) && r.publicKeyOrder.length >= 2 && r.publicKeyOrder.every(isHex),
         'must be an array of >= 2 hex pubkeys',
     );
+    // Legacy records may still carry a tweak, so this stays permissive and the
+    // refusal happens at sign time (passiveCoSignForAccount); a validation
+    // failure here would make such a record unreadable rather than unusable.
     check(errors, 'tweak', isNullableHex(r.tweak), 'must be null or hex');
+    check(errors, 'recoveryPublicKey', isNullableHex(r.recoveryPublicKey), 'must be null or hex');
     validatePolicy(errors, r.policy);
     checkEach(errors, 'allowedOutputs', r.allowedOutputs, isAllowedOutput, 'malformed');
     check(errors, 'window', isWindowState(r.window), 'must be null or { version, entries[] }');
