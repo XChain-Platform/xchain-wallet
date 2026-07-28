@@ -80,6 +80,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
     const [password, setPassword] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null} | null} */ (null));
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
@@ -172,8 +173,9 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     async function runOracleAction(feed, builder, submit, params) {
         const from = sourceDescriptor(feed.owner);
         setFormError(null);
+        setResult(null);
         try {
-            await actionConfirm.run({
+            const res = await actionConfirm.run({
                 chainId: feed.chainId,
                 from,
                 compose: () => messaging.composeBetForConfirm({
@@ -182,6 +184,17 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 onApprove: (prebuiltPsbt) => submit({
                     walletId, chainId: feed.chainId, from, params, prebuiltPsbt,
                 }),
+            });
+            // The two most consequential actions in betting reported NOTHING on
+            // success: the list simply reloaded, so publishing a result that pays
+            // out an entire pot looked exactly like a click that did nothing. The
+            // txid matters most on the losing side of a race - a resolve broadcast
+            // as the refund window ends is judged by the block it lands in - and
+            // without it there is no handle to look the attempt up by.
+            setResult({
+                mode: builder === 'cancelMarketParams' ? 'cancel' : 'resolve',
+                feedIndex: String(feed.action_index),
+                txid: res?.txid || res?.tx_hash || null,
             });
             setActive(null);
             setOutcome(null);
@@ -244,6 +257,19 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     return wrap(
         <>
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {result ? (
+                <div className={styles.card} data-testid="oracle-result">
+                    <p className={styles.summary}>
+                        {result.mode === 'cancel'
+                            ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
+                            : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}
+                    </p>
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Txid</dt>
+                        <dd className={styles.detailsValue}>{String(result.txid || 'n/a')}</dd>
+                    </dl>
+                </div>
+            ) : null}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {rows.map((f) => {
                     const key = `${f.chainId}:${f.action_index}`;
