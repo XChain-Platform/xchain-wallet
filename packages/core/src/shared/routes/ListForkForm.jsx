@@ -32,6 +32,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -668,12 +669,4 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             </div>
         </form>,
     );
-}
-
-function extractActionIndex(resp) {
-    if (!resp || typeof resp !== 'object') return null;
-    const raw = resp.action_index ?? resp.actionIndex ?? null;
-    if (raw === null || raw === undefined) return null;
-    const s = String(raw);
-    return s.length > 0 ? s : null;
 }

@@ -35,6 +35,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -1106,18 +1107,4 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             </div>
         </form>,
     );
-}
-
-// Resolve the ACTION_INDEX from whatever shape the explorer returns.
-// a merged action row (`action_index` / `actionIndex`) or the
-// transactions endpoint's `{ tx_hash, actions: [...] }` wrapper.
-function extractActionIndex(resp) {
-    if (!resp || typeof resp !== 'object') return null;
-    const raw = resp.action_index
-        ?? resp.actionIndex
-        ?? (Array.isArray(resp.actions) ? (resp.actions[0]?.action_index ?? resp.actions[0]?.actionIndex) : null)
-        ?? null;
-    if (raw === null || raw === undefined) return null;
-    const s = String(raw);
-    return s.length > 0 ? s : null;
 }

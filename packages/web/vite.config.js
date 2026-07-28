@@ -221,9 +221,21 @@ export default defineConfig({
     // Naming it here keeps the flag the ONLY thing that decides. The venue
     // itself is chosen in src/sdkFactory.js off the same flag, so the two
     // halves cannot disagree.
+    //
+    // The DEEP entry is listed in both branches and is not part of that gate.
+    // packages/extension/src/signers/ledgerFactory.js imports
+    // `xchain-sdk/src/wallet.js` directly (: keeping the SDK index out of
+    // the popup graph), and the web shell pulls that module in through
+    // createBackgroundHost. Vite pre-bundles per ENTRY, and a linked workspace
+    // package is source rather than a dependency, so listing the package alone
+    // leaves the deep file served raw over /@fs - CJS, `require` undefined,
+    // thrown at module eval, blank page before the app ever mounts. It carries
+    // only WalletUtils (pure PSBT helpers), never an explorer or encoder
+    // client, so pre-bundling it hands the dev shell no path to a live SDK and
+    // the flag above still decides that alone.
     optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
-        ? { include: ['xchain-sdk'] }
-        : { exclude: ['xchain-sdk'] },
+        ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js'] }
+        : { include: ['xchain-sdk/src/wallet.js'], exclude: ['xchain-sdk'] },
     build: {
         outDir: 'dist',
         emptyOutDir: true,

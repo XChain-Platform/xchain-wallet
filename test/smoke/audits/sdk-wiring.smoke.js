@@ -340,14 +340,45 @@ const webCfg = readFileSync(
     join(wsRoot, 'packages', 'web', 'vite.config.js'),
     'utf8',
 );
+// Asserted on the PACKAGE specifier rather than on the whole array literal,
+// because the include list legitimately carries a second entry (below) and the
+// invariant  protects is only about `xchain-sdk` itself: pre-bundled when
+// the flag is set, explicitly excluded when it is not.
+const optimizeDepsBlock = /optimizeDeps:[\s\S]*?,\n    build:/.exec(webCfg)?.[0] || '';
+assert.ok(optimizeDepsBlock, 'web vite config has an optimizeDeps block');
+const flagOnBranch = /\?\s*\{([\s\S]*?)\}/.exec(optimizeDepsBlock)?.[1] || '';
+const flagOffBranch = /:\s*\{([\s\S]*?)\}\s*,\s*$/m.exec(optimizeDepsBlock)?.[1] || '';
+assert.ok(flagOnBranch && flagOffBranch, 'web vite config optimizeDeps has both flag branches');
 assert.ok(
-    /include:\s*\['xchain-sdk'\]/.test(webCfg) && /exclude:\s*\['xchain-sdk'\]/.test(webCfg),
-    'web vite config both includes and excludes xchain-sdk from optimizeDeps, on the flag',
+    /include:\s*\[[^\]]*'xchain-sdk'/.test(flagOnBranch),
+    'web vite config pre-bundles the xchain-sdk package when the flag is set',
+);
+assert.ok(
+    /exclude:\s*\[[^\]]*'xchain-sdk'/.test(flagOffBranch),
+    'web vite config excludes the xchain-sdk package when the flag is not set',
+);
+assert.ok(
+    !/include:\s*\[[^\]]*'xchain-sdk'\s*[,\]]/.test(flagOffBranch),
+    'web vite config never pre-bundles the xchain-sdk PACKAGE off the flag ',
 );
 assert.ok(
     /VITE_XCHAIN_REAL_SDK/.test(webCfg),
     'web vite config gates SDK pre-bundling on VITE_XCHAIN_REAL_SDK',
 );
+// D-88 /  (wallet E2E session 19): ledgerFactory.js imports
+// `xchain-sdk/src/wallet.js` directly (, keeping the SDK index out of the
+// popup graph) and the web shell pulls it in through createBackgroundHost.
+// Vite pre-bundles per ENTRY, so naming only the package leaves that CJS file
+// served raw over /@fs and it throws `require is not defined` before React
+// mounts - a blank page in BOTH flag directions, which is how it survived a
+// full day undetected. It carries only WalletUtils, so it is safe on either
+// branch and must be on both.
+for (const [label, branch] of [['flag-on', flagOnBranch], ['flag-off', flagOffBranch]]) {
+    assert.ok(
+        /include:\s*\[[^\]]*'xchain-sdk\/src\/wallet\.js'/.test(branch),
+        `web vite config pre-bundles the deep xchain-sdk/src/wallet.js entry (${label} branch)`,
+    );
+}
 
 // The dev-server e2e config states its venue rather than inheriting whatever
 // the bundler happens to do that week.

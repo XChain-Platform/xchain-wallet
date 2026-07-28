@@ -48,6 +48,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { extractHolderRows } from '../utils/holderRows.js';
+import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -1634,17 +1635,6 @@ function DetailRow({ label, value }) {
 }
 
 // Resolve the ACTION_INDEX from whatever shape the explorer returns.
-// Transactions endpoint returns the action row merged with tx data;
-// historically the field is either `action_index` (snake_case from
-// the DB) or `actionIndex` (camelCase if wrapped by a newer layer).
-function extractActionIndex(resp) {
-    if (!resp || typeof resp !== 'object') return null;
-    const raw = resp.action_index ?? resp.actionIndex ?? null;
-    if (raw === null || raw === undefined) return null;
-    const s = String(raw);
-    return s.length > 0 ? s : null;
-}
-
 // Normalizes messaging.getListsForSource's response into a row array;
 // same shape MyLists.jsx's extractRows already handles.
 function extractListRows(resp) {
