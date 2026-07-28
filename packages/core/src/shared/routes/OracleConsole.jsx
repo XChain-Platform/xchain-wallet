@@ -292,6 +292,18 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 </div>
                             ) : null}
 
+                            {/* Say why the buttons are gone. Removing them silently leaves an
+                                oracle staring at a market it opened with no way to finish it and
+                                no reason given, and the cost of not knowing is real: an
+                                unresolved market refunds every bet at expiry and earns no fee.
+                                CreateBetFeedForm already says this plainly for its own case. */}
+                            {isWatcherMode && (canResolve || canCancel) ? (
+                                <div className={styles.hint}>
+                                    This wallet is in watcher mode, so it cannot resolve or cancel this market.
+                                    Both need the key that opened it.
+                                </div>
+                            ) : null}
+
                             {isActive && active.mode === 'resolve' ? (
                                 <div style={{ marginTop: '0.5rem' }}>
                                     <div className={styles.hint}>Which outcome actually happened?</div>

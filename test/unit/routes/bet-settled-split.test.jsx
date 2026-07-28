@@ -225,6 +225,25 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         expect(closed.textContent).toContain('if unresolved');
     });
 
+    // A bound that is not stated reads as "this is all of them".
+    it('admits it when the bet read was capped instead of implying a complete total', async () => {
+        const many = Array.from({ length: 500 }, (_, i) => ({
+            action_index: String(2000 + i), outcome: i % 2, amount: '1', bet_status: 'lost',
+        }));
+        const { messaging } = harness({ bets: () => Promise.resolve({ data: many }) });
+        const utils = await openMarket(messaging);
+        const text = utils.container.textContent;
+
+        expect(text).toContain('more than 500 bets');
+        expect(text).toContain('250 bets');   // the split it could see, still shown
+    });
+
+    it('says nothing about a cap when the whole market fits in one read', async () => {
+        const { messaging } = harness();
+        const utils = await openMarket(messaging);
+        expect(utils.container.textContent).not.toContain('more than 500 bets');
+    });
+
     it('falls back to the live rows if the bet read fails, rather than blanking the screen', async () => {
         const { messaging } = harness({ bets: () => Promise.reject(new Error('explorer down')) });
         const utils = await openMarket(messaging);

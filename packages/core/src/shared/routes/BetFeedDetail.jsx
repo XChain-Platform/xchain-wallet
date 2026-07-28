@@ -61,6 +61,10 @@ export function splitFromBets(rows) {
     }));
 }
 
+// One page of bets is enough to describe every market this campaign has seen,
+// and the screen says so out loud when a market has more.
+const SETTLED_BET_LIMIT = 500;
+
 function statusLabel(status) {
     if (status === 'open') return 'Taking bets';
     if (status === 'closed') return 'Betting closed, waiting on the result';
@@ -119,6 +123,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
     const [settledSplit, setSettledSplit] = useState(/** @type {any[] | null} */ (null));
+    const [settledPartial, setSettledPartial] = useState(false);
 
     const reload = useCallback(() => {
         setFeed(null);
@@ -153,12 +158,17 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     useEffect(() => {
         let cancelled = false;
         setSettledSplit(null);
+        setSettledPartial(false);
         if (!feed || isLiveFeedStatus(feed.feed_status)) return undefined;
         if (typeof messaging.bets !== 'function') return undefined;
-        messaging.bets({ chainId, query: String(feedIndex), type: 'feed', opts: { limit: 500 } })
+        messaging.bets({ chainId, query: String(feedIndex), type: 'feed', opts: { limit: SETTLED_BET_LIMIT } })
             .then((resp) => {
                 if (cancelled) return;
                 const rows = Array.isArray(resp) ? resp : (resp?.data || []);
+                // A page-sized answer means there may be more, and a total that
+                // silently omits bets is worse than one that admits its bound:
+                // this screen is where someone checks what a market did.
+                setSettledPartial(rows.length >= SETTLED_BET_LIMIT);
                 setSettledSplit(splitFromBets(rows));
             })
             // Falling back to the live-pool rows keeps the screen readable; it
@@ -412,6 +422,13 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 </div>
             )}
 
+            {!live && settledPartial ? (
+                <p className={styles.hint}>
+                    This market took more than {SETTLED_BET_LIMIT} bets, so the split above covers the
+                    most recent {SETTLED_BET_LIMIT} rather than all of them.
+                </p>
+            ) : null}
+
             {/* The three things that actually surprise people, stated plainly.
                 Past tense once the market is over: "every later bet changes it"
                 is advice for a decision nobody can still make, on a split that
@@ -437,6 +454,16 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 transaction: a closed market takes no bets, and the feed's own source
                 may not bet on its own market (§6 format 2). Showing a doomed form and
                 letting the chain refuse it would cost the user a fee for nothing. */}
+            {/* The one refusal that used to say nothing. A market reading "Taking bets"
+                with no form and no sentence looks broken rather than restricted, and this
+                surface already explains the other reason it hides the form. */}
+            {feed.feed_status === 'open' && isWatcherMode ? (
+                <p className={styles.hint}>
+                    This wallet is in watcher mode, so it cannot place a bet. A stake has to be signed
+                    by the address that pays it.
+                </p>
+            ) : null}
+
             {feed.feed_status === 'open' && !isWatcherMode ? (
                 fromAddress && feed.source === fromAddress.address ? (
                     <p className={styles.hint}>
