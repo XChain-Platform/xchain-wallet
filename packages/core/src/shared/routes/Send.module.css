@@ -114,6 +114,10 @@
     color: var(--xc-text-muted);
     list-style: revert;
     padding: var(--xc-space-1) 0;
+    /*  slice 2: the "Advanced" disclosure measured 21px tall. It is
+       full-width already, so only the block axis needs the tap floor. */
+    display: list-item;
+    min-height: var(--xc-tap-min);
 }
 
 .detailsToggle:hover {

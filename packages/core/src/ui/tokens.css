@@ -30,6 +30,21 @@
     --xc-text-xl: 20px;
     --xc-text-2xl: 24px;
 
+    /* Minimum interactive target ( responsive-first, slice 2).
+     *
+     * WCAG 2.2 AA 2.5.8 "Target Size (Minimum)": every pointer target is
+     * at least 24x24 CSS px. The wallet is ONE interface at every width,
+     * so this is a floor everywhere rather than a phone-only rule - the
+     * same 16px help dot that is fiddly on a 360px popup is fiddly on a
+     * desktop trackpad, and having two answers is how the shell ended up
+     * with two disagreeing breakpoints in the first place.
+     *
+     * Apply it to the CONTROL, or to the label/row that activates it: a
+     * bare checkbox inside a full-width <label> already has a target the
+     * size of that label.
+     */
+    --xc-tap-min: 24px;
+
     /* Radii */
     --xc-radius-sm: 4px;
     --xc-radius-md: 8px;
