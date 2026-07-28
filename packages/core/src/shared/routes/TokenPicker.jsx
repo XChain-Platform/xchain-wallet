@@ -391,6 +391,14 @@ export function TokenPicker({
                             onSelectToken={handleSelect}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
+                            // : the held-balance list is cross-chain too
+                            // whenever the caller has not pinned a network, so
+                            // a user holding the same tick on two chains would
+                            // otherwise face the same indistinguishable rows the
+                            // platform section had. Pinned network = one chain =
+                            // naming it on every row is the noise the default
+                            // avoids.
+                            showChain={networkFilter === 'all'}
                         />
                     ) : (platformResults.length === 0 && !platformBusy) ? (
                         <EmptyStateNudge
