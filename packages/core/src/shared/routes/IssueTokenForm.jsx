@@ -85,6 +85,9 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const [ticker, setTicker] = useState('');
     const [supply, setSupply] = useState('');
+    // Blank means "mint the whole supply now" . Kept as its own
+    // string so an explicit 0 stays distinguishable from an untouched field.
+    const [initialMint, setInitialMint] = useState('');
     const [divisible, setDivisible] = useState(false);
     const [description, setDescription] = useState('');
     const [lockSupply, setLockSupply] = useState(false);
@@ -112,12 +115,12 @@ export function IssueTokenForm({ walletId, onBack }) {
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
-            chainId, fromAddressId, ticker, supply, divisible,
+            chainId, fromAddressId, ticker, supply, initialMint, divisible,
             description, lockSupply, transferTo, payFeeInNativeCoin,
         });
     }, [
         stage, draftPending, draft,
-        chainId, fromAddressId, ticker, supply, divisible,
+        chainId, fromAddressId, ticker, supply, initialMint, divisible,
         description, lockSupply, transferTo, payFeeInNativeCoin,
     ]);
     const restoreDraft = useCallback(() => {
@@ -127,6 +130,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
         if (typeof v.ticker === 'string') setTicker(v.ticker);
         if (typeof v.supply === 'string') setSupply(v.supply);
+        if (typeof v.initialMint === 'string') setInitialMint(v.initialMint);
         if (typeof v.divisible === 'boolean') setDivisible(v.divisible);
         if (typeof v.description === 'string') setDescription(v.description);
         if (typeof v.lockSupply === 'boolean') setLockSupply(v.lockSupply);
@@ -234,7 +238,18 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (supply) {
             const s = String(supply).trim();
             p.MAX_SUPPLY = s;
-            p.MINT_SUPPLY = s;
+            // : MAX_SUPPLY is the cap, MINT_SUPPLY is how much of it
+            // exists the moment the token is created. Deriving both from the
+            // one "Supply" box made every wallet-issued token born at its own
+            // cap with zero mint headroom, which made the whole Mint surface
+            // unreachable for anything issued here. "Initial mint" left blank
+            // keeps that simple path (mint it all now); a smaller value leaves
+            // the difference mintable later. A 0 omits MINT_SUPPLY entirely,
+            // the fair-mint shape (see TokenWizard's `edition` template): the
+            // cap is declared at issuance with nothing minted yet.
+            const wantsMint = String(initialMint).trim();
+            const mint = wantsMint === '' ? s : wantsMint;
+            if (Number(mint) > 0) p.MINT_SUPPLY = mint;
         }
         if (description) p.DESCRIPTION = description.trim();
         if (lockSupply) {
@@ -243,7 +258,21 @@ export function IssueTokenForm({ walletId, onBack }) {
         }
         if (transferTo) p.TRANSFER = transferTo.trim();
         return p;
-    }, [ticker, supply, divisible, description, lockSupply, transferTo]);
+    }, [ticker, supply, initialMint, divisible, description, lockSupply, transferTo]);
+
+    // What is left mintable after the initial mint, as a display string, or
+    // null when the pair is blank/invalid/fully minted (nothing to say).
+    const mintHeadroom = useMemo(() => {
+        const cap = Number(String(supply).trim());
+        const mintText = String(initialMint).trim();
+        if (!mintText || !Number.isFinite(cap) || cap <= 0) return null;
+        const mint = Number(mintText);
+        if (!Number.isFinite(mint) || mint < 0 || mint > cap) return null;
+        const left = cap - mint;
+        if (left <= 0) return null;
+        // Trim float noise from the subtraction (0.3 - 0.1 = 0.19999...).
+        return divisible ? String(Number(left.toFixed(8))) : String(left);
+    }, [supply, initialMint, divisible]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -272,6 +301,29 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (!supply.trim() || Number(supply) <= 0) {
             setFormError('Supply must be a positive number.');
             return;
+        }
+        // : an initial mint above the cap is rejected outright by the
+        // indexer (issue.js), which costs the user the fee and the token, so
+        // it is caught here rather than at broadcast.
+        const mintText = initialMint.trim();
+        if (mintText) {
+            const mintNum = Number(mintText);
+            if (!Number.isFinite(mintNum) || mintNum < 0) {
+                setFormError('Initial mint must be zero or a positive number.');
+                return;
+            }
+            if (mintNum > Number(supply)) {
+                setFormError('Initial mint cannot be more than the supply.');
+                return;
+            }
+            // Minting nothing on a token that can never mint leaves a token
+            // with no supply and no way to ever create any.
+            if (mintNum === 0 && lockSupply) {
+                setFormError(
+                    'An initial mint of 0 needs minting left unlocked, or the token can never have any supply.',
+                );
+                return;
+            }
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -686,9 +738,20 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
             <Input
                 label="Supply"
+                hint="The most that can ever exist."
                 inputMode="decimal"
                 value={supply}
                 onChange={(e) => setSupply(e.target.value)}
+                autoComplete="off"
+            />
+            <Input
+                label="Initial mint (optional)"
+                hint={mintHeadroom
+                    ? `Leaves ${mintHeadroom} to mint later.`
+                    : 'How much exists at creation. Leave blank to mint the whole supply now; a smaller number leaves the rest to mint later.'}
+                inputMode="decimal"
+                value={initialMint}
+                onChange={(e) => setInitialMint(e.target.value)}
                 autoComplete="off"
             />
             <label className={styles.checkRow}>
@@ -715,6 +778,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                 />
                 <span>Lock supply + minting (irreversible)</span>
             </label>
+            {lockSupply && mintHeadroom ? (
+                // Locking minting alongside a partial initial mint strands the
+                // remainder forever: the cap says one thing, the token can only
+                // ever hold another. Say so before the fee is spent.
+                <StatusMessage variant="status">
+                    {`Locking minting means the ${mintHeadroom} left under the cap can never be minted. Clear this box to mint it later.`}
+                </StatusMessage>
+            ) : null}
             <AddressField
                 label="Transfer ownership to (optional)"
                 icon="contacts"

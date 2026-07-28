@@ -141,9 +141,21 @@ assert.ok(
     'IssueTokenForm uppercases the ticker',
 );
 assert.ok(
-    /p\.MAX_SUPPLY\s*=\s*s/.test(src)
-        && /p\.MINT_SUPPLY\s*=\s*s/.test(src),
-    'composer sets MAX_SUPPLY + MINT_SUPPLY from supply field',
+    /p\.MAX_SUPPLY\s*=\s*s/.test(src),
+    'composer sets MAX_SUPPLY from the supply field',
+);
+// : MINT_SUPPLY must come from its OWN field, defaulting to the
+// supply. Tying it to `s` like MAX_SUPPLY did is the defect: it births
+// every wallet-issued token at its cap with zero mint headroom, which
+// makes the entire Mint surface unreachable for anything issued here.
+assert.ok(
+    /const mint = wantsMint === ''\s*\?\s*s\s*:\s*wantsMint/.test(src)
+        && /p\.MINT_SUPPLY\s*=\s*mint/.test(src),
+    'composer sets MINT_SUPPLY from the initial-mint field, defaulting to supply',
+);
+assert.ok(
+    /Initial mint cannot be more than the supply/.test(src),
+    'IssueTokenForm rejects an initial mint above the cap before it costs a fee',
 );
 assert.ok(
     /divisible\s*\?\s*'8'\s*:\s*'0'/.test(src),
