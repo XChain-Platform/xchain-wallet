@@ -47,6 +47,14 @@
     background: transparent;
     border: none;
     padding: 4px 10px;
+    /*  slice 2: 11px uppercase text in 4px padding measured 20px
+       tall, under the 24px pointer-target floor. The pill grows in the
+       block axis only, so the range row keeps its shape. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     letter-spacing: 0.04em;

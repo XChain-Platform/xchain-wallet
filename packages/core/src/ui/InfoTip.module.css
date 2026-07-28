@@ -7,13 +7,22 @@
     line-height: 1;
 }
 
+/*  slice 2: the dot stays 16px, the TARGET is 24px.
+ *
+ * A 16x16 help dot is under the WCAG 2.2 AA floor (2.5.8) and misses on a
+ * touch screen. Growing the dot itself would shout for attention it does
+ * not deserve, so the button keeps its painted size via an inner circle
+ * (`.glyph`) and grows its own box to the tap minimum. Transparent
+ * background on the button, painted background on the glyph. */
 .trigger {
-    width: 16px;
-    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
     padding: 0;
-    border: 1px solid var(--xc-border);
-    border-radius: 50%;
-    background: var(--xc-bg-muted);
+    border: none;
+    background: transparent;
     color: var(--xc-text-muted);
     font-size: 11px;
     font-weight: 700;
@@ -22,11 +31,36 @@
     transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
+.glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--xc-border);
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
 .trigger:hover,
 .trigger:focus-visible {
     color: var(--xc-text);
+}
+
+.trigger:hover .glyph,
+.trigger:focus-visible .glyph {
     border-color: var(--xc-accent);
     background: var(--xc-bg);
+}
+
+/* Ring the dot, not the padded target box: a 24px outline around a 16px
+   dot reads as a stray box floating in the row. */
+.trigger:focus-visible {
+    outline: none;
+}
+
+.trigger:focus-visible .glyph {
     outline: 2px solid var(--xc-accent);
     outline-offset: 1px;
 }

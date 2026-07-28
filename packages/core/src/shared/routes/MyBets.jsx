@@ -40,6 +40,10 @@ function statusLabel(status) {
     if (status === 'won') return 'Won';
     if (status === 'lost') return 'Lost';
     if (status === 'refunded') return 'Refunded';
+    // A bet the chain refused. The row belongs here - it was a real transaction
+    // and it cost real fees - but it is not a position, and the raw word
+    // `invalid` in the "waiting on a result" colour read as one.
+    if (status === 'invalid') return 'Rejected by the network';
     return status ? String(status) : 'Unknown';
 }
 
@@ -47,6 +51,7 @@ function statusColor(status) {
     if (status === 'won') return { bg: '#1b5e20', fg: '#fff' };
     if (status === 'lost') return { bg: '#8e1c1c', fg: '#fff' };
     if (status === 'refunded') return { bg: '#4a4a4a', fg: '#fff' };
+    if (status === 'invalid') return { bg: '#8e1c1c', fg: '#fff' };
     return { bg: '#0d47a1', fg: '#fff' };
 }
 
@@ -208,7 +213,12 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                                 </span>
                             </div>
                             <div className={styles.hint}>
-                                Backed {backed} · staked {String(b.amount)} {b.tick || ''}
+                                {b.bet_status === 'invalid'
+                                    // "staked 100 XCHAIN" is false on a rejected bet: the amount is
+                                    // what the transaction ASKED for, and no stake was ever taken.
+                                    // The fees were, which is the part worth saying.
+                                    ? <>Would have backed {backed} for {String(b.amount)} {b.tick || ''} · nothing was staked, but the fees were spent</>
+                                    : <>Backed {backed} · staked {String(b.amount)} {b.tick || ''}</>}
                             </div>
                             {/* Payouts credit the address that PLACED the bet, so name it:
                                 a sweep does not move a bet escrow or its winnings. */}

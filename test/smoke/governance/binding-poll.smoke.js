@@ -108,9 +108,9 @@ assert.ok(
 // 4: the map matches xchain-indexer/src/protocol_changes.js.
 const activationsSrc = read(join(core, 'src', 'flows', 'protocolActivations.js'));
 assert.ok(
-    /'bitcoin-mainnet': 1790812800/.test(activationsSrc)
+    /'bitcoin-mainnet': 1786924800/.test(activationsSrc)
         && /'bitcoin-regtest': 0/.test(activationsSrc),
-    'VOTE flag-days match the indexer schedule (mainnet 2026-10-01, regtest genesis)',
+    'VOTE flag-days match the indexer schedule (mainnet 2026-08-17, regtest genesis)',
 );
 assert.ok(
     /VOTE_BINDING_MINIMUMS_TIMES/.test(activationsSrc) && /VOTE_CALLBACK_TIMELOCK_TIMES/.test(activationsSrc),

@@ -40,11 +40,29 @@ export function isLiveFeedStatus(status) {
     return status === 'open' || status === 'closed' || !status;
 }
 
+/**
+ * Did the chain accept this bet at all?
+ *
+ * A rejected BET still has a row - it was a real transaction that paid real
+ * fees - but it staked nothing, joined no pool and settles to nobody. Counting
+ * one produced a market reading "Void, everyone refunded" directly above
+ * "0: Yes 100 (100.0%, 1 bet)", which is a contradiction rather than a rounding
+ * quibble: the split is where a bettor reads what the market actually did.
+ *
+ * Written so a row with no status at all still counts. An older explorer that
+ * omits the field must not silently empty every split.
+ */
+export function isAcceptedBet(b) {
+    if (b?.bet_status === 'invalid') return false;
+    if (typeof b?.status === 'string' && /^invalid/i.test(b.status)) return false;
+    return true;
+}
+
 // Rebuild the per-outcome split from the bets themselves, in the shape the
 // explorer's `pools` rows use, so the renderer needs no second code path.
 export function splitFromBets(rows) {
     const byOutcome = new Map();
-    for (const b of Array.isArray(rows) ? rows : []) {
+    for (const b of (Array.isArray(rows) ? rows : []).filter(isAcceptedBet)) {
         // `Number(null)` is 0, so a row with no outcome would otherwise be
         // silently counted as a bet on outcome 0 - a wrong pool, not a
         // missing one.
@@ -542,8 +560,6 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
                             ) : null}
-                            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
-                            {result ? <p className={styles.hint}>Bet placed.</p> : null}
                             <div className={styles.actions}>
                                 <Button
                                     variant="primary"
@@ -559,6 +575,39 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                         </div>
                     </>
                 )
+            ) : null}
+
+            {/* The outcome of a bet OUTLIVES the form that started it, so it is
+                reported here rather than inside the card above. A submit ends with
+                reload(), and a market that closed while the user sat on the confirm
+                screen comes back `closed` - which unmounts the whole place-bet card
+                and, when the receipt lived inside it, took both the txid and the
+                error line with it. The user was left on a market page that said
+                nothing at all, unable to tell a wallet that refused from a bet that
+                was broadcast and paid for. By this point the money is spent either
+                way, so the txid is owed whatever the market's status has become. */}
+            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {result ? (
+                <div className={styles.card} data-testid="bet-result">
+                    <p className={styles.summary}>
+                        {/*  leg (a): a queued result is SIGNED and not broadcast, so
+                            "Bet placed" would claim the one thing that has not happened. */}
+                        {result?.queued
+                            ? 'Signed, but your bet could not reach the network just now. It is queued '
+                              + 'and will be broadcast automatically; do not place it again.'
+                            : feed.feed_status === 'open'
+                                ? 'Bet placed.'
+                                : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
+                                  + 'by the block it lands in, so the network will most likely reject this one. '
+                                  + 'The miner fee and the protocol fee are spent either way.'}
+                    </p>
+                    {result?.queued ? null : (
+                        <dl className={styles.detailsList}>
+                            <dt className={styles.detailsLabel}>Txid</dt>
+                            <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || 'n/a')}</dd>
+                        </dl>
+                    )}
+                </div>
             ) : null}
 
             <h4>History</h4>
