@@ -329,7 +329,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             onOrderPlaced?.();
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Order placement failed.');
+            // Same mapping the sign path already does: NativeFeeForfeitError's own message is
+            // wire wording, and this confirm path is the one the flow actually takes.
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
+                : err?.message || 'Order placement failed.');
         }
     }
 

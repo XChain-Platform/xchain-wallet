@@ -99,6 +99,48 @@ describe('applyNativeFeePreflight', () => {
         expect(out.quote.requiredFeeSats).toBe(0);
     });
 
+    // Measured live on Bitcoin regtest: a DIVIDEND to a single holder quotes
+    // requiredFeeSats 2 (DIVIDEND_PER_RECIPIENT 100 gas), the wallet attached that output,
+    // and bitcoind rejected the whole transaction as `dust` - after which the wallet still
+    // reported the dividend as sent. Refusing at the guardrail is what keeps the doomed
+    // transaction from being built at all.
+    it('refuses a fee priced below the chain dust threshold instead of building a doomed tx', async () => {
+        const sdk = makeSdk({ requiredFeeSats: 2, requiredFeeNative: '0.00000002' });
+        let err = null;
+        try {
+            await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
+        } catch (e) { err = e; }
+        expect(err).toBeInstanceOf(NativeFeeForfeitError);
+        expect(err.reason).toBe('dust');
+        expect(err.quote.requiredFeeSats).toBe(2);
+    });
+
+    it('reads the dust threshold off the SDK network, so DOGE refuses what Bitcoin allows', async () => {
+        // 600 sats clears Bitcoin's 546 and is far below Dogecoin's 100000.
+        const withNetwork = (dustThreshold) => Object.assign(makeSdk({ requiredFeeSats: 600 }), {
+            wallet: { getBitcoinNetwork: () => ({ dustThreshold }) },
+        });
+        const btc = await applyNativeFeePreflight({
+            sdk: withNetwork(546), actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+        });
+        expect(btc.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 600 }]);
+
+        let err = null;
+        try {
+            await applyNativeFeePreflight({
+                sdk: withNetwork(100000), actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+            });
+        } catch (e) { err = e; }
+        expect(err).toBeInstanceOf(NativeFeeForfeitError);
+        expect(err.reason).toBe('dust');
+    });
+
+    it('still attaches a fee at or above the threshold', async () => {
+        const sdk = makeSdk({ requiredFeeSats: 546 });
+        const out = await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
+        expect(out.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 546 }]);
+    });
+
     it('exposes a non-empty forfeiture warning string', () => {
         expect(NATIVE_FEE_WARNING).toMatch(/forfeit/i);
     });
@@ -108,6 +150,39 @@ describe('applyNativeFeePreflight', () => {
 // that HAS an XCHAIN fee lane. On LTC/DOGE it sends the user to build a
 // transaction the network rejects outright.
 describe('nativeFeeErrorMessage', () => {
+    it('names the amount and the XCHAIN lane on a dust refusal', () => {
+        const err = { reason: 'dust', quote: { requiredFeeNative: '0.00000002' } };
+        const btc = nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false });
+        expect(btc).toMatch(/0\.00000002 BTC/);
+        expect(btc).toMatch(/pay in XCHAIN/);
+        // No XCHAIN lane off Bitcoin: say the action cannot be submitted, not "turn it off".
+        const doge = nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true });
+        expect(doge).toMatch(/cannot be submitted/);
+        expect(doge).not.toMatch(/Turn off/i);
+    });
+
+    // The popup/extension gets this error back across the messaging boundary, which carries
+    // only { name, message }. Before this, every refusal that crossed it read as
+    // "the price is temporarily unavailable" - wrong for a dust fee and wrong for an
+    // unpriceable action, neither of which is temporary.
+    it('recovers the reason from the message when the boundary stripped the field', () => {
+        const crossed = {
+            name: 'NativeFeeForfeitError',
+            message: 'native-coin fee pre-flight failed (dust): 0.00000002 is below the dust threshold',
+        };
+        const msg = nativeFeeErrorMessage(crossed, { coinTicker: 'BTC' });
+        expect(msg).toMatch(/too small to send/);
+        // The amount survives the boundary because the constructor put it in the message.
+        expect(msg).toMatch(/0\.00000002 BTC/);
+        const unsupported = {
+            name: 'NativeFeeForfeitError',
+            message: 'native-coin fee pre-flight failed (unsupported): unsupported',
+        };
+        expect(nativeFeeErrorMessage(unsupported, { coinTicker: 'BTC' })).toMatch(/not available for this action/);
+        // An unrecognised error still gets the temporary-price wording.
+        expect(nativeFeeErrorMessage(new Error('boom'), { coinTicker: 'BTC' })).toMatch(/temporarily unavailable/);
+    });
+
     it('offers the XCHAIN fallback only where one exists', () => {
         const err = { reason: 'unsupported' };
         expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))

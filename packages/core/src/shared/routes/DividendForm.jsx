@@ -43,6 +43,7 @@ import {
 } from '../utils/dividendPerUnit.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -450,8 +451,19 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Dividend failed.');
+            setFormError(nativeFeeAwareMessage(err) || 'Dividend failed.');
         }
+    }
+
+    // A native-fee refusal arrives as NativeFeeForfeitError, whose own message is wire
+    // wording ("native-coin fee pre-flight failed (dust): ..."). nativeFeeErrorMessage turns
+    // it into the sentence that says what to do about it, and knows the advice differs off
+    // Bitcoin, where there is no XCHAIN lane to fall back to .
+    function nativeFeeAwareMessage(err) {
+        if (err?.name === 'NativeFeeForfeitError') {
+            return nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory });
+        }
+        return err?.message;
     }
 
     async function handleSubmit(event) {

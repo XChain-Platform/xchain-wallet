@@ -401,7 +401,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Issue failed.');
+            // Same mapping the sign path already does: NativeFeeForfeitError's own message is
+            // wire wording, and this confirm path is the one the flow actually takes.
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
+                : err?.message || 'Issue failed.');
         }
     }
 

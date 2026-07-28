@@ -36,12 +36,18 @@
 
 /**
  * Thrown to refuse a native-coin-fee transaction that would forfeit the fee on-chain.
- * `reason` is 'unsupported' (indexer can't price it) or 'invalid' (stale price / bad sizing).
+ * `reason` is 'unsupported' (indexer can't price it), 'invalid' (stale price / bad sizing),
+ * or 'dust' (priced fine, but below the chain's dust threshold - see the check below).
  */
 export class NativeFeeForfeitError extends Error {
-    /** @param {{ reason: 'unsupported' | 'invalid', quote: object | null }} fields */
+    /** @param {{ reason: 'unsupported' | 'invalid' | 'dust', quote: object | null }} fields */
     constructor({ reason, quote }) {
-        const detail = (quote && quote.error) ? quote.error : reason;
+        // The amount rides in the MESSAGE, not just in `quote`: a form in the popup receives
+        // this error across the messaging boundary, which keeps only { name, message }, and
+        // "too small to send" is a much weaker sentence when it cannot say how small.
+        const detail = reason === 'dust' && quote && quote.requiredFeeNative
+            ? `${quote.requiredFeeNative} is below the dust threshold`
+            : (quote && quote.error) ? quote.error : reason;
         super(`native-coin fee pre-flight failed (${reason}): ${detail}`);
         this.name = 'NativeFeeForfeitError';
         this.reason = reason;
@@ -63,7 +69,18 @@ export class NativeFeeForfeitError extends Error {
  */
 export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {}) {
     const coin = coinTicker || 'the native coin';
-    if (err && err.reason === 'unsupported') {
+    const reason = forfeitReason(err);
+    if (reason === 'dust') {
+        const quoted = (err && err.quote && err.quote.requiredFeeNative)
+            || dustAmountFromMessage(err);
+        const amount = quoted ? ` (${quoted} ${coin})` : '';
+        return mandatory
+            ? `This action's protocol fee${amount} is too small to send as a ${coin} payment, and ${coin} is ` +
+              `the only way to pay a protocol fee on this chain, so it cannot be submitted here.`
+            : `This action's protocol fee${amount} is too small to send as a ${coin} payment - the network will ` +
+              `not relay it. Turn off ${coin} fee payment to pay in XCHAIN instead.`;
+    }
+    if (reason === 'unsupported') {
         return mandatory
             ? `This action cannot be submitted on this chain: its protocol fee has no ${coin} price, ` +
               `and ${coin} is the only way to pay a protocol fee here.`
@@ -73,6 +90,26 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
         ? `The ${coin} fee price is temporarily unavailable. Try again in a moment.`
         : 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off ' +
           'native-coin fee payment.';
+}
+
+// The refusal reason, read from the error however it reached us. A form running in the
+// popup/extension gets this error back ACROSS the messaging boundary, whose envelope carries
+// only `{ name, message }` (MessageHost.serializeError), so `err.reason` is undefined there and
+// every refusal fell through to the "price is temporarily unavailable" default - including an
+// unpriceable action, which is not temporary and is not about price. The constructor writes the
+// reason into the message, so parse it back rather than adding a field the boundary would drop.
+// The quoted amount the constructor wrote into a dust message, for the same
+// boundary-survival reason `forfeitReason` parses the reason back out.
+function dustAmountFromMessage(err) {
+    const m = /\(dust\): ([0-9.]+) is below the dust threshold/.exec(String((err && err.message) || ''));
+    return m ? m[1] : null;
+}
+
+function forfeitReason(err) {
+    if (!err) return null;
+    if (typeof err.reason === 'string' && err.reason) return err.reason;
+    const m = /pre-flight failed \(([a-z]+)\)/.exec(String(err.message || ''));
+    return m ? m[1] : null;
 }
 
 /**
@@ -125,9 +162,23 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     if (!quote || quote.supported === false) throw new NativeFeeForfeitError({ reason: 'unsupported', quote });
     if (quote.valid === false) throw new NativeFeeForfeitError({ reason: 'invalid', quote });
 
+    // A quote can be perfectly valid and still unpayable: the fee scales with the action
+    // (AIRDROP/DIVIDEND per recipient, BET per credit), so a small one prices BELOW the chain's
+    // dust threshold - a DIVIDEND to a single holder quotes 2 sats on Bitcoin regtest. Attaching
+    // that output builds a transaction every node rejects outright ("dust"), and unlike the
+    // ORACLE fee (whose consensus check waives a below-dust amount, see oracleFeePreflight)
+    // there is no waiver here: omitting the output fails the indexer's own check with
+    // "no fee output to FEE_DESTINATION". So neither paying nor skipping works, and the only
+    // honest answer is to refuse before signing and point at the XCHAIN lane.
+    const feeSats = Number(quote.requiredFeeSats);
+    const dustThreshold = resolveDustThreshold(sdk);
+    if (feeSats > 0 && feeSats < dustThreshold) {
+        throw new NativeFeeForfeitError({ reason: 'dust', quote });
+    }
+
     const outs = Array.isArray(encoderOpts.customOutputs) ? encoderOpts.customOutputs.slice() : [];
-    if (Number(quote.requiredFeeSats) > 0) {
-        outs.push({ address: quote.feeDestination, value: Number(quote.requiredFeeSats) });
+    if (feeSats > 0) {
+        outs.push({ address: quote.feeDestination, value: feeSats });
     }
 
     if (typeof onProgress === 'function') onProgress('native_fee_quoted', { quote });
@@ -135,4 +186,20 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // Strip our own flag so it isn't forwarded to the encoder as an unknown param.
     const { payFeeInNativeCoin, ...rest } = encoderOpts;
     return { encoderOpts: { ...rest, customOutputs: outs }, quote };
+}
+
+// The chain's dust threshold, read from the SAME coin registry the SDK builds its
+// addresses and PSBTs from (BTC 546, LTC 5460, DOGE 100000), so the refusal above tracks
+// the network the transaction is actually going to. Falls back to Bitcoin's 546 when the
+// SDK was constructed without a network: the guardrail must still fire on a 2-sat fee,
+// and a too-low threshold would let exactly the doomed transaction through.
+function resolveDustThreshold(sdk) {
+    try {
+        const params = sdk && sdk.wallet && typeof sdk.wallet.getBitcoinNetwork === 'function'
+            ? sdk.wallet.getBitcoinNetwork()
+            : null;
+        const dust = params && Number(params.dustThreshold);
+        if (Number.isFinite(dust) && dust > 0) return dust;
+    } catch { /* fall through to the default */ }
+    return 546;
 }

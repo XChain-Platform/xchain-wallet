@@ -19,6 +19,18 @@ describe('classifyBroadcastFailure', () => {
         expect(classifyBroadcastFailure(new Error('txn-already-known'))).toBe('permanent');
     });
 
+    it('classifies a dust rejection as PERMANENT, not a retryable blip', () => {
+        // Measured live: a DIVIDEND to one holder priced its protocol fee at 2 sats, the
+        // encoder answered `Transaction broadcast failed: dust`, and the transient default
+        // queued it for a rebroadcast that can never succeed - the same bytes are dust on
+        // every node - while the form rendered a terminal "Dividend sent".
+        expect(classifyBroadcastFailure(new Error('dust'))).toBe('permanent');
+        expect(classifyBroadcastFailure(new Error('Transaction broadcast failed: dust'))).toBe('permanent');
+        expect(classifyBroadcastFailure({ cause: { message: 'dust' } })).toBe('permanent');
+        // Not a substring match on any word containing "dust".
+        expect(classifyBroadcastFailure(new Error('industrial node error'))).toBe('transient');
+    });
+
     it('classifies connection/mempool issues as TRANSIENT', () => {
         expect(classifyBroadcastFailure(new Error('ECONNREFUSED 127.0.0.1:8332'))).toBe('transient');
         expect(classifyBroadcastFailure(new Error('too-long-mempool-chain'))).toBe('transient');

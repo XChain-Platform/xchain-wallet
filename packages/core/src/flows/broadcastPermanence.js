@@ -45,6 +45,11 @@ const PERMANENT_PATTERNS = [
     /txn-already-in-mempool/i,      // an identical tx is already queued (not a re-sign case)
     /conflict.*confirmed/i,
     /already\s+spent/i,
+    // A dust output is a property of the signed BYTES, not of the node's mood: every node
+    // on every relay policy rejects the same transaction, so re-queuing it retries forever.
+    // Seen live on a DIVIDEND whose 2-sat protocol-fee output was below Bitcoin's dust limit,
+    // where the transient default left the wallet claiming the dividend had been sent.
+    /\bdust\b/i,
 ];
 
 // Node/connection is momentarily unavailable but the SAME signed tx can

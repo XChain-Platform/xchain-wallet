@@ -387,7 +387,13 @@ export function TokenWizard({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Issue failed.');
+            // Same mapping as handleSign below: a native-fee refusal arrives as
+            // NativeFeeForfeitError, whose own message is wire wording ("native-coin fee
+            // pre-flight failed (dust): ..."). This is the path the confirm flow actually
+            // takes, so leaving it unmapped showed that wording to every user.
+            setFormError(err?.name === 'NativeFeeForfeitError'
+                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
+                : err?.message || 'Issue failed.');
         }
     }
 
