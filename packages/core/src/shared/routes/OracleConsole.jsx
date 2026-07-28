@@ -307,9 +307,12 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             {isActive && active.mode === 'resolve' ? (
                                 <div style={{ marginTop: '0.5rem' }}>
                                     <div className={styles.hint}>Which outcome actually happened?</div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', margin: '0.35rem 0' }}>
+                                    {/* Same colour-only selection as the place-bet picker, and worse
+                                        consequences: this choice pays the whole pot out one way and
+                                        cannot be undone. The selected outcome has to be announced. */}
+                                    <div role="group" aria-label="Winning outcome" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', margin: '0.35rem 0' }}>
                                         {labels.map((l, i) => (
-                                            <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} onClick={() => setOutcome(i)}>{l}</Button>
+                                            <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
                                         ))}
                                     </div>
                                     {!isHw && !signerReady ? (

@@ -474,11 +474,16 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                     <>
                         <h4>Place a bet</h4>
                         <div className={styles.card}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                            {/* aria-pressed, because which outcome is selected decides which
+                                side of the bet the money lands on and the only other signal
+                                is the button's background colour. A screen reader announced
+                                two identical "Yes" / "No" buttons with no selected state. */}
+                            <div role="group" aria-label="Outcome to back" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.5rem' }}>
                                 {outcomes.map((label, i) => (
                                     <Button
                                         key={i}
                                         variant={outcome === i ? 'primary' : 'ghost'}
+                                        aria-pressed={outcome === i}
                                         onClick={() => setOutcome(i)}
                                     >
                                         {label}

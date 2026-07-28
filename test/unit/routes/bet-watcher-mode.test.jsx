@@ -183,3 +183,44 @@ describe('OracleConsole in watcher mode', () => {
         expect(cardFor(utils, '1193').textContent).not.toContain('watcher mode');
     });
 });
+
+// The outcome pickers announce which side is selected .
+//
+// Both betting surfaces signalled the selected outcome with the button's
+// background colour and nothing else: no aria-pressed, no aria-selected, no
+// role, no text change. A screen reader announced two identical "Yes" / "No"
+// buttons with no selected state, on the two controls in this wallet that
+// decide where money goes - which side of a bet a stake backs, and which
+// outcome an oracle pays the whole pot out to. The second cannot be undone.
+describe('betting outcome pickers announce the selected outcome', () => {
+    it('marks the backed outcome pressed on the place-bet picker', async () => {
+        const utils = await renderRoute(harness({ walletMode: 'full' }), detailRoute);
+        const picker = utils.container.querySelector('[aria-label="Outcome to back"]');
+        await assertGroup(picker, ['Yes', 'No']);
+    });
+
+    it('marks the winning outcome pressed on the resolve picker', async () => {
+        const utils = await renderRoute(
+            harness({ walletMode: 'full', feeds: [feed('closed')] }),
+            consoleRoute,
+        );
+        const resolve = Array.from(utils.container.querySelectorAll('button'))
+            .find((b) => b.textContent.trim() === 'Resolve');
+        await domAct(async () => { resolve.click(); await drain(); });
+        await assertGroup(utils.container.querySelector('[aria-label="Winning outcome"]'), ['Yes', 'No']);
+    });
+
+    // Selection is state, not decoration: every option must carry aria-pressed,
+    // exactly one may be true after a click, and none before.
+    async function assertGroup(group, labels) {
+        expect(group).not.toBeNull();
+        const buttons = Array.from(group.querySelectorAll('button'));
+        expect(buttons.map((b) => b.textContent.trim())).toEqual(labels);
+        for (const b of buttons) expect(b.getAttribute('aria-pressed')).toBe('false');
+
+        await domAct(async () => { buttons[1].click(); await drain(); });
+        const after = Array.from(group.querySelectorAll('button'));
+        expect(after.filter((b) => b.getAttribute('aria-pressed') === 'true')).toHaveLength(1);
+        expect(after[1].getAttribute('aria-pressed')).toBe('true');
+    }
+});
