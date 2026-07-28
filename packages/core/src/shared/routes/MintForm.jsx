@@ -30,7 +30,8 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { mintHeadroom, exceedsHeadroom } from '../utils/mintHeadroom.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -117,14 +118,27 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
 
-    // Balance of the amount tick at the source address (Max + "available").
-    const tickAmtBalance = useTickBalance({
-        messaging,
-        walletId,
-        chainId,
-        address: fromAddress?.address,
-        tick: ticker,
-    });
+    // : what a MINT can carry is the token's remaining headroom -
+    // min(MAX_MINT, MAX_SUPPLY - current supply) - never the minter's
+    // balance. The form used to size Max and its "available" footer off
+    // the holdings lookup every other amount form reaches for, so a token
+    // sitting at its cap offered a Max of its whole supply: an amount the
+    // chain rejects by construction, after a fee-paying broadcast. Same
+    // defect as D-23 (contract Withdraw sized off the wallet, not the
+    // contract's custody), on a sibling form.
+    const tokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker });
+    const headroom = useMemo(
+        () => mintHeadroom({
+            maxSupply: tokenInfo?.maxSupply ?? null,
+            totalSupply: tokenInfo?.totalSupply ?? null,
+            mintMax: tokenInfo?.mintMax ?? null,
+        }),
+        [tokenInfo],
+    );
+    // Nothing bounds a mint of an uncapped token with no MAX_MINT, so
+    // there is no Max to offer and no number to quote; say so instead of
+    // leaving a bare field that looks like a still-loading one.
+    const uncapped = !!tokenInfo && headroom === null;
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
@@ -300,6 +314,18 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         const amt = String(amount).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Amount must be a positive number.');
+            return;
+        }
+        // : stop an over-mint here rather than three screens later.
+        // The confirm page already catches it (MAX_MINT + supply-headroom
+        // preflight, plus the dry run), but only behind three individual
+        // "sign anyway" overrides, and a user who takes them pays a
+        // protocol fee for an action the chain will reject.
+        if (exceedsHeadroom(amt, headroom)) {
+            const TICK = ticker.trim().toUpperCase();
+            setFormError(Number(headroom) > 0
+                ? `Only ${formatWithThousands(headroom)} ${TICK} can still be minted.`
+                : `${TICK} is at its supply cap - no more can be minted.`);
             return;
         }
         setFormError(null);
@@ -611,13 +637,13 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
-                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
-                    ? () => setAmount(tickAmtBalance)
+                onMax={headroom !== null && Number(headroom) > 0
+                    ? () => { setAmount(headroom); setFormError(null); }
                     : undefined}
-                maxDisabled={!tickAmtBalance}
-                balanceText={tickAmtBalance != null && (ticker)
-                    ? `${formatWithThousands(tickAmtBalance)} ${String(ticker).toUpperCase()} available`
-                    : null}
+                maxDisabled={headroom === null || Number(headroom) <= 0}
+                balanceText={headroom !== null && ticker
+                    ? `${formatWithThousands(headroom)} ${String(ticker).toUpperCase()} available to mint`
+                    : (uncapped && ticker ? 'No supply cap' : null)}
             />
             <AddressField
                 label="Destination (optional)"
