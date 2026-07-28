@@ -34,7 +34,7 @@ the devhost VM.
 ```
 docker run -d --name xchain-speculos \
   -p 5012:5000 -p 9999:9999 \
-  -v REDACTED-LOCAL-PATH:/apps \
+  -v "$HOME"/xchain-speculos/apps:/apps \
   ghcr.io/ledgerhq/speculos:latest \
   --model nanosp --display headless --api-port 5000 --apdu-port 9999 \
   /apps/bitcoin-mainnet-nanosp.elf
