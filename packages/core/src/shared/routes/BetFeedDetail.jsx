@@ -590,16 +590,23 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             {result ? (
                 <div className={styles.card} data-testid="bet-result">
                     <p className={styles.summary}>
-                        {feed.feed_status === 'open'
-                            ? 'Bet placed.'
-                            : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
-                              + 'by the block it lands in, so the network will most likely reject this one. '
-                              + 'The miner fee and the protocol fee are spent either way.'}
+                        {/*  leg (a): a queued result is SIGNED and not broadcast, so
+                            "Bet placed" would claim the one thing that has not happened. */}
+                        {result?.queued
+                            ? 'Signed, but your bet could not reach the network just now. It is queued '
+                              + 'and will be broadcast automatically; do not place it again.'
+                            : feed.feed_status === 'open'
+                                ? 'Bet placed.'
+                                : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
+                                  + 'by the block it lands in, so the network will most likely reject this one. '
+                                  + 'The miner fee and the protocol fee are spent either way.'}
                     </p>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Txid</dt>
-                        <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || 'n/a')}</dd>
-                    </dl>
+                    {result?.queued ? null : (
+                        <dl className={styles.detailsList}>
+                            <dt className={styles.detailsLabel}>Txid</dt>
+                            <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || 'n/a')}</dd>
+                        </dl>
+                    )}
                 </div>
             ) : null}
 

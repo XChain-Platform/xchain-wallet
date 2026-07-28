@@ -203,6 +203,31 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         expect(receipt.textContent).not.toMatch(/betting closed while you were confirming/i);
     });
 
+    //  leg (a), applied to the receipt this file introduced. useConfirmAction
+    // resolves a TRANSIENT post-sign broadcast failure with { queued: true } rather
+    // than throwing, so a receipt that keys on "we got a result" reports a bet that
+    // never reached the network as placed - the exact shape D-99(a) swept out of
+    // thirteen other forms.
+    it('does not call a signed-but-unbroadcast bet placed', async () => {
+        const { messaging } = harness({
+            feedStatuses: ['open'],
+            submitResult: { queued: true, broadcast: 'queued' },
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(BetFeedDetail, messaging, { chainId: CHAIN, feedIndex: '1198' });
+            await drain();
+        });
+        await placeBet(utils);
+
+        const receipt = utils.getByTestId('bet-result');
+        expect(receipt.textContent).not.toContain('Bet placed.');
+        expect(receipt.textContent).toMatch(/queued and will be broadcast automatically/i);
+        // No txid row: there is no txid, and "n/a" beside a Txid label reads as a
+        // broadcast that lost its receipt rather than one that never happened.
+        expect(receipt.textContent).not.toContain('Txid');
+    });
+
     it('shows a failed submit even when the market has stopped taking bets', async () => {
         const { messaging } = harness({
             feedStatuses: ['open', 'closed'],
@@ -245,6 +270,25 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         expect(receipt.textContent).toContain('#2343');
         expect(receipt.textContent).toContain('f00dface');
         expect(receipt.textContent).toMatch(/paid out/i);
+    });
+
+    it('does not tell an oracle a queued result was sent', async () => {
+        // The oracle half of the same rule, and the one with a price: an oracle that
+        // believes it published waits out its own refund window, at which point the
+        // market expires, refunds everyone and pays the oracle nothing.
+        const { messaging } = harness();
+        messaging.resolveMarketAction = () => Promise.resolve({ queued: true, broadcast: 'queued' });
+        const utils = await openConsole(messaging);
+
+        await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Review resolve/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
+
+        const receipt = utils.getByTestId('oracle-result');
+        expect(receipt.textContent).not.toMatch(/Result sent/);
+        expect(receipt.textContent).toMatch(/queued and\s+will be broadcast automatically/i);
+        expect(receipt.textContent).toContain('#2343');
     });
 
     it('reports a cancel as a refund rather than as a payout', async () => {

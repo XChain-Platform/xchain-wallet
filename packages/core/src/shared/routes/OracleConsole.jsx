@@ -80,7 +80,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
     const [password, setPassword] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
-    const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null} | null} */ (null));
+    const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null, queued: boolean} | null} */ (null));
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
@@ -195,6 +195,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 mode: builder === 'cancelMarketParams' ? 'cancel' : 'resolve',
                 feedIndex: String(feed.action_index),
                 txid: res?.txid || res?.tx_hash || null,
+                queued: !!res?.queued,
             });
             setActive(null);
             setOutcome(null);
@@ -260,14 +261,23 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             {result ? (
                 <div className={styles.card} data-testid="oracle-result">
                     <p className={styles.summary}>
-                        {result.mode === 'cancel'
-                            ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
-                            : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}
+                        {/*  leg (a): signed and NOT broadcast. An oracle told "result sent"
+                            for a transaction still sitting in the queue would wait out its own
+                            refund window, which costs it the market. */}
+                        {result.queued
+                            ? `Signed, but the ${result.mode === 'cancel' ? 'cancel' : 'result'} for market `
+                              + `#${result.feedIndex} could not reach the network just now. It is queued and `
+                              + 'will be broadcast automatically; do not submit it again.'
+                            : result.mode === 'cancel'
+                                ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
+                                : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}
                     </p>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Txid</dt>
-                        <dd className={styles.detailsValue}>{String(result.txid || 'n/a')}</dd>
-                    </dl>
+                    {result.queued ? null : (
+                        <dl className={styles.detailsList}>
+                            <dt className={styles.detailsLabel}>Txid</dt>
+                            <dd className={styles.detailsValue}>{String(result.txid || 'n/a')}</dd>
+                        </dl>
+                    )}
                 </div>
             ) : null}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
