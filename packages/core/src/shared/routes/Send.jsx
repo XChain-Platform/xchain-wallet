@@ -1192,6 +1192,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFormError(gatedMultiSendBlock);
             return;
         }
+        // §21.4 / : an un-acknowledged test-send warning stops the
+        // send here, not just on the disabled button. The button is the
+        // visible control, but a form submits on Enter too, and the whole
+        // value of this gate is that it cannot be walked past by accident.
+        if (testSendGate) {
+            setFormError(
+                'This is your first send to this address. Send a small test first, '
+                + 'or choose "I\'ve verified, continue" above.',
+            );
+            return;
+        }
         setFormError(null);
         //  slice 1: with the flag on, sends go straight to the
         // single-encode confirm modal instead of the legacy review stage.
@@ -1514,6 +1525,43 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         </Screen>
     );
 
+    // §21.4 test-send banner. : this used to be inlined in the
+    // `stage === 'review'` branch only, and  then routed every
+    // non-watcher send from the compose form straight into the confirm
+    // modal - so the branch stopped rendering and the warning silently
+    // stopped existing for the overwhelming majority of sends. It is a
+    // shared const now and renders on the COMPOSE form, which is also
+    // where it belongs: the whole point is to intervene before the user
+    // commits, and it is the last screen every send path passes through.
+    const testSendGateBanner = testSendGate ? (
+        <div role="alert" className={styles.testSendGate}>
+            <p className={styles.testSendTitle}>
+                First send to this address. Test it first?
+            </p>
+            <p className={styles.testSendBody}>
+                You're sending {decimalStringFromSats(BigInt(testSendGate.amountSats))} {testSendGate.ticker} to
+                a new recipient. A small test send confirms the address
+                works before the full amount goes out.
+            </p>
+            <div className={styles.testSendActions}>
+                <Button
+                    type="button"
+                    variant="primary"
+                    onClick={onSendSmallTest}
+                >
+                    Send a small test first
+                </Button>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => markTested(toAddress.trim())}
+                >
+                    I've verified, continue
+                </Button>
+            </div>
+        </div>
+    ) : null;
+
     if (loadError) {
         return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
     }
@@ -1741,34 +1789,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         ))}
                     </div>
                 ) : null}
-                {testSendGate ? (
-                    <div role="alert" className={styles.testSendGate}>
-                        <p className={styles.testSendTitle}>
-                            First send to this address. Test it first?
-                        </p>
-                        <p className={styles.testSendBody}>
-                            You're sending {(testSendGate.amountSats / 1e8).toFixed(8)} {nativeTickerFor(descriptor)}
-                            to a new recipient. A small test send confirms the address
-                            works before the full amount goes out.
-                        </p>
-                        <div className={styles.testSendActions}>
-                            <Button
-                                type="button"
-                                variant="primary"
-                                onClick={onSendSmallTest}
-                            >
-                                Send a small test first
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() => markTested(toAddress.trim())}
-                            >
-                                I've verified, continue
-                            </Button>
-                        </div>
-                    </div>
-                ) : null}
+                {testSendGateBanner}
                 <RawPsbtViewer
                     developerMode={developerMode}
                     actionFields={isMultiSend ? {
@@ -2259,6 +2280,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     />
                 </label>
             </details>
+            {testSendGateBanner}
             {formError ? (
                 <StatusMessage
                     variant="error"
@@ -2278,6 +2300,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 form="send-form"
                 variant="primary"
                 block
+                disabled={!!testSendGate}
             >
                 Send
             </Button>
