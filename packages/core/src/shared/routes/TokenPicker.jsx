@@ -58,6 +58,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(query: string) => void} [props.onTokenQueryChange]
  * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]
  * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
+ * @param {boolean} [props.kindLocked]  hide the kind segments because the
+ *   caller's action only accepts one kind (: BET escrows tokens, so the
+ *   native coin is not a legal wager and must not be offered)
  * @param {string} [props.title]
  * @param {import('react').ReactNode} [props.titleIcon]
  * @param {string} [props.backLabel]
@@ -74,6 +77,7 @@ export function TokenPicker({
     onTokenQueryChange: onTokenQueryChangeProp,
     kindFilter: kindFilterProp,
     onKindFilterChange: onKindFilterChangeProp,
+    kindLocked = false,
     title,
     titleIcon,
     backLabel,
@@ -345,7 +349,18 @@ export function TokenPicker({
                     spellCheck={false}
                     aria-label="Search coins or tokens"
                 />
-                <div className={styles.kindSegments} role="tablist" aria-label="Asset kind">
+                {/* : a caller that pins `kindFilter` is stating a
+                    protocol constraint, not a default. Rendering the segments
+                    anyway would offer a choice the action cannot honour, and
+                    the segments would appear dead because the pinned prop wins
+                    over the local state they set. */}
+                <div
+                    className={styles.kindSegments}
+                    role="tablist"
+                    aria-label="Asset kind"
+                    hidden={kindLocked}
+                    style={kindLocked ? { display: 'none' } : undefined}
+                >
                     {KIND_OPTIONS.map((opt) => {
                         const active = (kindFilter || 'all') === opt.id;
                         return (
@@ -395,6 +410,13 @@ export function TokenPicker({
                                 <BalanceList
                                     rows={platformResults}
                                     onSelectToken={handleSelect}
+                                    // : this section searches EVERY chain
+                                    // the wallet holds an address on, so the
+                                    // same tick legitimately appears once per
+                                    // chain. Without the chain named, those
+                                    // rows are identical, and picking one
+                                    // re-targets the calling form's network.
+                                    showChain
                                 />
                             ) : null}
                         </div>

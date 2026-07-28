@@ -110,16 +110,21 @@ assert.ok(
     /FullLayoutWithNav\(\{ nav, bottomBar(?:, header)?, children \}\)/.test(navJsxSrc),
     'FullLayoutWithNav exposes a bottomBar slot',
 );
-assert.ok(/\{bottomBar \? <div className=\{styles\.bottomBarSlot\}>\{bottomBar\}<\/div>/.test(navJsxSrc),
-    'FullLayoutWithNav renders the bottomBar slot when provided');
+// : the slot's contents are now filtered through the layout tier
+// (`bar` is bottomBar on the compact tier, null above it), so the rendered
+// expression is the tier-resolved value rather than the raw prop.
+assert.ok(/const bar = showsBottomBar\(tier\) \? bottomBar : null;/.test(navJsxSrc),
+    'FullLayoutWithNav mounts the bottomBar only on the compact tier');
+assert.ok(/\{bar \? <div className=\{styles\.bottomBarSlot\}>\{bar\}<\/div>/.test(navJsxSrc),
+    'FullLayoutWithNav renders the bottomBar slot when the tier calls for it');
 
 const navCssPath = join(core, 'src', 'shared', 'components', 'LeftNav.module.css');
 const navCssSrc = readFileSync(navCssPath, 'utf8');
 assert.ok(/\.bottomBarSlot\b[\s\S]*?display:\s*contents/.test(navCssSrc),
     'bottomBar slot uses display:contents so the fixed bar stays at viewport');
-// Visibility is now JS-gated (FullLayoutWithNav passes null for bottomBar on
-// non-small variants); CSS uses display:contents so the fixed bar sits at
-// the viewport level when the slot IS rendered. No viewport media query.
+// Visibility is JS-gated (FullLayoutWithNav withholds the bottomBar above the
+// compact tier); CSS uses display:contents so the fixed bar sits at the
+// viewport level when the slot IS rendered. No viewport media query.
 assert.ok(/\.bottomBarSlot\s*\{[\s\S]*?display:\s*contents/.test(navCssSrc),
     'bottomBar slot collapses above 600px');
 // Padding is applied via a class on the layout div (JS-added when bottomBar
@@ -145,8 +150,8 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         /import\s*\{\s*BottomTabBar\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/components\/BottomTabBar\.jsx'/.test(src),
         `${label} App imports BottomTabBar`,
     );
-    // The bottomBar slot is wrapped in a variant guard so only small-layout
-    // renders get the bar; allow for the ternary between bottomBar={ and <BottomTabBar.
+    // : shells hand the slot in unconditionally and the layout decides,
+    // but keep the window wide enough to also accept a legacy inline guard.
     assert.ok(/bottomBar=\{[\s\S]{0,200}<BottomTabBar/.test(src),
         `${label} App passes <BottomTabBar> into FullLayoutWithNav.bottomBar`);
 }

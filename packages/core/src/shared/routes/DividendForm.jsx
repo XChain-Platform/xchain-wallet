@@ -33,7 +33,14 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import {
+    perUnitMax,
+    sumHolderUnits,
+    multiplyDecimal,
+    exceedsBalance,
+} from '../utils/dividendPerUnit.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -216,13 +223,23 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const nativeFee = useNativeFee(coinTicker);
 
     // Source balance of the dividend ticker, backing the per-unit
-    // AmountField's Max button + "available" footer.
+    // AmountField's "available" footer. It is NOT the Max: see
+    // `maxPerUnit` below .
     const dividendBalance = useTickBalance({
         messaging,
         walletId,
         chainId,
         address: fromAddress?.address,
         tick: dividendTick,
+    });
+
+    // Divisibility of the DIVIDEND token, so the per-unit Max floors to a
+    // rate the token can actually express (an indivisible dividend cannot
+    // be paid at 9.998 per unit).
+    const dividendInfo = useTokenInfo({
+        chainId,
+        tick: dividendTick.trim().toUpperCase(),
+        skip: !dividendTick.trim(),
     });
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
@@ -280,21 +297,40 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const eligible = sourceAddr
             ? holders.rows.filter((r) => r.address !== sourceAddr)
             : holders.rows;
-        const amt = Number(String(amount).trim());
-        let totalHeld = 0;
-        for (const row of eligible) {
-            const h = Number(row.amount);
-            if (Number.isFinite(h)) totalHeld += h;
-        }
-        const total = Number.isFinite(amt) && amt > 0 && totalHeld > 0
-            ? amt * totalHeld
+        // : the divisor is exact decimal math, not a float sum. It
+        // prices the preview AND bounds the Max button, so an ulp of
+        // drift here is the difference between a payable rate and one the
+        // chain rejects for insufficient funds.
+        const eligibleUnits = sumHolderUnits(eligible);
+        const amt = String(amount).trim();
+        const total = (eligibleUnits && Number(eligibleUnits) > 0 && Number(amt) > 0)
+            ? multiplyDecimal(amt, eligibleUnits)
             : null;
         return {
             eligibleCount: eligible.length,
+            eligibleUnits,
             sourceExcluded: Boolean(sourceAddr && holders.rows.some((r) => r.address === sourceAddr)),
             total,
         };
     }, [holders.rows, fromAddress, amount]);
+
+    //  (E2E D-86): AMOUNT is a RATE - dividend tokens per one unit
+    // of the holder-of token - so the whole balance is the wrong
+    // dimension for it. Max used to fill the balance, and the form's own
+    // summary then quoted a distribution 500x what the address held, with
+    // submit still live. The payable ceiling is balance / eligible units,
+    // and the eligible set is already resolved one line above for the
+    // preview. Same family as D-23 (contract Withdraw sized off the
+    // wallet) and  (Mint sized off holdings, not headroom).
+    const maxPerUnit = useMemo(
+        () => perUnitMax({
+            balance: dividendBalance,
+            eligibleUnits: preview?.eligibleUnits,
+            divisibility: dividendInfo?.divisibility ?? null,
+        }),
+        [dividendBalance, preview?.eligibleUnits, dividendInfo],
+    );
+    const maxPayable = maxPerUnit !== null && Number(maxPerUnit) > 0;
 
     function handleReview(event) {
         event.preventDefault();
@@ -321,6 +357,19 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const amt = String(amount).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Per-unit amount must be a positive number.');
+            return;
+        }
+        // : stop a payout the balance cannot cover here, not three
+        // screens later behind a "sign anyway" tick. Only fires when both
+        // the projected total and the balance are known, so an explorer
+        // hiccup leaves the form ungated.
+        if (preview?.total && exceedsBalance(preview.total, dividendBalance)) {
+            const DTICK = dividendTick.trim().toUpperCase();
+            setFormError(
+                `This pays ~${formatWithThousands(preview.total)} ${DTICK} in total, more than the `
+                + `${formatWithThousands(dividendBalance)} ${DTICK} this address holds.`
+                + (maxPayable ? ` Up to ${formatWithThousands(maxPerUnit)} per unit is payable.` : ''),
+            );
             return;
         }
         if (memo && /[|;]/.test(memo)) {
@@ -544,7 +593,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                                 <>
                                     <dt className={styles.detailsLabel}>Total distribution</dt>
                                     <dd className={styles.detailsValue}>
-                                        ~{preview.total} {dividendTick.trim().toUpperCase()}
+                                        ~{formatWithThousands(preview.total)} {dividendTick.trim().toUpperCase()}
                                     </dd>
                                 </>
                             ) : null}
@@ -743,12 +792,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
-                onMax={dividendBalance && Number(dividendBalance) > 0
-                    ? () => setAmount(dividendBalance)
-                    : undefined}
-                maxDisabled={!dividendBalance}
+                onMax={maxPayable ? () => setAmount(maxPerUnit) : undefined}
+                maxDisabled={!maxPayable}
                 balanceText={dividendBalance != null && dividendTick.trim()
-                    ? `${formatWithThousands(dividendBalance)} ${dividendTick.trim().toUpperCase()} available`
+                    ? `${formatWithThousands(dividendBalance)} ${dividendTick.trim().toUpperCase()} available${
+                        maxPayable ? ` · up to ${formatWithThousands(maxPerUnit)} per unit` : ''}`
                     : null}
             />
             <Input
@@ -772,8 +820,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         : holders.error ? `Couldn't load holders: ${holders.error}`
                             : holders.rows ? `${preview?.eligibleCount ?? 0} eligible holder${(preview?.eligibleCount ?? 0) === 1 ? '' : 's'}`
                                 : ''}
-                    {preview?.total !== null && preview?.total !== undefined
-                        ? ` · total distribution ~${preview.total} ${dividendTick.trim().toUpperCase() || 'tokens'}`
+                    {preview?.total
+                        ? ` · total distribution ~${formatWithThousands(preview.total)} ${dividendTick.trim().toUpperCase() || 'tokens'}`
                         : ''}
                 </p>
             ) : null}

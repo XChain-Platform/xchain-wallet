@@ -42,6 +42,19 @@
 //     top of this; neither is required for the freeze to work.
 
 const STORAGE_KEY = 'xchain-wallet:panic';
+
+// How the freeze was armed . This is NOT a security control; it is
+// the input to the disclosure policy in `shared/safety/panicNotice.js`:
+//   'self'    the user armed it deliberately from Settings -> Safety, so the
+//             wallet may say so plainly on Home and Send.
+//   'duress'  the duress passphrase armed it. The whole point of that flow is
+//             that an observer standing over the user sees no cue, so ambient
+//             surfaces MUST stay silent about it.
+// Either way the sign screen must stop claiming the wallet is ready to sign;
+// only the announcement differs.
+export const PANIC_ARMED_SELF = 'self';
+export const PANIC_ARMED_DURESS = 'duress';
+
 export const DEFAULT_DURATION_MS = 24 * 60 * 60 * 1000;     // 24h
 export const MIN_DURATION_MS = 60 * 1000;                    // 1m floor (tests)
 export const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;     // 7d cap
@@ -64,6 +77,7 @@ let awaitingHydration = false;
  * @property {number} activatedAt   epoch-ms; 0 when inactive
  * @property {number} expiresAt     epoch-ms; 0 when inactive
  * @property {number} durationMs    duration the user picked at activation
+ * @property {'self'|'duress'} [armedBy]   present only while active
  */
 
 export class PanicModeActiveError extends Error {
@@ -107,11 +121,56 @@ function coercePanicState(parsed) {
     ) {
         return emptyPanicModeState();
     }
-    return {
+    const base = {
         activatedAt: Math.floor(p.activatedAt),
         expiresAt: Math.floor(p.expiresAt),
         durationMs: Math.floor(p.durationMs),
     };
+    // `armedBy` rides along only on an ACTIVE record, so the inactive shape
+    // stays exactly what it has always been.
+    if (base.expiresAt === 0) return base;
+    return { ...base, armedBy: coerceArmedBy(p.armedBy) };
+}
+
+/**
+ * Read provenance off an untrusted persisted record. Deliberately asymmetric
+ * with `normalizeArmedBy` below: on the READ side anything we do not
+ * positively recognise as self-armed is treated as duress-armed, because the
+ * fail-safe direction is silence. A record written by an older build has no
+ * `armedBy`; announcing it on Home could be the exact disclosure the duress
+ * flow exists to avoid, while staying quiet only reproduces today's behaviour
+ * (the freeze is still stated in Settings -> Safety and on the sign screen).
+ *
+ * @param {unknown} raw
+ * @returns {'self'|'duress'}
+ */
+function coerceArmedBy(raw) {
+    return raw === PANIC_ARMED_SELF ? PANIC_ARMED_SELF : PANIC_ARMED_DURESS;
+}
+
+/**
+ * Read provenance off a caller's activation options. On the WRITE side the
+ * default is self-armed: the only caller that arms silently is the duress
+ * passphrase, and it says so explicitly.
+ *
+ * @param {unknown} raw
+ * @returns {'self'|'duress'}
+ */
+function normalizeArmedBy(raw) {
+    return raw === PANIC_ARMED_DURESS ? PANIC_ARMED_DURESS : PANIC_ARMED_SELF;
+}
+
+/**
+ * Provenance of an active freeze, for the disclosure policy. Returns
+ * `'duress'` for an unrecognised or absent value (see `coerceArmedBy`), and
+ * `null` when no freeze is active.
+ *
+ * @param {PanicModeState} [state]
+ * @returns {'self'|'duress'|null}
+ */
+export function getPanicArmedBy(state = readState()) {
+    if (!state || state.expiresAt === 0) return null;
+    return coerceArmedBy(state.armedBy);
 }
 
 /** @returns {PanicModeState} */
@@ -237,14 +296,17 @@ export function getPanicRemainingMs(state, nowMs = Date.now()) {
  * @param {object} [opts]
  * @param {number} [opts.durationMs]
  * @param {number} [opts.nowMs]
+ * @param {'self'|'duress'} [opts.armedBy]   defaults to 'self'; the duress
+ *        passphrase passes 'duress' so ambient surfaces stay silent
  * @returns {PanicModeState}
  */
-export function activatePanicMode({ durationMs, nowMs = Date.now() } = {}) {
+export function activatePanicMode({ durationMs, nowMs = Date.now(), armedBy } = {}) {
     const dur = clampDuration(durationMs ?? DEFAULT_DURATION_MS);
     const next = {
         activatedAt: nowMs,
         expiresAt: nowMs + dur,
         durationMs: dur,
+        armedBy: normalizeArmedBy(armedBy),
     };
     writeState(next);
     return next;

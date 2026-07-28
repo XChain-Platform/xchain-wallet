@@ -26,31 +26,45 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const componentPath = join(here, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'AnimatedQrFrames.jsx');
 const src = readFileSync(componentPath, 'utf8');
+const resolverPath = join(here, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'reducedMotion.js');
+const resolver = readFileSync(resolverPath, 'utf8');
 
-// 1. The component subscribes to the prefers-reduced-motion media query.
+// 1. The component reads the SHARED resolver rather than the media query
+//    directly. : reading matchMedia here made the in-app "Always
+//    reduce" setting unenforceable, because an OS that reports
+//    no-preference is exactly why a user reaches for that setting.
 assert.ok(
-    /matchMedia\(\s*['"]\(prefers-reduced-motion: reduce\)['"]/.test(src),
-    'AnimatedQrFrames calls window.matchMedia with the prefers-reduced-motion query',
+    /useReducedMotion\(\)/.test(src) && /from '\.\/reducedMotion\.js'/.test(src),
+    'AnimatedQrFrames resolves reduced motion through useReducedMotion',
+);
+assert.ok(
+    !/matchMedia\(/.test(src),
+    'AnimatedQrFrames does not read matchMedia behind the resolver\'s back',
 );
 
-// 2. State for the preference is held by useState so the component
-//    re-renders when the OS-level setting flips.
+// 2. The resolver weighs the in-app override ahead of the OS preference.
 assert.ok(
-    /const \[reducedMotion,\s*setReducedMotion\]\s*=\s*useState\(/.test(src),
-    'AnimatedQrFrames declares a reducedMotion state hook',
+    /matchMedia\(\s*MEDIA_QUERY\s*\)/.test(resolver)
+        && /\(prefers-reduced-motion: reduce\)/.test(resolver),
+    'the resolver reads the prefers-reduced-motion media query',
+);
+assert.ok(
+    /=== 'reduce'\) return true/.test(resolver) && /=== 'no-preference'\) return false/.test(resolver),
+    'the resolver lets the in-app override win over the OS preference',
 );
 
 // 3. The change-event handler updates the preference. Either the modern
 //    addEventListener path or the legacy addListener path must be present;
 //    we assert the modern one (with a fallback for legacy Safari noted in
-//    the source).
+//    the source), plus the MutationObserver that catches a settings change.
 assert.ok(
-    /mq\.addEventListener\(\s*['"]change['"]/.test(src),
-    'AnimatedQrFrames listens for change events on the media query',
+    /mq\.addEventListener\(\s*['"]change['"]/.test(resolver)
+        && /mq\.addListener\(/.test(resolver),
+    'the resolver listens for change events on the media query, with the Safari fallback',
 );
 assert.ok(
-    /mq\.addListener\(/.test(src),
-    'AnimatedQrFrames keeps a Safari-<14 fallback to mq.addListener',
+    /new MutationObserver\(/.test(resolver),
+    'the resolver re-resolves when the settings attribute changes',
 );
 
 // 4. The auto-advance interval bails out when reducedMotion is true.

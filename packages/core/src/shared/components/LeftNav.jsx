@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { Icon } from '@xchain-wallet/core/ui';
+import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
+import { useLayoutTier } from '../styles/useLayoutTier.js';
 import styles from './LeftNav.module.css';
 
 /**
@@ -19,9 +21,11 @@ import styles from './LeftNav.module.css';
  * `aria-current="page"`.
  *
  * Visibility is the parent's responsibility: this component renders
- * itself unconditionally; `<FullLayoutWithNav>` wraps it in a flex
- * container that hides the sidebar at viewports below the §24.1 full
- * breakpoint (900px).
+ * itself unconditionally. `<FullLayoutWithNav>` decides whether the
+ * sidebar shows at all (compact tier hands the slot to the bottom tab
+ * bar instead), and the `rail` tier styling below 900px collapses these
+ * rows to icons with their labels clipped but still in the accessibility
+ * tree. See shared/styles/breakpoints.js for the tier definitions.
  *
  * `currentView` is matched against each item's `id`, with two soft
  * mappings so the active highlight survives drilldowns:
@@ -222,10 +226,22 @@ export function LeftNav({
 
 /**
  * Wraps the unlocked-route render tree in a flex layout that places
- * `<LeftNav>` alongside the active route. Below 900px the sidebar
- * collapses (display:none); below 600px the optional `bottomBar` slot
- * (`<BottomTabBar>`, §24.3 / G054) renders fixed at the bottom of the
- * viewport instead.
+ * `<LeftNav>` alongside the active route.
+ *
+ * : the layout picks the navigation surface itself, from its own
+ * measured width (`useLayoutTier`), and publishes the result as
+ * `data-xc-tier` for the CSS to key off:
+ *
+ *   compact (< 640px)     bottom tab bar; the sidebar slot is withheld
+ *   rail    (640-899px)   sidebar as an icon rail; no bottom bar
+ *   full    (>= 900px)    labelled sidebar; no bottom bar
+ *
+ * Shells hand in BOTH slots and let the layout choose, which is what
+ * makes one interface work across every width. It replaces the old split
+ * where each shell gated the slots itself against a viewport threshold
+ * while the CSS used a different one, leaving 640-899px with neither nav.
+ * Measuring the container (not the viewport) is also what lets a 360px
+ * popup or dev-preview frame inside a 1400px window read as compact.
  *
  * The wrapper sets `--xc-screen-h: 100%` on the main pane so the route's
  * `<Screen>` (which defaults to `100dvh`) fills its flex parent instead
@@ -242,14 +258,21 @@ export function LeftNav({
  * @param {import('react').ReactNode} props.children
  */
 export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
+    const [layoutRef, tier] = useLayoutTier();
+    const sidebar = showsSidebar(tier) ? nav : null;
+    const bar = showsBottomBar(tier) ? bottomBar : null;
     return (
-        <div className={`${styles.layout} ${bottomBar ? styles.layoutWithBottomBar : ''}`}>
-            {nav ? <aside className={styles.sidebar}>{nav}</aside> : null}
+        <div
+            ref={layoutRef}
+            data-xc-tier={tier}
+            className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
+        >
+            {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
                 <div className={styles.mainBody}>{children}</div>
             </div>
-            {bottomBar ? <div className={styles.bottomBarSlot}>{bottomBar}</div> : null}
+            {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}
         </div>
     );
 }

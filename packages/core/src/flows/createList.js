@@ -103,6 +103,26 @@ export async function createList(opts) {
         actionData: { action: 'LIST', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // : name the funding address so the SDK selects UTXOs BY
+            // ADDRESS (`sourceAddress` is SDK-side only, never on the create_tx
+            // wire) and returns change to the spender. Without it the encoder
+            // falls back to resolving UTXOs from the raw `pubkey`, which it
+            // turns into a p2pkh script; from a bech32 source that script holds
+            // nothing and the lane dies at step 1 with "Error getting utxos:
+            // <pubkey> has no matching Script". `change` is required
+            // separately - the SDK states outright that it is "deliberately NOT
+            // a fallback" for `sourceAddress` (xchain-sdk/src/encoder.js
+            // createTx), because a change address is not always the spender.
+            //
+            // Only the live-build callers were hit: the confirm-modal path
+            // hands submitAction a prebuiltPsbt, so createTx (and these opts
+            // with it) is skipped. The legacy direct-dispatch publishes -
+            // official-token list (ProjectRosterForm), list fork, airdrop and
+            // the watcher/HW branches of ListCreateForm - build the tx here.
+            // Same family as advancedAction's D-17/D-18 and dispenserAction's
+            // .
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),

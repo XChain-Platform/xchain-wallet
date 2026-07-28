@@ -17,9 +17,9 @@
 //      Receive, DEX, Dispensers, Contracts, Messaging, Contacts).
 //   3. Contracts row is gated on hasBtcAddress (BTC-only per
 //      BITCOIN_ACTIONS); active row gets aria-current="page".
-//   4. CSS module declares a 220px sidebar with a max-width:899px
-//      `display: none` rule (collapses below the §24.1 full breakpoint)
-//      and overrides --xc-screen-h on the main pane.
+//   4. CSS module declares a 220px sidebar, collapses it on the compact
+//      layout tier and narrows it to a 64px rail on the rail tier
+//      , and overrides --xc-screen-h on the main pane.
 //   5. web + desktop App.jsx import LeftNav + FullLayoutWithNav and
 //      wrap the unlocked-route render tree in <FullLayoutWithNav>.
 //      Extension popup is intentionally untouched (always compact).
@@ -88,8 +88,13 @@ assert.ok(/onOpenWalletPicker[\s\S]*?walletSwitcher/.test(navSrc),
 const cssSrc = readFileSync(cssPath, 'utf8');
 assert.ok(/\.sidebar\s*\{[\s\S]*?flex:\s*0 0 220px/.test(cssSrc),
     '.sidebar reserves a 220px column');
-assert.ok(/@media\s*\(\s*max-width:\s*899px\s*\)\s*\{[\s\S]*?\.sidebar\s*\{[\s\S]*?display:\s*none/.test(cssSrc),
-    '.sidebar collapses below the 900px §24.1 full-layout breakpoint');
+// : the collapse is keyed on the layout tier that FullLayoutWithNav
+// measures, not on a viewport media query, so a 360px popup or preview frame
+// inside a wide window collapses too.
+assert.ok(/\.layout\[data-xc-tier='compact'\]\s+\.sidebar\s*\{[\s\S]*?display:\s*none/.test(cssSrc),
+    '.sidebar collapses on the compact tier');
+assert.ok(/\.layout\[data-xc-tier='rail'\]\s+\.sidebar\s*\{[\s\S]*?flex:\s*0 0 64px/.test(cssSrc),
+    '.sidebar narrows to a 64px icon rail on the rail tier');
 assert.ok(/--xc-screen-h:\s*100%/.test(cssSrc),
     '.main overrides --xc-screen-h so the route Screen fills the flex pane');
 
@@ -133,5 +138,5 @@ assert.ok(!/LeftNav/.test(popupApp),
     'Extension popup intentionally does NOT mount LeftNav (always compact per §24.1)');
 
 console.log(
-    'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar collapses below 900px; web + desktop App.jsx wrap unlocked tree, popup left compact)',
+    'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar, 64px rail tier, collapsed on compact; web + desktop App.jsx wrap unlocked tree, popup left compact)',
 );

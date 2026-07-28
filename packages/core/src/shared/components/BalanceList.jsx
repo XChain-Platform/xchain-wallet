@@ -35,6 +35,8 @@ import styles from './BalanceList.module.css';
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
+ * @param {boolean} [props.hideSmallBalances]   : `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
+ * @param {boolean} [props.showChain]   : name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
  */
 export function BalanceList({
     rows,
@@ -49,8 +51,11 @@ export function BalanceList({
     hiddenKeys,
     onToggleHide,
     verifyMap,
+    hideSmallBalances = false,
+    showChain = false,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
+    const [smallExpanded, setSmallExpanded] = useState(false);
     if (!rows || rows.length === 0) {
         return (
             <EmptyStateNudge
@@ -65,12 +70,23 @@ export function BalanceList({
     // Stable sort: pinned rows first (preserving each section's existing
     // chain/tick order), then unpinned. Caller already sorted within each
     // group via sortByChainThenAsset.
-    const visible = hiddenKeys
+    const notHidden = hiddenKeys
         ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
         : rows;
     const hidden = hiddenKeys
         ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
         : [];
+    // . A row the user explicitly pinned is never dust to them, so the
+    // pin wins over the dust threshold; everything else under the threshold
+    // moves into its own collapsed section. Collapsed, not dropped: a balance
+    // the wallet knows about but will not show anywhere is a support ticket.
+    const small = hideSmallBalances
+        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r))
+        : [];
+    const smallSet = new Set(small.map((r) => `${r.chainId}:${r.tick}`));
+    const visible = small.length > 0
+        ? notHidden.filter((r) => !smallSet.has(`${r.chainId}:${r.tick}`))
+        : notHidden;
     const sortedRows = pinnedKeys && pinnedKeys.size > 0
         ? [
             ...visible.filter((r) => pinnedKeys.has(`${r.chainId}:${r.tick}`)),
@@ -93,6 +109,7 @@ export function BalanceList({
                         hidden={false}
                         onToggleHide={onToggleHide}
                         verify={verifyMap ? verifyMap[key] : null}
+                        showChain={showChain}
                     />
                 );
             })}
@@ -121,6 +138,39 @@ export function BalanceList({
                                 hidden
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
+                                showChain={showChain}
+                            />
+                        );
+                    }) : null}
+                </>
+            ) : null}
+            {small.length > 0 ? (
+                <>
+                    <button
+                        type="button"
+                        className={styles.hiddenToggle}
+                        onClick={() => setSmallExpanded((v) => !v)}
+                        aria-expanded={smallExpanded}
+                        data-testid="small-balances-toggle"
+                    >
+                        {smallExpanded
+                            ? `Hide ${small.length} small balance${small.length === 1 ? '' : 's'}`
+                            : `Show ${small.length} small balance${small.length === 1 ? '' : 's'}`}
+                    </button>
+                    {smallExpanded ? small.map((r) => {
+                        const key = `${r.chainId}:${r.tick}`;
+                        return (
+                            <BalanceRowEl
+                                key={`small:${key}`}
+                                row={r}
+                                multisig={r.chainId === multisigChainId ? multisig : null}
+                                onSelect={onSelectToken}
+                                pinned={false}
+                                onTogglePin={onTogglePin}
+                                hidden={false}
+                                onToggleHide={onToggleHide}
+                                verify={verifyMap ? verifyMap[key] : null}
+                                showChain={showChain}
                             />
                         );
                     }) : null}
@@ -130,7 +180,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // App-wide privacy toggle: when on, replace the per-row qty and
@@ -141,7 +191,19 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
     // Network/env (mainnet/testnet/regtest) is already chosen globally
     // in Settings, so repeating it on every row adds noise. Show just the
     // tick symbol; chain family is conveyed by the chain icon.
-    const subtitle = row.tick;
+    //
+    // : that last clause only holds for NATIVE rows. The chain icon is
+    // rendered under `isNative` below; a token with no published image falls
+    // through to a letter chip, which is derived from the tick and therefore
+    // identical for the same token on every chain. In a cross-chain list that
+    // makes the rows genuinely indistinguishable: session 20 hit three
+    // identical "XCHAIN / XCHAIN / 0.00000000" rows keyed bitcoin-regtest,
+    // litecoin-regtest and dogecoin-regtest, and picking one silently
+    // re-targets the calling form's network. So callers that show a
+    // cross-chain list opt into naming the chain.
+    const subtitle = showChain && row.chainDisplayName
+        ? `${row.tick} · ${row.chainDisplayName}`
+        : row.tick;
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
@@ -312,6 +374,46 @@ export function detectSpamCandidates(rows) {
         }
     }
     return flagged;
+}
+
+/* . Display dust thresholds in each chain's smallest unit. These decide
+ * whether a ROW is worth listing, nothing else: they never gate a send, a fee
+ * or a change output, so being a little generous here costs the user nothing.
+ * Bitcoin's 546 is the familiar relay dust limit; Litecoin's relay floor sits
+ * an order of magnitude higher per byte; Dogecoin Core carries an explicit
+ * DEFAULT_DUST_LIMIT of 0.01 DOGE. */
+export const SMALL_BALANCE_BASE_UNITS = Object.freeze({
+    bitcoin: 546n,
+    litecoin: 5460n,
+    dogecoin: 1000000n,
+});
+const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
+
+/**
+ * Whether a balance row counts as dust for `settings.privacy.hideSmallBalances`.
+ *
+ * Zero is always dust, which is the case the user actually hits: an empty
+ * LTC / DOGE row on a Bitcoin-only wallet. Above zero, native rows compare
+ * against their chain's threshold, and divisible tokens against a ten-thousandth
+ * of a unit (the same magnitude the spam heuristic already calls airdrop dust).
+ * An indivisible token is never dust: one unit is one whole thing, usually an NFT.
+ *
+ * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
+ * @returns {boolean}
+ */
+export function isSmallBalanceRow(row) {
+    if (!row) return false;
+    const q = safeBigInt(row.quantity);
+    if (q < 0n) return false;
+    if (q === 0n) return true;
+    if (row.kind === 'native') {
+        const threshold = SMALL_BALANCE_BASE_UNITS[coinFromChainId(row.chainId)]
+            ?? DEFAULT_SMALL_BALANCE_BASE_UNITS;
+        return q < threshold;
+    }
+    const div = Number(row.divisibility) || 0;
+    if (div <= 0) return false;
+    return q < (10n ** BigInt(div)) / 10000n;
 }
 
 /**

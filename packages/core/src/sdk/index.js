@@ -8,7 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-export { SDKRegistry, UnknownChainError, DEFAULT_SDK_NETWORK_OPTIONS } from './SDKRegistry.js';
+export {
+    SDKRegistry,
+    UnknownChainError,
+    DEFAULT_SDK_NETWORK_OPTIONS,
+    endpointOverridesFromSettings,
+    joinEndpoint,
+} from './SDKRegistry.js';
 export { adaptXChainSDK } from './defaultFactory.js';
 export { submitWithSigner } from './submitWithSigner.js';
 export { mockDeriveAddress } from './devMockAddresses.js';

@@ -20,9 +20,18 @@
 // Chains without an override entry render the registry defaults as
 // placeholders. "Reset to default" wipes the entry; "Save" commits
 // the local edit buffer to the persisted record.
+//
+// : the draft is seeded with the FULL default URL, port included
+// (`joinEndpoint`), not the descriptor's bare `defaultUrl`. Saving
+// writes all three fields, so seeding a regtest endpoint as
+// "http://localhost" (port dropped) meant editing Explorer alone
+// silently rewrote Encoder and Hub to a port nothing listens on. The
+// same item wired these overrides into SDKRegistry, so a bad value here
+// now really does break that chain's traffic: URLs are validated before
+// they are allowed to persist.
 
 import { useEffect, useState } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { INPUT, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
@@ -178,27 +187,52 @@ function formatRelative(iso) {
     }
 }
 
+// A URL the wallet can actually talk to: absolute, http(s), with a host.
+// Anything else would be handed straight to the SDK now that overrides
+// are live, so it is refused at the edit surface instead.
+function endpointError(value) {
+    let parsed;
+    try {
+        parsed = new URL(value);
+    } catch {
+        return 'Enter a full URL, for example http://localhost:18080';
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return 'Only http:// and https:// URLs are supported.';
+    }
+    if (!parsed.hostname) return 'That URL has no host.';
+    return null;
+}
+
 function ChainEndpointBlock({ descriptor, override, onSave }) {
     const defaults = {
-        explorerUrl: descriptor.explorer?.defaultUrl || '',
-        encoderUrl: descriptor.encoder?.defaultUrl || '',
-        hubUrl: descriptor.hub?.defaultUrl || '',
+        explorerUrl: sdkLib.joinEndpoint(descriptor.explorer),
+        encoderUrl: sdkLib.joinEndpoint(descriptor.encoder),
+        hubUrl: sdkLib.joinEndpoint(descriptor.hub),
     };
-    const [draft, setDraft] = useState(() => ({
-        explorerUrl: override?.explorerUrl ?? defaults.explorerUrl,
-        encoderUrl: override?.encoderUrl ?? defaults.encoderUrl,
-        hubUrl: override?.hubUrl ?? defaults.hubUrl,
-    }));
+    // A persisted value equal to the descriptor's bare `defaultUrl` on a
+    // ported endpoint is the  seeding bug, not a choice: SDKRegistry
+    // ignores it, so show what the wallet is really using.
+    const seed = (value, endpoint, fallback) => {
+        if (typeof value !== 'string' || value.trim() === '') return fallback;
+        const trimmed = value.trim();
+        if (endpoint && trimmed === endpoint.defaultUrl && trimmed !== fallback) return fallback;
+        return trimmed;
+    };
+    const seeded = () => ({
+        explorerUrl: seed(override?.explorerUrl, descriptor.explorer, defaults.explorerUrl),
+        encoderUrl: seed(override?.encoderUrl, descriptor.encoder, defaults.encoderUrl),
+        hubUrl: seed(override?.hubUrl, descriptor.hub, defaults.hubUrl),
+    });
+    const [draft, setDraft] = useState(seeded);
     const [editing, setEditing] = useState(false);
+    const [saveError, setSaveError] = useState(/** @type {string|null} */ (null));
 
     useEffect(() => {
         // re-sync draft when the persisted record changes underneath
-        setDraft({
-            explorerUrl: override?.explorerUrl ?? defaults.explorerUrl,
-            encoderUrl: override?.encoderUrl ?? defaults.encoderUrl,
-            hubUrl: override?.hubUrl ?? defaults.hubUrl,
-        });
+        setDraft(seeded());
         setEditing(false);
+        setSaveError(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [override?.explorerUrl, override?.encoderUrl, override?.hubUrl]);
 
@@ -207,28 +241,48 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         ? ` · ${descriptor.networkKind}`
         : '';
 
+    const persisted = seeded();
     const dirty = (
-        draft.explorerUrl !== (override?.explorerUrl ?? defaults.explorerUrl)
-        || draft.encoderUrl !== (override?.encoderUrl ?? defaults.encoderUrl)
-        || draft.hubUrl !== (override?.hubUrl ?? defaults.hubUrl)
+        draft.explorerUrl !== persisted.explorerUrl
+        || draft.encoderUrl !== persisted.encoderUrl
+        || draft.hubUrl !== persisted.hubUrl
     );
 
     const onCommit = () => {
+        // An emptied field means "use the default for this one", not
+        // "send requests to nowhere".
+        const next = {
+            explorerUrl: draft.explorerUrl.trim() || defaults.explorerUrl,
+            encoderUrl: draft.encoderUrl.trim() || defaults.encoderUrl,
+            hubUrl: draft.hubUrl.trim() || defaults.hubUrl,
+        };
+        const bad = [
+            ['Explorer URL', next.explorerUrl],
+            ['Encoder URL', next.encoderUrl],
+            ['Hub URL', next.hubUrl],
+        ]
+            .map(([label, value]) => {
+                const err = endpointError(value);
+                return err ? `${label}: ${err}` : null;
+            })
+            .filter(Boolean);
+        if (bad.length > 0) {
+            setSaveError(bad.join(' '));
+            return;
+        }
         const matchesDefault = (
-            draft.explorerUrl === defaults.explorerUrl
-            && draft.encoderUrl === defaults.encoderUrl
-            && draft.hubUrl === defaults.hubUrl
+            next.explorerUrl === defaults.explorerUrl
+            && next.encoderUrl === defaults.encoderUrl
+            && next.hubUrl === defaults.hubUrl
         );
-        onSave({
-            explorerUrl: draft.explorerUrl,
-            encoderUrl: draft.encoderUrl,
-            hubUrl: draft.hubUrl,
-            custom: !matchesDefault,
-        });
+        setSaveError(null);
+        setDraft(next);
+        onSave({ ...next, custom: !matchesDefault });
         setEditing(false);
     };
     const onReset = () => {
         setDraft(defaults);
+        setSaveError(null);
         onSave({
             explorerUrl: defaults.explorerUrl,
             encoderUrl: defaults.encoderUrl,
@@ -266,6 +320,17 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 placeholder={defaults.hubUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
+            {saveError ? (
+                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger, #c33)' }}>
+                    {saveError}
+                </div>
+            ) : null}
+            {dirty ? (
+                <div style={ROW_HINT}>
+                    Saving points this chain&apos;s balances, history and broadcasts at these
+                    addresses right away.
+                </div>
+            ) : null}
             <div style={{ display: 'flex', flexDirection: 'row', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 {isCustom || dirty ? (
                     <button type="button" onClick={onReset} style={ACTION_BTN}>Reset to default</button>

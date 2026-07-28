@@ -25,7 +25,7 @@ const src = readFileSync(sectionPath, 'utf8');
 assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
 assert.match(
     src,
-    /import \{ registry as registryLib \} from '@xchain-wallet\/core'/,
+    /import \{ registry as registryLib(?:, sdk as sdkLib)? \} from '@xchain-wallet\/core'/,
     'imports chain registry',
 );
 assert.match(
@@ -54,6 +54,25 @@ assert.match(src, /onClick=\{onCommit\}/, 'Save action wired (onCommit)');
 // `custom` flag derived from whether draft equals defaults.
 assert.match(src, /matchesDefault\b/, 'matchesDefault check present');
 assert.match(src, /custom: !matchesDefault/, 'custom flag set when draft diverges from defaults');
+
+// : the draft carries the port, and the override the user saves is
+// consumed by SDKRegistry rather than persisted into a void.
+assert.match(src, /sdkLib\.joinEndpoint\(descriptor\.explorer\)/, 'draft seeded with the joined default URL');
+assert.ok(!/descriptor\.explorer\?\.defaultUrl/.test(src), 'no bare defaultUrl seeding (drops the port)');
+assert.match(src, /function endpointError\(/, 'endpoint URLs are validated before they persist');
+
+const registryPath = join(wsRoot, 'packages', 'core', 'src', 'sdk', 'SDKRegistry.js');
+const registrySrc = readFileSync(registryPath, 'utf8');
+assert.match(registrySrc, /applyEndpointOverridesFromSettings\(settings\)/, 'registry adopts Settings overrides');
+
+const hostPath = join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
+const hostSrc = readFileSync(hostPath, 'utf8');
+assert.match(hostSrc, /applyEndpointOverridesFromVault\(/, 'host applies the persisted overrides');
+assert.match(
+    hostSrc,
+    /hasOwnProperty\.call\(patch, 'sdkEndpoints'\)/,
+    'a settings.update carrying sdkEndpoints re-applies them',
+);
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

@@ -35,14 +35,16 @@ assert.ok(
 
 // --- 2. Reduced-motion contract: matchMedia subscription + stacking ---
 
+// : the preference is resolved centrally (OS media query AND the
+// in-app Settings > Appearance override), so the carousel asks the shared
+// hook instead of reading matchMedia, which could only ever see the OS.
 assert.ok(
-    /matchMedia\(\s*['"]\(prefers-reduced-motion: reduce\)['"]/.test(carousel),
-    'OnboardingCarousel subscribes to the prefers-reduced-motion query',
+    /useReducedMotion\(\)/.test(carousel),
+    'OnboardingCarousel resolves reduced motion through useReducedMotion',
 );
 assert.ok(
-    /addEventListener\(\s*['"]change['"]/.test(carousel)
-        && /addListener\(/.test(carousel),
-    'reduced-motion change is observed with the addEventListener + Safari addListener fallback',
+    !/matchMedia\(/.test(carousel),
+    'OnboardingCarousel does not read matchMedia behind the resolver\'s back',
 );
 assert.ok(
     /if \(reducedMotion\) \{/.test(carousel),

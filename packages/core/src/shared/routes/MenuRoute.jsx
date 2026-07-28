@@ -29,7 +29,7 @@ import menuStyles from '../components/HeaderActionMenu.module.css';
  * @param {() => void} props.onBack
  * @param {() => void} [props.onAlerts]
  * @param {() => void} [props.onMarkets]
- * @param {() => void} [props.onTokens]       opens the My Tokens page (tokens this wallet has issued)
+ * @param {() => void} [props.onTokens]       opens the My Tokens page (tokens this wallet owns, issued or transferred in)
  * @param {() => void} [props.onMoreActions]  opens the catch-all Token Actions page (all §40+ entries)
  * @param {() => void} [props.onMessaging]
  * @param {() => void} [props.onCrossChain]

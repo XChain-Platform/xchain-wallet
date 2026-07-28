@@ -708,6 +708,28 @@ export function createBackgroundHost(deps) {
             // Vault not open / read failed: boot continues.
         }
     }
+    // : Settings -> Network & Endpoints is the surface an operator
+    // uses to point the wallet at their OWN explorer / encoder / hub, and
+    // until this ran the record was written, read back by the summary row,
+    // and consumed by nothing: every SDK instance kept the bundled
+    // defaults. Applied here (one host, all three shells) at construction,
+    // opportunistically on settings.get, and after any settings.update
+    // that touches sdkEndpoints. The registry no-ops when the effective
+    // endpoints are unchanged, so unrelated saves never drop live SDK
+    // instances.
+    async function applyEndpointOverridesFromVault(vault, sdkRegistry) {
+        if (!vault) return;
+        if (typeof sdkRegistry?.applyEndpointOverridesFromSettings !== 'function') return;
+        try {
+            const settings = await vault.settings.get();
+            if (settings) sdkRegistry.applyEndpointOverridesFromSettings(settings);
+        } catch {
+            // Vault not open yet or read failed: the bundled defaults keep
+            // serving and the next trigger tries again.
+        }
+    }
+    void applyEndpointOverridesFromVault(hostDeps?.vault, hostDeps?.sdkRegistry);
+
     async function refreshThrottleLimitsFromVault() {
         if (!throttleVault) return;
         try {
@@ -925,7 +947,7 @@ export function createBackgroundHost(deps) {
     });
 
 
-    host.register('settings.get', async (_req, { vault, chainRegistry }) => {
+    host.register('settings.get', async (_req, { vault, chainRegistry, sdkRegistry }) => {
         // Cluster S FOLLOWUP 1: opportunistic throttle-limits cache
         // hydration. The bridge handlers don't await this, so the very
         // first sign request after SW restart may run on stale defaults
@@ -941,6 +963,11 @@ export function createBackgroundHost(deps) {
         // calls it shortly after unlock, before any chain-aware UI
         // mounts.
         void seedCustomChainsFromVault(vault, chainRegistry);
+        // : same opportunistic trigger for custom endpoints. Covers
+        // the web shell, where the module-scoped SDKRegistry is replaced
+        // once the real SDK factory resolves and the fresh instance would
+        // otherwise start with an empty override map.
+        void applyEndpointOverridesFromVault(vault, sdkRegistry);
         return getSettings(vault);
     });
 
@@ -986,11 +1013,18 @@ export function createBackgroundHost(deps) {
         return { settings, addresses };
     });
 
-    host.register('settings.update', async (req, { vault }) => {
+    host.register('settings.update', async (req, { vault, sdkRegistry }) => {
         const patch = req && typeof req === 'object' && 'patch' in req
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
         const result = await updateSettings(vault, patch);
+        // : a saved endpoint takes effect on the next request, not
+        // at the next wallet restart. Invalidates only the chains whose
+        // endpoints actually moved.
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'sdkEndpoints')
+            && typeof sdkRegistry?.applyEndpointOverridesFromSettings === 'function') {
+            sdkRegistry.applyEndpointOverridesFromSettings(result);
+        }
         // Cluster S FOLLOWUP 1: refresh the sign-throttle limit cache
         // when the patch touches signThrottle so users see the change
         // take effect on the very next sign request.

@@ -97,14 +97,19 @@ function DeltaRow({ delta }) {
         // with a coin-debit row above it. When emitted standalone (action
         // has no other coin row), the simulator gives this row a
         // before/after too; render the fee amount in either case.
+        //
+        // : a fee row may now be the action's PROTOCOL fee rather than
+        // the miner fee, and it can be denominated in XCHAIN rather than the
+        // coin, so the label comes from the row when it names itself.
         const standalone = delta.before !== '' || delta.after !== '';
         return (
             <div
                 className={styles.row}
                 data-fee="true"
+                data-protocol-fee={delta.isProtocolFee ? 'true' : undefined}
                 data-coin={delta.isCoin ? 'true' : undefined}
             >
-                <dt className={styles.tick}>Network fee</dt>
+                <dt className={styles.tick}>{delta.feeLabel || 'Network fee'}</dt>
                 <dd className={styles.amount}>
                     {standalone ? (
                         <>

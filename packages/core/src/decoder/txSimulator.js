@@ -49,6 +49,26 @@
  * @property {boolean} isCoin  true when this row tracks the native coin (rendered with the fee row)
  * @property {boolean} isFee   true only on the fee-label row (a derived coin debit)
  * @property {string} [feeAmount]  set on isFee rows; the raw fee amount as a decimal string
+ * @property {string} [feeLabel]   set on isFee rows the UI must not label "Network fee"
+ * @property {boolean} [isProtocolFee]  true on the protocol-fee row 
+ */
+
+/**
+ * The protocol fee the action itself charges, on top of the miner fee.
+ *
+ * : this is a SECOND debit and the simulator was blind to it, so the
+ * confirm screen understated every fee-bearing action. It is not derivable
+ * from the PSBT: paid in the native coin it rides as a FEE_DESTINATION
+ * OUTPUT (and `inputs - outputs` excludes outputs by construction); paid in
+ * XCHAIN it never touches the transaction at all. Either way the caller
+ * holds the number - the native-coin lane already quotes it
+ * (`quoteNativeFee` -> `requiredFeeSats`) - so it is passed in rather than
+ * inferred, and when it is absent the simulator stays silent instead of
+ * projecting a zero.
+ *
+ * @typedef {Object} ProtocolFee
+ * @property {string} amount  decimal string in the fee's own tick
+ * @property {string} [tick]  ticker the fee is paid in; defaults to the native coin
  */
 
 /**
@@ -87,7 +107,8 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} opts.action
  * @param {Record<string, unknown>} [opts.params]
  * @param {BalanceLookup[]} [opts.balances]   current balances at the source address (token rows + a coin row)
- * @param {string} [opts.feeEstimate]         coin-denominated fee, decimal string
+ * @param {string} [opts.feeEstimate]         coin-denominated MINER fee, decimal string
+ * @param {ProtocolFee} [opts.protocolFee]    the action's own protocol fee, when the caller knows it
  * @param {string} [opts.chainId]
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {SimulationResult}
@@ -97,6 +118,7 @@ export function simulateAction({
     params,
     balances,
     feeEstimate,
+    protocolFee,
     chainId,
     chainRegistry,
 }) {
@@ -107,6 +129,15 @@ export function simulateAction({
         : inferCoinTick(balances);
     const balMap = indexBalances(balances, coinTick);
 
+    const result = simulateBody(action, p, balMap, coinTick, feeEstimate, chainId, chainRegistry);
+    // Applied AFTER the per-action projection so the protocol fee lands on
+    // whatever coin row that projection produced (a coin SEND folds its own
+    // principal in first), and so a new action type gets it for free.
+    applyProtocolFee(result, balMap, coinTick, protocolFee);
+    return result;
+}
+
+function simulateBody(action, p, balMap, coinTick, feeEstimate, chainId, chainRegistry) {
     if (action === 'SEND') return simulateSend(p, balMap, coinTick, feeEstimate);
     if (action === 'SWEEP') return simulateSweep(p, balMap, coinTick, feeEstimate);
     if (action === 'MINT') return simulateMint(p, balMap, coinTick, feeEstimate);
@@ -577,6 +608,59 @@ function pushFeeRow(deltas, balMap, coinTick, feeEstimate) {
         isFee: true,
         feeAmount: fee,
     });
+}
+
+/**
+ * : fold the action's protocol fee into the projection.
+ *
+ * Two payment lanes, one debit shape. In native-coin mode the fee is an
+ * extra output to FEE_DESTINATION, so it comes out of the same coin balance
+ * the miner fee does and simply has to be added to that row. In XCHAIN mode
+ * it is debited from the XCHAIN balance on acceptance, which is a row the
+ * projection would otherwise never mention at all.
+ *
+ * The debit lands on the row the user reads as their post-state; the fee's
+ * own amount rides a separate label row so "Network fee" keeps meaning the
+ * miner fee and the protocol fee is named as itself.
+ */
+function applyProtocolFee(result, balMap, coinTick, protocolFee) {
+    if (!result || !protocolFee) return;
+    const amount = str(protocolFee.amount);
+    if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) return;
+    const tick = upper(protocolFee.tick) || coinTick;
+    if (!tick) return;
+    const isCoin = tick === coinTick;
+
+    const deltas = result.deltas;
+    // Fold into whichever row already carries this tick's post-state: the
+    // action's own balance row when it has one, otherwise the standalone fee
+    // row pushFeeRow emitted (which carries before/after itself).
+    const carrier = deltas.find((d) => d.tick === tick && !d.isFee)
+        || deltas.find((d) => d.tick === tick && d.isFee && d.before !== '');
+    const row = {
+        tick,
+        before: '',
+        after: '',
+        isCoin,
+        isFee: true,
+        isProtocolFee: true,
+        feeLabel: 'Protocol fee',
+        feeAmount: amount,
+    };
+    if (carrier) {
+        carrier.after = addStr(carrier.after, neg(amount));
+    } else {
+        // Nothing else touches this tick (a zero miner fee, or the XCHAIN
+        // lane where the fee is the only movement), so this row is the
+        // post-state as well as the label.
+        row.before = balMap.get(tick) || '0';
+        row.after = addStr(row.before, neg(amount));
+    }
+
+    // Sit next to the network-fee row so the two fee lines read together.
+    const feeAt = deltas.findIndex((d) => d.isFee && !d.isProtocolFee);
+    if (feeAt === -1) deltas.push(row);
+    else deltas.splice(feeAt + 1, 0, row);
 }
 
 function str(v) {

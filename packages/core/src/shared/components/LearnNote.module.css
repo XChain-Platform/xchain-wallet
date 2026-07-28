@@ -1,0 +1,28 @@
+/* LearnNote . A quiet explanatory callout, shown only when Learn
+ * Mode is on, so it reads as help rather than as a warning. Deliberately
+ * not danger/warning coloured: nothing is wrong when this appears. */
+
+.note {
+    border: 1px solid var(--xc-border);
+    border-inline-start: 3px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    padding: var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+}
+
+.title {
+    display: block;
+    margin-bottom: var(--xc-space-1);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.body {
+    margin: 0;
+}

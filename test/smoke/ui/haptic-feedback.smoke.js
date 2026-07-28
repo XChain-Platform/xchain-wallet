@@ -55,10 +55,16 @@ assert.ok(/typeof navigator\.vibrate === 'function'/.test(hookSrc),
 assert.ok(/navigator\.vibrate\(/.test(hookSrc),
     'useHaptic actually calls navigator.vibrate');
 
-// 4. Reduced-motion is honoured via the standard matchMedia subscription.
+// 4. Reduced-motion is honoured via the shared resolver, which weighs the
+//    in-app Settings > Appearance override ahead of the OS media query
+//    (: reading matchMedia here ignored "Always reduce" outright).
 assert.ok(
-    /matchMedia\(\s*['"]\(prefers-reduced-motion: reduce\)['"]/.test(hookSrc),
-    'useHaptic subscribes to prefers-reduced-motion',
+    /useReducedMotion\(\)/.test(hookSrc),
+    'useHaptic resolves reduced motion through useReducedMotion',
+);
+assert.ok(
+    !/matchMedia\(/.test(hookSrc),
+    'useHaptic does not read matchMedia behind the resolver\'s back',
 );
 assert.ok(
     /if \(reducedMotion\) return;/.test(hookSrc),

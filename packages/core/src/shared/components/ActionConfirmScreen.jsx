@@ -21,6 +21,7 @@ import { Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
+import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -165,9 +166,16 @@ export function ActionConfirmScreen({
                             onConfirmedChange={onHwConfirmedChange}
                         />
                     ) : signerReady ? (
-                        <p className={hintClassName}>
-                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                        </p>
+                        // : this is the last screen before Approve & Sign,
+                        // and panic mode makes "no password needed" a claim the
+                        // wallet cannot honour. SigningReadyNote withdraws it
+                        // whenever signing is frozen, and explains why only for
+                        // a self-armed freeze.
+                        <SigningReadyNote>
+                            <p className={hintClassName}>
+                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                            </p>
+                        </SigningReadyNote>
                     ) : (
                         <Input
                             type="password"

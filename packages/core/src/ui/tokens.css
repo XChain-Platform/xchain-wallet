@@ -77,8 +77,20 @@
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
+/* Dark palette. : two triggers, one payload.
+ *
+ *   - the OS asks for dark AND the user has not forced Light
+ *   - the user picked Dark in Settings > Appearance, which
+ *     useSettingsRootAttributes stamps as `data-xc-theme="dark"` on <html>
+ *
+ * A media query and an attribute selector cannot be OR'd in plain CSS, so
+ * the declarations are duplicated. Keep the two blocks byte-identical; the
+ * appearance-settings unit test asserts they stay in sync.
+ *
+ * `[data-xc-theme]` is absent for the default "System default", which is why
+ * the media query needs no positive attribute match, only the Light escape. */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-xc-theme="light"]) {
         --xc-bg: #0B0F17;
         --xc-bg-muted: #121824;
         --xc-surface: #151B28;
@@ -98,10 +110,60 @@
     }
 }
 
+:root[data-xc-theme="dark"] {
+    --xc-bg: #0B0F17;
+    --xc-bg-muted: #121824;
+    --xc-surface: #151B28;
+    --xc-surface-raised: #1B2231;
+    --xc-border: #243044;
+    --xc-border-strong: #364257;
+    --xc-text: #E5EAF2;
+    --xc-text-muted: #94A3B8;
+    --xc-text-inverted: #0B0F17;
+    --xc-danger-bg: rgba(252, 165, 165, 0.14);
+    --xc-danger-text: #FCA5A5;
+    --xc-warning-bg: rgba(252, 211, 77, 0.14);
+    --xc-warning-text: #FCD34D;
+    --xc-focus-ring: rgba(30, 144, 199, 0.6);
+    --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Tell the browser which palette its own widgets (scrollbars, native
+ * selects, form controls) should paint in, so an explicit Light choice on a
+ * dark OS does not leave black scrollbars framing a white app. */
+:root[data-xc-theme="light"] { color-scheme: light; }
+:root[data-xc-theme="dark"] { color-scheme: dark; }
+
+/* Motion. Same two-trigger shape as the palette above:
+ * "Always reduce" (data-xc-reduced-motion="reduce") is the accessibility
+ * case that matters, because it exists for a user whose OS does not
+ * advertise the preference at all. "Never reduce" ("no-preference") opts
+ * back out of an OS preference the user does not want honoured here. */
 @media (prefers-reduced-motion: reduce) {
-    :root {
+    :root:not([data-xc-reduced-motion="no-preference"]) {
         --xc-transition: 0ms;
     }
+}
+
+:root[data-xc-reduced-motion="reduce"] {
+    --xc-transition: 0ms;
+}
+
+/* The token only covers transitions declared through it. Component CSS
+ * modules carry their own keyframe animations behind
+ * `@media (prefers-reduced-motion: reduce)` blocks, which an in-app override
+ * cannot reach, so the forced case suppresses animation globally instead of
+ * asking ~15 modules to each learn about the attribute. Durations are near
+ * zero rather than zero so animation/transition end events still fire and
+ * nothing that waits on them hangs. */
+:root[data-xc-reduced-motion="reduce"] *,
+:root[data-xc-reduced-motion="reduce"] *::before,
+:root[data-xc-reduced-motion="reduce"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
 }
 
 /* §53.4 / G170 - high-contrast variant. Triggered by `prefers-contrast: more`
@@ -127,8 +189,10 @@
         --xc-focus-ring: rgba(15, 23, 42, 0.85);
     }
 
+    /* : same Light escape hatch as the base palette, so a user on a
+     * dark OS who picked Light gets the light high-contrast values. */
     @media (prefers-color-scheme: dark) {
-        :root {
+        :root:not([data-xc-theme="light"]) {
             --xc-bg: #000000;
             --xc-bg-muted: #0B0F17;
             --xc-surface: #050810;
@@ -144,6 +208,26 @@
             --xc-accent-primary-hover: #BFDBFE;
             --xc-focus-ring: rgba(255, 255, 255, 0.85);
         }
+    }
+
+    /* ...and the explicit Dark choice, on any OS. Duplicated for the same
+     * reason as the base palette: media query OR attribute is not expressible
+     * in one selector. Keep in sync with the block above. */
+    :root[data-xc-theme="dark"] {
+        --xc-bg: #000000;
+        --xc-bg-muted: #0B0F17;
+        --xc-surface: #050810;
+        --xc-surface-raised: #0B0F17;
+        --xc-border: #E5EAF2;
+        --xc-border-strong: #FFFFFF;
+        --xc-text: #FFFFFF;
+        --xc-text-muted: #E5EAF2;
+        --xc-danger: #FCA5A5;
+        --xc-warning: #FCD34D;
+        --xc-success: #86EFAC;
+        --xc-accent-primary: #93C5FD;
+        --xc-accent-primary-hover: #BFDBFE;
+        --xc-focus-ring: rgba(255, 255, 255, 0.85);
     }
 }
 

@@ -41,6 +41,7 @@ import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
@@ -1841,18 +1842,25 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         onConfirmedChange={setHwExplicitConfirmed}
                     />
                 ) : signerReady ? (
-                    <p
-                        style={{
-                            margin: 'var(--xc-space-2) 0 0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--xc-space-1)',
-                            fontSize: 'var(--xc-text-sm)',
-                            color: 'var(--xc-text-muted)',
-                        }}
-                    >
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                    </p>
+                    // : "Wallet unlocked. No password needed." is a claim
+                    // about this wallet's ability to sign, and panic mode makes
+                    // it false. SigningReadyNote keeps the note when signing is
+                    // allowed, swaps in the freeze when the user armed it
+                    // themselves, and renders nothing when it was duress-armed.
+                    <SigningReadyNote>
+                        <p
+                            style={{
+                                margin: 'var(--xc-space-2) 0 0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 'var(--xc-space-1)',
+                                fontSize: 'var(--xc-text-sm)',
+                                color: 'var(--xc-text-muted)',
+                            }}
+                        >
+                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                        </p>
+                    </SigningReadyNote>
                 ) : (
                     <Input
                         ref={passwordRef}
@@ -1969,6 +1977,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const hasTokenSelected = !!chainId && !!tick.trim();
     return wrap(
         <form id="send-form" onSubmit={handleReview} noValidate>
+            {/*
+              * : state the signing freeze at the TOP of the form, before
+              * the user picks a destination and an amount. The refusal used to
+              * arrive only on Approve & Sign, by which point a duress observer
+              * has already watched the whole transaction get composed.
+              * Duress-armed freezes render nothing here, by design.
+              */}
+            <PanicFreezeNotice surface="send" />
             {draftBanner}
             <SelectedTokenHero
                 chainId={chainId}

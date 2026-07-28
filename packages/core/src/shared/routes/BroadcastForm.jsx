@@ -50,6 +50,19 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+// Separator between the parts the form packs into one MEMO slot (the optional
+// UTC timestamp and the message body). : this used to be ' | ', and '|'
+// is the protocol's own field delimiter - the SDK refuses a MEMO containing
+// one, so ticking the wallet's own timestamp box made the action unsendable
+// with an error naming a field the UI never shows. The separator is cosmetic;
+// the delimiter is not.
+const MEMO_PART_SEPARATOR = ' - ';
+
+// '|' separates fields and ';' separates actions on the wire, so neither can
+// appear in text the user typed. The form says so in its own words rather than
+// letting the compose call fail with the protocol's field names.
+const RESERVED_DELIMITERS = /[|;]/;
+
 /**
  * BROADCAST form (§40.6).
  *
@@ -57,9 +70,9 @@ const PROTOCOL_COIN_TICKER = {
  * on-chain, tied to the source address. Three UX lanes map onto the
  * four protocol format versions (BROADCAST.md):
  *
- *   - plain broadcast (v0): feed name + message, no value, no fee.
- *   - oracle (v1): feed name + value + fee (+ optional memo).
- *   - feed URL (v2): feed name (a URL) + fee (+ optional memo).
+ *   - plain broadcast (v0): message only, no memo, no fee.
+ *   - oracle (v1): feed name + value (+ optional fee, optional memo).
+ *   - feed URL (v2): feed name (a URL) (+ optional fee, optional memo).
  *
  * v3 (feed results) is a resolve path from a prior feed's detail page
  * and not surfaced as a standalone authoring lane here.
@@ -208,12 +221,22 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         const memoParts = [];
         if (includeTimestamp) memoParts.push(new Date().toISOString());
         if (feed && body) memoParts.push(body);
-        const memo = memoParts.join(' | ');
+        const memo = memoParts.join(MEMO_PART_SEPARATOR);
 
-        // Version selection: oracle (v1) > feed (v2) > plain (v0).
+        // : the version has to follow the fields that are actually
+        // populated. Only v1/v2/v3 carry a MEMO slot (v0 is
+        // VERSION|MESSAGE|VALUE), so selecting on VALUE and FEE alone dropped a
+        // typed body on the floor - encoded, paid for, and reported as sent,
+        // with the confirm screen showing no trace of it either. FEE is
+        // optional on the wire (the indexer treats a null FEE as no usage fee),
+        // so a MEMO-carrying version is always reachable without inventing a
+        // fee: v1 when there is a value to publish, v2 otherwise. This is the
+        // same answer the SDK's own FormatSelector.select() reaches from these
+        // fields; the version stays explicit here so the confirm screen and the
+        // encoder read the identical wire shape.
         let version = '0';
-        if (val && fee) version = '1';
-        else if (fee) version = '2';
+        if (val && (fee || memo)) version = '1';
+        else if (fee || memo) version = '2';
 
         /** @type {Record<string, string>} */
         const p = { VERSION: version, MESSAGE: message };
@@ -267,6 +290,14 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 setFormError('Feed fee must be a non-negative number.');
                 return;
             }
+        }
+        //  sibling case: a user-typed delimiter. The wallet no longer
+        // inserts one itself, but a pipe or semicolon in either text field is
+        // still unsendable, and the compose call reports that in protocol
+        // field names nobody outside this file recognises.
+        if (RESERVED_DELIMITERS.test(feedName) || RESERVED_DELIMITERS.test(text)) {
+            setFormError('Remove any | or ; characters: the network reserves them as separators and will reject the broadcast.');
+            return;
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }

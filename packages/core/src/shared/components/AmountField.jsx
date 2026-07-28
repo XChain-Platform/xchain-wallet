@@ -26,7 +26,7 @@ import styles from './AmountField.module.css';
  * @param {string} props.amount                              canonical coin-scale amount (always)
  * @param {string} [props.fiatAmount]                        raw text in the fiat input mode; ignored when `amountInputMode === 'coin'`
  * @param {string} [props.tick]                              ticker shown in the label when in coin mode (e.g. 'BTC')
- * @param {{ fiatCurrency?: string, rate?: number } | null} [props.fiatRate]   when null, the fiat toggle is hidden
+ * @param {{ fiatCurrency?: string, rate?: number } | null} [props.fiatRate]   rate for ONE UNIT OF `tick`, not for the chain coin (: `useTickFiatRate` returns exactly this). When null, the fiat toggle and the ≈ preview are hidden, which is the correct render for a tick nothing can price.
  * @param {string} [props.fiatCurrency]                      fallback fiat code when `fiatRate.fiatCurrency` is missing
  * @param {'coin' | 'fiat'} [props.amountInputMode]
  * @param {(rawValue: string, cursorPos: number | null) => void} props.onAmountFieldChange

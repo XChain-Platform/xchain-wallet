@@ -22,6 +22,11 @@ import styles from './HeaderSettingsButton.module.css';
  *   ▸ Account    same shape; click navigates to AccountPicker
  *   ▸ Network    inline coin-family filter (quick toggle, no nav)
  *
+ * Every section is opt-in: a host that only wires the pickers gets a
+ * pure wallet/account switcher, and a host that only wires the filter
+ * gets the old filter-only button. Sections whose handlers are missing
+ * are omitted rather than rendered inert.
+ *
  * Keeping the popover compact: full lists + add affordances belong on
  * dedicated pages where there's room for labels, descriptions, and
  * confirmation. The popover is just "what's active" + "tap to change".
@@ -37,10 +42,10 @@ import styles from './HeaderSettingsButton.module.css';
  * @param {() => void} [props.onOpenAccountPicker]                         host navigates to the account picker route
  * @param {boolean} [props.walletNonDefault]   used by the gear's status dot (caller knows whether the active wallet is the "first" one in the list)
  * @param {boolean} [props.accountNonDefault]
- * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
- * @param {string[]} props.coinFamilies
- * @param {string} props.networkFilter
- * @param {(coin: string) => void} props.onNetworkFilterChange
+ * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
+ * @param {string[]} [props.coinFamilies]
+ * @param {string} [props.networkFilter]
+ * @param {(coin: string) => void} [props.onNetworkFilterChange]   omit (or omit the registry / families) to drop the Network section entirely
  */
 export function HeaderSettingsButton({
     activeWallet,
@@ -72,8 +77,17 @@ export function HeaderSettingsButton({
         };
     }, [open]);
 
-    const filterActive = networkFilter && networkFilter !== 'all';
-    const anyNonDefault = filterActive || walletNonDefault || accountNonDefault;
+    // The Network section needs all four pieces to render anything
+    // useful; NetworkFilter dereferences the registry and maps over the
+    // families, so a partially-wired host must get no section at all
+    // rather than a crash.
+    const showNetwork = Boolean(chainRegistry)
+        && Array.isArray(coinFamilies)
+        && coinFamilies.length > 0
+        && typeof onNetworkFilterChange === 'function';
+
+    const filterActive = showNetwork && networkFilter && networkFilter !== 'all';
+    const anyNonDefault = Boolean(filterActive) || walletNonDefault || accountNonDefault;
 
     const walletLabel = activeWallet?.name || null;
     const accountLabel = activeAccount?.name
@@ -125,14 +139,16 @@ export function HeaderSettingsButton({
                         </Section>
                     ) : null}
 
-                    <Section title="Network">
-                        <NetworkFilter
-                            chainRegistry={chainRegistry}
-                            coinFamilies={coinFamilies}
-                            value={networkFilter}
-                            onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
-                        />
-                    </Section>
+                    {showNetwork ? (
+                        <Section title="Network">
+                            <NetworkFilter
+                                chainRegistry={chainRegistry}
+                                coinFamilies={coinFamilies}
+                                value={networkFilter || 'all'}
+                                onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
+                            />
+                        </Section>
+                    ) : null}
                 </div>
             ) : null}
         </div>

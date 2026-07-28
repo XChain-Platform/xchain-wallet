@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
 import styles from './OnboardingCarousel.module.css';
 
 /**
@@ -19,8 +19,9 @@ import styles from './OnboardingCarousel.module.css';
  * `<Screen>` wrapper) so the caller controls the surrounding chrome and
  * the component stays trivial to unit-test in isolation.
  *
- * Motion contract (mirrors `AnimatedQrFrames`): honors
- * `prefers-reduced-motion: reduce`. When reduced motion is requested the
+ * Motion contract (mirrors `AnimatedQrFrames`): honors reduced motion,
+ * whether the OS asks for it or the user did in Settings → Appearance
+ * (`useReducedMotion`). When reduced motion is requested the
  * component drops the slide transition AND the optional auto-advance, and
  * renders every frame stacked in a single scrollable column so a user who
  * can't tolerate movement still gets the full explainer without stepping
@@ -54,27 +55,11 @@ export function OnboardingCarousel({
     // is retired for the rest of the session. A reader who takes the wheel
     // should never have the slide yanked out from under them.
     const [userDrove, setUserDrove] = useState(false);
-    const [reducedMotion, setReducedMotion] = useState(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    });
+    // : the OS media query AND the in-app Settings → Appearance
+    // override. The stacked-frames fallback and the auto-advance timer below
+    // are both JS decisions, so they have to ask rather than leave it to CSS.
+    const reducedMotion = useReducedMotion();
     const liveRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-
-    useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-        const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const onChange = (e) => setReducedMotion(e.matches);
-        // addEventListener on modern browsers; addListener for Safari < 14.
-        if (typeof mq.addEventListener === 'function') {
-            mq.addEventListener('change', onChange);
-            return () => mq.removeEventListener('change', onChange);
-        }
-        if (typeof mq.addListener === 'function') {
-            mq.addListener(onChange);
-            return () => mq.removeListener(onChange);
-        }
-        return undefined;
-    }, []);
 
     const count = Array.isArray(frames) ? frames.length : 0;
     const atLast = index >= count - 1;

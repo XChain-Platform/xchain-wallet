@@ -9,16 +9,24 @@
 // contact legal@dankest.llc.
 
 // AppHeader: persistent top strip that stays mounted across every
-// unlocked route. Brand on the left; QR/address dropdown, lock, and the
-// pancake-menu button on the right. Living in the FullLayoutWithNav
+// unlocked route. Brand on the left; the settings gear (wallet /
+// account / network), QR/address dropdown, lock, and the pancake-menu
+// button on the right. Living in the FullLayoutWithNav
 // header slot means TokenDetail / Send / Receive / Settings all keep the
 // wallet's top-level affordances visible without re-rendering their own
 // copy. `onMenuOpen` fires when the pancake is tapped; the parent layout
 // owns the menu drawer mount so it can span the viewport.
+//
+// : the gear leads the right-side stack so switching wallet or
+// account is one tap from ANY unlocked route, not a walk through
+// Settings -> Accounts. It renders only when the host wires at least one
+// of the pickers or a complete network filter, so shells that supply
+// none of them keep the old minimal bar.
 
 import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Icon } from '../../ui/index.js';
+import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import styles from './AppHeader.module.css';
 
 /**
@@ -30,6 +38,17 @@ import styles from './AppHeader.module.css';
  * @param {() => void} [props.onCommandPalette]                      when provided, renders a search button that opens the §33 command palette (Cmd/Ctrl+K)
  * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
  * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
+ * @param {{ id: string, name: string } | null} [props.activeWallet]              summary row in the gear popover
+ * @param {{ id: string, name?: string, index?: number } | null} [props.activeAccount]
+ * @param {() => void} [props.onOpenWalletPicker]                    gear popover: navigate to the wallet picker
+ * @param {() => void} [props.onOpenAccountPicker]                   gear popover: navigate to the account picker
+ * @param {boolean} [props.walletNonDefault]                         drives the gear's status dot
+ * @param {boolean} [props.accountNonDefault]
+ * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
+ * @param {string[]} [props.coinFamilies]
+ * @param {string} [props.networkFilter]
+ * @param {(coin: string) => void} [props.onNetworkFilterChange]
+ * @param {boolean} [props.showNetworkFilter]                        set false on routes where a network filter is meaningless (Send / Receive)
  */
 export function AppHeader({
     onMenuOpen,
@@ -39,7 +58,27 @@ export function AppHeader({
     onCommandPalette,
     onLock,
     locking,
+    activeWallet = null,
+    activeAccount = null,
+    onOpenWalletPicker,
+    onOpenAccountPicker,
+    walletNonDefault = false,
+    accountNonDefault = false,
+    chainRegistry,
+    coinFamilies,
+    networkFilter,
+    onNetworkFilterChange,
+    showNetworkFilter = true,
 }) {
+    const networkWired = showNetworkFilter
+        && Boolean(chainRegistry)
+        && Array.isArray(coinFamilies)
+        && coinFamilies.length > 0
+        && typeof onNetworkFilterChange === 'function';
+    const showSettings = typeof onOpenWalletPicker === 'function'
+        || typeof onOpenAccountPicker === 'function'
+        || networkWired;
+
     return (
         <header className={styles.bar} role="banner">
             <div className={styles.left}>
@@ -50,6 +89,20 @@ export function AppHeader({
                 />
             </div>
             <div className={styles.right}>
+                {showSettings ? (
+                    <HeaderSettingsButton
+                        activeWallet={activeWallet}
+                        activeAccount={activeAccount}
+                        onOpenWalletPicker={onOpenWalletPicker}
+                        onOpenAccountPicker={onOpenAccountPicker}
+                        walletNonDefault={walletNonDefault}
+                        accountNonDefault={accountNonDefault}
+                        chainRegistry={networkWired ? chainRegistry : undefined}
+                        coinFamilies={networkWired ? coinFamilies : undefined}
+                        networkFilter={networkFilter}
+                        onNetworkFilterChange={networkWired ? onNetworkFilterChange : undefined}
+                    />
+                ) : null}
                 {onCommandPalette ? (
                     <button
                         type="button"

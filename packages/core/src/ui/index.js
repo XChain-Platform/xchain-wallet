@@ -36,3 +36,13 @@ export { NetworkField } from './NetworkField.jsx';
 export { Skeleton } from './Skeleton.jsx';
 export { InfoTip } from './InfoTip.jsx';
 export * as Icon from './icons/index.jsx';
+// : the reduced-motion resolver every JS-driven animation reads, so a
+// consumer never has to decide between the OS preference and the in-app
+// override itself.
+export {
+    useReducedMotion,
+    resolveReducedMotion,
+    subscribeReducedMotion,
+    osPrefersReducedMotion,
+    REDUCED_MOTION_ATTR,
+} from './reducedMotion.js';

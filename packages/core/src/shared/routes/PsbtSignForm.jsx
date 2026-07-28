@@ -66,6 +66,7 @@ import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
+import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { decodeBbqrPsbt } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
 import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
@@ -989,9 +990,13 @@ export function PsbtSignForm({ walletId, onBack }) {
                     ) : null}
                 </div>
             ) : signerReady ? (
-                <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                    <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                </p>
+                // : withdraw the "ready to sign" claim while panic mode
+                // has signing frozen.
+                <SigningReadyNote>
+                    <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                    </p>
+                </SigningReadyNote>
             ) : (
                 <Input
                     type="password"

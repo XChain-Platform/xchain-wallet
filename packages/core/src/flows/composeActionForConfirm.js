@@ -28,7 +28,7 @@
 
 import { composeForConfirm } from './composeForConfirm.js';
 import { assertNoTamper } from './confirmChecks.js';
-import { exactNetworkFeeSats } from './psbtNetworkFee.js';
+import { totalNetworkFeeSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
@@ -89,8 +89,21 @@ export async function composeActionForConfirm({
     // built bytes rather than a rate estimate. Decomposed once here and reused
     // for the fee; null when an input value is missing from the PSBT, in which
     // case the UI falls back to its estimate and says so.
+    //
+    // : totalNetworkFeeSats, not exactNetworkFeeSats, because a chunk-lane
+    // action is TWO transactions and this PSBT is only the first. The reveal's
+    // miner fee is pre-funded by the carrier outputs this PSBT creates, so it is
+    // knowable here and belongs in the number the user is asked to approve.
+    // Off the chunk lanes the two functions agree exactly.
     const decomposed = sdk.wallet.decomposePsbt(composed.psbt);
-    const networkFeeSats = exactNetworkFeeSats(decomposed);
+    const networkFeeSats = totalNetworkFeeSats(decomposed, {
+        carrierScripts: composed.carrierScripts,
+        ownAddresses: own,
+        // The reveal re-emits the native-coin protocol fee as a real output, so
+        // that slice of the carrier value is not miner fee. It is the protocol
+        // fee's job to surface it , not this number's.
+        revealOutputSats: Number(composed.quote?.requiredFeeSats) || 0,
+    });
     assertNoTamper({
         psbtHex: composed.psbt,
         expected: composed.expectedOutputs,
@@ -178,6 +191,20 @@ export async function composeActionForConfirm({
         decoded = null;
     }
 
+    // : the miner fee is not the whole cost. A fee-bearing action
+    // (ISSUE, the BET_* and VM_* families, per-recipient AIRDROP/DIVIDEND)
+    // also pays a protocol fee, and `networkFeeSats` cannot see it: in
+    // native-coin mode it is an extra OUTPUT to FEE_DESTINATION, and
+    // `inputs - outputs` excludes outputs by construction. The quote that
+    // sized that output is right here on the envelope, so the projection
+    // gets the same number the transaction pays. Null in XCHAIN-fee mode -
+    // no quote was fetched there, and the simulator must stay silent rather
+    // than project a fee it does not know.
+    const protocolFeeSats = Number(composed.quote?.requiredFeeSats);
+    const protocolFee = Number.isFinite(protocolFeeSats) && protocolFeeSats > 0
+        ? { amount: satsToCoinDecimal(protocolFeeSats) }
+        : null;
+
     let simulation = null;
     try {
         const sdkBalances = await balancesPromise;
@@ -189,6 +216,7 @@ export async function composeActionForConfirm({
                 feeEstimate: Number.isFinite(networkFeeSats)
                     ? satsToCoinDecimal(networkFeeSats)
                     : '0',
+                protocolFee,
                 chainId,
                 chainRegistry,
             });
@@ -226,6 +254,10 @@ export async function composeActionForConfirm({
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
         // does not carry every input value. Never a rate estimate.
         networkFeeSats,
+        // : the action's own protocol fee in the chain's smallest unit,
+        // when it is being paid in the native coin and therefore known. Null
+        // in XCHAIN-fee mode, which quotes nothing.
+        protocolFeeSats: protocolFee ? protocolFeeSats : null,
         // §5.2.3: projected balance deltas, or null when they could not be
         // computed. Never a zero that would read as "nothing changes".
         simulation,

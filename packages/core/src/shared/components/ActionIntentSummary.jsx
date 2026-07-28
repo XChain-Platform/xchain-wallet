@@ -49,12 +49,29 @@ export function ActionIntentSummary({ decoded, simulation }) {
 
             {simulation && Array.isArray(simulation.deltas) && simulation.deltas.length > 0 ? (
                 <div className={styles.deltas} data-testid="action-intent-deltas">
-                    {simulation.deltas.map((d, i) => (
-                        <div key={`${d.tick}-${i}`} className={styles.delta}>
-                            <span className={styles.deltaTick}>{d.tick}</span>
-                            <span className={styles.deltaValues}>{d.before} → {d.after}</span>
-                        </div>
-                    ))}
+                    {simulation.deltas.map((d, i) => {
+                        // Label-only rows (empty before/after) are paired with
+                        // the balance row that already carries the debit, so
+                        // showing a before → after here would print a bare
+                        // arrow. : the protocol fee is still named and
+                        // priced, because the balance row folds it in with the
+                        // miner fee and this is the only place it is stated.
+                        if (d.before === '' && d.after === '') {
+                            if (!d.isProtocolFee) return null;
+                            return (
+                                <div key={`${d.tick}-${i}`} className={styles.delta}>
+                                    <span className={styles.deltaTick}>{d.feeLabel || 'Protocol fee'}</span>
+                                    <span className={styles.deltaValues}>{d.tick} {d.feeAmount}</span>
+                                </div>
+                            );
+                        }
+                        return (
+                            <div key={`${d.tick}-${i}`} className={styles.delta}>
+                                <span className={styles.deltaTick}>{d.tick}</span>
+                                <span className={styles.deltaValues}>{d.before} → {d.after}</span>
+                            </div>
+                        );
+                    })}
                     {Array.isArray(simulation.notes)
                         ? simulation.notes.map((n, i) => (<p key={i} className={styles.deltaNote}>{n}</p>))
                         : null}

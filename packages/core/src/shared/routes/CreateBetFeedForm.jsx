@@ -474,6 +474,14 @@ export function CreateBetFeedForm({
                 walletId={walletId}
                 title="Token bets are placed in"
                 networkFilter={coinFromChainId(chainId)}
+                // : BET escrows a TOKEN. The native coin is not a legal
+                // wager (the indexer answers `invalid: TICK (unknown)`), so
+                // offering it walked a wallet holding only BTC into composing a
+                // whole market that could never index. Proven on the regtest
+                // venue in wallet E2E session 20, then re-run with XCHAIN,
+                // which produced market #1160.
+                kindFilter="tokens"
+                kindLocked
                 onSelect={(sel) => { setTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
                 onBack={() => setTokenPickerOpen(false)}
             />

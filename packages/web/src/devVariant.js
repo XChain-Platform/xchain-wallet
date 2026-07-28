@@ -25,11 +25,16 @@
 //
 // 640px threshold: every common phone in portrait sits below; every
 // tablet in landscape and every desktop window the user is likely to
-// keep open sits above. Tweakable in one place.
+// keep open sits above.
+//
+// : the number itself is no longer defined here. It is the shell's
+// `rail` breakpoint, and it lives in core's shared/styles/breakpoints.js
+// alongside the other tier boundaries so a move stays in one place.
 
 import { useEffect, useState } from 'react';
+import { TIER_RAIL_MIN_PX } from '@xchain-wallet/core/shared/styles/breakpoints.js';
 
-export const THRESHOLD_PX = 640;
+export const THRESHOLD_PX = TIER_RAIL_MIN_PX;
 const STORAGE_KEY = 'xc.devVariant';
 
 function normalize(v) {

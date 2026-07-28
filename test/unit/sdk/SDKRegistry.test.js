@@ -11,7 +11,13 @@
 // Unit tests for SDKRegistry: the per-chain SDK instance cache.
 
 import { describe, it, expect } from 'vitest';
-import { SDKRegistry, UnknownChainError, DEFAULT_SDK_NETWORK_OPTIONS } from '../../../packages/core/src/sdk/SDKRegistry.js';
+import {
+    SDKRegistry,
+    UnknownChainError,
+    DEFAULT_SDK_NETWORK_OPTIONS,
+    endpointOverridesFromSettings,
+    joinEndpoint,
+} from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const chainRegistry = defaultRegistry();
@@ -91,6 +97,164 @@ describe('sdk/SDKRegistry', () => {
                 ...DEFAULT_SDK_NETWORK_OPTIONS.retry,
                 maxRetries: 0,
             });
+        });
+    });
+
+    // : Settings -> Network & Endpoints persisted an override that
+    // nothing ever consumed - `setEndpointOverrides` had no callers, so
+    // `_endpointOverrides` stayed `{}` for the process lifetime and an
+    // operator pointing the wallet at their own node was silently ignored.
+    describe('endpoint overrides ', () => {
+        const captureFactory = () => {
+            const calls = [];
+            return { calls, factory: (opts) => { calls.push(opts); return fakeFactory(opts); } };
+        };
+        const regtest = chainRegistry.get('litecoin-regtest');
+        const settingsWith = (chainId, entry) => ({ sdkEndpoints: { [chainId]: entry } });
+
+        it('joins the default port into the endpoint the factory receives', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            reg.get('litecoin-regtest');
+            expect(calls[0].encoderUrl).toBe(joinEndpoint(regtest.encoder));
+            expect(calls[0].encoderUrl).toContain(`:${regtest.encoder.defaultPort}`);
+        });
+
+        it('applies a saved custom endpoint to the next SDK instance', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            reg.get('litecoin-regtest');
+            expect(calls[0].explorerUrl).toBe(joinEndpoint(regtest.explorer));
+
+            const { changed } = reg.applyEndpointOverridesFromSettings(
+                settingsWith('litecoin-regtest', {
+                    explorerUrl: 'https://explorer.my-node.example:8443',
+                    encoderUrl: joinEndpoint(regtest.encoder),
+                    hubUrl: joinEndpoint(regtest.hub),
+                    custom: true,
+                }),
+            );
+            expect(changed).toEqual(['litecoin-regtest']);
+
+            reg.get('litecoin-regtest');
+            expect(calls).toHaveLength(2);
+            expect(calls[1].explorerUrl).toBe('https://explorer.my-node.example:8443');
+            // Untouched siblings keep their ports.
+            expect(calls[1].encoderUrl).toBe(joinEndpoint(regtest.encoder));
+            expect(calls[1].hubUrl).toBe(joinEndpoint(regtest.hub));
+        });
+
+        it('leaves other chains and their live instances alone', () => {
+            const { factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            const btc = reg.get('bitcoin-mainnet');
+            const ltc = reg.get('litecoin-regtest');
+            reg.applyEndpointOverridesFromSettings(
+                settingsWith('litecoin-regtest', {
+                    explorerUrl: 'https://explorer.my-node.example:8443',
+                    encoderUrl: joinEndpoint(regtest.encoder),
+                    hubUrl: joinEndpoint(regtest.hub),
+                    custom: true,
+                }),
+            );
+            expect(reg.get('bitcoin-mainnet')).toBe(btc);
+            expect(reg.get('litecoin-regtest')).not.toBe(ltc);
+        });
+
+        it('is a no-op when the effective endpoints did not move', () => {
+            const { factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            const settings = settingsWith('litecoin-regtest', {
+                explorerUrl: 'https://explorer.my-node.example:8443',
+                encoderUrl: joinEndpoint(regtest.encoder),
+                hubUrl: joinEndpoint(regtest.hub),
+                custom: true,
+            });
+            reg.applyEndpointOverridesFromSettings(settings);
+            const sdk = reg.get('litecoin-regtest');
+            const second = reg.applyEndpointOverridesFromSettings(settings);
+            expect(second.changed).toEqual([]);
+            expect(reg.get('litecoin-regtest')).toBe(sdk);
+        });
+
+        it('reverts to the descriptor default when the override is reset', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            reg.applyEndpointOverridesFromSettings(
+                settingsWith('litecoin-regtest', {
+                    explorerUrl: 'https://explorer.my-node.example:8443',
+                    encoderUrl: joinEndpoint(regtest.encoder),
+                    hubUrl: joinEndpoint(regtest.hub),
+                    custom: true,
+                }),
+            );
+            reg.get('litecoin-regtest');
+            reg.applyEndpointOverridesFromSettings(
+                settingsWith('litecoin-regtest', {
+                    explorerUrl: joinEndpoint(regtest.explorer),
+                    encoderUrl: joinEndpoint(regtest.encoder),
+                    hubUrl: joinEndpoint(regtest.hub),
+                    custom: false,
+                }),
+            );
+            reg.get('litecoin-regtest');
+            expect(calls[calls.length - 1].explorerUrl).toBe(joinEndpoint(regtest.explorer));
+        });
+
+        // The latent half of : the pre-fix editor seeded its draft
+        // from `defaultUrl` alone and then wrote all three fields, so a
+        // record saved before this fix carries port-stripped siblings.
+        // Consuming those verbatim would kill the two endpoints the
+        // operator never touched.
+        it('ignores port-stripped values left behind by the old editor', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            reg.applyEndpointOverridesFromSettings(
+                settingsWith('litecoin-regtest', {
+                    explorerUrl: 'https://explorer.my-node.example:8443',
+                    encoderUrl: regtest.encoder.defaultUrl,   // ':3223' dropped
+                    hubUrl: regtest.hub.defaultUrl,           // ':10000' dropped
+                    custom: true,
+                }),
+            );
+            reg.get('litecoin-regtest');
+            expect(calls[0].explorerUrl).toBe('https://explorer.my-node.example:8443');
+            expect(calls[0].encoderUrl).toBe(joinEndpoint(regtest.encoder));
+            expect(calls[0].hubUrl).toBe(joinEndpoint(regtest.hub));
+        });
+
+        it('drops blank fields, non-custom entries and unknown chains', () => {
+            const overrides = endpointOverridesFromSettings({
+                sdkEndpoints: {
+                    'litecoin-regtest': {
+                        explorerUrl: '  https://explorer.my-node.example  ',
+                        encoderUrl: '   ',
+                        hubUrl: joinEndpoint(regtest.hub),
+                        custom: true,
+                    },
+                    'bitcoin-mainnet': {
+                        explorerUrl: 'https://ignored.example',
+                        encoderUrl: '',
+                        hubUrl: '',
+                        custom: false,
+                    },
+                    'ethereum-mainnet': {
+                        explorerUrl: 'https://not-a-chain.example',
+                        encoderUrl: '',
+                        hubUrl: '',
+                        custom: true,
+                    },
+                },
+            }, chainRegistry);
+            expect(Object.keys(overrides)).toEqual(['litecoin-regtest']);
+            expect(overrides['litecoin-regtest']).toEqual({
+                explorerUrl: 'https://explorer.my-node.example',
+            });
+        });
+
+        it('tolerates a settings record with no sdkEndpoints at all', () => {
+            expect(endpointOverridesFromSettings({}, chainRegistry)).toEqual({});
+            expect(endpointOverridesFromSettings(null, chainRegistry)).toEqual({});
         });
     });
 

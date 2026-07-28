@@ -27,6 +27,7 @@
 import { Input } from '@xchain-wallet/core/ui';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { PsbtIntentPanel } from './PsbtIntentPanel.jsx';
+import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { isUnreadableActionReason } from './psbtDecodeReasons.js';
 
 /**
@@ -127,9 +128,13 @@ export function PsbtConfirmScreen({
             )}
             credentialsReady={signerReady || password.length > 0}
             credentials={signerReady ? (
-                <p className={hintClassName}>
-                    <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                </p>
+                // : panic mode freezes signPsbtFlow too, so this note is
+                // a claim the wallet cannot honour while a freeze is on.
+                <SigningReadyNote>
+                    <p className={hintClassName}>
+                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                    </p>
+                </SigningReadyNote>
             ) : (
                 <Input
                     type="password"

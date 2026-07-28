@@ -1,8 +1,12 @@
 /* §24.2 / G053: left-nav layout. The .layout flex container places
-   .sidebar alongside .main; below 900px (the §24.1 full-layout
-   breakpoint) the sidebar collapses so narrow viewports get the route
-   full-width. Once §24.3 / G054 lands, the mobile bottom tab bar
-   takes over below 600px. */
+   .sidebar alongside .main.
+
+   : which navigation surface shows is keyed on `data-xc-tier`,
+   which FullLayoutWithNav sets from the layout's own measured width
+   (shared/styles/breakpoints.js is the single source of truth for the
+   numbers). Viewport media queries are deliberately NOT used here: the
+   wallet renders into 360px popups and dev-preview frames that sit
+   inside a much wider window, so the viewport is the wrong ruler. */
 
 .layout {
     position: relative;
@@ -55,16 +59,18 @@
     position: relative;
 }
 
-@media (max-width: 899px) {
-    .sidebar { display: none; }
+/*  compact tier (< 640px): the bottom tab bar owns navigation.
+   FullLayoutWithNav already withholds the nav slot here, so this rule is
+   the belt-and-braces for any shell that renders a sidebar anyway. */
+.layout[data-xc-tier='compact'] .sidebar {
+    display: none;
 }
 
-/* §24.3 / G054: when a bottom-tab bar is supplied (small/sidebar
-   variants pass it; full variant passes null and the slot collapses),
+/* §24.3 / G054: when a bottom-tab bar is supplied (compact tier only),
    give the main pane enough bottom-padding to clear the fixed 56px bar
    (+ iOS safe-area inset). Visibility is JS-gated by the bottomBar prop;
-   no viewport-keyed media query because pinning small at a wide window
-   should still surface the bar. */
+   no viewport-keyed media query because a narrow frame inside a wide
+   window should still surface the bar. */
 
 .layoutWithBottomBar > .main {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
@@ -233,4 +239,62 @@
         outline: 2px solid currentColor;
         outline-offset: -2px;
     }
+}
+
+/* ──  rail tier (640-899px) ──────────────────────────────────────
+   Tablet portrait and half-screen desktop windows used to fall in a gap
+   with no persistent navigation at all: too wide for the bottom tab bar,
+   too narrow for the 220px sidebar. They now keep the sidebar, collapsed
+   to a 64px icon rail.
+
+   Labels are clipped rather than removed so every rail button keeps the
+   accessible name it gets from its label text. */
+
+.layout[data-xc-tier='rail'] .sidebar {
+    flex: 0 0 64px;
+}
+
+/* The brand wordmark and the wallet switcher have no icon-only form.
+   Both stay reachable from the app header at this width. */
+.layout[data-xc-tier='rail'] .brand,
+.layout[data-xc-tier='rail'] .walletSwitcher {
+    display: none;
+}
+
+.layout[data-xc-tier='rail'] .item {
+    position: relative;
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+}
+
+.layout[data-xc-tier='rail'] .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.layout[data-xc-tier='rail'] .search {
+    margin-inline: var(--xc-space-2);
+}
+
+/* Count pill tucks into the icon's top corner once the row has no label
+   to sit beside. Kept as a readable number, not a bare dot. */
+.layout[data-xc-tier='rail'] .badge {
+    position: absolute;
+    top: 2px;
+    inset-inline-end: 6px;
+    min-width: 0.9rem;
+    padding: 0 0.25rem;
+    font-size: 9px;
+    line-height: 0.9rem;
+}
+
+.layout[data-xc-tier='rail'] .divider {
+    margin-inline: var(--xc-space-2);
 }

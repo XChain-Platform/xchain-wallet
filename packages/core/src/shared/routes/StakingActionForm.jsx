@@ -24,7 +24,10 @@ import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { formatWithThousands, countNonCommaBefore, indexAfterNonCommaCount } from '../utils/amountFormat.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { useTickFiatRate } from '../hooks/useFiatRate.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -43,6 +46,10 @@ import {
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Staking is denominated in XCHAIN on every chain, so the amount field and
+// its fiat preview are always pricing this tick, never the chain's coin.
+const STAKING_TICK = 'XCHAIN';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -95,6 +102,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // holds addresses on (the address + fee sections follow along).
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    // Only for the fiat preview: the display currency, and whether the user
+    // has opted out of third-party price data (§45 / privacy.priceDataEnabled).
+    const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -242,37 +252,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         setAmount(availableAmt != null ? String(availableAmt) : '');
     }, [availableAmt]);
 
-    // Same comma/cursor handling as Send: commas are formatting only,
-    // strip before storing, then map the caret by "non-comma chars to
-    // the left" so typing across a thousands boundary doesn't fling it.
-    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
-        const stripped = String(rawValue).replace(/,/g, '');
-        // Valid partial decimals only ("" / "." / "1." stay allowed).
-        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-        amountTouchedRef.current = true;
-        setAmount(stripped);
-        if (typeof cursorPos === 'number' && amountInputRef.current) {
-            const formattedNew = formatWithThousands(stripped);
-            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
-            const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
-            const el = amountInputRef.current;
-            requestAnimationFrame(() => {
-                if (el && document.activeElement === el) {
-                    try { el.setSelectionRange(nextCursor, nextCursor); } catch { /* selection unavailable on some input types */ }
-                }
-            });
-        }
-    }, []);
-
     // §29.3 fiat preview + toggle, same wiring as Send. The canonical
     // `amount` stays coin-scale; fiat mode only changes the display.
-    // The amount here is XCHAIN and the price plumbing only serves
-    // coin-family rates (no XCHAIN/USD source yet, ): converting
-    // XCHAIN at the BTC price shows absurd fiat values, so the rate
-    // stays null until a token-aware rate exists. AmountField hides
-    // the toggle and the ≈ preview when fiatRate is null.
-    const fiatRate = null;
+    // The amount here is XCHAIN, so the rate has to be XCHAIN's own
+    // : the chain coin's rate would price a stake of 50,000
+    // XCHAIN as if it were 50,000 BTC. `useTickFiatRate` sources the
+    // XCHAIN/USD oracle pair and returns null when nothing can price
+    // it, which is AmountField's "hide the toggle and the ≈ preview".
+    const fiatRate = useTickFiatRate({
+        chainCoin: descriptor?.coin,
+        tick: STAKING_TICK,
+        nativeTicker: descriptor?.coin ? tickerForCoin(descriptor.coin) : null,
+        fiatCurrency: settings?.fiatCurrency || 'USD',
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
     const [amountInputMode, setAmountInputMode] = useState(/** @type {'coin' | 'fiat'} */ ('coin'));
     const [fiatAmount, setFiatAmount] = useState('');
     const toggleAmountInputMode = useCallback(() => {
@@ -287,6 +280,52 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             return 'coin';
         });
     }, [amount, fiatRate]);
+
+    // A rate can go away mid-edit (chain switched, feed went quiet), which
+    // would strand the field in a mode it can no longer convert.
+    useEffect(() => {
+        if (!fiatRate && amountInputMode === 'fiat') {
+            setAmountInputMode('coin');
+            setFiatAmount('');
+        }
+    }, [fiatRate, amountInputMode]);
+
+    // Same comma/cursor handling as Send: commas are formatting only,
+    // strip before storing, then map the caret by "non-comma chars to
+    // the left" so typing across a thousands boundary doesn't fling it.
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        // Valid partial decimals only ("" / "." / "1." stay allowed).
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        amountTouchedRef.current = true;
+        // In fiat mode the typed text is fiat and the canonical `amount`
+        // (what gets broadcast, and what the available-balance check reads)
+        // is derived from it. Writing the typed number straight into
+        // `amount` would stake a dollar figure as if it were XCHAIN.
+        if (amountInputMode === 'fiat') {
+            setFiatAmount(stripped);
+            if (!fiatRate) {
+                if (stripped === '') setAmount('');
+            } else {
+                const derivedCoin = fiatToCoin(stripped, fiatRate);
+                setAmount(derivedCoin != null ? derivedCoin : '');
+            }
+        } else {
+            setAmount(stripped);
+        }
+        if (typeof cursorPos === 'number' && amountInputRef.current) {
+            const formattedNew = formatWithThousands(stripped);
+            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
+            const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
+            const el = amountInputRef.current;
+            requestAnimationFrame(() => {
+                if (el && document.activeElement === el) {
+                    try { el.setSelectionRange(nextCursor, nextCursor); } catch { /* selection unavailable on some input types */ }
+                }
+            });
+        }
+    }, [amountInputMode, fiatRate]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const hwSignerInfo = useSignerInfo({

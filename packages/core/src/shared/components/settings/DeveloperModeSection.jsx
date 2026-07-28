@@ -16,8 +16,9 @@
 //     NetworkEndpointsSection; broader picker application lands in a
 //     follow-up step).
 //   - Learn Mode toggle (`settings.learnMode`). Drives explanatory
-//     copy on confirmation screens; toggle ships now even though some
-//     consumers haven't been wired yet.
+//     copy on confirmation screens.  gave it its first reader:
+//     DisplayPrefsGate stamps it on <html> and <LearnNote> renders the
+//     copy on the standard confirmation surface.
 //   - Auto-approve localhost dApps (`settings.autoApproveLocalhost`).
 //     §48.6 / G151: when both this and Developer Mode are on,
 //     `bridge.connect` from localhost / 127.0.0.1 / [::1] origins

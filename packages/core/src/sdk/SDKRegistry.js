@@ -65,6 +65,13 @@
  * @property {string} [hubUrl]
  */
 
+/** Settings field name -> descriptor field name, in factory-arg order. */
+const ENDPOINT_FIELDS = Object.freeze([
+    Object.freeze(['explorerUrl', 'explorer']),
+    Object.freeze(['encoderUrl', 'encoder']),
+    Object.freeze(['hubUrl', 'hub']),
+]);
+
 /**
  *  (§49 offline/degraded mode): bounded network patience for every
  * SDK instance the wallet creates. xchain-sdk's own defaults are tuned
@@ -179,6 +186,38 @@ export class SDKRegistry {
         this._endpointOverrides = { ...this._endpointOverrides, ...overrides };
     }
 
+    /**
+     * : adopt the operator's Settings -> Network & Endpoints record
+     * as the live override set. This is what makes the panel real: before
+     * it existed the setting persisted, the summary row said "1 chain
+     * custom", and every SDK instance kept talking to the bundled
+     * defaults, so an operator pointing the wallet at their own node was
+     * quietly ignored.
+     *
+     * REPLACES the whole map (unlike `setEndpointOverrides`, which merges)
+     * so "Reset to default" on a chain actually reverts it, and
+     * invalidates only the chains whose effective endpoints moved, so a
+     * settings save unrelated to endpoints does not tear down live SDK
+     * instances (and their WebSockets).
+     *
+     * @param {{ sdkEndpoints?: Record<string, any> }} settings full Settings record
+     * @returns {{ changed: string[] }} chain ids whose instances were dropped
+     */
+    applyEndpointOverridesFromSettings(settings) {
+        const next = endpointOverridesFromSettings(settings, this._chainRegistry);
+        const ids = new Set([
+            ...Object.keys(this._endpointOverrides),
+            ...Object.keys(next),
+        ]);
+        const changed = [];
+        for (const id of ids) {
+            if (!sameOverride(this._endpointOverrides[id], next[id])) changed.push(id);
+        }
+        this._endpointOverrides = next;
+        for (const id of changed) this.invalidate(id);
+        return { changed };
+    }
+
     /** @param {string} chainId */
     _create(chainId) {
         const d = this._chainRegistry.get(chainId);
@@ -186,9 +225,9 @@ export class SDKRegistry {
         const over = this._endpointOverrides[chainId] ?? {};
         return this._sdkFactory({
             network: chainId,
-            explorerUrl: over.explorerUrl ?? joinEndpoint(d.explorer),
-            encoderUrl: over.encoderUrl ?? joinEndpoint(d.encoder),
-            hubUrl: over.hubUrl ?? joinEndpoint(d.hub),
+            explorerUrl: overrideUrl(over.explorerUrl) ?? joinEndpoint(d.explorer),
+            encoderUrl: overrideUrl(over.encoderUrl) ?? joinEndpoint(d.encoder),
+            hubUrl: overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub),
             // Bounded network patience : the real XChainSDK honors
             // `timeout` + `retry` per client; the dev mock ignores them.
             timeout: this._networkOptions.timeout,
@@ -197,9 +236,83 @@ export class SDKRegistry {
     }
 }
 
-/** @param {import('../registry/validate.js').EndpointConfig} e */
-function joinEndpoint(e) {
+/**
+ * Recombine a descriptor endpoint into the URL the SDK is handed.
+ *
+ * Exported  so the Settings editor can seed its draft with the
+ * exact string the registry would otherwise use. Seeding from
+ * `defaultUrl` alone dropped the port off every non-standard endpoint,
+ * and the editor then saved that truncated value over all three fields.
+ *
+ * @param {import('../registry/validate.js').EndpointConfig} e
+ * @returns {string}
+ */
+export function joinEndpoint(e) {
+    if (!e || typeof e.defaultUrl !== 'string') return '';
     // 80/443 are implicit; omit to match conventional URLs.
+    if (!Number.isFinite(e.defaultPort)) return e.defaultUrl;
     if (e.defaultPort === 80 || e.defaultPort === 443) return e.defaultUrl;
     return `${e.defaultUrl}:${e.defaultPort}`;
+}
+
+/** A usable override value, or null when the field should fall back. */
+function overrideUrl(v) {
+    if (typeof v !== 'string') return null;
+    const trimmed = v.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function sameOverride(a, b) {
+    const l = a ?? {};
+    const r = b ?? {};
+    return ENDPOINT_FIELDS.every(([field]) => (l[field] ?? null) === (r[field] ?? null));
+}
+
+/**
+ * Distil a Settings record into the override map `SDKRegistry` consumes.
+ *
+ * Only entries the user actually customised survive:
+ *  - `custom !== true` is the editor's reset state, so it is skipped
+ *    outright.
+ *  - a value equal to the chain's own default is not an override.
+ *  -  heal: records written by the pre-fix editor carry the bare
+ *    `defaultUrl` with the port stripped ("http://localhost" where the
+ *    default is "http://localhost:10000"). That is the seeding bug
+ *    speaking, not the operator, and honouring it would point a live
+ *    endpoint at a port nothing listens on. Treat it as "unset".
+ *  - entries for chain ids this build does not know are dropped.
+ *
+ * @param {{ sdkEndpoints?: Record<string, any> }} settings
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Record<string, EndpointOverride>}
+ */
+export function endpointOverridesFromSettings(settings, chainRegistry) {
+    /** @type {Record<string, EndpointOverride>} */
+    const out = {};
+    const record = settings?.sdkEndpoints;
+    if (!record || typeof record !== 'object') return out;
+    for (const [chainId, entry] of Object.entries(record)) {
+        if (!entry || typeof entry !== 'object') continue;
+        if (entry.custom !== true) continue;
+        let descriptor = null;
+        try {
+            descriptor = chainRegistry?.has?.(chainId) ? chainRegistry.get(chainId) : null;
+        } catch {
+            descriptor = null;
+        }
+        if (!descriptor) continue;
+        /** @type {EndpointOverride} */
+        const over = {};
+        for (const [field, key] of ENDPOINT_FIELDS) {
+            const value = overrideUrl(entry[field]);
+            if (!value) continue;
+            const endpoint = descriptor[key];
+            if (!endpoint) continue;
+            if (value === joinEndpoint(endpoint)) continue;
+            if (value === endpoint.defaultUrl) continue;
+            over[field] = value;
+        }
+        if (Object.keys(over).length > 0) out[chainId] = over;
+    }
+    return out;
 }

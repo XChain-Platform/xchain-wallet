@@ -30,6 +30,7 @@ import { useState, useCallback } from 'react';
 import { Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
+import { LearnNote } from './LearnNote.jsx';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -144,6 +145,11 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
+                    {/* : Settings > Developer Mode > Learn Mode. Renders
+                        nothing unless the user asked for it; first in the body
+                        because it frames everything under it. */}
+                    <LearnNote variant={variant} chainLabel={chainLabel} />
+
                     {/* §5.5 PSBT variant: the input/output enumeration is the
                         foregrounded content, ABOVE any action-data intent. */}
                     {variant === 'psbt' ? psbtPanel : null}

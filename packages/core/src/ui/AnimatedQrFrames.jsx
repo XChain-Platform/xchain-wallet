@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { useReducedMotion } from './reducedMotion.js';
 
 /**
  * Render a sequence of strings as animated QR codes; frames advance
@@ -22,7 +23,8 @@ import QRCode from 'qrcode';
  * frame is being rendered the previous frame stays visible (avoids
  * flicker).
  *
- * Honors `prefers-reduced-motion: reduce`: when set, the auto-advance
+ * Honors reduced motion (`prefers-reduced-motion: reduce`, or the in-app
+ * Settings → Appearance override): when set, the auto-advance
  * interval is suspended and the user steps through frames manually
  * via Prev / Next buttons. Hardware scanners / cosigner phones are not
  * inconvenienced; the QR content is the same, only the cadence changes.
@@ -36,27 +38,10 @@ import QRCode from 'qrcode';
 export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated QR' }) {
     const [index, setIndex] = useState(0);
     const [urls, setUrls] = useState(/** @type {Record<number, string>} */ ({}));
-    const [reducedMotion, setReducedMotion] = useState(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    });
-
-    useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-        const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const onChange = (e) => setReducedMotion(e.matches);
-        // Newer browsers expose addEventListener; fall back to addListener for
-        // Safari < 14. Both branches are no-ops if missing.
-        if (typeof mq.addEventListener === 'function') {
-            mq.addEventListener('change', onChange);
-            return () => mq.removeEventListener('change', onChange);
-        }
-        if (typeof mq.addListener === 'function') {
-            mq.addListener(onChange);
-            return () => mq.removeListener(onChange);
-        }
-        return undefined;
-    }, []);
+    // : the OS media query AND the in-app Settings → Appearance
+    // override, resolved in one place. The auto-advance below is a JS timer,
+    // so no CSS rule can stop it on the user's behalf.
+    const reducedMotion = useReducedMotion();
 
     useEffect(() => {
         let cancelled = false;

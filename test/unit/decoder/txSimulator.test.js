@@ -443,6 +443,160 @@ describe('simulateAction', () => {
         });
     });
 
+    // : the confirm screen understated every fee-bearing action because
+    // the simulator only ever debited the MINER fee. The numbers below are the
+    // ones measured on regtest in wallet E2E session 19 (D-85): the same ISSUE,
+    // in each fee-payment mode, projected against what the chain actually did.
+    describe('protocol fee', () => {
+        const ISSUE_PARAMS = { VERSION: '0', TICK: 'S19FEE', MAX_SUPPLY: '1000', MINT_SUPPLY: '1000' };
+
+        it('debits a native-coin protocol fee on top of the miner fee', () => {
+            const r = simulateAction({
+                action: 'ISSUE',
+                params: ISSUE_PARAMS,
+                balances: balances('BTC', '2.99993667'),
+                feeEstimate: '0.00001176',
+                protocolFee: { amount: '0.00002' },
+                chainId: 'bitcoin-regtest',
+                chainRegistry,
+            });
+            // Session 19 measured 2.99990491 on chain; the projection said
+            // 2.99992491, understated by exactly the 2000-sat fee output.
+            const coinRow = r.deltas.find((d) => d.isCoin && d.before !== '');
+            expect(coinRow.before).toBe('2.99993667');
+            expect(coinRow.after).toBe('2.99990491');
+        });
+
+        it('names the protocol fee as its own row without touching the miner fee row', () => {
+            const r = simulateAction({
+                action: 'ISSUE',
+                params: ISSUE_PARAMS,
+                balances: balances('BTC', '2.99993667'),
+                feeEstimate: '0.00001176',
+                protocolFee: { amount: '0.00002' },
+                chainId: 'bitcoin-regtest',
+                chainRegistry,
+            });
+            const networkRow = r.deltas.find((d) => d.isFee && !d.isProtocolFee);
+            expect(networkRow.feeAmount).toBe('0.00001176');
+            expect(networkRow.feeLabel).toBeUndefined();
+
+            const protocolRow = r.deltas.find((d) => d.isProtocolFee);
+            expect(protocolRow.feeAmount).toBe('0.00002');
+            expect(protocolRow.feeLabel).toBe('Protocol fee');
+            expect(protocolRow.tick).toBe('BTC');
+            expect(protocolRow.isCoin).toBe(true);
+            // Label-only: the debit itself lives on the row above it, so a
+            // renderer never shows the same 2000 sats leaving twice.
+            expect(protocolRow.before).toBe('');
+            expect(protocolRow.after).toBe('');
+            expect(r.deltas.indexOf(protocolRow)).toBe(r.deltas.indexOf(networkRow) + 1);
+        });
+
+        it('debits an XCHAIN-denominated protocol fee from the XCHAIN balance', () => {
+            const r = simulateAction({
+                action: 'ISSUE',
+                params: { ...ISSUE_PARAMS, TICK: 'S19MINT' },
+                balances: balances('BTC', '2.99995484', [['XCHAIN', '5000']]),
+                feeEstimate: '0.00000942',
+                protocolFee: { tick: 'XCHAIN', amount: '1' },
+                chainId: 'bitcoin-regtest',
+                chainRegistry,
+            });
+            // Session 19: no XCHAIN row appeared at any point, yet the address
+            // read 4999 after the block where it had held 5000.
+            const xchainRow = r.deltas.find((d) => d.tick === 'XCHAIN');
+            expect(xchainRow).toBeDefined();
+            expect(xchainRow.before).toBe('5000');
+            expect(xchainRow.after).toBe('4999');
+            expect(xchainRow.isCoin).toBe(false);
+            expect(xchainRow.feeLabel).toBe('Protocol fee');
+            // The coin row still shows the miner fee alone.
+            const coinRow = r.deltas.find((d) => d.isCoin && d.before !== '');
+            expect(coinRow.after).toBe('2.99994542');
+        });
+
+        it('folds the protocol fee into a coin SEND row that already carries a principal', () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'BTC', AMOUNT: '0.001', DESTINATION: 'bc1q' },
+                balances: balances('BTC', '0.01'),
+                feeEstimate: '0.0001',
+                protocolFee: { amount: '0.00002' },
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const coinRow = r.deltas.find((d) => d.isCoin && !d.isFee);
+            // 0.01 - 0.001 principal - 0.0001 miner - 0.00002 protocol
+            expect(coinRow.after).toBe('0.00888');
+            expect(r.deltas.filter((d) => d.isProtocolFee)).toHaveLength(1);
+        });
+
+        it('carries the whole post-state when there is no miner-fee row to pair with', () => {
+            const r = simulateAction({
+                action: 'ISSUE',
+                params: ISSUE_PARAMS,
+                balances: balances('BTC', '1'),
+                feeEstimate: '0',
+                protocolFee: { amount: '0.00002' },
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const protocolRow = r.deltas.find((d) => d.isProtocolFee);
+            expect(protocolRow.before).toBe('1');
+            expect(protocolRow.after).toBe('0.99998');
+        });
+
+        it('stays silent when no protocol fee is known, rather than projecting a zero', () => {
+            const r = simulateAction({
+                action: 'ISSUE',
+                params: ISSUE_PARAMS,
+                balances: balances('BTC', '1'),
+                feeEstimate: '0.0001',
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            expect(r.deltas.some((d) => d.isProtocolFee)).toBe(false);
+            const coinRow = r.deltas.find((d) => d.isCoin);
+            expect(coinRow.after).toBe('0.9999');
+        });
+
+        it('ignores a zero, negative or unparseable protocol fee', () => {
+            for (const amount of ['0', '-1', '', 'abc', null, undefined]) {
+                const r = simulateAction({
+                    action: 'ISSUE',
+                    params: ISSUE_PARAMS,
+                    balances: balances('BTC', '1'),
+                    feeEstimate: '0.0001',
+                    protocolFee: { amount },
+                    chainId: 'bitcoin-mainnet',
+                    chainRegistry,
+                });
+                expect(r.deltas.some((d) => d.isProtocolFee)).toBe(false);
+            }
+        });
+
+        it('charges a BATCH protocol fee once, not once per sub-action', () => {
+            const r = simulateAction({
+                action: 'BATCH',
+                params: {
+                    COMMANDS: [
+                        { action: 'SEND', params: { TICK: 'XCP', AMOUNT: '1', DESTINATION: 'x' } },
+                        { action: 'SEND', params: { TICK: 'XCP', AMOUNT: '2', DESTINATION: 'y' } },
+                    ],
+                },
+                balances: balances('BTC', '1', [['XCP', '100']]),
+                feeEstimate: '0.0001',
+                protocolFee: { amount: '0.00002' },
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            expect(r.deltas.filter((d) => d.isProtocolFee)).toHaveLength(1);
+            const coinRow = r.deltas.find((d) => d.isCoin && d.before !== '');
+            expect(coinRow.after).toBe('0.99988');
+        });
+    });
+
     describe('chainRegistry coin inference', () => {
         it('infers coin tick from chainId via registry', () => {
             const r = simulateAction({

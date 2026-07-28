@@ -22,14 +22,18 @@ import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './MyTokens.module.css';
 
 /**
- * §40.5: "My Tokens". Lists every token issued by one of the active
- * wallet's addresses. Hosts the Issue-new-token affordance, and each
- * row drills into TokenDetail, which carries the owner-only actions
- * (Mint, Destroy, Lock supply, …).
+ * §40.5: "My Tokens". Lists every token one of the active wallet's
+ * addresses currently OWNS, which is not the same set as the tokens it
+ * issued: a TRANSFER moves ownership, so a token this wallet created and
+ * handed on drops off the list, and a token someone transferred in shows
+ * up here even though this wallet never issued anything ( / D-82,
+ * where every string on the page claimed issuance). Hosts the
+ * Issue-new-token affordance, and each row drills into TokenDetail, which
+ * carries the owner-only actions (Mint, Destroy, Lock supply, …).
  *
  * Data source: messaging.getOwnedTokens({ chainId, address }), wraps
  * xchain-sdk's `getTokens(address, 'address')`, which the explorer
- * filters by `WHERE m.owner_id = ?`.
+ * filters by `WHERE m.owner_id = ?` - ownership, not issuance.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -50,8 +54,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [query, setQuery] = useState('');
-    // 'all' shows every issued tick; 'owned' narrows to ticks the
-    // current wallet still holds supply of.
+    // 'all' shows every tick this wallet owns; 'owned' narrows to the ones
+    // it also still holds supply of (row.youOwn is a balance check, not an
+    // ownership one, so the chip is labelled "Holding").
     const [mode, setMode] = useState(/** @type {'all' | 'owned'} */ ('all'));
 
     useEffect(() => {
@@ -173,7 +178,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                 aria-label="Search your tokens by ticker or description"
                             />
                         </div>
-                        <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by holdings">
+                        <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
                             <button
                                 type="button"
                                 role="radio"
@@ -190,7 +195,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                 className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
                                 onClick={() => setMode('owned')}
                             >
-                                Owned
+                                Holding
                             </button>
                         </div>
                     </div>
@@ -210,8 +215,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
                 {isEmpty ? (
                     <p className={styles.empty}>
-                        You haven&apos;t issued any tokens yet. Tap
-                        &ldquo;Issue new token&rdquo; to create one.
+                        You don&apos;t own any tokens yet. Tap
+                        &ldquo;Issue new token&rdquo; to create one, or have
+                        someone transfer one to you.
                     </p>
                 ) : null}
 

@@ -24,6 +24,7 @@
 
 import { Input } from '@xchain-wallet/core/ui';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
+import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 
 /**
  * @param {object} props
@@ -75,9 +76,14 @@ export function MessageConfirmScreen({
                         </p>
                     ) : null}
                     {signerReady ? (
-                        <p className={hintClassName}>
-                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                        </p>
+                        // : panic mode freezes signMessageFlow too, so
+                        // this note is a claim the wallet cannot honour while
+                        // a freeze is on.
+                        <SigningReadyNote>
+                            <p className={hintClassName}>
+                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                            </p>
+                        </SigningReadyNote>
                     ) : (
                         <Input
                             type="password"

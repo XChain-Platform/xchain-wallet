@@ -23,6 +23,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
+import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
@@ -541,6 +542,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
     const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
 
+    // : `hideSmallBalances` persisted for fourteen sessions without a
+    // single reader. HomeTabs forwards it to the Coins and Tokens lists,
+    // which collapse dust rows into their own expandable section.
+    const hideSmallBalances = settings.settings?.privacy?.hideSmallBalances === true;
+
     const activeWallet = wallets && activeWalletId
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
@@ -730,6 +736,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </div>
                 ) : null}
 
+                {/*
+                  * : a self-armed panic freeze is announced here, above
+                  * the balances, so the user learns signing is frozen BEFORE
+                  * they tap Send. A duress-armed freeze renders nothing (the
+                  * component owns that policy) so an observer sees no cue.
+                  */}
+                <PanicFreezeNotice surface="home" />
                 {activeWalletId ? (
                     <DemoBanner
                         activeWalletId={activeWalletId}
@@ -766,6 +779,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         hiddenKeys={new Set(hiddenTokens)}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
+                        hideSmallBalances={hideSmallBalances}
                         onCommandPalette={onCommandPalette}
                         // : only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.

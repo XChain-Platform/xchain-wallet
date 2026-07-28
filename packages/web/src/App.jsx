@@ -167,6 +167,7 @@ import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
+import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -220,8 +221,10 @@ function GatedDevVariantBadge({ state }) {
 }
 
 function AppInner() {
-    const { variant } = useActiveVariant();
-    const isFull = variant === 'full';
+    // : no variant read here any more. Navigation surfaces are chosen
+    // by <FullLayoutWithNav> from its measured container width; the variant
+    // only decides the dev-preview frame and the messaging shell, both of
+    // which are resolved in <App> above.
     const { showToast } = useToast();
     // §34.1: settings carry the keyboard-shortcut overrides threaded into
     // the palette hook, the dispatcher, and the help modal below.
@@ -686,6 +689,12 @@ function AppInner() {
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
+
+    // : accounts of the active wallet, purely so the AppHeader gear
+    // can name the active one. The per-wallet effect above owns SELECTION;
+    // this owns the label, and keeping them separate stops the header from
+    // reaching into that effect's control flow.
+    const headerAccounts = useAccountList(activeWalletId);
 
     // Wallet-level alerts surfaced in the pancake menu's Alerts panel.
     // Mirrors Home.jsx's `alerts` array so the web MenuRoute shows the
@@ -2450,9 +2459,24 @@ function AppInner() {
                     .catch(() => refresh());
             };
             const handleOpenWalletPicker = () => setUnlockedView('wallet-picker');
+            const handleOpenAccountPicker = () => setUnlockedView('account-picker');
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
+            const activeWalletRow =
+                walletList.find((w) => w.id === activeWalletId) || null;
+            //  gear status dot: "non-default" means the user has moved
+            // off the first entry in the list, which is the only thing the
+            // dot is trying to say. Lists are ordered (wallets as stored,
+            // accounts by hardened index), so index 0 is the default.
+            const headerAccountRow =
+                headerAccounts.find((a) => a.id === activeAccountId) || null;
+            const headerWalletNonDefault = Boolean(
+                activeWalletId && walletList.length > 1 && walletList[0]?.id !== activeWalletId,
+            );
+            const headerAccountNonDefault = Boolean(
+                activeAccountId && headerAccounts.length > 1 && headerAccounts[0]?.id !== activeAccountId,
+            );
             // §33: assemble the palette command list from the shared catalogue
             // (navigation + authoring + signing + wallet verbs, gated exactly
             // like the ActionsMenu) plus the lazily-loaded contacts. Every
@@ -2509,33 +2533,35 @@ function AppInner() {
                 },
             });
             return (
+                // : both nav surfaces are handed in unconditionally.
+                // FullLayoutWithNav measures its own width and mounts exactly
+                // one of them (sidebar at >= 640px, bottom tab bar below), so
+                // the web shell no longer carries a width threshold of its own
+                // that used to disagree with the CSS and leave 640-899px with
+                // no navigation at all.
                 <FullLayoutWithNav
                     nav={
-                        isFull ? (
-                            <LeftNav
-                                currentView={unlockedView}
-                                onSelect={(view) => setUnlockedView(view)}
-                                onLock={handleNavLock}
-                                onOpenWalletPicker={handleOpenWalletPicker}
-                                onOpenSettings={handleOpenSettings}
-                                walletName={activeWalletName}
-                                hasBtcAddress={hasBtcAddress}
-                                badges={{ messaging: messagingUnread, obligations: obligationsDue }}
-                            />
-                        ) : null
+                        <LeftNav
+                            currentView={unlockedView}
+                            onSelect={(view) => setUnlockedView(view)}
+                            onLock={handleNavLock}
+                            onOpenWalletPicker={handleOpenWalletPicker}
+                            onOpenSettings={handleOpenSettings}
+                            walletName={activeWalletName}
+                            hasBtcAddress={hasBtcAddress}
+                            badges={{ messaging: messagingUnread, obligations: obligationsDue }}
+                        />
                     }
                     bottomBar={
-                        variant === 'small' ? (
-                            <BottomTabBar
-                                currentView={unlockedView}
-                                onSelect={(view) => setUnlockedView(view)}
-                                onLock={handleNavLock}
-                                onOpenWalletPicker={handleOpenWalletPicker}
-                                onOpenSettings={handleOpenSettings}
-                                hasBtcAddress={hasBtcAddress}
-                                badges={{ messaging: messagingUnread, obligations: obligationsDue }}
-                            />
-                        ) : null
+                        <BottomTabBar
+                            currentView={unlockedView}
+                            onSelect={(view) => setUnlockedView(view)}
+                            onLock={handleNavLock}
+                            onOpenWalletPicker={handleOpenWalletPicker}
+                            onOpenSettings={handleOpenSettings}
+                            hasBtcAddress={hasBtcAddress}
+                            badges={{ messaging: messagingUnread, obligations: obligationsDue }}
+                        />
                     }
                     header={
                         activeWalletId ? (
@@ -2560,6 +2586,16 @@ function AppInner() {
                                     onManageAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
                                     onViewAddress={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                                     onLock={handleNavLock}
+                                    activeWallet={activeWalletRow}
+                                    activeAccount={headerAccountRow}
+                                    onOpenWalletPicker={handleOpenWalletPicker}
+                                    onOpenAccountPicker={handleOpenAccountPicker}
+                                    walletNonDefault={headerWalletNonDefault}
+                                    accountNonDefault={headerAccountNonDefault}
+                                    chainRegistry={APP_CHAIN_REGISTRY}
+                                    coinFamilies={APP_COIN_FAMILIES}
+                                    networkFilter={globalNetworkFilter}
+                                    onNetworkFilterChange={setGlobalNetworkFilter}
                                 />
                                 {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not

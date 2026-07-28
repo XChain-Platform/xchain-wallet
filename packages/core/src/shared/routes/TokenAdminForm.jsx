@@ -44,6 +44,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
+import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { LOCK_FLAGS } from '../utils/issueAdvancedFields.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -57,6 +58,42 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
+// "Bitcoin" on mainnet, "Bitcoin regtest" elsewhere. The registry's
+// displayName is the same string on every network, which is exactly the
+// distinction a wrong-network address needs spelled out.
+function chainLabelFor(descriptor) {
+    if (!descriptor?.coin) return null;
+    const name = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+    return descriptor.networkKind === 'mainnet' ? name : `${name} ${descriptor.networkKind}`;
+}
+
+//  / D-81: validate the TRANSFER destination against the chain the
+// edit is broadcast on. Ownership moves to an address on that same chain,
+// so an address for another coin, for the right coin on the wrong network,
+// or simply mistyped, can never own the token: the indexer rejects the
+// action ("invalid: TRANSFER (bad address)") and the protocol fee is burnt
+// for nothing. The form used to require only a non-empty string, which let
+// a mainnet bech32 address through on a regtest wallet with an enabled
+// submit button. Same check Send and Sweep make on their destinations.
+// Returns an error string, or null when the address is good (or when there
+// is no chain yet to validate against).
+function newOwnerAddressError(address, descriptor) {
+    const a = (address || '').trim();
+    if (!a || !descriptor?.coin || !descriptor?.networkKind) return null;
+    if (isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) return null;
+
+    const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+    // Name the coin it *does* look like when that is unambiguous: far more
+    // useful than "invalid" when someone pastes an address for another chain.
+    const detected = detectAddressCoin(a);
+    if (detected && detected !== descriptor.coin) {
+        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+    }
+    return `This is not a valid ${chainLabelFor(descriptor)} address. Check it for typos.`;
+}
 
 // PC-02's lock matrix and PC-06's create-time lock panel drive the same
 // seven ISSUE lock flags, so the table lives in one place (see
@@ -231,6 +268,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+
+    // Live network-aware check on the new owner ( / D-81). Derived, so
+    // it clears itself the moment the address is corrected instead of sitting
+    // stale under a field the user already fixed.
+    const transferToError = useMemo(
+        () => (mode === 'transfer' ? newOwnerAddressError(transferTo, descriptor) : null),
+        [mode, transferTo, descriptor],
+    );
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -478,9 +523,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setFormError('Description is required.');
             return;
         }
-        if (mode === 'transfer' && !transferTo.trim()) {
-            setFormError('New owner address is required.');
-            return;
+        if (mode === 'transfer') {
+            if (!transferTo.trim()) {
+                setFormError('New owner address is required.');
+                return;
+            }
+            if (transferToError) {
+                setFormError(transferToError);
+                return;
+            }
         }
         if (mode === 'lock' && !hasAnyNewLock) {
             setFormError('Select at least one lock to apply.');
@@ -976,9 +1027,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 <AddressField
                     label="New owner address"
                     icon="contacts"
-                    hint="The address that will receive ownership."
+                    hint={`The ${chainLabelFor(descriptor) || 'same-chain'} address that will receive ownership.`}
                     value={transferTo}
-                    onChange={(e) => setTransferTo(e.target.value)}
+                    error={transferToError || undefined}
+                    onChange={(e) => {
+                        setTransferTo(e.target.value);
+                        // Drop any form-level error the previous submit left
+                        // behind; the field's own error is derived and live.
+                        setFormError(null);
+                    }}
                     onIconClick={() => setContactsPickerOpen(true)}
                 />
             ) : null}

@@ -172,6 +172,59 @@ describe('composeActionForConfirm', () => {
         expect(composed.tamperVerified).toBe(true);
     });
 
+    // . `networkFeeSats` is inputs-minus-outputs, so a protocol fee paid
+    // as an OUTPUT is excluded from it by construction - and the confirm screen
+    // was projecting that number as the whole cost. The quote that sized the
+    // output is already on the envelope, so the projection can use it.
+    it('projects the native-coin protocol fee on top of the exact miner fee', async () => {
+        const h = makeHarness({
+            inputs: [{ value: 500000 }],
+            outputs: [
+                { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
+                { address: 'feedest', scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 2000 },
+                { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 497000 },
+            ],
+        });
+        h.sdk.quoteNativeFee = vi.fn(async () => ({
+            supported: true, valid: true, requiredFeeSats: 2000, feeDestination: 'feedest',
+        }));
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'ISSUE',
+            params: { VERSION: '0', TICK: 'S19FEE', MAX_SUPPLY: '1000', MINT_SUPPLY: '1000' },
+        }));
+        h.sdk.getBalances = vi.fn(async () => ({ data: [] }));
+        h.sdk.getAddress = vi.fn(async () => ({ balances: { confirmed: '3' } }));
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+
+        const composed = await composeActionForConfirm({
+            ...ARGS(h),
+            encoderOpts: { pubkey: 'pub', payFeeInNativeCoin: true },
+        });
+
+        // The miner fee stays what the bytes pay: 500000 in, 499000 out.
+        expect(composed.networkFeeSats).toBe(1000);
+        expect(composed.protocolFeeSats).toBe(2000);
+        const protocolRow = composed.simulation.deltas.find((d) => d.isProtocolFee);
+        expect(protocolRow.feeAmount).toBe('0.00002');
+        // 3 BTC less the 1000-sat miner fee less the 2000-sat protocol fee.
+        const coinRow = composed.simulation.deltas.find((d) => d.isCoin && d.before !== '');
+        expect(coinRow.after).toBe('2.99997');
+    });
+
+    it('reports no protocol fee when the action pays it in XCHAIN', async () => {
+        // Nothing was quoted on that lane, and a fee the wallet has not been
+        // told is a fee it must not invent.
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({ ok: true, action: 'SEND', params: { TICK: 'JDOG', AMOUNT: '1', DESTINATION: 'dest' } }));
+        h.sdk.getBalances = vi.fn(async () => ([]));
+        h.sdk.getAddress = vi.fn(async () => ({ balance: '300000000' }));
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.protocolFeeSats).toBe(null);
+        expect(composed.simulation.deltas.some((d) => d.isProtocolFee)).toBe(false);
+    });
+
     it('reports a null fee when the PSBT omits an input value', async () => {
         // Without every input value the difference is an underestimate, and a
         // too-small fee shown on a signing screen is worse than "unavailable".

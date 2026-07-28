@@ -20,7 +20,7 @@
 // than admitting it is unknown.
 
 import { describe, it, expect } from 'vitest';
-import { exactNetworkFeeSats } from '../../../packages/core/src/flows/psbtNetworkFee.js';
+import { exactNetworkFeeSats, totalNetworkFeeSats } from '../../../packages/core/src/flows/psbtNetworkFee.js';
 
 describe('exactNetworkFeeSats', () => {
     it('computes inputs minus outputs', () => {
@@ -68,5 +68,92 @@ describe('exactNetworkFeeSats', () => {
             inputs: [{ value: 1000 }],
             outputs: [{ value: 1000 }],
         })).toBe(0);
+    });
+});
+
+// : on the P2SH/P2WSH chunk lanes an action is TWO transactions, and the
+// composed PSBT the confirm screen inspects is only the first. Measured
+// on-chain in wallet E2E session 20 while creating BET market #1160: the screen
+// said 0.00000546 BTC and the address moved 0.00001092, because the funding tx
+// paid 546 sats of miner fee AND created a 546-sat carrier output that the
+// reveal then spent in full. The numbers below are that transaction pair.
+describe('totalNetworkFeeSats', () => {
+    // Funding tx of BET market #1160, read back from the regtest node:
+    // one input, a 546-sat P2SH carrier, and change home to the source.
+    const BET_1160 = {
+        inputs: [{ value: 499999130 }],
+        outputs: [
+            { value: 546, scriptType: 'p2sh', address: '2N1oofV3qjxvuT9iK7Mt' },
+            { value: 499998038, scriptType: 'p2wpkh', address: 'bcrt1qlx2eanawq23ujwhdg7txxdfpffzdvmgtxge98h' },
+        ],
+    };
+    const OWN = ['bcrt1qlx2eanawq23ujwhdg7txxdfpffzdvmgtxge98h'];
+
+    it('off the chunk lanes it agrees with exactNetworkFeeSats', () => {
+        const single = {
+            inputs: [{ value: 100000 }],
+            outputs: [{ value: 95000, scriptType: 'p2wpkh', address: 'own' }],
+        };
+        expect(totalNetworkFeeSats(single, { carrierScripts: [], ownAddresses: ['own'] }))
+            .toBe(exactNetworkFeeSats(single));
+    });
+
+    it('adds the reveal fee the carrier output pre-funds', () => {
+        // The defect: 546. The chain: 1092.
+        expect(exactNetworkFeeSats(BET_1160)).toBe(546);
+        expect(totalNetworkFeeSats(BET_1160, {
+            carrierScripts: ['52ae'],
+            ownAddresses: OWN,
+        })).toBe(1092);
+    });
+
+    it('does not count a p2sh CHANGE output as a carrier', () => {
+        // A p2sh-p2wpkh change output classifies as plain 'p2sh' (decomposePsbt
+        // has no redeemScript for outputs), so keying on the type alone would
+        // treat the user's own change as a carrier and overstate the fee.
+        const p2shChange = {
+            inputs: [{ value: 100000 }],
+            outputs: [
+                { value: 546, scriptType: 'p2sh', address: 'carrier' },
+                { value: 98454, scriptType: 'p2sh', address: 'my-change' },
+            ],
+        };
+        expect(totalNetworkFeeSats(p2shChange, {
+            carrierScripts: ['52ae'],
+            ownAddresses: ['my-change'],
+        })).toBe(1000 + 546);
+    });
+
+    it('excludes the native-coin protocol fee the reveal re-emits', () => {
+        // The reveal spends the carrier to pay its miner fee AND the
+        // FEE_DESTINATION output. Only the miner half is a network fee; the
+        // rest is the protocol fee, which is 's to surface.
+        expect(totalNetworkFeeSats({
+            inputs: [{ value: 100000 }],
+            outputs: [
+                { value: 2546, scriptType: 'p2sh', address: 'carrier' },
+                { value: 96954, scriptType: 'p2wpkh', address: 'own' },
+            ],
+        }, {
+            carrierScripts: ['52ae'],
+            ownAddresses: ['own'],
+            revealOutputSats: 2000,
+        })).toBe(500 + 546);
+    });
+
+    it('refuses when the carrier count disagrees with the encoder', () => {
+        // Two chunks committed, one identifiable: our identification is wrong,
+        // so admit it rather than quote a number that is short by a chunk.
+        expect(totalNetworkFeeSats(BET_1160, {
+            carrierScripts: ['52ae', '52ae'],
+            ownAddresses: OWN,
+        })).toBeNull();
+    });
+
+    it('stays null when the funding fee itself is unknowable', () => {
+        expect(totalNetworkFeeSats({
+            inputs: [{ value: null }],
+            outputs: [{ value: 546, scriptType: 'p2sh', address: 'carrier' }],
+        }, { carrierScripts: ['52ae'] })).toBeNull();
     });
 });

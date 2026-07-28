@@ -35,6 +35,7 @@
 
 import { Input, StatusMessage } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
+import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 
 /**
  * @param {object} props
@@ -106,21 +107,28 @@ export function SignCredentials({
     // no error, no busy state and no console output: the user cannot tell a
     // rejected transaction from a dead button, and the natural response is to
     // press it again.
+    //
+    // : the note is wrapped in <SigningReadyNote>, which withdraws it
+    // whenever panic mode has signing frozen (and states the freeze when the
+    // user armed it themselves). `submitError` stays OUTSIDE the wrapper: it
+    // is the  surface and must survive every panic state.
     if (unlocked) {
         return (
             <>
-                <p
-                    style={{
-                        margin: 'var(--xc-space-2) 0 0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--xc-space-1)',
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text-muted)',
-                    }}
-                >
-                    <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                </p>
+                <SigningReadyNote>
+                    <p
+                        style={{
+                            margin: 'var(--xc-space-2) 0 0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--xc-space-1)',
+                            fontSize: 'var(--xc-text-sm)',
+                            color: 'var(--xc-text-muted)',
+                        }}
+                    >
+                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                    </p>
+                </SigningReadyNote>
                 {submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}

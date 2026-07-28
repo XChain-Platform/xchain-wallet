@@ -35,8 +35,16 @@ assert.ok(/setInterval/.test(hook),
     'hook polls on a setInterval');
 assert.ok(/clearInterval/.test(hook),
     'hook clears its interval on unmount');
-assert.ok(/cancelledRef/.test(hook),
-    'hook tracks an unmount cancellation flag so late-arriving probes do not setState');
+assert.ok(/mountedRef/.test(hook),
+    'hook tracks an unmount flag so late-arriving probes do not setState');
+// : an unmount flag alone was not enough. The flag was reset by the next
+// effect run, so a probe about a previous chain set could still land on top of
+// a newer verdict and pin a false "You're offline" until the user hit Retry.
+// Each probe now carries a generation id and only the newest may write.
+assert.ok(/seqRef/.test(hook),
+    'hook stamps each probe with a generation so a stale answer cannot overwrite a fresh one');
+assert.ok(/chainIds\.length === 0/.test(hook),
+    'hook skips the probe entirely when no chain set is seeded (empty maps to offline host-side)');
 
 // --- 2. ReachabilityBanner component ------------------------------------
 

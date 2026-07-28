@@ -12,6 +12,7 @@ import { useMemo } from 'react';
 import { MessagingContext } from './MessagingContext.js';
 import { PrivacyBlurGate } from './PrivacyBlurGate.jsx';
 import { LocaleSync } from './LocaleSync.jsx';
+import { DisplayPrefsGate } from './DisplayPrefsGate.jsx';
 
 /**
  * Wraps the app shell so every shared route can reach the correct
@@ -24,6 +25,9 @@ import { LocaleSync } from './LocaleSync.jsx';
  * Cluster R FOLLOWUP 4: also mounts <LocaleSync /> so a saved
  * `settings.language` rehydrates the live i18n locale on cold start.
  *
+ * : and <DisplayPrefsGate />, which stamps the theme, reduced-motion
+ * and learn-mode settings onto <html> for CSS and components to read.
+ *
  * @param {object} props
  * @param {'popup' | 'web' | 'desktop'} props.shell
  * @param {import('./MessagingContext.js').MessagingModule} props.messaging
@@ -35,6 +39,7 @@ export function MessagingProvider({ shell, messaging, children }) {
         <MessagingContext.Provider value={value}>
             <PrivacyBlurGate />
             <LocaleSync />
+            <DisplayPrefsGate />
             {children}
         </MessagingContext.Provider>
     );

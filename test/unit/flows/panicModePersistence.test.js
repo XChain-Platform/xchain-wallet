@@ -29,7 +29,14 @@ import {
 } from '../../../packages/core/src/flows/panicMode.js';
 
 function activeState(nowMs = Date.now()) {
-    return { activatedAt: nowMs, expiresAt: nowMs + DEFAULT_DURATION_MS, durationMs: DEFAULT_DURATION_MS };
+    return {
+        activatedAt: nowMs,
+        expiresAt: nowMs + DEFAULT_DURATION_MS,
+        durationMs: DEFAULT_DURATION_MS,
+        // : an active record carries how it was armed, because the
+        // disclosure policy on Home / Send / the sign screen turns on it.
+        armedBy: 'self',
+    };
 }
 
 afterEach(() => {
@@ -50,6 +57,23 @@ describe('panic-mode persistence', () => {
         expect(isSigningFrozen()).toBe(true);
         expect(getPanicModeState()).toEqual(state);
         expect(() => assertSigningAllowed()).toThrow(PanicModeActiveError);
+    });
+
+    it('hydrates a record written before provenance existed as duress-armed', async () => {
+        // : a legacy record has no `armedBy`. The freeze still applies;
+        // what we cannot do is announce it on Home, because we have no way to
+        // know it was not the duress passphrase that armed it.
+        const { activatedAt, expiresAt, durationMs } = activeState();
+        const store = {
+            load: async () => ({ activatedAt, expiresAt, durationMs }),
+            save: async () => {},
+            clear: async () => {},
+        };
+
+        await configurePanicModePersistence(store);
+
+        expect(isSigningFrozen()).toBe(true);
+        expect(getPanicModeState().armedBy).toBe('duress');
     });
 
     it('fails closed while hydration is pending, then serves once it resolves', async () => {

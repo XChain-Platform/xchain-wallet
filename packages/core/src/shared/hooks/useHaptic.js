@@ -15,11 +15,14 @@
 // a desktop browser without vibration support, every method silently
 // no-ops, so callers don't have to feature-detect.
 //
-// Reduced-motion guard: subscribes to the `prefers-reduced-motion`
-// media query (same pattern AnimatedQrFrames uses) and suppresses
-// every pulse while the user has the OS preference enabled. Vibration
-// is a motion affordance; users who turn motion off are signalling
-// they don't want involuntary feedback either.
+// Reduced-motion guard: suppresses every pulse while motion is reduced.
+// Vibration is a motion affordance; users who turn motion off are
+// signalling they don't want involuntary feedback either. : the
+// verdict comes from `useReducedMotion`, which weighs the in-app
+// Settings → Appearance override ("Always reduce" / "Never reduce")
+// ahead of the OS media query. Reading matchMedia directly, as this hook
+// used to, made "Always reduce" unenforceable for anyone whose OS does
+// not advertise the preference.
 //
 // Cluster P FOLLOWUP 1: `settings.privacy.hapticsEnabled` (v2-tolerant,
 // default true) is now honored as an in-wallet opt-out alongside the
@@ -28,7 +31,8 @@
 // is harsh enough that the pulses are more annoying than informative,
 // can flip it in Settings → Privacy.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useReducedMotion } from '../../ui/reducedMotion.js';
 import { useSettings } from './useSettings.js';
 
 const PATTERNS = Object.freeze({
@@ -37,11 +41,6 @@ const PATTERNS = Object.freeze({
     warn: [20, 60, 20],
     error: [40, 80, 40, 80, 40],
 });
-
-function readReducedMotion() {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 function canVibrate() {
     if (typeof navigator === 'undefined') return false;
@@ -72,27 +71,12 @@ function safeVibrate(pattern) {
  * }}
  */
 export function useHaptic() {
-    const [reducedMotion, setReducedMotion] = useState(readReducedMotion);
+    const reducedMotion = useReducedMotion();
     // Cluster P FOLLOWUP 1: read the in-wallet opt-out. Default-true
     // when the field is absent so existing settings records keep their
     // current behaviour; `=== false` is the only suppress signal.
     const { settings } = useSettings();
     const settingsEnabled = settings?.privacy?.hapticsEnabled !== false;
-
-    useEffect(() => {
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-        const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const onChange = (e) => setReducedMotion(e.matches);
-        if (typeof mq.addEventListener === 'function') {
-            mq.addEventListener('change', onChange);
-            return () => mq.removeEventListener('change', onChange);
-        }
-        if (typeof mq.addListener === 'function') {
-            mq.addListener(onChange);
-            return () => mq.removeListener(onChange);
-        }
-        return undefined;
-    }, []);
 
     const fire = useCallback((pattern) => {
         if (reducedMotion) return;

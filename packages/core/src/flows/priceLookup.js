@@ -55,10 +55,11 @@ const COINGECKO_ID_BY_COIN = {
 
 /**
  * @typedef {object} FiatRate
- * @property {number} rate           units of `fiatCurrency` per 1 native coin
+ * @property {number} rate           units of `fiatCurrency` per 1 unit of the thing priced
  * @property {string} chainCoin      coin family the rate is for (matches descriptor.coin)
+ * @property {string} [tick]         token ticker, on a per-tick rate only; absent = the native coin
  * @property {string} fiatCurrency   ISO-style currency code (USD, EUR, …)
- * @property {'oracle' | 'coingecko'} source
+ * @property {'oracle' | 'coingecko' | 'market'} source
  * @property {string} fetchedAt      ISO timestamp of when the rate was obtained
  */
 
@@ -124,19 +125,22 @@ async function fetchJson(fetchImpl, url) {
 }
 
 /**
- * Primary source: latest finalized oracle snapshot for `SYM/USD` from
- * the coin's mainnet explorer (hub-mirrored `price_snapshots`).
- * Returns a positive rate number, or null when the pair has no fresh
- * finalized snapshot. Throws on transport errors (caller falls back).
+ * Primary source: latest finalized oracle snapshot for `pair` from the
+ * coin's mainnet explorer (hub-mirrored `price_snapshots`). Returns a
+ * positive rate number, or null when the pair has no fresh finalized
+ * snapshot. Throws on transport errors (caller falls back).
  *
  * Queried via the status filter (FINALIZED) rather than the pair
  * filter because the pair contains a '/', which doesn't survive the
  * explorer's path-segment routing.
+ *
+ * The pair is a parameter rather than derived from the coin because
+ * the same feed carries token pairs (XCHAIN/USD, published by the
+ * hub's derived price source) beside the coin ones.
  */
-async function fetchOracleRate(fetchImpl, chainCoin, nowMs) {
+async function fetchOracleSnapshotRate(fetchImpl, chainCoin, pair, nowMs) {
     const base = explorerUrlForCoin(chainCoin);
     if (!base) return null;
-    const pair = `${tickerForCoin(chainCoin)}/USD`;
     const json = await fetchJson(fetchImpl, `${base}/api/price_snapshots/FINALIZED/status?limit=25`);
     const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
     const row = rows.find((r) => r && r.coin_pair === pair);
@@ -154,6 +158,11 @@ async function fetchOracleRate(fetchImpl, chainCoin, nowMs) {
     }
     if (tsMs != null && nowMs - tsMs > ORACLE_STALE_MS) return null;
     return rate;
+}
+
+/** The coin's own `SYM/USD` oracle rate. */
+function fetchOracleRate(fetchImpl, chainCoin, nowMs) {
+    return fetchOracleSnapshotRate(fetchImpl, chainCoin, `${tickerForCoin(chainCoin)}/USD`, nowMs);
 }
 
 /**
@@ -305,9 +314,201 @@ export function subscribeFiatRates(fn) {
     return () => listeners.delete(fn);
 }
 
+// --- Per-tick (token) rates,  ---------------------------------
+//
+// Everything above prices a COIN FAMILY. A token amount is a different
+// question with a different answer, and answering it with the coin's
+// rate is the defect  exists to kill: 50,000 XCHAIN priced at the
+// BTC rate renders as billions of dollars, in the same confident
+// "≈ $X.XX" styling a correct number would use.
+//
+// Two sources, tried in this order:
+//   1. the on-chain PRICE oracle, for a token that has its own USD pair
+//      in the finalized feed (XCHAIN/USD, derived from realized fills
+//      by the hub's XchainPriceSource),
+//   2. the token's DEX market against the chain's native coin, with the
+//      coin's own fiat rate applied to convert.
+// A token with neither is worth exactly nothing to guess at, so it
+// stays null and the UI shows no fiat (§45.4).
+
+// A market row the indexer has not recomputed in this long means the
+// feed is not being kept up, whatever its last fill said.
+const MARKET_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// A token with no oracle pair and no market is the COMMON case, and the
+// answer costs two round trips to reach. Remember the miss for a short
+// while so a form whose tick field is being typed into character by
+// character does not re-ask on every keystroke. Shorter than the hit
+// TTL: a market appearing is news we want reasonably soon.
+const MISS_TTL_MS = 60 * 1000;
+
+/** @type {Map<string, { rate: FiatRate | null, fetchedAtMs: number }>} */
+const tokenRateCache = new Map();
+
+function tokenCacheKey(chainCoin, tick, fiatCurrency) {
+    return `${chainCoin}|${tick}|${fiatCurrency}`;
+}
+
+function normalizeTick(tick) {
+    return String(tick ?? '').trim().toUpperCase();
+}
+
+/**
+ * Price of `tick` denominated in `quote` from an explorer market row.
+ * The explorer normalizes a row so tick1 is the requested base, but it
+ * only does that when the request named both sides, so read whichever
+ * orientation the row actually arrived in. `tickN_price` is the last
+ * fill's price of tickN in the OTHER tick (indexer db.js getPrice).
+ */
+function marketPriceOf(row, tick, quote) {
+    const t1 = normalizeTick(row?.tick1);
+    const t2 = normalizeTick(row?.tick2);
+    if (t1 === tick && t2 === quote) return Number(row.tick1_price);
+    if (t2 === tick && t1 === quote) return Number(row.tick2_price);
+    return NaN;
+}
+
+/**
+ * Secondary source: the token's last DEX fill price against the native
+ * coin. Returns coin units per 1 token, or null when the market has no
+ * usable price. Throws on transport errors (caller gives up).
+ */
+async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, nowMs) {
+    const base = explorerUrlForCoin(chainCoin);
+    if (!base) return null;
+    const url = `${base}/api/market/${encodeURIComponent(tick)}/${encodeURIComponent(nativeTicker)}`;
+    const json = await fetchJson(fetchImpl, url);
+    const rows = Array.isArray(json?.data) ? json.data
+        : Array.isArray(json) ? json
+            : json?.data ? [json.data] : [];
+    for (const row of rows) {
+        const price = marketPriceOf(row, tick, nativeTicker);
+        if (!Number.isFinite(price) || price <= 0) continue;
+        // `last_updated` is the indexer's last recompute of the row (unix
+        // seconds, block time), not the age of the fill it prices, so it
+        // bounds how stale the DATA can be rather than the trade. That is
+        // still the only freshness signal this endpoint gives us.
+        const tsMs = Number(row.last_updated) * 1000;
+        if (Number.isFinite(tsMs) && tsMs > 0 && nowMs - tsMs > MARKET_STALE_MS) continue;
+        return price;
+    }
+    return null;
+}
+
+/**
+ * Refresh the cached fiat rate for one token tick on one chain. Safe to
+ * call on every render pass: it is TTL-throttled, and a blank or native
+ * tick is a no-op (that case belongs to `getFiatRate`, not here).
+ *
+ * @param {object} opts
+ * @param {string} opts.chainCoin                  coin family, e.g. 'bitcoin'
+ * @param {string} opts.tick                       token ticker
+ * @param {string} opts.nativeTicker               the chain's coin ticker, e.g. 'BTC'
+ * @param {string} [opts.fiatCurrency]             default 'USD'
+ * @param {boolean} [opts.allowCoingeckoFallback]  default true
+ * @param {boolean} [opts.force]                   default false
+ * @returns {Promise<{ updated: boolean }>}
+ */
+export async function refreshTokenFiatRate({
+    chainCoin,
+    tick,
+    nativeTicker,
+    fiatCurrency = 'USD',
+    allowCoingeckoFallback = true,
+    force = false,
+} = {}) {
+    const t = normalizeTick(tick);
+    const n = normalizeTick(nativeTicker);
+    if (typeof chainCoin !== 'string' || chainCoin.length === 0) return { updated: false };
+    // No native ticker means we cannot prove this tick is NOT the coin,
+    // and pricing the coin as a token against itself is nonsense.
+    if (t.length === 0 || n.length === 0 || t === n) return { updated: false };
+    // No real ticker carries a path separator, and one would escape the
+    // explorer's path-segment routing.
+    if (/[/?#\\]/.test(t)) return { updated: false };
+
+    const fetchImpl = resolveFetch();
+    if (!fetchImpl) return { updated: false };
+    const nowMs = deps.now();
+
+    const key = tokenCacheKey(chainCoin, t, fiatCurrency);
+    const hit = tokenRateCache.get(key);
+    if (!force && hit) {
+        const ttl = hit.rate ? REFRESH_TTL_MS : MISS_TTL_MS;
+        if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
+    }
+    // A refresh that resolved nothing keeps whatever the cache already
+    // holds, exactly as the coin path does: a price from five minutes ago
+    // is a better answer mid-session than a field that suddenly goes
+    // blank because one request timed out. Stamping the time either way
+    // is what stops a miss being re-asked on every render.
+    const miss = () => {
+        tokenRateCache.set(key, { rate: hit?.rate ?? null, fetchedAtMs: nowMs });
+        return { updated: false };
+    };
+    const put = (rate, source) => {
+        tokenRateCache.set(key, {
+            rate: Object.freeze({
+                rate,
+                chainCoin,
+                tick: t,
+                fiatCurrency,
+                source,
+                fetchedAt: new Date(nowMs).toISOString(),
+            }),
+            fetchedAtMs: nowMs,
+        });
+        notifyListeners();
+        return { updated: true };
+    };
+
+    // 1. The token's own oracle pair. The feed publishes USD pairs only.
+    if (fiatCurrency === 'USD') {
+        try {
+            const rate = await fetchOracleSnapshotRate(fetchImpl, chainCoin, `${t}/USD`, nowMs);
+            if (rate != null) return put(rate, 'oracle');
+        } catch { /* fall through to the market */ }
+    }
+
+    // 2. The DEX market, converted through the coin's own rate. Without
+    //    that rate the market price is only a coin-denominated number,
+    //    which is not what the caller asked for.
+    await refreshFiatRates({ chainCoins: [chainCoin], fiatCurrency, allowCoingeckoFallback })
+        .catch(() => { /* the cache read below decides */ });
+    const coinRate = getFiatRate({ chainCoin, fiatCurrency });
+    if (!coinRate) return miss();
+    try {
+        const inCoin = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs);
+        const fiat = inCoin == null ? null : inCoin * coinRate.rate;
+        if (fiat != null && Number.isFinite(fiat) && fiat > 0) return put(fiat, 'market');
+    } catch { /* keep whatever the cache already holds */ }
+    return miss();
+}
+
+/**
+ * Look up a token's fiat rate from the in-process cache. Synchronous,
+ * and null until `refreshTokenFiatRate` has landed one. The returned
+ * object is reference-stable per refresh, so it can back a
+ * useSyncExternalStore snapshot.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainCoin
+ * @param {string} opts.tick
+ * @param {string} [opts.fiatCurrency]   default 'USD'
+ * @returns {FiatRate | null}
+ */
+export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {}) {
+    if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
+    const t = normalizeTick(tick);
+    if (t.length === 0) return null;
+    const hit = tokenRateCache.get(tokenCacheKey(chainCoin, t, fiatCurrency));
+    return hit && hit.rate ? hit.rate : null;
+}
+
 /** Test-only: clear the cache and injected deps. */
 export function _resetPriceLookupForTests() {
     rateCache.clear();
+    tokenRateCache.clear();
     listeners.clear();
     deps = { fetch: null, now: () => Date.now(), explorerUrlByCoin: null };
 }
