@@ -15,6 +15,14 @@
 //
 // Kept here (not in `src/popup/` or `src/approval/`) so both entries
 // can import the same implementation without depending on each other.
+//
+// : this is also where the extension drops stale tick metadata. The
+// flows run in the service worker, a different JS realm from the page holding
+// the `useTokenInfo` cache, so `submitAction`'s own invalidation never reaches
+// it. Every `action.*` route that resolves here invalidates the ticks its
+// request named, which is the same set `submitAction` would have dropped.
+
+import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
 
 /**
  * @param {string} type
@@ -39,6 +47,10 @@ export function sendMessage(type, request) {
                 return;
             }
             if (response.ok) {
+                if (typeof type === 'string' && type.startsWith('action.')) {
+                    const req = /** @type {any} */ (request);
+                    invalidateTokenInfoForAction(req?.chainId, req);
+                }
                 resolve(response.result);
                 return;
             }

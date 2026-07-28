@@ -101,10 +101,47 @@ assert.ok(/export function useTokenInfo\b/.test(hook),
     'useTokenInfo is a named export');
 assert.ok(/messaging\.getTokenInfo\b/.test(hook),
     'useTokenInfo calls messaging.getTokenInfo');
-assert.ok(/new Map\(\)/.test(hook),
-    'useTokenInfo carries a module-level cache Map');
 assert.ok(/__clearTokenInfoCache\b/.test(hook),
     'useTokenInfo exposes a __clearTokenInfoCache test helper');
+
+// : the module-level cache moved to shared/utils/tokenInfoCache.js so
+// the flows layer can invalidate it without importing React, and it grew a TTL
+// plus an invalidation channel. Without those, an ownership transfer the
+// wallet itself broadcast left Manage Token naming the previous owner and
+// locked the new owner out of every issuer action until a page reload.
+const cachePath = join(core, 'src', 'shared', 'utils', 'tokenInfoCache.js');
+assert.ok(existsSync(cachePath), 'shared/utils/tokenInfoCache.js exists');
+const tokenCache = readFileSync(cachePath, 'utf8');
+assert.ok(/new Map\(\)/.test(tokenCache),
+    'tokenInfoCache carries the module-level cache Map');
+assert.ok(/export const TOKEN_INFO_TTL_MS\b/.test(tokenCache),
+    'tokenInfoCache exposes a TTL');
+for (const fn of [
+    'invalidateTokenInfo', 'invalidateTokenInfoForAction',
+    'subscribeTokenInfoInvalidation', 'ticksFromActionParams',
+]) {
+    assert.ok(new RegExp(`export function ${fn}\\b`).test(tokenCache),
+        `tokenInfoCache exports ${fn}`);
+}
+assert.ok(/from '\.\.\/utils\/tokenInfoCache\.js'/.test(hook),
+    'useTokenInfo reads through tokenInfoCache');
+assert.ok(/subscribeTokenInfoInvalidation\b/.test(hook),
+    'useTokenInfo refetches a mounted page on invalidation');
+
+const submitPath = join(core, 'src', 'flows', 'submitAction.js');
+const submit = readFileSync(submitPath, 'utf8');
+assert.ok(/invalidateTokenInfoForAction\(chainId, actionData\)/.test(submit),
+    'submitAction invalidates tick metadata after a successful broadcast');
+
+const chromeMsgPath = join(ext, 'src', 'shared', 'chromeMessaging.js');
+const chromeMsg = readFileSync(chromeMsgPath, 'utf8');
+assert.ok(/invalidateTokenInfoForAction\b/.test(chromeMsg),
+    'extension pages invalidate tick metadata on action.* routes (flows run in another realm)');
+
+const desktopMsgPath = join(desktop, 'renderer', 'bridgeMessaging.js');
+const desktopMsg = readFileSync(desktopMsgPath, 'utf8');
+assert.ok(/invalidateTokenInfoForAction\b/.test(desktopMsg),
+    'desktop renderer invalidates tick metadata on action.* routes (host runs in the main process)');
 
 // --- 6. TokenDetail wiring ----------------------------------------------
 

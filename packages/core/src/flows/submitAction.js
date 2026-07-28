@@ -33,6 +33,7 @@ import {
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
 } from './broadcastPermanence.js';
+import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
 
 /**
  *  / §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -321,6 +322,15 @@ export async function submitAction({
             signer.lock();
         }
     }
+
+    // : the broadcast landed, so any cached metadata for the ticks this
+    // action names now describes the token as it was BEFORE the action. Drop
+    // those records here rather than at each call site: every issuer action
+    // (ISSUE, and so ownership transfer, description and mint settings; MINT;
+    // LOCK; DESTROY; CALLBACK) funnels through this one flow. Left cached, the
+    // Manage Token page keeps naming the previous owner and hides every issuer
+    // action from the new one, recoverable only by a full page reload.
+    invalidateTokenInfoForAction(chainId, actionData);
 
     // §36.3: advance the ADS accumulator after a successful submit.
     // Only fire when ADS is actually enabled for this chain; otherwise

@@ -10,6 +10,14 @@
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import {
+    tokenInfoCacheKey,
+    readTokenInfoCache,
+    writeTokenInfoCache,
+    subscribeTokenInfoInvalidation,
+    tokenInfoTargetMatches,
+    clearTokenInfoCache,
+} from '../utils/tokenInfoCache.js';
 
 /**
  * §27.6 + §27.5: shared tick-metadata lookup for token-detail and
@@ -22,9 +30,13 @@ import { useMessaging } from '../useMessaging.js';
  *   - `messaging.getTokenInfo` isn't wired in this build,
  *   - the lookup fails (silently; caller renders "no metadata" copy).
  *
- * Module-level cache keyed by `chainId:tick` survives re-mounts inside
- * a single session so navigating Detail → back → Detail (or hovering
- * the same row in Collectibles) doesn't re-fetch.
+ * The module-level cache keyed `chainId:tick` (see `utils/tokenInfoCache.js`)
+ * still spares the re-fetch on Detail -> back -> Detail, but  gave it a
+ * TTL and an invalidation channel: an action this wallet broadcasts against
+ * the tick drops the record, and this hook re-reads it even while mounted.
+ * Without that, Manage Token kept naming the previous owner after an
+ * ownership transfer and locked the new owner out of every issuer action
+ * until a full page reload.
  *
  * @param {object} args
  * @param {string | null | undefined} args.chainId
@@ -32,23 +44,32 @@ import { useMessaging } from '../useMessaging.js';
  * @param {boolean} [args.skip]                 caller can opt out (e.g. native coins)
  * @returns {import('../../flows/tokenInfo.js').TokenInfo | null}
  */
-
-const cache = /** @type {Map<string, any>} */ (new Map());
-
 export function useTokenInfo({ chainId, tick, skip = false }) {
     const { messaging } = useMessaging();
-    const key = chainId && tick ? `${chainId}:${tick}` : null;
-    const [info, setInfo] = useState(/** @type {any} */ (
-        key && cache.has(key) ? cache.get(key) : null
-    ));
+    const key = tokenInfoCacheKey(chainId, tick);
+    const [info, setInfo] = useState(/** @type {any} */ (readTokenInfoCache(key).value));
+    // Bumped when this tick is invalidated, purely to re-run the fetch effect
+    // on a component that never unmounted (the Manage Token page driving its
+    // own MINT / LOCK / TRANSFER is exactly that case).
+    const [revision, setRevision] = useState(0);
+
+    useEffect(() => {
+        if (skip || !chainId || !tick) return undefined;
+        return subscribeTokenInfoInvalidation((target) => {
+            if (tokenInfoTargetMatches(target, chainId, tick)) {
+                setRevision((n) => n + 1);
+            }
+        });
+    }, [chainId, tick, skip]);
 
     useEffect(() => {
         if (skip || !key) {
             setInfo(null);
             return undefined;
         }
-        if (cache.has(key)) {
-            setInfo(cache.get(key));
+        const cached = readTokenInfoCache(key);
+        if (cached.hit) {
+            setInfo(cached.value);
             return undefined;
         }
         if (typeof messaging?.getTokenInfo !== 'function') return undefined;
@@ -56,12 +77,12 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
         messaging.getTokenInfo({ chainId, tick })
             .then((next) => {
                 if (cancelled) return;
-                cache.set(key, next);
+                writeTokenInfoCache(key, next);
                 setInfo(next);
             })
             .catch(() => { /* silent; renderer falls back to "no metadata" copy */ });
         return () => { cancelled = true; };
-    }, [key, skip, messaging, chainId, tick]);
+    }, [key, skip, messaging, chainId, tick, revision]);
 
     return info;
 }
@@ -78,13 +99,14 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
  * @returns {Promise<any | null>}
  */
 export function fetchTokenInfo(messaging, chainId, tick) {
-    const key = chainId && tick ? `${chainId}:${tick}` : null;
+    const key = tokenInfoCacheKey(chainId, tick);
     if (!key) return Promise.resolve(null);
-    if (cache.has(key)) return Promise.resolve(cache.get(key));
+    const cached = readTokenInfoCache(key);
+    if (cached.hit) return Promise.resolve(cached.value);
     if (typeof messaging?.getTokenInfo !== 'function') return Promise.resolve(null);
     return messaging.getTokenInfo({ chainId, tick })
         .then((next) => {
-            cache.set(key, next);
+            writeTokenInfoCache(key, next);
             return next;
         })
         .catch(() => null);
@@ -95,5 +117,5 @@ export function fetchTokenInfo(messaging, chainId, tick) {
  * runs so a stale mock doesn't leak across cases.
  */
 export function __clearTokenInfoCache() {
-    cache.clear();
+    clearTokenInfoCache();
 }
