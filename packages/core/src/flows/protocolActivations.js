@@ -111,7 +111,7 @@ export async function resolveGateMinAmountActive({ chainId, getBlockHeight, heig
 // Unlike GATE_MIN_AMOUNT above, these are NOT waiting on the  train and
 // are NOT block heights. Both are already scheduled in the indexer
 // (xchain-indexer/src/protocol_changes.js) as BLOCK-TIMESTAMP gates, with real
-// values: mainnet 1790812800 (2026-10-01), testnet and regtest 0, i.e. live
+// values: mainnet 1786924800 (2026-08-17), testnet and regtest 0, i.e. live
 // from genesis so the regtest stack exercises the rules today.
 //
 // The comparison must be against the CHAIN's block time, never the local
@@ -126,13 +126,13 @@ export async function resolveGateMinAmountActive({ chainId, getBlockHeight, heig
  *  protocol changes, so each gets its own map to keep a future divergence a
  *  one-line edit rather than a refactor. */
 const VOTE_FLAG_DAY_TIMES = {
-    'bitcoin-mainnet': 1790812800,
+    'bitcoin-mainnet': 1786924800,
     'bitcoin-testnet': 0,
     'bitcoin-regtest': 0,
-    'litecoin-mainnet': 1790812800,
+    'litecoin-mainnet': 1786924800,
     'litecoin-testnet': 0,
     'litecoin-regtest': 0,
-    'dogecoin-mainnet': 1790812800,
+    'dogecoin-mainnet': 1786924800,
     'dogecoin-testnet': 0,
     'dogecoin-regtest': 0,
 };
