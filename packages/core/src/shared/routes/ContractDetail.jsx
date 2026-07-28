@@ -167,7 +167,6 @@ export function ContractDetail({
         return (
             <Screen variant={variant} header={header}>
                 <div role="alert" className={styles.entryDescription}>{contractError}</div>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </Screen>
         );
     }
@@ -175,7 +174,6 @@ export function ContractDetail({
         return (
             <Screen variant={variant} header={header}>
                 <p className={styles.entryDescription}>Loading contract…</p>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </Screen>
         );
     }

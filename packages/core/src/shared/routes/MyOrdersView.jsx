@@ -472,7 +472,6 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
             {error && hw ? <div role="alert" className={F.error}>{error}</div> : null}
 
             <div className={F.actions}>
-                <Button variant="secondary" onClick={onBack} disabled={submitting}>Back</Button>
                 <Button
                     type="submit"
                     variant={isCancel ? 'danger' : 'primary'}

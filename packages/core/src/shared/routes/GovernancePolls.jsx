@@ -115,7 +115,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         return wrap(
             <>
                 <p className={styles.hint}>No address on a governance-capable chain. Use Receive to generate one first.</p>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }

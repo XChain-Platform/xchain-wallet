@@ -128,7 +128,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         return wrap(
             <>
                 <p className={styles.hint}>No address on a chain that supports betting. Use Receive to generate one first.</p>
-                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
         );
     }

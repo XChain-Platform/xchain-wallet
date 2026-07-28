@@ -436,9 +436,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     on-chain, so this flow can't be split across an
                     air-gapped boundary today.
                 </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Back</Button>
-                </div>
             </>,
         );
     }
