@@ -240,7 +240,13 @@ export async function composeForConfirm({
         // output, so asking the wrong question gets a confident wrong answer
         // (measured: "invalid: insufficient funds (FEE)" for an action the same
         // endpoint calls valid when asked in native mode).
-        payFeeInNativeCoin: !!feePreflight.encoderOpts?.payFeeInNativeCoin,
+        // Read off the QUOTE, not off encoderOpts: applyNativeFeePreflight
+        // deliberately strips `payFeeInNativeCoin` from the opts it returns once
+        // the fee has become a real output, so the flag is gone by this point
+        // and reading it there quietly yields false - which is how the first
+        // version of this fix looked right and changed nothing on screen. A
+        // quote exists exactly when a coin fee was priced and attached.
+        payFeeInNativeCoin: !!feePreflight.quote,
         // : present when the protocol fee was moved off this PSBT and on
         // to the reveal the submit path builds. The confirm surface still shows
         // the fee (it reads the quote); this tells the submit path where to put

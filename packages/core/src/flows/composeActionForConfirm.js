@@ -245,6 +245,13 @@ export async function composeActionForConfirm({
         psbt: composed.psbt,
         encoding: composed.encoding,
         quote: composed.quote,
+        // WHICH LANE these bytes pay the protocol fee through. It has to cross
+        // the boundary, and this whitelist is where D-119 actually broke: the
+        // compose knew, the confirm screen did not, so the network dry run was
+        // asked about the chain default and told a payer with no XCHAIN that a
+        // correct action would fail. A field the popup cannot see may as well
+        // not exist.
+        payFeeInNativeCoin: !!composed.payFeeInNativeCoin,
         // : the protocol fee output the two-phase lane moved to the
         // reveal. Rides the envelope so the form can hand it back on Approve
         // and the submit path attaches it without re-quoting.

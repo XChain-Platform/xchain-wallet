@@ -210,6 +210,17 @@ describe('composeActionForConfirm', () => {
         // 3 BTC less the 1000-sat miner fee less the 2000-sat protocol fee.
         const coinRow = composed.simulation.deltas.find((d) => d.isCoin && d.before !== '');
         expect(coinRow.after).toBe('2.99997');
+
+        // D-119: WHICH LANE has to cross the boundary too. This envelope is a
+        // whitelist, and a field the popup cannot see may as well not exist -
+        // the confirm screen used it to ask the network dry run the right
+        // question, and without it a payer with no XCHAIN was told a correct
+        // action would fail. The unit test on the hook passed throughout,
+        // because it stubs the compose; only the live drive and this
+        // assertion see the gap.
+        expect(composed.payFeeInNativeCoin,
+            'the composed envelope does not say it pays the protocol fee in coin')
+            .toBe(true);
     });
 
     it('reports no protocol fee when the action pays it in XCHAIN', async () => {

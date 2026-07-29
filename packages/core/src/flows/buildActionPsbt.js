@@ -122,6 +122,20 @@ export async function buildActionPsbt(opts) {
         encoded = await encoder.createTx({
             data: createResult.actionString,
             pubkey: source.publicKey,
+            // D-120: the same D-7 pair every signing path passes, and the one
+            // this lane was missing. `sourceAddress` makes the SDK select the
+            // funding UTXOs BY ADDRESS; without it the encoder selects by
+            // `pubkey`, which the utxo-tracker cannot resolve to a script, so
+            // every watcher-mode build from a bech32 address died on "Error
+            // getting utxos: <pubkey> has no matching Script" - the whole
+            // air-gapped lane, unusable on the wallet's DEFAULT address type.
+            // `change` is the leftover sink, for the same reason
+            // composeForConfirm passes it: without one the encoder refuses
+            // rather than burn the change as fee. An explicit value in
+            // encoderOpts still wins, since it is spread last.
+            ...(source.address
+                ? { sourceAddress: source.address, change: source.address }
+                : {}),
             ...encoderOpts,
         });
     } catch (err) {

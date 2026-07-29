@@ -205,10 +205,20 @@ test.describe('the native-fee flag on each submit lane', () => {
                 'the action indexed invalid, which is what a DROPPED fee flag looks like: the wallet '
                 + 'signed and paid a miner fee for something the chain would never accept')
                 .toBe('valid');
-            expect(Number(action.payment_mode),
+            // The fee record lives UNDER `fee`, not at the top level, and the
+            // top-level `payment_mode` is null on every action - reading it
+            // there reports a correct coin payment as an XCHAIN one.
+            expect(Number(action.fee?.payment_mode),
                 'the action was accepted but recorded as paying its fee in XCHAIN, so the coin lane '
                 + 'the user chose never reached the wire')
                 .toBe(1);
+            // And the amount is the one the venue quoted before composing, in
+            // the chain's own coin: the flag did not merely survive, it bought
+            // what it said it would.
+            expect(Math.round(Number(action.fee?.native_coin_amount) * 1e8),
+                `the coin fee on chain is not the ${quotedSats} sats quoted`)
+                .toBe(quotedSats);
+            expect(String(action.fee?.native_coin)).toBe('BTC');
         });
 
         await test.step('LANE 2: the watcher build changes when the flag is set', async () => {
@@ -218,7 +228,9 @@ test.describe('the native-fee flag on each submit lane', () => {
                 const main = await fillIssueForm(page, tick, { nativeFee });
                 await main.getByRole('button', { name: 'Preview', exact: true }).click();
                 await main.getByRole('button', { name: 'Create unsigned transaction', exact: true }).click();
-                const hex = page.getByLabel('Unsigned transaction hex');
+                // By ROLE: the panel also carries a "Copy unsigned transaction
+                // hex" button, so the label alone matches two elements.
+                const hex = page.getByRole('textbox', { name: 'Unsigned transaction hex' });
                 await expect(hex, 'the watcher build produced no unsigned transaction')
                     .toBeVisible({ timeout: 120_000 });
                 const value = await hex.inputValue();
@@ -227,6 +239,13 @@ test.describe('the native-fee flag on each submit lane', () => {
             };
 
             const off = await build(`${TICK}A`, false);
+            // BACK VIA THE SCREEN'S OWN CONTROL, not the palette: re-selecting
+            // "Issue token" while the route is already mounted changes no state,
+            // so the form stays on its result screen and the second build never
+            // starts. Same shape as D-117 on the betting hub - a command for the
+            // route you are already on is a no-op - and here the wallet offers
+            // "Build another" precisely for this.
+            await page.getByRole('button', { name: 'Build another', exact: true }).click();
             const on = await build(`${TICK}B`, true);
 
             // Differential, so no transaction parsing is needed: a dropped flag
