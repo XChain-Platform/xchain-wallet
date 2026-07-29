@@ -46,12 +46,18 @@
 //   - Raw PSBT inspector reveal on sign screens (§48.4)
 
 import { useEffect, useState } from 'react';
-import { registry as registryLib, schemas } from '@xchain-wallet/core';
+import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
 import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -64,7 +70,7 @@ const AUTO_SIGN_LABELS = {
     [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: '1 hour',
 };
 
-export function DeveloperModeSection() {
+export function DeveloperModeSection({ onNavigateToMint } = {}) {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text="Loading…" />;
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
@@ -101,6 +107,11 @@ export function DeveloperModeSection() {
                 onChange={(v) => onToggle('showVariantBadge', v)}
             />
             <RegtestNetworksRow developerMode={Boolean(settings.developerMode)} fees={settings.fees} />
+            <RegtestFaucetRow
+                developerMode={Boolean(settings.developerMode)}
+                fees={settings.fees}
+                onNavigateToMint={onNavigateToMint}
+            />
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
             <ToggleRow
                 label="Raw PSBT inspector"
@@ -413,6 +424,142 @@ function RegtestRow({ descriptor, isActive, disabled }) {
                     </div>
                 </form>
             ) : null}
+            {statusText ? <Status text={statusText} /> : null}
+            {errorText ? <Status text={errorText} tone="error" /> : null}
+        </div>
+    );
+}
+
+// Regtest faucet: dev-only convenience for local testing. Two independent
+// mechanisms, because XCHAIN is a protocol-level asset the miner can't
+// touch (see flows/regtestFaucet.js header comment):
+//   - "Get test <COIN>" hits xchain-regtest-miner's send_funds JSON-RPC
+//     directly (fetch, CORS-open on local stacks, no signing).
+//   - "Mint test XCHAIN" hands off to the real MintForm flow (via
+//     onNavigateToMint) since minting is a signed protocol action and
+//     XCHAIN only exists on the bitcoin chain (XCHAIN_GENESIS.md).
+function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
+    const { messaging } = useMessaging();
+    const activeRegtests = chainRegistry.supportedChains()
+        .filter((d) => d.networkKind === 'regtest' && fees && fees[d.id]);
+    if (activeRegtests.length === 0) return null;
+    // Prefer bitcoin-regtest as the default target (it's the only chain
+    // XCHAIN can exist on), otherwise the first activated regtest chain.
+    const descriptor = activeRegtests.find((d) => d.coin === 'bitcoin') || activeRegtests[0];
+    const coinTicker = PROTOCOL_COIN_TICKER[descriptor.coin] || descriptor.coin;
+
+    const [minerUrl, setMinerUrl] = useState('http://localhost:3005');
+    const [amount, setAmount] = useState('10');
+    const [busy, setBusy] = useState(false);
+    const [statusText, setStatusText] = useState(/** @type {string | null} */ (null));
+    const [errorText, setErrorText] = useState(/** @type {string | null} */ (null));
+
+    const onGetFunds = async (event) => {
+        event.preventDefault();
+        if (busy || typeof messaging?.listWallets !== 'function') return;
+        setBusy(true);
+        setStatusText(null);
+        setErrorText(null);
+        try {
+            const wallets = await messaging.listWallets();
+            const walletId = Array.isArray(wallets) ? wallets[0]?.id : null;
+            if (!walletId) throw new Error('No wallet found.');
+            const addr = await messaging.getNewestAddress(walletId, descriptor.id);
+            const address = addr?.address;
+            if (!address) throw new Error(`No ${descriptor.displayName} address yet. Use Receive first.`);
+            const result = await flowsLib.fundBtcFromMiner({ minerUrl, address, amount: Number(amount) });
+            if (!result.ok) throw new Error(result.error || 'Funding failed.');
+            setStatusText(`Sent ${amount} ${coinTicker} to ${address}. txid ${result.txid}. Waiting for the regtest miner to confirm it.`);
+        } catch (err) {
+            setErrorText(err?.message || 'Funding failed.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div style={REGTEST_BLOCK}>
+            <div style={{ fontWeight: 600, color: 'var(--xc-text)' }}>Regtest faucet</div>
+            <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                Local testing only. "Get test {coinTicker}" asks the xchain-regtest-miner to send coins
+                to your {descriptor.displayName} address directly (no signing). XCHAIN can't be funded
+                that way - it's a protocol asset, not a native coin - so "Mint test XCHAIN" opens the
+                real Mint form instead (requires some {coinTicker} already, to pay the fee).
+                {!developerMode ? ' Turn Developer Mode on to use these.' : ''}
+            </div>
+            <form onSubmit={onGetFunds} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>Miner URL</span>
+                    <input
+                        type="text"
+                        value={minerUrl}
+                        onChange={(e) => setMinerUrl(e.target.value)}
+                        disabled={!developerMode || busy}
+                        style={{
+                            background: 'var(--xc-bg)',
+                            color: 'var(--xc-text)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-2)',
+                            fontSize: 'var(--xc-text-sm)',
+                        }}
+                    />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>Amount ({coinTicker})</span>
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        disabled={!developerMode || busy}
+                        style={{
+                            background: 'var(--xc-bg)',
+                            color: 'var(--xc-text)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-2)',
+                            fontSize: 'var(--xc-text-sm)',
+                        }}
+                    />
+                </label>
+                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                    <button
+                        type="submit"
+                        disabled={!developerMode || busy}
+                        style={{
+                            background: 'var(--xc-accent-primary)',
+                            borderColor: 'var(--xc-accent-primary)',
+                            color: 'var(--xc-bg)',
+                            border: '1px solid',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-3)',
+                            fontSize: 'var(--xc-text-xs)',
+                            cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
+                            opacity: !developerMode || busy ? 0.5 : 1,
+                        }}
+                    >
+                        {busy ? 'Sending…' : `Get test ${coinTicker}`}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onNavigateToMint?.({ chainId: descriptor.id, tick: 'XCHAIN' })}
+                        disabled={!developerMode || busy || typeof onNavigateToMint !== 'function' || descriptor.coin !== 'bitcoin'}
+                        style={{
+                            background: 'transparent',
+                            border: '1px solid var(--xc-border)',
+                            color: 'var(--xc-text)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-3)',
+                            fontSize: 'var(--xc-text-xs)',
+                            cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
+                            opacity: !developerMode || busy ? 0.5 : 1,
+                        }}
+                    >
+                        Mint test XCHAIN
+                    </button>
+                </div>
+            </form>
             {statusText ? <Status text={statusText} /> : null}
             {errorText ? <Status text={errorText} tone="error" /> : null}
         </div>
