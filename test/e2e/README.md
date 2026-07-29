@@ -102,6 +102,23 @@ at the confirm stage. Those flows live in the regtest venue
 (`playwright.regtest.config.js`), which serves a production build against a
 real chain.
 
+## Which CHAIN the regtest venue runs on
+
+Bitcoin by default. `XC_REGTEST_COIN=RLTC` (or `RDOGE`) moves a run onto the
+other two chains of the same stack; `fixtures/regtest.js` holds the venue table
+and derives the encoder/miner ports from it (BTC 3023/3025, LTC 3223/3225, DOGE
+3123/3125; the explorer and hub are shared). Nothing else has to change: the
+wallet's own regtest descriptors already point at those ports, and switching the
+Active network to regtest derives an address on all three chains.
+
+Reach for it when Bitcoin regtest is busy. It is the chain every other e2e suite
+and drill lands on, and a spec that owns a market's or a dispenser's state for
+several minutes cannot share it. Two gotchas off Bitcoin: every form's chain
+picker defaults to Bitcoin and they do not share state (the add-address modal's
+is labelled "Coin", not "Network", so pass the field to `selectVenueChain`), and a
+fee-bearing action pays its protocol fee in the native coin, so the venue's
+price snapshot has to be seeded for that coin first.
+
 ## Which SDK this venue runs on 
 
 The dev config pins the venue with `VITE_XCHAIN_REAL_SDK: '0'` on its

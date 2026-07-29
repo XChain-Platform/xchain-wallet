@@ -39,13 +39,16 @@
 // VENUE CONTRACT
 //
 // These specs need the devhost 3-chain regtest stack reachable on
-// localhost at the ports the wallet's `bitcoin-regtest` descriptor
-// already names (explorer 18080, encoder 3023, hub 10000) plus the
-// regtest-miner on 3025 for funding. SSH tunnels satisfy that with no
-// code change:
+// localhost at the ports the wallet's own regtest descriptors already
+// name (explorer 18080, hub 10000, shared by all three chains; encoder
+// 3023/3223/3123 for BTC/LTC/DOGE) plus that chain's regtest-miner on
+// 3025/3225/3125 for funding. SSH tunnels satisfy that with no code
+// change; one command covers every chain:
 //
-//   ssh -N -L 18080:localhost:18080 -L 3023:localhost:3023 \
-//          -L 10000:localhost:10000 -L 3025:localhost:3025 jdog@devhost
+//   ssh -N -L 18080:localhost:18080 -L 10000:localhost:10000 \
+//          -L 3023:localhost:3023 -L 3025:localhost:3025 \
+//          -L 3223:localhost:3223 -L 3225:localhost:3225 \
+//          -L 3123:localhost:3123 -L 3125:localhost:3125 jdog@devhost
 //
 // `assertVenueReachable()` (called from global setup) fails once, fast,
 // with that command in the message, rather than letting every spec die
@@ -55,13 +58,72 @@
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 
-/** Explorer/encoder/hub ports come from the `bitcoin-regtest` descriptor. */
-export const EXPLORER_URL = 'http://localhost:18080';
-export const ENCODER_URL = 'http://localhost:3023';
-export const MINER_URL = 'http://localhost:3025';
+/**
+ * The three regtest chains this stack runs, and the ports each one answers on.
+ *
+ * WHY THIS IS A TABLE AND NOT THREE CONSTANTS. The venue is SHARED, and Bitcoin
+ * is the busy one: it carries the e2e suites, the drills and whatever another
+ * session is mid-sweep on. A spec that must own the chain's state for a while -
+ * a market with a deadline, a clock that has to cross it - cannot take its turn
+ * on a chain somebody else is broadcasting into, and until this table existed
+ * the only answer was to wait. Litecoin and Dogecoin run the identical stack on
+ * a fixed port offset (encoder 3x23, miner 3x25), so the choice costs nothing
+ * but the arithmetic below.
+ *
+ * The explorer (18080) and hub (10000) are SHARED across all three chains, so
+ * only the per-chain services are keyed here; the explorer is addressed by coin
+ * code in the path instead.
+ */
+const VENUES = {
+    RBTC: {
+        encoderPort: 3023, minerPort: 3025,
+        chainId: 'bitcoin-regtest', chainLabel: 'Bitcoin',
+        // Bech32 HRP plus the legacy P2PKH/P2SH version bytes each chain's
+        // regtest params use. Asserted on wherever a spec reads an address out
+        // of the wallet, so a form that hands back a MAINNET address (or another
+        // chain's) fails on the address itself rather than several steps later
+        // on a funding that never arrives.
+        addressRe: /^(bcrt1|[mn2])/,
+    },
+    RLTC: {
+        encoderPort: 3223, minerPort: 3225,
+        chainId: 'litecoin-regtest', chainLabel: 'Litecoin',
+        addressRe: /^(rltc1|[mn2])/,
+    },
+    RDOGE: {
+        encoderPort: 3123, minerPort: 3125,
+        chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin',
+        addressRe: /^[mn2]/,
+    },
+};
 
-/** Explorer coin code for the regtest Bitcoin chain. */
-export const REGTEST_COIN = 'RBTC';
+/**
+ * Explorer coin code for the chain this run drives.
+ *
+ * Defaults to Bitcoin, so every spec written before this table keeps the venue
+ * it was written against and nothing has to opt out. Set XC_REGTEST_COIN=RLTC
+ * to move a run onto Litecoin.
+ */
+export const REGTEST_COIN = process.env.XC_REGTEST_COIN || 'RBTC';
+
+const VENUE = VENUES[REGTEST_COIN];
+if (!VENUE) {
+    throw new Error(
+        `XC_REGTEST_COIN=${REGTEST_COIN} is not a regtest chain on this stack; `
+        + `expected one of ${Object.keys(VENUES).join(', ')}`);
+}
+
+/** Explorer/hub ports are shared; encoder/miner come from the chosen chain. */
+export const EXPLORER_URL = 'http://localhost:18080';
+export const ENCODER_URL = `http://localhost:${VENUE.encoderPort}`;
+export const MINER_URL = `http://localhost:${VENUE.minerPort}`;
+
+/** The wallet's own id and display name for the chain this run drives. */
+export const REGTEST_CHAIN_ID = VENUE.chainId;
+export const REGTEST_CHAIN_LABEL = VENUE.chainLabel;
+
+/** Address shape this chain's regtest params produce. */
+export const REGTEST_ADDRESS_RE = VENUE.addressRe;
 
 /**
  * A deterministic, checksum-valid regtest P2WPKH destination.
@@ -111,10 +173,13 @@ export const encoderRpc = (method, params) => venueRpc(ENCODER_URL, method, para
  * instead of N specs timing out inside the wallet UI.
  */
 export async function assertVenueReachable() {
+    // Names the ports THIS run needs, not Bitcoin's: a Litecoin run whose
+    // encoder tunnel is missing would otherwise be told to open Bitcoin's and
+    // find that it already is.
     const hint =
-        'Regtest venue unreachable. Open the tunnels:\n'
-        + '  ssh -N -L 18080:localhost:18080 -L 3023:localhost:3023 '
-        + '-L 10000:localhost:10000 -L 3025:localhost:3025 jdog@devhost';
+        `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
+        + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
+        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} jdog@devhost`;
 
     let status;
     try {
@@ -349,6 +414,41 @@ function actionStatuses(detail) {
 }
 
 /**
+ * Points one of a form's chain pickers at the chain this run drives.
+ *
+ * A no-op on Bitcoin, which every form already defaults to, so specs written
+ * before the venue table behave exactly as they did.
+ *
+ * `field` is the picker's own visible label, and it is REQUIRED to be specific
+ * because several screens carry more than one: a form's is "Network", the
+ * add-address modal's is "Coin", a cross-chain swap has "Give chain" and "Get
+ * chain". Addressing them by accessible name is possible at all because
+ * ChainPicker now puts its label in that name; before that fix every picker on
+ * a screen answered to the same query, which is a defect for a screen reader
+ * user and was a coin flip for this helper.
+ *
+ * @param {import('@playwright/test').Page | import('@playwright/test').Locator} scope
+ * @param {string} [field]  the picker's visible label
+ */
+export async function selectVenueChain(scope, field = 'Network') {
+    if (REGTEST_COIN === 'RBTC') return;
+
+    const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
+    await expect(trigger, `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+    if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
+
+    await trigger.click();
+    await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
+        .first().click();
+    // Assert the switch took: the picker closes on click whether or not the
+    // option was the one intended, so an unasserted click is a silent
+    // wrong-chain run - the exact failure this helper exists to prevent.
+    await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
+        { timeout: 15_000 });
+}
+
+/**
  * Mints `amount` XCHAIN to the active address and waits for the balance.
  *
  * XCHAIN is free-mintable on regtest and testnet by any address, so this is
@@ -367,6 +467,11 @@ export async function mintXchain(page, amount) {
     await expect(combobox).toBeVisible();
     await combobox.fill('Advanced action');
     await page.keyboard.press('Enter');
+
+    // Every form defaults to whichever chain the wallet lists first, which is
+    // Bitcoin; on any other venue the mint would land on the wrong chain and
+    // the balance this helper promises would never appear.
+    await selectVenueChain(page);
 
     await page.getByLabel('Action').selectOption('MINT');
     await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
@@ -537,6 +642,6 @@ export async function readReceiveAddress(page) {
 
     const field = page.getByLabel('Address', { exact: true });
     await expect(field).toBeVisible({ timeout: 30_000 });
-    await expect(field).toHaveValue(/^bcrt1/, { timeout: 30_000 });
+    await expect(field).toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
     return field.inputValue();
 }
