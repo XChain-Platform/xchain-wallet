@@ -80,16 +80,16 @@ async function openAddresses(page) {
 async function generateAddress(page, purpose) {
     const before = await listedAddresses(page);
 
-    await page.getByRole('button', { name: 'Add or import address' }).click();
-    await page.getByRole('menuitem', { name: 'Add address' }).click();
-    await expect(page.getByText('Add addresses', { exact: true }),
+    await page.getByTestId('address-add-menu').click();
+    await page.getByTestId('address-add-address').click();
+    await expect(page.getByTestId('add-address-generate'),
         'the Add addresses screen did not open').toBeVisible({ timeout: 30_000 });
 
     if (purpose === 'dispenser') {
         // Rendered only when the host exposes generateDispenserAddress. If it is
         // missing the flow cannot be driven at all, which is a fact about the
         // build under test rather than a selector problem, so name it as such.
-        const select = page.getByLabel('Purpose');
+        const select = page.getByTestId('add-address-purpose');
         await expect(select,
             'the Add addresses screen offers no Purpose selector, so this build cannot create a '
             + 'dispenser sub-address (messaging.generateDispenserAddress is missing)')
@@ -97,7 +97,7 @@ async function generateAddress(page, purpose) {
         await select.selectOption('dispenser');
     }
 
-    await page.getByRole('button', { name: /^Generate$/ }).click();
+    await page.getByTestId('add-address-generate').click();
 
     let added = [];
     await expect(async () => {
@@ -113,9 +113,9 @@ async function generateAddress(page, purpose) {
 async function readPath(page, rowName) {
     await page.getByRole('button', { name: rowName, exact: true }).click();
 
-    const label = page.getByText('Derivation path', { exact: true });
-    await expect(label, 'the address detail view showed no derivation path').toBeVisible({ timeout: 30_000 });
-    const value = (await label.locator('xpath=following-sibling::*[1]').innerText()).trim();
+    const field = page.getByTestId('address-detail-derivation-path');
+    await expect(field, 'the address detail view showed no derivation path').toBeVisible({ timeout: 30_000 });
+    const value = (await field.innerText()).trim();
 
     await page.getByRole('button', { name: 'Back' }).first().click();
     await expect(page.getByRole('button', { name: /^View address / }).first())
