@@ -2633,6 +2633,10 @@ function AppInner() {
                                     coinFamilies={APP_COIN_FAMILIES}
                                     networkFilter={globalNetworkFilter}
                                     onNetworkFilterChange={setGlobalNetworkFilter}
+                                    // Cross-site navigation for the *.xchain.io family.
+                                    // Web only: the extension popup and desktop app do
+                                    // not pass this, so they render no switcher.
+                                    platformCurrent="wallet"
                                 />
                                 {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not
