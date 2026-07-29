@@ -27,10 +27,10 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
-    nativeFeeErrorMessage,
     NATIVE_FEE_WARNING,
     NATIVE_FEE_UNVERIFIED_NOTICE,
 } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -471,9 +471,11 @@ export function DeployContractForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
-                : err?.message || 'Deploy failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Deploy failed.',
+            }));
         }
     }
 
@@ -561,9 +563,11 @@ export function DeployContractForm({ walletId, onBack }) {
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.name === 'NativeFeeForfeitError'
-                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
-                        : err?.message || 'Deploy failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Deploy failed.',
+                    }),
             );
             setChunkProgress(null);
             // PC-38: a failed chunked run leaves its record behind on purpose -

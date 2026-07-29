@@ -46,7 +46,8 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
-import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -682,9 +683,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                : err?.message || 'Dispenser failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: err?.message || 'Dispenser failed.',
+            }));
         }
     }
 
@@ -737,10 +740,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             let submitMsg;
             if (isBadPassword) {
                 submitMsg = 'Incorrect password.';
-            } else if (err?.name === 'NativeFeeForfeitError') {
-                submitMsg = nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory });
             } else {
-                submitMsg = err?.message || 'Dispenser creation failed.';
+                submitMsg = submitFailureMessage(err, {
+                    coinTicker,
+                    mandatory: nativeFeeMandatory,
+                    fallback: err?.message || 'Dispenser creation failed.',
+                });
             }
             setSubmitError(submitMsg);
             setStage('review');

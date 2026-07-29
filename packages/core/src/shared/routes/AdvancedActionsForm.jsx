@@ -10,7 +10,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     Screen,
     PageHeader,
@@ -412,9 +413,11 @@ export function AdvancedActionsForm({ walletId, onBack }) {
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                : err?.message || 'Action failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: err?.message || 'Action failed.',
+            }));
         }
     }
 
@@ -470,13 +473,14 @@ export function AdvancedActionsForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr
-                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                    : err?.message || 'Action failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFeeMandatory,
+                        fallback: err?.message || 'Action failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {

@@ -26,7 +26,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
-import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -427,9 +427,14 @@ export function CreateBetFeedForm({
             setPassword('');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
-                : err?.message || 'Creating the market failed.');
+            // Through the shared mapper : this form's own validation
+            // catches a blank label or tick, but the SDK builder is the last
+            // word on the wire rules, and its refusals reached the user as log
+            // lines - "betting.createBetFeedParams: ..." (D-118).
+            setFormError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Creating the market failed.',
+            }));
         }
     }
 

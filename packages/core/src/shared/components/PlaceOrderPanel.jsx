@@ -38,7 +38,8 @@ import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
@@ -331,9 +332,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                : err?.message || 'Order placement failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: err?.message || 'Order placement failed.',
+            }));
         }
     }
 
@@ -415,10 +418,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             let errorMessage;
             if (err?.name === 'InvalidPasswordError') {
                 errorMessage = 'Incorrect password.';
-            } else if (err?.name === 'NativeFeeForfeitError') {
-                errorMessage = nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory });
             } else {
-                errorMessage = err?.message || 'Order placement failed.';
+                errorMessage = submitFailureMessage(err, {
+                    coinTicker,
+                    mandatory: nativeFeeMandatory,
+                    fallback: err?.message || 'Order placement failed.',
+                });
             }
             setSubmitError(errorMessage);
             // Return to review (not form) so the user sees the error

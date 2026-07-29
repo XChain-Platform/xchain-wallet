@@ -115,8 +115,17 @@ assert.doesNotMatch(
 // call would fail a form for adopting the helper, which is backwards: D-118
 // moved the betting surfaces onto it precisely because hand-rolled ternaries
 // mapped ONE error shape and let every other one through as a log line.
+//
+// WIDENED AGAIN (D-121): the first widening still pinned the ARGUMENT LAYOUT -
+// it required `coinTicker, mandatory: nativeFee.mandatory` on one line, so the
+//  sweep failed this smoke by adopting the same helper with the argument
+// object spread over separate lines. That is a whitespace opinion wearing a
+// correctness assertion, and it punishes exactly the change the rule wants.
+// What is actually being asserted is: the catch hands `err` to a mapper that
+// knows the coin and whether the chain has an XCHAIN lane. So match the call
+// and its two named arguments in either order of line breaks, and nothing else.
 const CHAIN_AWARE_REFUSAL =
-    /nativeFeeErrorMessage\(err, \{ coinTicker, mandatory: nativeFee\.mandatory \}\)|submitFailureMessage\(err, \{\s*\n?\s*coinTicker, mandatory: nativeFee\.mandatory/;
+    /(?:nativeFeeErrorMessage|submitFailureMessage)\(\s*err,\s*\{[\s\S]{0,200}?\bcoinTicker\b[\s\S]{0,200}?\bmandatory:\s*nativeFee\.mandatory/;
 
 // ---- : the BET lane, which the PC-51 sweep never covered ----
 //

@@ -40,7 +40,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -404,9 +405,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                : err?.message || 'Issue failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: err?.message || 'Issue failed.',
+            }));
         }
     }
 
@@ -456,13 +459,14 @@ export function IssueTokenForm({ walletId, onBack }) {
             setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr
-                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                    : err?.message || 'Issue failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFeeMandatory,
+                        fallback: err?.message || 'Issue failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
