@@ -234,6 +234,13 @@ export async function composeForConfirm({
         // regtest round trip did, immediately .
         carrierScripts: Array.isArray(encoded.carrierScripts) ? encoded.carrierScripts : [],
         quote: feePreflight.quote,
+        // Which lane this PSBT actually pays its protocol fee through. Stated
+        // rather than inferred because the dry run's verdict DEPENDS on it: the
+        // XCHAIN mode debits the payer's balance and the native mode pays a coin
+        // output, so asking the wrong question gets a confident wrong answer
+        // (measured: "invalid: insufficient funds (FEE)" for an action the same
+        // endpoint calls valid when asked in native mode).
+        payFeeInNativeCoin: !!feePreflight.encoderOpts?.payFeeInNativeCoin,
         // : present when the protocol fee was moved off this PSBT and on
         // to the reveal the submit path builds. The confirm surface still shows
         // the fee (it reads the quote); this tells the submit path where to put

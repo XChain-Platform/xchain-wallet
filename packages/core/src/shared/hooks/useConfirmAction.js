@@ -245,6 +245,12 @@ export function useConfirmAction() {
                         actionString: built.actionString,
                         source: args.source,
                         localDeltas,
+                        // The dry run must be asked about the transaction that
+                        // was actually built. Without this it answers for the
+                        // chain's DEFAULT lane, so an opt-in native fee on
+                        // Bitcoin is judged against an XCHAIN balance the payer
+                        // deliberately is not using.
+                        feeMode: built.payFeeInNativeCoin ? 'native' : undefined,
                         mode: args.preflightOpts?.mode || 'report',
                     });
                     if (controller.signal.aborted) return; // superseded; never render
@@ -312,6 +318,10 @@ export function useConfirmAction() {
                     source: args.source,
                     localDeltas: await gatherLocalDeltas(args),
                     bypassCache: true,
+                    // Same mode as the first check, for the same reason: a
+                    // re-check that asked a different question could only
+                    // produce a verdict change nobody could explain.
+                    feeMode: built.payFeeInNativeCoin ? 'native' : undefined,
                     mode: args.preflightOpts?.mode || 'report',
                 });
                 setReport(fresh);

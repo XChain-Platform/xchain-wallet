@@ -2032,6 +2032,11 @@ export function createBackgroundHost(deps) {
             localDeltas: localDeltas.length ? localDeltas : undefined,
             bypassCache: req.bypassCache === true,
             preflight: req.mode || 'report',
+            // Only 'native' and 'xchain' cross this boundary: anything else is
+            // dropped rather than forwarded, so a malformed caller cannot make
+            // the endpoint reject the whole dry run over a query parameter.
+            ...(req.feeMode === 'native' || req.feeMode === 'xchain'
+                ? { feeMode: req.feeMode } : {}),
         });
     });
 
