@@ -45,6 +45,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -630,7 +631,19 @@ function AppInner() {
                 const arr = Array.isArray(list) ? list : [];
                 setWalletList(arr);
                 if (arr.length > 0) {
-                    setActiveWalletId(arr[0].id);
+                    // Restore the last selected WALLET if it still exists,
+                    // exactly as the account effect below restores the last
+                    // account inside it. Snapping to arr[0] unconditionally
+                    // meant every reload silently moved a multi-wallet user
+                    // back to their first wallet - and a reload always happens,
+                    // because the password is never persisted so the app
+                    // re-locks. Anything composed afterwards (a send, a receive
+                    // address, a mint) was then signed by the wrong wallet.
+                    const persisted = readActiveWallet();
+                    const chosen = (persisted && arr.some((w) => w.id === persisted))
+                        ? persisted
+                        : arr[0].id;
+                    setActiveWalletId(chosen);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
@@ -688,6 +701,14 @@ function AppInner() {
             .catch(() => { if (!cancelled) setActiveAccountId(null); });
         return () => { cancelled = true; };
     }, [activeWalletId]);
+
+    // Switch the active wallet and remember it, so a reload returns to it
+    // instead of snapping back to the first wallet. Twin of the account
+    // handler below.
+    const handleSwitchWallet = (id) => {
+        setActiveWalletId(id);
+        if (id) writeActiveWallet(id);
+    };
 
     // Switch the active account and remember it per wallet, so a reload
     // returns to it instead of snapping back to the lowest-index account.
@@ -2243,7 +2264,7 @@ function AppInner() {
                 return (
                     <WalletPicker
                         activeWalletId={activeWalletId}
-                        onSwitch={setActiveWalletId}
+                        onSwitch={handleSwitchWallet}
                         onAddWallet={() => {
                             setOnboardingStep('welcome');
                             setUnlockedView('add-wallet');
