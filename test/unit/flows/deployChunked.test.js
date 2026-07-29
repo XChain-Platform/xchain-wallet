@@ -227,6 +227,65 @@ describe('PC-38 deployChunkedRun', () => {
         expect(submitAction).toHaveBeenCalledTimes(1);
     });
 
+    // , found by driving a full three-leg deploy on Bitcoin regtest.
+    //
+    // `waitForTxid` settles from two different shapes and every test above
+    // models only one of them. The WEBSOCKET fast path settles with a
+    // NEW_ACTION event (`action_index` at the top level); the POLLING fallback
+    // settles with the explorer's TRANSACTION row, which carries the index
+    // inside `actions[]` and nothing at the top. Reading only the first field
+    // meant that on any venue without a live socket - the ordinary case - leg 1
+    // resolved fine and then read `null`, so the run aborted with "chunk 1 did
+    // not index" over a chunk that was on chain, valid, and paid for.
+    it('reads the leg index from the POLLING shape, not just the websocket one', async () => {
+        let n = 0;
+        submitAction.mockImplementation(async () => {
+            n += 1;
+            return {
+                txid: `tx${n}`,
+                // Exactly what explorer.getTransaction returns, which is what
+                // ActionWaiter's poll path resolves with.
+                indexed: {
+                    tx_hash: `tx${n}`,
+                    block_index: 100 + n,
+                    actions: [{ action_index: 2000 + n, action: 'DEPLOY', status: 'valid' }],
+                },
+            };
+        });
+        const vault = fakeVault();
+        const { opts } = baseOpts({ vault });
+        await deployChunkedRun(opts);
+        expect(submitAction).toHaveBeenCalledTimes(4);
+        const record = [...vault.store.values()][0];
+        expect(record.chunks.map((c) => c.actionIndex)).toEqual(['2001', '2002', '2003']);
+        expect(record.contractActionIndex).toBe('2004');
+        expect(record.stage).toBe('done');
+    });
+
+    it('still prefers the websocket event index when both shapes are present', async () => {
+        submitAction.mockImplementation(async () => ({
+            txid: 'tx',
+            indexed: { action_index: 11, actions: [{ action_index: 99, action: 'DEPLOY' }] },
+        }));
+        const vault = fakeVault();
+        const { opts } = baseOpts({ vault });
+        await deployChunkedRun(opts);
+        expect([...vault.store.values()][0].chunks.map((c) => c.actionIndex))
+            .toEqual(['11', '11', '11']);
+    });
+
+    it('still refuses when the transaction carries no action at all', async () => {
+        // The honest negative: a transaction row with an empty action list is
+        // NOT a leg that indexed, and treating it as one would assemble a group
+        // whose carrier the indexer never saw.
+        submitAction.mockImplementation(async () => ({
+            txid: 'tx', indexed: { tx_hash: 'tx', block_index: 5, actions: [] },
+        }));
+        const { opts } = baseOpts();
+        await expect(deployChunkedRun(opts)).rejects.toThrow(/did not index/);
+        expect(submitAction).toHaveBeenCalledTimes(1);
+    });
+
     it('refuses to resume a record whose source changed (CODE_HASH mismatch)', async () => {
         const vault = fakeVault();
         vault.store.set('r1', {

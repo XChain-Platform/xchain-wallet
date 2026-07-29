@@ -35,22 +35,102 @@
 // of source is the smallest that crosses the inline cap, giving exactly 2
 // chunks, which keeps the paste small and the run fast.
 
+import { createHash } from 'node:crypto';
+
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    EXPLORER_URL,
     REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
     fundAddress,
     minerRpc,
+    mintXchain,
+    nudgeChain,
     switchToRegtest,
     unlockAfterReload,
+    waitForTokenBalance,
+    waitForValidAction,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 const GAS_LIMIT = '50000';
+const FUNDING = 1;
+// Sized from the venue's own quotes rather than guessed: each DEPLOY v4 carrier
+// quotes 0.4 XCHAIN, the assembling DEPLOY 1.0, plus GAS_LIMIT * gasPrice
+// (50000 * 0.00001 = 0.5) on the assembler. Under 5 XCHAIN for the whole run;
+// 1000 is the amount every other regtest spec mints, kept the same on purpose.
+const MINT_XCHAIN = 1000;
+
+/**
+ * The counter contract from `deploy-execute.regtest.spec.js`, verbatim, so the
+ * chunked lane is compared against a body already proven to deploy and run
+ * INLINE. Same code, different transport: that is the whole experiment.
+ *
+ * One line, `parseInt` over a JSON-text counter, no BigInt and no RegExp
+ * literal (the VM rejects both at deploy).
+ */
+const COUNTER_BODY =
+    "module.exports = { inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
+    + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
+
+const EXECUTE_GAS = '100000';
+/** A chunked DEPLOY assembles a bigger body, so it is metered above the inline lane's 200000. */
+const CHUNKED_DEPLOY_GAS = '300000';
 
 const SMALL_SOURCE = 'function main(){ return 1 }';
 // Padding chosen from chunkHelper.planDeploy: 6102 is the smallest that stops
 // fitting one inline DEPLOY, and it plans as exactly 2 chunks.
 const CHUNKED_SOURCE = `//${'x'.repeat(6102)}\nfunction main(){ return 1 }`;
+
+/**
+ * A source unique to this run, still planning as exactly 2 chunks.
+ *
+ * The tag is what makes the chain assertions precise: CODE_HASH is
+ * sha256(utf8(source)) and it is the chunk GROUP id, so a per-run source means
+ * "the legs carrying this hash" can only be this run's. Without it the venue's
+ * earlier chunked attempts - which are on chain, and failed - would be
+ * indistinguishable from this one's.
+ */
+function uniqueChunkedSource(tag) {
+    return `//${'x'.repeat(6102)}\nfunction main(){ return 1 } // ${tag}`;
+}
+
+const codeHashOf = (source) => createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex');
+
+/** Every DEPLOY action on chain carrying `codeHash`, newest-first page. */
+async function deployLegsFor(codeHash) {
+    const list = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/actions?limit=100`, {
+        signal: AbortSignal.timeout(15_000),
+    }).then((r) => r.json()).catch(() => null);
+    const rows = (list?.data || []).filter((r) => r.action === 'DEPLOY');
+    const legs = [];
+    for (const row of rows) {
+        const detail = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/action/${row.action_index}`, {
+            signal: AbortSignal.timeout(15_000),
+        }).then((r) => r.json()).catch(() => null);
+        if (detail && detail.code_hash === codeHash) legs.push(detail);
+    }
+    return legs;
+}
+
+/**
+ * A padded version of `body` that plans as exactly 2 chunks.
+ *
+ * The padding is a comment, so the module still exports what it exported: the
+ * point is to move the SAME code through the chunked transport, not to test a
+ * different contract.
+ */
+function chunkedCounterSource(tag) {
+    return `//${'x'.repeat(6102)}\n${COUNTER_BODY} // ${tag}`;
+}
+
+/** The deployed-contract row for `codeHash`, or null while it does not exist. */
+async function contractFor(codeHash) {
+    const list = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/contracts?limit=100`, {
+        signal: AbortSignal.timeout(15_000),
+    }).then((r) => r.json()).catch(() => null);
+    return (list?.data || []).find((c) => c.code_hash === codeHash) || null;
+}
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -211,6 +291,381 @@ test.describe('§11.3: the chunked deploy lane', () => {
             } finally {
                 clearInterval(nudger);
             }
+        });
+    });
+
+    // §11.3's owed leg. The test above proves the chunked lane is ENTERED; it
+    // deliberately stops there, because the first live run's carrier indexed
+    // `invalid: insufficient funds (GAS)` from a fresh wallet - a DEPLOY v4
+    // carrier is a priced action like any other, and a wallet holding no XCHAIN
+    // cannot pay for one. So "the lane runs" and "the lane WORKS" were still two
+    // different claims, and only the first had been driven.
+    //
+    // This one funds the gas and drives all three legs to a contract that exists
+    // on chain. It is the only test in this campaign whose subject is a
+    // multi-transaction, multi-signature flow: three signed transactions, each
+    // waiting for the previous to confirm AND index before it is built.
+    //
+    // ASKED OF THE CHAIN, NOT THE SCREEN. The wallet's done screen says
+    // "Contract deployed" as soon as the assembling transaction is broadcast,
+    // which is true and not the question - the assembler can still index invalid
+    // (a missing chunk, a hash mismatch, unpaid gas) and leave the user with
+    // three paid-for transactions and no contract. What has to be true is that
+    // the indexer reassembled the slices, verified them against CODE_HASH, and
+    // created the contract.
+    test('the full chunked run deploys a contract the chain actually holds', async ({ page }) => {
+        const runTag = `s29-${Date.now()}`;
+        const source = uniqueChunkedSource(runTag);
+        const codeHash = codeHashOf(source);
+        let main;
+        let payer;
+
+        // eslint-disable-next-line no-console
+        console.log(`[§11.3 full] run ${runTag} code_hash ${codeHash}`);
+
+        await test.step('onboard, fund the coin side, and hold XCHAIN for gas', async () => {
+            await createWallet(page, { password: PASSWORD, name: 'Chunked Deploy Wallet' });
+            await switchToRegtest(page, PASSWORD);
+
+            main = await openDeployForm(page);
+            payer = await main.getByLabel('From').inputValue();
+            expect(payer, `the deploy form has no ${REGTEST_COIN} address`).toMatch(REGTEST_ADDRESS_RE);
+
+            // Every leg spends the previous leg's confirmed change from this
+            // same address (consensus rule 1: chunks are gathered per-deployer),
+            // so one funded address is both necessary and sufficient.
+            await fundAddress(payer, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+
+            await mintXchain(page, MINT_XCHAIN);
+            await waitForTokenBalance(payer, 'XCHAIN', MINT_XCHAIN);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+        });
+
+        await test.step('the wallet plans this source as 2 chunks plus an assembler', async () => {
+            main = await openDeployForm(page);
+            await setSource(main, source);
+            await main.getByLabel('Gas limit').fill(GAS_LIMIT);
+            const promise = main.getByText(/too large for one transaction/i);
+            await expect(promise,
+                'the planner did not flip to chunked, so this source no longer crosses the inline cap '
+                + '(re-derive the padding from chunkHelper.planDeploy)')
+                .toBeVisible({ timeout: 60_000 });
+            expect(await promise.textContent(), 'the summary does not name 2 chunks')
+                .toMatch(/deploys as 2 chunk/i);
+        });
+
+        let doneTxid = null;
+
+        await test.step('run all three legs', async () => {
+            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+
+            // The review screen is identified by its SUBMIT button, not by the
+            // password field: SignCredentials renders no password box when the
+            // vault is already unlocked for the session, and asserting on it
+            // cost this spec its first run - a wallet that is behaving
+            // correctly simply had nothing to type into.
+            const go = page.getByRole('button', { name: /^Deploy on / });
+            await expect(go, 'the review screen that starts a chunked run never appeared')
+                .toBeVisible({ timeout: 60_000 });
+            const password = page.getByLabel('Password', { exact: true });
+            if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
+            await expect(go).toBeEnabled({ timeout: 30_000 });
+
+            // This venue mines only on demand and each leg waits for the
+            // previous to be CONFIRMED and INDEXED, so a run left alone waits
+            // forever on a block nobody is producing.
+            //
+            // MINE DIRECTLY, and this is not a style choice: the first version
+            // used `nudgeChain`, which skips the mine while the decoder is more
+            // than 3 blocks behind. Three ~8 kB carriers ARE enough decoder work
+            // to trip that guard, so the guard withheld exactly the blocks the
+            // leg needed to confirm, and the wallet's 120s per-leg indexer wait
+            // expired on a transaction that was sitting in the mempool. Measured:
+            // the leg landed in block 10499 and indexed fine, ~40s after the
+            // wallet had already given up. The lag guard is right for a poll loop
+            // waiting on state to APPEAR; it is wrong when the thing being waited
+            // for is a confirmation only this loop can produce.
+            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 3_000);
+            try {
+                await go.click();
+
+                // D-124's regression guard, and the only thing the user sees for
+                // several minutes: the progress copy renders during `submitting`,
+                // which is the review screen. It used to sit in the form-stage
+                // JSX, i.e. on a screen the run has already left.
+                await expect(page.getByText(/Deploying \d+ chunk transactions/i).first(),
+                    'the chunked run said nothing on the screen it runs on (D-124)')
+                    .toBeVisible({ timeout: 120_000 });
+
+                // The terminal screen, or the refusal that explains why there is
+                // none. Budgeted for three sequential confirm-and-index waits on
+                // a shared venue.
+                const done = page.getByText(/Contract deployed/i);
+                const failed = page.getByRole('alert').filter({ hasText: /\S/ });
+                await expect(done.or(failed).first(),
+                    'the chunked run neither finished nor reported a failure')
+                    .toBeVisible({ timeout: 900_000 });
+
+                const alertText = await failed.first().textContent().catch(() => null);
+                expect(alertText || '',
+                    'the chunked run failed; the chunks it did send are paid for and on chain')
+                    .toBe('');
+                await expect(done, 'the run never reached the deployed screen').toBeVisible();
+
+                doneTxid = (await page.getByText(/^[0-9a-f]{64}$/i).first().textContent()
+                    .catch(() => null))?.trim() || null;
+                // eslint-disable-next-line no-console
+                console.log(`[§11.3 full] assembling txid ${doneTxid}`);
+            } finally {
+                clearInterval(nudger);
+            }
+        });
+
+        await test.step('the CHAIN holds two carriers, an assembler, and the contract', async () => {
+            // ORDER MATTERS, and it is a property of the EXPLORER rather than a
+            // preference: `/api/action/<index>` caches a miss permanently
+            // ( - the LRU has no TTL and is only invalidated by a reorg),
+            // so asking for an index before the indexer has written its typed
+            // row blanks that action for the life of the explorer process. So
+            // wait on the CONTRACT row first - it cannot exist until every leg
+            // has been read and reassembled - and only then read the per-leg
+            // detail. Polling the details in the wait loop would poison exactly
+            // the rows this step then asserts on.
+            let contract = null;
+            const deadline = Date.now() + 300_000;
+            while (Date.now() < deadline) {
+                contract = await contractFor(codeHash);
+                if (contract) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 3_000));
+            }
+            const legs = await deployLegsFor(codeHash);
+
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 full] legs: ${JSON.stringify(legs.map((l) => ({
+                i: l.action_index, fmt: l.action_format, chunk: l.chunk_index,
+                total: l.total_chunks, status: l.status,
+            })))}`);
+
+            const carriers = legs.filter((l) => l.action_format === 4)
+                .sort((a, b) => Number(a.chunk_index) - Number(b.chunk_index));
+            const assemblers = legs.filter((l) => l.action_format !== 4);
+
+            expect(carriers.map((c) => Number(c.chunk_index)),
+                'the two DEPLOY v4 carriers this plan needs are not both on chain')
+                .toEqual([0, 1]);
+            for (const c of carriers) {
+                expect(c.total_chunks, `carrier ${c.chunk_index} does not declare 2 chunks`).toBe(2);
+                expect(c.status, `carrier ${c.chunk_index} (action ${c.action_index}) was rejected`)
+                    .toBe('valid');
+                expect(c.source, 'a carrier was signed by a different address; chunks are gathered '
+                    + 'per-deployer, so a mismatch orphans the group').toBe(payer);
+            }
+
+            expect(assemblers.length, 'no assembling DEPLOY carries this run\'s CODE_HASH').toBe(1);
+            const [assembler] = assemblers;
+            expect(assembler.status,
+                `the assembling DEPLOY (action ${assembler.action_index}) was rejected, so all three `
+                + 'legs were paid for and no contract exists')
+                .toBe('valid');
+            // Consensus rule 2, checked rather than assumed: every carrier must
+            // sit at a LOWER action_index than the assembler or the indexer
+            // cannot see it when it reassembles.
+            for (const c of carriers) {
+                expect(Number(c.action_index),
+                    `carrier ${c.chunk_index} indexed at or after the assembler`)
+                    .toBeLessThan(Number(assembler.action_index));
+            }
+            if (doneTxid) {
+                expect(assembler.tx_hash,
+                    'the txid the wallet reported is not the assembling leg on chain')
+                    .toBe(doneTxid);
+            }
+
+            expect(contract,
+                'the chain records no contract for this CODE_HASH, so the slices were never '
+                + 'reassembled into a deploy - the run paid for three transactions and produced nothing')
+                .toBeTruthy();
+            expect(contract.status, 'the contract row is not valid').toBe('valid');
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 full] contract action ${contract.action_index} status ${contract.status}`);
+        });
+    });
+
+    // The question the chunked lane raises and nothing had asked: a contract that
+    // arrives as N base64 slices has to be REASSEMBLED by the indexer before it
+    // is anything at all. "A contract row exists with status valid" only proves
+    // the sha256 matched; it does not prove the bytes the VM will later compile
+    // are the bytes that were typed, and a body that is subtly wrong (a slice
+    // boundary re-encoded, an off-by-one join) can still hash-match nothing and
+    // simply never be called until someone calls it.
+    //
+    // So this drives the SAME contract body the inline lane is already proven on
+    // (`deploy-execute.regtest.spec.js`), padded to cross the chunk cap, and then
+    // CALLS it. Same code, different transport - which makes a failure here a
+    // failure of the transport rather than of the contract.
+    //
+    // The VM state write is the assertion that cannot be faked: a reassembled
+    // body that does not compile cannot increment a counter, and a `gas_used` of
+    // zero would mean the action indexed without the VM running at all.
+    test('a contract assembled from chunks compiles and runs', async ({ page }) => {
+        const runTag = `s29x-${Date.now()}`;
+        const source = chunkedCounterSource(runTag);
+        const codeHash = codeHashOf(source);
+        let main;
+        let payer;
+        let contractIndex;
+
+        // eslint-disable-next-line no-console
+        console.log(`[§11.3 execute] run ${runTag} code_hash ${codeHash}`);
+
+        await test.step('onboard, fund, and hold XCHAIN for three legs plus a call', async () => {
+            await createWallet(page, { password: PASSWORD, name: 'Chunked Execute Wallet' });
+            await switchToRegtest(page, PASSWORD);
+
+            main = await openDeployForm(page);
+            payer = await main.getByLabel('From').inputValue();
+            expect(payer, `the deploy form has no ${REGTEST_COIN} address`).toMatch(REGTEST_ADDRESS_RE);
+            await fundAddress(payer, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            await mintXchain(page, MINT_XCHAIN);
+            await waitForTokenBalance(payer, 'XCHAIN', MINT_XCHAIN);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+        });
+
+        await test.step('deploy it chunked', async () => {
+            main = await openDeployForm(page);
+            await setSource(main, source);
+            await main.getByLabel('Gas limit').fill(CHUNKED_DEPLOY_GAS);
+            await expect(main.getByText(/too large for one transaction/i),
+                'the padded counter no longer crosses the inline cap')
+                .toBeVisible({ timeout: 60_000 });
+
+            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            const go = page.getByRole('button', { name: /^Deploy on / });
+            await expect(go, 'the review screen never appeared').toBeVisible({ timeout: 60_000 });
+            const password = page.getByLabel('Password', { exact: true });
+            if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
+
+            // Direct mining, for the reason recorded on the run above: the lag
+            // guard withholds exactly the confirmations this loop must produce.
+            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 3_000);
+            try {
+                await go.click();
+                const done = page.getByText(/Contract deployed/i);
+                const failed = page.getByRole('alert').filter({ hasText: /\S/ });
+                await expect(done.or(failed).first()).toBeVisible({ timeout: 900_000 });
+                const alertText = await failed.first().textContent().catch(() => null);
+                expect(alertText || '', 'the chunked deploy failed').toBe('');
+            } finally {
+                clearInterval(nudger);
+            }
+
+            let contract = null;
+            const deadline = Date.now() + 300_000;
+            while (Date.now() < deadline) {
+                contract = await contractFor(codeHash);
+                if (contract) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 3_000));
+            }
+            expect(contract, 'the slices were never reassembled into a contract').toBeTruthy();
+            expect(contract.status).toBe('valid');
+            contractIndex = String(contract.action_index);
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 execute] contract ${contractIndex}`);
+        });
+
+        await test.step('the reassembled body is byte-identical to what was typed', async () => {
+            // The strongest thing the chain can say about reassembly, and the
+            // reason it is asserted separately from the call: a truncated or
+            // re-encoded join would still deploy and still index, and every
+            // later assertion would then be about someone else's code.
+            const detail = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/contract/${contractIndex}`, {
+                signal: AbortSignal.timeout(15_000),
+            }).then((r) => r.json());
+            expect(String(detail.code || '').length,
+                'the chain stored no code for a contract it called valid').toBeGreaterThan(0);
+            expect(String(detail.code), 'the reassembled source differs from the source that was typed')
+                .toBe(source);
+            // The same claim in the protocol's own terms, which is what the
+            // indexer verifies the slices against: CODE_HASH is sha256(utf8(source)).
+            // Measured on this venue before it was asserted - the explorer returns
+            // the body with its newline intact, and its digest equals the stored
+            // code_hash - so a mismatch here is reassembly, not transport.
+            expect(codeHashOf(String(detail.code)), 'the stored body does not hash to its own CODE_HASH')
+                .toBe(codeHash);
+            expect(String(detail.code_hash), 'the chain records a different CODE_HASH than the plan used')
+                .toBe(codeHash);
+        });
+
+        await test.step('call inc() and read the state the VM wrote', async () => {
+            await gotoPalette(page, 'Contracts');
+            const row = page.getByRole('button', { name: `Contract ${contractIndex}`, exact: true });
+            await expect(row.first(), 'the deployed contract is not in the list')
+                .toBeVisible({ timeout: 60_000 });
+            await row.first().click();
+
+            const scope = page.getByRole('main');
+            await expect(page.getByText(`Contract #${contractIndex}`).first())
+                .toBeVisible({ timeout: 30_000 });
+            await page.getByRole('button', { name: 'Call method', exact: true }).click();
+            await scope.getByLabel('Method', { exact: true }).fill('inc');
+            await scope.getByLabel('Gas limit').fill(EXECUTE_GAS);
+            await scope.getByRole('button', { name: 'Execute', exact: true }).click();
+
+            const confirm = page.getByTestId('confirm-modal');
+            await expect(confirm).toBeVisible({ timeout: 60_000 });
+            const pw = page.getByLabel('Password', { exact: true });
+            if (await pw.count() > 0 && await pw.isVisible()) await pw.fill(PASSWORD);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
+            await page.getByTestId('confirm-approve').click();
+
+            await expect(scope.getByText('Method call broadcast.')).toBeVisible({ timeout: 120_000 });
+            const txid = (await scope.locator('dl dd').first().innerText()).trim();
+            expect(txid, 'the done screen names a real txid').toMatch(/^[0-9a-f]{64}$/);
+
+            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 3_000);
+            let action;
+            try {
+                action = await waitForValidAction(txid);
+            } finally {
+                clearInterval(nudger);
+            }
+            expect(action.action).toBe('EXECUTE');
+            expect(String(action.contract_index), 'the call targeted the chunked contract')
+                .toBe(contractIndex);
+            expect(action.method_name).toBe('inc');
+            expect(action.error_message, 'the reassembled body threw when the VM ran it').toBeFalsy();
+            expect(Number(action.gas_used), 'gas_used 0 means the VM never ran the reassembled body')
+                .toBeGreaterThan(0);
+
+            // The state write. A contract whose reassembly was subtly wrong
+            // cannot get this far: it would have failed to compile, or it would
+            // have written something else.
+            let counter = null;
+            const deadline = Date.now() + 300_000;
+            while (Date.now() < deadline) {
+                const state = await fetch(
+                    `${EXPLORER_URL}/${REGTEST_COIN}/api/contract/${contractIndex}/state`,
+                    { signal: AbortSignal.timeout(15_000) },
+                ).then((r) => r.json()).catch(() => null);
+                counter = (state?.data || []).find((r) => r.state_key === 'n');
+                if (counter) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 2_000));
+            }
+            expect(counter, 'the method wrote no state, so the VM did not run the body').toBeTruthy();
+            expect(JSON.parse(counter.state_value), 'the counter the reassembled body incremented')
+                .toBe('1');
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 execute] EXECUTE ${action.action_index} gas_used ${action.gas_used} `
+                + `state n=${counter.state_value}`);
         });
     });
 });

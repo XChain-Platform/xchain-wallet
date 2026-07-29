@@ -138,9 +138,41 @@ export function normalizeConstructorParams(v) {
     return arr.map((s) => String(s).trim()).filter((s) => s.length > 0);
 }
 
+/**
+ * The action_index of the leg that was just submitted, from EITHER shape the
+ * indexer wait can resolve with.
+ *
+ * : this used to read `indexed.action_index` alone, and that field only
+ * exists on ONE of the two paths `waitForTxid` can settle from:
+ *
+ *   - the WEBSOCKET fast path settles with a NEW_ACTION event, which carries
+ *     `action_index` at the top level;
+ *   - the POLLING fallback settles with the explorer's TRANSACTION row,
+ *     `{ tx_hash, block_index, actions: [ { action_index, action, status } ] }`,
+ *     which carries no top-level index at all.
+ *
+ * So on any venue without a live explorer WebSocket - which is every venue
+ * where the socket is down, blocked, or simply not connected yet - leg 1
+ * resolved successfully and then read `null`, and the run aborted with "chunk 1
+ * of N did not index" while that chunk was on chain, valid and paid for. The
+ * lane could never complete, and a resume re-sent (and re-paid for) the same
+ * chunk, because the record it re-verifies never got an actionIndex written
+ * into it either. Found by driving a full three-leg deploy (campaign §11.3).
+ *
+ * One action per leg is not an assumption: each leg is a single `submitAction`
+ * call carrying one `{ action: 'DEPLOY' }`, so its transaction holds exactly one
+ * XChain action. The DEPLOY filter is belt-and-braces for a future batching
+ * change, and falls back to the sole entry rather than refusing.
+ */
 function indexedActionIndex(res) {
-    const idx = res && res.indexed
-        && (res.indexed.action_index ?? res.indexed.actionIndex);
+    const indexed = res && res.indexed;
+    if (!indexed || typeof indexed !== 'object') return null;
+    const direct = indexed.action_index ?? indexed.actionIndex;
+    if (direct !== undefined && direct !== null) return String(direct);
+    const actions = Array.isArray(indexed.actions) ? indexed.actions : [];
+    const leg = actions.find((a) => String((a && a.action) || '').toUpperCase() === 'DEPLOY')
+        || (actions.length === 1 ? actions[0] : null);
+    const idx = leg && (leg.action_index ?? leg.actionIndex);
     return idx === undefined || idx === null ? null : String(idx);
 }
 
