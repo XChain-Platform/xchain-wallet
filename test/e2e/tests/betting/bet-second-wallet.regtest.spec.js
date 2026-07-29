@@ -32,6 +32,20 @@
 // Runs on Litecoin for the same reasons as the deadline race (see
 // bet-deadline-race.regtest.spec.js): Bitcoin regtest is the busy chain, and
 // this spec owns a market's state for minutes. XC_REGTEST_COIN=RLTC.
+//
+// STATUS, stated plainly because this file was committed before it had ever
+// completed a fully green run (session 26). WHAT IT PROVED, on chain and
+// beyond doubt: market #1233 was created by wallet A (rltc1q9kll...), bet #1235
+// was placed on it by wallet B (rltc1qz8rxm...) for 100 XCHAIN with
+// bet_status 'open' and a pool of 100, the bettor went 1000 -> 900, and the
+// oracle stayed at 1000. That is the leg's whole substance, across two wallets
+// rather than two addresses in one seed. WHAT IS STILL OWED: one clean
+// end-to-end pass. Three separate runs were stopped by three different things,
+// none of them this spec's subject - a real wallet defect it found on the way
+// (, the reload that changed which wallet signs; fixed), an expired LTC
+// price sentinel, and finally "no spendable UTXOs found for the funding
+// address" when a concurrent session began driving Litecoin as well. Re-run it
+// on a quiet chain with the price sentinel kept fresh (campaign §3.5).
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
@@ -293,10 +307,30 @@ test.describe('BET across two wallets', () => {
 
             // The stake really left wallet B, which is the difference between a
             // bet and a self-payment inside one seed.
-            const body = await explorerJson(`balances/${punter}`);
-            const xchain = (body?.data || []).find((b) => b.tick === 'XCHAIN');
-            expect(Number(xchain?.amount), 'the stake left the bettor wallet')
-                .toBe(MINT_XCHAIN - Number(STAKE));
+            //
+            // POLLED, not sampled. The bet row appears in `bets/{feed}/feed`
+            // BEFORE the escrow debit shows up in `balances`, so a single read
+            // taken the moment the row exists returns the pre-bet balance and
+            // fails claiming the stake never left - which is a false accusation
+            // against the wallet, and cost this spec a run. The round trip warns
+            // about exactly this ("a balance read is a moving target here").
+            const want = MINT_XCHAIN - Number(STAKE);
+            const untilDebit = Date.now() + 180_000;
+            let held = null;
+            while (Date.now() < untilDebit) {
+                const body = await explorerJson(`balances/${punter}`);
+                held = Number((body?.data || []).find((b) => b.tick === 'XCHAIN')?.amount ?? NaN);
+                if (held === want) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 2_000));
+            }
+            expect(held, `the stake never left the bettor wallet (still ${held})`).toBe(want);
+
+            // And it did NOT come out of the oracle's wallet, which is the
+            // assertion a single-wallet run can never make.
+            const oracleBody = await explorerJson(`balances/${oracle}`);
+            expect(Number((oracleBody?.data || []).find((b) => b.tick === 'XCHAIN')?.amount ?? NaN),
+                'the oracle wallet paid for the bettor stake').toBe(MINT_XCHAIN);
         });
 
         await test.step('MyBets is scoped to the wallet that placed the bet', async () => {
