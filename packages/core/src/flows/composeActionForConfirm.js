@@ -27,6 +27,7 @@
 // about to preview are the bytes that will be signed.
 
 import { composeForConfirm } from './composeForConfirm.js';
+import { isBareNativePayment } from './nativePayment.js';
 import { assertNoTamper } from './confirmChecks.js';
 import { totalNetworkFeeSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
@@ -72,6 +73,33 @@ export async function composeActionForConfirm({
     const balancesPromise = source
         ? addressBalances({ sdkRegistry, chainRegistry, chainId, address: source })
             .catch(() => null)
+        : Promise.resolve(null);
+
+    // : the XCHAIN lane's own protocol-fee quote, for the confirm
+    // screen's disclosure line.
+    //
+    // That line used to read only `report.quote.xchainFee`, i.e. the fee record
+    // the Tier-1 dry run staged - and the dry run is BEST-EFFORT: it has a
+    // 4000ms budget and the wallet drops the verdict when the indexer misses
+    // it. So on a merely busy venue the fee silently stopped being disclosed
+    // and the screen went back to quoting the miner fee alone, which is
+    // 's screen. Measured twice in one hour on the same action (campaign
+    // §11.1).
+    //
+    // Asked here, concurrently, from the same `/feequote` call the NATIVE lane
+    // sizes a real on-chain output from - a number good enough to spend is good
+    // enough to display - and only in the XCHAIN lane, because the native lane
+    // discloses its fee as a coin debit and must not also state it in XCHAIN.
+    // Pre-rejected to null: a fee the wallet cannot quote is a line it does not
+    // draw, never a compose that fails.
+    // Skipped for a bare native payment for the same reason  skips the
+    // dry run on one: there is no XChain action to price, and asking anyway
+    // spends a round trip on the wallet's commonest operation.
+    const quotable = source
+        && !encoderOpts.payFeeInNativeCoin
+        && !isBareNativePayment(actionData, chainRegistry.get(chainId));
+    const xchainFeePromise = quotable
+        ? quoteXchainFee({ sdkRegistry, chainId, actionData, source, signal }).catch(() => null)
         : Promise.resolve(null);
 
     const composed = await composeForConfirm({
@@ -205,6 +233,14 @@ export async function composeActionForConfirm({
         ? { amount: satsToCoinDecimal(protocolFeeSats) }
         : null;
 
+    // , and only for the disclosure LINE: the XCHAIN-lane fee is not fed
+    // to the simulator above. The projection folds a fee into a balance row,
+    // and in this lane the debit is contingent on acceptance rather than spent
+    // on broadcast, so it belongs in a sentence that can say so. Kept as the
+    // wire's own 8dp string; the line trims it for display and never parses it
+    // through a float.
+    const xchainFee = await xchainFeePromise;
+
     let simulation = null;
     try {
         const sdkBalances = await balancesPromise;
@@ -263,8 +299,14 @@ export async function composeActionForConfirm({
         networkFeeSats,
         // : the action's own protocol fee in the chain's smallest unit,
         // when it is being paid in the native coin and therefore known. Null
-        // in XCHAIN-fee mode, which quotes nothing.
+        // in XCHAIN-fee mode, which pays no coin output.
         protocolFeeSats: protocolFee ? protocolFeeSats : null,
+        // : the same fee in XCHAIN, when THAT is the lane paying it. The
+        // confirm screen's disclosure line prefers the dry run's own staged fee
+        // record and falls back to this, so the fee stays on screen when the
+        // dry run does not answer. Null in native mode and whenever the quote
+        // was unavailable, refused or zero.
+        xchainFee,
         // §5.2.3: projected balance deltas, or null when they could not be
         // computed. Never a zero that would read as "nothing changes".
         simulation,
@@ -274,4 +316,38 @@ export async function composeActionForConfirm({
         decoded,
         tamperVerified: true,
     };
+}
+
+/**
+ * The action's protocol fee in XCHAIN, or null when the venue will not say.
+ *
+ * Read through `sdk.quoteNativeFee`, whose name is about the lane it was built
+ * for rather than what it returns: `/feequote` answers `xchainFee` in every
+ * payment mode, because the fee row is XCHAIN-denominated and the mode only
+ * decides how it settles.
+ *
+ * Null - never zero, and never a guess - on every unusable answer:
+ *   - a quote the indexer refused (`supported: false` / `valid: false`), whose
+ *     `xchainFee` is either absent or about an action that will not run. The
+ *     native lane REFUSES to sign on those (NativeFeeForfeitError) because it
+ *     is about to spend coin; this one only draws a line, so it stays quiet and
+ *     leaves the dry run's own verdict to say what is wrong;
+ *   - `valid: null`, which is the third answer, not a failure (DEPLOY/EXECUTE
+ *     are priced from the gas schedule without a dry run) - so those DO get a
+ *     line, and the unverified-ness is already stated elsewhere on the screen;
+ *   - a zero fee, i.e. the action genuinely charges nothing. Saying so would be
+ *     the opposite failure to  and just as wrong .
+ */
+async function quoteXchainFee({ sdkRegistry, chainId, actionData, source, signal }) {
+    const sdk = sdkRegistry.get(chainId);
+    if (!sdk || typeof sdk.quoteNativeFee !== 'function') return null;
+    const quote = await sdk.quoteNativeFee(actionData, { source, signal });
+    if (!quote || quote.supported === false || quote.valid === false) return null;
+    const raw = quote.xchainFee;
+    if (raw === undefined || raw === null) return null;
+    const amount = String(raw).trim();
+    // A plain non-negative decimal that is not all zeros. Tested as a STRING:
+    // an 8dp fee through a float is the one thing a fee display must not do.
+    if (!/^\d+(\.\d+)?$/.test(amount) || !/[1-9]/.test(amount)) return null;
+    return amount;
 }

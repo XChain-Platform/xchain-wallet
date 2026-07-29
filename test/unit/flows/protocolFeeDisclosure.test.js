@@ -91,6 +91,48 @@ describe('xchainProtocolFeeLine', () => {
         expect(xchainProtocolFeeLine({ report: reportWith('0') })).toBeNull();
     });
 
+    // . The report is best-effort: the SDK's Tier-1 dry run has a 4s
+    // budget and the wallet drops the verdict when the indexer misses it, which
+    // used to take this line down too - back to 's screen, on a venue
+    // that was merely busy. Measured in the wallet e2e campaign §11.1.
+    describe('when the dry run did not answer ', () => {
+        it('falls back to the quote the composed envelope carries', () => {
+            const line = xchainProtocolFeeLine({ report: null, composed: { xchainFee: '1.00000000' } });
+            expect(line?.amount).toBe('1');
+            expect(line.text).toMatch(/from your XCHAIN balance/);
+        });
+
+        it('falls back when the report exists but staged no fee record', () => {
+            expect(xchainProtocolFeeLine({
+                report: reportWith(null), composed: { xchainFee: '0.50000000' },
+            })?.amount).toBe('0.5');
+            // And on a pre- explorer, whose report carries no fee field.
+            expect(xchainProtocolFeeLine({
+                report: { quote: { supported: true } }, composed: { xchainFee: '0.50000000' },
+            })?.amount).toBe('0.5');
+        });
+
+        it('prefers the report when it has an answer', () => {
+            // It is the fee record the dry run staged for these exact bytes;
+            // the envelope's quote is a fallback, not a second opinion.
+            expect(xchainProtocolFeeLine({
+                report: reportWith('2.00000000'), composed: { xchainFee: '1.00000000' },
+            })?.amount).toBe('2');
+        });
+
+        it('stays silent in the native lane even with a fee on the envelope', () => {
+            expect(xchainProtocolFeeLine({
+                report: null,
+                composed: { xchainFee: '1.00000000', quote: { requiredFeeSats: 2000 } },
+            })).toBeNull();
+        });
+
+        it('stays silent when neither source knows the fee', () => {
+            expect(xchainProtocolFeeLine({ report: null, composed: { xchainFee: null } })).toBeNull();
+            expect(xchainProtocolFeeLine({ report: null, composed: {} })).toBeNull();
+        });
+    });
+
     it('refuses a fee it cannot read rather than rendering junk', () => {
         expect(xchainProtocolFeeLine({ report: reportWith('not-a-number') })).toBeNull();
         expect(xchainProtocolFeeLine({ report: reportWith('-1.00000000') })).toBeNull();
