@@ -105,10 +105,11 @@ describe('the vendored link list', () => {
         }
     });
 
-    it('omits the internal dashboard and any host that is not live yet', () => {
+    it('omits the internal dashboard, and includes every live host', () => {
         const keys = LINKS.links.map((p) => p.key);
         expect(keys).not.toContain('dashboard');
         // Liveness rule: a host joins only once it serves 200 over HTTPS.
-        expect(keys).not.toContain('mcp');
+        // mcp.xchain.io met that on 2026-07-29, so it is expected here.
+        expect(keys).toContain('mcp');
     });
 });
