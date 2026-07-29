@@ -597,6 +597,33 @@ export function DeployContractForm({ walletId, onBack }) {
         }
     }
 
+    /**
+     * Put a resumed deploy's phase-2 fields back on screen .
+     *
+     * The flow assembles from `record.assembleParams`, so the form must show the
+     * same values or the review screen describes a different transaction than
+     * the one being signed. Tolerant of an older record with no stored params:
+     * it leaves the fields alone rather than clearing them.
+     */
+    function restoreAssembleFields(assembleParams) {
+        if (!assembleParams || typeof assembleParams !== 'object') return;
+        if (assembleParams.GAS_LIMIT) setGasLimit(String(assembleParams.GAS_LIMIT));
+        const ctor = assembleParams.CONSTRUCTOR_PARAMS;
+        if (ctor !== undefined && ctor !== null) {
+            // v2 stores the REST field as an array, v3 as a single value; the
+            // form collects both as one pipe-delimited string.
+            setConstructorParams(Array.isArray(ctor) ? ctor.join('|') : String(ctor));
+        }
+        if (assembleParams.COOLDOWN_BLOCKS) setCooldownBlocks(String(assembleParams.COOLDOWN_BLOCKS));
+        // The form's convention is that a BLANK destination means BURN, and the
+        // wire params spell BURN out, so map it back rather than typing the
+        // literal into a field whose placeholder already means it.
+        if (assembleParams.SLASH_DESTINATION) {
+            setSlashDestination(String(assembleParams.SLASH_DESTINATION) === 'BURN'
+                ? '' : String(assembleParams.SLASH_DESTINATION));
+        }
+    }
+
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
@@ -877,12 +904,23 @@ export function DeployContractForm({ walletId, onBack }) {
             {resumable.length > 0 ? (
                 <div className={styles.warnings}>
                     {resumable.map((r) => {
-                        const done = (r.chunks || []).filter((c) => c.actionIndex).length;
+                        // : count a chunk as SENT on its txid, not only on
+                        // its action_index. The index is written after the
+                        // indexer answers; the txid at broadcast. Counting
+                        // indexes alone made the banner read "0 of 2" over a
+                        // run whose first chunk was on chain and paid for -
+                        // measured live - which is the one number a user reads
+                        // to decide between finishing and starting over.
+                        // "Sent" rather than "on chain" because a broadcast that
+                        // never confirmed is still only sent; the resumed run
+                        // re-checks each one against the chain and re-sends
+                        // whatever is genuinely missing.
+                        const done = (r.chunks || []).filter((c) => c.actionIndex || c.txid).length;
                         return (
                             <div key={r.id} className={styles.warning}>
                                 <p>
                                     Unfinished deploy{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
-                                    {r.totalChunks} chunk transactions are already on chain. Finishing
+                                    {r.totalChunks} chunk transactions have already been sent. Finishing
                                     costs only the remaining ones; starting over pays for all of them again.
                                 </p>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -895,6 +933,14 @@ export function DeployContractForm({ walletId, onBack }) {
                                             setResumeId(r.id);
                                             setValidation(null);
                                             setSizeInfo(null);
+                                            // : restore the rest of the plan, not just the
+                                            // source. The flow now assembles phase 2 from the
+                                            // record, so leaving these fields blank would show a
+                                            // review screen that disagrees with the transaction
+                                            // about to be signed - measured: the gas field came
+                                            // back empty against an original 50000. `assembleParams`
+                                            // is the record's copy of exactly these values.
+                                            restoreAssembleFields(r.assembleParams);
                                         }}
                                     >
                                         Resume this deploy

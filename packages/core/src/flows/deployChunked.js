@@ -177,39 +177,103 @@ function indexedActionIndex(res) {
 }
 
 /**
- * Re-verify a resumed record's recorded chunks against the chain. A recorded
- * action_index only counts as done when the chain still reports it VALID and
- * still attributes it to this group and position - a reorg can drop it, and a
- * stale record must never let the assembler run against a chunk that no
- * longer exists (the assembly would index invalid and burn the fee).
+ * Confirm ONE recorded chunk against the chain by its action_index.
  *
- * @returns {Promise<Set<number>>} the chunk indexes confirmed on chain
+ * A recorded action_index only counts as done when the chain still reports it
+ * VALID and still attributes it to this group and position - a reorg can drop
+ * it, and a stale record must never let the assembler run against a chunk that
+ * no longer exists (the assembly would index invalid and burn the fee).
+ */
+async function confirmByActionIndex({ sdk, record, chunk, actionIndex }) {
+    let row = null;
+    try {
+        row = await sdk.getAction(String(actionIndex));
+    } catch {
+        // Unreadable is NOT confirmed: the caller re-sends. Re-sending costs a
+        // fee; skipping a missing chunk costs the whole assembly, so this fails
+        // toward spending.
+        return false;
+    }
+    const data = row && row.data && !Array.isArray(row.data) ? row.data : row;
+    const status = String((data && (data.status || (data.state && data.state.status))) || '').toLowerCase();
+    const hashOnChain = String((data && (data.code_hash || (data.state && data.state.code_hash))) || '');
+    const posOnChain = data && (data.chunk_index ?? (data.state && data.state.chunk_index));
+    if (status !== 'valid') return false;
+    if (hashOnChain && hashOnChain !== record.codeHash) return false;
+    if (posOnChain !== undefined && posOnChain !== null && Number(posOnChain) !== Number(chunk.index)) return false;
+    return true;
+}
+
+/**
+ * The action_index a broadcast txid ended up as, or null while it has none.
+ *
+ * : this is the lookup that closes the double-pay window. A chunk's
+ * action_index is only knowable once the indexer has read it, but its TXID is
+ * known the moment it is broadcast - so a run interrupted DURING the indexer
+ * wait leaves a chunk that is on chain, paid for, and invisible to a record
+ * that only tracks action_indexes.
+ */
+async function actionIndexForTxid({ sdk, txid }) {
+    if (typeof sdk.getTransaction !== 'function') return null;
+    let tx = null;
+    try {
+        tx = await sdk.getTransaction(String(txid), 'tx_hash');
+    } catch {
+        return null;
+    }
+    const data = tx && tx.data && !Array.isArray(tx.data) ? tx.data : tx;
+    const actions = Array.isArray(data && data.actions) ? data.actions : [];
+    const leg = actions.find((a) => String((a && a.action) || '').toUpperCase() === 'DEPLOY')
+        || (actions.length === 1 ? actions[0] : null);
+    const idx = leg && (leg.action_index ?? leg.actionIndex);
+    return idx === undefined || idx === null ? null : String(idx);
+}
+
+/**
+ * Re-verify a resumed record's chunks against the chain.
+ *
+ * TWO WAYS IN, and the second one is . A chunk recorded with an
+ * `actionIndex` is checked directly. A chunk recorded with only a `txid` -
+ * broadcast, but interrupted before the indexer answered - is resolved through
+ * that txid first. Without the second path a resume re-sends and re-pays for a
+ * chunk the chain already holds, which is exactly what the resume banner
+ * promises will not happen ("Finishing costs only the remaining ones").
+ *
+ * MEASURED, on Bitcoin regtest: interrupting a two-chunk run during leg 2's
+ * indexer wait produced THREE carriers - 2223 (chunk 0), 2224 (chunk 1, from
+ * the interrupted run) and 2225 (chunk 1 again, from the resume). Consensus
+ * rule 3 dedups by position, lowest action_index wins, so 2224 stood and 2225
+ * was a fee paid for nothing. The window is the width of the indexer wait, up
+ * to 120s per leg, on a flow whose own copy tells the user it takes a few
+ * minutes and to leave the wallet open.
+ *
+ * @returns {Promise<{confirmed: Set<number>, backfilled: Array<{index: number, actionIndex: string}>}>}
  */
 export async function verifyRecordedChunks({ sdkRegistry, chainId, record }) {
     const sdk = sdkRegistry.get(chainId);
     /** @type {Set<number>} */
     const confirmed = new Set();
+    /** @type {Array<{index: number, actionIndex: string}>} */
+    const backfilled = [];
     for (const c of record.chunks || []) {
-        if (!c.actionIndex) continue;
-        let row = null;
-        try {
-            row = await sdk.getAction(String(c.actionIndex));
-        } catch {
-            // Unreadable is NOT confirmed: fall through and re-send the chunk.
-            // Re-sending costs a fee; skipping a missing chunk costs the whole
-            // assembly, so this fails toward spending.
+        if (c.actionIndex) {
+            if (await confirmByActionIndex({ sdk, record, chunk: c, actionIndex: c.actionIndex })) {
+                confirmed.add(Number(c.index));
+            }
             continue;
         }
-        const data = row && row.data && !Array.isArray(row.data) ? row.data : row;
-        const status = String((data && (data.status || (data.state && data.state.status))) || '').toLowerCase();
-        const hashOnChain = String((data && (data.code_hash || (data.state && data.state.code_hash))) || '');
-        const posOnChain = data && (data.chunk_index ?? (data.state && data.state.chunk_index));
-        if (status !== 'valid') continue;
-        if (hashOnChain && hashOnChain !== record.codeHash) continue;
-        if (posOnChain !== undefined && posOnChain !== null && Number(posOnChain) !== Number(c.index)) continue;
-        confirmed.add(Number(c.index));
+        if (!c.txid) continue;
+        const resolved = await actionIndexForTxid({ sdk, txid: c.txid });
+        if (!resolved) continue;
+        // Held to the SAME standard as a recorded index: valid, this group, this
+        // position. A txid that indexed invalid is not a chunk the assembler can
+        // use, and skipping it would buy an assembly that cannot succeed.
+        if (await confirmByActionIndex({ sdk, record, chunk: c, actionIndex: resolved })) {
+            confirmed.add(Number(c.index));
+            backfilled.push({ index: Number(c.index), actionIndex: resolved });
+        }
     }
-    return confirmed;
+    return { confirmed, backfilled };
 }
 
 /**
@@ -278,7 +342,7 @@ export async function deployChunkedRun(opts) {
         throw new Error('deployChunkedRun: this source fits a single DEPLOY; use deployAction instead');
     }
 
-    const assemble = assembleParams({
+    const assembleFromOpts = assembleParams({
         codeHash: plan.codeHash,
         gasLimit: opts.gasLimit,
         constructorParams: opts.constructorParams,
@@ -309,17 +373,72 @@ export async function deployChunkedRun(opts) {
             codeHash: plan.codeHash,
             code: opts.code,
             totalChunks: plan.totalChunks,
-            assembleParams: assemble,
+            assembleParams: assembleFromOpts,
             name: opts.name,
         });
         await opts.vault.pendingDeploys.put(record);
     }
 
-    const alreadyConfirmed = opts.resumeId
-        ? await verifyRecordedChunks({ sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, record })
-        : new Set();
+    // : on a RESUME the assembling leg comes from the record, not from the
+    // caller's current arguments. The record stores `assembleParams` for exactly
+    // this - "the DEPLOY v2/v3 params for phase 2", per its schema - and nothing
+    // read it back, so a resumed run rebuilt phase 2 from whatever the form
+    // happened to hold. The form's resume button restores the CODE and the NAME
+    // and nothing else, so a resumed deploy silently lost:
+    //   - the GAS_LIMIT (measured empty after a real resume, so it fell back to
+    //     the auto-suggested value: a different limit than the one planned),
+    //   - CONSTRUCTOR_PARAMS entirely, and
+    //   - COOLDOWN_BLOCKS / SLASH_DESTINATION, which drops a stakeable v3 deploy
+    //     to a NON-stakeable v2 - silently, and a deploy is immutable.
+    // The chunks are unaffected either way (CODE_HASH is a function of the source
+    // alone, and the record's is checked above), so this is purely about phase 2
+    // being the deploy that was planned.
+    const assemble = (opts.resumeId && record.assembleParams
+        && String(record.assembleParams.CODE_HASH || '') === String(plan.codeHash))
+        ? record.assembleParams
+        : assembleFromOpts;
 
-    const submitLeg = async (params, label) => submitAction({
+    const verified = opts.resumeId
+        ? await verifyRecordedChunks({ sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, record })
+        : { confirmed: new Set(), backfilled: [] };
+    const alreadyConfirmed = verified.confirmed;
+    // Persist anything the txid lookup recovered, so a second interruption does
+    // not have to re-derive it (and so the resume banner's "N of M" is honest).
+    if (verified.backfilled.length > 0) {
+        const byIndex = new Map(verified.backfilled.map((b) => [b.index, b.actionIndex]));
+        record = {
+            ...record,
+            chunks: record.chunks.map((c) => (byIndex.has(Number(c.index))
+                ? { ...c, actionIndex: byIndex.get(Number(c.index)) }
+                : c)),
+        };
+        await opts.vault.pendingDeploys.put(record);
+    }
+
+    /**
+     * Write a leg's txid into the record the moment it is broadcast.
+     *
+     * : the chunk row used to be written only AFTER the indexer wait
+     * returned, so a run interrupted during that wait - up to 120s per leg, on a
+     * flow that tells the user it takes a few minutes - left a chunk on chain,
+     * paid for, and invisible to the resumed run, which re-sent and re-paid for
+     * it. `submitWithSigner` emits 'waiting' with the final txid immediately
+     * after broadcast, which is the earliest moment the txid is knowable, so
+     * that is where the record is stamped. `verifyRecordedChunks` resolves a
+     * txid-only chunk through the chain on resume.
+     */
+    const stampChunkTxid = async (index, txid) => {
+        if (index === null || !txid) return;
+        record = {
+            ...record,
+            chunks: record.chunks.map((c) => (Number(c.index) === Number(index)
+                ? { ...c, txid: String(txid) }
+                : c)),
+        };
+        await opts.vault.pendingDeploys.put(record);
+    };
+
+    const submitLeg = async (params, label, chunkIndex = null) => submitAction({
         vault: opts.vault,
         walletId: opts.walletId,
         password: opts.password,
@@ -354,6 +473,15 @@ export async function deployChunkedRun(opts) {
         },
         waitForTxid,
         waitOpts: opts.waitOpts,
+        onProgress: (phase, data) => {
+            // 'waiting' is fired with the final txid right after broadcast and
+            // before the indexer wait, which is exactly the window this closes.
+            // Fire-and-forget: a failed vault write must not abort a leg that is
+            // already on the wire, and the next persist covers it.
+            if ((phase === 'waiting' || phase === 'broadcasting') && data && data.txid) {
+                stampChunkTxid(chunkIndex, data.txid).catch(() => {});
+            }
+        },
     });
 
     // Phase 1: carriers, in order, each indexed before the next.
@@ -361,6 +489,47 @@ export async function deployChunkedRun(opts) {
         if (alreadyConfirmed.has(i)) {
             progress('chunk-skipped', { index: i, total: plan.totalChunks });
             continue;
+        }
+        // , second window: a chunk whose txid we hold but which the chain
+        // does not YET carry an action for. `verifyRecordedChunks` could not
+        // confirm it because the transaction is still unmined - measured live,
+        // where a resume re-sent a chunk that was sitting in the mempool and
+        // confirmed a moment later, producing two carriers for one position.
+        //
+        // Re-sending is not the honest move when the txid is known: WAIT on it,
+        // exactly as the interrupted run would have. The wait is the same
+        // `waitForTxid` every leg already uses, so a transaction that confirms
+        // costs nothing extra, and one that is genuinely gone falls through to a
+        // re-send after its own timeout - which is the right trade, since the
+        // alternative pays a second fee every time.
+        const pending = (record.chunks || []).find(
+            (c) => Number(c.index) === i && c.txid && !c.actionIndex,
+        );
+        if (pending) {
+            progress('chunk-waiting', { index: i, total: plan.totalChunks, txid: pending.txid });
+            let recovered = null;
+            try {
+                const waited = await waitForTxid(pending.txid, opts.waitOpts);
+                const idx = indexedActionIndex({ indexed: waited });
+                if (idx && await confirmByActionIndex({
+                    sdk: opts.sdkRegistry.get(opts.chainId), record, chunk: pending, actionIndex: idx,
+                })) {
+                    recovered = idx;
+                }
+            } catch {
+                // Never confirmed inside the window, or unreadable: re-send below.
+            }
+            if (recovered) {
+                record = {
+                    ...record,
+                    chunks: record.chunks.map((c) => (Number(c.index) === i
+                        ? { ...c, actionIndex: recovered }
+                        : c)),
+                };
+                await opts.vault.pendingDeploys.put(record);
+                progress('chunk-done', { index: i, total: plan.totalChunks, actionIndex: recovered });
+                continue;
+            }
         }
         progress('chunk-start', { index: i, total: plan.totalChunks });
         const res = await submitLeg(
@@ -371,6 +540,7 @@ export async function deployChunkedRun(opts) {
                 part: plan.parts[i],
             }),
             `Deploy chunk ${i + 1} of ${plan.totalChunks}`,
+            i,
         );
         const actionIndex = indexedActionIndex(res);
         if (!actionIndex) {

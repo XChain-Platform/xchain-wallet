@@ -124,6 +124,30 @@ function chunkedCounterSource(tag) {
     return `//${'x'.repeat(6102)}\n${COUNTER_BODY} // ${tag}`;
 }
 
+/**
+ * Mines a block only when a transaction is actually waiting for one.
+ *
+ * THE THIRD ANSWER, after two wrong ones cost a run each. `nudgeChain` skips its
+ * mine while the decoder is more than 3 blocks behind, which starves a leg whose
+ * confirmation only this loop can produce (measured: the wallet's 120s per-leg
+ * wait expired on a transaction sitting in the mempool that indexed 40s later).
+ * Mining unconditionally every 3s does confirm promptly, but on a long run it
+ * outruns the decoder - measured 39 and then 47 blocks behind - and that is a
+ * feedback loop, because a lagging decoder makes each leg's indexer wait longer,
+ * which makes the loop mine more.
+ *
+ * A block is only ever NEEDED when something is unconfirmed. Asking the venue's
+ * own miner how many transactions are waiting turns the loop from a timer into a
+ * response: it confirms a leg within ~3s of broadcast and produces nothing at
+ * all while the pipeline is catching up.
+ */
+async function mineIfPending() {
+    try {
+        const status = await minerRpc('status', {});
+        if (Number(status?.mempool_size ?? 0) > 0) await minerRpc('generate_blocks', { count: 1 });
+    } catch { /* a blipped status read must not kill the loop */ }
+}
+
 /** The deployed-contract row for `codeHash`, or null while it does not exist. */
 async function contractFor(codeHash) {
     const list = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/contracts?limit=100`, {
@@ -266,7 +290,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // this venue mines only on demand, so a run left alone waits forever on
             // a block that nobody is producing. Nudging is part of driving this
             // lane at all, not a workaround for a wallet problem.
-            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 5_000);
+            const nudger = setInterval(() => { mineIfPending(); }, 5_000);
             try {
                 await go.click();
                 // ENTERING the lane is what this asserts. Completing all three legs
@@ -388,7 +412,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // wallet had already given up. The lag guard is right for a poll loop
             // waiting on state to APPEAR; it is wrong when the thing being waited
             // for is a confirmation only this loop can produce.
-            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 3_000);
+            const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
                 await go.click();
 
@@ -554,7 +578,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
             // Direct mining, for the reason recorded on the run above: the lag
             // guard withholds exactly the confirmations this loop must produce.
-            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 3_000);
+            const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
                 await go.click();
                 const done = page.getByText(/Contract deployed/i);
@@ -630,7 +654,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const txid = (await scope.locator('dl dd').first().innerText()).trim();
             expect(txid, 'the done screen names a real txid').toMatch(/^[0-9a-f]{64}$/);
 
-            const nudger = setInterval(() => { minerRpc('generate_blocks', { count: 1 }).catch(() => {}); }, 3_000);
+            const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             let action;
             try {
                 action = await waitForValidAction(txid);
@@ -666,6 +690,187 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // eslint-disable-next-line no-console
             console.log(`[§11.3 execute] EXECUTE ${action.action_index} gas_used ${action.gas_used} `
                 + `state n=${counter.state_value}`);
+        });
+    });
+
+    // The money-critical promise on this form, and the one nothing had tested.
+    // Every leg is a real transaction with a real fee, so an interrupted run
+    // leaves paid-for chunks on chain, and the banner says in words:
+    // "Finishing costs only the remaining ones; starting over pays for all of
+    // them again."
+    //
+    //  is the reason this is worth driving NOW and could not be driven
+    // before: until legs recorded their action_index, `verifyRecordedChunks`
+    // could confirm nothing, so a resume re-sent and re-paid for chunk 0 every
+    // time. With the index recorded, the skip path becomes reachable for the
+    // first time - and an unexercised skip path that handles money is exactly
+    // where a wrong assumption is expensive.
+    //
+    // THE ASSERTION THAT MATTERS IS A COUNT: exactly two v4 carriers may exist
+    // for this CODE_HASH when the run finishes. A third - a re-sent chunk 0 -
+    // is the user paying twice for a chunk the chain already had, which is
+    // precisely what the banner promises will not happen. Consensus rule 3
+    // (dedup by position, lowest index wins) means it cannot corrupt anything;
+    // it just quietly costs money, which is why only a count catches it.
+    test('an interrupted chunked deploy resumes without re-paying for the chunk already sent', async ({ page }) => {
+        const runTag = `s29r-${Date.now()}`;
+        const source = uniqueChunkedSource(runTag);
+        const codeHash = codeHashOf(source);
+        let main;
+        let payer;
+
+        // eslint-disable-next-line no-console
+        console.log(`[§11.3 resume] run ${runTag} code_hash ${codeHash}`);
+
+        await test.step('onboard and fund', async () => {
+            await createWallet(page, { password: PASSWORD, name: 'Chunked Resume Wallet' });
+            await switchToRegtest(page, PASSWORD);
+            main = await openDeployForm(page);
+            payer = await main.getByLabel('From').inputValue();
+            expect(payer).toMatch(REGTEST_ADDRESS_RE);
+            await fundAddress(payer, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            await mintXchain(page, MINT_XCHAIN);
+            await waitForTokenBalance(payer, 'XCHAIN', MINT_XCHAIN);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+        });
+
+        await test.step('start the run, then interrupt it once chunk 0 is on chain', async () => {
+            main = await openDeployForm(page);
+            await setSource(main, source);
+            await main.getByLabel('Gas limit').fill(GAS_LIMIT);
+            await expect(main.getByText(/too large for one transaction/i)).toBeVisible({ timeout: 60_000 });
+
+            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            const go = page.getByRole('button', { name: /^Deploy on / });
+            await expect(go).toBeVisible({ timeout: 60_000 });
+            const password = page.getByLabel('Password', { exact: true });
+            if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
+
+            const nudger = setInterval(() => { mineIfPending(); }, 3_000);
+            try {
+                await go.click();
+                // Wait for the FIRST carrier to be indexed, then pull the rug. It
+                // has to be indexed and not merely broadcast, or the record holds
+                // no action_index and this is a test of the old bug rather than of
+                // the resume path.
+                const deadline = Date.now() + 600_000;
+                let carriers = [];
+                while (Date.now() < deadline) {
+                    carriers = (await deployLegsFor(codeHash)).filter((l) => l.action_format === 4);
+                    if (carriers.length >= 1) break;
+                    await new Promise((r) => setTimeout(r, 3_000));
+                }
+                expect(carriers.length, 'no carrier reached the chain, so there is nothing to resume from')
+                    .toBeGreaterThanOrEqual(1);
+                // eslint-disable-next-line no-console
+                console.log(`[§11.3 resume] interrupting with ${carriers.length} carrier(s) on chain: `
+                    + JSON.stringify(carriers.map((c) => ({ i: c.action_index, chunk: c.chunk_index }))));
+            } finally {
+                clearInterval(nudger);
+            }
+
+            // The interruption itself: a reload kills the in-page run mid-flight,
+            // which is what a closed tab or a crash does to a real user.
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+        });
+
+        let resumedGas = null;
+
+        await test.step('the form offers to finish it, and says what is already paid for', async () => {
+            main = await openDeployForm(page);
+            const banner = main.getByText(/Unfinished deploy/i).first();
+            await expect(banner, 'the resume banner never appeared, so the paid-for chunk is unreachable')
+                .toBeVisible({ timeout: 60_000 });
+            const text = (await banner.textContent()) || '';
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 resume] banner: ${JSON.stringify(text.trim().slice(0, 200))}`);
+            // 's second half: the count must include a chunk known only by
+            // its txid. Counting action_indexes alone read "0 of 2" over a run
+            // whose first chunk was on chain and paid for, which is the one
+            // number a user reads to choose between finishing and starting over.
+            const sent = /(\d+) of 2 chunk transactions have already been sent/i.exec(text);
+            expect(sent, 'the banner does not say how many chunk transactions have been sent')
+                .not.toBeNull();
+            expect(Number(sent[1]),
+                'the banner counted zero sent chunks over a run whose chunk 0 is on chain and paid for')
+                .toBeGreaterThanOrEqual(1);
+
+            await main.getByRole('button', { name: 'Resume this deploy', exact: true }).click();
+
+            // : the resume must restore the whole plan, not just the source.
+            // The flow assembles phase 2 from the record, so a blank field here
+            // would mean the review screen describes a different transaction than
+            // the one being signed. Measured before the fix: "" against an
+            // original 50000, which fell through to the auto-suggested value.
+            resumedGas = await main.getByLabel('Gas limit').inputValue();
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 resume] gas limit after resume: ${JSON.stringify(resumedGas)} `
+                + `(original ${GAS_LIMIT})`);
+            expect(resumedGas, 'the resume did not restore the gas limit the deploy was planned with')
+                .toBe(GAS_LIMIT);
+            await expect(main.getByText(/too large for one transaction/i),
+                'the restored source no longer plans as chunked, so Resume did not restore the code')
+                .toBeVisible({ timeout: 60_000 });
+        });
+
+        await test.step('finishing it sends only what was missing', async () => {
+            // Deliberately NOT re-filling the gas limit: the step above asserts
+            // the resume restored it, so typing it again here would hide a
+            // regression by supplying the value the wallet was supposed to keep.
+            expect(resumedGas, 'nothing to submit with').toBe(GAS_LIMIT);
+
+            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            const go = page.getByRole('button', { name: /^Deploy on / });
+            await expect(go).toBeVisible({ timeout: 60_000 });
+            const password = page.getByLabel('Password', { exact: true });
+            if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
+
+            const nudger = setInterval(() => { mineIfPending(); }, 3_000);
+            try {
+                await go.click();
+                const done = page.getByText(/Contract deployed/i);
+                const failed = page.getByRole('alert').filter({ hasText: /\S/ });
+                await expect(done.or(failed).first()).toBeVisible({ timeout: 900_000 });
+                const alertText = await failed.first().textContent().catch(() => null);
+                expect(alertText || '', 'the resumed run failed').toBe('');
+            } finally {
+                clearInterval(nudger);
+            }
+        });
+
+        await test.step('exactly two carriers exist: the chunk already paid for was not re-sent', async () => {
+            let contract = null;
+            const deadline = Date.now() + 300_000;
+            while (Date.now() < deadline) {
+                contract = await contractFor(codeHash);
+                if (contract) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 3_000));
+            }
+            expect(contract, 'the resumed run produced no contract').toBeTruthy();
+            expect(contract.status).toBe('valid');
+
+            const legs = await deployLegsFor(codeHash);
+            const carriers = legs.filter((l) => l.action_format === 4);
+            // eslint-disable-next-line no-console
+            console.log(`[§11.3 resume] final carriers: ${JSON.stringify(carriers.map((c) => ({
+                i: c.action_index, chunk: c.chunk_index, status: c.status,
+            })))}`);
+
+            // THE assertion. Three carriers for a two-chunk plan means chunk 0 was
+            // sent twice and paid for twice, which is the thing the banner
+            // promises does not happen.
+            expect(carriers.length,
+                'more carriers than the plan needs: a chunk that was already on chain was re-sent and '
+                + 're-paid for, which is exactly what the resume banner promises will not happen')
+                .toBe(2);
+            expect(carriers.map((c) => Number(c.chunk_index)).sort(),
+                'the two carriers are not chunks 0 and 1').toEqual([0, 1]);
+            for (const c of carriers) expect(c.status).toBe('valid');
         });
     });
 });
