@@ -59,6 +59,7 @@ import styles from './ActionsMenu.module.css';
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onOpenAccountPicker]
  * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
+ * @param {(sel: { chainId: string, tick: string }) => void} [props.onNavigateToMint]   Developer Mode's regtest faucet "Mint test XCHAIN" button
  */
 export function Settings({
     onBack,
@@ -67,6 +68,7 @@ export function Settings({
     onOpenWalletPicker,
     onOpenAccountPicker,
     initialSubpageId = null,
+    onNavigateToMint,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -258,6 +260,7 @@ export function Settings({
             keywords: 'developer mode regtest custom endpoints psbt raw learn',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
+            props: { onNavigateToMint },
             summary: developerSummary(settings),
         },
         {
@@ -269,7 +272,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
