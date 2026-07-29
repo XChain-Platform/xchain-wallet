@@ -21,13 +21,23 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { assertVenueReachable } from './fixtures/regtest.js';
+import { assertVenueReachable, seedPrices, REGTEST_COIN } from './fixtures/regtest.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXT_PKG = path.resolve(HERE, '../../packages/extension');
 
 export default async function globalSetup() {
     await assertVenueReachable();
+
+    // , and this venue needs it for the same reason the web one does:
+    // `reservation-race.extension.spec.js` mints and sends XCHAIN, and both
+    // legs pay a USD-priced protocol fee. Without a usable snapshot the run
+    // dies inside the confirm screen on copy that reads like a wallet bug.
+    // Before the build, so an unpriceable venue costs one message instead of a
+    // full extension build first.
+    const price = await seedPrices();
+    console.log(`[regtest ${REGTEST_COIN}] price ${price.seeded ? 'seeded' : 'already on venue'}: `
+        + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})`);
 
     execFileSync('pnpm', ['build'], { cwd: EXT_PKG, stdio: 'inherit' });
 

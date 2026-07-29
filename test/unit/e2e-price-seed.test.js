@@ -1,0 +1,268 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+// Unit: test/e2e/fixtures/priceSeed.js - the venue price fixture .
+//
+// Test infrastructure testing test infrastructure, and it earns its keep the
+// same way the timeout-budget suite does: everything here is invisible when it
+// is wrong. A seed with the anchors transposed still writes two perfectly valid
+// rows, and the venue then reports "no current oracle price" forever while the
+// table looks full - which is exactly how three campaign sessions were lost.
+// The arithmetic is pinned here, where it fails in milliseconds, instead of on
+// a shared chain ninety seconds into a spec.
+
+import { describe, it, expect } from 'vitest';
+import {
+    BASE_ROUNDS,
+    SYNTHETIC_ROUNDS,
+    VENUE_PRICE,
+    XCHAIN_PAIR,
+    XCHAIN_USD_PRICE,
+    planPairRows,
+    planSeedRows,
+    priceVerdict,
+    readStateScript,
+    unusablePriceMessage,
+    writeRowsScript,
+} from '../e2e/fixtures/priceSeed.js';
+
+const CHAIN = 1_785_300_000;
+const WALL = CHAIN + 9_000;   // the idle regime: chain trails wall by 2.5h
+
+describe('e2e price seed ', () => {
+    describe('planPairRows anchoring', () => {
+        it('gives the wall anchor to the HIGHEST round and the tip to the rest', () => {
+            const rows = planPairRows({
+                coinPair: 'LTC/USD', price: '30.00000000',
+                baseRounds: BASE_ROUNDS.coin, chainTime: CHAIN, wallTime: WALL,
+            });
+
+            expect(rows.map((r) => r.roundNumber)).toEqual([888100002, 888100012]);
+            // The pairing is the whole fixture. Selection is ORDER BY round
+            // DESC and the staleness guard runs after it, so a wall-stamped row
+            // at the LOW round would be hidden by a tip-stamped high round off
+            // Bitcoin, and on Bitcoin the high round would be selected and then
+            // rejected as stale - a pair that looks permanently dead with two
+            // correct-looking rows in the table.
+            expect(rows[0].blockTimestamp).toBe(CHAIN);
+            expect(rows[1].blockTimestamp).toBe(WALL);
+        });
+
+        it('stamps every row at the tip when the chain clock is not behind', () => {
+            const rows = planPairRows({
+                coinPair: 'BTC/USD', price: '100000.00000000',
+                baseRounds: BASE_ROUNDS.coin, chainTime: WALL, wallTime: CHAIN,
+            });
+            // A row stamped in the chain's future is invisible to the H-3
+            // selection gate, not "fresh for longer", so wall clock is only ever
+            // used when it is genuinely ahead.
+            expect(rows.map((r) => r.blockTimestamp)).toEqual([WALL, WALL]);
+        });
+
+        it('adopts a leftover synthetic round so it cannot shadow the seed', () => {
+            // The live BTC regtest condition: a previous run's nativeFeeLive
+            // sentinels sit ABOVE this fixture's own rounds. Left alone they win
+            // selection with whatever stale timestamp they carry.
+            const rows = planPairRows({
+                coinPair: 'BTC/USD', price: '100000.00000000',
+                baseRounds: BASE_ROUNDS.coin, existingRounds: [999200012, 990001],
+                chainTime: CHAIN, wallTime: WALL,
+            });
+
+            expect(rows.map((r) => r.roundNumber)).toEqual([990001, 888100002, 888100012, 999200012]);
+            expect(rows.at(-1)).toMatchObject({ roundNumber: 999200012, blockTimestamp: WALL });
+            expect(rows.slice(0, -1).every((r) => r.blockTimestamp === CHAIN)).toBe(true);
+        });
+
+        it('never touches a round the tree did not write synthetically', () => {
+            // A hub-derived round is real data. Re-stamping it would replace a
+            // venue's own oracle output with a fixture and every later run would
+            // prove nothing.
+            const rows = planPairRows({
+                coinPair: 'LTC/USD', price: '30.00000000',
+                baseRounds: BASE_ROUNDS.coin, existingRounds: [1948, 2001],
+                chainTime: CHAIN, wallTime: WALL,
+            });
+            expect(rows.map((r) => r.roundNumber)).toEqual([...BASE_ROUNDS.coin]);
+        });
+
+        it('does not write the same round twice when the venue already has it', () => {
+            const rows = planPairRows({
+                coinPair: 'LTC/USD', price: '30.00000000',
+                baseRounds: BASE_ROUNDS.coin, existingRounds: [888100002, 888100012],
+                chainTime: CHAIN, wallTime: WALL,
+            });
+            expect(rows).toHaveLength(2);
+        });
+
+        it('refuses a missing or nonsense clock rather than seeding an epoch row', () => {
+            // A zero chainTime is what a read against an empty `blocks` table
+            // returns; seeding at 1970 writes rows no block can ever use, and
+            // the failure would present as "the seed did not work".
+            expect(() => planPairRows({
+                coinPair: 'LTC/USD', price: '30.00000000',
+                baseRounds: BASE_ROUNDS.coin, chainTime: 0, wallTime: WALL,
+            })).toThrow(/chainTime/);
+            expect(() => planPairRows({
+                coinPair: 'LTC/USD', price: '30.00000000',
+                baseRounds: BASE_ROUNDS.coin, chainTime: CHAIN, wallTime: NaN,
+            })).toThrow(/wallTime/);
+        });
+    });
+
+    describe('planSeedRows', () => {
+        it('prices both pairs a fee-bearing action needs', () => {
+            const rows = planSeedRows({ regtestCoin: 'RLTC', chainTime: CHAIN, wallTime: WALL });
+            const pairs = [...new Set(rows.map((r) => r.coinPair))];
+            expect(pairs).toEqual([XCHAIN_PAIR, 'LTC/USD']);
+            // Both halves are required: the gas amount is XCHAIN-denominated and
+            // the native fee converts it through the coin price, so a run with
+            // only one of them fails on the other with the identical message.
+            expect(rows.filter((r) => r.coinPair === XCHAIN_PAIR)).toHaveLength(2);
+            expect(rows.filter((r) => r.coinPair === 'LTC/USD')).toHaveLength(2);
+        });
+
+        it('uses the gas-token price production actually publishes', () => {
+            const rows = planSeedRows({ regtestCoin: 'RBTC', chainTime: CHAIN, wallTime: WALL });
+            expect(rows.filter((r) => r.coinPair === XCHAIN_PAIR).every((r) => r.price === XCHAIN_USD_PRICE))
+                .toBe(true);
+            expect(XCHAIN_USD_PRICE).toBe('2.00000000');
+        });
+
+        it('keeps Litecoin under the measured dust ceiling', () => {
+            // Not a preference. At $100 a place-bet's fee prices at 2000 sats
+            // against LTC's 5460-sat dust floor and is refused outright, so
+            // betting is unusable; break-even is ~$36.6.
+            expect(Number(VENUE_PRICE.RLTC.price)).toBeLessThan(36.6);
+        });
+
+        it('refuses a chain it has no fixture price for', () => {
+            expect(() => planSeedRows({ regtestCoin: 'RXMR', chainTime: CHAIN, wallTime: WALL }))
+                .toThrow(/not a regtest chain/);
+        });
+
+        it('writes only rounds the platform-wide cleanup already knows', () => {
+            // : a synthetic round outranks every derived round forever and
+            // suppressing new seeds cannot retract old rows, so the e2e tree
+            // keeps ONE list of every synthetic round for clearSeedSentinels to
+            // undo. A wallet-private family would be invisible to that cleanup.
+            const rounds = [...BASE_ROUNDS.xchain, ...BASE_ROUNDS.coin];
+            expect(rounds.every((r) => SYNTHETIC_ROUNDS.includes(r))).toBe(true);
+        });
+    });
+
+    describe('priceVerdict', () => {
+        it('accepts a quote carrying both prices', () => {
+            const v = priceVerdict({
+                supported: true, valid: true,
+                xchainUsdPrice: '2.00000000', coinUsdPrice: '30.00000000', oracleRound: 888100012,
+            });
+            expect(v).toMatchObject({ usable: true, coinUsdPrice: '30.00000000', oracleRound: 888100012 });
+        });
+
+        it('reads the venue refusal that three sessions mistook for a wallet bug', () => {
+            const v = priceVerdict({
+                supported: true, valid: false, xchainFee: null,
+                error: 'invalid: no current oracle price for LTC/USD (missing or stale beyond 1800s)',
+            });
+            expect(v.usable).toBe(false);
+            expect(v.retryable).toBe(true);
+            expect(v.reason).toMatch(/no current oracle price/);
+        });
+
+        it('treats a busy quote engine as not-yet, not as a missing price', () => {
+            const v = priceVerdict({ busy: true, retryable: true, error: 'fee quote busy (8 quotes already pending); retry shortly' });
+            expect(v).toMatchObject({ usable: false, retryable: true });
+        });
+
+        it('treats a venue with native fees switched off as unfixable', () => {
+            // Seeding and re-mining forever cannot change this answer, so the
+            // caller must stop rather than burn its whole retry budget.
+            const v = priceVerdict({
+                supported: false, valid: false,
+                error: 'native coin fee not enabled (no FEE_DESTINATION configured)',
+            });
+            expect(v).toMatchObject({ usable: false, retryable: false });
+        });
+
+        it('rejects a quote whose prices are absent or zero', () => {
+            expect(priceVerdict({ supported: true, xchainUsdPrice: '2.00000000' }).usable).toBe(false);
+            expect(priceVerdict({ supported: true, xchainUsdPrice: '0', coinUsdPrice: '30' }).usable).toBe(false);
+            expect(priceVerdict(null).usable).toBe(false);
+            expect(priceVerdict('not json').usable).toBe(false);
+        });
+    });
+
+    describe('container scripts', () => {
+        const rows = planSeedRows({ regtestCoin: 'RLTC', chainTime: CHAIN, wallTime: WALL });
+
+        it('refuses to run anywhere but a regtest indexer', () => {
+            // The only database write anywhere in the wallet's test tree. The
+            // guard is checked against the CONTAINER's own network, not against
+            // anything the caller passed in.
+            for (const script of [readStateScript([XCHAIN_PAIR, 'LTC/USD']), writeRowsScript(rows)]) {
+                expect(script).toContain("env.INDEXER_NETWORK !== 'regtest'");
+                expect(script).toContain('process.exit(2)');
+            }
+        });
+
+        it('reads its credentials from the container environment and never embeds one', () => {
+            const script = writeRowsScript(rows);
+            expect(script).toContain('env.INDEXER_DB_PASS');
+            // Nothing may be assigned a literal password, and the error path
+            // must print a message rather than the mariadb error object, which
+            // carries the whole connection config.
+            expect(script).not.toMatch(/password:\s*'/);
+            expect(script).toContain('err.message');
+        });
+
+        it('follows the indexer to the hub DB when one is configured', () => {
+            // Once HUB_DB_NAME is set every price lookup goes through that
+            // connection, so a seed into the local database would land in a
+            // table nothing reads.
+            expect(writeRowsScript(rows)).toContain('env.HUB_DB_HOST && env.HUB_DB_NAME');
+        });
+
+        it('carries the planned rows and upserts rather than stacking new rounds', () => {
+            const script = writeRowsScript(rows);
+            expect(script).toContain(JSON.stringify(rows));
+            expect(script).toContain('ON DUPLICATE KEY UPDATE');
+        });
+
+        it('expands the pair list into real placeholders', () => {
+            // The mariadb driver does not expand an array into an IN list; it
+            // binds it as a single value and matches nothing, which would report
+            // an empty venue and lose the shadowing check.
+            const script = readStateScript([XCHAIN_PAIR, 'LTC/USD']);
+            expect(script).toContain("PAIRS.map(() => '?').join(',')");
+            expect(script).toContain(JSON.stringify([XCHAIN_PAIR, 'LTC/USD']));
+        });
+    });
+
+    describe('unusablePriceMessage', () => {
+        it('names the venue as the cause, not the wallet', () => {
+            const msg = unusablePriceMessage({
+                regtestCoin: 'RLTC', seeded: false,
+                reason: 'invalid: no current oracle price for LTC/USD (missing or stale beyond 1800s)',
+            });
+            expect(msg).toMatch(/VENUE state, not a wallet defect/);
+            expect(msg).toMatch(/no current oracle price/);
+        });
+
+        it('says what was tried, so a seeded failure points at shadowing', () => {
+            const msg = unusablePriceMessage({
+                regtestCoin: 'RBTC', seeded: true, reason: 'still stale',
+                state: { wrote: ['BTC/USD#888100012@123'] },
+            });
+            expect(msg).toMatch(/HIGHEST round number/);
+            expect(msg).toContain('BTC/USD#888100012@123');
+        });
+    });
+});

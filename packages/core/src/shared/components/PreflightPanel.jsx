@@ -11,13 +11,31 @@
 // PreflightPanel ( §5.2.4). Renders a PreflightReport: a verdict
 // chip, findings grouped by severity with per-finding override affordances
 // (non-overridable client errors have none; network-sourced errors carry an
-// explicit acknowledgment checkbox), a "Could not verify" list, and the
-// "checked at block N" stamp. aria-live=polite (assertive on fail).
+// explicit acknowledgment checkbox), the Tier-1 notice saying which party
+// answered, a "Could not verify" list, and the "checked at block N" stamp.
+// aria-live=polite (assertive on fail).
 //
 // Exported standalone so the extension approval screen and the co-signer
 // preview surface can reuse it (§5.5).
 
 import styles from './PreflightPanel.module.css';
+
+// Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
+// literals rather than imported: this component is rendered by the extension
+// approval root too, and it must not pull the SDK into that bundle.
+const DRYRUN_VALID       = 'DRYRUN_VALID';
+const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
+
+// Plain-language copy for the Tier-1 notices. The SDK messages are written
+// for a report reader ("relying on client checks"); this surface is read by
+// someone about to sign. The SDK's own text still renders underneath the
+// unavailable case as the diagnostic detail, because the REASON is what made
+//  cost a session: "timeout after 4000ms" names a slow venue, and
+// nothing on the screen used to say it.
+const NOTICE_COPY = {
+    [DRYRUN_VALID]:       'The network checked this action and expects it to succeed.',
+    [DRYRUN_UNAVAILABLE]: 'The network was not reached, so only local checks ran. This is not a network approval.',
+};
 
 /**
  * @param {object} props
@@ -44,7 +62,27 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
     const errors = report.findings.filter((f) => f.severity === 'error');
     const warnings = report.findings.filter((f) => f.severity === 'warning');
+
+    // . `info` findings used to render NOWHERE, and DRYRUN_UNAVAILABLE is
+    // an `info` finding - so a confirm screen the network never answered was
+    // pixel-identical to one the network approved, right down to the "Looks
+    // good" chip. That is §4.2's "which party said what" failing in the unsafe
+    // direction, and it read as a wallet defect to an experienced reader.
+    //
+    // Excluded: findings Tier-1 precedence DEMOTED to info (`_downgradedBy`).
+    // Those are diagnostics kept for tests and support, and they contradict the
+    // verdict by construction - rendering "insufficient balance" under a chip
+    // that says the network accepted the action is worse than saying nothing.
+    const notices = report.findings.filter((f) => f.severity === 'info' && !f._downgradedBy);
+    const unreached = report.findings.some((f) => f.code === DRYRUN_UNAVAILABLE);
     const isFail = report.verdict === 'fail';
+
+    // The chip is the one thing a hurried user reads. A clean local pass with
+    // no network answer is not "Looks good"; it is "nobody checked but us".
+    const chipText = report.verdict === 'fail' ? 'Will likely fail'
+        : report.verdict === 'warn' ? 'Review warnings'
+        : unreached ? 'Local checks only'
+        : 'Looks good';
 
     return (
         <div
@@ -68,10 +106,22 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             className={styles.panel}
             data-testid="preflight-panel"
             data-verdict={report.verdict}
+            // Machine-readable Tier-1 state, so an e2e can assert the network
+            // was actually asked instead of inferring it from a chip that used
+            // to look the same either way.
+            data-dryrun={unreached ? 'unreached' : notices.some((f) => f.code === DRYRUN_VALID) ? 'approved' : 'none'}
             aria-live={isFail ? 'assertive' : 'polite'}
         >
-            <div className={`${styles.chip} ${styles[`chip_${report.verdict}`] || ''}`.trim()} data-testid="preflight-chip">
-                {report.verdict === 'pass' ? 'Looks good' : report.verdict === 'warn' ? 'Review warnings' : 'Will likely fail'}
+            <div
+                // The muted "unreached" palette applies to a PASS only. A warn
+                // or fail chip keeps its own colour: the network being silent
+                // does not make a client-proven failure less urgent, and this
+                // rule is declared after the verdict rules in the stylesheet,
+                // so it would otherwise win the cascade and mute them.
+                className={`${styles.chip} ${styles[`chip_${report.verdict}`] || ''} ${unreached && report.verdict === 'pass' ? styles.chip_unreached : ''}`.trim()}
+                data-testid="preflight-chip"
+            >
+                {chipText}
             </div>
 
             {report.restricted ? (
@@ -104,6 +154,23 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                     {warnings.map((f, i) => (
                         <li key={`${f.code}-${i}`} className={`${styles.finding} ${styles.findingWarning}`}>
                             {f.message}
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
+
+            {notices.length > 0 ? (
+                <ul className={styles.notices} data-testid="preflight-notices">
+                    {notices.map((f, i) => (
+                        <li
+                            key={`${f.code}-${i}`}
+                            className={`${styles.finding} ${f.code === DRYRUN_UNAVAILABLE ? styles.findingUnreached : styles.findingNotice}`}
+                            data-testid={`preflight-notice-${f.code}`}
+                        >
+                            <span className={styles.findingMsg}>{NOTICE_COPY[f.code] || f.message}</span>
+                            {f.code === DRYRUN_UNAVAILABLE && f.message ? (
+                                <span className={styles.noticeDetail}>{f.message}</span>
+                            ) : null}
                         </li>
                     ))}
                 </ul>
