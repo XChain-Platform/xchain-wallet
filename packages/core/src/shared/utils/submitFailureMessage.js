@@ -47,6 +47,7 @@
 
 import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
+import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 
@@ -107,6 +108,13 @@ export function submitFailureMessage(
         // specific classifier goes first. See validationErrors.js (D-118).
         const validationCopy = validationErrorMessage(err);
         if (validationCopy) return validationCopy;
+        // The explorer: the third service a submit talks to, and the last one
+        // whose failures were reaching users as wire wording (URL included).
+        // Checked last of the three because it is the broadest - every
+        // fee-bearing action reads a quote from it - and a message that matched
+        // an encoder or params refusal is the more specific answer.
+        const explorerCopy = explorerErrorMessage(err);
+        if (explorerCopy) return explorerCopy;
     }
     const raw = (err && typeof err === 'object') ? String(/** @type {any} */ (err).message || '') : '';
     return fallback || raw || 'Something went wrong.';

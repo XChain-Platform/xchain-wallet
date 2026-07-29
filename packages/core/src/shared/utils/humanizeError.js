@@ -22,6 +22,8 @@
 // Returns a structured result so callers can key recovery affordances
 // off `cause` instead of re-parsing display prose.
 
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+
 /**
  * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'unknown'} HumanizedErrorCause
  */
@@ -46,6 +48,15 @@ export function humanizeError(err, verb = 'complete this') {
         : (err ? String(err) : '');
     const name = (err && typeof err === 'object') ? (/** @type {any} */ (err).name || '') : '';
     const hay = `${name} ${raw}`.toLowerCase();
+
+    // D-125: an SDK explorer failure is classified by its own code before the
+    // keyword chain below ever sees it. Two of its four shapes fall through
+    // that chain to `unknown`, which appends the raw message - that is how
+    // "Explorer returned HTTP 502 for /RBTC/api/feequote?action=..." reached a
+    // user - and a third ("Explorer request timed out") matched `network` and
+    // blamed the user's own connection for a service-side timeout.
+    const explorerRead = explorerReadFailure(err, verb);
+    if (explorerRead) return { message: explorerRead.message, cause: explorerRead.cause, raw };
 
     /** @type {HumanizedErrorCause} */
     let cause = 'unknown';
