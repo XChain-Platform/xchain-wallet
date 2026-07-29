@@ -183,6 +183,24 @@ describe('BetFeedsList refresh', () => {
             .not.toContain('explorer unreachable');
     });
 
+    // Campaign §10.1's negative, which cannot be driven in a browser on this
+    // stack: switching to regtest derives an address on ALL THREE chains, so a
+    // wallet with none on any BET-capable chain does not exist there. The state
+    // it guards is real though - the hub must say "you have no address for this"
+    // rather than render an empty list, which reads as "no markets exist".
+    it('says why the list is empty when no chain can bet, instead of showing an empty list', async () => {
+        const { messaging, calls } = harness([[]]);
+        messaging.getAddressesByChain = () => Promise.resolve({});
+        const { container } = await renderList(messaging);
+
+        expect(container.textContent).toContain('No address on a chain that supports betting');
+        expect(container.textContent,
+            'the no-chain state reads as a chain with no markets on it')
+            .not.toContain('No markets are taking bets');
+        expect(calls.length,
+            'the list was fetched with no chain to fetch it for').toBe(0);
+    });
+
     it('stops refreshing once the screen is gone', async () => {
         const { messaging, calls } = harness([[market(1248, 'open')]]);
         const { unmount } = await renderList(messaging);
