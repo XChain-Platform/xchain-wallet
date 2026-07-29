@@ -31,6 +31,10 @@ export default async function globalSetup() {
     // "seeded" is the difference between reading the venue's own oracle and
     // reading a fixture.
     const price = await seedPrices();
+    // The margin rides along because a fee-bearing spec that dies on "no current
+    // oracle price" looks exactly like a product regression until you know how
+    // much chain life the quote had when the run started .
+    const margin = Number.isFinite(price.marginSeconds) ? `, ${price.marginSeconds}s of chain life left` : '';
     console.log(`[regtest ${REGTEST_COIN}] price ${price.seeded ? 'seeded' : 'already on venue'}: `
-        + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})`);
+        + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})${margin}`);
 }

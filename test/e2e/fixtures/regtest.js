@@ -61,12 +61,16 @@ import { randomBytes } from 'node:crypto';
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 import {
+    MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
+    XCHAIN_USD_PRICE,
     VENUE_PRICE,
     planSeedRows,
     priceVerdict,
     readStateScript,
+    seedMarginSeconds,
     unusablePriceMessage,
+    venueDisagreement,
     writeRowsScript,
 } from './priceSeed.js';
 
@@ -340,6 +344,40 @@ async function probePrice() {
 }
 
 /**
+ * Chain-seconds of usable life left in the venue's price, or null when that
+ * cannot be established.
+ *
+ * The public quote cannot answer this: it reports whether a price exists, and
+ * carries the BLOCK's time and the round number but never the chosen snapshot's
+ * own timestamp, so there is nothing in it to subtract. The age lives in
+ * `price_snapshots`, so this asks the container the same way the seed does, over
+ * the same credential-free path.
+ *
+ * Null on any failure, deliberately. This runs on the healthy path, where the
+ * venue has ALREADY told us it prices; a flaky SSH hop or a schema surprise must
+ * not turn a working venue into a failed global setup. The caller reads null as
+ * "leave it alone".
+ */
+async function priceHealth(venue) {
+    try {
+        const state = await runInIndexer(readStateScript([XCHAIN_PAIR, venue.coinPair]));
+        if (!state || !Number(state.chainTime)) return { margin: null, disagreement: null };
+        const chainTime = Number(state.chainTime);
+        const rows = state.rows || [];
+        return {
+            margin: seedMarginSeconds({ rows, chainTime, coinPairs: [XCHAIN_PAIR, venue.coinPair] }),
+            disagreement: venueDisagreement({
+                rows,
+                chainTime,
+                expected: { [XCHAIN_PAIR]: XCHAIN_USD_PRICE, [venue.coinPair]: venue.price },
+            }),
+        };
+    } catch {
+        return { margin: null, disagreement: null };
+    }
+}
+
+/**
  * Guarantees this venue can price a fee-bearing action, or fails naming that as
  * the reason .
  *
@@ -378,20 +416,51 @@ export async function seedPrices({ attempts = 4 } = {}) {
         throw new Error(`seedPrices: no fixture price for ${REGTEST_COIN}`);
     }
 
-    // Step 1: does the venue already answer? Never write over a venue that does.
+    // Step 1: does the venue already answer, and will it still answer at the
+    // approve step? "Answers now" was the whole test until , and it is not
+    // enough: the run that found this composed a bet against a healthy quote and
+    // failed minutes later on "no current oracle price for LTC/USD". Off Bitcoin
+    // the window is spent in CHAIN seconds, and an idle LTC/DOGE chain burns them
+    // in a rush once a spec starts mining, so a margin check is the only way to
+    // tell a fresh venue from one that is about to expire under the run's feet.
+    // Never write over a venue that has real life left in it.
     const before = await probePrice();
+    let refreshing = false;
     if (before.usable) {
-        return { seeded: false, reason: 'venue already priced', ...before };
+        const { margin, disagreement } = await priceHealth(venue);
+        const thin = margin !== null && margin < MIN_SEED_MARGIN_SECONDS;
+        if (!thin && !disagreement) {
+            return { seeded: false, reason: 'venue already priced', marginSeconds: margin, ...before };
+        }
+        const why = disagreement
+            ? `${disagreement.coinPair} is seeded at ${disagreement.found} but this fixture prices it at `
+              + `${disagreement.expected} (synthetic round ${disagreement.round}, almost certainly another suite's)`
+            : `only ${margin}s of chain life left`;
+        // Suppression is an explicit instruction not to write, so it outranks the
+        // refresh. Say so loudly rather than seeding anyway or failing a venue
+        // that does, right now, still price.
+        if (PRICE_SEED_SUPPRESSED) {
+            console.warn(`[regtest ${REGTEST_COIN}] ${why}, and XC_REGTEST_NO_PRICE_SEED is set, so it will `
+                + 'NOT be repaired; a fee-bearing step may fail on price or on a dust protocol fee');
+            return { seeded: false, reason: 'venue already priced', marginSeconds: margin, ...before };
+        }
+        console.log(`[regtest ${REGTEST_COIN}] refreshing the venue price: ${why}`);
+        refreshing = true;
     }
-    if (!before.retryable) {
-        throw new Error(unusablePriceMessage({
-            regtestCoin: REGTEST_COIN, reason: before.reason, seeded: false,
-        }));
-    }
-    if (PRICE_SEED_SUPPRESSED) {
-        throw new Error(unusablePriceMessage({
-            regtestCoin: REGTEST_COIN, reason: before.reason, seeded: false,
-        }));
+    // These two only speak to a venue that cannot price at all. A refresh has
+    // already proved it can, so neither applies and both would be wrong here:
+    // `retryable` is false for a usable quote, and suppression was handled above.
+    if (!refreshing) {
+        if (!before.retryable) {
+            throw new Error(unusablePriceMessage({
+                regtestCoin: REGTEST_COIN, reason: before.reason, seeded: false,
+            }));
+        }
+        if (PRICE_SEED_SUPPRESSED) {
+            throw new Error(unusablePriceMessage({
+                regtestCoin: REGTEST_COIN, reason: before.reason, seeded: false,
+            }));
+        }
     }
 
     // Step 2: seed. Read the venue's own clock and its existing rounds first -

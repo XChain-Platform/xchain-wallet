@@ -169,6 +169,109 @@ export const SYNTHETIC_ROUNDS = Object.freeze([
 
 const SYNTHETIC = new Set(SYNTHETIC_ROUNDS);
 
+/** The indexer's `ORACLE_MAX_PRICE_AGE_SECONDS`. See the anchor rule above. */
+export const ORACLE_MAX_PRICE_AGE_SECONDS = 1800;
+
+/**
+ * How much of that window a run insists on having LEFT before it accepts a
+ * venue as already priced.
+ *
+ * Not a style preference, and the reason it is this large is . A quote
+ * that answers at global setup is not the same claim as a quote that will still
+ * answer at the approve step several minutes later, and off Bitcoin the gap
+ * between those two claims is not bounded by wall clock: LTC and DOGE mine only
+ * on demand, so an idle chain's clock sits hours behind, and the moment a spec
+ * starts mining, chain time sprints toward wall time and burns the window far
+ * faster than the run takes. A spec that composed a bet against a healthy quote
+ * then failed at approve with "no current oracle price" is exactly that race.
+ * 900s is half the window: comfortably longer than any single spec's fee-bearing
+ * stretch, and still short enough that a genuinely fresh venue is left alone.
+ */
+export const MIN_SEED_MARGIN_SECONDS = 900;
+
+/**
+ * The snapshot `getLatestPrice` would actually choose for `coinPair` at block
+ * time `chainTime`, or null if the pair has none it can see.
+ *
+ * Mirrors the two halves of the anchor rule in this file's header, and the
+ * ORDER is the whole point: the H-3 gate hides any row stamped in the chain's
+ * future, and selection is `ORDER BY round_number DESC` among what survives -
+ * so the winner is the highest ROUND, not the newest timestamp. The staleness
+ * guard then runs on that one row and does NOT fall back to a fresher row
+ * beneath it. Picking by timestamp here would report a venue healthy while the
+ * indexer was failing on a stale high round, which is the precise shape of the
+ * bug this function exists to catch.
+ */
+export function selectedSnapshot(rows, coinPair, chainTime) {
+    const visible = (rows || []).filter((r) => r
+        && r.coinPair === coinPair
+        && Number.isFinite(Number(r.timestamp))
+        && Number(r.timestamp) <= chainTime);
+    if (!visible.length) return null;
+    return visible.reduce((best, r) => (Number(r.round) > Number(best.round) ? r : best));
+}
+
+/**
+ * The pair whose seeded price is not the one this fixture asks for, or null.
+ *
+ * WHY THIS IS NOT A VIOLATION OF "NEVER WRITE OVER A VENUE THAT PRICES".
+ * That rule protects REAL data: a hub that genuinely publishes a pair must not
+ * be papered over by a fixture, because then a green run proves nothing. It says
+ * nothing about a row this fixture family owns. Only SYNTHETIC rounds are
+ * considered here, so a derived round is still never touched, and a synthetic
+ * round carrying someone else's number is not real data by any reading.
+ *
+ * WHY IT HAPPENS, which is the part worth remembering: the regtest venue is
+ * SHARED between suites that disagree about what a coin is worth.
+ * `xchain-e2e-test` seeds LTC/USD at 100000 for its own fee arithmetic while
+ * this fixture wants 30, both write the same synthetic rounds, and whichever
+ * suite ran last wins. Found by , where a controllerPolicy run on LTC left
+ * 100000 behind and the next wallet bet died with a protocol fee of 0.00000002
+ * LTC, which is dust the network will not relay. That reads as a wallet bug and
+ * is not one, so the fixture repairs its own number instead of inheriting it.
+ */
+export function venueDisagreement({ rows, chainTime, expected }) {
+    for (const [coinPair, want] of Object.entries(expected || {})) {
+        const row = selectedSnapshot(rows, coinPair, chainTime);
+        if (!row || !SYNTHETIC.has(Number(row.round))) continue;
+        if (Number(row.price) !== Number(want)) {
+            return { coinPair, round: Number(row.round), found: String(row.price), expected: String(want) };
+        }
+    }
+    return null;
+}
+
+/**
+ * Chain-seconds of usable life left in the venue's price, taken as the WORST of
+ * the pairs a fee-bearing action needs (both must price, so the weaker one is
+ * the venue's real answer).
+ *
+ * Returns null when the answer is unknowable rather than bad: a pair with no
+ * visible row at all. That case is deliberately not reported as 0, because the
+ * caller has already asked the public endpoint whether the venue prices, and a
+ * disagreement between that answer and this table is not something a fixture
+ * should resolve by silently rewriting rows.
+ *
+ * @returns {number|null} seconds, negative when the selected row is already stale
+ */
+export function seedMarginSeconds({ rows, chainTime, coinPairs, maxAge = ORACLE_MAX_PRICE_AGE_SECONDS }) {
+    if (!Number.isFinite(chainTime) || chainTime <= 0) {
+        throw new Error(`seedMarginSeconds: chainTime must be a positive unix time, got ${chainTime}`);
+    }
+    if (!Array.isArray(coinPairs) || !coinPairs.length) {
+        throw new Error('seedMarginSeconds: coinPairs must be a non-empty array');
+    }
+
+    let worst = null;
+    for (const pair of coinPairs) {
+        const row = selectedSnapshot(rows, pair, chainTime);
+        if (!row) return null;
+        const margin = (Number(row.timestamp) + maxAge) - chainTime;
+        if (worst === null || margin < worst) worst = margin;
+    }
+    return worst;
+}
+
 /**
  * The rows to write for ONE coin pair: every round this fixture owns for it,
  * stamped so that both the pre-flight clock and the on-chain clock find a

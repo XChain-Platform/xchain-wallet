@@ -36,8 +36,11 @@ export default async function globalSetup() {
     // Before the build, so an unpriceable venue costs one message instead of a
     // full extension build first.
     const price = await seedPrices();
+    // See the note in global-setup.regtest.js: the margin is what separates a
+    // stale sentinel from a real regression when a fee-bearing spec goes red.
+    const margin = Number.isFinite(price.marginSeconds) ? `, ${price.marginSeconds}s of chain life left` : '';
     console.log(`[regtest ${REGTEST_COIN}] price ${price.seeded ? 'seeded' : 'already on venue'}: `
-        + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})`);
+        + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})${margin}`);
 
     execFileSync('pnpm', ['build'], { cwd: EXT_PKG, stdio: 'inherit' });
 

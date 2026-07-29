@@ -21,6 +21,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     BASE_ROUNDS,
+    MIN_SEED_MARGIN_SECONDS,
+    ORACLE_MAX_PRICE_AGE_SECONDS,
     SYNTHETIC_ROUNDS,
     VENUE_PRICE,
     XCHAIN_PAIR,
@@ -29,7 +31,10 @@ import {
     planSeedRows,
     priceVerdict,
     readStateScript,
+    seedMarginSeconds,
+    selectedSnapshot,
     unusablePriceMessage,
+    venueDisagreement,
     writeRowsScript,
 } from '../e2e/fixtures/priceSeed.js';
 
@@ -263,6 +268,122 @@ describe('e2e price seed ', () => {
             });
             expect(msg).toMatch(/HIGHEST round number/);
             expect(msg).toContain('BTC/USD#888100012@123');
+        });
+    });
+
+    // . The venue answered at setup and failed at approve, so every case
+    // here is about the difference between "prices now" and "still prices later".
+    describe('selectedSnapshot mirrors getLatestPrice', () => {
+        const PAIR = 'LTC/USD';
+
+        it('hides a row stamped in the chain future (the H-3 gate)', () => {
+            const rows = [
+                { coinPair: PAIR, round: 888100011, timestamp: CHAIN - 100 },
+                { coinPair: PAIR, round: 888100012, timestamp: CHAIN + 5_000 },
+            ];
+            expect(selectedSnapshot(rows, PAIR, CHAIN).round).toBe(888100011);
+        });
+
+        it('picks the highest ROUND, not the newest timestamp', () => {
+            // The trap this whole function exists for: the fresher row loses,
+            // so a venue can hold a perfectly recent price and still go stale.
+            const rows = [
+                { coinPair: PAIR, round: 888100012, timestamp: CHAIN - 1_700 },
+                { coinPair: PAIR, round: 888100011, timestamp: CHAIN - 10 },
+            ];
+            expect(selectedSnapshot(rows, PAIR, CHAIN).round).toBe(888100012);
+        });
+
+        it('ignores other pairs, and returns null when nothing is visible', () => {
+            const rows = [{ coinPair: 'DOGE/USD', round: 1, timestamp: CHAIN - 10 }];
+            expect(selectedSnapshot(rows, PAIR, CHAIN)).toBeNull();
+            expect(selectedSnapshot([], PAIR, CHAIN)).toBeNull();
+        });
+    });
+
+    describe('seedMarginSeconds', () => {
+        const PAIRS = [XCHAIN_PAIR, 'LTC/USD'];
+        const fresh = (pair) => ({ coinPair: pair, round: 888100012, timestamp: CHAIN - 60 });
+
+        it('reports the life left on a fresh venue', () => {
+            const rows = PAIRS.map(fresh);
+            expect(seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS }))
+                .toBe(ORACLE_MAX_PRICE_AGE_SECONDS - 60);
+        });
+
+        it('answers with the WORST pair, since a fee needs both', () => {
+            const rows = [
+                fresh(XCHAIN_PAIR),
+                { coinPair: 'LTC/USD', round: 888100012, timestamp: CHAIN - 1_500 },
+            ];
+            expect(seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS }))
+                .toBe(ORACLE_MAX_PRICE_AGE_SECONDS - 1_500);
+        });
+
+        it('goes negative once the selected row is already stale', () => {
+            const rows = PAIRS.map((p) => ({ coinPair: p, round: 888100012, timestamp: CHAIN - 2_000 }));
+            expect(seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS })).toBeLessThan(0);
+        });
+
+        it('is null when a pair has no visible row, rather than 0', () => {
+            // Unknowable is not the same as bad: the public quote has already
+            // said the venue prices, and a fixture must not resolve that
+            // disagreement by rewriting rows.
+            const rows = [fresh(XCHAIN_PAIR)];
+            expect(seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS })).toBeNull();
+        });
+
+        it('REGRESSION: the near-expiry venue that  accepted is now refused', () => {
+            // The exact shape of the red run: both pairs answer, so the old
+            // usable-only check returned "venue already priced", and the bet
+            // failed minutes later once chain time crossed the window.
+            const rows = PAIRS.map((p) => ({ coinPair: p, round: 888100012, timestamp: CHAIN - 1_750 }));
+            const margin = seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS });
+            expect(margin).toBe(50);
+            expect(margin).toBeLessThan(MIN_SEED_MARGIN_SECONDS);
+        });
+
+        it('rejects a nonsense chain time instead of quietly pricing off it', () => {
+            const rows = PAIRS.map(fresh);
+            expect(() => seedMarginSeconds({ rows, chainTime: 0, coinPairs: PAIRS })).toThrow(/positive unix time/);
+            expect(() => seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: [] })).toThrow(/non-empty/);
+        });
+    });
+
+    //  second half: the shared venue, where another suite's idea of what a
+    // coin is worth arrives as a perfectly fresh price.
+    describe('venueDisagreement', () => {
+        const EXPECTED = { [XCHAIN_PAIR]: XCHAIN_USD_PRICE, 'LTC/USD': '30.00000000' };
+        const row = (coinPair, price, round = 888100012) => ({ coinPair, price, round, timestamp: CHAIN - 60 });
+
+        it('says nothing when the venue carries this fixture\'s own numbers', () => {
+            const rows = [row(XCHAIN_PAIR, XCHAIN_USD_PRICE), row('LTC/USD', '30.00000000')];
+            expect(venueDisagreement({ rows, chainTime: CHAIN, expected: EXPECTED })).toBeNull();
+        });
+
+        it('REGRESSION: catches the 100000 LTC that xchain-e2e-test leaves behind', () => {
+            // The live failure: fee became 0.00000002 LTC, refused as dust, and
+            // it read as a wallet bug.
+            const rows = [row(XCHAIN_PAIR, XCHAIN_USD_PRICE), row('LTC/USD', '100000.00000000')];
+            const d = venueDisagreement({ rows, chainTime: CHAIN, expected: EXPECTED });
+            expect(d).toMatchObject({ coinPair: 'LTC/USD', found: '100000.00000000', expected: '30.00000000' });
+        });
+
+        it('never touches a DERIVED round, which is the real-data rule', () => {
+            // Same wrong-looking number, but the round is outside the synthetic
+            // set, so it may be a genuine published price and is left alone.
+            const rows = [row('LTC/USD', '100000.00000000', 4_242_424)];
+            expect(venueDisagreement({ rows, chainTime: CHAIN, expected: EXPECTED })).toBeNull();
+        });
+
+        it('ignores a disagreeing row that the H-3 gate hides anyway', () => {
+            const rows = [{ coinPair: 'LTC/USD', price: '100000.00000000', round: 888100012, timestamp: CHAIN + 500 }];
+            expect(venueDisagreement({ rows, chainTime: CHAIN, expected: EXPECTED })).toBeNull();
+        });
+
+        it('compares numerically, so trailing-zero formatting is not a mismatch', () => {
+            const rows = [row('LTC/USD', '30.000000000000')];
+            expect(venueDisagreement({ rows, chainTime: CHAIN, expected: { 'LTC/USD': '30.00000000' } })).toBeNull();
         });
     });
 });
