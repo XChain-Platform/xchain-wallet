@@ -492,6 +492,12 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                     <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>Miner URL</span>
                     <input
                         type="text"
+                        // The wrapping <label> associates this implicitly, which
+                        // assistive tech honours, but the repo's a11y audit only
+                        // accepts an explicit name (label= / aria-label /
+                        // aria-labelledby / placeholder / label htmlFor) - and a
+                        // named input is unambiguous either way.
+                        aria-label="Miner URL"
                         value={minerUrl}
                         onChange={(e) => setMinerUrl(e.target.value)}
                         disabled={!developerMode || busy}
@@ -510,6 +516,7 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                     <input
                         type="text"
                         inputMode="decimal"
+                        aria-label={`Amount (${coinTicker})`}
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         disabled={!developerMode || busy}
