@@ -37,12 +37,12 @@ import {
     DOGECOIN_ACTIONS,
 } from '../../../packages/core/src/registry/actions.js';
 
-// Actions whose contract-lane versions the indexer accepts on any chain.
-// Payable on LTC/DOGE today. DEPLOY/EXECUTE are deliberately NOT here: the
-// indexer denylists their native-fee quote, so on a native-coin-fee chain a
-// wallet could compose them but never pay for them (see actions.js).
-const CONTRACT_LANE = ['DEPOSIT', 'WITHDRAW', 'STAKE', 'UNSTAKE', 'DELEGATE'];
-const FEE_QUOTE_BLOCKED = ['DEPLOY', 'EXECUTE'];
+// Actions whose contract-lane versions the indexer accepts on any chain, and
+// which a wallet can now also PAY for there. DEPLOY/EXECUTE joined this list in
+// , once the native-fee quote gap closed end to end (indexer ,
+// wallet forms , fee placement /) and a wallet-composed
+// DEPLOY paying the native fee indexed `valid` on both LTC and DOGE regtest.
+const CONTRACT_LANE = ['DEPOSIT', 'WITHDRAW', 'STAKE', 'UNSTAKE', 'DELEGATE', 'DEPLOY', 'EXECUTE'];
 
 describe(' staking + contract chain reach', () => {
     it('advertises the whole contract lane on Litecoin and Dogecoin', () => {
@@ -52,26 +52,30 @@ describe(' staking + contract chain reach', () => {
         }
     });
 
-    it('holds DEPLOY/EXECUTE back off Bitcoin: composable there, but unpayable', () => {
-        // Not a chain refusal - a fee-quote gap. Proven live 2026-07-26:
-        // quoteNativeFee answers supported:false for DEPLOY on litecoin-regtest
-        // while the chain demands a native-coin fee output.
-        for (const action of FEE_QUOTE_BLOCKED) {
-            expect(LITECOIN_ACTIONS).not.toContain(action);
-            expect(DOGECOIN_ACTIONS).not.toContain(action);
+    // . The hold-back this used to assert was a FEE-QUOTE gap, never a
+    // chain refusal, and it is closed: the driver
+    // tools/regtest/deployNativeFee.mjs composed a DEPLOY through
+    // submitWithSigner (both branches) paying the fee in native coin, and the
+    // indexer answered `valid` on litecoin-regtest (actions 1226-1228) and
+    // dogecoin-regtest (action 953) on 2026-07-28. Re-run it before ever
+    // re-asserting the hold-back: this is a venue fact, not a code opinion.
+    it('advertises DEPLOY/EXECUTE on every chain now that the fee is payable there', () => {
+        for (const action of ['DEPLOY', 'EXECUTE']) {
+            expect(LITECOIN_ACTIONS).toContain(action);
+            expect(DOGECOIN_ACTIONS).toContain(action);
             expect(BITCOIN_ACTIONS).toContain(action);
         }
     });
 
     it('keeps COLLECT Bitcoin-exclusive: it has no contract-targeted version', () => {
-        expect(BTC_EXCLUSIVE_ACTIONS).toEqual(['COLLECT', 'DEPLOY', 'EXECUTE']);
+        expect(BTC_EXCLUSIVE_ACTIONS).toEqual(['COLLECT']);
         expect(BITCOIN_ACTIONS).toContain('COLLECT');
         expect(LITECOIN_ACTIONS).not.toContain('COLLECT');
         expect(DOGECOIN_ACTIONS).not.toContain('COLLECT');
     });
 
     it('leaves Bitcoin with everything it had', () => {
-        for (const action of [...CONTRACT_LANE, ...FEE_QUOTE_BLOCKED, 'COLLECT']) {
+        for (const action of [...CONTRACT_LANE, 'COLLECT']) {
             expect(BITCOIN_ACTIONS).toContain(action);
         }
     });
@@ -89,7 +93,7 @@ describe(' staking + contract chain reach', () => {
     it('gives every chain the same set apart from the validator lane', () => {
         const ltcExtra = BITCOIN_ACTIONS.filter((a) => !LITECOIN_ACTIONS.includes(a));
         const dogeExtra = BITCOIN_ACTIONS.filter((a) => !DOGECOIN_ACTIONS.includes(a));
-        expect(ltcExtra).toEqual(['COLLECT', 'DEPLOY', 'EXECUTE']);
-        expect(dogeExtra).toEqual(['COLLECT', 'DEPLOY', 'EXECUTE']);
+        expect(ltcExtra).toEqual(['COLLECT']);
+        expect(dogeExtra).toEqual(['COLLECT']);
     });
 });

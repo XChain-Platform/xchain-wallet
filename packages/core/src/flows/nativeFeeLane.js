@@ -22,29 +22,33 @@
 // ONLY lane, which made every DEPLOY unsendable, along with every large FILE,
 // gated publish and multi-recipient SEND.
 //
-// WHY A PREDICTION, AND WHY IT IS CHECKED
+// THE FEE OUTPUT STAYS IN THE PHASE-1 BUILD, AND IS EMITTED ON PHASE 2
 //
-// The decision has to be made BEFORE the phase-1 build, because phase 1 is
-// signed and broadcast before phase 2 exists, and a second createTx would
-// collide with the encoder's own outpoint reservations. There is no
-// side-effect-free way to ask the encoder which lane it will choose
-// (`estimateFee` is `createTx` under the covers).
+// : the first cut of this deferral removed the fee output from the
+// phase-1 `createTx` call as well as from the phase-1 transaction, and that
+// undersized the commit. The reveal's ONLY inputs are the phase-1 script
+// outputs, so a reveal-side output has to be paid for out of value the commit
+// locked up. Strip it from the build and the commit reserves nothing, and the
+// reveal fails to balance - "Outputs are spending more than Inputs" - as soon
+// as the fee is larger than the commit's incidental slack. It reproduced on
+// litecoin-regtest at a ~0.069 LTC quote and hid on dogecoin-regtest at 2084
+// sats, which is why the DOGE half of  passed and the LTC half did not.
 //
-// So the lane is predicted from the action's byte length against the SDK's
-// carrier caps - the same caps pre-flight's ENCODING_TOO_LARGE check already
-// uses - and then CHECKED against the encoding the encoder actually chose.
-// That keeps the spec's posture of verifying rather than re-deriving (§1): a
-// wrong prediction throws before anything is signed, instead of quietly
-// broadcasting a transaction the indexer will reject while keeping the fee.
-
-// Deliberately NOT imported from xchain-sdk. Core reaches the SDK only by
-// injection, and pulling the package index into core's graph is what re-armed
-//  earlier today (a shared index turns the MV3 worker's fallback
-// import() into a dynamic chunk it cannot execute). So the cap is declared
-// here and pinned to the SDK's own value by
-// test/unit/flows/nativeFeeLane.test.js, which runs in Node and may import it.
-// One source of truth, with a drift gate, and no import.
-const OP_RETURN_ACTION_BUDGET = 76;
+// The encoder already does the right thing with a customOutput on this lane
+// (xchain-encoder XChainEncoder.js, `revealCustomOutputsValue` /
+// `skipCustomOutputs`): on a P2SH/P2WSH FUNDING tx it folds each customOutput's
+// value AND its reveal-side byte cost into the first script output and emits
+// none of them, and on the reveal it emits them. So the output must be PASSED
+// to phase 1 and EMITTED on phase 2, which is what the wallet now does.
+//
+// WHICH TRANSACTION, DECIDED AFTER THE BUILD
+//
+// Placement is read off the encoding the encoder actually chose, never
+// predicted from the action's byte length. It can be: the fee output no longer
+// has to be removed before the build, so nothing has to be known before it.
+// That is also why there is no prediction-mismatch guard here any more - a
+// prediction is the only thing such a guard could catch, and both callers now
+// branch on `encoded.encoding`.
 
 /** Encodings whose action rides a second, revealing transaction. */
 const CHUNK_LANE = Object.freeze(['P2SH', 'P2WSH']);
@@ -67,28 +71,26 @@ export function nativeFeeOutputOf(quote) {
 }
 
 /**
- * Will this action be carried by the two-phase (chunk) lane?
+ * Does this encoding carry the action in a SECOND transaction (the reveal)?
  *
- * An explicit `encoding` in the caller's encoder options wins, because the
- * encoder honours it. Otherwise the encoder picks OP_RETURN when the action
- * fits its budget and a chunk lane when it does not, which is what the byte
- * comparison mirrors.
+ * Answered from the encoding the encoder reported for the transaction it just
+ * built, so it is an observation rather than a guess.
  *
- * @param {{ actionString?: string } | null} createResult
- * @param {{ encoding?: string } | null} encoderOpts
+ * @param {string | null | undefined} encoding
  * @returns {boolean}
  */
-export function willTakeChunkLane(createResult, encoderOpts) {
-    const forced = String(encoderOpts?.encoding || '').toUpperCase();
-    if (forced) return CHUNK_LANE.includes(forced);
-    const actionString = createResult?.actionString;
-    if (typeof actionString !== 'string' || !actionString) return false;
-    return Buffer.byteLength(actionString, 'utf8') > OP_RETURN_ACTION_BUDGET;
+export function isChunkEncoding(encoding) {
+    return CHUNK_LANE.includes(String(encoding || '').toUpperCase());
 }
 
 /**
  * A copy of `encoderOpts` with one custom output removed. Matches on address
  * AND value so an unrelated output to the same address is left alone.
+ *
+ * Used to build the EXPECTED-OUTPUT set for the phase-1 PSBT, not the encoder
+ * options: the deferred fee output is passed to the build (so the commit
+ * reserves its value) but is not emitted on the phase-1 transaction, so it must
+ * not be in the set the §5.3.2 output check says that transaction should have.
  *
  * @param {object} encoderOpts
  * @param {{ address: string, value: number }} output
@@ -99,38 +101,4 @@ export function withoutCustomOutput(encoderOpts, output) {
         && o.address === output.address
         && Number(o.value) === Number(output.value)));
     return { ...encoderOpts, customOutputs: kept };
-}
-
-export class FeeLaneMismatchError extends Error {
-    constructor(message) {
-        super(message);
-        this.name = 'FeeLaneMismatchError';
-        this.code = 'FEE_LANE_MISMATCH';
-    }
-}
-
-/**
- * The check half of the prediction: does the encoder's chosen encoding agree
- * with where the fee output was placed? Throws when it does not, so the
- * caller refuses BEFORE signing.
- *
- * @param {{ encoding?: string, deferred: boolean, hasFeeOutput: boolean }} args
- */
-export function assertFeeLane({ encoding, deferred, hasFeeOutput }) {
-    if (!hasFeeOutput) return;
-    const isChunked = CHUNK_LANE.includes(String(encoding || '').toUpperCase());
-    if (isChunked && !deferred) {
-        throw new FeeLaneMismatchError(
-            `The protocol fee would be paid on the wrong transaction: the encoder chose ${encoding}, `
-            + 'which carries the action in a second transaction, but the fee output was placed on the first. '
-            + 'Nothing was signed.',
-        );
-    }
-    if (!isChunked && deferred) {
-        throw new FeeLaneMismatchError(
-            `The protocol fee would be missing: the encoder chose ${encoding}, which carries the action in `
-            + 'one transaction, but the fee output was deferred to a second one that will not exist. '
-            + 'Nothing was signed.',
-        );
-    }
 }

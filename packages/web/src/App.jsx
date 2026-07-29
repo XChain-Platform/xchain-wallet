@@ -168,6 +168,7 @@ import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
+import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
 import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
@@ -717,9 +718,12 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // §42.2 Contracts nav: show only when a BTC wallet address exists
-    // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
+    // Two gates, because the lanes stopped agreeing . Staking,
+    // multisig and co-signer accounts are still Bitcoin-exclusive; the §42.2
+    // Contracts nav follows the registry, which now advertises DEPLOY on
+    // LTC/DOGE as well. One shared hook would have opened all of them.
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
+    const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
 
     // : accounts of the active wallet, purely so the AppHeader gear
@@ -844,7 +848,7 @@ function AppInner() {
                         onContacts={() => { setFormReturnView(menuBackTo); setUnlockedView('contacts'); }}
                         onLists={() => setUnlockedView('lists')}
                         onAddresses={() => setUnlockedView('addresses')}
-                        onContracts={hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
+                        onContracts={hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onMultisig={hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSwitchWallet={() => setUnlockedView('wallet-picker')}
@@ -2448,7 +2452,7 @@ function AppInner() {
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                         onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
-                        onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
+                        onContracts={activeWalletId && hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onHistory={activeWalletId ? () => {
                             setHistoryInitialQuery('');

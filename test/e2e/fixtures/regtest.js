@@ -265,6 +265,92 @@ export async function waitForConfirmedUtxo(address, txid, timeoutMs = 90_000) {
 }
 
 /**
+ * How fast a pre-flight response has to come back before the SDK's Tier-1
+ * budget is safe. The budget itself is `DEFAULT_TIMEOUT_MS` (4000ms) in
+ * `xchain-sdk/src/preflight/constants.js`; this is well under it so a
+ * warm call cannot be marginal.
+ */
+const PREFLIGHT_WARM_MS = 750;
+
+/**
+ * Makes the indexer's dry-run for ONE exact action cheap, and returns its
+ * verdict, so a spec can assert on the Tier-1 half without racing a budget.
+ *
+ * WHY THIS EXISTS. Tier 1 is the dry-run: the indexer runs the action
+ * through the real handler in a rolled-back transaction. That is not a
+ * lookup, it costs real work, and on this SHARED venue a COLD one measured
+ * between 1.2s and 5.0s depending on what else was driving the stack. The
+ * SDK abandons Tier 1 at 4000ms and degrades to the client tier by design
+ * (spec §8.4), so the confirm panel renders a Tier-2-only report and the
+ * dry-run finding the spec is asserting on simply is not there.
+ *
+ * That failure is worth spelling out because it reads as a wallet defect and
+ * is not one: the verdict is right, the panel is right, the network was just
+ * slow. Worse, `DRYRUN_UNAVAILABLE` is an `info` finding and `PreflightPanel`
+ * renders only errors, warnings and the unverified list - so nothing on the
+ * screen distinguishes "the network said this is fine" from "the network
+ * never answered". A spec that waits and hopes is a coin flip on this venue.
+ *
+ * The lever is that the indexer MEMOIZES the verdict per block height
+ * , which is measurable: the same query costs seconds cold and ~10ms
+ * warm. So this asks the endpoint for exactly what the wallet is about to ask
+ * it - same action, same params, same source, same query shape as
+ * `explorer.getPreflight` - until the answer comes back warm.
+ *
+ * It does NOT weaken what the spec proves. The wallet still composes the
+ * action itself, still calls the endpoint itself, and still has to relay the
+ * verdict to the panel; all this removes is the stopwatch. And it adds teeth
+ * of its own: the returned verdict lets a spec assert the VENUE agrees with
+ * its premise, so an unaffordable send that the indexer happens to consider
+ * valid fails here, naming the venue, instead of failing later as a confusing
+ * assertion about missing panel text.
+ *
+ * The memo is keyed by block height, so warm and use it in the same breath -
+ * a block landing in between (this venue mines on demand AND on a timer)
+ * puts the next call back on the cold path.
+ *
+ * @param {{action: string, params: string, source: string}} query
+ * @returns {Promise<object>} the endpoint's own response body
+ */
+export async function warmPreflight({ action, params, source }, timeoutMs = 120_000) {
+    // Built exactly as `explorer.getPreflight` builds it - a query that
+    // differs from the wallet's is a different memo entry, which would warm
+    // nothing and quietly restore the race this exists to remove.
+    const q = new URLSearchParams();
+    q.set('action', action);
+    q.set('params', params);
+    q.set('source', source);
+    const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/preflight?${q.toString()}`;
+
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    let lastMs = null;
+    while (Date.now() < deadline) {
+        const started = Date.now();
+        let body = null;
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+            body = await res.json();
+        } catch {
+            // The explorer blipping mid-block is transient; keep trying until
+            // the budget runs out rather than reporting it as a slow dry-run.
+            await new Promise((r) => setTimeout(r, 2_000));
+            continue;
+        }
+        lastMs = Date.now() - started;
+        last = body;
+        if (lastMs <= PREFLIGHT_WARM_MS) return last;
+        // Straight back round: the point of the second call is that it hits
+        // the memo the first one populated.
+    }
+    throw new Error(
+        `pre-flight for ${action} never answered within ${PREFLIGHT_WARM_MS}ms `
+        + `(last ${lastMs}ms). The indexer dry-run is too slow for the SDK's 4000ms `
+        + `Tier-1 budget on this venue, so the wallet would drop the verdict. `
+        + `This is venue load, not a wallet defect - last response: ${JSON.stringify(last)}`);
+}
+
+/**
  * Makes the next broadcast fail, with a chosen node reject reason.
  *
  * §8.6 scenarios 3 and 4 hinge on the wallet CLASSIFYING a post-sign

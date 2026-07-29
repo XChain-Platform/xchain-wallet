@@ -538,10 +538,8 @@ export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLive
 // : which transaction carries the native-coin protocol fee.
 export {
     nativeFeeOutputOf,
-    willTakeChunkLane,
+    isChunkEncoding,
     withoutCustomOutput,
-    assertFeeLane,
-    FeeLaneMismatchError,
 } from './nativeFeeLane.js';
 // : the Approve-time re-check of an already-sized native-coin fee. The
 // host route owns the quote fetch; the band comparison and its sentence are

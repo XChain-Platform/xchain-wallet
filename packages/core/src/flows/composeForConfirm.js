@@ -31,7 +31,7 @@
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
-import { nativeFeeOutputOf, willTakeChunkLane, withoutCustomOutput } from './nativeFeeLane.js';
+import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
@@ -141,17 +141,20 @@ export async function composeForConfirm({
     // it - on LTC/DOGE, where native is the only fee lane, that was every
     // DEPLOY and every large FILE, gated publish or multi-recipient SEND.
     //
-    // Taking it out HERE (rather than at submit) is what keeps the previewed
-    // PSBT honest: the §5.3.2 output-set check reads these same customOutputs,
-    // so an output the phase-1 transaction does not contain must not be in the
-    // expected set either. The submit path re-attaches it to the reveal, and
-    // the envelope carries it so that path does not have to re-quote.
-    const deferredFeeOutput = willTakeChunkLane(createResult, withNativeOut)
-        ? nativeFeeOutputOf(feePreflight.quote)
-        : null;
-    const finalEncoderOpts = deferredFeeOutput
-        ? withoutCustomOutput(withNativeOut, deferredFeeOutput)
-        : withNativeOut;
+    // : the fee output is still HANDED to the build below. On the chunk
+    // lane the encoder does not emit it on the commit, but it does fold its
+    // value (and its reveal-side byte cost) into the script output the reveal
+    // spends, and that reservation is the only thing that lets the reveal
+    // afford it. Removing it from the build was the first cut of  and it
+    // made every chunked native-fee action unbalanced ("Outputs are spending
+    // more than Inputs") once the quote outgrew the commit's incidental slack.
+    //
+    // So only the EXPECTED-OUTPUT set drops it, below: the §5.3.2 check must
+    // describe the phase-1 transaction as it actually is, and that transaction
+    // does not carry the output. Which transaction pays it is decided after the
+    // build from the encoding the encoder chose, so no prediction can be wrong.
+    const feeOutput = nativeFeeOutputOf(feePreflight.quote);
+    const finalEncoderOpts = withNativeOut;
 
     // 4. Encode to the ONE PSBT the modal previews and the signer signs.
     // D-7: give the encoder the spender address so it can build the tx:
@@ -177,6 +180,14 @@ export async function composeForConfirm({
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
 
+    // /: now that the encoder has answered, place the fee output.
+    // A chunk encoding means the action rides a reveal, so the fee rides it too
+    // and the submit path emits it there; anything else carries the action in
+    // the transaction just built, which already contains the output.
+    const deferredFeeOutput = feeOutput && !bareNativePayment && isChunkEncoding(encoded.encoding)
+        ? feeOutput
+        : null;
+
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
         : null;
@@ -186,7 +197,9 @@ export async function composeForConfirm({
     // passing it through would let the matcher wave through one OP_RETURN
     // output that this transaction must not contain. Null tightens the check.
     const expectedOutputs = buildExpectedOutputs({
-        customOutputs: finalEncoderOpts.customOutputs,
+        customOutputs: deferredFeeOutput
+            ? withoutCustomOutput(finalEncoderOpts, deferredFeeOutput).customOutputs
+            : finalEncoderOpts.customOutputs,
         encoding: bareNativePayment ? null : encoded.encoding,
         adsOutput,
         // D-24 : a P2SH/P2WSH/MULTISIGN payload larger than one on-chain
