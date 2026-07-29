@@ -405,7 +405,18 @@ export function DeployContractForm({ walletId, onBack }) {
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        // The PLAN decides the lane, not just the wallet mode. `openConfirmScreen`
+        // composes ONE `{ action: 'DEPLOY' }` and never consults `plan`, so routing
+        // a chunked source there attempted a single-shot deploy of a source this
+        // very form had just described as "N chunk transactions plus 1 assembling
+        // transaction" - and the encoder refused it with "Combined compiled payload
+        // (8194 bytes) exceeds maximum (8192)". That left PC-38's chunked lane
+        // unreachable from BOTH sides: full mode never entered it, and watcher mode,
+        // the only mode that reached `handleSubmit`, is refused inside it by design
+        // because the legs must be signed one after another.
+        // The review stage is the chunked lane's entry point and already renders
+        // SignCredentials in full mode, so a chunked plan goes there instead.
+        if (singleEncode && plan?.single !== false) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -741,6 +752,22 @@ export function DeployContractForm({ walletId, onBack }) {
                 {(isWatcherMode || isHwSource) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
+                {/* A chunked run lives entirely in `submitting`, which renders THIS
+                    screen - so the explanation has to be here. It used to sit in the
+                    form-stage JSX, i.e. on a screen the user has already left by the
+                    time the run starts, which left a multi-minute, multi-transaction
+                    deploy showing nothing but a spinning button. States what is
+                    happening without claiming a live count it cannot know (a frozen
+                    "0 of N" would read as a stall); per-leg progress is in the
+                    pendingDeploy record the resume banner reads. */}
+                {chunkProgress ? (
+                    <p className={styles.summary} role="status">
+                        Deploying {chunkProgress.total} chunk transactions, then the assembling one.
+                        Each waits for confirmation before the next is signed, so this takes a
+                        few minutes. Leave the wallet open; if it is interrupted you can resume
+                        without re-paying for the chunks already sent.
+                    </p>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
@@ -968,15 +995,6 @@ export function DeployContractForm({ walletId, onBack }) {
                 live count it cannot know (a frozen "0 of N" would read as a
                 stall). Per-leg progress is recorded in the pendingDeploy
                 record, which is what the resume banner reads. */}
-            {chunkProgress ? (
-                <p className={styles.summary} role="status">
-                    Deploying {chunkProgress.total} chunk transactions, then the assembling one.
-                    Each waits for confirmation before the next is signed, so this takes a
-                    few minutes. Leave the wallet open; if it is interrupted you can resume
-                    without re-paying for the chunks already sent.
-                </p>
-            ) : null}
-
             {validation ? (
                 <p
                     role={validation.ok ? undefined : 'alert'}
