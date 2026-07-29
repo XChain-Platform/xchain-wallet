@@ -34,10 +34,18 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { workspaceAlias } from './workspaceAlias.js';
+
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 export default defineConfig({
-    root: fileURLToPath(new URL('../..', import.meta.url)),
+    root: repoRoot,
     plugins: [react()],
+    // `@xchain-wallet/*` resolves to this checkout's packages, not to
+    // whatever node_modules/@xchain-wallet happens to link at. See
+    // workspaceAlias.js: vi.mock is keyed on the resolved module id, so a
+    // link pointing at another copy turns a mock into a silent no-op.
+    resolve: { alias: workspaceAlias(repoRoot) },
     test: {
         environment: 'jsdom',
         include: ['test/unit/**/*.test.{js,jsx}'],

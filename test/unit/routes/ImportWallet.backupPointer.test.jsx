@@ -34,6 +34,22 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     };
 });
 
+// The stub above only reaches ImportWallet if the route resolves
+// `@xchain-wallet/core/ui` to the same file this mock is keyed on. When it
+// does not, vi.mock is a silent no-op: the real camera-backed QrScanner
+// renders and the button is simply absent. Say that out loud instead of
+// leaving a bare "cannot find fake-scan" to read like a product bug .
+function clickFakeScan() {
+    const stub = screen.queryByTestId('fake-scan');
+    expect(
+        stub,
+        'the @xchain-wallet/core/ui mock never reached ImportWallet - the route resolved '
+        + 'the specifier to a different copy of core than this file mocked '
+        + '(check test/vitest/workspaceAlias.js and node_modules/@xchain-wallet)',
+    ).toBeTruthy();
+    fireEvent.click(stub);
+}
+
 function renderImport(messaging) {
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -59,7 +75,7 @@ describe('ImportWallet backup-pointer restore', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
         // Open the pointer scanner, then fire a scan frame.
         fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
-        fireEvent.click(screen.getByTestId('fake-scan'));
+        clickFakeScan();
 
         // Pointer card appears.
         await waitFor(() => expect(screen.getByText(/Backup pointer loaded/)).toBeTruthy());
@@ -83,7 +99,7 @@ describe('ImportWallet backup-pointer restore', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
         fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
-        fireEvent.click(screen.getByTestId('fake-scan'));
+        clickFakeScan();
 
         await waitFor(() => expect(screen.getByText(/not a backup pointer/i)).toBeTruthy());
     });
@@ -95,7 +111,7 @@ describe('ImportWallet backup-pointer restore', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
         fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
-        fireEvent.click(screen.getByTestId('fake-scan'));
+        clickFakeScan();
         await waitFor(() => expect(screen.getByText(/Backup pointer loaded/)).toBeTruthy());
 
         fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'pw12345678' } });

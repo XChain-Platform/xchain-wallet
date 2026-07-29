@@ -53,6 +53,15 @@
 // real ~$47 price the fee quotes ~4,200 sats and every place-bet is refused
 // before it can race anything. Seed at $30 and mine, per campaign §3.2.
 
+// TIER 1, AND WHY EVERY VERDICT BELOW IS WARMED FIRST. Both pre-flight
+// assertions here are Tier-1-only: `data-dryrun="approved"` at compose and
+// "feed not open" at the Approve-time re-check are the INDEXER's words
+// (`xchain-indexer/src/actions/bet.js`), reachable no other way. A cold dry-run
+// on this shared venue has been measured between 1.2s and 5.0s and the SDK
+// abandons Tier 1 at 4000ms, so an unwarmed assertion is a coin flip on venue
+// load rather than a test of the wallet. `warmPreflight`  is the fix
+// and `warmBet` below is this spec's use of it.
+
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
@@ -64,12 +73,26 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    warmPreflight,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
 const MINT_XCHAIN = 1000;
 const STAKE = '100';
+
+/**
+ * The outcome this run bets on, as the market's LABEL and as its zero-based
+ * wire index, declared together.
+ *
+ * They have to agree: the label is what the form is clicked by, the index is
+ * what the wire params carry, and a warm built on the wrong index would warm a
+ * different memo entry - which restores the exact race this spec warms to
+ * remove, silently and while still looking warmed.
+ */
+const OUTCOME = { label: 'Yes', index: 0 };
+/** The market's other outcome. Named only so the create form can be filled. */
+const OUTCOME_OTHER = 'No';
 
 /**
  * How far ahead of the chain's clock the market's deadline is set.
@@ -215,6 +238,45 @@ async function fillPasswordIfPresent(scope) {
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
+/**
+ * Warms the indexer's dry-run for the exact BET this spec is about to ask the
+ * wallet to pre-flight, and asserts the venue's own verdict matches the premise
+ * of the step that follows.
+ *
+ * The params are BET v2's wire form, `VERSION|FEED_ACTION_INDEX|OUTCOME|AMOUNT`
+ * (`xchain-sdk/src/formats.js`), with the empty trailing MEMO trimmed exactly as
+ * `FormatSelector.serialize` trims it. That has to match the wallet's string
+ * character for character: the indexer memoizes per (action, params, source,
+ * height, feeMode), so a params string that differs by so much as a trailing
+ * pipe warms an entry nobody will ask for.
+ *
+ * `feeMode` is deliberately NOT sent, and that is the faithful choice on both
+ * chains this can run on rather than an omission. The wallet forces the native
+ * lane for a bet on Litecoin and leaves it off on Bitcoin (`useNativeFee`), and
+ * those are each chain's own default, which is what the indexer resolves an
+ * absent `feeMode` to. Both sides therefore land on the same resolved mode, and
+ * the memo key is built from the RESOLVED mode.
+ *
+ * The `expected` check earns its place twice over: it says at the venue, in one
+ * line, that the network holds the opinion the step is scripted around, so a
+ * market the indexer has not closed yet fails here naming the feed instead of
+ * ten lines later as missing text on a panel.
+ *
+ * @param {string} source     the address the wallet is betting from
+ * @param {number} feedIndex  the market's action index
+ * @param {boolean} expected  the verdict the following step depends on
+ */
+async function warmBet(source, feedIndex, expected) {
+    const quote = await warmPreflight({
+        action: 'BET',
+        params: `2|${feedIndex}|${OUTCOME.index}|${STAKE}`,
+        source,
+    });
+    expect(quote.valid, `the venue's own dry-run for a ${STAKE} bet on market #${feedIndex} `
+        + `disagrees with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
+    return quote;
+}
+
 /** Approves a confirm that is expected to go through cleanly. */
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
@@ -349,8 +411,8 @@ test.describe('BET deadline race', () => {
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
             await main.getByLabel('What is being bet on').fill(`Deadline race ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
+            await main.getByLabel('Outcome 0').fill(OUTCOME.label);
+            await main.getByLabel('Outcome 1').fill(OUTCOME_OTHER);
 
             // From the CHAIN's clock, not the browser's.
             deadlineSec = (await chainTime()) + DEADLINE_LEAD_SEC;
@@ -393,9 +455,15 @@ test.describe('BET deadline race', () => {
 
             const main = page.getByRole('main');
             await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            await main.getByRole('button', { name: OUTCOME.label, exact: true }).click();
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
+
+            // Warmed in the same breath as the compose it is warming for: the
+            // memo is keyed by block height, and this venue mines on a timer as
+            // well as on demand, so anything slotted in between can put the
+            // wallet's own call back on the cold path.
+            await warmBet(punter, feedIndex, true);
             await main.getByRole('button', { name: 'Review bet', exact: true }).click();
 
             // The dry run must PASS here. A confirm that is already failing would
@@ -403,6 +471,15 @@ test.describe('BET deadline race', () => {
             await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
             await expect(page.getByTestId('preflight-panel'))
                 .toHaveAttribute('data-verdict', 'pass', { timeout: 60_000 });
+
+            // And it must pass because the NETWORK said so. `pass` alone cannot
+            // tell that apart from a dry-run that never answered: DRYRUN_UNAVAILABLE
+            // is an info finding, so a Tier-2-only report is also a `pass`. This is
+            // the machine-readable Tier-1 state , and asserting it here is
+            // what makes the degradation below a real transition rather than the
+            // first time the network was ever heard from.
+            await expect(page.getByTestId('preflight-panel'))
+                .toHaveAttribute('data-dryrun', 'approved');
             await expect(page.getByTestId('confirm-approve')).toBeEnabled();
         });
 
@@ -427,6 +504,20 @@ test.describe('BET deadline race', () => {
         });
 
         await test.step('Approve is refused by the §4.6 re-check', async () => {
+            // The re-check is where this spec's Tier-1 exposure actually bites:
+            // the refusal it asserts is the indexer's own "feed not open", and
+            // the re-check is a fresh dry-run at the height the closing block
+            // just created, so it is COLD by construction. `bypassCache` on the
+            // re-check bypasses the SDK's coalescer, not the indexer's memo, so
+            // warming here is what the wallet's call lands on.
+            //
+            // The verdict is also the venue's confirmation that the latch really
+            // took: `false` here means the indexer refuses the bet, which is the
+            // only reason the panel below has anything to say.
+            const quote = await warmBet(punter, feedIndex, false);
+            expect(String(quote.status), 'the indexer refuses the bet for the reason this spec '
+                + 'asserts on screen').toMatch(/feed not open/i);
+
             await page.getByTestId('confirm-approve').click();
 
             // The verdict degrades from the re-check, and the chain's own reason
@@ -435,6 +526,12 @@ test.describe('BET deadline race', () => {
                 .toHaveAttribute('data-verdict', 'fail', { timeout: 90_000 });
             await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
             await expect(page.getByTestId('preflight-panel')).toContainText(/feed not open/i);
+
+            // Not a Tier-2 fail wearing the same paint: an unreached dry-run
+            // renders "Local checks only" and `data-dryrun="unreached"`, and this
+            // whole step is about the NETWORK having changed its mind.
+            await expect(page.getByTestId('preflight-panel'))
+                .not.toHaveAttribute('data-dryrun', 'unreached');
 
             // Refusing means refusing: Approve is blocked behind an unchecked
             // override rather than merely warned about.
