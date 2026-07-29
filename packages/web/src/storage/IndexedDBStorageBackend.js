@@ -164,9 +164,17 @@ function idbRequest(db, storeName, mode, fn) {
         const tx = db.transaction(storeName, mode);
         const store = tx.objectStore(storeName);
         const req = fn(store);
+        let result;
         tx.onabort = () => reject(tx.error ?? new Error('tx aborted'));
         tx.onerror = () => reject(tx.error);
         req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => { result = req.result; };
+        // Resolve on the transaction's commit, not the request's success.
+        // req.onsuccess can fire before the transaction is actually durable;
+        // callers here (e.g. NetworkSection's active-network switch) do
+        // `await save(); window.location.reload()` immediately afterward,
+        // so resolving early raced the reload against the real commit and
+        // could drop the write (settings silently reverting on next unlock).
+        tx.oncomplete = () => resolve(result);
     });
 }
