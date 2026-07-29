@@ -261,8 +261,14 @@ const PRICE_SEED_SUPPRESSED =
  * local shell and a remote one, and no part of it is visible in a process list.
  * `BatchMode=yes` means a host that wants a password fails immediately with a
  * legible error instead of hanging a global setup on a prompt nobody can see.
+ *
+ * Exported because `seedPrices()` deliberately refuses to write over a venue
+ * that already prices, which is right for setup and useless for the one spec
+ * that must MOVE a price it just used: the  Approve-time re-quote can
+ * only be driven by changing the fee between composing and approving. That
+ * spec drives the write itself, through this same credential-free path.
  */
-async function runInIndexer(script, timeoutMs = 60_000) {
+export async function runInIndexer(script, timeoutMs = 60_000) {
     const args = [
         '-o', 'BatchMode=yes',
         '-o', 'ConnectTimeout=10',
