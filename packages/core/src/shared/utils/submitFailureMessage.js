@@ -47,6 +47,7 @@
 
 import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
+import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 
 /**
@@ -100,6 +101,12 @@ export function submitFailureMessage(
     if (broadcastKind === null) {
         const encoderCopy = encoderErrorMessage(err, { coinTicker, requiredNative });
         if (encoderCopy) return encoderCopy;
+        // A params-builder refusal happens BEFORE the encoder is called at all,
+        // so it can only be reached here - and it is checked after the encoder
+        // for the same reason the encoder is checked after broadcast: the more
+        // specific classifier goes first. See validationErrors.js (D-118).
+        const validationCopy = validationErrorMessage(err);
+        if (validationCopy) return validationCopy;
     }
     const raw = (err && typeof err === 'object') ? String(/** @type {any} */ (err).message || '') : '';
     return fallback || raw || 'Something went wrong.';

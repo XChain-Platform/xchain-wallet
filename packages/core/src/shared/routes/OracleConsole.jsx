@@ -17,6 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -203,7 +204,11 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             load();
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Action failed.');
+            // Resolve and cancel are not fee-bearing , so this form has
+            // no native-fee lane to describe - but it can still be handed an SDK
+            // params-builder refusal, and those read as log lines until they go
+            // through the shared mapper (D-118).
+            setFormError(submitFailureMessage(err, { fallback: err?.message || 'Action failed.' }));
         }
     }
 

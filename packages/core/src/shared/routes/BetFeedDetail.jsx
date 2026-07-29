@@ -17,7 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
-import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -322,9 +322,17 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             reload();
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
-                : err?.message || 'Bet failed.');
+            // Through the shared mapper , not a hand-rolled ternary:
+            // the native-fee branch was the only one this form translated, so
+            // an SDK params-builder refusal reached the user as the builder's
+            // own log line - "betting.placeBetParams: amount must be a positive
+            // stake" for a zero stake, measured on regtest (D-118).
+            setFormError(submitFailureMessage(err, {
+                coinTicker, mandatory: nativeFee.mandatory,
+                // The raw message stays the fallback (the in-repo convention): a node
+                // rejection reason is worth showing verbatim when nothing recognises it.
+                fallback: err?.message || 'Bet failed.',
+            }));
         }
     }
 

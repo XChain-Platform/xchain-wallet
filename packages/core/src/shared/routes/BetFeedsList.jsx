@@ -60,6 +60,11 @@ function StatusPill({ status }) {
     );
 }
 
+// How often the market list re-reads the chain while it is on screen. Matches
+// the OracleConsole tick, which is the same problem on the other side of the
+// role boundary (its gating is re-derived every 30s for the same reason).
+const REFRESH_MS = 30_000;
+
 function extractRows(resp) {
     if (!resp) return [];
     if (Array.isArray(resp)) return resp;
@@ -106,19 +111,46 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     }, [walletId, messaging]);
 
     useEffect(() => {
-        if (!chainId) return;
+        if (!chainId) return undefined;
         let cancelled = false;
-        setRows(null);
-        setError(null);
-        // Filter on the stored feed status rather than fetching everything and
-        // deciding client-side, so paging stays meaningful on a busy chain.
-        const req = openOnly
-            ? { chainId, query: 'open', type: 'status', opts: { limit: 50 } }
-            : { chainId, opts: { limit: 50 } };
-        messaging.betFeeds(req)
-            .then((resp) => { if (!cancelled) setRows(extractRows(resp)); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load markets.'); });
-        return () => { cancelled = true; };
+
+        // `clear` separates the FIRST read of a chain/filter from the refreshes
+        // that follow it: blanking the rows is what shows "Loading markets…",
+        // and doing that every 30 seconds would flash the whole list.
+        const load = (clear) => {
+            if (clear) { setRows(null); setError(null); }
+            // Filter on the stored feed status rather than fetching everything and
+            // deciding client-side, so paging stays meaningful on a busy chain.
+            const req = openOnly
+                ? { chainId, query: 'open', type: 'status', opts: { limit: 50 } }
+                : { chainId, opts: { limit: 50 } };
+            return messaging.betFeeds(req)
+                .then((resp) => { if (!cancelled) { setRows(extractRows(resp)); setError(null); } })
+                .catch((err) => {
+                    // A failed REFRESH keeps the markets already on screen: they
+                    // are still the best thing known about the chain, and
+                    // replacing them with an error would punish a momentary blip.
+                    if (cancelled) return;
+                    if (clear) setError(err?.message || 'Failed to load markets.');
+                });
+        };
+
+        load(true);
+        // A market's status is a property of the CHAIN and changes without the
+        // user doing anything: a deadline passes, an oracle resolves, someone
+        // opens a new market. Nothing here used to re-read, so a hub left open
+        // kept saying "Taking bets" about a market that had closed, and
+        // re-selecting Betting from the palette did not help - the route is
+        // already mounted, so nothing re-runs. Measured in a live run: six list
+        // requests, all in the first thirty seconds, and none after the market
+        // closed several minutes later.
+        // No visibility gate on purpose. The wallet's background-poll routes
+        // gate on `document.visibilityState`, which is right for a poll that
+        // drives a submit; this one only replaces a read-only list, and a gate
+        // would leave a returning user looking at whatever was true when they
+        // last had the tab in front of them.
+        const timer = setInterval(() => load(false), REFRESH_MS);
+        return () => { cancelled = true; clearInterval(timer); };
     }, [chainId, openOnly, messaging]);
 
     const header = <PageHeader onBack={onBack} title="Betting" />;
