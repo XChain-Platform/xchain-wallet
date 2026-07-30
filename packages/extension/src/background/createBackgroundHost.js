@@ -777,8 +777,29 @@ export function createBackgroundHost(deps) {
         return { exists: (await vault.wallets.get(id)) !== null };
     });
 
-    host.register('wallet.create', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('wallet.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const r = await createWallet({ ...req, vault, chainRegistry, sdkRegistry });
+        // Same adoption as wallet.add.import below, and for a sharper reason
+        // than "no password on accounts": a wallet CREATED inside an open
+        // session had no signer in the pool, so anything that must sign
+        // WITHOUT a prompt silently could not. PC-16 auto-pay is exactly that
+        // - CoinpayAutopayWatcher asks getSigner(walletId), gets null, and
+        // classifies the wallet unsignable - while the order form's success
+        // screen promises "matches on this order will be paid automatically
+        // while a wallet holding it is unlocked". Measured on LTC regtest: an
+        // armed order matched, the obligation sat pending for ten minutes with
+        // the wallet open and unlocked, and no COINPAY was ever sent.
+        if (signerPool && req?.password) {
+            try {
+                await signerPool.unlockOne({
+                    wallet: r.wallet,
+                    password: req.password,
+                    bip39Passphrase: req.bip39Passphrase,
+                    chainRegistry,
+                    sdkRegistry,
+                });
+            } catch { /* best-effort: fallback is per-op password prompt */ }
+        }
         return {
             mnemonic: r.mnemonic,
             wallet: toSafeWallet(r.wallet),

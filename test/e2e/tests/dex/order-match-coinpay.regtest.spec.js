@@ -387,4 +387,142 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(ASK_SATS);
         });
     });
+
+    // The PAYING half of PC-16. `order-autopay-arming.regtest.spec.js` proves the
+    // wallet takes the consent and can withdraw it; this proves the consent is
+    // ACTED ON - that a match against an armed order is paid with no user action
+    // at all. It is the only place in this campaign where the wallet spends coin
+    // while nobody is driving it, so the assertion that matters is the one about
+    // what was NOT done: Payments due is never opened and nothing is clicked
+    // after the order is placed.
+    //
+    // Two gates decide how long this takes and both are the product's, not the
+    // harness's: the watcher polls once a minute (CoinpayAutopayWatcher's
+    // DEFAULT_INTERVAL_MS) and `autopayPolicy` refuses to pay a match shallower
+    // than two confirmations (DEFAULT_CONFIRM_DEPTH), so the spec mines past that
+    // depth and then simply waits.
+    // KNOWN FAILING, and it is the product that fails, not the spec: see
+    // D-139/. Measured twice, ~10 minutes each, on a venue where the
+    // MANUAL queue settles the identical obligation in seconds (COINPAY 1524,
+    // 1551). Left as fixme rather than deleted because it is the executable
+    // statement of the promise the order form makes, and it will pass the
+    // moment that promise is kept.
+    //
+    // Two mechanisms have been ruled OUT already, so do not start there:
+    //   - the web-shell acknowledgement gate (the run ticks it and the success
+    //     screen confirms "Auto-pay is armed");
+    //   - a missing signer for the payer wallet: `wallet.create` did not adopt
+    //     the created wallet into the signer pool while `wallet.add.import`
+    //     did, which is fixed and pinned (test/smoke/core/
+    //     wallet-create-signer-adoption.smoke.js) - and the lane still did not
+    //     pay, so that was a real gap but not this one.
+    // NEXT PROBE, cheapest first: CoinpayAutopayWatcher is constructed with
+    // `logger: console`, so run this spec with a console listener attached and
+    // read its own verdict - `evaluateObligation` returns a NAMED reason
+    // (amounts-unavailable / amount-mismatch / terms-unparseable / depth), and
+    // whichever it is names the next fix.
+    test.fixme('an armed order pays its own match, with nobody driving the wallet', async ({ page }) => {
+        let maker;
+        let taker;
+        let makerOrder;
+        let takerOrder;
+
+        await test.step('wallet A sells tokens for coin', async () => {
+            await createWallet(page, { password: PASSWORD, name: 'Maker Wallet' });
+            await switchToRegtest(page, PASSWORD);
+
+            ({ source: maker } = await openCreateOrder(page));
+            await fundAddress(maker, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            await mintXchain(page, MINT);
+            await waitForBalanceAtLeast(maker, 'XCHAIN', MINT);
+
+            const { main } = await openCreateOrder(page);
+            await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
+            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
+            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
+            await main.getByRole('button', { name: /^Place order/ }).click();
+            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const action = await waitForIndexedAction(await approveAndGetTxid(page));
+            expect(String(action.status), 'the chain rejected the maker order').toBe('valid');
+            makerOrder = String(action.action_index);
+        });
+
+        await test.step('wallet B mirrors it with auto-pay ARMED', async () => {
+            await gotoPalette(page, 'Switch wallet');
+            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await createWallet(page, { password: PASSWORD, name: 'Autopay Taker', navigate: false });
+            await gotoPalette(page, 'Switch wallet');
+            await page.getByRole('button', { name: /Autopay Taker/ }).first().click();
+            await expect(page.getByRole('button', { name: /Autopay Taker/ }).first())
+                .toBeVisible({ timeout: 30_000 });
+
+            ({ source: taker } = await openCreateOrder(page));
+            expect(taker, 'wallet B derived the same address as wallet A').not.toBe(maker);
+            await fundAddress(taker, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+
+            const { main } = await openCreateOrder(page);
+            await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
+            await main.getByRole('radio', { name: 'A token' }).last().check();
+            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
+            await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
+            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
+
+            // Left ON this time, and the web shell's acknowledgement taken: this
+            // is the arming the rest of the test depends on.
+            await expect(main.getByRole('checkbox', { name: /Enable CoinPay auto-pay/ })).toBeChecked();
+            await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
+
+            await main.getByRole('button', { name: /^Place order/ }).click();
+            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const action = await waitForIndexedAction(await approveAndGetTxid(page));
+            expect(String(action.status), 'the chain rejected the taker order').toBe('valid');
+            takerOrder = String(action.action_index);
+            await expect(page.getByRole('main'), 'the wallet did not report the order as armed')
+                .toContainText(/Auto-pay is armed/, { timeout: 30_000 });
+        });
+
+        await test.step('nobody touches the wallet, and the payment happens anyway', async () => {
+            const match = await waitForMatch(makerOrder, takerOrder);
+            expect(String(match.settlement_type)).toBe('coinpay');
+            const obligation = await waitForObligation(taker, 'pending_coinpay');
+            expect(String(obligation.payer_address)).toBe(taker);
+
+            // Past the policy's two-confirmation floor. Mined here rather than
+            // waited for, because the venue only makes blocks when something
+            // asks: this is the harness supplying chain time, not user input.
+            await minerRpc('generate_blocks', { count: 3 });
+
+            // From here the spec does NOTHING to the page: no navigation, no
+            // clicks. If a COINPAY appears, the wallet decided to send it.
+            const deadline = Date.now() + 600_000;
+            let coinpay = null;
+            while (Date.now() < deadline && !coinpay) {
+                const list = await explorerJson('actions?limit=100');
+                const row = (list?.data || []).find((r) => String(r.action) === 'COINPAY'
+                    && String(r.source) === taker);
+                if (row) coinpay = await explorerJson(`action/${row.action_index}`);
+                else { await mineIfPending(); await new Promise((r) => setTimeout(r, 5_000)); }
+            }
+            expect(coinpay,
+                'an armed order matched and no COINPAY was ever sent, so PC-16 consent buys nothing: '
+                + 'the obligation sits on its deadline waiting for a user who was told they need not act')
+                .toBeTruthy();
+            expect(String(coinpay.status), 'the chain rejected the auto-payment').toBe('valid');
+            expect(Math.round(Number(coinpay.coin_amount) * 1e8),
+                'auto-pay sent an amount other than the one the obligation owed')
+                .toBe(ASK_SATS);
+
+            const settled = await waitForObligation(taker, 'fulfilled');
+            expect(Math.round(Number(settled.coin_amount) * 1e8)).toBe(ASK_SATS);
+            expect(await waitForBalanceAtLeast(taker, 'XCHAIN', GIVE_TOKENS),
+                'the escrowed tokens did not reach the payer after their own auto-payment')
+                .toBe(GIVE_TOKENS);
+        });
+    });
 });
