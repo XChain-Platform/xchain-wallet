@@ -417,6 +417,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const getAmount = dispenser?.get_amount;
     const giveTick = dispenser?.give_tick;
     const giveAmount = dispenser?.give_amount;
+    // D-144: a FIAT-priced dispenser stores NO coin price. GET_AMOUNT is 0 by
+    // protocol convention and the real price is derived at settlement from
+    // FIAT_AMOUNT and the validator snapshot for GET_COIN (dispense.js ->
+    // reversePriceMatch). This panel priced straight off GET_AMOUNT and so told
+    // a buyer to "Send exactly 0 LTC per fill" - an instruction that costs them
+    // a network fee and buys nothing. The explorer already serves `fiat`,
+    // `fiat_amount` and `oracle_address` on the dispenser row; read them and say
+    // what is actually true instead of quoting a zero as if it were a price.
+    const fiatCode = dispenser?.fiat || dispenser?.fiat_code || '';
+    const fiatAmount = dispenser?.fiat_amount;
+    const oracleAddress = dispenser?.oracle_address || '';
+    const isFiatPriced = Boolean(fiatCode) && (Boolean(oracleAddress) || fiatAmount != null);
     // Where a buyer sends payment. The by-action-index read path returns the
     // flattened action row, which carries `get_address`/`source` but no
     // `address` column, so keying only on `address` left the pay-to-buy panel
@@ -1558,8 +1570,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <p className={styles.successLabel}>Pay to buy</p>
                     <p className={styles.hint}>
                         This dispenser accepts bare {getCoin} payments. Any {getCoin} wallet
-                        can trigger a fill. Send exactly {getAmount} {getCoin} per fill to
-                        the dispenser address.
+                        can trigger a fill.
+                        {isFiatPriced
+                            ? ` Its price is set in ${fiatCode}, not in ${getCoin}: the `
+                              + `${getCoin} each fill costs is worked out when your payment `
+                              + 'lands, from the price feed the network was using at that '
+                              + 'moment. Send at least that much or the payment buys nothing.'
+                            : ` Send exactly ${getAmount} ${getCoin} per fill to the dispenser address.`}
                     </p>
                     <dl className={styles.detailsList}>
                         <dt className={styles.detailsLabel}>Send to</dt>
@@ -1574,19 +1591,33 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 {copied === 'address' ? 'Copied' : 'Copy'}
                             </button>
                         </dd>
-                        <dt className={styles.detailsLabel}>Send exactly</dt>
-                        <dd className={styles.detailsValue}>
-                            <code>{getAmount} {getCoin}</code>
-                            {' '}
-                            <button
-                                type="button"
-                                onClick={() => handleCopy(String(getAmount), 'amount')}
-                                style={{ marginLeft: '0.5rem' }}
-                            >
-                                {copied === 'amount' ? 'Copied' : 'Copy amount'}
-                            </button>
-                            {' per fill'}
-                        </dd>
+                        {isFiatPriced ? (
+                            <>
+                                <dt className={styles.detailsLabel}>Price per fill</dt>
+                                <dd className={styles.detailsValue}>
+                                    {oracleAddress && fiatAmount == null
+                                        ? `Set by an oracle, in ${fiatCode}`
+                                        : `${fiatAmount} ${fiatCode}`}
+                                    {` (paid in ${getCoin} at the rate when your payment lands)`}
+                                </dd>
+                            </>
+                        ) : (
+                            <>
+                                <dt className={styles.detailsLabel}>Send exactly</dt>
+                                <dd className={styles.detailsValue}>
+                                    <code>{getAmount} {getCoin}</code>
+                                    {' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCopy(String(getAmount), 'amount')}
+                                        style={{ marginLeft: '0.5rem' }}
+                                    >
+                                        {copied === 'amount' ? 'Copied' : 'Copy amount'}
+                                    </button>
+                                    {' per fill'}
+                                </dd>
+                            </>
+                        )}
                         <dt className={styles.detailsLabel}>Per-fill give</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>

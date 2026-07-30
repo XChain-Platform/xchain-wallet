@@ -99,6 +99,21 @@ export async function oraclePriceAction(opts) {
         actionData: { action: 'PRICE', params: { ...opts.params, VERSION: '1' } },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Name the funding ADDRESS, not just its public key. Two separate
+            // things read it, and this form is on the legacy sign path where
+            // both run live rather than against a prebuilt PSBT:
+            //   - the native-coin fee pre-flight, which passes it to the
+            //     indexer as the quoted action's SOURCE. Without it the PRICE
+            //     dry run has no source to write and answers `valid:false`
+            //     with a raw SQL error, which the wallet then reports as
+            //     "the LTC fee price is temporarily unavailable" - so PRICE
+            //     could not be published at all on a chain where the coin fee
+            //     is the only lane . D-146.
+            //   - the encoder's UTXO selection, which cannot turn a bare
+            //     pubkey into a script ("has no matching Script"): the D-7
+            //     family, same two lines advancedAction.js carries.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),

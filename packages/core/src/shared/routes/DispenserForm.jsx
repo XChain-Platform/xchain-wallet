@@ -48,6 +48,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -66,6 +67,7 @@ const PROTOCOL_COIN_TICKER = {
 // fields under "Advanced options" so the §40.7.1 primary flow stays
 // uncluttered.
 const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL', 'INR', 'EUR', 'KRW'];
+
 
 // datetime-local string -> Unix seconds. DISPENSER EXPIRATION is a
 // wall-clock Unix timestamp (indexer bclte(EXPIRATION, BLOCK_TIME)),
@@ -584,8 +586,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
             return;
         }
-        if (fa && !/^\d+\.\d{2}$/.test(fa)) {
-            setFormError('Fiat amount must look like 12.34.');
+        if (fa && !isValidFiatAmount(fa)) {
+            setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
             return;
         }
         if (addressMode === 'existing' && !existingAddress) {

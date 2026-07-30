@@ -348,6 +348,42 @@ describe('e2e price seed ', () => {
             expect(() => seedMarginSeconds({ rows, chainTime: 0, coinPairs: PAIRS })).toThrow(/positive unix time/);
             expect(() => seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: [] })).toThrow(/non-empty/);
         });
+
+        it('REGRESSION: an idle chain trailing wall clock is refused, not called fresh', () => {
+            // Found live on Litecoin regtest, which mines ONLY ON DEMAND and
+            // stamps wall clock: the tip sat 5.7 hours behind, the selected rows
+            // were 60 chain-seconds old, and the health check reported 1743s of
+            // life left. The run's own first block then landed at wall clock,
+            // consumed 20,700 chain-seconds in one step, and every fee-bearing
+            // action after it answered "no current oracle price for LTC/USD
+            // (missing or stale beyond 1800s)". MIN_SEED_MARGIN_SECONDS cannot
+            // absorb that - the jump is bounded by how long the chain has been
+            // idle, not by how long the run takes - so the margin has to be
+            // judged at the time the next block will carry.
+            const trailing = CHAIN - 20_700;
+            const rows = PAIRS.map((p) => ({ coinPair: p, round: 888100012, timestamp: trailing - 60 }));
+
+            // Measured at the tip alone, this venue looks healthy. That answer is
+            // the defect, and it is what the fixture used to return.
+            expect(seedMarginSeconds({ rows, chainTime: trailing, coinPairs: PAIRS }))
+                .toBeGreaterThan(MIN_SEED_MARGIN_SECONDS);
+
+            // Measured at the next block's time, it is already dead.
+            const margin = seedMarginSeconds({
+                rows, chainTime: trailing, referenceTime: CHAIN, coinPairs: PAIRS,
+            });
+            expect(margin).toBeLessThan(0);
+            expect(margin).toBeLessThan(MIN_SEED_MARGIN_SECONDS);
+        });
+
+        it('keeps the frozen-clock regime unchanged when no reference time is given', () => {
+            // A setmocktime-pinned chain (Bitcoin regtest here) carries mocktime
+            // into its next block too, so the tip IS the right clock there and
+            // the default must not become pessimistic about it.
+            const rows = PAIRS.map(fresh);
+            expect(seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS }))
+                .toBe(seedMarginSeconds({ rows, chainTime: CHAIN, referenceTime: CHAIN, coinPairs: PAIRS }));
+        });
     });
 
     //  second half: the shared venue, where another suite's idea of what a

@@ -102,6 +102,17 @@ export async function addressPreferencesAction(opts) {
         actionData: { action: 'ADDRESS', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // The other flow still on the legacy sign path (D-146's sibling
+            // sweep): no confirm screen means no prebuilt PSBT, so `createTx`
+            // runs live and selects UTXOs from whatever names the spender. A
+            // bare pubkey is not something the utxo-tracker can turn into a
+            // script - the D-7 family, fixed the same way in advancedAction.js,
+            // sendToken, dispenserAction and the three ORDER flows. The fee
+            // quote reads it too (submitWithSigner), and an ADDRESS dry run
+            // happens not to need a source today; that is the indexer's choice
+            // to change, not a reason to leave it unnamed.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),

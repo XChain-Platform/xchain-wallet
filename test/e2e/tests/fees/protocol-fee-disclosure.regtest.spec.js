@@ -219,6 +219,15 @@ async function setFeeLane(scope, nativeFee) {
 
 /** Fills the Issue form in the requested fee lane and opens the confirm screen. */
 async function composeIssue(page, tick, { nativeFee }) {
+    // HOME FIRST, and it is not tidiness. This test composes TWICE, and after
+    // the first broadcast the shell is sitting on the Issue form's own "Token
+    // issued" terminal screen. Asking the palette for "Issue token" from there
+    // routes to a screen already active, so nothing remounts and the form stays
+    // done: the second lane then waits 30s for a Ticker field that is not on
+    // screen. Bouncing through Home forces the remount. (Session 32; the same
+    // shape the multi-recipient spec records as "the mint left the shell on its
+    // terminal screen".)
+    await gotoPalette(page, 'Home');
     await gotoPalette(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });

@@ -246,6 +246,25 @@ export function venueDisagreement({ rows, chainTime, expected }) {
  * the pairs a fee-bearing action needs (both must price, so the weaker one is
  * the venue's real answer).
  *
+ * TWO CLOCKS AGAIN, AND THEY ARE NOT THE SAME ONE THIS TIME EITHER. Selection
+ * happens at `chainTime` (the H-3 gate hides a row stamped in the chain's
+ * future, so the tip's own time decides WHICH row answers), but staleness has to
+ * be judged at the time of the block that will carry the action - which is what
+ * `referenceTime` is for. On a chain whose clock tracks wall time and which
+ * mines ONLY ON DEMAND those two are hours apart, and the difference is not
+ * academic: an idle Litecoin venue found 5.7 hours behind wall clock reported
+ * 1743s of life left, and then the run's own first block, stamped at wall clock,
+ * consumed 20,700 chain-seconds in one step and every fee-bearing action after
+ * it answered "no current oracle price for LTC/USD (missing or stale beyond
+ * 1800s)". MIN_SEED_MARGIN_SECONDS cannot absorb that: no margin inside the
+ * 1800s window can, because the jump is unbounded by the length of the run.
+ *
+ * So the caller passes the time the NEXT block will most likely carry
+ * (`max(chainTime, wallTime)` on this stack) and gets an answer that is already
+ * true after that block lands. It defaults to `chainTime`, which keeps the
+ * frozen-clock regime (`setmocktime`, where the next block carries mocktime, not
+ * wall time) reading exactly as it did.
+ *
  * Returns null when the answer is unknowable rather than bad: a pair with no
  * visible row at all. That case is deliberately not reported as 0, because the
  * caller has already asked the public endpoint whether the venue prices, and a
@@ -254,19 +273,22 @@ export function venueDisagreement({ rows, chainTime, expected }) {
  *
  * @returns {number|null} seconds, negative when the selected row is already stale
  */
-export function seedMarginSeconds({ rows, chainTime, coinPairs, maxAge = ORACLE_MAX_PRICE_AGE_SECONDS }) {
+export function seedMarginSeconds({
+    rows, chainTime, coinPairs, referenceTime, maxAge = ORACLE_MAX_PRICE_AGE_SECONDS,
+}) {
     if (!Number.isFinite(chainTime) || chainTime <= 0) {
         throw new Error(`seedMarginSeconds: chainTime must be a positive unix time, got ${chainTime}`);
     }
     if (!Array.isArray(coinPairs) || !coinPairs.length) {
         throw new Error('seedMarginSeconds: coinPairs must be a non-empty array');
     }
+    const readAt = Number.isFinite(referenceTime) && referenceTime > 0 ? referenceTime : chainTime;
 
     let worst = null;
     for (const pair of coinPairs) {
         const row = selectedSnapshot(rows, pair, chainTime);
         if (!row) return null;
-        const margin = (Number(row.timestamp) + maxAge) - chainTime;
+        const margin = (Number(row.timestamp) + maxAge) - readAt;
         if (worst === null || margin < worst) worst = margin;
     }
     return worst;

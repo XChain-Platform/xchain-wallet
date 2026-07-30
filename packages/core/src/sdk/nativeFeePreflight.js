@@ -94,6 +94,15 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
     // Found live: a stake larger than the balance answered `invalid: insufficient funds
     // (AMOUNT)`, and the wallet said the LTC fee price was temporarily unavailable.
     const detail = invalidDetailFromMessage(err);
+    // The USER-ORACLE verdicts have to be read before the price heuristic below,
+    // because they are the one family that contains the words the heuristic looks
+    // for while being neither temporary nor about the validator price feed
+    // (D-146). `ORACLE_ADDRESS (no effective oracle price)` matched both "oracle"
+    // and "price", so a Mode B dispenser pointed at a quote that has not matured
+    // was reported as "the LTC fee price is temporarily unavailable. Try again in
+    // a moment" - and a moment is 24 hours short.
+    const oracleCopy = oracleVerdictMessage(detail, coin);
+    if (oracleCopy) return oracleCopy;
     if (detail && !PRICE_REJECTION.test(detail)) {
         return `The network would refuse this action as it stands: ${detail}. Nothing was signed or ` +
                'sent. Waiting will not change this, so adjust the action and try again.';
@@ -107,6 +116,45 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
 // Whether an indexer verdict is about the price feed, which is the only part of the
 // `invalid` bucket that a user fixes by waiting.
 const PRICE_REJECTION = /price|oracle|stale/i;
+
+/**
+ * The sentence for an `ORACLE_ADDRESS (...)` verdict, or null when the verdict is
+ * not one.
+ *
+ * These come from the  oracle usage fee a Mode B dispenser owes its price
+ * publisher, and they reach this function rather than oracleFeePreflight's own
+ * error because the indexer's dry run performs that check too: on a chain where
+ * the coin fee is the only lane, the native-fee quote refuses first and the
+ * dedicated oracle pre-flight is never reached.
+ *
+ * Kept as an explicit table rather than a passthrough of the indexer's own words:
+ * the verdict names a wire field and a stage, and each of the four has a different
+ * remedy - one of which is "wait a day", one "wait a moment", and two "this wallet
+ * built the transaction wrong".
+ *
+ * @param {string | null} detail   the indexer verdict, "invalid: " already stripped
+ * @param {string} coin
+ * @returns {string | null}
+ */
+function oracleVerdictMessage(detail, coin) {
+    if (!detail || !/^ORACLE_ADDRESS\b/i.test(detail)) return null;
+    if (/no effective oracle price/i.test(detail)) {
+        return 'The price oracle this dispenser names has no price in effect yet. A published '
+            + 'price starts pricing 24 hours after the block it lands in, so a quote published '
+            + 'today cannot be used until tomorrow. Nothing was signed or sent.';
+    }
+    if (/no validator price/i.test(detail)) {
+        return `The oracle's usage fee cannot be priced right now: the network has no current `
+            + `${coin} rate to value it against. Nothing was signed or sent; try again in a moment.`;
+    }
+    if (/missing oracle fee output|insufficient oracle fee/i.test(detail)) {
+        return 'This dispenser owes its price oracle a usage fee, and the amount this wallet '
+            + 'attached does not satisfy the network. Nothing was signed or sent. Try again; if '
+            + 'it keeps failing, the oracle repriced its fee mid-compose.';
+    }
+    return `The network would refuse this action as it stands: ${detail}. Nothing was signed or `
+        + 'sent. Waiting will not change this, so adjust the action and try again.';
+}
 
 // The indexer's verdict, recovered from the message the constructor built. Same
 // boundary-survival reason as dustAmountFromMessage: the popup receives only

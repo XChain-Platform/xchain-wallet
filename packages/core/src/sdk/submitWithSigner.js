@@ -218,7 +218,14 @@ export async function submitWithSigner({
             sdk,
             actionData,
             encoderOpts,
-            source: encoderOpts.change,
+            // `change` is the address the spender gets its leftovers back on and
+            // `sourceAddress` is the address the SDK funds FROM; they are the same
+            // address on every flow that sets them, and either one answers "who is
+            // spending" for the quote. Reading only `change` meant a flow that set
+            // one and not the other quoted with NO source, and an indexer dry run
+            // that needs a source answers `valid:false` - which the wallet reports
+            // as an unavailable price feed (D-146).
+            source: encoderOpts.change || encoderOpts.sourceAddress,
             onProgress,
         });
         // Step 1c: PRICE v1 oracle usage fee. A Mode B dispenser must pay its oracle

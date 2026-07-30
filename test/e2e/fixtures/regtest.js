@@ -365,7 +365,17 @@ async function priceHealth(venue) {
         const chainTime = Number(state.chainTime);
         const rows = state.rows || [];
         return {
-            margin: seedMarginSeconds({ rows, chainTime, coinPairs: [XCHAIN_PAIR, venue.coinPair] }),
+            // Judged at the time the NEXT block will carry, not at the tip's.
+            // LTC and DOGE regtest mine only on demand and stamp wall clock, so
+            // an idle venue's tip can sit hours behind: measured in chain
+            // seconds a row there looks fresh, and the run's own first block
+            // ages it out in a single step. See seedMarginSeconds.
+            margin: seedMarginSeconds({
+                rows,
+                chainTime,
+                referenceTime: Math.max(chainTime, Math.floor(Date.now() / 1000)),
+                coinPairs: [XCHAIN_PAIR, venue.coinPair],
+            }),
             disagreement: venueDisagreement({
                 rows,
                 chainTime,
@@ -858,7 +868,14 @@ export async function selectVenueChain(scope, field = 'Network') {
  */
 export async function mintXchain(page, amount) {
     await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
+    // Scoped to the palette DIALOG, not to the page. A bare
+    // `getByRole('combobox').first()` picks up any <select> on the screen
+    // behind the palette - the oracle form's Currency picker, for one - and
+    // then fails with "Element is not an <input>" from inside a helper that
+    // has nothing to do with the screen it was called from.
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeVisible();
     await combobox.fill('Advanced action');
     await page.keyboard.press('Enter');
