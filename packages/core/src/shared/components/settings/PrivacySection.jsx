@@ -82,7 +82,13 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Change-address rotation"
-                hint="Use a fresh change address for every send. Improves chain-analysis resistance."
+                /* : this drives flows/changeAddress.js. The second
+                   sentence is not a caveat for its own sake - the wallet funds
+                   one action from one address, so after a rotated send the
+                   remaining balance sits on the new address and the address you
+                   sent from reads zero. Users who are not told that report it
+                   as lost funds. */
+                hint="Use a fresh change address for every send. Improves chain-analysis resistance. Your leftover balance moves to the new address, which appears in your address list as “Change #N”."
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />

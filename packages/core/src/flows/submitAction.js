@@ -34,6 +34,7 @@ import {
     BROADCAST_FAILED_TRANSIENT_NAME,
 } from './broadcastPermanence.js';
 import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
+import { resolveChangeAddress } from './changeAddress.js';
 
 /**
  *  / §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -221,6 +222,38 @@ export async function submitAction({
             sdkRegistry,
         });
 
+    //  change-address rotation. The signer is the first thing in this
+    // flow that can derive a key, so this is the earliest point a fresh
+    // internal address exists; it is also still before any encoding, so the
+    // PSBT is built against the rotated address rather than patched after.
+    //
+    // Skipped on the prebuilt path: those bytes were composed (and rotated,
+    // see the host's action.composeForConfirm) at confirm time and must be
+    // signed byte-identically. Rotating again here would allocate an index
+    // nothing spends to and change nothing on the wire.
+    //
+    // Only the self-change default is rotated - `change === sourceAddress`.
+    // A caller that deliberately points change somewhere else (createList's
+    // note: "a change address is not always the spender") is stating where
+    // the value must land, and a privacy preference does not get to move it.
+    let changeRotation = null;
+    if (!prebuiltPsbt
+        && effectiveEncoderOpts?.change
+        && effectiveEncoderOpts.change === effectiveEncoderOpts.sourceAddress) {
+        changeRotation = await resolveChangeAddress({
+            vault,
+            walletId,
+            signer,
+            chainRegistry,
+            chainId,
+            sourceAddress: effectiveEncoderOpts.sourceAddress,
+            settings: adsSettingsSnapshot,
+        });
+    }
+    const encoderOptsForSubmit = changeRotation?.rotated
+        ? { ...effectiveEncoderOpts, change: changeRotation.address }
+        : effectiveEncoderOpts;
+
     let result;
     try {
         try {
@@ -236,7 +269,7 @@ export async function submitAction({
                 // effectiveEncoderOpts above is inert on this path (createTx
                 // never runs); the adsPlan it produced still drives the post-
                 // broadcast commitAdsStep below.
-                encoderOpts: effectiveEncoderOpts,
+                encoderOpts: encoderOptsForSubmit,
                 prebuiltPsbt,
                 signer,
                 signingPaths,
@@ -388,5 +421,12 @@ export async function submitAction({
         }
     }
 
-    return { ...result, pendingTxId: pending?.id ?? null };
+    return {
+        ...result,
+        pendingTxId: pending?.id ?? null,
+        // : the address the change actually paid, so a caller can say so
+        // (and so a test can assert the rotation rather than infer it).
+        changeAddress: encoderOptsForSubmit?.change ?? null,
+        changeRotated: changeRotation?.rotated === true,
+    };
 }

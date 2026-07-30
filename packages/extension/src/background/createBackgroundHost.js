@@ -361,6 +361,77 @@ async function addressesByChain(req, { vault, chainRegistry }) {
 }
 
 /**
+ *  confirm-path preamble shared by every `*.composeForConfirm` route:
+ * settle where the change output pays, then collect the wallet's own
+ * addresses on that chain for the tamper check.
+ *
+ * Both halves in ONE place because they are coupled. Settings > Privacy's
+ * "fresh change address for every send" rotates change onto a newly derived
+ * internal address, and `buildExpectedOutputs` treats a payment to an
+ * address the wallet does not claim as tampering. Deriving the address
+ * after the own-address list was built would make every rotated send fail
+ * its own confirm check.
+ *
+ * The rotation happens HERE rather than in submitAction because the
+ * single-encode pipeline  builds the PSBT at this step and signs
+ * those exact bytes on Approve; a change address chosen later would never
+ * reach the wire.
+ *
+ * Needs an unlocked signer to derive, so it is a no-op on a locked wallet
+ * (per-op-password flows), which `resolveChangeAddress` degrades to the
+ * spending address for.
+ *
+ * @param {Object} args
+ * @param {any} args.req
+ * @param {import('@xchain-wallet/core').storage.Vault} args.vault
+ * @param {import('@xchain-wallet/core').registry.ChainRegistry} args.chainRegistry
+ * @param {import('@xchain-wallet/core').signers.SignerPool} [args.signerPool]
+ * @param {string} args.chainId              the chain the tx is funded and broadcast on
+ * @param {string} args.sourceAddress
+ * @returns {Promise<{ change: string, ownAddresses: string[] }>}
+ */
+async function confirmChangeAndOwnAddresses({
+    req, vault, chainRegistry, signerPool, chainId, sourceAddress,
+}) {
+    let change = sourceAddress;
+    try {
+        const signer = signerPool && typeof signerPool.get === 'function'
+            ? signerPool.get(req?.walletId)
+            : null;
+        if (signer) {
+            const resolved = await flows.resolveChangeAddress({
+                vault,
+                walletId: req?.walletId,
+                signer,
+                chainRegistry,
+                chainId,
+                sourceAddress,
+                settings: await vault.settings.get(),
+            });
+            if (resolved?.address) change = resolved.address;
+        }
+    } catch {
+        // Fail open to the spending address: a privacy preference must never
+        // be why a transaction cannot be composed.
+    }
+
+    // Own addresses on this chain: change back to any of them is not a
+    // tamper. Best-effort - the source and change addresses are always
+    // added, so a resolve failure only loosens change detection to those.
+    let ownAddresses = [sourceAddress];
+    try {
+        const byChain = await addressesByChain(req, { vault, chainRegistry });
+        const rows = byChain?.[chainId] || [];
+        ownAddresses = rows.map((r) => r.address).filter(Boolean);
+    } catch {
+        // fall through to [sourceAddress]
+    }
+    if (!ownAddresses.includes(sourceAddress)) ownAddresses.push(sourceAddress);
+    if (!ownAddresses.includes(change)) ownAddresses.push(change);
+    return { change, ownAddresses };
+}
+
+/**
  * Look up the Address record a `action.*.hw` handler needs to resolve
  * the right SignerRecord. The request carries `from.addressId` (the
  * Address record's id, filled by the form) OR a plain `from` triple
@@ -1743,7 +1814,7 @@ export function createBackgroundHost(deps) {
     // later slices (§5.6) reuse it without a new route. Own-chain addresses
     // (change is allowed there by the output-set check) are resolved from
     // the vault.
-    host.register('action.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('action.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const chainId = req?.chainId;
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.composeForConfirm: chainId is required');
@@ -1806,18 +1877,13 @@ export function createBackgroundHost(deps) {
             encoderOpts = { ...encoderOpts, attachPrevTx: true };
         }
 
-        // Own addresses on this chain: change back to any of them is not a
-        // tamper. Best-effort - the source address is always added by the
-        // flow, so a resolve failure only loosens change detection to that.
-        let ownAddresses = [source.address];
-        try {
-            const byChain = await addressesByChain(req, { vault, chainRegistry });
-            const rows = byChain?.[chainId] || [];
-            ownAddresses = rows.map((r) => r.address).filter(Boolean);
-            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
-        } catch {
-            // fall through to [source.address]
-        }
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
+            req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
+        });
+        // A caller that named its own change destination is stating where the
+        // value must land; a privacy preference does not get to move it. Only
+        // the default (change back to the spender) is rotated.
+        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
 
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
@@ -1835,8 +1901,10 @@ export function createBackgroundHost(deps) {
     // short-circuits it. Composing through the real builder removes the mirror
     // (spec §1: the SDK owns the logic, the wallet owns the glass).
     //
-    // No vault unlock and no signer: the builders are pure shape validation.
-    host.register('action.vote.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    // No vault unlock and no password: the builders are pure shape validation.
+    // The signer pool is read only for  change rotation, which is a
+    // no-op when the pool is empty.
+    host.register('action.vote.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const chainId = req?.chainId;
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.vote.composeForConfirm: chainId is required');
@@ -1857,15 +1925,9 @@ export function createBackgroundHost(deps) {
         // submit flow's own up-front guard does.
         const params = sdk.voting[builder](req?.params);
 
-        let ownAddresses = [source.address];
-        try {
-            const byChain = await addressesByChain(req, { vault, chainRegistry });
-            const rows = byChain?.[chainId] || [];
-            ownAddresses = rows.map((r) => r.address).filter(Boolean);
-            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
-        } catch {
-            // fall through to [source.address]
-        }
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
+            req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
+        });
 
         const composed = await composeActionForConfirm({
             vault,
@@ -1875,6 +1937,7 @@ export function createBackgroundHost(deps) {
             actionData: { action: 'VOTE', params },
             encoderOpts: {
                 pubkey: source.publicKey,
+                change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
@@ -3066,15 +3129,11 @@ export function createBackgroundHost(deps) {
         });
         const { params, broadcastChainId, source } = built;
 
-        let ownAddresses = [source.address];
-        try {
-            const byChain = await addressesByChain(req, { vault, chainRegistry });
-            const rows = byChain?.[broadcastChainId] || [];
-            ownAddresses = rows.map((r) => r.address).filter(Boolean);
-            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
-        } catch {
-            // fall through to [source.address]
-        }
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
+            req, vault, chainRegistry, signerPool,
+            chainId: broadcastChainId,
+            sourceAddress: source.address,
+        });
 
         const composed = await composeActionForConfirm({
             vault,
@@ -3087,6 +3146,7 @@ export function createBackgroundHost(deps) {
             actionData: { action: 'MESSAGE', params },
             encoderOpts: {
                 pubkey: source.publicKey,
+                change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
@@ -3337,7 +3397,7 @@ export function createBackgroundHost(deps) {
     // Compose a BET through the SDK's own builder HOST-side, so the confirm page
     // decodes what the host actually composed rather than a client-side wire
     // mirror (the  rule the vote route already follows).
-    host.register('action.bet.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('action.bet.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const chainId = req?.chainId;
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.bet.composeForConfirm: chainId is required');
@@ -3357,15 +3417,9 @@ export function createBackgroundHost(deps) {
         // Throws on bad input BEFORE the confirm page opens.
         const params = sdk.betting[builder](req?.params);
 
-        let ownAddresses = [source.address];
-        try {
-            const byChain = await addressesByChain(req, { vault, chainRegistry });
-            const rows = byChain?.[chainId] || [];
-            ownAddresses = rows.map((r) => r.address).filter(Boolean);
-            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
-        } catch {
-            // fall through to [source.address]
-        }
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
+            req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
+        });
 
         const composed = await composeActionForConfirm({
             vault,
@@ -3375,6 +3429,7 @@ export function createBackgroundHost(deps) {
             actionData: { action: 'BET', params },
             encoderOpts: {
                 pubkey: source.publicKey,
+                change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
