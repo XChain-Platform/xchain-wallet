@@ -44,6 +44,7 @@ import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -134,6 +135,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [refillBalance, setRefillBalance] = useState(
         /** @type {string | null} */ (null),
     );
+    // D-147: how many of the five refills are gone, derived from the lifecycle
+    // events this page already loads. Nothing else can answer it: this lane has
+    // no confirm screen and owes no protocol fee, so no network dry run runs on
+    // it, and a sixth refill used to be signed and broadcast against a rule that
+    // rejects it every time.
+    const refillCount = useMemo(() => refillsUsed(lifecycle), [lifecycle]);
 
     // Edit (DISPENSER v2: reschedule EXPIRATION / update ALLOW_LIST /
     // BLOCK_LIST). Blank = leave unchanged (the indexer treats a null
@@ -900,11 +907,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <p className={styles.summary}>
                     Refill dispenser #{actionIndex}: add {giveTick} to escrow.
                 </p>
-                <p className={styles.hint}>
-                    A refill resets the per-fill dispense counter (1,000 dispenses per
-                    fill). A dispenser allows up to 5 refills (6,000 lifetime dispenses);
-                    a 6th refill is rejected.
-                </p>
+                {/*
+                  * D-147: this used to be policy copy alone ("a dispenser allows
+                  * up to 5 refills … a 6th is rejected") with no count, on the one
+                  * lane the wallet cannot dry-run. It now says where THIS dispenser
+                  * stands, and when the ceiling is spent it says so as an alert and
+                  * the sign button goes away, because the alternative is a signed
+                  * transaction the chain always rejects.
+                  */}
+                {refillCount.remaining <= 0 && refillCount.exact ? (
+                    <div role="alert" className={styles.error}>
+                        {refillCeilingMessage(refillCount)}
+                    </div>
+                ) : (
+                    <p className={styles.hint}>{refillCeilingMessage(refillCount)}</p>
+                )}
                 <AmountField
                     label="Refill amount"
                     amount={refillAmount}
@@ -950,7 +967,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={refillStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        disabled={(refillCount.remaining <= 0 && refillCount.exact)
+                            || (cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0))}
                     >
                         {cancelHw
                             ? `Sign refill on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`

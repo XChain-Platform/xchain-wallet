@@ -60,7 +60,23 @@ assert.match(src, /onClick=\{\(\) => setEditStage\('confirm'\)\}/, 'Edit quick-a
 assert.match(src, /Icon\.PencilIcon/, 'Edit uses the pencil icon');
 
 // State display: refill-cap honesty, close-window banner, expiration + lists.
-assert.match(src, /up to 5 refills \(6,000 lifetime dispenses\)/, 'refill form states the 5-refill / 6000 cap');
+// D-147: this used to pin the POLICY sentence ("up to 5 refills (6,000 lifetime
+// dispenses)"), which is true of every dispenser and says nothing about the one
+// on screen. The refill lane has no confirm screen and owes no protocol fee, so
+// nothing dry-runs it, and an owner on their sixth was shown that sentence, then
+// a "Refill submitted" screen for a transaction the chain always rejects. What
+// is pinned now is the live count and the block it drives.
+assert.match(src, /refillCeilingMessage\(refillCount\)/, 'refill form states THIS dispenser\'s refill count');
+assert.match(src, /refillsUsed\(lifecycle\)/, 'the count is derived from the lifecycle events already loaded');
+assert.match(
+    src,
+    /disabled=\{\(refillCount\.remaining <= 0 && refillCount\.exact\)/,
+    'a spent refill ceiling disables Sign refill',
+);
+assert.ok(
+    !/up to 5 refills \(6,000 lifetime dispenses\)/.test(src),
+    'the refill form no longer quotes the cap as policy with no count beside it (D-147)',
+);
 assert.match(src, /const isClosing = liveStatus === 'cancelling';/, 'derives the cancelling close-window state');
 assert.match(src, /closeWindowNote/, 'renders the close-window banner');
 assert.match(src, /of 1,000 this fill/, 'labels dispenses as per-fill against the 1000 cap');
