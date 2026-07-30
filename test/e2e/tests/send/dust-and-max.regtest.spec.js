@@ -175,13 +175,16 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
                 .not.toBe('pending');
 
             const composed = await confirm.isVisible();
-            // MEASURED, and it is not what the plan assumed: the wallet DOES
-            // compose a dust send and opens the confirm screen for it. There is
-            // no dust guard on the recipient output anywhere in the wallet - the
-            // encoder's `dustAmount` governs its own CHANGE output (M-6), not
-            // what the user typed. So this leg follows the transaction to the
-            // end rather than stopping at the screen, because what matters is
-            // whether the user can be left worse off.
+            // MEASURED 2026-07-29, and it was not what the plan assumed: the
+            // wallet DID compose a dust send and open the confirm screen for it,
+            // Approve enabled, and signed it. There was no dust guard on the
+            // recipient output anywhere in the wallet; the encoder's `dustAmount`
+            // governs its own CHANGE output (M-6), not what the user typed.
+            //  added one in the Send form, so this should now read
+            // "refused before composing" and the refusal should name the floor.
+            // The leg still follows the transaction to the end when it DOES
+            // compose, because what matters is whether the user can be left worse
+            // off, and that has to keep being asked rather than assumed.
             console.log(`[dust] amount=${dustAmount} ${COIN} (floor ${dustFloor} sats) -> `
                 + (composed ? 'composed a confirm screen' : 'refused before composing'));
 

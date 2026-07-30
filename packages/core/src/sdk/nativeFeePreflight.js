@@ -264,12 +264,40 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     return { encoderOpts: { ...rest, customOutputs: outs }, quote };
 }
 
+// The dust floor per coin, in satoshis, mirroring xchain-sdk/src/coins/{BTC,LTC,DOGE}.js.
+// It does not vary by network (mainnet, testnet and regtest all carry the same number),
+// so the coin name alone determines it.
+//
+// This table is a COPY of the SDK's, and it exists because the popup has no SDK: the Send
+// form has to answer "is this amount dust?" while the user is still typing, and reaching
+// across the messaging boundary for a value that has not changed in the lifetime of any of
+// these chains would buy nothing but a race. `resolveDustThreshold` below still prefers the
+// SDK's live number wherever an SDK is in hand, so this only ever governs the UI-side check.
+export const DUST_THRESHOLD_SATS_BY_COIN = Object.freeze({
+    bitcoin: 546,
+    litecoin: 5460,
+    dogecoin: 100000,
+});
+
+/**
+ * The dust floor in satoshis for a chain-registry coin name ('bitcoin' / 'litecoin' /
+ * 'dogecoin'), or null for anything unrecognized. Null means "cannot judge", so a caller
+ * must not treat it as zero and let an amount through unchecked.
+ *
+ * @param {string | null | undefined} coin
+ * @returns {number | null}
+ */
+export function dustThresholdForCoin(coin) {
+    const dust = DUST_THRESHOLD_SATS_BY_COIN[String(coin || '').toLowerCase()];
+    return Number.isFinite(dust) ? dust : null;
+}
+
 // The chain's dust threshold, read from the SAME coin registry the SDK builds its
-// addresses and PSBTs from (BTC 546, LTC 5460, DOGE 100000), so the refusal above tracks
-// the network the transaction is actually going to. Falls back to Bitcoin's 546 when the
-// SDK was constructed without a network: the guardrail must still fire on a 2-sat fee,
-// and a too-low threshold would let exactly the doomed transaction through.
-function resolveDustThreshold(sdk) {
+// addresses and PSBTs from, so the refusal above tracks the network the transaction is
+// actually going to. Falls back to Bitcoin's floor when the SDK was constructed without a
+// network: the guardrail must still fire on a 2-sat fee, and a too-low threshold would let
+// exactly the doomed transaction through.
+export function resolveDustThreshold(sdk) {
     try {
         const params = sdk && sdk.wallet && typeof sdk.wallet.getBitcoinNetwork === 'function'
             ? sdk.wallet.getBitcoinNetwork()
@@ -277,5 +305,5 @@ function resolveDustThreshold(sdk) {
         const dust = params && Number(params.dustThreshold);
         if (Number.isFinite(dust) && dust > 0) return dust;
     } catch { /* fall through to the default */ }
-    return 546;
+    return DUST_THRESHOLD_SATS_BY_COIN.bitcoin;
 }
