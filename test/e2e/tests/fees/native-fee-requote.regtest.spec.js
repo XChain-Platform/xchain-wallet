@@ -139,6 +139,16 @@ test.describe('§11.5: the protocol fee moving while the confirm screen is open'
     test('a fee that went short between compose and Approve is refused, not broadcast', async ({ page }) => {
         const venue = VENUE_PRICE[REGTEST_COIN];
         test.skip(!venue, `no fixture price for ${REGTEST_COIN}`);
+        // This spec is about the XCHAIN-or-coin fee CHOICE, and that choice only
+        // exists on Bitcoin: off it the coin is the only lane, so there is nothing
+        // to re-quote between compose and Approve. Without this guard a run on
+        // LTC or DOGE got as far as reading the form and failed on "the form has
+        // no Bitcoin address to sign with", which reads like a wallet bug and is
+        // really just the wrong venue. Now reachable because the VENUES table
+        // carries three chains.
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `the fee choice this spec re-quotes exists only on Bitcoin; ${REGTEST_COIN} pays its protocol fee `
+            + 'in the coin with no alternative lane');
         const params = `${TICK}|${SUPPLY}|0|0|0`;
         let source;
         let composedSats;
