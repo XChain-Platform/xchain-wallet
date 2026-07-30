@@ -160,7 +160,9 @@ describe(' EXECUTE carries the native-coin fee lane', () => {
         const { messaging, calls } = harness(LTC_CHAIN);
         const utils = await mountExecute(messaging, LTC_CHAIN);
 
-        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
+        // : EXECUTE is priced, but the FORM holds no quote for it, so the
+        // row states the chain's rule rather than asserting a charge.
+        expect(utils.container.textContent).toContain('Protocol fees are paid in LTC');
         expect(utils.queryByLabelText(/Pay protocol fee in LTC instead of XCHAIN/)).toBeNull();
         // The caveat rides along on the mandatory variant too: there is no
         // opting out of the forfeiture risk on this chain, only knowing about it.

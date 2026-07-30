@@ -624,9 +624,23 @@ describe(' BET carries the native-coin fee lane', () => {
         });
         await fillMarket(utils);
 
-        // A statement, not a switch: there is nothing to choose between.
-        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
+        // : the default 14-day market is FREE, and this form holds the
+        // quote that says so, so the row states that rather than promising an
+        // LTC payment that is never made. A statement either way, never a
+        // switch: there is nothing to choose between on this chain.
+        expect(utils.container.textContent).toContain('This action has no protocol fee');
         expect(utils.queryByLabelText(/Pay protocol fee in LTC instead of XCHAIN/)).toBeNull();
+
+        // Lengthen the publish window past the free days and the same row turns
+        // definite, with the figure the quote returned.
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Time to publish the result'), {
+                target: { value: String(YEAR_WINDOW) },
+            });
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
+        expect(utils.container.textContent).toContain("This action's protocol fee is 0.165 XCHAIN.");
 
         await domAct(async () => {
             fireEvent.click(button(utils, /Review market/i));
@@ -656,6 +670,15 @@ describe(' BET carries the native-coin fee lane', () => {
             await drain();
         });
         await fillMarket(utils);
+        // A charged market, so there is a fee lane to choose between at all:
+        //  hides the switch when the quote prices the action at zero,
+        // because both settings would then pay nothing.
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Time to publish the result'), {
+                target: { value: String(YEAR_WINDOW) },
+            });
+            await drain();
+        });
 
         await domAct(async () => {
             fireEvent.click(button(utils, /Review market/i));
@@ -697,7 +720,10 @@ describe(' BET carries the native-coin fee lane', () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
         });
-        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
+        // : placing a bet IS priced (BET_PER_CREDIT), but this surface
+        // holds no quote for it, so the row states the chain's rule instead of
+        // asserting a charge it has not been given.
+        expect(utils.container.textContent).toContain('Protocol fees are paid in LTC');
 
         await domAct(async () => {
             fireEvent.click(button(utils, /Review bet/i));
@@ -746,6 +772,8 @@ describe(' BET carries the native-coin fee lane', () => {
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
         expect(compose.args.builder).toBe('resolveMarketParams');
         expect(compose.args.payFeeInNativeCoin).toBeUndefined();
-        expect(utils.container.textContent).not.toContain('Protocol fee is paid in');
+        // No fee row at all, in either voice ( gave the unquoted case a
+        // plural wording, which a `Protocol fee is paid in` check would miss).
+        expect(utils.container.textContent).not.toMatch(/Protocol fees? (is|are) paid in/);
     });
 });

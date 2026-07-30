@@ -44,8 +44,7 @@ describe('NativeFeeToggle', () => {
     it('states the fee rather than offering a switch when mandatory', () => {
         render(<NativeFeeToggle checked mandatory onChange={() => {}} coinTicker="LTC" />);
         expect(screen.queryByRole('switch')).toBeNull();
-        expect(screen.getByText('Protocol fee is paid in LTC')).toBeTruthy();
-        expect(screen.getByText(/only way to pay the protocol fee on this chain/i)).toBeTruthy();
+        expect(screen.getByText(/only way to pay a protocol fee on this chain/i)).toBeTruthy();
         // The fee is still a real on-chain payment, so the forfeit warning stays.
         expect(screen.getByText(/not refunded if the network rejects/i)).toBeTruthy();
     });
@@ -55,5 +54,51 @@ describe('NativeFeeToggle', () => {
             <NativeFeeToggle checked mandatory onChange={() => {}} coinTicker="" />,
         );
         expect(container.firstChild).toBeNull();
+    });
+
+    // . The row mounts on far more actions than the schedule prices, and
+    // an unquoted one used to be told a fee would be spent and forfeited.
+    describe(' it does not promise a fee it has not been given', () => {
+        it('speaks conditionally on LTC when the form holds no quote', () => {
+            render(<NativeFeeToggle checked mandatory onChange={() => {}} coinTicker="LTC" />);
+            expect(screen.getByText('Protocol fees are paid in LTC')).toBeTruthy();
+            expect(screen.getByText(/If this action charges one/)).toBeTruthy();
+            // The old sentence asserted a charge on BROADCAST, MINT, SLEEP and
+            // every other unpriced action.
+            expect(screen.queryByText('Protocol fee is paid in LTC')).toBeNull();
+        });
+
+        it('says the action is free when the quote prices it at zero', () => {
+            render(
+                <NativeFeeToggle
+                    checked mandatory onChange={() => {}} coinTicker="LTC"
+                    fee={{ free: true, fee: '0.00000000' }}
+                />,
+            );
+            expect(screen.getByText('This action has no protocol fee')).toBeTruthy();
+            expect(screen.queryByText(/not refunded/i)).toBeNull();
+        });
+
+        it('drops the Bitcoin payment-mode switch too when the fee is zero', () => {
+            render(
+                <NativeFeeToggle
+                    checked={false} onChange={() => {}} coinTicker="BTC" fee="0.00000000"
+                />,
+            );
+            expect(screen.queryByRole('switch')).toBeNull();
+            expect(screen.getByText('This action has no protocol fee')).toBeTruthy();
+        });
+
+        it('states the exact charge, definitely, when the quote carries one', () => {
+            render(
+                <NativeFeeToggle
+                    checked mandatory onChange={() => {}} coinTicker="LTC"
+                    fee={{ free: false, fee: '0.16500000' }}
+                />,
+            );
+            expect(screen.getByText('Protocol fee is paid in LTC')).toBeTruthy();
+            expect(screen.getByText(/protocol fee is 0\.165 XCHAIN/)).toBeTruthy();
+            expect(screen.getByText(/not refunded if the network rejects/i)).toBeTruthy();
+        });
     });
 });

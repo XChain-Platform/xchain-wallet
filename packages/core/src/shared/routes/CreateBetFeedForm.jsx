@@ -688,7 +688,11 @@ export function CreateBetFeedForm({
 
             {quoteBlock}
 
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            {/* : this form is the one that already quotes its own fee, so
+                the row states the real answer instead of the chain's rule. Most
+                markets are free (the first 90 days cost nothing), and on LTC the
+                row used to promise a coin payment for every one of them. */}
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={quote} />
 
             <Input
                 label="Your fee (optional)"

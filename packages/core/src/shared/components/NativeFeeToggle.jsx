@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { ToggleRow, ROW, ROW_HINT } from './settings/_settingsPrimitives.jsx';
-import { NATIVE_FEE_UNVERIFIED_NOTICE } from '../../sdk/nativeFeePreflight.js';
+import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
 
 /**
  * How this action's protocol fee gets paid, in the one place a form shows it.
@@ -24,11 +24,21 @@ import { NATIVE_FEE_UNVERIFIED_NOTICE } from '../../sdk/nativeFeePreflight.js';
  * already spent.
  *
  * Either way the native-coin fee is a REAL on-chain payment that is forfeited
- * if the action is rejected (no refund), so the hint stays on both variants.
- * Dumb + controlled: the authoritative price/validity check runs at submit
- * time in `applyNativeFeePreflight`, which surfaces `NativeFeeForfeitError`
- * when the action can't be priced. Renders nothing when `coinTicker` is empty
+ * if the action is rejected (no refund), so the hint stays wherever a fee is
+ * actually paid in coin. Renders nothing when `coinTicker` is empty
  * (custom/unknown chains, which do not offer native-coin fee payment).
+ *
+ * : the row no longer ASSERTS that this action charges a protocol fee.
+ * Most actions it mounts on do not - MINT, BROADCAST, DESTROY, SLEEP, SWEEP,
+ * LIST create/fork, LINK, PUBLISH, ATTACH and address preferences have no
+ * gas-schedule entry, and ORDER/SWAP/DISPENSER are free under the expiration
+ * free-days rule - and on LTC/DOGE it was telling all of them that a fee would
+ * be spent and forfeited. Pass `fee` when the form already holds a quote (see
+ * CreateBetFeedForm) and the row states the truth exactly, free or priced;
+ * without one it states the chain's RULE conditionally, which is true either
+ * way. Still deliberately dumb otherwise: the authoritative price check runs
+ * at submit in `applyNativeFeePreflight`, and the confirm screen discloses the
+ * real figure. The wording itself lives in flows/protocolFeeRow.js.
  *
  * Mount this on any QUOTABLE authoring action. Per the indexer's
  * classifyFeeQuoteAction (xchain-indexer/src/actions.js), every action is
@@ -52,27 +62,31 @@ import { NATIVE_FEE_UNVERIFIED_NOTICE } from '../../sdk/nativeFeePreflight.js';
  * @param {boolean} [props.mandatory] Chain has no XCHAIN fee lane; no choice to offer.
  * @param {boolean} [props.unverified] Action is priced without a verdict (DEPLOY/EXECUTE).
  * @param {boolean} [props.disabled]
+ * @param {*} [props.fee]  The protocol fee for THIS action if the form already
+ *   knows it: a quote object (`{ free, fee }` / `{ xchainFee }`) or a decimal
+ *   string. Omit when unknown; never pass a guess.
  */
 export function NativeFeeToggle({
     checked, onChange, coinTicker, mandatory = false, unverified = false, disabled = false,
+    fee = undefined,
 }) {
     if (!coinTicker) return null;
-    const forfeitHint =
-        'The fee is sent on-chain and is not refunded if the network rejects this transaction.'
-        // Only when the fee is actually being paid in coin: on Bitcoin with the
-        // toggle off the fee is an XCHAIN balance debit that costs nothing when
-        // the action is rejected, so there is no unverified risk to warn about.
-        + (unverified && (mandatory || checked) ? ` ${NATIVE_FEE_UNVERIFIED_NOTICE}` : '');
+    const copy = protocolFeeRowCopy({
+        fee, coinTicker, mandatory, checked: !!checked, unverified,
+    });
 
-    if (mandatory) {
+    // A statement covers both the no-choice chains and any action whose fee is
+    // known to be zero: on a free action even Bitcoin's switch would be a
+    // choice between two ways of paying nothing.
+    if (copy.variant === 'statement') {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        {`Protocol fee is paid in ${coinTicker}`}
+                        {copy.label}
                     </span>
                     <span style={ROW_HINT}>
-                        {`${coinTicker} is the only way to pay the protocol fee on this chain. ${forfeitHint}`}
+                        {copy.hint}
                     </span>
                 </div>
             </div>
@@ -81,8 +95,8 @@ export function NativeFeeToggle({
 
     return (
         <ToggleRow
-            label={`Pay protocol fee in ${coinTicker} instead of XCHAIN`}
-            hint={forfeitHint}
+            label={copy.label}
+            hint={copy.hint}
             checked={!!checked}
             onChange={onChange}
             disabled={disabled}
