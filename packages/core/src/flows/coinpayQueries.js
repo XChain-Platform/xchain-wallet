@@ -19,6 +19,8 @@
 // its current status; callers filter to `pending_coinpay` on the
 // payer side to build the queue.
 
+import { obligationBaseUnits } from '../market/obligationStatus.js';
+
 /**
  * @typedef {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} SdkCtx
  */
@@ -141,12 +143,11 @@ export async function verifyCoinpayObligation({
     // units , where Number() rounds BOTH sides and two different
     // amounts can collide after rounding. BigInt('...') throws on a
     // non-integer shape, which is exactly the unusable-amount case.
-    let trueAmount;
-    try {
-        trueAmount = BigInt(String(row.coin_amount ?? row.coinAmount).trim());
-    } catch {
-        trueAmount = null;
-    }
+    // The explorer serves this column as the match's DECIMAL coin figure on
+    // current venues and as base units on older ones; obligationBaseUnits
+    // accepts exactly those two shapes and nothing looser, because the
+    // equality below is what stops the wallet signing a wrong amount.
+    const trueAmount = obligationBaseUnits(row.coin_amount ?? row.coinAmount);
     if (trueAmount === null || trueAmount <= 0n) {
         throw new Error(
             `verifyCoinpayObligation: ORDER_MATCH #${want} has an unusable coin_amount (${row.coin_amount ?? row.coinAmount})`,

@@ -121,6 +121,16 @@ export async function orderAction(opts) {
         actionData: { action: 'ORDER', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Select funding UTXOs BY ADDRESS and return change to the spender
+            // (the D-7 failure, same as swapAction.js): with only `pubkey` the
+            // encoder asks the utxo-tracker for the PUBLIC KEY's utxos and it
+            // answers "has no matching Script". The confirm screen hides this
+            // on the create path by handing down a prebuiltPsbt, which skips
+            // createTx entirely - so it bites exactly the callers that build
+            // live: watcher mode here, and cancel/edit below, which have no
+            // confirm screen at all. Inert on the prebuiltPsbt path.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -217,6 +227,12 @@ export async function cancelOrder(opts) {
         actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Cancel has no confirm screen, so it ALWAYS builds live: without
+            // these the encoder funds from the public key and the utxo-tracker
+            // refuses it ("has no matching Script"), which made releasing an
+            // order's escrow impossible from the wallet.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -293,6 +309,9 @@ export async function editOrder(opts) {
         actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Edit builds live too (no confirm screen); see cancelOrder above.
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),

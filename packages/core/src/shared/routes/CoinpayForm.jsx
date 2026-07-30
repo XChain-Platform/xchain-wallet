@@ -30,6 +30,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
+import { obligationBaseUnits } from '../../market/obligationStatus.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -635,10 +636,17 @@ function DetailRow({ label, value }) {
 // Number.MAX_SAFE_INTEGER so a large-DOGE obligation can't be rounded
 // into a wrong native-coin output.
 function safeBaseUnitAmount(raw) {
-    if (raw == null || raw === '') return null;
-    if (typeof raw === 'string' && !/^\d+$/.test(raw.trim())) return null;
-    const n = Number(raw);
-    if (!Number.isSafeInteger(n) || n <= 0) return null;
+    // The explorer serves an obligation's coin_amount as the match's DECIMAL
+    // coin figure on current venues and as base units on older ones, so parse
+    // both shapes through the one canonical reader (obligationBaseUnits) and
+    // keep this function's own contract: a positive, exactly-representable
+    // base-unit NUMBER, or null. Rejecting the decimal is what left the Pay
+    // screen refusing every real obligation with "a coin amount too large to
+    // pay safely" - D-137.
+    const base = obligationBaseUnits(raw);
+    if (base === null || base <= 0n) return null;
+    const n = Number(base);
+    if (!Number.isSafeInteger(n)) return null;
     return n;
 }
 

@@ -33,7 +33,8 @@ assert.match(view, /Expired, awaiting settlement/, 'expired section labeled');
 assert.match(view, /Do not pay/, 'expired copy warns against paying');
 assert.match(view, /onPay\(\{\s*chainId: row\.chainId,\s*address: row\.address,\s*orderMatchActionIndex: row\.orderMatchActionIndex,\s*\}\)/,
     'Pay now hands the CoinpayForm resume-ref shape');
-assert.match(view, /baseUnitsToCoinText\(row\.coinAmount\)/, 'amounts render BigInt-safe at coin scale');
+assert.match(view, /baseUnitsToCoinText\(obligationBaseUnits\(row\.coinAmount\)\)/,
+    'amounts render BigInt-safe at coin scale, through the parser that accepts the DECIMAL shape the\n     explorer actually serves - reading it as base units labelled a 0.5 LTC debt "0.5 base units" (D-137)');
 assert.match(view, /base units/, 'falls back to labeled base units when unconvertible');
 assert.match(view, /coinpayExpiryText\(row\.expiration\)/, 'absolute deadline shown alongside countdown');
 

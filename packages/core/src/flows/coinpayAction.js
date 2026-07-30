@@ -29,6 +29,7 @@
 // always sign from the obligation's `payer_address` because that's
 // the address the user has keys for.
 
+import { obligationBaseUnits } from '../market/obligationStatus.js';
 import { submitAction } from './submitAction.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
@@ -146,10 +147,17 @@ async function prepareCoinpay(opts, fnName) {
     // and braces: it means a future caller cannot reintroduce the bug by
     // threading its own values past the guard.
     const payeeAddress = String(obligation.payee_address ?? obligation.payeeAddress);
-    const payAmount = normalizeCoinAmount(
-        obligation.coin_amount ?? obligation.coinAmount,
-        fnName,
-    );
+    // The obligation's own figure arrives as a DECIMAL coin amount on current
+    // venues (the indexer stores the match's coin fill verbatim) and as base
+    // units on older ones, while normalizeCoinAmount's contract - and every
+    // ceiling check inside it - is base units. Convert first, through the one
+    // canonical reader, then let those checks run unchanged. D-137.
+    const obligationBase = obligationBaseUnits(obligation.coin_amount ?? obligation.coinAmount);
+    if (obligationBase === null || obligationBase <= 0n) {
+        throw new Error(`${fnName}: obligation has an unusable coin_amount `
+            + `(${obligation.coin_amount ?? obligation.coinAmount})`);
+    }
+    const payAmount = normalizeCoinAmount(obligationBase.toString(), fnName);
     assertValidDestination(fnName, payeeAddress, opts.chainRegistry, opts.chainId);
 
     return {
@@ -225,6 +233,16 @@ export async function coinpayAction(opts) {
         actionData: { action: 'COINPAY', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Select funding UTXOs BY ADDRESS and return change to the payer.
+            // Without these the encoder asks the utxo-tracker for the PUBLIC
+            // KEY's utxos and it answers "has no matching Script" - the D-7
+            // failure, and the sixth site of it (sendToken ,
+            // dispenserAction D-43, the three ORDER flows D-134). This lane has
+            // no confirm screen to hand down a prebuilt PSBT, so it always
+            // builds live and the fault was unconditional: no CoinPay
+            // obligation could ever be paid from the wallet.
+            sourceAddress: source.address,
+            change: source.address,
             customOutputs: [
                 { address: payeeAddress, value: coinAmount },
             ],

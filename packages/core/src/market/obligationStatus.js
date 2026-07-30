@@ -73,6 +73,41 @@ export function countdownText(secondsLeft) {
 }
 
 /**
+ * The base-unit value of a CoinPay obligation's `coin_amount`, whichever
+ * shape the explorer served it in.
+ *
+ * THE TWO SHAPES ARE REAL, and assuming one of them broke the whole lane.
+ * The indexer stores an obligation's COIN_AMOUNT as the match's own decimal
+ * coin figure (`order_match.js`: `COIN_AMOUNT: nativeCoinAmount`) and the
+ * explorer serves that column verbatim, so a 0.5 LTC debt arrives as `"0.5"`.
+ * Every wallet reader assumed base units and rejected anything that was not
+ * all digits, which was measured on Litecoin regtest 2026-07-29 to mean:
+ * Payments due labelled the debt `0.5 base units` (a figure 100,000,000x
+ * smaller than the truth, under the wrong unit); `autopayPolicy` cap 2
+ * scored every obligation `amount-mismatch`, so auto-pay could never pay;
+ * and `verifyCoinpayObligation` threw `unusable coin_amount`, so the manual
+ * Pay path refused to sign. The lane could be entered and never settled.
+ *
+ * Accepts a plain integer (base units) or a plain decimal (coin units), and
+ * NOTHING else - no hex, no octal, no exponent, no sign - because this feeds
+ * a signing-path equality check where a lenient parse is a wrong payment.
+ * A value with a fractional part is unambiguously coin units; a bare integer
+ * stays base units, which is what every other caller of this module passes.
+ *
+ * @param {unknown} raw
+ * @returns {bigint | null}
+ */
+export function obligationBaseUnits(raw) {
+    if (raw == null || raw === '') return null;
+    const s = String(raw).trim();
+    const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
+    if (!m) return null;
+    if (m[2] === undefined) return BigInt(m[1]);
+    if (m[2].length > 8) return null;
+    return BigInt(m[1]) * 100000000n + BigInt(m[2].padEnd(8, '0'));
+}
+
+/**
  * Render a base-unit native-coin amount (8 decimals: BTC/LTC/DOGE) as
  * a decimal string at coin scale. BigInt throughout: a DOGE
  * obligation can exceed Number.MAX_SAFE_INTEGER , where

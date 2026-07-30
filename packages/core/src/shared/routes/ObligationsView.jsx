@@ -24,6 +24,7 @@ import {
     classifyObligation,
     countdownText,
     baseUnitsToCoinText,
+    obligationBaseUnits,
 } from '../../market/obligationStatus.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import styles from './ObligationsView.module.css';
@@ -196,7 +197,10 @@ function rowKey(o) {
 function ObligationRow({ row, onPay }) {
     const descriptor = chainRegistry.get(row.chainId);
     const ticker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    const coinText = baseUnitsToCoinText(row.coinAmount);
+    // The explorer serves this as a decimal coin figure, not base units; read
+    // it through the shape-tolerant parser or a 0.5 LTC debt renders as
+    // "0.5 base units" (see obligationBaseUnits).
+    const coinText = baseUnitsToCoinText(obligationBaseUnits(row.coinAmount));
     const amountLabel = coinText != null
         ? `${coinText} ${ticker || 'coins'}`
         : `${String(row.coinAmount ?? '?')} base units`;
