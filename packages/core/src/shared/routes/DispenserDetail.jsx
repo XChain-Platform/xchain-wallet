@@ -1586,9 +1586,36 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {showPayHere ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
                     <p className={styles.successLabel}>Pay to buy</p>
+                    {/*
+                      * D-148: this used to say "Any {coin} wallet can trigger a
+                      * fill" unconditionally, and for a dispenser carrying an
+                      * allow- or block-list that is the opposite of the truth.
+                      * The gate runs in dispense.js AFTER the coin has moved -
+                      * a dispenser is triggered by a BARE payment - so a buyer
+                      * the list refuses is out the trigger price and the miner
+                      * fee and receives nothing. Measured on Litecoin regtest:
+                      * 5,005,460 sats for a refused fill, unrecoverable.
+                      */}
+                    {currentAllowList || currentBlockList ? (
+                        <p role="alert" className={styles.warning}>
+                            <strong>This dispenser is restricted.</strong>{' '}
+                            {currentAllowList
+                                ? `Only addresses on list #${currentAllowList} can trigger a fill.`
+                                : ''}
+                            {currentAllowList && currentBlockList ? ' ' : ''}
+                            {currentBlockList
+                                ? `Addresses on list #${currentBlockList} are barred from triggering it.`
+                                : ''}
+                            {' '}A payment from an address it refuses is <strong>not returned</strong>:
+                            the {getCoin} is spent, the dispense is recorded invalid, and nothing
+                            comes back. Check you are on the right side of the list before sending.
+                        </p>
+                    ) : null}
                     <p className={styles.hint}>
-                        This dispenser accepts bare {getCoin} payments. Any {getCoin} wallet
-                        can trigger a fill.
+                        This dispenser accepts bare {getCoin} payments.
+                        {currentAllowList || currentBlockList
+                            ? ''
+                            : ` Any ${getCoin} wallet can trigger a fill.`}
                         {isFiatPriced
                             ? ` Its price is set in ${fiatCode}, not in ${getCoin}: the `
                               + `${getCoin} each fill costs is worked out when your payment `
