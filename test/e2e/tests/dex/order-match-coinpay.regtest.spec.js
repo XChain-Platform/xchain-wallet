@@ -421,7 +421,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     // read its own verdict - `evaluateObligation` returns a NAMED reason
     // (amounts-unavailable / amount-mismatch / terms-unparseable / depth), and
     // whichever it is names the next fix.
-    test.fixme('an armed order pays its own match, with nobody driving the wallet', async ({ page }) => {
+    test('an armed order pays its own match, with nobody driving the wallet', async ({ page }) => {
         let maker;
         let taker;
         let makerOrder;

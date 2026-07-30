@@ -62,7 +62,7 @@ import {
     getCoinpayObligationsForAddress,
 } from '../flows/coinpayQueries.js';
 import { estimateNativeSendFeeTiers, displayRateToSettingsCustom } from '../flows/feeEstimate.js';
-import { baseUnitsToCoinText } from '../market/obligationStatus.js';
+import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
 import { randomUUID } from '../util/uuid.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
@@ -451,7 +451,25 @@ export class CoinpayAutopayWatcher {
 
     async _pay({ chainId, row, consent, matchIndex, signer }) {
         const payee = row.payee_address ?? row.payeeAddress;
-        const amountBase = String(row.coin_amount ?? row.coinAmount);
+        // The explorer serves this as the match's DECIMAL coin figure, so it is
+        // converted ONCE here and every downstream use - the reservation hold,
+        // the caps ledger, the payment itself and the notification copy - reads
+        // base units. Taking the raw column threw `Cannot convert 0.5 to a
+        // BigInt` out of the hold computation below, and because that runs
+        // inside the poll cycle it killed the whole cycle: no obligation was
+        // ever evaluated, so an armed order simply never paid and the only
+        // trace was one console line a minute (measured on LTC regtest).
+        const amountBaseValue = obligationBaseUnits(row.coin_amount ?? row.coinAmount);
+        if (amountBaseValue === null || amountBaseValue <= 0n) {
+            await this._notifyOnce(matchIndex, 'unusable-amount', {
+                kind: 'coinpay-autopay-manual',
+                title: 'Payment needs attention',
+                body: 'A matched order needs payment but its amount could not be read. Pay manually from Payments due.',
+                data: { chainId, orderMatchActionIndex: matchIndex, reason: 'unusable-amount', urgency: 'high' },
+            });
+            return;
+        }
+        const amountBase = amountBaseValue.toString();
 
         // Source ref: the consented order's address record (auto-pay
         // signs with that address's key only and never pulls coin from
