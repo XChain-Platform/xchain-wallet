@@ -964,12 +964,15 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'controller-bind' && activeWalletId && tokenDetailRef) {
+            // D-153: see the web shell. The ADDRESS-scoped half of this form
+            // has nothing to do with tokens, so a token context must not gate
+            // the route.
+            if (unlockedView === 'controller-bind' && activeWalletId) {
                 return (
                     <ControllerBindForm
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
+                        chainId={tokenDetailRef?.chainId}
+                        tick={tokenDetailRef?.tick}
                         onBack={formBack}
                     />
                 );

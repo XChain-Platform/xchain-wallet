@@ -47,7 +47,11 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
-const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake'];
+// The locked-fact list, used only until the SDK answers. Mirrors the indexer's
+// CONTROLLER_BINDABLE_CLASSES: 'all' is the catch-all (every class, present and
+// future, wherever no class-specific controller covers one) and 'ownership'
+// gates a token's ownership deed-over rather than its balances.
+const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'];
 
 /**
  * Controller-bind authoring form: Phase F (Part 3b).
@@ -56,7 +60,9 @@ const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake'];
  * the user issued (TICK → ISSUE v6) or the signing address itself
  * (ADDRESS v1). The guard `controller` is the action_index of a
  * deployed contract; `actionClass` ∈ {transfer, trade, burn, mint,
- * stake} names which native actions the guard gates; `cooldownBlocks`
+ * stake, ownership, all} names which native actions the guard gates
+ * (`all` is the catch-all: every class, present and future, wherever no
+ * class-specific controller covers one); `cooldownBlocks`
  * delays an unbind taking effect (bind only).
  *
  * Stage machine mirrors the other contract forms: form → review →
@@ -114,7 +120,22 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                const addrs = (byChain?.[chainId] || []).filter(
+                // D-153: opened WITHOUT a token (the address-controller lane),
+                // there is no chain to inherit, so default to the first chain
+                // the wallet has an address on - the same rule `useActionForm`
+                // applies to every other free-entry form. Without it the form
+                // renders its "no address on this chain" error over a wallet
+                // that has plenty, because `chainId` is simply undefined.
+                let cid = chainId;
+                if (!cid) {
+                    cid = Object.keys(byChain || {})[0];
+                    if (!cid) {
+                        setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                        return;
+                    }
+                    setChainId(cid);
+                }
+                const addrs = (byChain?.[cid] || []).filter(
                     (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
                 );
                 if (addrs.length === 0) {
@@ -275,13 +296,21 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setFormError('No token selected to bind. Open this form from a token you issued.');
             return;
         }
-        if (!String(controller).trim()) {
-            setFormError('Guard contract is required (the action number of a deployed contract).');
-            return;
-        }
-        if (Number.isNaN(Number(controller)) || Number(controller) < 0 || !Number.isInteger(Number(controller))) {
-            setFormError('Guard contract must be a whole number that is zero or greater (the contract’s action number).');
-            return;
+        // An UNBIND names no contract: the wire field is empty and the indexer
+        // resolves the live binding for ACTION_CLASS itself, ignoring anything
+        // sent here (xchain-indexer issue.js format 6). Requiring it made the
+        // ONLY surface that releases a token from a guard demand a number the
+        // action does not use - and, since the submit button was gated on the
+        // same emptiness with no message, it simply sat disabled.
+        if (!unbind) {
+            if (!String(controller).trim()) {
+                setFormError('Guard contract is required (the action number of a deployed contract).');
+                return;
+            }
+            if (Number.isNaN(Number(controller)) || Number(controller) < 0 || !Number.isInteger(Number(controller))) {
+                setFormError('Guard contract must be a whole number that is zero or greater (the contract’s action number).');
+                return;
+            }
         }
         if (!actionClass) {
             setFormError('Pick an action class to gate.');
@@ -444,7 +473,10 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    {verb} guard contract #{String(controller).trim()} over the {actionClass} actions of {subjectLabel}.
+                    {unbind
+                        ? `Stop gating the ${actionClass} actions of ${subjectLabel}. `
+                            + 'Whichever contract currently guards that class is released.'
+                        : `Bind guard contract #${String(controller).trim()} over the ${actionClass} actions of ${subjectLabel}.`}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -457,8 +489,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     </dd>
                     <dt className={styles.detailsLabel}>Subject</dt>
                     <dd className={styles.detailsValue}>{subjectLabel}</dd>
-                    <dt className={styles.detailsLabel}>Guard contract</dt>
-                    <dd className={styles.detailsValue}>#{String(controller).trim()}</dd>
+                    {!unbind ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Guard contract</dt>
+                            <dd className={styles.detailsValue}>#{String(controller).trim()}</dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Action class</dt>
                     <dd className={styles.detailsValue}>{actionClass}</dd>
                     <dt className={styles.detailsLabel}>Operation</dt>
@@ -603,17 +639,27 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 </select>
             </label>
 
-            <Input
-                label="Guard contract"
-                hint="The action number of the deployed contract that will gate the selected actions."
-                inputMode="numeric"
-                value={controller}
-                onChange={(e) => setController(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {/*
+              * Bind only, like the cooldown field below. An unbind sends an
+              * EMPTY controller and the chain resolves the live binding for the
+              * chosen class itself, so a value typed here would be discarded -
+              * and offering the field on a drop invites an owner to believe
+              * they are choosing WHICH controller comes off, when the class is
+              * what decides that.
+              */}
+            {!unbind ? (
+                <Input
+                    label="Guard contract"
+                    hint="The action number of the deployed contract that will gate the selected actions."
+                    inputMode="numeric"
+                    value={controller}
+                    onChange={(e) => setController(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            ) : null}
 
             <label className={styles.pickerLabel}>
                 Action class
@@ -627,6 +673,21 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     ))}
                 </select>
             </label>
+            {/*
+              * Two of the seven classes do not mean what their name suggests,
+              * and both are consequential enough that offering them unlabelled
+              * would be its own defect: `all` hands the contract every class,
+              * including ones the protocol has not added yet, and `ownership`
+              * gates the deed rather than the balances - which reads as a
+              * synonym for `transfer` and is not one.
+              */}
+            <p className={styles.hint}>
+                {actionClass === 'all'
+                    ? 'all: every class, including ones added later. A class-specific binding still wins over this one.'
+                    : actionClass === 'ownership'
+                        ? 'ownership: transfers of the token itself (including a sweep), not transfers of its balances.'
+                        : 'The native actions this guard is asked about. One binding per class.'}
+            </p>
 
             <label className={styles.pickerLabel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <input
@@ -679,7 +740,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !String(controller).trim() || actionConfirm.composing}
+                    disabled={!fromAddress || (!unbind && !String(controller).trim()) || actionConfirm.composing}
                 >
                     {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
                 </Button>

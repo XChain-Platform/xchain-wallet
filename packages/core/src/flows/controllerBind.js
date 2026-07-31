@@ -34,7 +34,7 @@
  * @property {boolean} unbind
  * @property {string} [tick]            required when target === 'token'
  * @property {string} controller        action_index of the guard contract
- * @property {string} actionClass       transfer | trade | burn | mint | stake
+ * @property {string} actionClass       transfer | trade | burn | mint | stake | ownership | all
  * @property {string|number} [cooldownBlocks]  bind only; ignored on unbind
  * @property {string} [memo]
  */
@@ -133,7 +133,9 @@ export function controllerBindParams(opts) {
  * @returns {string[]}
  */
 export function controllerActionClasses(sdkRegistry, chainId) {
-    const FALLBACK = ['transfer', 'trade', 'burn', 'mint', 'stake'];
+    // Mirrors the indexer's CONTROLLER_BINDABLE_CLASSES (bindable, not routable:
+    // a bind may target the 'all' catch-all, which no incoming action routes to).
+    const FALLBACK = ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'];
     try {
         const sdk = sdkRegistry.get(chainId);
         const fn = sdk && sdk.controller && sdk.controller.actionClasses;

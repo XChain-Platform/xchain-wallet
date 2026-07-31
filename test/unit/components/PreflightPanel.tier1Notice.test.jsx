@@ -96,6 +96,37 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
             .toContain('timeout after 4000ms');
     });
 
+    // Session 34. The SDK routes a DECLINED Tier-1 answer through this same
+    // code (a controller-bound action, a denylisted VM action, a fee-exempt
+    // reply): the network was reached and refused to judge, which is not an
+    // approval either. The headline therefore has to be true of BOTH states,
+    // which "the network was not reached" was not.
+    const DRYRUN_DECLINED_FINDING = {
+        code: 'DRYRUN_UNAVAILABLE',
+        severity: 'info',
+        source: 'dryrun',
+        message: 'The network declined to judge this action (guardInert); relying on client checks.',
+        data: {},
+    };
+
+    it('does NOT call a DECLINED verdict "Looks good" either', () => {
+        mount(reportWith('pass', [DRYRUN_DECLINED_FINDING]));
+        expect(chip().textContent).not.toContain('Looks good');
+        expect(chip().textContent).toMatch(/local checks only/i);
+        expect(panel().getAttribute('data-dryrun')).toBe('unreached');
+    });
+
+    it('states the DECLINED reason without claiming the network was unreachable', () => {
+        mount(reportWith('pass', [DRYRUN_DECLINED_FINDING]));
+        const notice = screen.getByTestId('preflight-notice-DRYRUN_UNAVAILABLE');
+        // The headline must not assert unreachability on an answer that
+        // arrived; the SDK's own words carry which of the two states it was.
+        expect(notice.textContent).not.toMatch(/network was not reached/i);
+        expect(notice.textContent).toMatch(/not a network approval/i);
+        expect(notice.textContent).toMatch(/declined to judge/i);
+        expect(notice.textContent).toContain('guardInert');
+    });
+
     it('states the network verdict when the network DID answer', () => {
         mount(reportWith('pass', [DRYRUN_VALID_FINDING]));
         expect(chip().textContent).toBe('Looks good');

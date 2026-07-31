@@ -34,7 +34,12 @@ const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
 // nothing on the screen used to say it.
 const NOTICE_COPY = {
     [DRYRUN_VALID]:       'The network checked this action and expects it to succeed.',
-    [DRYRUN_UNAVAILABLE]: 'The network was not reached, so only local checks ran. This is not a network approval.',
+    // Covers both ways a Tier-1 verdict goes missing: the network was
+    // unreachable, and the network answered but declined to judge (a
+    // controller-bound action, a denylisted VM action, a fee-exempt reply).
+    // The per-finding message beneath says which, so this line must be true of
+    // either - "the network was not reached" was a lie on the declined half.
+    [DRYRUN_UNAVAILABLE]: 'A network verdict was not reached, so only local checks ran. This is not a network approval.',
 };
 
 /**

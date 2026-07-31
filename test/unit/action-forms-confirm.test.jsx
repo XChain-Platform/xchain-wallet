@@ -432,6 +432,39 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // Session 34. The other half of the same form, and the half that had never
+    // been driven: UNBIND is the ONLY way a token is released from a guard, and
+    // it composed nothing at all. The form required "Guard contract" and gated
+    // its submit button on the same value - but an unbind sends an EMPTY
+    // CONTROLLER, because the chain resolves the live binding for the chosen
+    // class itself. So the button sat disabled, with no message, on the one
+    // action a controlled token's owner cannot do without.
+    //
+    // `fill` deliberately sets no Guard contract: typing one would make this
+    // test pass against the defect.
+    it('ControllerBindForm composes an UNBIND with no guard contract at all', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: ControllerBindForm,
+            props: { tick: 'JDOG' },
+            actionLabel: 'Unbind',
+            fill: (utils) => {
+                fireEvent.click(utils.getByLabelText(/^Unbind/));
+            },
+        });
+        const built = calls.find((c) => c.method === 'buildControllerBindParams');
+        expect(built, 'the unbind reached the host builder').toBeTruthy();
+        expect(built.args.unbind, 'built as a drop, not a bind').toBe(true);
+        expect(built.args.target).toBe('token');
+        expect(built.args.tick).toBe('JDOG');
+        // Empty, not a placeholder: a value here would be discarded by the
+        // chain, so inventing one would only mislead the review screen.
+        expect(String(built.args.controller || '')).toBe('');
+        expectSingleEncode(calls, {
+            action: 'ISSUE',
+            submitMethod: 'advancedAction',
+        });
+    });
+
     it('ExecuteContractForm composes EXECUTE and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ExecuteContractForm,

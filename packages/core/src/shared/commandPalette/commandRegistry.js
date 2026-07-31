@@ -188,6 +188,14 @@ export function buildCommands(ctx) {
         { id: 'create-airdrop', category: 'Create', title: 'Airdrop', subtitle: 'Send to many recipients', keywords: ['airdrop', 'distribute', 'bulk'], Icon: Icon.SendIcon, run: go('airdrop') },
         { id: 'create-list', category: 'Create', title: 'Create a list', subtitle: 'Publish an address or token list', keywords: ['list', 'roster', 'allowlist'], Icon: Icon.TokenListIcon, run: go('list-create') },
         { id: 'create-publish-file', category: 'Create', title: 'Publish file', subtitle: 'Public or token-gated on-chain file', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'], Icon: Icon.UploadIcon, run: go('publish-file') },
+        // D-153: the ADDRESS-scoped half of the controller form (ADDRESS v1 -
+        // a self-imposed gate on this address's own transfers, and the
+        // recipient-side gate on what it will accept) had NO entry point at
+        // all: the only route in was Manage Token -> More -> Controller, so a
+        // wallet that had never issued a token could not reach it from any
+        // screen. Titled for the address subject, since the token subject is
+        // already reachable from the token it belongs to.
+        { id: 'create-controller-bind', category: 'Create', title: 'Bind a controller', subtitle: 'Route this address\'s actions through a guard contract', keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
         { id: 'create-advanced', category: 'Create', title: 'Advanced action', subtitle: 'Author any action by hand', keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
     );
 

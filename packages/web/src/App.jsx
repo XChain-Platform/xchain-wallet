@@ -1122,12 +1122,20 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'controller-bind' && activeWalletId && tokenDetailRef) {
+            // D-153: NOT gated on tokenDetailRef. This form has two subjects -
+            // a token (ISSUE v6) and the SIGNING ADDRESS (ADDRESS v1) - and the
+            // address one has nothing to do with tokens: it is the self-imposed
+            // spending gate and the recipient-side gate. Requiring a token
+            // context to reach the route made that whole half unreachable for
+            // anyone who had not issued a token, which is most users. Opened
+            // from the palette it arrives with neither, defaults its chain, and
+            // offers 'This address' as the only subject.
+            if (unlockedView === 'controller-bind' && activeWalletId) {
                 return (
                     <ControllerBindForm
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
+                        chainId={tokenDetailRef?.chainId}
+                        tick={tokenDetailRef?.tick}
                         onBack={formBack}
                     />
                 );
