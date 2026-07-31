@@ -1467,7 +1467,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 title="Select token"
                 onSelect={(sel) => {
                     setToken(String(sel.tick || '').toUpperCase());
-                    if (!lockedToken && sel.chainId) setChainId(sel.chainId);
+                    // Picking a token on ANOTHER chain re-targets the whole
+                    // form, so the source address has to be re-defaulted with
+                    // it: the default effect below returns early once
+                    // fromAddressId is set, so a stale id from the old chain
+                    // survives and resolves to nothing on the new one. See the
+                    // NetworkField below for what that looks like on screen.
+                    if (!lockedToken && sel.chainId) {
+                        if (sel.chainId !== chainId) setFromAddressId(null);
+                        setChainId(sel.chainId);
+                    }
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -1514,7 +1523,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <LockedTokenContext chainId={chainId} tick={token} label="Token to drop" />
             ) : (
                 <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    {/* Clearing the source address with the chain is load-
+                        bearing, not tidiness: the default effect above returns
+                        early while fromAddressId is set (so an explicit pick is
+                        not clobbered by an unrelated address refresh), which
+                        means a chain switch leaves an id belonging to the OLD
+                        chain. It resolves to nothing on the new one, and the
+                        form then renders "No address on this chain. Use Receive
+                        to generate one first." over a wallet that has plenty -
+                        with no source picker on screen to fix it with, because
+                        that control only renders when an address IS resolved.
+                        Same shape as ListCreateForm / ControllerBindForm, which
+                        have always reset here. */}
+                    <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                 </>
             )}
 
