@@ -82,6 +82,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    encoderRpc,
     fundAddress,
     minerRpc,
     seedPrices,
@@ -118,6 +119,62 @@ const AMOUNT = 25;
  * is on the WRONG-NETWORK wording and not merely on the invalid count.
  */
 const MAINNET_ADDRESS = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+
+/**
+ * The venue coin's spendable satoshis at `address`, read from the encoder's
+ * UTXO view rather than from the explorer - it is the same set the wallet
+ * spends from, so a before/after pair measures what the transaction really
+ * cost. (Method borrowed from `fees/protocol-fee-mandatory-lane`.)
+ */
+async function coinBalanceSats(address) {
+    const result = await encoderRpc('get_utxos', { address });
+    return (result?.utxos || []).reduce((sum, u) => sum + Number(u.value || 0), 0);
+}
+
+/** The composed transaction's miner fee, in satoshis, off the confirm screen. */
+async function screenNetworkFeeSats(page) {
+    const text = await page.getByTestId('confirm-fee').innerText();
+    const coin = Number(text.match(/([\d.]+)\s*[A-Z]{3,5}/)?.[1]);
+    expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
+    return Math.round(coin * 1e8);
+}
+
+/** The protocol-fee row of the confirm screen's balance projection, in sats. */
+async function projectedProtocolFeeSats(page) {
+    const deltas = page.getByTestId('action-intent-deltas');
+    if (await deltas.count() === 0) return null;
+    const text = await deltas.innerText();
+    const coin = text.match(/Protocol fee\s*[A-Z]{3,5}\s*([\d.]+)/)?.[1];
+    return coin === undefined ? null : Math.round(Number(coin) * 1e8);
+}
+
+/**
+ * Asserts the chain's own fee record for an AIRDROP that paid `recipients`
+ * addresses.
+ *
+ * AIRDROP is the only action in the wallet whose protocol fee scales with the
+ * size of its own input: the unified schedule bills `AIRDROP_PER_RECIPIENT`
+ * (100 gas units) PER recipient, and the recipients are the set the indexer
+ * resolved, not the set the wallet asked for. So a fee computed off the list
+ * length, off a flat rate, or off the wrong count is a real and plausible bug,
+ * and the gas figure is where it shows up undivided by any price.
+ */
+function expectPerRecipientFee(dropped, recipients) {
+    const fee = dropped.fee || {};
+    expect(Number(fee.gas_cost),
+        `an airdrop to ${recipients} addresses was billed ${fee.gas_cost} gas units; the unified `
+        + `schedule prices it per recipient, so it should be ${100 * recipients}`)
+        .toBe(100 * recipients);
+    // : off Bitcoin the native coin is the ONLY lane, so a fee recorded
+    // against an XCHAIN balance here would be a fee this wallet cannot pay (it
+    // holds no XCHAIN at all).
+    expect(Number(fee.payment_mode),
+        'the airdrop recorded an XCHAIN-lane fee on a chain that has no XCHAIN fee lane')
+        .toBe(1);
+    expect(Number(fee.native_coin_amount),
+        'the mandatory native lane recorded no coin amount for a fee-bearing action')
+        .toBeGreaterThan(0);
+}
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -496,6 +553,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         let listTxid;
         let listIndex;
         let airdropTxid;
+        let minerSats;
+        let projectedFeeSats;
+        let satsBefore;
 
         await test.step('onboard, fund and issue the token from the wallet\'s only address', async () => {
             issuer = await onboardAndIssue(page);
@@ -616,6 +676,21 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await main.getByRole('button', { name: /^Sign AIRDROP/ }).click();
             await expectConfirmModal(page);
+
+            // Read the screen's two money figures BEFORE approving, and the
+            // payer's coin balance with them. This is the only action in the
+            // wallet whose protocol fee scales with its own input, so "the
+            // screen projected what the chain charged" is a different claim
+            // here than it is for a flat-rate action.
+            minerSats = await screenNetworkFeeSats(page);
+            projectedFeeSats = await projectedProtocolFeeSats(page);
+            expect(projectedFeeSats,
+                'the confirm screen projected NO protocol fee for an airdrop that is about to be '
+                + 'charged one per recipient, which is  s screen: the miner fee quoted to '
+                + 'eight places and the larger charge unmentioned')
+                .not.toBeNull();
+            satsBefore = await coinBalanceSats(issuer);
+
             // The done screen prints the LIST's id above the AIRDROP's, so the
             // one already known has to be excluded by name.
             airdropTxid = await approveAndGetTxid(page, listTxid);
@@ -668,6 +743,31 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'is paying addresses nobody asked for')
                 .toBe(0);
             await waitForBalance(issuer, TICK, SUPPLY - (AMOUNT * recipients.length));
+        });
+
+        await test.step('the per-recipient fee is what the screen projected, to the satoshi', async () => {
+            const dropped = await waitForIndexedAction(airdropTxid);
+            expectPerRecipientFee(dropped, recipients.length);
+            expect(Math.round(Number(dropped.fee.native_coin_amount) * 1e8),
+                `the coin fee on chain is not the ${projectedFeeSats} sats the screen projected`)
+                .toBe(projectedFeeSats);
+
+            // What the payer actually lost: the miner fee plus the protocol
+            // fee, and nothing else.  was exactly this subtraction coming
+            // out short, and on an action whose fee is a function of its own
+            // recipient count it is the only check that would catch a
+            // projection computed off the wrong number.
+            const satsAfter = await coinBalanceSats(issuer);
+            expect(satsBefore - satsAfter,
+                `the screen projected ${minerSats + projectedFeeSats} sats (network ${minerSats} `
+                + `+ protocol ${projectedFeeSats}); the chain charged ${satsBefore - satsAfter}`)
+                .toBe(minerSats + projectedFeeSats);
+
+            // This wallet minted no XCHAIN, so a fee taken there as well would
+            // have to come out of a balance of nothing.
+            expect(await tokenBalance(issuer, 'XCHAIN'),
+                'the mandatory coin lane also touched an XCHAIN balance')
+                .toBe(0);
         });
     });
 
@@ -850,6 +950,12 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(dropped.tick)).toBe(DROP_TICK);
             expect(String(dropped.list_action_index)).toBe(listIndex);
 
+            // Three recipients here against two in the paste lane and one in
+            // the existing-list lane: three points on the per-recipient curve,
+            // and this is the one whose count came from the CHAIN rather than
+            // from anything the wallet published.
+            expectPerRecipientFee(dropped, 3);
+
             // The address that HELD the token when the list was published.
             await waitForBalance(early, DROP_TICK, AMOUNT);
             // THE ASSERTION THIS TEST EXISTS FOR: the address that became a
@@ -971,6 +1077,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(dropped.list_action_index),
                 'the AIRDROP paid a list other than the one the picker showed')
                 .toBe(listIndex);
+
+            // One recipient: the cheapest point on the per-recipient curve.
+            expectPerRecipientFee(dropped, 1);
 
             await waitForBalance(member, LIST_TICK, AMOUNT);
             expect(await tokenBalance(heldOut, LIST_TICK),
