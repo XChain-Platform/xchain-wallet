@@ -32,6 +32,13 @@ import styles from './Home.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Nothing pushes balance changes to the wallet (an incoming send, a mint
+// landing, a token someone else sent you), so Home has to poll for them.
+// 20s balances catching an incoming token promptly against hammering the
+// SDK/indexer on every open tab; see the polling effect below, which also
+// refreshes immediately on focus/visibility and pauses while hidden.
+const BALANCE_POLL_INTERVAL_MS = 20000;
+
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the
  * wallet name; body renders a per-chain balance card grid; footer
@@ -387,131 +394,177 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, [activeWalletId, messaging]);
 
     // Per-wallet load: balances, multisig indicator, pending airdrops,
-    // pending COINPAY obligations. Reruns when the active wallet OR
-    // active BIP44 account changes. Switching either flushes stale
-    // state and refetches. When `activeAccountId` is null (data layer
-    // returned no accounts for this wallet, or pre-load), the calls
-    // fall back to wallet-wide aggregation.
+    // pending COINPAY obligations. `reset: true` (wallet/account switch,
+    // manual reload key) flushes state to the loading-skeleton first;
+    // `reset: false` (poll / focus refresh below) fetches quietly in the
+    // background and only swaps state in once fresh data lands, so an
+    // incoming token doesn't flash the whole screen back to a skeleton.
+    const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
+        if (reset) {
+            setBalances(null);
+            setBalancesFetchedAt(null);
+            setActiveByChain({});
+            setMultisig(null);
+            setPendingAirdrops([]);
+            setPendingCoinpays([]);
+            setConfirmSessions([]);
+            setLoadError(null);
+        }
+
+        try {
+            let b;
+            // Cluster J FOLLOWUP 1: synthesize fabricated balances
+            // for the demo wallet so Home / Send / Receive feel
+            // populated. Uses the wallet's real address records so
+            // the rest of the app sees the same address-rooted
+            // shape it would for a funded wallet.
+            if (flowsLib.isDemoWallet(walletId) && typeof messaging.getAddressesByChain === 'function') {
+                const byChain = await messaging.getAddressesByChain(walletId, accountId);
+                b = flowsLib.synthesizeDemoBalances(byChain);
+            } else {
+                b = await messaging.getWalletBalances(walletId, accountId);
+            }
+            if (!isCancelled()) {
+                setBalances(b);
+                setBalancesFetchedAt(Date.now());
+            }
+        } catch (err) {
+            // A silent poll that fails (e.g. a transient network blip)
+            // should not stomp a screen the user is already looking at
+            // with an error banner; only surface it on the reset path.
+            if (!isCancelled() && reset) setLoadError(err?.message || 'Failed to load balances.');
+        }
+
+        if (typeof messaging.getActiveAddresses === 'function') {
+            try {
+                const active = await messaging.getActiveAddresses(walletId, accountId);
+                if (!isCancelled()) setActiveByChain(active || {});
+            } catch { /* fall back to aggregate when unavailable */ }
+        }
+
+        if (typeof messaging.getMultisigReceiveAddress === 'function') {
+            const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+            if (btcChain) {
+                messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
+                    .then((r) => {
+                        if (isCancelled()) return;
+                        if (r && Number.isInteger(r.threshold)) {
+                            setMultisig({
+                                threshold: r.threshold,
+                                cosignerCount: r.cosignerCount,
+                                scheme: r.scheme,
+                            });
+                        }
+                    })
+                    .catch(() => { /* no multisig configured */ });
+            }
+        }
+
+        if (typeof messaging.listPendingAirdropsForWallet === 'function') {
+            try {
+                const records = await messaging.listPendingAirdropsForWallet({ walletId });
+                if (!isCancelled()) {
+                    const resumable = (records || []).filter(
+                        (r) => r.stage === 'waiting-index' || r.stage === 'ready-to-airdrop',
+                    );
+                    setPendingAirdrops(resumable);
+                }
+            } catch { /* non-fatal */ }
+        }
+
+        if (typeof messaging.getCoinpayObligationsForAddress === 'function') {
+            try {
+                const byChain = await messaging.getAddressesByChain(walletId, accountId);
+                const pairs = [];
+                for (const [cId, addrs] of Object.entries(byChain || {})) {
+                    for (const a of addrs) pairs.push({ chainId: cId, address: a.address });
+                }
+                const results = await Promise.all(pairs.map((p) =>
+                    messaging.getCoinpayObligationsForAddress({
+                        chainId: p.chainId, address: p.address,
+                    })
+                        .then((resp) => ({ ...p, rows: extractObligationRows(resp) }))
+                        .catch(() => ({ ...p, rows: [] }))
+                ));
+                if (isCancelled()) return;
+                const obligations = [];
+                for (const r of results) {
+                    for (const row of r.rows) {
+                        if (!isPendingForPayer(row, r.address)) continue;
+                        obligations.push({
+                            chainId: r.chainId,
+                            address: r.address,
+                            orderMatchActionIndex: String(row.action_index ?? row.actionIndex),
+                            coinAmount: row.coin_amount,
+                            payeeAddress: row.payee_address || row.payeeAddress,
+                            expiration: row.expiration,
+                        });
+                    }
+                }
+                setPendingCoinpays(obligations);
+            } catch { /* non-fatal */ }
+        }
+
+        //  §5.4: confirms the popup closed on. Extension-only in
+        // practice (the store is chrome.storage.session), and the route
+        // answers with an empty list on the shells that have none, so no
+        // shell check is needed here.
+        if (typeof messaging.listConfirmSessions === 'function') {
+            try {
+                const resp = await messaging.listConfirmSessions();
+                if (!isCancelled()) setConfirmSessions(resp?.sessions || []);
+            } catch { /* non-fatal */ }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messaging]);
+
+    // Reruns when the active wallet OR active BIP44 account changes.
+    // Switching either flushes stale state and refetches. When
+    // `activeAccountId` is null (data layer returned no accounts for this
+    // wallet, or pre-load), the calls fall back to wallet-wide aggregation.
     useEffect(() => {
         if (!activeWalletId) return undefined;
         let cancelled = false;
-        setBalances(null);
-        setBalancesFetchedAt(null);
-        setActiveByChain({});
-        setMultisig(null);
-        setPendingAirdrops([]);
-        setPendingCoinpays([]);
-        setConfirmSessions([]);
-        setLoadError(null);
+        loadHomeData(activeWalletId, activeAccountId || undefined, {
+            reset: true,
+            isCancelled: () => cancelled,
+        });
+        return () => { cancelled = true; };
+    }, [activeWalletId, activeAccountId, homeReloadKey, loadHomeData]);
+
+    // Nothing pushes balance changes to the wallet - an incoming send, a
+    // mint landing, a token someone else sent you - so Home has to ask.
+    // Poll on an interval, and also refresh the moment the tab/window
+    // regains focus or visibility, since that's exactly when a user goes
+    // looking for a balance that "isn't showing up yet". Paused while the
+    // document is hidden so a backgrounded wallet isn't burning SDK/indexer
+    // calls for no viewer.
+    useEffect(() => {
+        if (!activeWalletId) return undefined;
+        let cancelled = false;
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
 
-        (async () => {
-            try {
-                let b;
-                // Cluster J FOLLOWUP 1: synthesize fabricated balances
-                // for the demo wallet so Home / Send / Receive feel
-                // populated. Uses the wallet's real address records so
-                // the rest of the app sees the same address-rooted
-                // shape it would for a funded wallet.
-                if (flowsLib.isDemoWallet(walletId) && typeof messaging.getAddressesByChain === 'function') {
-                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                    b = flowsLib.synthesizeDemoBalances(byChain);
-                } else {
-                    b = await messaging.getWalletBalances(walletId, accountId);
-                }
-                if (!cancelled) {
-                    setBalances(b);
-                    setBalancesFetchedAt(Date.now());
-                }
-            } catch (err) {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
-            }
+        const poll = () => {
+            if (typeof document !== 'undefined' && document.hidden) return;
+            loadHomeData(walletId, accountId, { reset: false, isCancelled: () => cancelled });
+        };
 
-            if (typeof messaging.getActiveAddresses === 'function') {
-                try {
-                    const active = await messaging.getActiveAddresses(walletId, accountId);
-                    if (!cancelled) setActiveByChain(active || {});
-                } catch { /* fall back to aggregate when unavailable */ }
-            }
+        const intervalId = setInterval(poll, BALANCE_POLL_INTERVAL_MS);
+        const onVisibilityOrFocus = () => {
+            if (typeof document !== 'undefined' && document.hidden) return;
+            poll();
+        };
+        window.addEventListener('focus', onVisibilityOrFocus);
+        document.addEventListener('visibilitychange', onVisibilityOrFocus);
 
-            if (typeof messaging.getMultisigReceiveAddress === 'function') {
-                const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
-                if (btcChain) {
-                    messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
-                        .then((r) => {
-                            if (cancelled) return;
-                            if (r && Number.isInteger(r.threshold)) {
-                                setMultisig({
-                                    threshold: r.threshold,
-                                    cosignerCount: r.cosignerCount,
-                                    scheme: r.scheme,
-                                });
-                            }
-                        })
-                        .catch(() => { /* no multisig configured */ });
-                }
-            }
-
-            if (typeof messaging.listPendingAirdropsForWallet === 'function') {
-                try {
-                    const records = await messaging.listPendingAirdropsForWallet({ walletId });
-                    if (!cancelled) {
-                        const resumable = (records || []).filter(
-                            (r) => r.stage === 'waiting-index' || r.stage === 'ready-to-airdrop',
-                        );
-                        setPendingAirdrops(resumable);
-                    }
-                } catch { /* non-fatal */ }
-            }
-
-            if (typeof messaging.getCoinpayObligationsForAddress === 'function') {
-                try {
-                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                    const pairs = [];
-                    for (const [cId, addrs] of Object.entries(byChain || {})) {
-                        for (const a of addrs) pairs.push({ chainId: cId, address: a.address });
-                    }
-                    const results = await Promise.all(pairs.map((p) =>
-                        messaging.getCoinpayObligationsForAddress({
-                            chainId: p.chainId, address: p.address,
-                        })
-                            .then((resp) => ({ ...p, rows: extractObligationRows(resp) }))
-                            .catch(() => ({ ...p, rows: [] }))
-                    ));
-                    if (cancelled) return;
-                    const obligations = [];
-                    for (const r of results) {
-                        for (const row of r.rows) {
-                            if (!isPendingForPayer(row, r.address)) continue;
-                            obligations.push({
-                                chainId: r.chainId,
-                                address: r.address,
-                                orderMatchActionIndex: String(row.action_index ?? row.actionIndex),
-                                coinAmount: row.coin_amount,
-                                payeeAddress: row.payee_address || row.payeeAddress,
-                                expiration: row.expiration,
-                            });
-                        }
-                    }
-                    setPendingCoinpays(obligations);
-                } catch { /* non-fatal */ }
-            }
-
-            //  §5.4: confirms the popup closed on. Extension-only in
-            // practice (the store is chrome.storage.session), and the route
-            // answers with an empty list on the shells that have none, so no
-            // shell check is needed here.
-            if (typeof messaging.listConfirmSessions === 'function') {
-                try {
-                    const resp = await messaging.listConfirmSessions();
-                    if (!cancelled) setConfirmSessions(resp?.sessions || []);
-                } catch { /* non-fatal */ }
-            }
-        })();
-        return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeWalletId, activeAccountId, messaging, homeReloadKey]);
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+            window.removeEventListener('focus', onVisibilityOrFocus);
+            document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+        };
+    }, [activeWalletId, activeAccountId, loadHomeData]);
 
     // : Home does not lock, in either sense. The idle timer lives
     // in each shell's AppInner via `useAutoLockPolicy`, because this
