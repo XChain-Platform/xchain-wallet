@@ -680,6 +680,7 @@ export function AddressList({
                         aria-expanded={addMenuOpen}
                         aria-label="Add or import address"
                         title="Add address"
+                        data-testid="address-add-menu"
                     >
                         <Icon.PlusIcon />
                     </button>
@@ -691,6 +692,7 @@ export function AddressList({
                                     role="menuitem"
                                     className={local.addMenuItem}
                                     onClick={() => { setAddMenuOpen(false); setShowAddModal(true); }}
+                                    data-testid="address-add-address"
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                                     Add address
@@ -925,10 +927,20 @@ export function AddressList({
 
                 <div className={local.tabPanel}>
                     <div className={local.detailCard}>
+                        {/* The testid is derived from the label so every detail field is
+                            addressable without hand-maintaining a list. Before it, a spec
+                            reading a field had to find the label text and walk to its
+                            sibling by xpath, which silently reads the WRONG field the day
+                            someone wraps the value in another element . */}
                         {fields.map((f) => (
                             <div key={f.label} className={local.detailField}>
                                 <div className={local.detailLabel}>{f.label}</div>
-                                <div className={local.detailValue}>{f.value}</div>
+                                <div
+                                    className={local.detailValue}
+                                    data-testid={'address-detail-' + f.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}
+                                >
+                                    {f.value}
+                                </div>
                             </div>
                         ))}
                     </div>

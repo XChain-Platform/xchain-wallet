@@ -1,0 +1,100 @@
+/* Mirrors the scan dropdown in AppHeader.module.css so the two header menus
+   are visually the same control. Kept in its own file because the switcher is
+   opt-in per shell and should not drag header styles into shells that never
+   render it. */
+.wrap {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.trigger {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.trigger:hover {
+    background: var(--xc-bg-muted);
+}
+
+.trigger:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: 20;
+    min-width: 208px;
+    padding: 4px;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: 8px 10px;
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-decoration: none;
+}
+
+.item:hover {
+    background: var(--xc-bg-muted);
+}
+
+.item:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.itemIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-text-muted);
+}
+
+/* The surface the user is already on: present for orientation, not a link. */
+.here {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: 8px 10px;
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    cursor: default;
+}
+
+.hereTag {
+    font-size: var(--xc-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+}

@@ -24,12 +24,22 @@ import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// VM is BTC-only at launch (see xchain-wallet registry/actions.js
-// BITCOIN_ACTIONS: DEPLOY / EXECUTE / DEPOSIT / WITHDRAW). The Contracts
-// nav item is gated on the wallet having at least one BTC address; this
-// component assumes the caller has already done that gating but also
-// surfaces the no-BTC-address case defensively.
-const VM_COIN = 'bitcoin';
+// Which chains have contracts to browse, asked of the registry rather than
+// pinned to a coin here . This file held the wallet's last hard-coded
+// bitcoin pin for the VM surfaces: the gate has ONE home, registry/actions.js
+// BTC_EXCLUSIVE_ACTIONS, and a private copy in this file meant that when the
+// registry opened contracts to LTC/DOGE the browse surface silently did not.
+// Same descriptor-driven pattern as DeployContractForm, StakingList and
+// BetFeedsList.
+//
+// DEPLOY is the right question to ask, not EXECUTE: a chain that can deploy is
+// a chain that can have contracts to list, and the two travel together.
+// The Contracts nav item is gated on the wallet having an address on one of
+// these chains; this component assumes the caller did that gating but also
+// surfaces the no-address case defensively.
+const VM_CHAINS = chainRegistry.supportedChains()
+    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY'))
+    .map((d) => d.id);
 
 /**
  * Contracts browse landing (§42.2).
@@ -44,8 +54,9 @@ const VM_COIN = 'bitcoin';
  *      lane. Documented limitation, not a silent gap.
  *   3. "Browse all contracts": sdk.getContracts() paginated.
  *
- * Chain filter is fixed to Bitcoin for now (only coin that supports
- * VM actions); testnet / regtest BTC chains appear when present. The
+ * The chain filter offers the chains whose descriptors advertise DEPLOY
+ * (VM_CHAINS above), so it follows the registry rather than a coin pinned
+ * here; testnet / regtest chains appear when present. The
  * search input filters the currently-rendered rows client-side on
  * CONTRACT_ACTION_INDEX prefix or NAME substring. The explorer
  * doesn't expose a server-side contract-name search today.
@@ -61,10 +72,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const btcChains = useMemo(
-        () => chainRegistry.byCoin(VM_COIN).map((d) => d.id),
-        [],
-    );
+    const vmChains = useMemo(() => VM_CHAINS, []);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -103,18 +111,18 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const btcChainsWithAddresses = useMemo(() => {
+    const vmChainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
-        return btcChains.filter((cid) => {
+        return vmChains.filter((cid) => {
             const rows = addressesByChain[cid];
             return Array.isArray(rows) && rows.length > 0;
         });
-    }, [btcChains, addressesByChain]);
+    }, [vmChains, addressesByChain]);
 
     const activeChains = useMemo(() => {
-        if (chainFilter === 'all') return btcChainsWithAddresses;
-        return btcChainsWithAddresses.includes(chainFilter) ? [chainFilter] : [];
-    }, [chainFilter, btcChainsWithAddresses]);
+        if (chainFilter === 'all') return vmChainsWithAddresses;
+        return vmChainsWithAddresses.includes(chainFilter) ? [chainFilter] : [];
+    }, [chainFilter, vmChainsWithAddresses]);
 
     // Phase 2: "My contracts" (deployed by one of my addresses on the
     // chain). Fan out one sdk.getContracts(addr, 'source') per address
@@ -281,13 +289,12 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
     }
-    if (btcChainsWithAddresses.length === 0) {
+    if (vmChainsWithAddresses.length === 0) {
         return wrap(
             <p className={styles.entryDescription}>
-                Contracts are available on Bitcoin only at launch
-                ({actionDisplayLabel('DEPLOY')} / {actionDisplayLabel('EXECUTE')} /
-                {' '}{actionDisplayLabel('DEPOSIT')} / {actionDisplayLabel('WITHDRAW')}).
-                Use Receive on a Bitcoin network to generate an address first.
+                Contracts ({actionDisplayLabel('DEPLOY')} / {actionDisplayLabel('EXECUTE')} /
+                {' '}{actionDisplayLabel('DEPOSIT')} / {actionDisplayLabel('WITHDRAW')}) need an
+                address on a chain that supports them. Use Receive to generate one first.
             </p>,
         );
     }
@@ -296,7 +303,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         <>
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                 <ChainFilterBar
-                    chains={btcChainsWithAddresses}
+                    chains={vmChainsWithAddresses}
                     value={chainFilter}
                     onChange={setChainFilter}
                 />

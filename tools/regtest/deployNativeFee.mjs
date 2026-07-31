@@ -40,6 +40,14 @@
 //
 // From the Mac it needs tunnels for the chain's encoder + miner ports.
 //
+// LTC/DOGE regtest indexers run with HUB_DB_NAME unset, so they read their own
+// never-refreshed price_snapshots . A hand-seeded row is only usable
+// inside ORACLE_MAX_PRICE_AGE_SECONDS (1800s) of the block time, so a venue that
+// worked an hour ago answers "no current oracle price for LTC/USD (missing or
+// stale beyond 1800s)" at the pre-flight. That is the guardrail refusing before
+// signing, not a wallet defect and not a broken run: re-seed the pair (the
+// xchain-e2e-test _ctlseed preamble) and drive again.
+//
 // The WIF is generated here, used once on regtest, and never printed.
 
 import { createRequire } from 'node:module';
@@ -127,11 +135,19 @@ async function fund(address, amount) {
 }
 
 async function actionStatus(txid) {
-    // The action-detail route is keyed by index, so find the row by txid.
+    // Two calls, because the LIST route does not carry `status` (measured
+    // 2026-07-28: its rows are action/action_index/block_index/source/timestamp
+    // /tx_hash/tx_index only). Reading the verdict off the list row therefore
+    // answered `undefined` for a perfectly valid action and this driver exited
+    // 1 on its own success - the absent-vs-invalid trap. The list resolves the
+    // txid to an index; the DETAIL route is where the verdict lives.
     const res = await fetch(`${EXPLORER}/${cfg.coin}/api/actions?limit=50`);
     const body = await res.json();
     const row = (body.data || []).find((r) => r.tx_hash === txid || r.txid === txid);
-    return row || null;
+    if (!row) return null;
+    const detailRes = await fetch(`${EXPLORER}/${cfg.coin}/api/action/${row.action_index}`);
+    const detail = await detailRes.json();
+    return { ...row, ...detail };
 }
 
 async function main() {
@@ -170,9 +186,6 @@ async function main() {
     const wif = kp.wif;
     const publicKey = kp.publicKeyHex;
     const address = sdk.wallet.deriveAddress(kp.publicKey, { type: cfg.addressType });
-    console.log(`funding ${address} ...`);
-    await fund(address, 5);
-    console.log(`funded: ${await utxoCount(address)} utxo(s)`);
 
     // The wallet's Signer interface, backed by a raw WIF instead of the vault.
     const signer = {
@@ -201,6 +214,26 @@ async function main() {
             NAME: 'xc775' + Date.now().toString(36),
         },
     };
+
+    // Fund AFTER quoting, and fund for the quote. A flat 5 coins was enough on
+    // whatever prices the regtest indexers happened to hold in July 2026, and
+    // stopped being enough the moment they moved: dogecoin-regtest quoted 20.84
+    // DOGE and the run died in the encoder ("insufficient funds ... protocol fee
+    // requires 20.84 in native coin"), which reads exactly like a wallet defect
+    // and is not one. The quote is free and side-effect-free, so take it first.
+    let fundAmount = 5;
+    try {
+        const quote = await sdk.quoteNativeFee(actionData, { source: address });
+        const feeCoins = Number(quote?.requiredFeeNative)
+            || Number(quote?.requiredFeeSats) / 1e8;
+        if (Number.isFinite(feeCoins) && feeCoins > 0) fundAmount = Math.ceil(feeCoins) + 5;
+        console.log(`pre-quote: ${quote?.requiredFeeNative ?? quote?.requiredFeeSats} -> funding ${fundAmount}`);
+    } catch (err) {
+        console.log(`pre-quote unavailable (${err?.message || err}); funding ${fundAmount}`);
+    }
+    console.log(`funding ${address} ...`);
+    await fund(address, fundAmount);
+    console.log(`funded: ${await utxoCount(address)} utxo(s)`);
 
     // The CONFIRM path: compose + tamper-check host-side, then approve the
     // PREBUILT psbt. That is the exact pair of steps a form takes, and it is a

@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
+import { PlatformSwitcher } from './PlatformSwitcher.jsx';
 import styles from './AppHeader.module.css';
 
 /**
@@ -49,6 +50,7 @@ import styles from './AppHeader.module.css';
  * @param {string} [props.networkFilter]
  * @param {(coin: string) => void} [props.onNetworkFilterChange]
  * @param {boolean} [props.showNetworkFilter]                        set false on routes where a network filter is meaningless (Send / Receive)
+ * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
  */
 export function AppHeader({
     onMenuOpen,
@@ -69,6 +71,7 @@ export function AppHeader({
     networkFilter,
     onNetworkFilterChange,
     showNetworkFilter = true,
+    platformCurrent,
 }) {
     const networkWired = showNetworkFilter
         && Boolean(chainRegistry)
@@ -132,6 +135,7 @@ export function AppHeader({
                         <Icon.LockIcon />
                     </button>
                 ) : null}
+                <PlatformSwitcher current={platformCurrent} />
                 {onMenuOpen ? (
                     <button
                         type="button"

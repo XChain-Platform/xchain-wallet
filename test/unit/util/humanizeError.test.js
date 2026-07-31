@@ -32,6 +32,23 @@ describe('humanizeError', () => {
         expect(out.message).to.match(/network rejected/i);
     });
 
+    // : a dust rejection is the one member of the `rejected` family the
+    // user can actually fix, and the generic sentence named neither the amount
+    // nor the floor, so retrying the same amount was the obvious next move.
+    // Measured live: a 109-sat Bitcoin send got signed, was refused at relay,
+    // and all the wallet said was "the network rejected this transaction".
+    it('tells a dust rejection apart from a generic one', () => {
+        const out = humanizeError(new Error('dust (code -26)'), 'send');
+        expect(out.cause).to.equal('rejected');
+        expect(out.message).to.match(/below the smallest payment/i);
+        expect(out.message).to.not.match(/network rejected/i);
+    });
+
+    it('does not read "dust" out of an unrelated word', () => {
+        const out = humanizeError(new Error('adjust the fee rate and try again'), 'send');
+        expect(out.message).to.not.match(/below the smallest payment/i);
+    });
+
     // D-42: a backend index that is behind is neither a funds problem nor a
     // rejection - the transaction was never built. Observed live as
     // "Encoder RPC error: utxo-tracker is lagging by 97 blocks; refusing to

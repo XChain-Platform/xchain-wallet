@@ -130,6 +130,31 @@ describe('splitFromBets', () => {
         expect(splitFromBets([{ amount: '5' }, { outcome: null, amount: '5' }])).toEqual([]);
         expect(splitFromBets(null)).toEqual([]);
     });
+
+    // Session 25, . Market #1198 was resolved `resolved_void` because it
+    // held no accepted bets at all, and its page still read "0: Yes 100
+    // (100.0%, 1 bet)" - the rejected bet from the deadline race, counted as a
+    // stake. A rejected BET is a real transaction that paid real fees and
+    // staked nothing.
+    it('leaves out bets the chain rejected, which staked nothing', () => {
+        expect(splitFromBets([
+            { outcome: 0, amount: '100', bet_status: 'invalid', status: 'invalid: FEED_ACTION_INDEX (feed not open)' },
+            { outcome: 0, amount: '300', bet_status: 'won', status: 'valid' },
+        ])).toEqual([{ outcome: 0, pool: '300', bet_count: 1 }]);
+
+        // A market whose only bet was rejected has an empty split, not a
+        // phantom pool beside a "void, everyone refunded" verdict.
+        expect(splitFromBets([
+            { outcome: 0, amount: '100', bet_status: 'invalid', status: 'invalid: FEED_ACTION_INDEX (feed not open)' },
+        ])).toEqual([]);
+    });
+
+    it('still counts a row whose validity the host never reported', () => {
+        // An explorer that omits the field must not silently empty the split.
+        expect(splitFromBets([{ outcome: 1, amount: '7' }])).toEqual([
+            { outcome: 1, pool: '7', bet_count: 1 },
+        ]);
+    });
 });
 
 describe('isLiveFeedStatus', () => {

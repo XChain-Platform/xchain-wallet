@@ -45,7 +45,7 @@
 // payability on display data). A human can still pay manually from
 // the queue; an engine that pays on garbage cannot be un-paid.
 
-import { AT_RISK_SECONDS, classifyObligation } from './obligationStatus.js';
+import { AT_RISK_SECONDS, classifyObligation, obligationBaseUnits } from './obligationStatus.js';
 
 /** First-attempt cutoff: no depth-confirmed match by T-45min => manual. */
 export const ARMING_CUTOFF_SECONDS = 45 * 60;
@@ -157,12 +157,31 @@ export function orientMatch(matchRow, orderActionIndex) {
     const mine = String(orderActionIndex);
     const give = matchRow.give_action_index != null ? String(matchRow.give_action_index) : null;
     const get = matchRow.get_action_index != null ? String(matchRow.get_action_index) : null;
+    // THE TWO COLUMN FAMILIES ON THIS ROW DO NOT PAIR UP, and reading them as
+    // if they did is what kept auto-pay from ever paying. From the indexer's
+    // own row construction (xchain-indexer db.js createOrderMatch):
+    //
+    //     give_amount = data['MATCH_GIVE_AMOUNT']   // the TRIGGERING order's give
+    //     get_amount  = data['MATCH_GET_AMOUNT']    // the TRIGGERING order's get
+    //     give_action_index = match['ACTION_INDEX'] // the COUNTERPARTY's order
+    //     get_action_index  = order['ACTION_INDEX'] // the TRIGGERING order
+    //
+    // So the amounts (and the tick columns beside them) belong to the order named
+    // by get_action_index, while give_action_index names the other one. A real row
+    // measured on LTC regtest: match 1559 carries give_action_index 1557,
+    // get_action_index 1558, give_amount "0.5", get_amount "100" - and 1558 is the
+    // order that GIVES 0.5 LTC for 100 XCHAIN. Pairing give_amount with
+    // give_action_index therefore hands back the token fill as the coin fill, so
+    // cap 2 compared a coin debt against a token quantity and answered
+    // amount-mismatch every time.
     let coinFill;
     let tokenFill;
-    if (give === mine) {
+    if (get === mine) {
+        // I triggered the match: the amounts are already mine.
         coinFill = matchRow.give_amount;
         tokenFill = matchRow.get_amount;
-    } else if (get === mine) {
+    } else if (give === mine) {
+        // I am the counterparty: my give is the triggering order's GET.
         coinFill = matchRow.get_amount;
         tokenFill = matchRow.give_amount;
     } else {
@@ -270,10 +289,10 @@ export function evaluateObligation({
     // Per-fill cap (cap 2): the obligation's coin_amount must equal the
     // match's coin-side fill exactly, and that fill must price out at
     // or under the consented GIVE/GET ratio.
-    const owedBase = (() => {
-        const s = String(obligation.coin_amount ?? obligation.coinAmount ?? '').trim();
-        return /^\d+$/.test(s) ? BigInt(s) : null;
-    })();
+    // Either shape: current venues serve a decimal coin figure here, older
+    // ones base units. Rejecting the decimal scored every obligation
+    // "amount-mismatch", which made auto-pay inert rather than wrong.
+    const owedBase = obligationBaseUnits(obligation.coin_amount ?? obligation.coinAmount);
     const coinFillBase = decimalToBaseUnits(oriented.coinFill);
     if (owedBase === null || coinFillBase === null || owedBase !== coinFillBase) {
         return { action: 'notify-manual', reason: 'amount-mismatch' };

@@ -210,6 +210,17 @@ describe('composeActionForConfirm', () => {
         // 3 BTC less the 1000-sat miner fee less the 2000-sat protocol fee.
         const coinRow = composed.simulation.deltas.find((d) => d.isCoin && d.before !== '');
         expect(coinRow.after).toBe('2.99997');
+
+        // D-119: WHICH LANE has to cross the boundary too. This envelope is a
+        // whitelist, and a field the popup cannot see may as well not exist -
+        // the confirm screen used it to ask the network dry run the right
+        // question, and without it a payer with no XCHAIN was told a correct
+        // action would fail. The unit test on the hook passed throughout,
+        // because it stubs the compose; only the live drive and this
+        // assertion see the gap.
+        expect(composed.payFeeInNativeCoin,
+            'the composed envelope does not say it pays the protocol fee in coin')
+            .toBe(true);
     });
 
     it('reports no protocol fee when the action pays it in XCHAIN', async () => {
@@ -223,6 +234,93 @@ describe('composeActionForConfirm', () => {
         const composed = await composeActionForConfirm(ARGS(h));
         expect(composed.protocolFeeSats).toBe(null);
         expect(composed.simulation.deltas.some((d) => d.isProtocolFee)).toBe(false);
+    });
+
+    // . The confirm screen's XCHAIN-lane fee line used to have exactly
+    // one source, the Tier-1 dry-run report - which is best-effort and drops
+    // out on a busy venue, taking the fee statement with it and leaving 's
+    // screen behind. So the envelope carries the wallet's own quote too.
+    describe('the XCHAIN-lane protocol fee on the envelope ', () => {
+        const quoting = (quote) => {
+            const h = makeHarness({ inputs: [{ value: 5000 }] });
+            h.sdk.quoteNativeFee = vi.fn(async () => quote);
+            return h;
+        };
+
+        it('carries the quoted XCHAIN fee as the decimal string the wire sent', async () => {
+            const h = quoting({ supported: true, valid: true, xchainFee: '1.00000000' });
+            const composed = await composeActionForConfirm(ARGS(h));
+            expect(composed.xchainFee).toBe('1.00000000');
+            // Asked about the action being composed, from the source paying it.
+            expect(h.sdk.quoteNativeFee).toHaveBeenCalledWith(
+                ARGS(h).actionData, expect.objectContaining({ source: 'chg' }),
+            );
+        });
+
+        it('does not quote at all in native-coin mode', async () => {
+            // That lane already has a quote it sized a real output from, and a
+            // second XCHAIN figure beside a coin debit reads as a second charge.
+            const h = quoting({ supported: true, valid: true, xchainFee: '1.00000000' });
+            const composed = await composeActionForConfirm({
+                ...ARGS(h), encoderOpts: { pubkey: 'pub', payFeeInNativeCoin: true },
+            });
+            expect(composed.xchainFee).toBe(null);
+            // Exactly ONE quote on this lane - the one applyNativeFeePreflight
+            // sizes the FEE_DESTINATION output from. A second call here would
+            // mean the display path was quoting on top of the spending path.
+            expect(h.sdk.quoteNativeFee).toHaveBeenCalledTimes(1);
+        });
+
+        it('stays null on a zero fee, a refused quote, or no quote endpoint', async () => {
+            // Zero is the  failure in the other direction: an action that
+            // charges nothing must not be told it charges something.
+            expect((await composeActionForConfirm(ARGS(
+                quoting({ supported: true, valid: true, xchainFee: '0.00000000' }),
+            ))).xchainFee).toBe(null);
+            expect((await composeActionForConfirm(ARGS(
+                quoting({ supported: true, valid: false, xchainFee: '1.00000000' }),
+            ))).xchainFee).toBe(null);
+            expect((await composeActionForConfirm(ARGS(
+                quoting({ supported: false }),
+            ))).xchainFee).toBe(null);
+            // An SDK too old to quote, and a venue that throws: a line the
+            // wallet cannot draw must never be a compose that fails.
+            const old = makeHarness({ inputs: [{ value: 5000 }] });
+            expect((await composeActionForConfirm(ARGS(old))).xchainFee).toBe(null);
+            const dead = quoting(null);
+            dead.sdk.quoteNativeFee = vi.fn(async () => { throw new Error('explorer down'); });
+            expect((await composeActionForConfirm(ARGS(dead))).xchainFee).toBe(null);
+        });
+
+        it('still prices a static (unvalidated) quote, where valid is null', async () => {
+            // DEPLOY/EXECUTE are priced from the gas schedule without a dry
+            // run. `valid: null` is the third answer, not a refusal, and those
+            // two are the actions most in need of a stated fee.
+            const h = quoting({ supported: true, valid: null, staticQuote: true, xchainFee: '0.50000000' });
+            expect((await composeActionForConfirm(ARGS(h))).xchainFee).toBe('0.50000000');
+        });
+
+        it('does not quote a bare native payment', async () => {
+            // : no XChain action, so no protocol fee to state - and this
+            // is the wallet's commonest operation, so it pays no round trip.
+            // A bare payment carries no OP_RETURN, so the harness's outputs are
+            // the payment and the change; the default carrier output would fail
+            // the tamper check here for an unrelated reason.
+            const h = makeHarness({
+                inputs: [{ value: 200000000 }],
+                outputs: [
+                    { address: 'addr', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100000000 },
+                    { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 99999000 },
+                ],
+            });
+            h.sdk.quoteNativeFee = vi.fn(async () => ({ supported: true, valid: true, xchainFee: '1.00000000' }));
+            const composed = await composeActionForConfirm({
+                ...ARGS(h),
+                actionData: { action: 'SEND', params: { TICK: 'BTC', AMOUNT: '1', DESTINATION: 'addr' } },
+            });
+            expect(composed.xchainFee).toBe(null);
+            expect(h.sdk.quoteNativeFee).not.toHaveBeenCalled();
+        });
     });
 
     it('reports a null fee when the PSBT omits an input value', async () => {

@@ -39,29 +39,115 @@
 // VENUE CONTRACT
 //
 // These specs need the devhost 3-chain regtest stack reachable on
-// localhost at the ports the wallet's `bitcoin-regtest` descriptor
-// already names (explorer 18080, encoder 3023, hub 10000) plus the
-// regtest-miner on 3025 for funding. SSH tunnels satisfy that with no
-// code change:
+// localhost at the ports the wallet's own regtest descriptors already
+// name (explorer 18080, hub 10000, shared by all three chains; encoder
+// 3023/3223/3123 for BTC/LTC/DOGE) plus that chain's regtest-miner on
+// 3025/3225/3125 for funding. SSH tunnels satisfy that with no code
+// change; one command covers every chain:
 //
-//   ssh -N -L 18080:localhost:18080 -L 3023:localhost:3023 \
-//          -L 10000:localhost:10000 -L 3025:localhost:3025 jdog@devhost
+//   ssh -N -L 18080:localhost:18080 -L 10000:localhost:10000 \
+//          -L 3023:localhost:3023 -L 3025:localhost:3025 \
+//          -L 3223:localhost:3223 -L 3225:localhost:3225 \
+//          -L 3123:localhost:3123 -L 3125:localhost:3125 jdog@devhost
 //
 // `assertVenueReachable()` (called from global setup) fails once, fast,
 // with that command in the message, rather than letting every spec die
 // several screens deep in the UI on a symptom that looks like a wallet
 // bug.
 
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
+import {
+    MIN_SEED_MARGIN_SECONDS,
+    XCHAIN_PAIR,
+    XCHAIN_USD_PRICE,
+    VENUE_PRICE,
+    planSeedRows,
+    priceVerdict,
+    readStateScript,
+    seedMarginSeconds,
+    unusablePriceMessage,
+    venueDisagreement,
+    writeRowsScript,
+} from './priceSeed.js';
 
-/** Explorer/encoder/hub ports come from the `bitcoin-regtest` descriptor. */
+/**
+ * The three regtest chains this stack runs, and the ports each one answers on.
+ *
+ * WHY THIS IS A TABLE AND NOT THREE CONSTANTS. The venue is SHARED, and Bitcoin
+ * is the busy one: it carries the e2e suites, the drills and whatever another
+ * session is mid-sweep on. A spec that must own the chain's state for a while -
+ * a market with a deadline, a clock that has to cross it - cannot take its turn
+ * on a chain somebody else is broadcasting into, and until this table existed
+ * the only answer was to wait. Litecoin and Dogecoin run the identical stack on
+ * a fixed port offset (encoder 3x23, miner 3x25), so the choice costs nothing
+ * but the arithmetic below.
+ *
+ * The explorer (18080) and hub (10000) are SHARED across all three chains, so
+ * only the per-chain services are keyed here; the explorer is addressed by coin
+ * code in the path instead.
+ */
+const VENUES = {
+    RBTC: {
+        encoderPort: 3023, minerPort: 3025,
+        chainId: 'bitcoin-regtest', chainLabel: 'Bitcoin',
+        // The container `seedPrices()` runs its price seed inside . Named
+        // here rather than derived from chainId because the stack's naming uses
+        // the coin's full name where the wallet's chain id does too, but there is
+        // no rule saying it always will - a rename should break on a missing key,
+        // not on a string that silently builds the wrong container name.
+        indexerContainer: 'xchain-node-bitcoin-regtest-xchain-indexer',
+        // Bech32 HRP plus the legacy P2PKH/P2SH version bytes each chain's
+        // regtest params use. Asserted on wherever a spec reads an address out
+        // of the wallet, so a form that hands back a MAINNET address (or another
+        // chain's) fails on the address itself rather than several steps later
+        // on a funding that never arrives.
+        addressRe: /^(bcrt1|[mn2])/,
+    },
+    RLTC: {
+        encoderPort: 3223, minerPort: 3225,
+        chainId: 'litecoin-regtest', chainLabel: 'Litecoin',
+        indexerContainer: 'xchain-node-litecoin-regtest-xchain-indexer',
+        addressRe: /^(rltc1|[mn2])/,
+    },
+    RDOGE: {
+        encoderPort: 3123, minerPort: 3125,
+        chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin',
+        indexerContainer: 'xchain-node-dogecoin-regtest-xchain-indexer',
+        addressRe: /^[mn2]/,
+    },
+};
+
+/**
+ * Explorer coin code for the chain this run drives.
+ *
+ * Defaults to Bitcoin, so every spec written before this table keeps the venue
+ * it was written against and nothing has to opt out. Set XC_REGTEST_COIN=RLTC
+ * to move a run onto Litecoin.
+ */
+export const REGTEST_COIN = process.env.XC_REGTEST_COIN || 'RBTC';
+
+const VENUE = VENUES[REGTEST_COIN];
+if (!VENUE) {
+    throw new Error(
+        `XC_REGTEST_COIN=${REGTEST_COIN} is not a regtest chain on this stack; `
+        + `expected one of ${Object.keys(VENUES).join(', ')}`);
+}
+
+/** Explorer/hub ports are shared; encoder/miner come from the chosen chain. */
 export const EXPLORER_URL = 'http://localhost:18080';
-export const ENCODER_URL = 'http://localhost:3023';
-export const MINER_URL = 'http://localhost:3025';
+export const ENCODER_URL = `http://localhost:${VENUE.encoderPort}`;
+export const MINER_URL = `http://localhost:${VENUE.minerPort}`;
 
-/** Explorer coin code for the regtest Bitcoin chain. */
-export const REGTEST_COIN = 'RBTC';
+/** The wallet's own id and display name for the chain this run drives. */
+export const REGTEST_CHAIN_ID = VENUE.chainId;
+export const REGTEST_CHAIN_LABEL = VENUE.chainLabel;
+
+/** Address shape this chain's regtest params produce. */
+export const REGTEST_ADDRESS_RE = VENUE.addressRe;
 
 /**
  * A deterministic, checksum-valid regtest P2WPKH destination.
@@ -111,10 +197,13 @@ export const encoderRpc = (method, params) => venueRpc(ENCODER_URL, method, para
  * instead of N specs timing out inside the wallet UI.
  */
 export async function assertVenueReachable() {
+    // Names the ports THIS run needs, not Bitcoin's: a Litecoin run whose
+    // encoder tunnel is missing would otherwise be told to open Bitcoin's and
+    // find that it already is.
     const hint =
-        'Regtest venue unreachable. Open the tunnels:\n'
-        + '  ssh -N -L 18080:localhost:18080 -L 3023:localhost:3023 '
-        + '-L 10000:localhost:10000 -L 3025:localhost:3025 jdog@devhost';
+        `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
+        + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
+        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} jdog@devhost`;
 
     let status;
     try {
@@ -146,6 +235,297 @@ export async function assertVenueReachable() {
     if (!miner?.wallet_ready) {
         throw new Error(`Regtest miner is up but its wallet is not ready: ${JSON.stringify(miner)}`);
     }
+}
+
+/**
+ * The venue host the tunnels already go to, and the SSH identity used to reach
+ * it. Overridable for a stack that lives somewhere else; never a credential,
+ * just a host, and the key is the operator's own agent.
+ */
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'jdog@devhost';
+
+/**
+ * Whether this run may write a price snapshot at all.
+ *
+ * Two names, because there are two audiences. `XCHAIN_E2E_NO_PRICE_SEED` is the
+ * platform's existing flag and means "this venue's hub publishes prices itself,
+ * so a synthetic round would shadow the real ones"; `XC_REGTEST_NO_PRICE_SEED`
+ * is the wallet-local off switch for a run that simply must not touch shared
+ * state. Either one suppresses the write; NEITHER suppresses the CHECK, which
+ * is the half that keeps a price failure legible.
+ */
+const PRICE_SEED_SUPPRESSED =
+    process.env.XC_REGTEST_NO_PRICE_SEED === '1' || process.env.XCHAIN_E2E_NO_PRICE_SEED === '1';
+
+/**
+ * Runs `script` inside this chain's indexer container and returns the JSON it
+ * printed.
+ *
+ * The script arrives on stdin, so nothing has to survive quoting through a
+ * local shell and a remote one, and no part of it is visible in a process list.
+ * `BatchMode=yes` means a host that wants a password fails immediately with a
+ * legible error instead of hanging a global setup on a prompt nobody can see.
+ *
+ * Exported because `seedPrices()` deliberately refuses to write over a venue
+ * that already prices, which is right for setup and useless for the one spec
+ * that must MOVE a price it just used: the  Approve-time re-quote can
+ * only be driven by changing the fee between composing and approving. That
+ * spec drives the write itself, through this same credential-free path.
+ */
+export async function runInIndexer(script, timeoutMs = 60_000) {
+    const args = [
+        '-o', 'BatchMode=yes',
+        '-o', 'ConnectTimeout=10',
+        SSH_HOST,
+        'docker', 'exec', '-i', VENUE.indexerContainer, 'node',
+    ];
+
+    return new Promise((resolve, reject) => {
+        const child = spawn('ssh', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
+        const timer = setTimeout(() => {
+            child.kill('SIGKILL');
+            reject(new Error(`ssh ${SSH_HOST} docker exec ${VENUE.indexerContainer} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        child.stdout.on('data', (d) => { stdout += d; });
+        child.stderr.on('data', (d) => { stderr += d; });
+        child.on('error', (err) => { clearTimeout(timer); reject(err); });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            if (code !== 0) {
+                reject(new Error(`ssh ${SSH_HOST} docker exec ${VENUE.indexerContainer} exited ${code}: `
+                    + `${stderr.trim() || stdout.trim() || '(no output)'}`));
+                return;
+            }
+            // The container script prints exactly one JSON line, but docker exec
+            // can prepend a warning; take the last non-empty line rather than
+            // the whole buffer so a chatty daemon does not read as a parse error.
+            const line = stdout.trim().split('\n').filter(Boolean).pop();
+            try {
+                resolve(JSON.parse(line));
+            } catch {
+                reject(new Error(`indexer container returned unparseable output: ${stdout.trim().slice(0, 400)}`));
+            }
+        });
+
+        child.stdin.end(script);
+    });
+}
+
+/**
+ * Asks the venue, over the public read the wallet itself uses, whether it can
+ * price an action right now.
+ *
+ * The tick is randomized on every call for a reason that cost real time to
+ * find: `computeFeeQuote` runs the REAL handler, and a handler that refuses
+ * (taken ticker) stages a zero fee, which returns early with no price fields at
+ * all - indistinguishable, to a naive reader, from a venue with no oracle
+ * price. A fresh tick keeps the quote on the path that actually reports prices.
+ */
+async function probePrice() {
+    const tick = 'XCW' + randomBytes(4).toString('hex').toUpperCase();
+    const q = new URLSearchParams({
+        action: 'ISSUE',
+        params: `0|${tick}`,
+        source: REGTEST_DESTINATION,
+    });
+    let body = null;
+    try {
+        const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote?${q.toString()}`, {
+            signal: AbortSignal.timeout(30_000),
+        });
+        body = await res.json();
+    } catch (err) {
+        return { usable: false, retryable: true, reason: `the explorer did not answer /feequote: ${err.message}` };
+    }
+    return priceVerdict(body);
+}
+
+/**
+ * Chain-seconds of usable life left in the venue's price, or null when that
+ * cannot be established.
+ *
+ * The public quote cannot answer this: it reports whether a price exists, and
+ * carries the BLOCK's time and the round number but never the chosen snapshot's
+ * own timestamp, so there is nothing in it to subtract. The age lives in
+ * `price_snapshots`, so this asks the container the same way the seed does, over
+ * the same credential-free path.
+ *
+ * Null on any failure, deliberately. This runs on the healthy path, where the
+ * venue has ALREADY told us it prices; a flaky SSH hop or a schema surprise must
+ * not turn a working venue into a failed global setup. The caller reads null as
+ * "leave it alone".
+ */
+async function priceHealth(venue) {
+    try {
+        const state = await runInIndexer(readStateScript([XCHAIN_PAIR, venue.coinPair]));
+        if (!state || !Number(state.chainTime)) return { margin: null, disagreement: null };
+        const chainTime = Number(state.chainTime);
+        const rows = state.rows || [];
+        return {
+            // Judged at the time the NEXT block will carry, not at the tip's.
+            // LTC and DOGE regtest mine only on demand and stamp wall clock, so
+            // an idle venue's tip can sit hours behind: measured in chain
+            // seconds a row there looks fresh, and the run's own first block
+            // ages it out in a single step. See seedMarginSeconds.
+            margin: seedMarginSeconds({
+                rows,
+                chainTime,
+                referenceTime: Math.max(chainTime, Math.floor(Date.now() / 1000)),
+                coinPairs: [XCHAIN_PAIR, venue.coinPair],
+            }),
+            disagreement: venueDisagreement({
+                rows,
+                chainTime,
+                expected: { [XCHAIN_PAIR]: XCHAIN_USD_PRICE, [venue.coinPair]: venue.price },
+            }),
+        };
+    } catch {
+        return { margin: null, disagreement: null };
+    }
+}
+
+/**
+ * Guarantees this venue can price a fee-bearing action, or fails naming that as
+ * the reason .
+ *
+ * WHAT THIS REPLACES. Nothing on a regtest stack publishes `price_snapshots` -
+ * those rows come from a validator federation and there is none here - so until
+ * this existed every fee-bearing spec silently inherited whatever the last
+ * person to hand-seed had left behind, and a snapshot is usable for 1800s.
+ * Three campaign sessions were lost to that: one to a sentinel that had expired,
+ * one to re-seeding on a seven-minute timer for its whole length, and both had
+ * to hand the state back to the next session in prose.
+ *
+ * ORDER OF OPERATIONS, ALL THREE STEPS LOAD-BEARING:
+ *
+ *   1. CHECK FIRST, and return without writing anything if the venue already
+ *      prices. This is not an optimization. A synthetic round outranks every
+ *      derived round forever (selection is `ORDER BY round_number DESC`), so on
+ *      a venue whose hub really does publish the pair - the end state 
+ *      step 8 is driving at - an unconditional seed would silently replace real
+ *      data with a fixture and every green run after it would prove nothing.
+ *   2. SEED, delegated over SSH into the indexer container so no credential
+ *      lives in this repo or in the browser harness. See `priceSeed.js` for why
+ *      the hub's `pushoracleprice` cannot do this job.
+ *   3. MINE, THEN RE-CHECK. The dry-run verdict is pinned per block height, so
+ *      a re-quote at the same height replays the old failure and reads exactly
+ *      like "the seed did not work" - that cost a full diagnostic detour once
+ *      already. The block also does real work: on a chain whose clock tracks
+ *      wall time it moves the tip past the wall-anchored row, which is what
+ *      makes that row selectable.
+ *
+ * Returns a summary rather than throwing when the venue is fine, so a caller
+ * can log what it is pricing against.
+ */
+export async function seedPrices({ attempts = 4 } = {}) {
+    const venue = VENUE_PRICE[REGTEST_COIN];
+    if (!venue) {
+        throw new Error(`seedPrices: no fixture price for ${REGTEST_COIN}`);
+    }
+
+    // Step 1: does the venue already answer, and will it still answer at the
+    // approve step? "Answers now" was the whole test until , and it is not
+    // enough: the run that found this composed a bet against a healthy quote and
+    // failed minutes later on "no current oracle price for LTC/USD". Off Bitcoin
+    // the window is spent in CHAIN seconds, and an idle LTC/DOGE chain burns them
+    // in a rush once a spec starts mining, so a margin check is the only way to
+    // tell a fresh venue from one that is about to expire under the run's feet.
+    // Never write over a venue that has real life left in it.
+    const before = await probePrice();
+    let refreshing = false;
+    if (before.usable) {
+        const { margin, disagreement } = await priceHealth(venue);
+        const thin = margin !== null && margin < MIN_SEED_MARGIN_SECONDS;
+        if (!thin && !disagreement) {
+            return { seeded: false, reason: 'venue already priced', marginSeconds: margin, ...before };
+        }
+        const why = disagreement
+            ? `${disagreement.coinPair} is seeded at ${disagreement.found} but this fixture prices it at `
+              + `${disagreement.expected} (synthetic round ${disagreement.round}, almost certainly another suite's)`
+            : `only ${margin}s of chain life left`;
+        // Suppression is an explicit instruction not to write, so it outranks the
+        // refresh. Say so loudly rather than seeding anyway or failing a venue
+        // that does, right now, still price.
+        if (PRICE_SEED_SUPPRESSED) {
+            console.warn(`[regtest ${REGTEST_COIN}] ${why}, and XC_REGTEST_NO_PRICE_SEED is set, so it will `
+                + 'NOT be repaired; a fee-bearing step may fail on price or on a dust protocol fee');
+            return { seeded: false, reason: 'venue already priced', marginSeconds: margin, ...before };
+        }
+        console.log(`[regtest ${REGTEST_COIN}] refreshing the venue price: ${why}`);
+        refreshing = true;
+    }
+    // These two only speak to a venue that cannot price at all. A refresh has
+    // already proved it can, so neither applies and both would be wrong here:
+    // `retryable` is false for a usable quote, and suppression was handled above.
+    if (!refreshing) {
+        if (!before.retryable) {
+            throw new Error(unusablePriceMessage({
+                regtestCoin: REGTEST_COIN, reason: before.reason, seeded: false,
+            }));
+        }
+        if (PRICE_SEED_SUPPRESSED) {
+            throw new Error(unusablePriceMessage({
+                regtestCoin: REGTEST_COIN, reason: before.reason, seeded: false,
+            }));
+        }
+    }
+
+    // Step 2: seed. Read the venue's own clock and its existing rounds first -
+    // the anchors and the shadowing check both depend on them.
+    let state;
+    let rows;
+    try {
+        state = await runInIndexer(readStateScript([XCHAIN_PAIR, venue.coinPair]));
+        const existingRounds = {};
+        for (const row of state.rows || []) {
+            (existingRounds[row.coinPair] ||= []).push(row.round);
+        }
+        rows = planSeedRows({
+            regtestCoin: REGTEST_COIN,
+            existingRounds,
+            chainTime: state.chainTime,
+            wallTime: Math.floor(Date.now() / 1000),
+        });
+        await runInIndexer(writeRowsScript(rows));
+    } catch (err) {
+        throw new Error(unusablePriceMessage({
+            regtestCoin: REGTEST_COIN,
+            reason: `${before.reason} - and seeding one failed: ${err.message}`,
+            seeded: false,
+        }));
+    }
+
+    // Step 3: mine, then re-check against the same public read the wallet uses.
+    let after = before;
+    for (let i = 0; i < attempts; i++) {
+        await minerRpc('generate_blocks', { count: 1 }).catch(() => {});
+        await new Promise((r) => setTimeout(r, 3_000));
+        after = await probePrice();
+        if (after.usable) {
+            return {
+                seeded: true,
+                rows: rows.length,
+                chainTime: state.chainTime,
+                ...after,
+            };
+        }
+        if (!after.retryable) break;
+    }
+
+    throw new Error(unusablePriceMessage({
+        regtestCoin: REGTEST_COIN,
+        reason: after.reason,
+        seeded: true,
+        state: {
+            chainTime: state.chainTime,
+            tipIndex: state.tipIndex,
+            wrote: rows.map((r) => `${r.coinPair}#${r.roundNumber}@${r.blockTimestamp}`),
+            found: (state.rows || []).map((r) => `${r.coinPair}#${r.round}@${r.timestamp}`),
+        },
+    }));
 }
 
 /**
@@ -197,6 +577,96 @@ export async function waitForConfirmedUtxo(address, txid, timeoutMs = 90_000) {
         await new Promise((r) => setTimeout(r, 2_000));
     }
     throw new Error(`Transaction ${txid} never confirmed to ${address}`);
+}
+
+/**
+ * How fast a pre-flight response has to come back before the SDK's Tier-1
+ * budget is safe. The budget itself is `DEFAULT_TIMEOUT_MS` (4000ms) in
+ * `xchain-sdk/src/preflight/constants.js`; this is well under it so a
+ * warm call cannot be marginal.
+ */
+const PREFLIGHT_WARM_MS = 750;
+
+/**
+ * Makes the indexer's dry-run for ONE exact action cheap, and returns its
+ * verdict, so a spec can assert on the Tier-1 half without racing a budget.
+ *
+ * WHY THIS EXISTS. Tier 1 is the dry-run: the indexer runs the action
+ * through the real handler in a rolled-back transaction. That is not a
+ * lookup, it costs real work, and on this SHARED venue a COLD one measured
+ * between 1.2s and 5.0s depending on what else was driving the stack. The
+ * SDK abandons Tier 1 at 4000ms and degrades to the client tier by design
+ * (spec §8.4), so the confirm panel renders a Tier-2-only report and the
+ * dry-run finding the spec is asserting on simply is not there.
+ *
+ * That failure is worth spelling out because it reads as a wallet defect and
+ * is not one: the verdict is right, the panel is right, the network was just
+ * slow. It USED to be worse: `DRYRUN_UNAVAILABLE` is an `info` finding, and
+ * `PreflightPanel` rendered only errors, warnings and the unverified list, so
+ * nothing on the screen distinguished "the network said this is fine" from
+ * "the network never answered".  fixed that half - the panel now reads
+ * "Local checks only" with an explicit unreached notice, and carries
+ * `data-dryrun="unreached"` - so a spec that hits the slow path now FAILS
+ * loudly instead of asserting against a false pass. Warming is still the right
+ * move: a spec that waits and hopes is a coin flip on this venue.
+ *
+ * The lever is that the indexer MEMOIZES the verdict per block height
+ * , which is measurable: the same query costs seconds cold and ~10ms
+ * warm. So this asks the endpoint for exactly what the wallet is about to ask
+ * it - same action, same params, same source, same query shape as
+ * `explorer.getPreflight` - until the answer comes back warm.
+ *
+ * It does NOT weaken what the spec proves. The wallet still composes the
+ * action itself, still calls the endpoint itself, and still has to relay the
+ * verdict to the panel; all this removes is the stopwatch. And it adds teeth
+ * of its own: the returned verdict lets a spec assert the VENUE agrees with
+ * its premise, so an unaffordable send that the indexer happens to consider
+ * valid fails here, naming the venue, instead of failing later as a confusing
+ * assertion about missing panel text.
+ *
+ * The memo is keyed by block height, so warm and use it in the same breath -
+ * a block landing in between (this venue mines on demand AND on a timer)
+ * puts the next call back on the cold path.
+ *
+ * @param {{action: string, params: string, source: string}} query
+ * @returns {Promise<object>} the endpoint's own response body
+ */
+export async function warmPreflight({ action, params, source }, timeoutMs = 120_000) {
+    // Built exactly as `explorer.getPreflight` builds it - a query that
+    // differs from the wallet's is a different memo entry, which would warm
+    // nothing and quietly restore the race this exists to remove.
+    const q = new URLSearchParams();
+    q.set('action', action);
+    q.set('params', params);
+    q.set('source', source);
+    const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/preflight?${q.toString()}`;
+
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    let lastMs = null;
+    while (Date.now() < deadline) {
+        const started = Date.now();
+        let body = null;
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+            body = await res.json();
+        } catch {
+            // The explorer blipping mid-block is transient; keep trying until
+            // the budget runs out rather than reporting it as a slow dry-run.
+            await new Promise((r) => setTimeout(r, 2_000));
+            continue;
+        }
+        lastMs = Date.now() - started;
+        last = body;
+        if (lastMs <= PREFLIGHT_WARM_MS) return last;
+        // Straight back round: the point of the second call is that it hits
+        // the memo the first one populated.
+    }
+    throw new Error(
+        `pre-flight for ${action} never answered within ${PREFLIGHT_WARM_MS}ms `
+        + `(last ${lastMs}ms). The indexer dry-run is too slow for the SDK's 4000ms `
+        + `Tier-1 budget on this venue, so the wallet would drop the verdict. `
+        + `This is venue load, not a wallet defect - last response: ${JSON.stringify(last)}`);
 }
 
 /**
@@ -349,6 +819,41 @@ function actionStatuses(detail) {
 }
 
 /**
+ * Points one of a form's chain pickers at the chain this run drives.
+ *
+ * A no-op on Bitcoin, which every form already defaults to, so specs written
+ * before the venue table behave exactly as they did.
+ *
+ * `field` is the picker's own visible label, and it is REQUIRED to be specific
+ * because several screens carry more than one: a form's is "Network", the
+ * add-address modal's is "Coin", a cross-chain swap has "Give chain" and "Get
+ * chain". Addressing them by accessible name is possible at all because
+ * ChainPicker now puts its label in that name; before that fix every picker on
+ * a screen answered to the same query, which is a defect for a screen reader
+ * user and was a coin flip for this helper.
+ *
+ * @param {import('@playwright/test').Page | import('@playwright/test').Locator} scope
+ * @param {string} [field]  the picker's visible label
+ */
+export async function selectVenueChain(scope, field = 'Network') {
+    if (REGTEST_COIN === 'RBTC') return;
+
+    const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
+    await expect(trigger, `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+    if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
+
+    await trigger.click();
+    await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
+        .first().click();
+    // Assert the switch took: the picker closes on click whether or not the
+    // option was the one intended, so an unasserted click is a silent
+    // wrong-chain run - the exact failure this helper exists to prevent.
+    await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
+        { timeout: 15_000 });
+}
+
+/**
  * Mints `amount` XCHAIN to the active address and waits for the balance.
  *
  * XCHAIN is free-mintable on regtest and testnet by any address, so this is
@@ -363,10 +868,22 @@ function actionStatuses(detail) {
  */
 export async function mintXchain(page, amount) {
     await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
+    // Scoped to the palette DIALOG, not to the page. A bare
+    // `getByRole('combobox').first()` picks up any <select> on the screen
+    // behind the palette - the oracle form's Currency picker, for one - and
+    // then fails with "Element is not an <input>" from inside a helper that
+    // has nothing to do with the screen it was called from.
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeVisible();
     await combobox.fill('Advanced action');
     await page.keyboard.press('Enter');
+
+    // Every form defaults to whichever chain the wallet lists first, which is
+    // Bitcoin; on any other venue the mint would land on the wrong chain and
+    // the balance this helper promises would never appear.
+    await selectVenueChain(page);
 
     await page.getByLabel('Action').selectOption('MINT');
     await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
@@ -537,6 +1054,6 @@ export async function readReceiveAddress(page) {
 
     const field = page.getByLabel('Address', { exact: true });
     await expect(field).toBeVisible({ timeout: 30_000 });
-    await expect(field).toHaveValue(/^bcrt1/, { timeout: 30_000 });
+    await expect(field).toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
     return field.inputValue();
 }

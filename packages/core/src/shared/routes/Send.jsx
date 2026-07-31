@@ -15,6 +15,7 @@ import {
     Button,
     Input,
     AddressCombobox,
+    AddressField,
     ChainBadge,
     AddressText,
     FeeSelector,
@@ -28,6 +29,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
@@ -116,6 +118,7 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
 } from '../utils/amountFormat.js';
+import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 
@@ -248,10 +251,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
-    // Active (operating) address per chain; Send defaults its from-address to
-    // this so a send always spends from the chain's active address.
+    // Active (operating) address per chain; Send DEFAULTS its from-address to
+    // this so a send spends from the chain's active address unless the user
+    // says otherwise.
     const [activeByChain, setActiveByChain] = useState(
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
+    //  source picker, matching the From field every other action form
+    // carries. `pickedSourceChain` records the chain a manual pick was made on,
+    // so the defaulting effect below re-defaults on a chain switch (where the
+    // picked address does not exist) but never overwrites a deliberate choice.
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [pickedSourceChain, setPickedSourceChain] = useState(
+        /** @type {string | null} */ (null),
     );
     const [toAddress, setToAddress] = useState(prefill?.address || '');
     const [tick, setTick] = useState(prefill?.tick || '');
@@ -628,6 +640,53 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
           + 'needs their own transaction. Remove the extra recipients, or pick a token.'
         : null;
 
+    //  dust floor on the RECIPIENT amount, refused here rather than at the node.
+    //
+    // An output below the chain's dust threshold is non-standard, so the transaction is
+    // rejected at relay: it never enters a mempool and costs no miner fee, but the wallet
+    // has already composed it, opened the confirm screen and SIGNED it, and all the user
+    // was told afterwards was that "the network rejected this transaction" - which names
+    // neither the amount nor the floor, so retrying the same amount is the obvious next
+    // move. The floor is a per-chain protocol constant the wallet already knows (the
+    // native-fee lane refuses a below-dust FEE output by the same reasoning, (b)),
+    // so this is predictable before anything is built.
+    //
+    // NATIVE sends only. A native amount is paid as a real output of exactly that size; a
+    // token amount is written into the action instead, and the encoder sizes the
+    // destination output itself (its own `dustAmount`, M-6), so a 109-unit token send is
+    // perfectly ordinary. `amount` here is the first leg; extra legs are token-only,
+    // because nativeMultiSendBlock above already refuses a multi-recipient native send.
+    const dustBlock = useMemo(() => {
+        if (!isNativeSend) return null;
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const floor = dustThresholdForCoin(desc?.coin);
+        if (!floor) return null;
+        const sats = exactSatsFromDecimalString(amount);
+        if (sats === null || sats <= 0 || sats >= floor) return null;
+        const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
+        const minimum = decimalStringFromSats(BigInt(floor));
+        return `That amount is too small to send. The smallest ${ticker} payment the network will `
+            + `carry is ${minimum} ${ticker} (${formatWithThousands(String(floor))} sats), and anything `
+            + 'under that is refused by every node, so it can never arrive. Enter at least '
+            + `${minimum} ${ticker}.`;
+    }, [isNativeSend, chainId, amount, tick]);
+
+    // Retract the refusal the moment the amount stops being dust. `formError` is
+    // otherwise only cleared by the next submit, so raising the amount to a legal one
+    // left the old "too small to send" sentence sitting under a form that was now
+    // fine. Matched by identity against what the guard itself pushed, so an unrelated
+    // error occupying the slot is never cleared out from under the user.
+    const dustErrorRef = useRef(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (dustBlock) return;
+        // Read the ref BEFORE clearing it: React invokes a functional updater
+        // during the next render, by which point the field would already be null
+        // and every comparison against it would fail.
+        const pushed = dustErrorRef.current;
+        dustErrorRef.current = null;
+        setFormError((prev) => (prev !== null && prev === pushed ? null : prev));
+    }, [dustBlock]);
+
     // : `fiatRate` prices the CHAIN COIN. The amount field may be holding a
     // TOKEN amount, and pricing that at the coin's rate renders a confidently
     // formatted, wildly wrong number (50,000 XCHAIN shown as billions of dollars).
@@ -716,14 +775,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const onSendSmallTest = useCallback(() => {
         const amtSats = exactSatsBigIntFromDecimalString(amount);
         if (amtSats == null || amtSats <= 0n) return;
-        // 1% of the original (floor division in sats), with a floor of one
-        // sat so tiny sends don't round to zero. Exact BigInt math keeps
+        // 1% of the original (floor division in sats). : the floor is the chain's
+        // dust threshold, not one satoshi, because the gate only ever fires on a NATIVE
+        // send and 1% of a modest amount lands under 546 sats routinely. A one-sat "test"
+        // is a transaction no node relays, so the button that exists to build the user's
+        // confidence would have handed them a failure instead. Exact BigInt math keeps
         // the result a plain decimal string ('0.00000001', never '1e-8').
-        const reduced = amtSats / 100n > 1n ? amtSats / 100n : 1n;
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const floor = BigInt(dustThresholdForCoin(desc?.coin) || 1);
+        const onePercent = amtSats / 100n;
+        const lifted = onePercent > floor ? onePercent : floor;
+        // Never propose a "small test" larger than what the user asked to send.
+        const reduced = lifted < amtSats ? lifted : amtSats;
         const display = decimalStringFromSats(reduced);
         setAmount(display);
         setStage('form');
-    }, [amount]);
+    }, [amount, chainId]);
 
     // Latest-tick ref so the chainId effect below can preserve a
     // non-empty tick without subscribing to every keystroke.
@@ -741,24 +808,29 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
         const all = addressesByChain[chainId] || [];
-        // Prefer the chain's active (operating) address; fall back to the
-        // newest HD external address when no active address is resolvable.
-        const activeId = activeByChain[chainId]?.id;
-        if (activeId && all.some((a) => a.id === activeId)) {
-            setFromAddressId(activeId);
-        } else {
-            const addrs = all.filter(
-                (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-            );
-            if (addrs.length > 0) {
-                const sorted = [...addrs].sort((a, b) => {
-                    const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                    const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                    return bi - ai;
-                });
-                setFromAddressId(sorted[0].id);
+        // : a source the user picked on THIS chain wins over the default.
+        // The tick default below still runs either way, so only the
+        // from-address half is skipped.
+        if (pickedSourceChain !== chainId) {
+            // Prefer the chain's active (operating) address; fall back to the
+            // newest HD external address when no active address is resolvable.
+            const activeId = activeByChain[chainId]?.id;
+            if (activeId && all.some((a) => a.id === activeId)) {
+                setFromAddressId(activeId);
             } else {
-                setFromAddressId(null);
+                const addrs = all.filter(
+                    (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
+                );
+                if (addrs.length > 0) {
+                    const sorted = [...addrs].sort((a, b) => {
+                        const ai = (externalIndexOf(a.derivationPath) ?? -1);
+                        const bi = (externalIndexOf(b.derivationPath) ?? -1);
+                        return bi - ai;
+                    });
+                    setFromAddressId(sorted[0].id);
+                } else {
+                    setFromAddressId(null);
+                }
             }
         }
         // Default the tick to the native coin only when the field is
@@ -770,7 +842,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             const nativeTicker = nativeTickerFor(descriptor);
             if (nativeTicker) setTick(nativeTicker);
         }
-    }, [chainId, addressesByChain, activeByChain]);
+    }, [chainId, addressesByChain, activeByChain, pickedSourceChain]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -1064,6 +1136,20 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
     }, [previewBalances.sdkShape, tick]);
 
+    // : the asset picker is wallet-scoped, the funding is address-scoped, and this
+    // is where they disagree. A WARNING rather than a refusal, deliberately: the only
+    // evidence is a balance read, and a lagging or failed one must never be able to block
+    // a send the address can genuinely pay for. Both of those states are excluded here, so
+    // this fires only when the balances came back clean and this address holds none of the
+    // selected token.
+    const sourceLacksTick = useMemo(() => {
+        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) return null;
+        const tickUpper = tick.trim().toUpperCase();
+        if (!tickUpper || sourceBalance) return null;
+        return `This address holds no ${tickUpper}. A send spends from one address, not from the `
+            + 'whole wallet, so pick the address that holds it in the From field above.';
+    }, [previewBalances, sourceBalance, tick]);
+
     const onMax = useCallback(() => {
         if (!sourceBalance || !sourceBalance.amount) return;
         // Exact string/BigInt math: this string is what gets signed, and a
@@ -1143,6 +1229,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         const amt = String(amount).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Amount must be a positive number.');
+            return;
+        }
+        // : refuse a below-dust amount BEFORE composing. Enter also submits this
+        // form, so the inline warning alone would not be enough (same reasoning as the
+        // test-send gate below).
+        if (dustBlock) {
+            dustErrorRef.current = dustBlock;
+            setFormError(dustBlock);
             return;
         }
         if (/[|;]/.test(memo)) {
@@ -1940,6 +2034,26 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         );
     }
 
+    //  source picker, the same OwnAddressPickerScreen every other action
+    // form routes its From field to. Rendered in place of the form; all other
+    // form state stays intact behind it.
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setPickedSourceChain(chainId);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     // Contacts picker: rendered in place of the form when the user taps the
     // contacts icon in the To field. Selecting a row fills the To field and
     // returns to the form with all other state intact.
@@ -1999,6 +2113,39 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 prefill={prefill}
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
+            {/*
+              * : the funding address, shown and changeable.
+              *
+              * Send resolves its source to the chain's ACTIVE address and used to
+              * neither render it nor offer to change it, while the other 26 action
+              * forms all carry this field. That made the two halves of the screen
+              * disagree silently: the asset picker is WALLET-scoped and offers every
+              * token the wallet holds anywhere, but the funding is ADDRESS-scoped, so
+              * a token held on a non-active address could be selected, priced and
+              * composed, and the failure came back as the encoder's "no spendable
+              * UTXOs found for the funding address" - a sentence about UTXOs, from
+              * which the fix (switch address) is not discoverable.
+              *
+              * Rendering it also puts the balance line underneath in context: the
+              * "available" figure has always been this address's balance, not the
+              * wallet's.
+              */}
+            {fromAddress ? (
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                    hint="Only what this address holds can be sent."
+                />
+            ) : (
+                <div role="alert" className={styles.error}>
+                    No address on this chain. Use Receive to generate one first.
+                </div>
+            )}
             <AddressCombobox
                 size="lg"
                 icon="contacts"
@@ -2147,6 +2294,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                             {' '}across {sendLegs.length} recipients, in one transaction and one network fee.
                         </p>
                     ) : null}
+                </div>
+            ) : null}
+            {sourceLacksTick ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{sourceLacksTick}</p>
+                </div>
+            ) : null}
+            {/* : say it while the amount field still has focus, not only on Send.
+                Suppressed once Send has already pushed the same sentence into formError,
+                so the user is not shown it twice. */}
+            {dustBlock && formError !== dustBlock ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{dustBlock}</p>
                 </div>
             ) : null}
             {nativeMultiSendBlock ? (

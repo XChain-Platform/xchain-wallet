@@ -44,6 +44,7 @@ import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -134,6 +135,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [refillBalance, setRefillBalance] = useState(
         /** @type {string | null} */ (null),
     );
+    // D-147: how many of the five refills are gone, derived from the lifecycle
+    // events this page already loads. Nothing else can answer it: this lane has
+    // no confirm screen and owes no protocol fee, so no network dry run runs on
+    // it, and a sixth refill used to be signed and broadcast against a rule that
+    // rejects it every time.
+    const refillCount = useMemo(() => refillsUsed(lifecycle), [lifecycle]);
 
     // Edit (DISPENSER v2: reschedule EXPIRATION / update ALLOW_LIST /
     // BLOCK_LIST). Blank = leave unchanged (the indexer treats a null
@@ -417,6 +424,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const getAmount = dispenser?.get_amount;
     const giveTick = dispenser?.give_tick;
     const giveAmount = dispenser?.give_amount;
+    // D-144: a FIAT-priced dispenser stores NO coin price. GET_AMOUNT is 0 by
+    // protocol convention and the real price is derived at settlement from
+    // FIAT_AMOUNT and the validator snapshot for GET_COIN (dispense.js ->
+    // reversePriceMatch). This panel priced straight off GET_AMOUNT and so told
+    // a buyer to "Send exactly 0 LTC per fill" - an instruction that costs them
+    // a network fee and buys nothing. The explorer already serves `fiat`,
+    // `fiat_amount` and `oracle_address` on the dispenser row; read them and say
+    // what is actually true instead of quoting a zero as if it were a price.
+    const fiatCode = dispenser?.fiat || dispenser?.fiat_code || '';
+    const fiatAmount = dispenser?.fiat_amount;
+    const oracleAddress = dispenser?.oracle_address || '';
+    const isFiatPriced = Boolean(fiatCode) && (Boolean(oracleAddress) || fiatAmount != null);
     // Where a buyer sends payment. The by-action-index read path returns the
     // flattened action row, which carries `get_address`/`source` but no
     // `address` column, so keying only on `address` left the pay-to-buy panel
@@ -888,11 +907,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <p className={styles.summary}>
                     Refill dispenser #{actionIndex}: add {giveTick} to escrow.
                 </p>
-                <p className={styles.hint}>
-                    A refill resets the per-fill dispense counter (1,000 dispenses per
-                    fill). A dispenser allows up to 5 refills (6,000 lifetime dispenses);
-                    a 6th refill is rejected.
-                </p>
+                {/*
+                  * D-147: this used to be policy copy alone ("a dispenser allows
+                  * up to 5 refills … a 6th is rejected") with no count, on the one
+                  * lane the wallet cannot dry-run. It now says where THIS dispenser
+                  * stands, and when the ceiling is spent it says so as an alert and
+                  * the sign button goes away, because the alternative is a signed
+                  * transaction the chain always rejects.
+                  */}
+                {refillCount.remaining <= 0 && refillCount.exact ? (
+                    <div role="alert" className={styles.error}>
+                        {refillCeilingMessage(refillCount)}
+                    </div>
+                ) : (
+                    <p className={styles.hint}>{refillCeilingMessage(refillCount)}</p>
+                )}
                 <AmountField
                     label="Refill amount"
                     amount={refillAmount}
@@ -938,7 +967,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={refillStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        disabled={(refillCount.remaining <= 0 && refillCount.exact)
+                            || (cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0))}
                     >
                         {cancelHw
                             ? `Sign refill on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
@@ -1556,10 +1586,42 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {showPayHere ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
                     <p className={styles.successLabel}>Pay to buy</p>
+                    {/*
+                      * D-148: this used to say "Any {coin} wallet can trigger a
+                      * fill" unconditionally, and for a dispenser carrying an
+                      * allow- or block-list that is the opposite of the truth.
+                      * The gate runs in dispense.js AFTER the coin has moved -
+                      * a dispenser is triggered by a BARE payment - so a buyer
+                      * the list refuses is out the trigger price and the miner
+                      * fee and receives nothing. Measured on Litecoin regtest:
+                      * 5,005,460 sats for a refused fill, unrecoverable.
+                      */}
+                    {currentAllowList || currentBlockList ? (
+                        <p role="alert" className={styles.warning}>
+                            <strong>This dispenser is restricted.</strong>{' '}
+                            {currentAllowList
+                                ? `Only addresses on list #${currentAllowList} can trigger a fill.`
+                                : ''}
+                            {currentAllowList && currentBlockList ? ' ' : ''}
+                            {currentBlockList
+                                ? `Addresses on list #${currentBlockList} are barred from triggering it.`
+                                : ''}
+                            {' '}A payment from an address it refuses is <strong>not returned</strong>:
+                            the {getCoin} is spent, the dispense is recorded invalid, and nothing
+                            comes back. Check you are on the right side of the list before sending.
+                        </p>
+                    ) : null}
                     <p className={styles.hint}>
-                        This dispenser accepts bare {getCoin} payments. Any {getCoin} wallet
-                        can trigger a fill. Send exactly {getAmount} {getCoin} per fill to
-                        the dispenser address.
+                        This dispenser accepts bare {getCoin} payments.
+                        {currentAllowList || currentBlockList
+                            ? ''
+                            : ` Any ${getCoin} wallet can trigger a fill.`}
+                        {isFiatPriced
+                            ? ` Its price is set in ${fiatCode}, not in ${getCoin}: the `
+                              + `${getCoin} each fill costs is worked out when your payment `
+                              + 'lands, from the price feed the network was using at that '
+                              + 'moment. Send at least that much or the payment buys nothing.'
+                            : ` Send exactly ${getAmount} ${getCoin} per fill to the dispenser address.`}
                     </p>
                     <dl className={styles.detailsList}>
                         <dt className={styles.detailsLabel}>Send to</dt>
@@ -1574,19 +1636,33 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 {copied === 'address' ? 'Copied' : 'Copy'}
                             </button>
                         </dd>
-                        <dt className={styles.detailsLabel}>Send exactly</dt>
-                        <dd className={styles.detailsValue}>
-                            <code>{getAmount} {getCoin}</code>
-                            {' '}
-                            <button
-                                type="button"
-                                onClick={() => handleCopy(String(getAmount), 'amount')}
-                                style={{ marginLeft: '0.5rem' }}
-                            >
-                                {copied === 'amount' ? 'Copied' : 'Copy amount'}
-                            </button>
-                            {' per fill'}
-                        </dd>
+                        {isFiatPriced ? (
+                            <>
+                                <dt className={styles.detailsLabel}>Price per fill</dt>
+                                <dd className={styles.detailsValue}>
+                                    {oracleAddress && fiatAmount == null
+                                        ? `Set by an oracle, in ${fiatCode}`
+                                        : `${fiatAmount} ${fiatCode}`}
+                                    {` (paid in ${getCoin} at the rate when your payment lands)`}
+                                </dd>
+                            </>
+                        ) : (
+                            <>
+                                <dt className={styles.detailsLabel}>Send exactly</dt>
+                                <dd className={styles.detailsValue}>
+                                    <code>{getAmount} {getCoin}</code>
+                                    {' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCopy(String(getAmount), 'amount')}
+                                        style={{ marginLeft: '0.5rem' }}
+                                    >
+                                        {copied === 'amount' ? 'Copied' : 'Copy amount'}
+                                    </button>
+                                    {' per fill'}
+                                </dd>
+                            </>
+                        )}
                         <dt className={styles.detailsLabel}>Per-fill give</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>

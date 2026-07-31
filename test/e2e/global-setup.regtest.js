@@ -8,15 +8,33 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Global setup for the regtest venue: prove the chain is there before
-// Playwright spends two minutes onboarding a wallet against nothing.
+// Global setup for the regtest venue: prove the chain is there, and that it can
+// price an action, before Playwright spends two minutes onboarding a wallet
+// against neither.
 //
-// A down SSH tunnel otherwise surfaces as a spec timing out deep in the
-// send flow, which reads exactly like a wallet regression. Fail here
-// instead, once, with the tunnel command in the message.
+// Both checks exist for the same reason. A down SSH tunnel otherwise surfaces as
+// a spec timing out deep in the send flow, and missing price state surfaces as a
+// confirm screen refusing with "The LTC fee price is temporarily unavailable" -
+// and both read exactly like a wallet regression. Fail here instead, once, with
+// the cause named.
+//
+// Order matters: `seedPrices` talks to the explorer and the miner, so it would
+// report a down tunnel as a price problem if it ran first.
 
-import { assertVenueReachable } from './fixtures/regtest.js';
+import { assertVenueReachable, seedPrices, REGTEST_COIN } from './fixtures/regtest.js';
 
 export default async function globalSetup() {
     await assertVenueReachable();
+
+    // . Logged rather than silent: which price a run is asserting against
+    // is the single fact that explains a fee number, and "already priced" vs
+    // "seeded" is the difference between reading the venue's own oracle and
+    // reading a fixture.
+    const price = await seedPrices();
+    // The margin rides along because a fee-bearing spec that dies on "no current
+    // oracle price" looks exactly like a product regression until you know how
+    // much chain life the quote had when the run started .
+    const margin = Number.isFinite(price.marginSeconds) ? `, ${price.marginSeconds}s of chain life left` : '';
+    console.log(`[regtest ${REGTEST_COIN}] price ${price.seeded ? 'seeded' : 'already on venue'}: `
+        + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})${margin}`);
 }

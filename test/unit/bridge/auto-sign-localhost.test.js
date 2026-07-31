@@ -123,6 +123,28 @@ beforeEach(() => {
     sendToken.mockReset().mockImplementation(async (args) => ({ txid: 'tx', usedPassword: args.password }));
 });
 
+// handlers.js destructures `flows` from '@xchain-wallet/core' at module
+// scope, so the mock above only lands if handlers.js resolves that
+// specifier to the same file this test mocked. When it does not, vi.mock is
+// a silent no-op and the real signing flows run: the spies stay at zero and
+// the failures read as bridge bugs. Assert the wiring once, up front, so a
+// resolution drift names itself .
+// Deliberately reached by relative path, not by the specifier the mock is
+// keyed on: that is the whole point. This path can only mean core in THIS
+// checkout, so if the bare specifier resolved anywhere else the two are
+// different modules and the identity check fails here, loudly, instead of
+// six assertions later.
+it('the @xchain-wallet/core mock covers this checkout\'s core', async () => {
+    const core = await import('../../../packages/core/src/index.js');
+    expect(
+        core.flows.signMessageFlow,
+        '@xchain-wallet/core resolved to a different copy of core than this repo\'s '
+        + 'packages/core, so vi.mock never reached the bridge handlers '
+        + '(check test/vitest/workspaceAlias.js and node_modules/@xchain-wallet)',
+    ).toBe(signMessageFlow);
+    expect(core.flows.sendToken).toBe(sendToken);
+});
+
 describe('bridge.signMessage: localhost auto-sign reuses the cached password', () => {
     it('prompts once, then auto-signs subsequent requests from cache', async () => {
         const vault = makeVault({ autoSignLocalhostMs: AUTO_SIGN_LOCALHOST_5M });

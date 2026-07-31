@@ -23,8 +23,23 @@
 // The `webServer` spawns `pnpm -C packages/web dev`. On CI this gets
 // the `CI=1` + `reuseExistingServer: false` path so each job starts
 // from a clean port. Locally we reuse if already running.
+//
+// : the timeouts are NOT constants. This suite shares a machine
+// with whatever else is on it, and on a busy one it used to fail a
+// different spec each run while every one of them passed in isolation.
+// `timeout-budget.js` sizes the budget from the measured load; see its
+// header for why a single number could not be right for both an idle and
+// a contended box. Pin `PW_TIMEOUT_SCALE=1` to reproduce the old numbers.
 
 import { defineConfig, devices } from '@playwright/test';
+
+import { describeBudget, timeoutBudget } from './timeout-budget.js';
+
+const budget = timeoutBudget();
+// Named in the run's own output, so a red run is self-describing: the
+// budget it had is the first thing you need to know when deciding whether
+// a timeout was pressure or a genuine hang.
+console.log(describeBudget(budget));
 
 export default defineConfig({
     testDir: './tests',
@@ -38,8 +53,11 @@ export default defineConfig({
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,
     workers: 1,
-    timeout: 120_000,       // Argon2id KDF on CI runners can take several seconds
-    expect: { timeout: 15_000 },
+    // Argon2id KDF on CI runners can take several seconds, and an on-demand
+    // Vite transform on a loaded box costs several more. Both scale with
+    // contention, so both budgets do too.
+    timeout: budget.timeout,
+    expect: { timeout: budget.expectTimeout },
     reporter: process.env.CI
         ? [['github'], ['html', { open: 'never' }]]
         : 'list',

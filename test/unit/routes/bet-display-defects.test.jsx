@@ -348,6 +348,24 @@ describe('(c) MyBets names each row\'s outcome', () => {
         expect(utils.container.textContent).toContain('Backed outcome 1');
     });
 
+    // Session 25, . The deadline race put a REJECTED bet in this list and
+    // it read "Backed "No" (outcome 1) · staked 100 XCHAIN" under a raw
+    // lowercase `invalid` pill in the same colour as a live position. Nothing
+    // was staked: the chain refused the action. What it did cost is the fees.
+    it('does not tell a bettor they staked money on a bet the chain refused', async () => {
+        const rejected = { ...BET_ROW, bet_status: 'invalid', status: 'invalid: FEED_ACTION_INDEX (feed not open)' };
+        const { messaging } = harness({ bets: () => Promise.resolve({ data: [rejected] }) });
+        const utils = await openMyBets(messaging);
+        const text = utils.container.textContent;
+
+        expect(text).not.toContain('staked 100 XCHAIN');
+        expect(text).toContain('nothing was staked, but the fees were spent');
+        expect(text).toContain('Rejected by the network');
+        // The row still names what was attempted, and is still a row: the user
+        // paid for it and may need to find it.
+        expect(text).toContain('Would have backed "No" (outcome 1)');
+    });
+
     it('keeps the index alone when the market read fails, and asks only once', async () => {
         const { messaging, calls } = harness({
             bets: () => Promise.resolve({ data: [BET_ROW] }),

@@ -60,10 +60,16 @@ function scenario(over = {}) {
     };
     const matchRow = over.matchRow === null ? null : {
         action_index: '900',
-        give_action_index: '500', // my coin-GIVE order
-        get_action_index: '600',
-        give_amount: '0.005',     // coin-side fill
-        get_amount: '100',        // token-side fill
+        // The row's two column families do NOT pair up (xchain-indexer db.js
+        // createOrderMatch): the amounts are the TRIGGERING order's give/get, and
+        // that order is the one named by get_action_index, while
+        // give_action_index names the counterparty. This fixture used to be
+        // written the other way round - the same misreading the code carried -
+        // which is why the bug passed its own tests for as long as it existed.
+        give_action_index: '600', // the counterparty's order
+        get_action_index: '500',  // MY order: it triggered the match
+        give_amount: '0.005',     // my give: the coin-side fill
+        get_amount: '100',        // my get: the token-side fill
         settlement_type: 'coinpay',
         status: 'pending_coinpay',
         ...over.matchRow,
@@ -122,8 +128,40 @@ describe('paidBase / remainingGiveBase', () => {
 describe('orientMatch', () => {
     it('reads the coin fill from whichever side is the consented order', () => {
         const { matchRow } = scenario();
+        // Mine triggered the match, so the row's amounts are already mine.
         expect(orientMatch(matchRow, '500')).toEqual({ coinFill: '0.005', tokenFill: '100' });
+        // Seen from the counterparty, the sides swap: their give is my get.
         expect(orientMatch(matchRow, '600')).toEqual({ coinFill: '100', tokenFill: '0.005' });
+    });
+
+    // The regression, pinned against a row copied verbatim off the chain rather
+    // than hand-built, because a hand-built fixture is what hid this: the old one
+    // paired give_amount with give_action_index and so agreed with the bug.
+    //
+    // LTC regtest match 1559. Order 1558 GIVES 0.5 LTC and GETS 100 XCHAIN; order
+    // 1557 is its counterparty. The row names 1557 as give_action_index and 1558
+    // as get_action_index while carrying give_amount "0.5" - which only 1558 gives.
+    it('[REGRESSION] orients a real on-chain row: the coin fill is what I owe', () => {
+        const real = {
+            action: 'ORDER_MATCH',
+            action_index: '1559',
+            block_index: '3494',
+            give_action_index: '1557',
+            get_action_index: '1558',
+            give_amount: '0.5',
+            get_amount: '100',
+            give_coin: 'LTC',
+            get_coin: 'LTC',
+            settlement_type: 'coinpay',
+            status: 'pending_coinpay',
+        };
+        // 1558 is the coin payer; it owes 0.5 LTC, not 100 of anything.
+        expect(orientMatch(real, '1558'),
+            'the coin payer is handed the TOKEN fill as their coin fill, so cap 2 compares a coin '
+            + 'debt against a token quantity and auto-pay refuses every obligation it is offered')
+            .toEqual({ coinFill: '0.5', tokenFill: '100' });
+        // And the counterparty's own view is the mirror of it.
+        expect(orientMatch(real, '1557')).toEqual({ coinFill: '100', tokenFill: '0.5' });
     });
 
     it('nulls when the row does not reference the order or lacks amounts', () => {

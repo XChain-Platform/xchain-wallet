@@ -51,6 +51,7 @@ function droppedFields(params) {
 }
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
+const LTC_CHAIN = 'litecoin-regtest';
 const ADDRESSES = {
     'bitcoin-mainnet': [
         {
@@ -63,14 +64,28 @@ const ADDRESSES = {
     ],
 };
 
+// The form picks the FIRST chain the host reports addresses for, so a mount on
+// another chain hands it that chain alone rather than reordering a shared map.
+const LTC_ADDRESSES = {
+    [LTC_CHAIN]: [
+        {
+            id: 'addr-ltc',
+            address: 'rltc1qexampleexampleexampleexampleexampleex',
+            publicKey: '02cd',
+            derivationPath: "m/84'/2'/0'/0/0",
+            source: 'hd',
+        },
+    ],
+};
+
 let composeForConfirm;
 
-function mountForm() {
+function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES) {
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
     const target = {
-        getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+        getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listContacts: vi.fn().mockResolvedValue([]),
@@ -93,7 +108,7 @@ function mountForm() {
             { shell: 'web', messaging },
             React.createElement(BroadcastForm, {
                 walletId: 'w',
-                initialChainId: 'bitcoin-mainnet',
+                initialChainId: chainId,
                 onBack() {},
             }),
         ),
@@ -214,5 +229,30 @@ describe('BroadcastForm builds a sendable MEMO ', () => {
 
         await screen.findByText(/Remove any \| or ; characters/);
         expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
+//  (wallet E2E session 25, D-114). BROADCAST has no gas-schedule entry:
+// `/RLTC/api/feequote?action=BROADCAST` answers `xchainFee 0.00000000`,
+// `requiredFeeSats 0`, and applyNativeFeePreflight builds no fee output for it.
+// The SCREEN said otherwise. On LTC, where  turns the fee row into a
+// statement rather than a choice, this form read "Protocol fee is paid in LTC ·
+// LTC is the only way to pay the protocol fee on this chain. The fee is sent
+// on-chain and is not refunded if the network rejects this transaction" for an
+// action that is never charged anything.
+describe(' the fee row does not promise a fee BROADCAST never pays', () => {
+    it('states the chain rule conditionally on LTC instead of asserting a charge', async () => {
+        mountForm(LTC_CHAIN, LTC_ADDRESSES);
+        await screen.findByLabelText(/^Feed name/);
+
+        // The old sentences, both gone: no definite charge, no forfeiture claim
+        // about money that is never spent.
+        expect(screen.queryByText(/Protocol fee is paid in LTC/)).toBeNull();
+        expect(screen.queryByText(/The fee is sent on-chain and is not refunded/)).toBeNull();
+
+        // What replaces them is true whether or not this action is priced, so
+        // no per-action list has to be kept in the client for it to stay true.
+        expect(screen.getByText('Protocol fees are paid in LTC')).toBeTruthy();
+        expect(screen.getByText(/If this action charges one/)).toBeTruthy();
     });
 });

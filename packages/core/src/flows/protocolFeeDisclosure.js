@@ -30,6 +30,19 @@
 // Which is also why the native lane must NOT take this line: it already shows
 // the same fee as a native-coin debit, and adding an XCHAIN line beside it
 // would read as a second, separate charge.
+//
+// : the report is NOT the only source, because it is best-effort. The
+// SDK's Tier-1 dry run has a 4-second budget and the wallet drops the verdict
+// when the indexer misses it (the panel says "the network dry-run was
+// unavailable ... relying on client checks"), which used to take the fee line
+// down with it - the confirm screen fell all the way back to quoting the miner
+// fee to eight decimals with the larger charge unmentioned, i.e. 's
+// screen, on a venue that was merely busy. Measured in the wallet e2e campaign
+// §11.1: same action, same wallet, one run stated the fee and the next did not.
+// So the composed envelope now carries the wallet's OWN fee quote
+// (`composed.xchainFee`, from the same `/feequote` call the native lane sizes a
+// real output from) and this reads it whenever the report has nothing to say.
+// A number good enough to spend is good enough to display.
 
 /** The tick every protocol fee is denominated in. */
 export const PROTOCOL_FEE_TICK = 'XCHAIN';
@@ -48,25 +61,34 @@ export const PROTOCOL_FEE_TICK = 'XCHAIN';
  * Null in four cases, each deliberate:
  *   - the fee is being paid in the native coin (the composed envelope carries
  *     a quote), where it is already disclosed as a native debit;
- *   - the pre-flight report is absent or predates  (legacy `/feequote`
- *     answers carry no `xchainFee`), where the wallet does not know the fee
- *     and must not imply it is zero;
- *   - `xchainFee` is null, which means the dry-run was rejected before the
+ *   - NEITHER source knows the fee: no report (or one from a pre-
+ *     explorer, whose legacy `/feequote` answers carry no `xchainFee`) AND no
+ *     quote on the composed envelope. The wallet must not imply zero;
+ *   - both sources answer null, which means the dry-run was rejected before the
  *     handler staged a fee record - a "fee: none" line there would be a claim
  *     about an action that is not going to run;
  *   - the fee is zero, i.e. the action genuinely charges nothing.
  *
+ * The report is preferred where it has an answer: it is the fee record the
+ * dry-run itself staged for these exact bytes. The envelope's quote is the
+ * fallback, and the reason it exists is that the report is allowed to be
+ * missing .
+ *
  * @param {object} [args]
  * @param {{ quote?: { xchainFee?: string|number|null } | null } | null} [args.report]
  *   the SDK PreflightReport
- * @param {{ protocolFeeSats?: number|null, quote?: object|null } | null} [args.composed]
+ * @param {{ protocolFeeSats?: number|null, quote?: object|null,
+ *   xchainFee?: string|null } | null} [args.composed]
  *   the composed-action envelope (composeActionForConfirm)
  * @returns {ProtocolFeeDisclosure | null}
  */
 export function xchainProtocolFeeLine({ report, composed } = {}) {
     if (paysFeeInNativeCoin(composed)) return null;
 
-    const raw = report?.quote?.xchainFee;
+    const reported = report?.quote?.xchainFee;
+    const raw = (reported === undefined || reported === null)
+        ? composed?.xchainFee
+        : reported;
     if (raw === undefined || raw === null) return null;
 
     const amount = trimDecimal(String(raw).trim());

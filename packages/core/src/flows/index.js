@@ -412,6 +412,16 @@ export {
     NotHardwareAddressError,
 } from './verifyReceiveAddress.js';
 export { dispenserAddress } from './dispenserAddress.js';
+// : Settings > Privacy "fresh change address for every send".
+export {
+    resolveChangeAddress,
+    deriveChangeAddress,
+    changeRotationEnabled,
+    nextChangeIndex,
+    findSourceRecord,
+    branchOf,
+    CHANGE_BRANCH,
+} from './changeAddress.js';
 export { resolveActiveAddresses, setActiveAddress } from './activeAddress.js';
 export { isBindingPoll, bindingPollErrors, CALLBACK_ON_VALUES } from './bindingPoll.js';
 export { unclaimedRewards, cooldownStatus, cooldownText, toBaseUnits, fromBaseUnits } from './stakingDashboard.js';
@@ -538,10 +548,8 @@ export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLive
 // : which transaction carries the native-coin protocol fee.
 export {
     nativeFeeOutputOf,
-    willTakeChunkLane,
+    isChunkEncoding,
     withoutCustomOutput,
-    assertFeeLane,
-    FeeLaneMismatchError,
 } from './nativeFeeLane.js';
 // : the Approve-time re-check of an already-sized native-coin fee. The
 // host route owns the quote fetch; the band comparison and its sentence are

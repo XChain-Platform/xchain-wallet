@@ -27,10 +27,10 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
-    nativeFeeErrorMessage,
     NATIVE_FEE_WARNING,
     NATIVE_FEE_UNVERIFIED_NOTICE,
 } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -405,7 +405,18 @@ export function DeployContractForm({ walletId, onBack }) {
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        // The PLAN decides the lane, not just the wallet mode. `openConfirmScreen`
+        // composes ONE `{ action: 'DEPLOY' }` and never consults `plan`, so routing
+        // a chunked source there attempted a single-shot deploy of a source this
+        // very form had just described as "N chunk transactions plus 1 assembling
+        // transaction" - and the encoder refused it with "Combined compiled payload
+        // (8194 bytes) exceeds maximum (8192)". That left PC-38's chunked lane
+        // unreachable from BOTH sides: full mode never entered it, and watcher mode,
+        // the only mode that reached `handleSubmit`, is refused inside it by design
+        // because the legs must be signed one after another.
+        // The review stage is the chunked lane's entry point and already renders
+        // SignCredentials in full mode, so a chunked plan goes there instead.
+        if (singleEncode && plan?.single !== false) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -471,9 +482,11 @@ export function DeployContractForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
-                : err?.message || 'Deploy failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Deploy failed.',
+            }));
         }
     }
 
@@ -561,9 +574,11 @@ export function DeployContractForm({ walletId, onBack }) {
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.name === 'NativeFeeForfeitError'
-                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory })
-                        : err?.message || 'Deploy failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFee.mandatory,
+                        fallback: err?.message || 'Deploy failed.',
+                    }),
             );
             setChunkProgress(null);
             // PC-38: a failed chunked run leaves its record behind on purpose -
@@ -579,6 +594,33 @@ export function DeployContractForm({ walletId, onBack }) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        }
+    }
+
+    /**
+     * Put a resumed deploy's phase-2 fields back on screen .
+     *
+     * The flow assembles from `record.assembleParams`, so the form must show the
+     * same values or the review screen describes a different transaction than
+     * the one being signed. Tolerant of an older record with no stored params:
+     * it leaves the fields alone rather than clearing them.
+     */
+    function restoreAssembleFields(assembleParams) {
+        if (!assembleParams || typeof assembleParams !== 'object') return;
+        if (assembleParams.GAS_LIMIT) setGasLimit(String(assembleParams.GAS_LIMIT));
+        const ctor = assembleParams.CONSTRUCTOR_PARAMS;
+        if (ctor !== undefined && ctor !== null) {
+            // v2 stores the REST field as an array, v3 as a single value; the
+            // form collects both as one pipe-delimited string.
+            setConstructorParams(Array.isArray(ctor) ? ctor.join('|') : String(ctor));
+        }
+        if (assembleParams.COOLDOWN_BLOCKS) setCooldownBlocks(String(assembleParams.COOLDOWN_BLOCKS));
+        // The form's convention is that a BLANK destination means BURN, and the
+        // wire params spell BURN out, so map it back rather than typing the
+        // literal into a field whose placeholder already means it.
+        if (assembleParams.SLASH_DESTINATION) {
+            setSlashDestination(String(assembleParams.SLASH_DESTINATION) === 'BURN'
+                ? '' : String(assembleParams.SLASH_DESTINATION));
         }
     }
 
@@ -737,6 +779,22 @@ export function DeployContractForm({ walletId, onBack }) {
                 {(isWatcherMode || isHwSource) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
+                {/* A chunked run lives entirely in `submitting`, which renders THIS
+                    screen - so the explanation has to be here. It used to sit in the
+                    form-stage JSX, i.e. on a screen the user has already left by the
+                    time the run starts, which left a multi-minute, multi-transaction
+                    deploy showing nothing but a spinning button. States what is
+                    happening without claiming a live count it cannot know (a frozen
+                    "0 of N" would read as a stall); per-leg progress is in the
+                    pendingDeploy record the resume banner reads. */}
+                {chunkProgress ? (
+                    <p className={styles.summary} role="status">
+                        Deploying {chunkProgress.total} chunk transactions, then the assembling one.
+                        Each waits for confirmation before the next is signed, so this takes a
+                        few minutes. Leave the wallet open; if it is interrupted you can resume
+                        without re-paying for the chunks already sent.
+                    </p>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
@@ -846,12 +904,23 @@ export function DeployContractForm({ walletId, onBack }) {
             {resumable.length > 0 ? (
                 <div className={styles.warnings}>
                     {resumable.map((r) => {
-                        const done = (r.chunks || []).filter((c) => c.actionIndex).length;
+                        // : count a chunk as SENT on its txid, not only on
+                        // its action_index. The index is written after the
+                        // indexer answers; the txid at broadcast. Counting
+                        // indexes alone made the banner read "0 of 2" over a
+                        // run whose first chunk was on chain and paid for -
+                        // measured live - which is the one number a user reads
+                        // to decide between finishing and starting over.
+                        // "Sent" rather than "on chain" because a broadcast that
+                        // never confirmed is still only sent; the resumed run
+                        // re-checks each one against the chain and re-sends
+                        // whatever is genuinely missing.
+                        const done = (r.chunks || []).filter((c) => c.actionIndex || c.txid).length;
                         return (
                             <div key={r.id} className={styles.warning}>
                                 <p>
                                     Unfinished deploy{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
-                                    {r.totalChunks} chunk transactions are already on chain. Finishing
+                                    {r.totalChunks} chunk transactions have already been sent. Finishing
                                     costs only the remaining ones; starting over pays for all of them again.
                                 </p>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -864,6 +933,14 @@ export function DeployContractForm({ walletId, onBack }) {
                                             setResumeId(r.id);
                                             setValidation(null);
                                             setSizeInfo(null);
+                                            // : restore the rest of the plan, not just the
+                                            // source. The flow now assembles phase 2 from the
+                                            // record, so leaving these fields blank would show a
+                                            // review screen that disagrees with the transaction
+                                            // about to be signed - measured: the gas field came
+                                            // back empty against an original 50000. `assembleParams`
+                                            // is the record's copy of exactly these values.
+                                            restoreAssembleFields(r.assembleParams);
                                         }}
                                     >
                                         Resume this deploy
@@ -964,15 +1041,6 @@ export function DeployContractForm({ walletId, onBack }) {
                 live count it cannot know (a frozen "0 of N" would read as a
                 stall). Per-leg progress is recorded in the pendingDeploy
                 record, which is what the resume banner reads. */}
-            {chunkProgress ? (
-                <p className={styles.summary} role="status">
-                    Deploying {chunkProgress.total} chunk transactions, then the assembling one.
-                    Each waits for confirmation before the next is signed, so this takes a
-                    few minutes. Leave the wallet open; if it is interrupted you can resume
-                    without re-paying for the chunks already sent.
-                </p>
-            ) : null}
-
             {validation ? (
                 <p
                     role={validation.ok ? undefined : 'alert'}

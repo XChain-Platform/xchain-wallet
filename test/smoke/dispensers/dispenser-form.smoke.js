@@ -140,9 +140,23 @@ assert.ok(
     /Oracle pricing needs a fiat currency/.test(src),
     'DispenserForm requires fiat code when oracle is set',
 );
+// D-142: this used to pin the copy "Fiat amount must look like 12.34", which
+// was the wording of a rule the CHAIN does not have. The protocol's rule is AT
+// MOST two decimals, so `3` and `3.5` are valid prices and JPY/KRW - both in
+// this form's own currency list - have no honest two-decimal form at all. The
+// check now pins the corrected rule and the shared validator it delegates to,
+// which is what keeps the form and `isValidFiatFormat(2, ...)` in step.
 assert.ok(
-    /Fiat amount must look like 12\.34/.test(src),
-    'DispenserForm enforces X.XX fiat amount',
+    /at most 2 decimal places/.test(src),
+    'DispenserForm states the chain\'s actual fiat-amount rule (at most 2 decimals)',
+);
+assert.ok(
+    !/must look like 12\.34/.test(src),
+    'DispenserForm no longer demands exactly two decimals (D-142)',
+);
+assert.ok(
+    /isValidFiatAmount/.test(src) && /utils\/fiatAmountFormat\.js/.test(src),
+    'DispenserForm delegates the fiat-amount check to the shared validator',
 );
 
 // --- 6. Params composer -----------------------------------------------

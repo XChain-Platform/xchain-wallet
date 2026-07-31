@@ -50,6 +50,16 @@ export function IconSelect({ label, value, onChange, options = [], placeholder =
 
     const selected = options.find((o) => o.value === value) || null;
 
+    // Same reasoning as the sibling ChainPicker and TokenField: the visible
+    // label below is a <span>, not a <label for>, so without this the trigger's
+    // whole accessible name is its current selection. ComposeMessage renders two
+    // of these side by side - "Encryption" and "Delivery network" - which a
+    // screen reader announced as two unexplained buttons, on a screen where one
+    // of them decides whether the message is encrypted at all.
+    const accessibleName = label
+        ? `${label}: ${selected ? selected.label : placeholder}`
+        : undefined;
+
     return (
         <div className={styles.wrap}>
             {label ? <span className={styles.label}>{label}</span> : null}
@@ -60,6 +70,7 @@ export function IconSelect({ label, value, onChange, options = [], placeholder =
                 onClick={() => !disabled && setOpen((v) => !v)}
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
+                aria-label={accessibleName}
                 disabled={disabled}
             >
                 <span className={styles.icon} aria-hidden="true">{selected?.icon || null}</span>

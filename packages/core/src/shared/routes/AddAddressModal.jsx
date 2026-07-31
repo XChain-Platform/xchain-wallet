@@ -247,6 +247,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                         setError(null);
                                     }}
                                     disabled={busy}
+                                    data-testid="add-address-purpose"
                                 >
                                     <option value="receive">Receive</option>
                                     <option value="dispenser">Dispenser</option>
@@ -275,7 +276,11 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                         {error ? <div role="alert" className={styles.error}>{error}</div> : null}
                         {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         <div className={styles.actions}>
-                            <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !effectiveChainId}>
+                            {/* The label carries a count ("Generate 3"), so matching it by
+                                text needs a regex that quietly also matches the wrong
+                                button the day another Generate appears . */}
+                            <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !effectiveChainId}
+                                data-testid="add-address-generate">
                                 {generateLabel}
                             </Button>
                         </div>

@@ -41,6 +41,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    warmPreflight,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'a11yconfirmpassword';
@@ -84,6 +85,27 @@ async function fundedWallet(page) {
     await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    return own;
+}
+
+/**
+ * Warms the dry-run for one of the two amounts this spec composes.
+ *
+ * The fail arm is the scan that matters here - it is the only state that
+ * renders the error list and the "Sign anyway" checkboxes - and it exists
+ * only if the Tier-1 verdict arrives inside the SDK's 4000ms budget, which a
+ * cold dry-run on this shared venue frequently misses. Without this the scan
+ * would quietly fall back to the pass layout and audit the wrong screen.
+ * See `warmPreflight`.
+ */
+async function warmSend(source, amount, expected) {
+    const quote = await warmPreflight({
+        action: 'SEND',
+        params: `0|XCHAIN|${amount}|${REGTEST_DESTINATION}`,
+        source,
+    });
+    expect(quote.valid, `the venue's own dry-run for a ${amount} XCHAIN send disagrees `
+        + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
 }
 
 /**
@@ -93,11 +115,14 @@ async function fundedWallet(page) {
  * funding and minting, and both states are reachable from the same wallet
  * by changing one field.
  */
-async function scanBothVerdicts(page, width) {
+async function scanBothVerdicts(page, own, width) {
+    await warmSend(own, AFFORDABLE, true);
     await composeTokenSend(page, AFFORDABLE);
     await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
+
+    await warmSend(own, UNAFFORDABLE, false);
 
     // The fail state is its own scan target, not a variation: it is the only
     // one that renders the error list, the per-finding "Sign anyway"
@@ -112,8 +137,8 @@ async function scanBothVerdicts(page, width) {
 
 test.describe('a11y: confirm surface, full width (§5.2)', () => {
     test('both verdict states scan clean', async ({ page }) => {
-        await fundedWallet(page);
-        await scanBothVerdicts(page, 'full');
+        const own = await fundedWallet(page);
+        await scanBothVerdicts(page, own, 'full');
     });
 });
 
@@ -128,7 +153,7 @@ test.describe('a11y: confirm surface, popup width (§5.2)', () => {
     test.use({ viewport: POPUP });
 
     test('both verdict states scan clean', async ({ page }) => {
-        await fundedWallet(page);
-        await scanBothVerdicts(page, 'popup');
+        const own = await fundedWallet(page);
+        await scanBothVerdicts(page, own, 'popup');
     });
 });

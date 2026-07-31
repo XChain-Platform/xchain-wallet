@@ -56,10 +56,16 @@ function obligationRow(over = {}) {
 function matchRow(over = {}) {
     return {
         action_index: '900',
-        give_action_index: '500',
-        get_action_index: '600',
-        give_amount: '0.005',
-        get_amount: '100',
+        // The row's two column families do NOT pair up: the amounts are the
+        // TRIGGERING order's give/get and that order is get_action_index, while
+        // give_action_index names the counterparty (xchain-indexer db.js
+        // createOrderMatch). This fixture was written the other way round, which
+        // is how orientMatch's inversion survived: the consented order '500' owes
+        // the COIN, so it must be the side whose give_amount is the coin fill.
+        give_action_index: '600', // the counterparty
+        get_action_index: '500',  // the consented order, which triggered the match
+        give_amount: '0.005',     // its give: the coin fill
+        get_amount: '100',        // its get: the token fill
         settlement_type: 'coinpay',
         status: 'pending_coinpay',
         ...over,

@@ -312,12 +312,35 @@ export function TokenPicker({
         />
     );
 
-    const emptyTitle = tokenQueryTrim
-        ? 'No matching balances'
-        : (networkFilter === 'all'
-            ? (isReceive ? 'No balances to receive against yet' : 'Nothing to send yet')
-            : 'No balances on this network');
-    const emptyBody = tokenQueryTrim
+    // D-152. A token-ledger read that failed degrades to an EMPTY token list
+    // (flows/balances.js `fetchAddressShape`), which is indistinguishable from
+    // holding nothing - so "Nothing matches X" was being printed with equal
+    // confidence over a token the address was holding. Where the read is known
+    // to be incomplete, say so instead of asserting an absence.
+    const partialRead = useMemo(() => {
+        if (!balances || typeof balances !== 'object') return false;
+        for (const entries of Object.values(balances)) {
+            if (!Array.isArray(entries)) continue;
+            for (const entry of entries) {
+                if (entry?.error) return true;
+                if (Array.isArray(entry?.balances?.unavailable)
+                    && entry.balances.unavailable.includes('tokens')) return true;
+            }
+        }
+        return false;
+    }, [balances]);
+
+    const emptyTitle = partialRead
+        ? 'Balances could not be fully loaded'
+        : tokenQueryTrim
+            ? 'No matching balances'
+            : (networkFilter === 'all'
+                ? (isReceive ? 'No balances to receive against yet' : 'Nothing to send yet')
+                : 'No balances on this network');
+    const emptyBody = partialRead
+        ? 'Some of this wallet\'s token balances could not be read just now, so this list may be '
+            + 'incomplete. It is not a statement that you hold nothing. Try again in a moment.'
+        : tokenQueryTrim
         ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see everything.`
         : (networkFilter === 'all'
             ? (isReceive

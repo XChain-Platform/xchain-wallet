@@ -33,10 +33,12 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'CALLBACK',
     'COINPAY',
     'DELEGATE',
+    'DEPLOY',
     'DEPOSIT',
     'DESTROY',
     'DISPENSER',
     'DIVIDEND',
+    'EXECUTE',
     'FILE',
     'ISSUE',
     'LINK',
@@ -80,60 +82,43 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 // list is per-ACTION, the validator-only SURFACES gate themselves at the
 // form level rather than here; see StakingList / StakeForm.
 //
-// DEPLOY and EXECUTE are held back for a different reason, and NOT
-// because the chain refuses them: LTC/DOGE settle the protocol fee in
-// NATIVE COIN, and sizing that output needs a feequote the indexer
-// DENYLISTS for exactly these two (they run caller-supplied code in the
-// VM, so dry-running them on a shared node would be a block-loop stall
-// primitive). The denylist's advice - "pay the fee in XCHAIN" - is BTC-
-// era and has no LTC/DOGE equivalent, so a wallet there can compose
-// them but can never pay for them: measured live 2026-07-26, a DEPLOY
-// indexes `insufficient fee (native coin output required)` while
-// quoteNativeFee answers `supported:false`. Advertising them would hand
-// the user a form that burns a network fee on a guaranteed-invalid
-// action. They open when that fee-quote gap closes (see the ledger).
+// DEPLOY and EXECUTE used to sit here too, and were the reason this list
+// outlived the staking split. Not because the chain refused them: LTC/DOGE
+// settle the protocol fee in NATIVE COIN, the indexer denylists a dry-run
+// feequote for exactly these two (they run caller-supplied code in the VM, so
+// dry-running them on a shared node would be a block-loop stall primitive),
+// and the denylist advice - "pay the fee in XCHAIN" - has no LTC/DOGE
+// equivalent. A wallet there could compose them and never pay for them.
 //
-//  closed the INDEXER half of that gap (FEE_QUOTE_STATIC gives
-// DEPLOY/EXECUTE a schedule-priced, verdict-free quote), and the SDK
-// already treats its `valid:null` as payable-but-unverified.  then
-// wired the WALLET half: DeployContractForm and ExecuteContractForm carry
-// the useNativeFee/NativeFeeToggle lane (mandatory wherever there is no
-// XCHAIN fee lane) and surface the verdict-free caveat, and the DEPLOY
-// form now takes its chain list from THIS list instead of a second
-// hard-coded 'bitcoin', so a flip here moves the form with it.
-// ContractsList still pins VM_COIN='bitcoin' for its browse/entry surface
-// and is the one remaining wallet site a flip has to visit by hand.
+// That gap is closed, in all four places it had to close :
+//   - INDEXER:  gives DEPLOY/EXECUTE a schedule-priced, verdict-free
+//     static quote, and the SDK reads its `valid:null` as payable-but-
+//     unverified rather than as a refusal.
+//   - WALLET forms:  put the useNativeFee/NativeFeeToggle lane on
+//     DeployContractForm and ExecuteContractForm (mandatory wherever there is
+//     no XCHAIN lane) and pointed the DEPLOY form chain list at THIS list.
+//   - FEE PLACEMENT:  moved the fee output onto the phase-2 reveal (the
+//     transaction the indexer checks) and  kept it declared to the
+//     phase-1 build so the commit reserves its value; see flows/nativeFeeLane.
+//   - VENUE: proven live rather than argued. A wallet-composed DEPLOY paying
+//     the native fee indexes `valid` on litecoin-regtest (actions 1226-1228,
+//     6946667 sats to FEE_DESTINATION) and on dogecoin-regtest (action 953,
+//     20.84 DOGE), through both submitWithSigner branches, driven by
+//     tools/regtest/deployNativeFee.mjs on 2026-07-28.
 //
-// These two stay here anyway, because the VENUE leg is still open: the
-// LTC/DOGE regtest indexers still run PRE- code (measured
-// 2026-07-26 via feequote on both: `supported:false`, "native fee
-// pre-flight not supported"), so the payability exists in git and on no
-// venue. Flipping before that lands would ship the exact hazard this list
-// was created to prevent. The gate is a live `feequote` for DEPLOY
-// answering supported:true with a staticQuote on both chains, then a
-// wallet-composed DEPLOY that indexes valid there.
+// So they are gone from this list and COLLECT is alone in it. Reverting that
+// flip is a VENUE question, not a code one: re-run the driver on both chains
+// before believing any claim that these are unpayable again.
 //
-// The forms leg used to claim those two were the ONLY fee-bearing
-// forms without the lane. They were not:  found the BET authoring
-// surfaces (CreateBetFeedForm, BetFeedDetail's place-bet flow) in the same
-// state, and BET is in COMMON_ACTIONS, so it was already offered on
-// LTC/DOGE while being unpayable there. Both are wired now, and the
-// superlative is gone rather than re-asserted: it is a claim about every
-// form in the wallet, which no comment can keep true, and asserting it is
-// what let BET hide. The native-fee-sweep smoke is where that property is
-// actually enforced, form by named form.
-//
-// BATCH is NOT the same shape, contrary to the note this replaces.
-// Measured 2026-07-26: batch.js runs every sub-action through
-// processAction, so each one validates its OWN native fee and BATCH
-// itself never calls validateNativeCoinFee and carries no protocol fee.
-// Its denylisting is a QUOTING limit (a compound action can't be priced
-// without running the engine), not a payability one, so it correctly
-// stays in COMMON_ACTIONS on every chain.
+// BATCH is NOT the same shape, contrary to a note this replaced. Measured
+// 2026-07-26: batch.js runs every sub-action through processAction, so each
+// one validates its OWN native fee and BATCH itself never calls
+// validateNativeCoinFee and carries no protocol fee. Its denylisting is a
+// QUOTING limit (a compound action cannot be priced without running the
+// engine), not a payability one, so it correctly stays in COMMON_ACTIONS on
+// every chain.
 export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
     'COLLECT',
-    'DEPLOY',
-    'EXECUTE',
 ]);
 
 // Protocol-accepted on every chain, form-less by design (see header note 2).

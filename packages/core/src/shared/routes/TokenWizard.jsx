@@ -35,7 +35,8 @@ import {
     advancedIssueWarnings,
 } from '../utils/issueAdvancedFields.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
@@ -392,9 +393,11 @@ export function TokenWizard({ walletId, onBack }) {
             // NativeFeeForfeitError, whose own message is wire wording ("native-coin fee
             // pre-flight failed (dust): ..."). This is the path the confirm flow actually
             // takes, so leaving it unmapped showed that wording to every user.
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                : err?.message || 'Issue failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: err?.message || 'Issue failed.',
+            }));
         }
     }
 
@@ -426,13 +429,14 @@ export function TokenWizard({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr
-                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                    : err?.message || 'Sign failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFeeMandatory,
+                        fallback: err?.message || 'Sign failed.',
+                    }),
             );
             setStage('preview');
             passwordRef.current?.focus();

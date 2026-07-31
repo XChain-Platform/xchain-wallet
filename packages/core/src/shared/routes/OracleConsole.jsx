@@ -17,6 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -80,6 +81,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
     const [password, setPassword] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null, queued: boolean} | null} */ (null));
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
@@ -172,8 +174,9 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     async function runOracleAction(feed, builder, submit, params) {
         const from = sourceDescriptor(feed.owner);
         setFormError(null);
+        setResult(null);
         try {
-            await actionConfirm.run({
+            const res = await actionConfirm.run({
                 chainId: feed.chainId,
                 from,
                 compose: () => messaging.composeBetForConfirm({
@@ -183,13 +186,29 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     walletId, chainId: feed.chainId, from, params, prebuiltPsbt,
                 }),
             });
+            // The two most consequential actions in betting reported NOTHING on
+            // success: the list simply reloaded, so publishing a result that pays
+            // out an entire pot looked exactly like a click that did nothing. The
+            // txid matters most on the losing side of a race - a resolve broadcast
+            // as the refund window ends is judged by the block it lands in - and
+            // without it there is no handle to look the attempt up by.
+            setResult({
+                mode: builder === 'cancelMarketParams' ? 'cancel' : 'resolve',
+                feedIndex: String(feed.action_index),
+                txid: res?.txid || res?.tx_hash || null,
+                queued: !!res?.queued,
+            });
             setActive(null);
             setOutcome(null);
             setPassword('');
             load();
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Action failed.');
+            // Resolve and cancel are not fee-bearing , so this form has
+            // no native-fee lane to describe - but it can still be handed an SDK
+            // params-builder refusal, and those read as log lines until they go
+            // through the shared mapper (D-118).
+            setFormError(submitFailureMessage(err, { fallback: err?.message || 'Action failed.' }));
         }
     }
 
@@ -244,6 +263,28 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     return wrap(
         <>
             {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {result ? (
+                <div className={styles.card} data-testid="oracle-result">
+                    <p className={styles.summary}>
+                        {/*  leg (a): signed and NOT broadcast. An oracle told "result sent"
+                            for a transaction still sitting in the queue would wait out its own
+                            refund window, which costs it the market. */}
+                        {result.queued
+                            ? `Signed, but the ${result.mode === 'cancel' ? 'cancel' : 'result'} for market `
+                              + `#${result.feedIndex} could not reach the network just now. It is queued and `
+                              + 'will be broadcast automatically; do not submit it again.'
+                            : result.mode === 'cancel'
+                                ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
+                                : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}
+                    </p>
+                    {result.queued ? null : (
+                        <dl className={styles.detailsList}>
+                            <dt className={styles.detailsLabel}>Txid</dt>
+                            <dd className={styles.detailsValue}>{String(result.txid || 'n/a')}</dd>
+                        </dl>
+                    )}
+                </div>
+            ) : null}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {rows.map((f) => {
                     const key = `${f.chainId}:${f.action_index}`;

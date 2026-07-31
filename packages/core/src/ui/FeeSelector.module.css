@@ -71,6 +71,12 @@
     width: 100%;
     accent-color: var(--xc-accent-primary);
     cursor: pointer;
+    /*  slice 2: the native range input is drawn ~16px tall, which
+       is under the 24px pointer-target floor and genuinely hard to grab
+       on a phone. Height on the INPUT enlarges the hit area; the browser
+       keeps painting the track and thumb centred at their own size, so
+       the fee row looks unchanged and is easier to hit. */
+    min-height: var(--xc-tap-min);
 }
 
 .slider:focus-visible {
@@ -86,7 +92,8 @@
 
 .sliderTicks {
     position: relative;
-    height: 1.25em;
+    /* Tall enough to hold a tick at the tap-target floor below. */
+    height: var(--xc-tap-min);
 }
 
 .sliderTick {
@@ -98,12 +105,21 @@
     white-space: nowrap;
     background: transparent;
     border: none;
-    padding: 0;
+    padding: 0 var(--xc-space-1);
     font: inherit;
     cursor: pointer;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     text-align: center;
+    /*  slice 2: "Low" measured 21x13. The stops are the fastest way
+       to set a fee tier and were the smallest targets in the send form.
+       Flex-centred so the label stays optically on its nub while the
+       button around it reaches the 24px floor. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
 }
 
 .sliderTick:first-child { transform: translateX(0); }
@@ -184,7 +200,10 @@
 .readoutEdit {
     background: transparent;
     border: none;
-    padding: 0;
+    /*  slice 2: block padding lifts a 17px-tall text button to the
+       24px target floor without moving the figure it underlines. */
+    padding: var(--xc-space-1) 0;
+    min-height: var(--xc-tap-min);
     font: inherit;
     color: inherit;
     cursor: text;

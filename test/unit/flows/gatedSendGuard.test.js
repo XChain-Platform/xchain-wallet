@@ -17,6 +17,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
     prepareGatedSend,
@@ -474,5 +476,65 @@ describe('PC-29 unlock-threshold lane', () => {
         expect(gatedGroupThreshold(grp([{ gateMinAmount: '5' }, { gateMinAmount: null }]))).toBeNull();
         expect(gatedGroupThreshold(grp([{ gateMinAmount: 'abc' }]))).toBeNull();
         expect(gatedGroupThreshold(grp([]))).toBeNull();
+    });
+
+    // ── Shared vector fixture ( spec section 6.5) ──────────────────────
+    // The same vectors the SDK validator and the indexer's FILE handler run, from a
+    // byte-identical file. This wallet is the third implementation of the threshold
+    // rules and the only one that compares balances, so the pack-minimum and
+    // handoff-required halves are its share of the contract. Three suites written
+    // separately can agree today and drift tomorrow; one fixture cannot.
+    describe('shared GATE_MIN_AMOUNT vectors', () => {
+        // Paths are resolved from the package root (vitest's cwd): this config does not
+        // give import.meta.url a file: scheme, so a URL-relative read cannot be used.
+        const FIXTURE = resolve('test/fixtures/gate-min-amount-vectors.json');
+        const vectors = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+
+        it('is byte-identical to the canonical xchain-sdk copy', () => {
+            const sibling = resolve('../xchain-sdk/test/fixtures/gate-min-amount-vectors.json');
+            if (!existsSync(sibling)) {
+                if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1')
+                    throw new Error('sibling xchain-sdk fixture missing');
+                return;
+            }
+            expect(readFileSync(sibling, 'utf8')).toBe(readFileSync(FIXTURE, 'utf8'));
+        });
+
+        for (const vec of vectors.pack_threshold) {
+            it(`pack threshold: ${vec.label}`, () => {
+                const files = vec.thresholds.map((t) => ({ gateMinAmount: t }));
+                const got = gatedGroupThreshold({ keyHash: HASH_A, files });
+                if (vec.effective === null) {
+                    expect(got, 'an unconditional pack must return null, not a value').toBeNull();
+                } else {
+                    // Compared NUMERICALLY per the fixture contract: which equal spelling
+                    // is returned is not part of the contract, only the value is.
+                    expect(got).not.toBeNull();
+                    expect(Number(got)).toBe(Number(vec.effective));
+                }
+            });
+        }
+
+        // The threshold scale is a cross-repo constant twin (spec section 6.2): the
+        // indexer bounds a threshold's decimal places at min(tick divisibility, this),
+        // precisely because a value with more places cannot be represented in the
+        // fixed-scale BigInt comparison here. If the two drift, the two sides disagree
+        // on the last digit of a threshold neither considers malformed.
+        it('the fixed comparison scale matches the protocol constant', () => {
+            const sibling = resolve('../xchain-sdk/src/protocol/constants.js');
+            if (!existsSync(sibling)) {
+                if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1')
+                    throw new Error('sibling xchain-sdk protocol constants missing');
+                return;
+            }
+            const src = readFileSync(sibling, 'utf8');
+            const m = /THRESHOLD_SCALE\s*[:=]\s*(\d+)/.exec(src);
+            expect(m, 'THRESHOLD_SCALE not found in the sibling protocol constants').toBeTruthy();
+            // Read this side from the source rather than importing a private const.
+            const own = /THRESHOLD_SCALE\s*=\s*(\d+)/.exec(
+                readFileSync(resolve('packages/core/src/flows/gatedSendGuard.js'), 'utf8'));
+            expect(own).toBeTruthy();
+            expect(own[1]).toBe(m[1]);
+        });
     });
 });

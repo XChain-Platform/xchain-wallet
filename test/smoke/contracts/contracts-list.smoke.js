@@ -99,15 +99,23 @@ assert.ok(
     'ContractsList renders a client-side search input',
 );
 
-// --- 4. BTC-only gating + empty states --------------------------------
+// --- 4. Chain gating + empty states -----------------------------------
 
+//  flipped this from a pin to a ban. The gate has ONE home,
+// registry/actions.js BTC_EXCLUSIVE_ACTIONS; a private VM_COIN copy here is
+// what made the browse surface miss the day contracts opened to LTC/DOGE, so
+// the constant must not come back.
 assert.ok(
-    /VM_COIN\s*=\s*['"]bitcoin['"]/.test(listSrc),
-    'ContractsList pins VM_COIN to bitcoin (VM is BTC-only at launch)',
+    !/VM_COIN\s*=/.test(listSrc) && !/byCoin\(/.test(listSrc),
+    'ContractsList must not re-pin a hard-coded VM_COIN or select chains byCoin; ask the registry',
 );
 assert.ok(
-    /BITCOIN_ACTIONS|VM actions are BTC-only|Contracts are available on Bitcoin only/.test(listSrc),
-    'ContractsList explains the BTC-only constraint in the no-BTC-address state',
+    /supportedActions\)\s*&&\s*d\.supportedActions\.includes\('DEPLOY'\)/.test(listSrc),
+    'ContractsList derives its chain list from descriptors advertising DEPLOY',
+);
+assert.ok(
+    /need an\s*\n?\s*address on a chain that supports them/.test(listSrc),
+    'ContractsList explains the no-address state without naming a single coin',
 );
 assert.ok(
     /No contracts deployed from this chain/.test(listSrc),
@@ -251,8 +259,13 @@ for (const [shell, msgPath] of [
         `${shell} messaging routes browse via contracts.browseAll`);
 }
 
-// --- 7. App.jsx wiring + BTC gate -------------------------------------
+// --- 7. App.jsx wiring + contract-chain gate --------------------------
 
+// : the Contracts nav came off the shared BTC-address hook and on to
+// useVmAddressesPresent, which asks the registry which chains advertise DEPLOY.
+// The shared hook is still right for Staking / multisig / co-signer accounts,
+// which stay Bitcoin-exclusive, so both hooks are expected in these files - the
+// gate that must NOT be hasBtcAddress is the Contracts one specifically.
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
     ['web', join(web, 'src', 'App.jsx')],
@@ -260,13 +273,17 @@ for (const [shell, appPath] of [
 ]) {
     const app = readFileSync(appPath, 'utf8');
     assert.ok(app.includes('ContractsList'), `${shell} App.jsx imports ContractsList`);
-    assert.ok(app.includes('useBtcAddressesPresent'),
-        `${shell} App.jsx uses the BTC-address gate hook`);
+    assert.ok(app.includes('useVmAddressesPresent'),
+        `${shell} App.jsx uses the contract-chain address gate hook`);
     assert.ok(app.includes("'contracts-list'"),
         `${shell} tracks the contracts-list sub-route`);
     assert.ok(
-        /onContracts=\{activeWalletId\s*&&\s*hasBtcAddress\s*\?\s*\(\)\s*=>\s*setUnlockedView\('contracts-list'\)\s*:\s*undefined\}/.test(app),
-        `${shell} passes onContracts to Home only when activeWalletId && hasBtcAddress`,
+        /onContracts=\{activeWalletId\s*&&\s*hasVmAddress\s*\?\s*\(\)\s*=>\s*setUnlockedView\('contracts-list'\)\s*:\s*undefined\}/.test(app),
+        `${shell} passes onContracts to Home only when activeWalletId && hasVmAddress`,
+    );
+    assert.ok(
+        !/onContracts=\{[^}]*hasBtcAddress/.test(app),
+        `${shell} must not gate Contracts on a BTC address any more`,
     );
 }
 

@@ -45,6 +45,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -167,6 +168,7 @@ import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
+import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
 import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
@@ -630,7 +632,19 @@ function AppInner() {
                 const arr = Array.isArray(list) ? list : [];
                 setWalletList(arr);
                 if (arr.length > 0) {
-                    setActiveWalletId(arr[0].id);
+                    // Restore the last selected WALLET if it still exists,
+                    // exactly as the account effect below restores the last
+                    // account inside it. Snapping to arr[0] unconditionally
+                    // meant every reload silently moved a multi-wallet user
+                    // back to their first wallet - and a reload always happens,
+                    // because the password is never persisted so the app
+                    // re-locks. Anything composed afterwards (a send, a receive
+                    // address, a mint) was then signed by the wrong wallet.
+                    const persisted = readActiveWallet();
+                    const chosen = (persisted && arr.some((w) => w.id === persisted))
+                        ? persisted
+                        : arr[0].id;
+                    setActiveWalletId(chosen);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
@@ -689,6 +703,14 @@ function AppInner() {
         return () => { cancelled = true; };
     }, [activeWalletId]);
 
+    // Switch the active wallet and remember it, so a reload returns to it
+    // instead of snapping back to the first wallet. Twin of the account
+    // handler below.
+    const handleSwitchWallet = (id) => {
+        setActiveWalletId(id);
+        if (id) writeActiveWallet(id);
+    };
+
     // Switch the active account and remember it per wallet, so a reload
     // returns to it instead of snapping back to the lowest-index account.
     const handleSwitchAccount = (id) => {
@@ -696,9 +718,12 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // §42.2 Contracts nav: show only when a BTC wallet address exists
-    // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
+    // Two gates, because the lanes stopped agreeing . Staking,
+    // multisig and co-signer accounts are still Bitcoin-exclusive; the §42.2
+    // Contracts nav follows the registry, which now advertises DEPLOY on
+    // LTC/DOGE as well. One shared hook would have opened all of them.
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
+    const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
 
     // : accounts of the active wallet, purely so the AppHeader gear
@@ -823,7 +848,7 @@ function AppInner() {
                         onContacts={() => { setFormReturnView(menuBackTo); setUnlockedView('contacts'); }}
                         onLists={() => setUnlockedView('lists')}
                         onAddresses={() => setUnlockedView('addresses')}
-                        onContracts={hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
+                        onContracts={hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onMultisig={hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSwitchWallet={() => setUnlockedView('wallet-picker')}
@@ -1097,12 +1122,20 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'controller-bind' && activeWalletId && tokenDetailRef) {
+            // D-153: NOT gated on tokenDetailRef. This form has two subjects -
+            // a token (ISSUE v6) and the SIGNING ADDRESS (ADDRESS v1) - and the
+            // address one has nothing to do with tokens: it is the self-imposed
+            // spending gate and the recipient-side gate. Requiring a token
+            // context to reach the route made that whole half unreachable for
+            // anyone who had not issued a token, which is most users. Opened
+            // from the palette it arrives with neither, defaults its chain, and
+            // offers 'This address' as the only subject.
+            if (unlockedView === 'controller-bind' && activeWalletId) {
                 return (
                     <ControllerBindForm
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
+                        chainId={tokenDetailRef?.chainId}
+                        tick={tokenDetailRef?.tick}
                         onBack={formBack}
                     />
                 );
@@ -2243,7 +2276,7 @@ function AppInner() {
                 return (
                     <WalletPicker
                         activeWalletId={activeWalletId}
-                        onSwitch={setActiveWalletId}
+                        onSwitch={handleSwitchWallet}
                         onAddWallet={() => {
                             setOnboardingStep('welcome');
                             setUnlockedView('add-wallet');
@@ -2427,7 +2460,7 @@ function AppInner() {
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                         onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
-                        onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
+                        onContracts={activeWalletId && hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onHistory={activeWalletId ? () => {
                             setHistoryInitialQuery('');
@@ -2608,6 +2641,10 @@ function AppInner() {
                                     coinFamilies={APP_COIN_FAMILIES}
                                     networkFilter={globalNetworkFilter}
                                     onNetworkFilterChange={setGlobalNetworkFilter}
+                                    // Cross-site navigation for the *.xchain.io family.
+                                    // Web only: the extension popup and desktop app do
+                                    // not pass this, so they render no switcher.
+                                    platformCurrent="wallet"
                                 />
                                 {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not

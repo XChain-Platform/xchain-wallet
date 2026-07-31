@@ -19,6 +19,7 @@ import {
     AddressText,
     FeeSelector,
     AddressField,
+    NetworkField,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -112,6 +113,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         addressesByChain,
         loadError,
         chainId,
+        setChainId,
+        chainsWithAddresses,
         fromAddress,
         setFromAddressId,
         descriptor,
@@ -545,6 +548,21 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 the going rate. Anyone can run one; whoever opens a dispenser against your oracle
                 pays you the usage fee you set below.
             </p>
+
+            {/*
+              * A PRICE quote is scoped to ONE chain: the tick it prices lives on
+              * this chain, and only dispensers on this chain can read it. The
+              * publishing-address picker below is chain-scoped too, so without
+              * this the form publishes on whichever chain the wallet happens to
+              * list first and offers no way to say otherwise (D-145, the same
+              * fault D-133 fixed on the order form).
+              */}
+            <NetworkField
+                value={chainId}
+                onChange={setChainId}
+                chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                chainRegistry={chainRegistry}
+            />
 
             {fromAddress ? (
                 <AddressField

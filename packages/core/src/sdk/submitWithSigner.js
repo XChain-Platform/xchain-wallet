@@ -28,9 +28,7 @@
 // or skip the wait and poll separately.
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
-import {
-    nativeFeeOutputOf, willTakeChunkLane, withoutCustomOutput, assertFeeLane,
-} from '../flows/nativeFeeLane.js';
+import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
@@ -220,7 +218,14 @@ export async function submitWithSigner({
             sdk,
             actionData,
             encoderOpts,
-            source: encoderOpts.change,
+            // `change` is the address the spender gets its leftovers back on and
+            // `sourceAddress` is the address the SDK funds FROM; they are the same
+            // address on every flow that sets them, and either one answers "who is
+            // spending" for the quote. Reading only `change` meant a flow that set
+            // one and not the other quoted with NO source, and an indexer dry run
+            // that needs a source answers `valid:false` - which the wallet reports
+            // as an unavailable price feed (D-146).
+            source: encoderOpts.change || encoderOpts.sourceAddress,
             onProgress,
         });
         // Step 1c: PRICE v1 oracle usage fee. A Mode B dispenser must pay its oracle
@@ -235,26 +240,22 @@ export async function submitWithSigner({
         });
         effectiveEncoderOpts = oraclePreflight.encoderOpts;
 
-        // Step 1d : decide WHICH transaction carries the native-fee
-        // output. The indexer validates the protocol fee against the outputs of
-        // the transaction carrying the ACTION (`data['TX_OUTPUTS']`), and on the
-        // two-phase lane that is the phase-2 REVEAL, not the phase-1 commit.
-        // Paying it on phase 1 spends the fee on a transaction with no action,
-        // and the action is then rejected for not paying it. On LTC/DOGE, where
-        // the native fee is the only lane, that was every DEPLOY plus every
-        // large FILE, gated publish and multi-recipient SEND.
+        // Step 1d : the native-fee output must be EMITTED on the
+        // transaction that carries the ACTION. The indexer validates the
+        // protocol fee against that transaction's outputs
+        // (`data['TX_OUTPUTS']`), and on the two-phase lane that is the phase-2
+        // REVEAL, not the phase-1 commit. Paying it on phase 1 spends the fee
+        // on a transaction with no action, and the action is then rejected for
+        // not paying it. On LTC/DOGE, where the native fee is the only lane,
+        // that was every DEPLOY plus every large FILE, gated publish and
+        // multi-recipient SEND.
         //
-        // The lane must be known BEFORE the build: phase 1 is signed and
-        // broadcast before phase 2 is built, and a second createTx would
-        // collide with the encoder's own outpoint reservations. So it is
-        // predicted from the action size against the SDK's carrier caps and
-        // then CHECKED against the encoding the encoder actually chose, so a
-        // wrong prediction fails loudly instead of broadcasting a doomed tx.
+        // : it is nonetheless PASSED to the phase-1 build below, always.
+        // The encoder skips emitting a customOutput on a P2SH/P2WSH funding tx
+        // but folds its value and reveal-side byte cost into the script output,
+        // and that reservation is what pays for it on the reveal. Withholding
+        // it left the reveal unable to balance.
         const feeOutput = nativeFeeOutputOf(preflight.quote);
-        if (feeOutput && willTakeChunkLane(createResult, effectiveEncoderOpts)) {
-            deferredNativeFeeOutput = feeOutput;
-            effectiveEncoderOpts = withoutCustomOutput(effectiveEncoderOpts, feeOutput);
-        }
 
         // Step 2: encode to PSBT via the encoder service.
         onProgress('encoding', { actionString: bareNativePayment ? null : createResult.actionString });
@@ -270,14 +271,14 @@ export async function submitWithSigner({
             throw annotateEncoderFeeRequirement(err, preflight.quote);
         }
 
-        // The check half. A mismatch means the fee output would sit on the
-        // wrong transaction, so refuse BEFORE anything is signed rather than
-        // broadcast a transaction the indexer rejects while keeping the fee.
-        assertFeeLane({
-            encoding: encoded.encoding,
-            deferred: !!deferredNativeFeeOutput,
-            hasFeeOutput: !!feeOutput,
-        });
+        // Placement, read off the encoding the encoder actually chose rather
+        // than predicted from the action size: a chunk encoding means the
+        // action rides a reveal, so the fee output is emitted there. Anything
+        // else carries the action in the transaction just built, which already
+        // contains the output.
+        if (feeOutput && isChunkEncoding(encoded.encoding)) {
+            deferredNativeFeeOutput = feeOutput;
+        }
     }
 
     // The signers now sign ONLY the inputs named in signingPaths (so a dApp PSBT

@@ -40,7 +40,8 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { NATIVE_FEE_WARNING, nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
 import {
     estimateNativeSendFee,
@@ -350,9 +351,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(err?.name === 'NativeFeeForfeitError'
-                ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                : err?.message || 'Swap failed.');
+            setFormError(submitFailureMessage(err, {
+                coinTicker,
+                mandatory: nativeFeeMandatory,
+                fallback: err?.message || 'Swap failed.',
+            }));
         }
     }
 
@@ -421,13 +424,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : isNativeFeeErr
-                        ? nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFeeMandatory })
-                    : err?.message || 'Sign failed.',
+                    : submitFailureMessage(err, {
+                        coinTicker,
+                        mandatory: nativeFeeMandatory,
+                        fallback: err?.message || 'Sign failed.',
+                    }),
             );
             // Stay on review rather than dropping back to the form so the
             // user can correct their password without re-entering swap terms.

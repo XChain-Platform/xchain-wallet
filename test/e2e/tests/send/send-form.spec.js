@@ -98,8 +98,19 @@ test.describe('send form', () => {
 
         const confirm = page.getByTestId('confirm-modal');
         await expect(confirm).toBeVisible();
-        // What the user is about to authorize: amount, chain, destination.
-        await expect(confirm).toContainText(`Send 0.01 BTC on Bitcoin to ${VALID_BTC}`);
+        // The intent line ("Send 0.01 BTC on Bitcoin to <addr>") is deliberately
+        // NOT asserted here, and this venue cannot assert it . Since
+        //  removed the caller-supplied intent fallback, that line comes
+        // solely from sdk.decoder.describe(), which the dev-mock host does not
+        // implement (packages/web/src/hostBridge.js exposes only
+        // decodeActionFromPsbt). composeActionForConfirm swallows the resulting
+        // TypeError, so decoded is null and the line never renders. Teaching the
+        // mock to describe would put a SECOND describer in front of a signing
+        // screen, which is the fidelity trap  warns about. The assertion
+        // lives on the regtest venue instead, against the PROD build and the real
+        // SDK: confirm-broadcast.regtest.spec.js:82 and :172, and
+        // preflight-gate.regtest.spec.js:174. What this venue still owns is
+        // everything the mock CAN answer for honestly, below.
         await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
         // §5.2.5: the fee comes from the composed PSBT, so it is an exact
         // amount, not the form's rate estimate.

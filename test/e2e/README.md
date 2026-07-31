@@ -102,6 +102,55 @@ at the confirm stage. Those flows live in the regtest venue
 (`playwright.regtest.config.js`), which serves a production build against a
 real chain.
 
+## Which CHAIN the regtest venue runs on
+
+Bitcoin by default. `XC_REGTEST_COIN=RLTC` (or `RDOGE`) moves a run onto the
+other two chains of the same stack; `fixtures/regtest.js` holds the venue table
+and derives the encoder/miner ports from it (BTC 3023/3025, LTC 3223/3225, DOGE
+3123/3125; the explorer and hub are shared). Nothing else has to change: the
+wallet's own regtest descriptors already point at those ports, and switching the
+Active network to regtest derives an address on all three chains.
+
+Reach for it when Bitcoin regtest is busy. It is the chain every other e2e suite
+and drill lands on, and a spec that owns a market's or a dispenser's state for
+several minutes cannot share it. Two gotchas off Bitcoin: every form's chain
+picker defaults to Bitcoin and they do not share state (the add-address modal's
+is labelled "Coin", not "Network", so pass the field to `selectVenueChain`), and a
+fee-bearing action pays its protocol fee in the native coin, so the venue needs a
+price snapshot for that coin (see below, and it is no longer your job).
+
+## Price state, and why global setup writes to a database 
+
+Every USD-priced action (place a bet, issue a token, open a dispenser) is valued
+against the indexer's `price_snapshots`, and a row there is usable for 1800
+seconds. Nothing on a regtest stack publishes those rows: they come from a
+validator federation and there is none here. So a fee-bearing spec used to pass
+only if somebody had hand-seeded recently, and it failed several screens into a
+form with copy that reads exactly like a wallet bug ("The LTC fee price is
+temporarily unavailable"). Three campaign sessions were lost to that.
+
+`seedPrices()` (called from `global-setup.regtest.js`) closes it. It checks the
+venue first over the public `/api/feequote` read, and returns without writing
+anything if the venue already prices - a synthetic round outranks every derived
+round forever, so unconditionally seeding a venue whose hub really does publish
+prices would replace real data with a fixture. Only when the venue cannot answer
+does it seed, then mine a block, then re-check. A run that still cannot be priced
+fails in global setup naming the venue as the reason.
+
+Two things about it are worth knowing before you touch it:
+
+- **It carries no credentials.** The seed runs as `ssh <venue host> docker exec
+  <indexer container> node`, script piped in on stdin, so the connection
+  parameters resolve from the container's own environment and never enter this
+  repo or the Playwright process. The hub's `pushoracleprice` was the obvious
+  credential-free candidate and cannot do this: it writes `oracle_prices`, a
+  different table with a different consumer. `fixtures/priceSeed.js` has the
+  full reasoning and the anchoring rule, which is the subtle part.
+- **`XC_REGTEST_NO_PRICE_SEED=1` turns the write off** (as does the platform's
+  `XCHAIN_E2E_NO_PRICE_SEED=1`, which means "this venue's hub publishes prices
+  itself"). Neither turns the CHECK off, which is the half that keeps a price
+  failure legible.
+
 ## Which SDK this venue runs on 
 
 The dev config pins the venue with `VITE_XCHAIN_REAL_SDK: '0'` on its

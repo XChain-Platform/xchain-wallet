@@ -43,7 +43,8 @@ import {
 } from '../utils/dividendPerUnit.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -461,10 +462,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // it into the sentence that says what to do about it, and knows the advice differs off
     // Bitcoin, where there is no XCHAIN lane to fall back to .
     function nativeFeeAwareMessage(err) {
-        if (err?.name === 'NativeFeeForfeitError') {
-            return nativeFeeErrorMessage(err, { coinTicker, mandatory: nativeFee.mandatory });
-        }
-        return err?.message;
+        return submitFailureMessage(err, {
+            coinTicker,
+            mandatory: nativeFee.mandatory,
+            fallback: err?.message,
+        });
     }
 
     async function handleSubmit(event) {

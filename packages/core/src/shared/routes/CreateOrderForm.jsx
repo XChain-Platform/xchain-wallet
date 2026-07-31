@@ -18,6 +18,7 @@ import {
     AddressText,
     FeeSelector,
     AddressField,
+    NetworkField,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -101,6 +102,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         addressesByChain,
         loadError,
         chainId,
+        setChainId,
+        chainsWithAddresses,
         fromAddress,
         setFromAddressId,
         descriptor,
@@ -568,6 +571,23 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            {/*
+              * An order is posted to ONE chain and escrows a balance held on
+              * that chain, so the chain is part of the order, not context. The
+              * form used to have no way to say which: it took `useActionForm`'s
+              * first-chain default and offered no control, while the From-address
+              * picker below is chain-scoped and so cannot cross chains either.
+              * On a multi-chain wallet that made every other chain unauthorable
+              * from here, silently - the only tell was the coin ticker on the
+              * GET amount field.
+              */}
+            <NetworkField
+                value={chainId}
+                onChange={setChainId}
+                chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                chainRegistry={chainRegistry}
+            />
+
             {fromAddress ? (
                 <AddressField
                     label="From address"

@@ -100,6 +100,25 @@ export function ChainPicker({
 
     const selected = entries.find((e) => e.id === value) || null;
 
+    // The visible `label` below is a plain <span>, not a <label for>, so without
+    // this the trigger's accessible name is only whatever chain it happens to be
+    // showing: "Bitcoin · regtest, button", with nothing saying WHICH chain
+    // question it answers. On a form with one picker that is merely vague; on
+    // CrossChainSwapForm, which renders "Give chain" and "Get chain" side by
+    // side, it makes the two controls indistinguishable to a screen reader - and
+    // transposing them sends the money the wrong way.
+    //
+    // Same fix, and the same reasoning, as the sibling TokenField already
+    // carries ("the visual chip isn't a native form control"): put the field
+    // label and the current selection in the accessible name. Only when a label
+    // was given; a label-less picker keeps its text as its name rather than
+    // gaining a stray colon.
+    const selectionText = selected
+        ? `${selected.label}${!hideNetworkKind && selected.networkKind !== 'mainnet'
+            ? ` · ${selected.networkKind}` : ''}`
+        : placeholder;
+    const accessibleName = label ? `${label}: ${selectionText}` : undefined;
+
     return (
         <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             {label ? <span className={styles.label}>{label}</span> : null}
@@ -110,6 +129,7 @@ export function ChainPicker({
                 onClick={() => !disabled && setOpen((v) => !v)}
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
+                aria-label={accessibleName}
                 disabled={disabled}
             >
                 {selected?.iconUrl ? (

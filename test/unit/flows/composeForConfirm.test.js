@@ -229,3 +229,83 @@ describe('composeForConfirm native-coin protocol fee ( BET on LTC)', () => {
         expect((composed.encoderOpts.customOutputs || []).some((o) => o.address === FEE_DEST)).toBe(false);
     });
 });
+
+//  / : where the native-coin protocol fee output goes on the
+// two-phase (chunk) lane, and - the half  found - where it must still be
+// declared so the reveal can afford it.
+//
+// The reveal's only inputs are the commit's script outputs, and the encoder
+// sizes those from the customOutputs it was given (XChainEncoder.js folds their
+// value and reveal-side bytes in, then skips emitting them on the commit).
+// Withholding the fee output from the build therefore reserved nothing and the
+// reveal could not balance: measured on litecoin-regtest as "Outputs are
+// spending more than Inputs" at a ~0.069 LTC quote. It hid on dogecoin-regtest
+// only because 2084 sats fitted the commit's incidental slack.
+describe('composeForConfirm native-fee placement on the chunk lane ', () => {
+    const FEE_DEST = 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls';
+    const FEE_SATS = 6946667;
+
+    function deployHarness({ encoding = 'P2SH' } = {}) {
+        const createTx = vi.fn(async ({ data, ...opts }) => ({
+            psbt: 'PSBTHEX', encoding, carrierScripts: ['aa11'], _opts: opts,
+        }));
+        // Long enough that the encoder would pick a chunk lane for it, which is
+        // the case the placement decision exists for.
+        const createAction = vi.fn(() => ({
+            actionString: `DEPLOY|0|${'Q'.repeat(400)}|100000`, action: 'DEPLOY', version: 0,
+        }));
+        const sdk = {
+            encoder: { createTx },
+            actions: { createAction },
+            quoteNativeFee: vi.fn(async () => ({
+                supported: true, valid: null, feeDestination: FEE_DEST, requiredFeeSats: FEE_SATS,
+            })),
+        };
+        return {
+            createTx,
+            sdk,
+            args: {
+                sdkRegistry: { get: () => sdk },
+                chainRegistry: { get: () => ({ coin: 'LTC', networkKind: 'regtest', adsDonationAddress: 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' }) },
+                vault: { settings: { get: async () => ({ ads: { enabled: false, perChain: {} } }) } },
+                chainId: 'litecoin-regtest',
+                actionData: { action: 'DEPLOY', params: { VERSION: '0', CODE: 'x', GAS_LIMIT: '100000' } },
+                encoderOpts: { pubkey: 'pub', change: 'chg', payFeeInNativeCoin: true },
+                source: 'chg',
+            },
+        };
+    }
+
+    it('hands the fee output to the phase-1 build so the commit reserves its value', async () => {
+        const h = deployHarness();
+        await composeForConfirm(h.args);
+        const built = h.createTx.mock.calls[0][0].customOutputs || [];
+        expect(built).toContainEqual({ address: FEE_DEST, value: FEE_SATS });
+    });
+
+    it('reports it as deferred so the submit path emits it on the reveal', async () => {
+        const h = deployHarness();
+        const composed = await composeForConfirm(h.args);
+        expect(composed.deferredFeeOutput).toEqual({ address: FEE_DEST, value: FEE_SATS });
+    });
+
+    // The phase-1 transaction genuinely does not carry the output, so the
+    // §5.3.2 output-set check must not claim it does.
+    it('keeps it OUT of the expected-output set for the previewed PSBT', async () => {
+        const h = deployHarness();
+        const composed = await composeForConfirm(h.args);
+        expect(composed.expectedOutputs.addressed.some((s) => s.address === FEE_DEST)).toBe(false);
+    });
+
+    // Placement is read off the encoding the encoder chose, not predicted from
+    // the action's size, so a long action the encoder still packs into one
+    // transaction pays its fee there and defers nothing.
+    it('does not defer when the encoder chose a single-transaction encoding', async () => {
+        const h = deployHarness({ encoding: 'OP_RETURN' });
+        const composed = await composeForConfirm(h.args);
+        expect(composed.deferredFeeOutput).toBe(null);
+        expect(h.createTx.mock.calls[0][0].customOutputs)
+            .toContainEqual({ address: FEE_DEST, value: FEE_SATS });
+        expect(composed.expectedOutputs.addressed.some((s) => s.address === FEE_DEST)).toBe(true);
+    });
+});

@@ -45,6 +45,14 @@
     border: 1px solid var(--xc-danger);
 }
 
+/* . A pass with no network answer must not wear the success colour: the
+   chip words change too ("Local checks only"), so this is never colour-only. */
+.chip_unreached {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    border: 1px dashed var(--xc-border-strong);
+}
+
 .restrictedChip {
     align-self: flex-start;
     padding: 2px var(--xc-space-2);
@@ -56,7 +64,8 @@
 }
 
 .errors,
-.warnings {
+.warnings,
+.notices {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -86,6 +95,31 @@
     background: var(--xc-warning-bg);
     color: var(--xc-warning-text);
     border-inline-start-color: var(--xc-warning);
+}
+
+/* Tier-1 notices (§4.2 "which party said what"). Muted by default: on a real
+   network pass this line is reassurance, not a demand for attention. */
+.findingNotice {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    border-inline-start-color: var(--xc-border-strong);
+}
+
+/* The unreached case is the one that used to be invisible, so it keeps the
+   solid bar and the full-strength text: "nobody checked this but us" is the
+   sentence a signer most needs and least expects. */
+.findingUnreached {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    border-inline-start-color: var(--xc-border-strong);
+    border: 1px dashed var(--xc-border-strong);
+    border-inline-start: 3px solid var(--xc-border-strong);
+}
+
+.noticeDetail {
+    display: block;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
 }
 
 .findingMsg {

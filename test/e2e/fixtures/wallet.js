@@ -69,18 +69,17 @@ export { expect };
 /**
  * The wallet's navigation surface, whichever one the layout is showing.
  *
- * §5.6 responsive-first : the left rail ("Primary navigation")
- * collapses below 900px and below 600px `<BottomTabBar>` ("Bottom
- * navigation") takes over. The MV3 popup is 400px wide, so it is ALWAYS in
- * the bottom-bar band - a fixture anchored on the rail alone finds nothing
- * there, which is not a wallet defect but a test that only knew one shell.
+ *  responsive-first: the layout picks ONE nav surface from its own
+ * measured width (packages/core/src/shared/styles/breakpoints.js). Below
+ * 640px `<BottomTabBar>` ("Bottom navigation") owns navigation; from 640px
+ * up it is the left rail ("Primary navigation"), labelled from 900px. The
+ * MV3 popup is 400px wide, so it is ALWAYS in the bottom-bar band - a
+ * fixture anchored on the rail alone finds nothing there, which is not a
+ * wallet defect but a test that only knew one shell.
  *
- * Normally exactly one is in the accessibility tree: the rail is
- * `display:none` below 900px, and the bar only mounts for the JS-gated
- * `small` variant. They CAN coexist - pinning small at a wide window
- * deliberately keeps the bar (LeftNav.module.css:60-67) - and both are
- * genuinely usable then, so take the first rather than trip strict mode on
- * a configuration that is working as designed.
+ * Exactly one of the two is mounted at any width, which
+ * tests/responsive/viewports.spec.js asserts in a real browser. Taking
+ * `.first()` is belt-and-braces for a shell that pins a variant by hand.
  */
 export function nav(page) {
     return page.getByRole('navigation', { name: 'Primary navigation' })
@@ -136,6 +135,44 @@ export async function openSettings(page) {
 }
 
 /**
+ * A nav destination by name, tolerating the badge that rides in its
+ * accessible name.
+ *
+ * A nav item with unread items reads "Messaging 5 unread", not
+ * "Messaging": the count pill carries `aria-label="5 unread"` and the
+ * accessible name is the concatenation. An exact match therefore finds
+ * the item right up until the wallet has something to tell the user
+ * about, which is precisely when a test is most likely to be looking at
+ * it. (This bit the  width walk: the same click passed on an empty
+ * wallet and hung on a populated one.)
+ *
+ * Exact first so a name that IS another's prefix cannot be hijacked, then
+ * an anchored prefix so the badge suffix is tolerated. Anchored, not
+ * substring: `getByRole(..., { name })` without `exact` matches anywhere
+ * in the name, which would let "Send" also select "Resend".
+ */
+function navDestination(scope, name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return {
+        exact: scope.getByRole('button', { name, exact: true }),
+        prefixed: scope.getByRole('button', { name: new RegExp(`^${escaped}\\b`) }),
+    };
+}
+
+async function clickDestination(scope, name) {
+    const { exact, prefixed } = navDestination(scope, name);
+    if (await exact.count() > 0) {
+        await exact.first().click();
+        return true;
+    }
+    if (await prefixed.count() > 0) {
+        await prefixed.first().click();
+        return true;
+    }
+    return false;
+}
+
+/**
  * Clicks a section (Send / History / DEX / ...) in whichever nav is showing.
  *
  * The bottom bar surfaces only four primary tabs (Home, History, Send,
@@ -145,23 +182,21 @@ export async function openSettings(page) {
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        const direct = bar.getByRole('button', { name, exact: true });
-        if (await direct.count() > 0) {
-            await direct.click();
-            return;
-        }
+        if (await clickDestination(bar, name)) return;
+
         await bar.getByRole('button', { name: 'More', exact: true }).click();
-        await page.getByRole('dialog', { name: 'More navigation' })
-            .getByRole('button', { name, exact: true })
-            .click();
-        return;
+        const sheet = page.getByRole('dialog', { name: 'More navigation' });
+        await sheet.waitFor({ state: 'visible', timeout: 15_000 });
+        if (await clickDestination(sheet, name)) return;
+        throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
     }
 
     // No nav landmark at all: the MV3 popup. It navigates from Home's quick
     // actions (Send / Receive / Exchange / More) instead of a nav surface.
     // Destinations that are NOT quick actions are not reachable this way; see
     //  before writing an extension spec that needs one.
-    await page.getByRole('main').getByRole('button', { name, exact: true }).click();
+    if (await clickDestination(page.getByRole('main'), name)) return;
+    throw new Error(`no quick action named "${name}" on this screen`);
 }
 
 /** A button inside the main content region, e.g. a form's submit. */

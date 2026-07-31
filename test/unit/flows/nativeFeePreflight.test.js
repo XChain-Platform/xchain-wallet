@@ -232,6 +232,47 @@ describe('nativeFeeErrorMessage', () => {
         }
     });
 
+    // D-146, found live (wallet E2E session 33) driving the first Mode B
+    // dispenser this platform has composed. The oracle-usage-fee verdicts are the
+    // one family that contains the words the price heuristic above looks for
+    // while being neither temporary nor about the validator feed, so they were
+    // swallowed by it: an operator who had just published a quote, and been
+    // warned twice on screen that it matures in 24 hours, was told the LTC fee
+    // price was temporarily unavailable and to try again in a moment.
+    it('names the oracle maturation instead of blaming the coin price feed', () => {
+        const err = new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { valid: false, error: 'invalid: ORACLE_ADDRESS (no effective oracle price)' },
+        });
+        const msg = nativeFeeErrorMessage(err, { coinTicker: 'LTC', mandatory: true });
+
+        expect(msg).not.toMatch(/temporarily unavailable/);
+        expect(msg).not.toMatch(/try again in a moment/i);
+        expect(msg).not.toMatch(/ORACLE_ADDRESS/);
+        expect(msg).toMatch(/24 hours/);
+        expect(msg).toMatch(/Nothing was signed or sent/);
+    });
+
+    // The four ORACLE_ADDRESS verdicts have four different remedies, and one of
+    // them genuinely IS "wait a moment". Collapsing them would trade one wrong
+    // sentence for another.
+    it('separates the oracle verdicts that are temporary from the ones that are not', () => {
+        const say = (detail) => nativeFeeErrorMessage(
+            new NativeFeeForfeitError({ reason: 'invalid', quote: { valid: false, error: detail } }),
+            { coinTicker: 'LTC', mandatory: true },
+        );
+        expect(say('invalid: ORACLE_ADDRESS (no validator price to value the oracle fee)'))
+            .toMatch(/try again in a moment/i);
+        expect(say('invalid: ORACLE_ADDRESS (missing oracle fee output)'))
+            .toMatch(/usage fee/i);
+        expect(say('invalid: ORACLE_ADDRESS (insufficient oracle fee, paid 0.00001000, expected 0.00002000)'))
+            .toMatch(/usage fee/i);
+        // An unrecognised ORACLE_ADDRESS verdict still must not be reported as a
+        // stale price feed: quoting the chain verbatim is the safe fallback.
+        expect(say('invalid: ORACLE_ADDRESS (some future rule)'))
+            .toMatch(/Waiting will not change this/);
+    });
+
     // A bare reason with no indexer verdict must not invent one.
     it('still says "temporarily unavailable" when there is no detail to report', () => {
         expect(nativeFeeErrorMessage({ reason: 'invalid' }, { coinTicker: 'LTC', mandatory: true }))

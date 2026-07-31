@@ -22,6 +22,8 @@
 // Returns a structured result so callers can key recovery affordances
 // off `cause` instead of re-parsing display prose.
 
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+
 /**
  * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'unknown'} HumanizedErrorCause
  */
@@ -47,6 +49,15 @@ export function humanizeError(err, verb = 'complete this') {
     const name = (err && typeof err === 'object') ? (/** @type {any} */ (err).name || '') : '';
     const hay = `${name} ${raw}`.toLowerCase();
 
+    // D-125: an SDK explorer failure is classified by its own code before the
+    // keyword chain below ever sees it. Two of its four shapes fall through
+    // that chain to `unknown`, which appends the raw message - that is how
+    // "Explorer returned HTTP 502 for /RBTC/api/feequote?action=..." reached a
+    // user - and a third ("Explorer request timed out") matched `network` and
+    // blamed the user's own connection for a service-side timeout.
+    const explorerRead = explorerReadFailure(err, verb);
+    if (explorerRead) return { message: explorerRead.message, cause: explorerRead.cause, raw };
+
     /** @type {HumanizedErrorCause} */
     let cause = 'unknown';
     let message = `Couldn't ${verb}.`;
@@ -64,7 +75,19 @@ export function humanizeError(err, verb = 'complete this') {
         // 'rejected' because these messages often also say "refusing".
         cause = 'backend_behind';
         message = `Couldn't ${verb}. The service is still catching up with the chain. Try again in a few minutes.`;
-    } else if (/reject|refused|mempool|min relay|minrelay|dust|non-final|nonfinal|bad-txns|txn-|would exceed|already known|conflict/.test(hay)) {
+    } else if (/\bdust\b/.test(hay)) {
+        // : a dust rejection is the one member of the `rejected` family the user can
+        // fix, and "the network rejected this transaction" told them nothing, so the same
+        // amount was the obvious thing to retry. The cause key stays `rejected` because
+        // that is still what happened; only the sentence changes. The wallet now refuses a
+        // below-dust send before composing, so reaching this means some OTHER output came
+        // out under the floor (a scaled protocol fee, a change remainder), which is why
+        // this names the shape of the problem rather than a specific field.
+        cause = 'rejected';
+        message = `Couldn't ${verb}. One of the amounts in this transaction is below the `
+            + 'smallest payment the network will carry, so it was refused before it went out. '
+            + 'Nothing was spent. Raise the amount and try again.';
+    } else if (/reject|refused|mempool|min relay|minrelay|non-final|nonfinal|bad-txns|txn-|would exceed|already known|conflict/.test(hay)) {
         cause = 'rejected';
         message = `Couldn't ${verb}. The network rejected this transaction.`;
     }

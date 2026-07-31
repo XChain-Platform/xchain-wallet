@@ -77,9 +77,27 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
     if (!balOk && !addrOk) {
         throw balResp instanceof Error ? balResp : new Error(String(balResp));
     }
+    // D-152: degrading independently is right; degrading SILENTLY is not. A
+    // failed token read used to return `tokens: []`, which is byte-identical to
+    // "this address holds no tokens" - so a hiccup on one endpoint presented as
+    // a confident empty wallet: no rows on Home, and an asset picker that says
+    // "Nothing matches" for a token the address is holding. `unavailable` names
+    // which half is missing so a surface can say "could not read" instead of
+    // "you have none". Nothing reads the field yet except the surfaces that
+    // choose to; every existing consumer of `.native` / `.tokens` is unchanged.
+    const unavailable = [
+        ...(balOk ? [] : ['tokens']),
+        ...(addrOk ? [] : ['native']),
+    ];
     return {
         native: addrOk ? nativeFromAddress(addrResp, nativeTicker) : null,
         tokens: balOk ? tokensFromBalances(balResp) : [],
+        ...(unavailable.length > 0 ? {
+            unavailable,
+            unavailableReason: String(
+                (balOk ? addrResp : balResp)?.message || 'balance read failed',
+            ),
+        } : {}),
     };
 }
 

@@ -94,6 +94,15 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
     // Found live: a stake larger than the balance answered `invalid: insufficient funds
     // (AMOUNT)`, and the wallet said the LTC fee price was temporarily unavailable.
     const detail = invalidDetailFromMessage(err);
+    // The USER-ORACLE verdicts have to be read before the price heuristic below,
+    // because they are the one family that contains the words the heuristic looks
+    // for while being neither temporary nor about the validator price feed
+    // (D-146). `ORACLE_ADDRESS (no effective oracle price)` matched both "oracle"
+    // and "price", so a Mode B dispenser pointed at a quote that has not matured
+    // was reported as "the LTC fee price is temporarily unavailable. Try again in
+    // a moment" - and a moment is 24 hours short.
+    const oracleCopy = oracleVerdictMessage(detail, coin);
+    if (oracleCopy) return oracleCopy;
     if (detail && !PRICE_REJECTION.test(detail)) {
         return `The network would refuse this action as it stands: ${detail}. Nothing was signed or ` +
                'sent. Waiting will not change this, so adjust the action and try again.';
@@ -107,6 +116,45 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
 // Whether an indexer verdict is about the price feed, which is the only part of the
 // `invalid` bucket that a user fixes by waiting.
 const PRICE_REJECTION = /price|oracle|stale/i;
+
+/**
+ * The sentence for an `ORACLE_ADDRESS (...)` verdict, or null when the verdict is
+ * not one.
+ *
+ * These come from the  oracle usage fee a Mode B dispenser owes its price
+ * publisher, and they reach this function rather than oracleFeePreflight's own
+ * error because the indexer's dry run performs that check too: on a chain where
+ * the coin fee is the only lane, the native-fee quote refuses first and the
+ * dedicated oracle pre-flight is never reached.
+ *
+ * Kept as an explicit table rather than a passthrough of the indexer's own words:
+ * the verdict names a wire field and a stage, and each of the four has a different
+ * remedy - one of which is "wait a day", one "wait a moment", and two "this wallet
+ * built the transaction wrong".
+ *
+ * @param {string | null} detail   the indexer verdict, "invalid: " already stripped
+ * @param {string} coin
+ * @returns {string | null}
+ */
+function oracleVerdictMessage(detail, coin) {
+    if (!detail || !/^ORACLE_ADDRESS\b/i.test(detail)) return null;
+    if (/no effective oracle price/i.test(detail)) {
+        return 'The price oracle this dispenser names has no price in effect yet. A published '
+            + 'price starts pricing 24 hours after the block it lands in, so a quote published '
+            + 'today cannot be used until tomorrow. Nothing was signed or sent.';
+    }
+    if (/no validator price/i.test(detail)) {
+        return `The oracle's usage fee cannot be priced right now: the network has no current `
+            + `${coin} rate to value it against. Nothing was signed or sent; try again in a moment.`;
+    }
+    if (/missing oracle fee output|insufficient oracle fee/i.test(detail)) {
+        return 'This dispenser owes its price oracle a usage fee, and the amount this wallet '
+            + 'attached does not satisfy the network. Nothing was signed or sent. Try again; if '
+            + 'it keeps failing, the oracle repriced its fee mid-compose.';
+    }
+    return `The network would refuse this action as it stands: ${detail}. Nothing was signed or `
+        + 'sent. Waiting will not change this, so adjust the action and try again.';
+}
 
 // The indexer's verdict, recovered from the message the constructor built. Same
 // boundary-survival reason as dustAmountFromMessage: the popup receives only
@@ -216,12 +264,40 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     return { encoderOpts: { ...rest, customOutputs: outs }, quote };
 }
 
+// The dust floor per coin, in satoshis, mirroring xchain-sdk/src/coins/{BTC,LTC,DOGE}.js.
+// It does not vary by network (mainnet, testnet and regtest all carry the same number),
+// so the coin name alone determines it.
+//
+// This table is a COPY of the SDK's, and it exists because the popup has no SDK: the Send
+// form has to answer "is this amount dust?" while the user is still typing, and reaching
+// across the messaging boundary for a value that has not changed in the lifetime of any of
+// these chains would buy nothing but a race. `resolveDustThreshold` below still prefers the
+// SDK's live number wherever an SDK is in hand, so this only ever governs the UI-side check.
+export const DUST_THRESHOLD_SATS_BY_COIN = Object.freeze({
+    bitcoin: 546,
+    litecoin: 5460,
+    dogecoin: 100000,
+});
+
+/**
+ * The dust floor in satoshis for a chain-registry coin name ('bitcoin' / 'litecoin' /
+ * 'dogecoin'), or null for anything unrecognized. Null means "cannot judge", so a caller
+ * must not treat it as zero and let an amount through unchecked.
+ *
+ * @param {string | null | undefined} coin
+ * @returns {number | null}
+ */
+export function dustThresholdForCoin(coin) {
+    const dust = DUST_THRESHOLD_SATS_BY_COIN[String(coin || '').toLowerCase()];
+    return Number.isFinite(dust) ? dust : null;
+}
+
 // The chain's dust threshold, read from the SAME coin registry the SDK builds its
-// addresses and PSBTs from (BTC 546, LTC 5460, DOGE 100000), so the refusal above tracks
-// the network the transaction is actually going to. Falls back to Bitcoin's 546 when the
-// SDK was constructed without a network: the guardrail must still fire on a 2-sat fee,
-// and a too-low threshold would let exactly the doomed transaction through.
-function resolveDustThreshold(sdk) {
+// addresses and PSBTs from, so the refusal above tracks the network the transaction is
+// actually going to. Falls back to Bitcoin's floor when the SDK was constructed without a
+// network: the guardrail must still fire on a 2-sat fee, and a too-low threshold would let
+// exactly the doomed transaction through.
+export function resolveDustThreshold(sdk) {
     try {
         const params = sdk && sdk.wallet && typeof sdk.wallet.getBitcoinNetwork === 'function'
             ? sdk.wallet.getBitcoinNetwork()
@@ -229,5 +305,5 @@ function resolveDustThreshold(sdk) {
         const dust = params && Number(params.dustThreshold);
         if (Number.isFinite(dust) && dust > 0) return dust;
     } catch { /* fall through to the default */ }
-    return 546;
+    return DUST_THRESHOLD_SATS_BY_COIN.bitcoin;
 }

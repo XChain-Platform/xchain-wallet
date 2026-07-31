@@ -31,6 +31,14 @@
 // Verified against the venue before this was written: an over-balance SEND
 // returns `valid:false, status:"invalid: insufficient funds"` from
 // /RBTC/api/preflight, and an affordable one returns `valid:true`.
+//
+// WHAT IT COSTS TO GET THAT VERDICT, and why every walk below warms it
+// first: a COLD dry-run on this shared venue was measured between 1.2s and
+// 5.0s, and the SDK gives Tier 1 4000ms before degrading to the client tier.
+// Past that line the panel renders a Tier-2-only report - right by the spec,
+// identical on screen to a clean network answer, and a red that reads
+// exactly like the wallet having stopped relaying the dry-run. See
+// `warmPreflight` in fixtures/regtest.js.
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
@@ -42,6 +50,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    warmPreflight,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -60,6 +69,33 @@ function amountField(page) {
     return page.getByRole('textbox', { name: /^Amount/ });
 }
 
+/**
+ * Warms the indexer's dry-run for the SEND this spec is about to compose, and
+ * asserts the venue's own verdict matches what the walk assumes.
+ *
+ * Tier 1 is the whole point of this spec, and it is the one part of the report
+ * that can silently go missing: a cold dry-run on this shared venue has been
+ * measured anywhere from 1.2s to 5.0s, and the SDK abandons it at 4000ms. When
+ * that happens the panel renders a Tier-2-only report - correct behaviour per
+ * §8.4, indistinguishable on screen from a clean network answer, and a red
+ * that reads exactly like a wallet defect. See `warmPreflight`.
+ *
+ * The `expected` check is not ceremony: the assertions below are only
+ * meaningful if the network actually holds the opinion the walk is scripted
+ * around, and this says so in one line at the venue instead of leaving it to
+ * be inferred from missing text on a page.
+ */
+async function warmSend(source, amount, expected) {
+    const quote = await warmPreflight({
+        action: 'SEND',
+        params: `0|XCHAIN|${amount}|${REGTEST_DESTINATION}`,
+        source,
+    });
+    expect(quote.valid, `the venue's own dry-run for a ${amount} XCHAIN send disagrees `
+        + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
+    return quote;
+}
+
 /** Picks XCHAIN in the Send asset picker, fills the form, opens the modal. */
 async function composeTokenSend(page, amount) {
     await gotoSection(page, 'Send');
@@ -73,11 +109,14 @@ async function composeTokenSend(page, amount) {
 }
 
 test.describe('pre-flight gate on regtest', () => {
+    /** This wallet's own address, and the `source` every dry-run is asked about. */
+    let own;
+
     test.beforeEach(async ({ page }) => {
         await createWallet(page, { password: PASSWORD });
         await switchToRegtest(page, PASSWORD);
 
-        const own = await readReceiveAddress(page);
+        own = await readReceiveAddress(page);
         // BTC pays the miner fee; XCHAIN is what the send actually spends.
         await fundAddress(own, FUNDING_BTC);
         await page.reload();
@@ -93,6 +132,7 @@ test.describe('pre-flight gate on regtest', () => {
     });
 
     test('an unaffordable token send fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
+        await warmSend(own, UNAFFORDABLE, false);
         await composeTokenSend(page, UNAFFORDABLE);
 
         // §5.2.4: the verdict chip, from a REAL dry-run. Tier 1 was
@@ -154,10 +194,18 @@ test.describe('pre-flight gate on regtest', () => {
         // point is that a rejected pre-flight is not a dead end and leaves
         // nothing behind - the second compose has to produce a clean report,
         // not a stale one.
+        await warmSend(own, UNAFFORDABLE, false);
         await composeTokenSend(page, UNAFFORDABLE);
         await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+
+        // The second dry-run is a DIFFERENT action string, so it is cold
+        // again. Warming it is also the only thing that makes "Looks good"
+        // below mean anything: a Tier-1 verdict that never arrived produces
+        // the same chip as one that came back valid, so without this the
+        // clean report could be clean by omission.
+        await warmSend(own, AFFORDABLE, true);
 
         // Fix in place: the form kept its values (§5.1), so only the amount
         // changes.

@@ -107,6 +107,26 @@ assert.doesNotMatch(
     'stale four-action mount rule removed',
 );
 
+// A form "explains a refused native-fee quote in chain-aware wording" if it
+// calls nativeFeeErrorMessage with the chain context, OR if it routes its catch
+// through submitFailureMessage - the  helper whose whole purpose is to be
+// the one place a form turns a failed submit into a sentence, and which calls
+// nativeFeeErrorMessage with exactly those options. Pinning only the literal
+// call would fail a form for adopting the helper, which is backwards: D-118
+// moved the betting surfaces onto it precisely because hand-rolled ternaries
+// mapped ONE error shape and let every other one through as a log line.
+//
+// WIDENED AGAIN (D-121): the first widening still pinned the ARGUMENT LAYOUT -
+// it required `coinTicker, mandatory: nativeFee.mandatory` on one line, so the
+//  sweep failed this smoke by adopting the same helper with the argument
+// object spread over separate lines. That is a whitespace opinion wearing a
+// correctness assertion, and it punishes exactly the change the rule wants.
+// What is actually being asserted is: the catch hands `err` to a mapper that
+// knows the coin and whether the chain has an XCHAIN lane. So match the call
+// and its two named arguments in either order of line breaks, and nothing else.
+const CHAIN_AWARE_REFUSAL =
+    /(?:nativeFeeErrorMessage|submitFailureMessage)\(\s*err,\s*\{[\s\S]{0,200}?\bcoinTicker\b[\s\S]{0,200}?\bmandatory:\s*nativeFee\.mandatory/;
+
 // ---- : the BET lane, which the PC-51 sweep never covered ----
 //
 // BET is fee-bearing on two of its four formats and sits in COMMON_ACTIONS, so
@@ -134,7 +154,7 @@ for (const f of BET_FORMS) {
         `${f} threads the flag into BOTH compose and submit`,
     );
     // The LTC/DOGE-aware wording, not the BTC-era "turn it off" advice.
-    assert.match(src, /nativeFeeErrorMessage\(err, \{ coinTicker, mandatory: nativeFee\.mandatory \}\)/,
+    assert.match(src, CHAIN_AWARE_REFUSAL,
         `${f} explains a refused native-fee quote in chain-aware wording`);
 }
 
@@ -187,7 +207,7 @@ for (const f of CONTRACT_FORMS) {
         `${f} marks the quote unverified (DEPLOY/EXECUTE are priced without a dry-run)`);
     assert.match(src, /NATIVE_FEE_UNVERIFIED_NOTICE/,
         `${f} states the unverified caveat on its review stage too`);
-    assert.match(src, /nativeFeeErrorMessage\(err, \{ coinTicker, mandatory: nativeFee\.mandatory \}\)/,
+    assert.match(src, CHAIN_AWARE_REFUSAL,
         `${f} explains a refused native-fee quote in chain-aware wording`);
     // Three submit lanes, and a form that threaded only some of them would
     // preview a fee output it never pays for, or pay for one nobody previewed.
