@@ -318,6 +318,46 @@ assert.ok(
     'the plugin is registered BEFORE super.onCreate builds the bridge',
 );
 
+// SSC-1: the plugins Capacitor registers FOR us, which the rule about
+// registering only what we use does not otherwise reach.
+//
+// Measured on an API 36 emulator (2026-08-01): before this removal, ordinary
+// page script could call `Capacitor.Plugins.CapacitorHttp.request(...)` and
+// get an HTTP 200 body back from a third-party origin. That request is made
+// by the NATIVE stack, so the WebView's CSP - which §1 calls one of the two
+// real boundaries - does not constrain it at all.
+assert.match(
+    mainActivity,
+    /dropUnusedCapacitorPlugins\(\)/,
+    'SSC-1: CapacitorHttp/CapacitorCookies must be dropped from the bridge registry',
+);
+assert.ok(
+    mainActivity.indexOf('dropUnusedCapacitorPlugins()')
+        > mainActivity.indexOf('super.onCreate('),
+    'the removal runs AFTER super.onCreate: the bridge (and its registry) does'
+    + ' not exist before it',
+);
+for (const unused of ['CapacitorHttp', 'CapacitorCookies']) {
+    assert.match(
+        mainActivity,
+        new RegExp(`"${unused}"`),
+        `SSC-1: ${unused} is a general-purpose native capability this app never uses`,
+    );
+}
+assert.match(
+    mainActivity,
+    /getBridge\(\)\.getPlugin\(name\) != null[\s\S]{0,200}?throw new IllegalStateException/,
+    'the removal is asserted through the same lookup the bridge dispatches with:'
+    + ' removing from the wrong map would otherwise look exactly like success',
+);
+assert.match(
+    mainActivity,
+    /catch \(NoSuchFieldException \| IllegalAccessException e\) \{[\s\S]{0,300}?throw new IllegalStateException/,
+    'a Capacitor upgrade that moves Bridge.plugins must FAIL LOUDLY: a security'
+    + ' control that silently stops applying is worse than one never added,'
+    + ' because the spec still claims it',
+);
+
 // Biometric lifecycle: the three properties that make the sidecar safe. Each
 // has a convenient wrong version (a validity window, weak biometrics, a key
 // that survives re-enrollment), so assert the right ones are present.
@@ -425,6 +465,29 @@ assert.match(
     linksJava,
     /pending = null;/,
     'the queued link is cleared on read, so a reload cannot replay it',
+);
+
+// ONE INTENT, ONE DELIVERY. Both of these were found by running a cold-start
+// link on an API 36 emulator (2026-08-01) and watching the SAME tap reach the
+// SPA twice; neither is visible from reading the plugin alone.
+assert.match(
+    linksJava,
+    /notifyListeners\(EVENT, payload, false\)/,
+    'the event is NOT retained: a retained notify is replayed to the listener the'
+    + ' SPA attaches straight after reading the queue, which delivers one tap twice'
+    + ' and no amount of clearing the queue on read can stop it',
+);
+assert.match(
+    linksJava,
+    /if \(hasListeners\(EVENT\)\)[\s\S]{0,600}?\} else \{[\s\S]{0,200}?pending = url;/,
+    'queue XOR notify: a warm tap that was delivered as an event must not ALSO'
+    + ' be left in the queue, where the next SPA reload would replay it',
+);
+assert.match(
+    linksJava,
+    /getBooleanExtra\(EXTRA_CONSUMED, false\)\) return null;/,
+    'an Intent is extracted once: Capacitor hands the launch intent to both load()'
+    + ' and handleOnNewIntent, and getIntent() keeps returning it afterwards',
 );
 assert.match(mainActivity, /registerPlugin\(XChainLinksPlugin\.class\)/);
 assert.ok(

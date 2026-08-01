@@ -36,6 +36,8 @@ import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
+import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
 import { ImportWallet } from '@xchain-wallet/core/shared/routes/ImportWallet.jsx';
@@ -421,7 +423,15 @@ function AppInner() {
         getSessionStatus()
             .then((next) => setStatus(next))
             .catch((err) =>
-                setStatus({ state: 'error', error: err?.message || String(err) }),
+                setStatus({
+                    state: 'error',
+                    error: err?.message || String(err),
+                    // : a vault that EXISTS and will not open gets a
+                    // screen of its own, and which of the three it is decides
+                    // what that screen may offer. Narrowed here because this is
+                    // the last point at which the error is still an error.
+                    errorKind: coreStorageLib.vaultErrorKind(err),
+                }),
             );
     }, []);
 
@@ -557,7 +567,9 @@ function AppInner() {
         case 'loading':
             return <Loading />;
         case 'error':
-            return <Loading error={status.error} />;
+            return status.errorKind
+                ? <VaultUnavailable kind={status.errorKind} detail={status.error} />
+                : <Loading error={status.error} />;
         case 'no-wallet':
             if (onboardingStep === 'create') {
                 return (

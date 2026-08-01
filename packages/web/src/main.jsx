@@ -99,7 +99,14 @@ function renderBlockingPanel(heading, message) {
 // the moment the wallet is gone, so it must not be allowed to work at all.
 // In a browser this is false and nothing changes.
 const floor = checkWebViewFloor();
-if (nativeShellIsBroken()) {
+
+// public/boot-check.js already refused this engine and drew the panel: same
+// verdict, from the tier that runs BEFORE this bundle is parsed (the tier
+// that exists because an engine too old for `type="module"` never runs a line
+// of this file). Nothing to do here but leave its panel alone.
+if (globalThis.__xchainBootFloor?.blocked) {
+    console.warn('web: boot floor refused this engine before the bundle loaded');
+} else if (nativeShellIsBroken()) {
     renderBlockingPanel('XChain Wallet cannot open on this device', BROKEN_SHELL_MESSAGE);
 } else if (!floor.usable) {
     renderBlockingPanel(

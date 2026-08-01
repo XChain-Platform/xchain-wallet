@@ -63,6 +63,38 @@ export class VaultCorruptError extends VaultUnavailableError {
 }
 
 /**
+ * Which of the three this error is, or null when it is not one of them.
+ *
+ * The shells catch a boot failure and keep only `err.message`, which throws
+ * the type away exactly where it is needed: the screen a user sees for a
+ * LOCKED keystore ("unlock your phone") is not the screen for a CORRUPT blob
+ * ("your recovery phrase still holds everything"). This narrows the error
+ * once, at the boundary, so all three shells branch on the same word.
+ *
+ * Matched on `name` BEFORE `instanceof`, and that is deliberate: an error
+ * raised in another realm - a native plugin reply decoded in a different
+ * bundle, a worker, an iframe - fails `instanceof` against these exact class
+ * objects while still being the very error meant. That is not hypothetical
+ * here; the same trap already produced a real bug in this shell's native
+ * seam, where `instanceof Uint8Array` was false for a `TextEncoder` result
+ * from another realm. `instanceof` stays as the fallback so a subclass that
+ * sets its own `name` is still classified.
+ *
+ * @param {unknown} err
+ * @returns {'corrupt' | 'locked' | 'unavailable' | null}
+ */
+export function vaultErrorKind(err) {
+    const name = /** @type {any} */ (err)?.name;
+    if (name === 'VaultCorruptError') return 'corrupt';
+    if (name === 'VaultLockedError') return 'locked';
+    if (name === 'VaultUnavailableError') return 'unavailable';
+    if (err instanceof VaultCorruptError) return 'corrupt';
+    if (err instanceof VaultLockedError) return 'locked';
+    if (err instanceof VaultUnavailableError) return 'unavailable';
+    return null;
+}
+
+/**
  * A backend stores a single opaque ciphertext blob. All record-level
  * structure lives inside the Vault document, encrypted under the master
  * key. The backend never sees plaintext.

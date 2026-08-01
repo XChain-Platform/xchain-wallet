@@ -76,8 +76,31 @@ unblocks the assetlinks fingerprints and the `SECURITY.md` slot.
 > the BUILT bundle, because no source-level assertion can see what the merger
 > adds.
 >
-> **Nothing has run on a device or emulator**, so no BiometricPrompt has been
-> shown and no FLAG_SECURE has taken effect.
+> **It has now run on Android (2026-08-01).** The §7 emulator matrix (API 26 +
+> API 36, `google_apis` arm64) is stood up, and it found two things reading had
+> not: the wallet was a **blank white screen on its own `minSdkVersion`**
+> (Chromium 58 ignores `<script type="module">` silently, so the bundle - and
+> with it the capability floor that exists for exactly that device - never
+> ran; fixed by `packages/web/public/boot-check.js`, a pre-bundle ES5 tier),
+> and **one deep link reached the SPA twice** (a retained cold-start event
+> replayed to the listener attached right after the queue was read; fixed to
+> queue XOR notify). BiometricPrompt has now been shown and the whole SSC-3
+> lifecycle driven; FLAG_SECURE has taken effect; the vault's
+> ABSENT/OK/CORRUPT statuses are measured rather than asserted. Report:
+> `claude/reports/2026-08-01_xc999-android-emulator-first-run.md`.
+>
+> **Two things an emulator cannot tell you.** `setWebContentsDebuggingEnabled(false)`
+> cannot be checked on any `google_apis` image (`ro.debuggable=1` makes WebView
+> expose DevTools for every app regardless), and no App Link has been verified
+> end to end - that needs a signed build, a published `assetlinks.json` with
+> real fingerprints, and `adb shell pm get-app-links`, which today reports
+> `xchain.io: legacy_failure`. Both need the physical device §7 names as a
+> release gate.
+>
+> **Rebuilding for a device: `pnpm --filter @xchain-wallet/mobile build` stages
+> `www/` only.** The APK reads `android/app/src/main/assets/public`, which only
+> `cap sync android` populates, so a build without it silently ships the
+> previous web assets.
 
 ### Where the mobile JS actually lives
 

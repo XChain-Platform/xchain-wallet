@@ -152,6 +152,46 @@ jobs:
           grep -q 'usesCleartextTraffic="false"' merged-manifest.xml
           test "$(grep -c 'android:name="android.permission' merged-manifest.xml)" -le 4
 
+      # The capability floor that refuses an engine too old to PARSE the app
+      # (public/boot-check.js) is only worth anything if it shipped, as a
+      # CLASSIC script, AHEAD of the module bundle. The unit test asserts the
+      # source index.html; what ships is the built one, which Vite rewrites
+      # (it hoists the module entry and adds SRI). Same lesson as the merged
+      # manifest above: assert the artifact, not the source.
+      #
+      # Found by running the app on API 26, where the stock WebView is
+      # Chromium 58: it does not error on `type="module"`, it IGNORES it, so
+      # the whole bundle silently never ran and the wallet was a blank white
+      # screen. Anything that reorders these two tags, or gives this one a
+      # `type`, brings that back with no other symptom.
+      - name: The pre-bundle capability floor shipped, ahead of the bundle
+        run: |
+          set -euo pipefail
+          rm -rf aab-assets
+          unzip -o -q packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+            'base/assets/public/index.html' 'base/assets/public/boot-check.js' -d aab-assets
+          html="aab-assets/base/assets/public/index.html"
+          boot="aab-assets/base/assets/public/boot-check.js"
+
+          test -s "$boot"
+          grep -q 'noModule' "$boot"   # it is the real floor, not an empty file
+
+          tag="$(grep -oE '<script[^>]*boot-check\.js[^>]*>' "$html")"
+          echo "shipped tag: $tag"
+          echo "$tag" | grep -q 'integrity="sha384-'
+          # A `type` here would defer it behind the very bundle it precedes.
+          if echo "$tag" | grep -q 'type='; then
+            echo "boot-check.js must ship as a classic script" >&2; exit 1
+          fi
+
+          # Anchor on the TAGS. Matching the bare filename finds the HTML
+          # comment above it instead, which sits before the module either way
+          # and made this assertion pass a deliberately reordered file.
+          b="$(grep -bo '<script[^>]*boot-check\.js' "$html" | head -1 | cut -d: -f1)"
+          m="$(grep -bo '<script[^>]*type="module"' "$html" | head -1 | cut -d: -f1)"
+          echo "boot-check tag at $b, module entry at $m"
+          test "$b" -lt "$m"
+
       - name: Upload the unsigned smoke artifacts
         uses: actions/upload-artifact@v4
         with:

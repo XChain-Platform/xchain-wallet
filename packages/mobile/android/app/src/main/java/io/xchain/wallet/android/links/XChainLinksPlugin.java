@@ -53,6 +53,16 @@ public class XChainLinksPlugin extends Plugin {
     private static final String SCHEME_WEB = "https";
     private static final String HOST_WEB = "xchain.io";
 
+    /**
+     * Marks an Intent this plugin has already taken the link out of.
+     *
+     * Capacitor hands the LAUNCH intent to both {@link #load()} and
+     * {@link #handleOnNewIntent(Intent)} - the same Intent object, twice -
+     * so without a marker one tap is extracted twice and the SPA applies it
+     * twice. Measured on an API 36 emulator, 2026-08-01.
+     */
+    private static final String EXTRA_CONSUMED = "io.xchain.wallet.android.links.CONSUMED";
+
     /** The link that launched the app, until the SPA asks for it. */
     private String pending;
 
@@ -67,13 +77,31 @@ public class XChainLinksPlugin extends Plugin {
         super.handleOnNewIntent(intent);
         String url = extract(intent);
         if (url == null) return;
-        JSObject payload = new JSObject();
-        payload.put("url", url);
-        // Queue as well as notify: the activity is singleTask, so a warm tap
-        // can still land while the WebView is reloading after a process
-        // death, with no listener attached yet.
-        pending = url;
-        notifyListeners(EVENT, payload, true);
+
+        // QUEUE **XOR** NOTIFY, which is the whole delivery contract: one
+        // intent reaches the SPA exactly once.
+        //
+        // Doing both, which is what this did until it was run, delivers the
+        // same link twice. Emulator trace: the cold-start notify found no
+        // listener and Capacitor RETAINED it; the SPA then read the queue
+        // (delivery one) and attached its listener, at which point the
+        // retained event fired (delivery two). Clearing the queue on read
+        // cannot prevent that, because the replay arrives down the other
+        // channel entirely - so the guarantee has to be that only one
+        // channel is ever used per intent.
+        //
+        // The `false` matters as much as the branch: a retained event is a
+        // deferred replay by definition, and deferring is exactly what the
+        // queue is already for.
+        if (hasListeners(EVENT)) {
+            JSObject payload = new JSObject();
+            payload.put("url", url);
+            notifyListeners(EVENT, payload, false);
+        } else {
+            // No listener yet - a warm tap landing while the WebView reloads
+            // after process death. The SPA collects this when it subscribes.
+            pending = url;
+        }
     }
 
     /**
@@ -101,10 +129,19 @@ public class XChainLinksPlugin extends Plugin {
         if (data == null) return null;
         String scheme = data.getScheme();
         if (scheme == null) return null;
+        // Already taken out of this Intent (see EXTRA_CONSUMED). Android
+        // hands the launch intent to load() and to handleOnNewIntent, and
+        // keeps handing the same object back from getIntent() for the life
+        // of the activity, so "have I seen this one" has to live on the
+        // Intent rather than in a field.
+        if (intent.getBooleanExtra(EXTRA_CONSUMED, false)) return null;
+
         if (SCHEME_APP.equalsIgnoreCase(scheme)) {
+            intent.putExtra(EXTRA_CONSUMED, true);
             return data.toString();
         }
         if (SCHEME_WEB.equalsIgnoreCase(scheme) && HOST_WEB.equalsIgnoreCase(data.getHost())) {
+            intent.putExtra(EXTRA_CONSUMED, true);
             return data.toString();
         }
         // An http:// link, another host, or a scheme some other app aimed at
