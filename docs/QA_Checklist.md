@@ -293,7 +293,7 @@ should not have to re-derive the answer under a review clock:
 
 Watch the absolute-origin inventory the same scan produces. Every host that
 the shipped code can actually contact at runtime must appear in
-`packages/extension/PRIVACY_POLICY.md` and must match what the operator ticks
+`docs/Privacy_Policy.md` (the one policy covering every shell) and must match what the operator ticks
 in the store's data-disclosure tab; spec §3.3 names that mismatch as a common
 rejection cause. As of this audit the runtime set is: the configured
 blockchain RPC and XChain decoder / indexer / explorer endpoints;
@@ -320,7 +320,7 @@ things a script can do for you.
   `https://xchain.io/wallet/privacy/`, and the CWS submission form validates
   that the URL resolves; a first submission or a resubmission against a
   down or stale URL fails at the form, not at review. The page is generated
-  from this repo's own `packages/extension/PRIVACY_POLICY.md` by
+  from this repo's own `docs/Privacy_Policy.md` by
   `xchain-websites/xchain.io/build/privacy.build.js`, and
   `xchain-websites/test/wallet-privacy-policy-sync.test.js` (run in the
   `xchain-websites` repo's `npm test`) fails if the hosted page has drifted

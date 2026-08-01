@@ -57,12 +57,12 @@ What this does NOT protect against (out of scope for Level 2):
 The end-to-end recipe lives in the desktop doc. Short version:
 
 ```bash
-git clone https://github.com/XChain-platform/xchain-wallet.git
+git clone https://github.com/XChain-Platform/xchain-wallet.git
 cd xchain-wallet
 bash packages/desktop/scripts/reproduce.sh vX.Y.Z
 
 diff reproduce-out/RELEASE_HASHES.txt \
-     <(curl -fsSL "https://github.com/XChain-platform/xchain-wallet/releases/download/vX.Y.Z/RELEASE_HASHES.txt")
+     <(curl -fsSL "https://github.com/XChain-Platform/xchain-wallet/releases/download/vX.Y.Z/RELEASE_HASHES.txt")
 ```
 
 Zero-byte diff = reproducible. Any diff means either toolchain drift,

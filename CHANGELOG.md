@@ -4706,7 +4706,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 ### Changed
 
-- `packages/extension/manifest.json`: `version` now `0.1.0.2` (derived from wallet `1.0.0-rc.2`). New `version_name: "1.0.0-rc.2"` carries the human-readable semver into Chrome. New `homepage_url: "https://github.com/XChain-platform/xchain-wallet"`. Description expanded from 55 → 110 chars to list the launch chains (still well under the 132-char CWS listing limit). Every future wallet bump must re-derive the manifest version; the smoke fails CI if it doesn't.
+- `packages/extension/manifest.json`: `version` now `0.1.0.2` (derived from wallet `1.0.0-rc.2`). New `version_name: "1.0.0-rc.2"` carries the human-readable semver into Chrome. New `homepage_url: "https://github.com/XChain-Platform/xchain-wallet"`. Description expanded from 55 → 110 chars to list the launch chains (still well under the 132-char CWS listing limit). Every future wallet bump must re-derive the manifest version; the smoke fails CI if it doesn't.
 
 ### Decided
 

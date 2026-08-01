@@ -3,7 +3,7 @@
 A reference for terms used throughout the wallet's code, documentation,
 and user-facing surfaces. Wallet-specific vocabulary lives here;
 protocol-level terms (ACTION names, encoding types, BATCH, magic
-prefix) are defined upstream in [`xchain-documentation/getting-started/Key_Terms.md`](https://github.com/XChain-platform/xchain-documentation/blob/master/getting-started/Key_Terms.md)
+prefix) are defined upstream in [`xchain-documentation/getting-started/Key_Terms.md`](https://github.com/XChain-Platform/xchain-documentation/blob/master/getting-started/Key_Terms.md)
 and not duplicated here unless the wallet reuses the term with a
 narrower meaning.
 

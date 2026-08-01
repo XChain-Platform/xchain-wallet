@@ -97,7 +97,7 @@ Prerequisites: Docker, git, bash.
 
 ```bash
 # Clone the repo and check out the tag you want to verify.
-git clone https://github.com/XChain-platform/xchain-wallet.git
+git clone https://github.com/XChain-Platform/xchain-wallet.git
 cd xchain-wallet
 
 # Run reproduction against a specific tag.

@@ -1020,7 +1020,7 @@ const DEMO_TIS_BY_TICK = {
             website: 'https://xchain.io',
             social: [
                 { type: 'twitter', data: 'https://twitter.com/' },
-                { type: 'github', data: 'https://github.com/XChain-platform' },
+                { type: 'github', data: 'https://github.com/XChain-Platform' },
             ],
             categories: [{ type: 'main', data: 'Showcase' }],
         },

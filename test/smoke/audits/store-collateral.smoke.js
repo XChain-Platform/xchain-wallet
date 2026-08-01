@@ -92,6 +92,32 @@ assert.ok(/not yet publishable/i.test(policy),
 assert.ok(policy.includes('Data_Collection.md'),
     'Privacy_Policy.md points at its source of record');
 
+// --- 1b. Nothing pending may sit in the PUBLISHABLE body ---------------
+//
+// Added 2026-08-01, when this file became the one policy for every shell
+// (web, extension, desktop, Android, iOS) and the source that
+// xchain-websites renders into https://xchain.io/wallet/privacy/. That
+// generator strips HTML comments and publishes everything else, so where
+// a marker sits is now the difference between a maintainer note and a
+// sentence a store reviewer reads. The two rules above still hold; this
+// one adds the half they cannot see: a pending marker in body text would
+// be published verbatim.
+//
+// The check is on the RAW file, not the whitespace-collapsed copy, since
+// it is about comment boundaries.
+const policyRaw = read(DOCS.policy);
+const withoutComments = policyRaw.replace(/<!--[\s\S]*?-->/g, '');
+for (const marker of [/\[UNSETTLED/, /\bPENDING\b/, /not yet publishable/i, /\bDRAFT\b/]) {
+    assert.ok(!marker.test(withoutComments),
+        `Privacy_Policy.md has ${marker} outside an HTML comment. This file is rendered onto a public `
+        + 'page with comments stripped, so a maintainer note in body text gets published. Move it into '
+        + 'the internal status comment at the top.');
+}
+// And the status block must still exist somewhere, or the rules above
+// would pass on a file that simply deleted its own status.
+assert.ok(/<!--[\s\S]*not yet publishable[\s\S]*-->/i.test(policyRaw),
+    'Privacy_Policy.md must keep its internal status block while facts are pending');
+
 // --- 2. The declaration must cover what the code actually does ---------
 //
 // Not a prose review - just that each disclosed egress destination is

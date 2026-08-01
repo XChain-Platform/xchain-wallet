@@ -74,30 +74,46 @@ This is the access you confirmed you had (or knew who to ask for) in Phase 0. If
 
 **STOP: D1.** The trader declaration publishes name, postal address, email, **and** phone number, permanently, on the public listing. This is not reversible in the sense that matters: even if you could later edit the fields, the original values were public and indexed the moment they went live. Spec §8 D1 decides the whole public-identity set as one unit, and it is still open:
 
-> publisher display name ("Dankest, LLC" vs "XChain"), verified domain (xchain.io, already handled in 2b), listing support email (spec §2 proposes `support@xchain.io`), privacy-policy contact email (currently `privacy@dankest.llc` plus a GitHub issues link, per `PRIVACY_POLICY.md`'s own D1-pending marker), and the trader entity plus published address/phone.
+> publisher display name ("Dankest, LLC" vs "XChain"), verified domain (xchain.io, already handled in 2b), listing support email (spec §2 proposes `support@xchain.io`), privacy-policy contact email (currently `privacy@dankest.llc` plus a GitHub issues link, per the pending note in `docs/Privacy_Policy.md`), and the trader entity plus published address/phone.
 
 Do not fill in the trader declaration form with a best guess "for now." Five surfaces have to agree before submission (the four above plus this declaration), and reviewers cross-check them. Get D1 answered as one unit, then come back to this step.
 
-⬜ D1 answered by the operator, all five surfaces reconciled (this declaration, `PRIVACY_POLICY.md`'s contact line, the listing support email, the publisher display name, and the verified domain already done in 2b).  
+⬜ D1 answered by the operator, all five surfaces reconciled (this declaration, `docs/Privacy_Policy.md`'s contact line, the listing support email, the publisher display name, and the verified domain already done in 2b).  
 ⬜ Trader declaration submitted, matching the reconciled identity.
 
 ---
 
 ## Phase 3: Privacy-policy URL must be live before you open the store form
 
+**This phase was BLOCKED and is now CLEAR.** On 2026-08-01 `https://xchain.io/wallet/privacy/` returned **404**: the page was built, correct and deployed, but only at `newsite.xchain.io`, because the apex still served an old placeholder docroot. The operator flipped the apex the same day () and the URL now serves the current policy, confirmed through the edge in a browser and against the origin directly. Re-confirm it yourself before you submit anyway, with the two checks below: this is exactly the kind of thing that is true on the day it is written down and false on the day someone needs it.
+
 ⬜ Confirm `https://xchain.io/wallet/privacy/` (trailing slash; this is the canonical form, see S6's note below) resolves and serves the current policy:
 
 ```bash
-curl -sI https://xchain.io/wallet/privacy/ | head -1
+node tools/release/verify-privacy-url.mjs
 ```
 
-Expect `HTTP/2 200`. If you get a redirect or a 404, stop here; the CWS submission form validates that the privacy-policy URL resolves, and a first submission against a down or stale URL fails at the form, before a reviewer ever sees it.
+Exit 0 means live, direct, and carrying this repo's current policy word for word. The other three exit codes are deliberately disjoint: **1** the URL does not resolve, redirects, or serves a stale policy (submission is blocked, and the fix is a deploy); **2** config error, nothing was checked; **3** could not tell, which is never an all-clear.
 
-**Why the trailing slash matters:** the page is generated from this package's own `PRIVACY_POLICY.md` by `xchain-websites/xchain.io/build/privacy.build.js` (stage S6). The site's canonical URL carries a trailing slash. Paste `https://xchain.io/wallet/privacy/`, not `https://xchain.io/wallet/privacy` (no slash), into the console field, to avoid a redirect hop under review.
+**Expect exit 3 from a normal terminal, and do not read it as failure.** Cloudflare fronts this origin and answers non-browser clients with **403 on every path**, live page or not. Two ways to get past it, and the runbook wants both because they prove different things:
 
-**Before you trust what's live, confirm it matches this repo**, since the hosted page and this package's `PRIVACY_POLICY.md` are two copies of one source and a drift between them is the exact mismatch-rejection pattern spec §3.3 already found once (the Trezor claim). In the `xchain-websites` repo: run `node xchain.io/build/build.js`, confirm `test/wallet-privacy-policy-sync.test.js` passes, and confirm that repo's deploy actually shipped what you just built, **before** proceeding to Phase 4. This runbook does not own that repo or that test; it only tells you to check it.
+1. **Load the URL in a real browser.** That is the only check that exercises the same path the store's validator will: DNS, the edge, the cache, the redirect behaviour.
+2. **Check the bytes against this repo**, by fetching the origin directly and feeding the result back in:
 
-⬜ Hosted policy confirmed live and in sync with `packages/extension/PRIVACY_POLICY.md` at the version you are about to submit.
+```bash
+curl -sS -o /tmp/policy.html --resolve xchain.io:443:<origin-ip> https://xchain.io/wallet/privacy/
+node tools/release/verify-privacy-url.mjs --html /tmp/policy.html
+```
+
+That second one bypasses the edge on purpose, so it proves the deployed page is the current policy and says nothing about reachability or about a stale edge cache. Neither check subsumes the other. An earlier version of this phase told you to read `curl -sI | head -1` and expect `HTTP/2 200`, which on this domain is unreachable: you would have read a 403 as an outage, or gone hunting for the wrong problem entirely.
+
+**Why the trailing slash matters:** the page is generated from the wallet-wide `docs/Privacy_Policy.md` by `xchain-websites/xchain.io/build/privacy.build.js` (stage S6). The site's canonical URL carries a trailing slash. Paste `https://xchain.io/wallet/privacy/`, not `https://xchain.io/wallet/privacy` (no slash), into the console field, to avoid a redirect hop under review. The script treats a redirect as a failure for the same reason, and names the destination so you can paste that instead.
+
+**Content drift is covered from both ends, and you should confirm both.** The hosted page and `docs/Privacy_Policy.md` are two copies of one source; a drift between them is the exact mismatch-rejection pattern spec §3.3 already found once (the Trezor claim). In the `xchain-websites` repo: run `node xchain.io/build/build.js` and confirm `test/wallet-privacy-policy-sync.test.js` passes, which proves the CHECKED-IN page matches. The script above proves the DEPLOYED page matches, which is a different claim: a repo can be correct and the deploy stale. This runbook does not own that repo or that test; it only tells you to check both.
+
+⬜ Hosted policy confirmed live and in sync with `docs/Privacy_Policy.md` at the version you are about to submit.
+
+** is done**, so the `newsite.xchain.io` fallback this phase used to describe is no longer needed and has been removed rather than left as a tempting shortcut: a provisional hostname on a permanent listing is a cost with nothing to buy any more.
 
 ---
 
@@ -142,12 +158,12 @@ Everything paste-ready lives in `packages/extension/docs/STORE_LISTING_PACK.md`.
 | Listing name, summary, full description | `STORE_LISTING_PACK.md` §4 |
 | Screenshots (1280x800 popup, side panel, sign approval) and small promo tile (440x280) | `packages/extension/docs/listing-assets/` (four PNGs, generated by `packages/extension/scripts/capture-listing-screenshots.mjs`) |
 | Privacy-policy URL | `https://xchain.io/wallet/privacy/` (Phase 3; confirm it is still live right before you paste it) |
-| Data-disclosure tab (what the extension stores/transmits) | `PRIVACY_POLICY.md`, "What the extension stores on your device" and "What the extension sends off your device, and why". Tick the boxes to match this document exactly; a mismatch here is spec §3.3's named rejection cause. |
+| Data-disclosure tab (what the extension stores/transmits) | `docs/Privacy_Policy.md`, "What stays on your device" and "What the extension sends off your device, and why". Tick the boxes to match this document exactly; a mismatch here is spec §3.3's named rejection cause. |
 
 ⬜ Single-purpose, permission justifications, and content-script justification pasted from `STORE_LISTING_PACK.md`.  
 ⬜ Listing name and description pasted (name is a working title, see **STOP: D2** below).  
 ⬜ Four listing assets uploaded from `packages/extension/docs/listing-assets/`.  
-⬜ Data-disclosure tab ticked to match `PRIVACY_POLICY.md` exactly.  
+⬜ Data-disclosure tab ticked to match `docs/Privacy_Policy.md` exactly.  
 ⬜ Privacy-policy URL field set to `https://xchain.io/wallet/privacy/`.
 
 **STOP: D2.** Two fields on this form are not decided:
@@ -221,7 +237,9 @@ Once public: the store's staged-rollout percentage is not available to this list
 | Phase 5, final name field | **D2** | Final store name confirmation ("XChain Wallet" is the working, undecided assumption) |
 | Phase 5, support email / trader fields on the form itself | **D1** | Same as Phase 2c; this is the same gate surfacing a second time on the form |
 
-Nothing in Phases 6 through 8 can happen until Phases 2 and 5 are unblocked, because there is no submission without the form being complete and the trader declaration filed.
+Nothing in Phases 6 through 8 can happen until Phases 2 and 5 are unblocked, because there is no submission without a complete form and the trader declaration filed. Phase 3 is no longer among them: the privacy-policy URL went live on 2026-08-01 with the apex flip, and its row above is struck from this table.
+
+What is left is decisions, not deploys. The blocked-on-deploy row that sat here (the apex flip,) cleared on 2026-08-01, which leaves D1 and D2: one operator, sitting down once, answering both as single units.
 
 ## Appendix B: Things this runbook could not verify against the repo, or is not certain about
 
@@ -238,8 +256,9 @@ Nothing in Phases 6 through 8 can happen until Phases 2 and 5 are unblocked, bec
 - `packages/extension/docs/publish-log.md` - the row you append at upload time.
 - `packages/extension/docs/store-correspondence.md` - reviewer exchange log.
 - `packages/extension/docs/listing-assets/` - screenshots and promo tile.
-- `packages/extension/PRIVACY_POLICY.md` - the policy the hosted page and the data-disclosure tab must both match.
+- `docs/Privacy_Policy.md` - the policy the hosted page and the data-disclosure tab must both match. It covers every shell (web, extension, desktop, Android, iOS); `packages/extension/PRIVACY_POLICY.md` is a signpost pointing here and holds no prose.
 - `packages/extension/docs/manifest-freeze.json` and `docs/QA_Checklist.md` "Chrome Web Store release provenance" - the pre-upload gates (manifest freeze, human diff, sha256 check) that run before this ceremony's Phase 4.
 - `tools/release/README.md`, `tools/release/verify.sh`, `tools/release/verify-store.sh`, `tools/release/rollback-rerelease.sh` - the artifact-provenance and post-publish tooling this runbook points at rather than duplicates.
+- `tools/release/verify-privacy-url.mjs` - Phase 3's check: is the policy URL live, direct, and serving this repo's current policy.
 - `docs/BRIDGE.md` - where the assigned extension ID gets recorded for dApp integrators.
 - `claude/reports/launch/INCIDENT-RUNBOOK.md` section 14 - emergency levers if something goes wrong after publish.

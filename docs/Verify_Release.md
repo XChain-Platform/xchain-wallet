@@ -273,7 +273,7 @@ maintainer-machine compromise.
 ### Desktop (Linux)
 
 ```bash
-git clone https://github.com/XChain-platform/xchain-wallet.git
+git clone https://github.com/XChain-Platform/xchain-wallet.git
 cd xchain-wallet
 git checkout ${TAG}
 bash packages/desktop/scripts/reproduce.sh ${TAG}

@@ -24,7 +24,7 @@
 // list is not gated (most entries are inert documentation, licence, and
 // demo-fixture strings) but it must be read by a human before submission:
 // every host the code can actually contact at runtime has to appear in
-// PRIVACY_POLICY.md and match the store's data-disclosure answers, and
+// docs/Privacy_Policy.md and match the store's data-disclosure answers, and
 // spec §3.3 names that mismatch as a common rejection cause.
 //
 //   node packages/extension/scripts/remote-code-audit.mjs [distDir]

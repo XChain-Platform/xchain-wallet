@@ -44,12 +44,12 @@ All packages ship at the **same version number**. See "Versioning" below.
 
 - **Node.js** ≥ 18 (`engines.node` in `package.json`).
 - **pnpm** 9.x (declared in `packageManager`). Install with `corepack enable && corepack prepare pnpm@9.0.0 --activate`.
-- A sibling `xchain-sdk` checkout. The wallet's web + extension packages link `xchain-sdk` from `../../../xchain-sdk` (a symlink resolved at install time). Clone https://github.com/XChain-platform/xchain-sdk next to `xchain-wallet` before installing.
+- A sibling `xchain-sdk` checkout. The wallet's web + extension packages link `xchain-sdk` from `../../../xchain-sdk` (a symlink resolved at install time). Clone https://github.com/XChain-Platform/xchain-sdk next to `xchain-wallet` before installing.
 
 ### First-time install
 
 ```bash
-git clone https://github.com/XChain-platform/xchain-wallet.git
+git clone https://github.com/XChain-Platform/xchain-wallet.git
 cd xchain-wallet
 pnpm install
 ```
@@ -226,7 +226,7 @@ CI is intentionally not configured against `master` during the active build phas
 
 For non-security bugs, open an issue at:
 
-<https://github.com/XChain-platform/xchain-wallet/issues/new>
+<https://github.com/XChain-Platform/xchain-wallet/issues/new>
 
 Include: shell (extension / web / desktop), wallet version (visible in the About panel and machine-readable as `packages/core/src/buildInfo.js → WALLET_VERSION`), reproduction steps, expected vs. actual behavior, and a screenshot if the bug is visual.
 
