@@ -51,6 +51,14 @@ assert.ok(/import \{[^}]*\bparseXchainUri\b[^}]*\} from '\.\.\/\.\.\/uri\/xchain
 // regression in either import is its own failure, not a shared one.
 assert.ok(/import \{[^}]*\bhardenUriIntentText\b[^}]*\} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
     'ScanRoute imports hardenUriIntentText and applies it to a scanned xchain: intent before routing');
+//  §3.6 follow-up: the bip21 branch reaches chainId by a different road
+// (bip21.js, not xchainUri.js) and originally passed `chain=` through on a bare
+// length check, so a scanned QR could ride an arbitrary string into a routing
+// decision that the xchain: road drops. Both roads now share safeChainIdParam.
+// Asserted on the source because the gap was a missing call, and a missing call
+// is invisible to any test that only exercises well-formed input.
+assert.ok(/safeChainIdParam\s*\(\s*chainParam\s*\)/.test(scanRouteSrc),
+    'ScanRoute gates the scanned bip21 `chain=` param through safeChainIdParam, not a bare length check');
 assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
 assert.ok(/<textarea/.test(scanRouteSrc),

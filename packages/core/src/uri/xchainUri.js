@@ -158,6 +158,25 @@ const HARDENED_INTENT_FIELDS = ['memo', 'tick', 'method', 'executeParams', 'labe
  * @param {XchainUriIntent} intent
  * @returns {XchainUriIntent} a shallow copy with the hardened fields replaced
  */
+/**
+ * Gate a chainId that arrived from untrusted input, returning it only if it
+ * looks like a registry id and `undefined` otherwise.
+ *
+ * Exported because a chainId reaches a ROUTING decision, and the same BIP21
+ * `chain=` param arrives by two different roads: through this parser, and
+ * through `bip21.js` when `ScanRoute` classifies a scanned `bitcoin:` QR.
+ * The second road had no gate, so a scanned link could ride an arbitrary
+ * string into screen state on a path where the first road drops it. One
+ * exported gate rather than a second copy of the regex, so the two roads
+ * cannot drift apart again.
+ *
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+export function safeChainIdParam(value) {
+    return typeof value === 'string' && CHAIN_ID_RE.test(value) ? value : undefined;
+}
+
 export function hardenUriIntentText(intent) {
     if (!intent) return intent;
     const out = { ...intent };
@@ -233,7 +252,7 @@ function parsePathStyle(raw) {
     /** @type {XchainUriIntent} */
     const intent = {
         kind: 'send',
-        chainId: CHAIN_ID_RE.test(segments[0]) ? segments[0] : undefined,
+        chainId: safeChainIdParam(segments[0]),
         tick: segments.length > 1 ? segments[1] : undefined,
     };
 
@@ -273,7 +292,8 @@ function parseBip21Style(raw) {
     if (parts.message) intent.message = parts.message;
     if (parts.params?.memo) intent.memo = parts.params.memo;
     if (parts.params?.tick) intent.tick = parts.params.tick;
-    if (parts.params?.chain && CHAIN_ID_RE.test(parts.params.chain)) intent.chainId = parts.params.chain;
+    const gatedChain = safeChainIdParam(parts.params?.chain);
+    if (gatedChain) intent.chainId = gatedChain;
     const feePriority = normalizeFeePriority(parts.params?.feePriority);
     if (feePriority) intent.feePriority = feePriority;
     // BIP21: reject on any unimplemented req- param (see parseCoinCodeStyle).

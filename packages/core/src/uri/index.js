@@ -27,6 +27,7 @@ export {
     buildXchainUri,
     describeXchainIntent,
     hardenUriIntentText,
+    safeChainIdParam,
 } from './xchainUri.js';
 export {
     coinCodeForChainId,

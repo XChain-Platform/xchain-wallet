@@ -25,7 +25,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
-import { parseXchainUri, hardenUriIntentText } from '../../uri/xchainUri.js';
+import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
 
@@ -127,7 +127,10 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             // xchainUri.js), but a scanned `bitcoin:`/`xchain:<addr>` link is
             // the same untrusted-QR surface, so tick/memo get the same
             // neutralization; `address` stays raw for the same reason
-            // `hardenUriIntentText` leaves it alone.
+            // `hardenUriIntentText` leaves it alone. `chain` needs more than
+            // neutralizing because it picks a chain rather than being shown:
+            // it takes the same registry-id gate the xchain: road applies to
+            // this very param, which this road was missing.
             onClassified({
                 kind: 'send',
                 address: detected.address,
@@ -136,9 +139,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                 tick: typeof tickParam === 'string' && tickParam.length > 0
                     ? neutralizeControlText(tickParam).toUpperCase()
                     : undefined,
-                chainId: typeof chainParam === 'string' && chainParam.length > 0
-                    ? chainParam
-                    : undefined,
+                chainId: safeChainIdParam(chainParam),
             });
             return;
         }

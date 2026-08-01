@@ -1,0 +1,245 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!-- Copyright © 2026 Dankest, LLC -->
+
+# Chrome Web Store Submission Runbook
+
+**Date authored:** 2026-08-01  
+**Ledger item:**  stage S8 ("submission ceremony support")  
+**Scope:** the FIRST submission of the `io.xchain.wallet.extension` item to the Chrome Web Store, from account registration through the unlisted-to-public flip. Everything here is the operational sequence; the decisions behind it live in `claude/specs/wallet-publishing-chrome-extension.md` .  
+**Audience:** the operator, sitting at the Chrome Web Store developer console, doing this for the first time. Read the whole thing before opening the console. Several steps below are irreversible or ordering-sensitive; doing them out of order is not recoverable by redoing them in the right order afterward.
+
+**This runbook is currently BLOCKED.** Two spec decisions are still open (D1, D2) and this document refuses to hand you copy-paste text for the steps that need them. The exact blocking points are marked **STOP: D1** and **STOP: D2** below, and both are collected again in Appendix A. Do not invent an answer to either one to get past a stop; that is exactly the mistake this ceremony exists to prevent (§8 of the spec is explicit that these are operator decisions, not defaults).
+
+---
+
+## Ground rules (apply to every phase below)
+
+- **2FA is hardware security keys or passkeys only. Never SMS, never TOTP.** Phished publisher accounts pushing malicious updates is the dominant real-world extension-compromise pattern (spec §2 cites the December 2024 Cyberhaven wave, which was OAuth phishing of a publisher account, not a code vulnerability). Set this up before anything else in Phase 1.
+- **The publisher identity grants OAuth to no third-party tool, ever.** Not a CI service, not a browser extension, not a "connect your Google account" integration, no matter how convenient. This is the same compromise class as the bullet above: an OAuth grant is a standing credential that does not show up in a password check.
+- **This runbook never contains a real secret, credential, or recovery code.** It says where each one lives and how it is handled, never its value. If you find yourself about to paste a password, recovery code, or API key into this file (or into any file), stop; that is not what this document is for.
+- **Credential custody:** the Chrome Web Store developer account is K7 in the rails credential inventory (`claude/specs/wallet-release-rails.md` §4). Per that spec's account-hygiene rule, K7 uses hardware-key 2FA with no SMS fallback, is org-owned (not a personal Gmail), and its recovery codes go into the recovery store (LastPass, per the rails custody split) alongside the other K-row recovery material, never into this repo, never into a chat, never into a screenshot.
+- **One operator, claimed before touching the console.** The pending draft in the CWS console is a singleton; two people editing it clobbers silently (spec §6). Before you open the console, claim this release as the named operator in the ledger entry for this submission.
+- **The worktree may hold other sessions' uncommitted work.** Nothing in this ceremony touches git state (no commit, no push, no tag) except where explicitly noted as already-done CI/release-pipeline steps that happened before you sat down. If a step below tells you to run a git command, it is read-only (`git diff`, `git log`).
+
+---
+
+## Phase 0: Preconditions (confirm before Phase 1)
+
+⬜ You have read `claude/specs/wallet-publishing-chrome-extension.md` §2, §3, §4, §8 in full (not just this runbook).  
+⬜ Stages S1 through S4 are built (docs pass, security audits, hardening, release tooling). Verify against `claude/OPEN-ITEMS.md` / the spec's own status line, not from memory.  
+⬜ You have claimed this submission as the named release operator in the ledger.  
+⬜ You have console access to `xchain.io` DNS / Google Search Console (or know who does), because Phase 2's domain verification needs it. This runbook cannot verify that access from the repo; confirm it now rather than discovering the gap mid-ceremony.
+
+---
+
+## Phase 1: Account registration and hygiene
+
+⬜ **Register the developer account** with an org-controlled Google identity, not a personal Gmail. One-time $5 registration fee.  
+⬜ **Set up 2FA with a hardware security key or passkey.** Do this at registration time, before anything else touches the account. Never enable SMS or TOTP as a fallback; if the console offers one as a "backup" option, decline it.  
+⬜ **Grant no OAuth access to any third-party tool from this identity.** This includes CI/automation tools you may be tempted to wire up early "to save time later." Post-launch CI automation (D4, spec §6) is deliberately not decided yet, and when it is, the token it uses is scoped narrowly and reviewed, not a blanket OAuth grant to the publisher account itself.  
+⬜ **Record the recovery codes into the K7 slot of the recovery store** (LastPass, per rails §4), in the same sitting you generate them. A generated credential with nowhere durable to live is a future outage, not a future convenience.  
+⬜ **Set the account's contact email to a forwarding address that lands in a monitored shared inbox.** Do not point it at a personal inbox.
+
+### Prove the inbox is actually live
+
+Compliance clocks on this account run as short as 7 days (rejection responses, policy warnings, takedown notices). An unread inbox is how a listing dies quietly, not loudly, so prove receipt before you submit anything, not after the first rejection arrives.
+
+⬜ From an **external** account (not anything that already forwards into the same inbox), send a test email to the console's registered contact address.  
+⬜ Confirm it arrives in the monitored shared inbox, and confirm someone is actually watching that inbox on a cadence shorter than 7 days.  
+⬜ **Known gap:** inbound mail to an `@xchain.io` address depends on  (SMTP relay + host hardening), which is still open as of this writing. Interim: point the console's contact email at an existing, known-working mailbox, and migrate later via the console's contact-email change flow once  lands. Do not wait on  to do this test; test whatever mailbox you are actually using today.
+
+---
+
+## Phase 2: Account-shape changes before first submission
+
+**Why this phase exists as a separate, ordered block:** the spec is emphatic that group-publisher conversion, domain verification, and the trader declaration all happen **before** first submission, so an account-shape change never races a pending review. Doing any one of these after a submission is pending risks the review clock resetting or the listing entering an inconsistent state mid-review. Do all three now, while there is nothing in flight to race.
+
+### 2a. Group publisher conversion
+
+⬜ Convert the item to a group publisher, with the group holding at least two org identities, each with independent recovery.
+
+**Read this before clicking anything:**
+
+- **This conversion is IRREVERSIBLE.** There is no console flow to convert back to a solo publisher.
+- **It moves the publish credential into the Google Group itself.** Once converted, whoever administers that group, including the Workspace admin sitting above it, can add a publisher to the item. You are trading "one lost login kills the extension" for "the group's admin surface is now part of the trust boundary." That is the intended trade (it removes a single point of failure), but go in knowing what you're accepting, not discovering it later.
+- **Both group-member identities go into the K7 custody row** (rails §4) in the same step as the conversion. A group conversion with only one member recorded has recreated the single point of failure it exists to remove.
+
+### 2b. Domain verification
+
+⬜ Complete domain verification against `xchain.io` so the listing carries the verified-publisher badge before first submission.
+
+This is the access you confirmed you had (or knew who to ask for) in Phase 0. If you do not have it now, stop and get it before proceeding; do not submit unverified and plan to verify later, since that is exactly the "account-shape change racing a pending review" pattern this phase exists to avoid.
+
+### 2c. Trader declaration
+
+**STOP: D1.** The trader declaration publishes name, postal address, email, **and** phone number, permanently, on the public listing. This is not reversible in the sense that matters: even if you could later edit the fields, the original values were public and indexed the moment they went live. Spec §8 D1 decides the whole public-identity set as one unit, and it is still open:
+
+> publisher display name ("Dankest, LLC" vs "XChain"), verified domain (xchain.io, already handled in 2b), listing support email (spec §2 proposes `support@xchain.io`), privacy-policy contact email (currently `privacy@dankest.llc` plus a GitHub issues link, per `PRIVACY_POLICY.md`'s own D1-pending marker), and the trader entity plus published address/phone.
+
+Do not fill in the trader declaration form with a best guess "for now." Five surfaces have to agree before submission (the four above plus this declaration), and reviewers cross-check them. Get D1 answered as one unit, then come back to this step.
+
+⬜ D1 answered by the operator, all five surfaces reconciled (this declaration, `PRIVACY_POLICY.md`'s contact line, the listing support email, the publisher display name, and the verified domain already done in 2b).  
+⬜ Trader declaration submitted, matching the reconciled identity.
+
+---
+
+## Phase 3: Privacy-policy URL must be live before you open the store form
+
+⬜ Confirm `https://xchain.io/wallet/privacy/` (trailing slash; this is the canonical form, see S6's note below) resolves and serves the current policy:
+
+```bash
+curl -sI https://xchain.io/wallet/privacy/ | head -1
+```
+
+Expect `HTTP/2 200`. If you get a redirect or a 404, stop here; the CWS submission form validates that the privacy-policy URL resolves, and a first submission against a down or stale URL fails at the form, before a reviewer ever sees it.
+
+**Why the trailing slash matters:** the page is generated from this package's own `PRIVACY_POLICY.md` by `xchain-websites/xchain.io/build/privacy.build.js` (stage S6). The site's canonical URL carries a trailing slash. Paste `https://xchain.io/wallet/privacy/`, not `https://xchain.io/wallet/privacy` (no slash), into the console field, to avoid a redirect hop under review.
+
+**Before you trust what's live, confirm it matches this repo**, since the hosted page and this package's `PRIVACY_POLICY.md` are two copies of one source and a drift between them is the exact mismatch-rejection pattern spec §3.3 already found once (the Trezor claim). In the `xchain-websites` repo: run `node xchain.io/build/build.js`, confirm `test/wallet-privacy-policy-sync.test.js` passes, and confirm that repo's deploy actually shipped what you just built, **before** proceeding to Phase 4. This runbook does not own that repo or that test; it only tells you to check it.
+
+⬜ Hosted policy confirmed live and in sync with `packages/extension/PRIVACY_POLICY.md` at the version you are about to submit.
+
+---
+
+## Phase 4: Build artifact provenance (the zip you upload)
+
+**The uploaded artifact is exclusively the CI-emitted `xchain-wallet-extension-vX.Y.Z.zip`. Never a locally built zip.** This repo's shared worktree has a documented incident class of a build carrying a neighbour's uncommitted edits; the post-publish diff (Phase 8) would only catch that days later, after review, with the bad build already live. Do not run `pnpm --filter @xchain-wallet/extension build` on your own machine and zip the result for upload; that build is not the one this ceremony verifies.
+
+### 4a. Get the CI artifact
+
+The `.github/workflows/release.yml` `v*`-tag workflow builds the extension zip and leaves it as a run artifact named `unsigned-web-extension` (it does not publish or sign anything itself; see that workflow's own header). The release maintainer already downloaded it from the specific run ID matching the tag commit and staged it into `release-artifacts/vX.Y.Z/` as part of the normal release procedure (`tools/release/README.md`, "Per-release procedure"). Confirm that staging happened for the tag you are about to submit:
+
+```bash
+ls release-artifacts/vX.Y.Z/xchain-wallet-extension-vX.Y.Z.zip
+ls release-artifacts/vX.Y.Z/RELEASE_HASHES.txt
+```
+
+If either is missing, stop; go back to the release procedure, not around it. Submitting a zip you built or found without a signed manifest behind it defeats the entire provenance chain this phase exists to enforce.
+
+### 4b. Check the sha256 before upload
+
+```bash
+bash tools/release/verify.sh --input release-artifacts/vX.Y.Z/ \
+  --tag vX.Y.Z --artifact xchain-wallet-extension-vX.Y.Z.zip
+```
+
+Confirm it reports the hash as OK (and, once G180 / the release key ceremony lands, the signature as OK too; today signing is blocked on that, per `tools/release/README.md` "Status today"). This is the same command `docs/QA_Checklist.md`'s "Chrome Web Store release provenance" section already asks for; this runbook does not duplicate that checklist, it points at the one command you need at this exact moment.
+
+⬜ `verify.sh` reports the zip's hash as OK against `RELEASE_HASHES.txt`.  
+⬜ The checked sha256 is ready to record in `publish-log.md` (next step happens at upload time, Phase 6, not now: the log row is written in the same step as the actual upload, not before it).
+
+---
+
+## Phase 5: Fill in the store listing form
+
+Everything paste-ready lives in `packages/extension/docs/STORE_LISTING_PACK.md`. This runbook does not duplicate that copy; it tells you which field takes which section and where the form still cannot be completed.
+
+| CWS console field | Source |
+|---|---|
+| Single purpose | `STORE_LISTING_PACK.md` §1 |
+| Permission justification, per permission (`storage`, `sidePanel`, `notifications`, `alarms`, content script, `web_accessible_resources`) | `STORE_LISTING_PACK.md` §2 |
+| Content-script / host-permission justification | `STORE_LISTING_PACK.md` §3 |
+| Listing name, summary, full description | `STORE_LISTING_PACK.md` §4 |
+| Screenshots (1280x800 popup, side panel, sign approval) and small promo tile (440x280) | `packages/extension/docs/listing-assets/` (four PNGs, generated by `packages/extension/scripts/capture-listing-screenshots.mjs`) |
+| Privacy-policy URL | `https://xchain.io/wallet/privacy/` (Phase 3; confirm it is still live right before you paste it) |
+| Data-disclosure tab (what the extension stores/transmits) | `PRIVACY_POLICY.md`, "What the extension stores on your device" and "What the extension sends off your device, and why". Tick the boxes to match this document exactly; a mismatch here is spec §3.3's named rejection cause. |
+
+⬜ Single-purpose, permission justifications, and content-script justification pasted from `STORE_LISTING_PACK.md`.  
+⬜ Listing name and description pasted (name is a working title, see **STOP: D2** below).  
+⬜ Four listing assets uploaded from `packages/extension/docs/listing-assets/`.  
+⬜ Data-disclosure tab ticked to match `PRIVACY_POLICY.md` exactly.  
+⬜ Privacy-policy URL field set to `https://xchain.io/wallet/privacy/`.
+
+**STOP: D2.** Two fields on this form are not decided:
+
+- **Category.** Spec §8 D2 leaves this open; "Productivity → Tools" is the working assumption in `STORE_LISTING_PACK.md` §5, explicitly marked not-yet-decided.
+- **Final store name.** "XChain Wallet" is the working title used throughout the listing pack and this runbook, also explicitly marked not-yet-decided in spec §8 D2.
+
+Do not pick a category or lock in the final name to unblock yourself. If the operator has decided D2 by the time you reach this step, update `STORE_LISTING_PACK.md` §5's two remaining ⬜ rows first (that file is the source of truth for listing copy, not this runbook), then come back and fill the form from it.
+
+⬜ D2 answered by the operator (category and final name).  
+⬜ Category and name fields filled from the now-updated `STORE_LISTING_PACK.md`.
+
+**Support email and trader-declaration fields on this form are the same D1 gate as Phase 2c.** If you reached this phase with D1 still open, you should not have gotten past Phase 2; if you did, stop here and go back.
+
+---
+
+## Phase 6: First upload
+
+⬜ Upload `xchain-wallet-extension-vX.Y.Z.zip` from `release-artifacts/vX.Y.Z/` (the file you hash-checked in Phase 4, not a re-download, not a re-build).  
+⬜ **Set visibility to UNLISTED, not public.** This is the first-submission rule from spec §4: the listing is installable only via a direct link until the exit criteria in Phase 8 all pass.  
+⬜ Submit for review.
+
+### Immediately after upload
+
+⬜ **Record the assigned extension ID.** Chrome assigns this 32-character (`a`-`p`) hash at first upload, and it is permanent: losing the account means losing the ID, and every installed user is orphaned with no update path. There is no retry on this one; write it down correctly the first time.
+  - Add it to the rails K7 row (`claude/specs/wallet-release-rails.md` §4).
+  - Add it to `docs/BRIDGE.md`, wherever it documents `chrome-extension://<id>/...` for dApp integrators (currently a placeholder `<id>`), so provider-detection guidance stops being hypothetical.  
+⬜ **Append the publish-log.md row**, in the same sitting as the upload, not later: version, the zip sha256 from Phase 4b, item (`main`, since this is the first submission), operator, date. Follow the format already scaffolded in `packages/extension/docs/publish-log.md` (its current row is a labeled EXAMPLE; replace-with-real-entry conventions are documented at the top of that file).
+
+---
+
+## Phase 7: While the review clock runs
+
+Expect days for a new wallet listing; budget two weeks. This is a waiting phase, not an idle one:
+
+⬜ If any correspondence arrives (a question, a warning, a rejection), log it in `packages/extension/docs/store-correspondence.md` in full **before** responding, using the entry format already scaffolded there. Respond via the console's appeal/reply flow. Never resubmit blind: read the reviewer's stated reason, check it against `STORE_LISTING_PACK.md`'s existing justification language first, and reuse language a reviewer has already accepted where it applies.  
+⬜ If the review rejects the submission, fix the specific finding, log the outcome and the follow-up action taken in `store-correspondence.md`, and resubmit through the same unlisted-first path. Do not skip Phase 2's ordering rule on a resubmission either: if any account-shape change is pending when a resubmission goes in, that is the exact race this ceremony was built to avoid.
+
+---
+
+## Phase 8: Exit criteria before the public flip
+
+Do not flip visibility to public until every item below is checked. These are concrete and checkable, not a vibe:
+
+⬜ Installed from the store link (the unlisted item's direct URL, not a sideload) on at least 2 machines.  
+⬜ A patch version published and observed auto-updating on both of those machines within 24 hours, **measured from the patch showing as PUBLISHED in the console**, not from when it was uploaded (its own review clock sits in between the two).  
+⬜ Connect + sign driven end to end against the test dApp (`packages/extension/docs/TEST_DAPP_RUNBOOK.md`), from the **store-installed** build specifically, not a local dev build. This matters because the dev server silently substitutes a dev-mock SDK; only a store-installed build proves the real signing path.  
+⬜ **The store-version monitor (spec §2 "Publish monitoring", stage S5) is live.** As of this writing, S5 is not yet built; it depends on the first upload existing (this ceremony) and is scoped to land "right after first upload" per the spec's stage table. Do not flip to public before it is running: this monitor is what turns a rogue or compromised publish into a same-day alert instead of a silent one, reading `publish-log.md` against the live store version. Confirm its cron is actually installed on origin-host and has fired at least once before treating this box as checked, not merely that the script exists.
+
+⬜ **All boxes above checked** before flipping visibility to public.
+
+Once public: the store's staged-rollout percentage is not available to this listing yet (Chrome requires more than 10,000 users for that). Every subsequent release soaks in the beta lane first per spec §4, a separate ceremony from this one (this runbook covers first submission of the main item only; the second unlisted beta item's own setup follows D3, spec §8, and is not part of this document).
+
+---
+
+## What this runbook deliberately does not cover
+
+- **Rollback.** There is no rollback lever on the Chrome Web Store; a previous version can never be re-served. If you need one, read `tools/release/rollback-rerelease.sh`'s own header first, then `claude/reports/launch/INCIDENT-RUNBOOK.md` section 14 ("Chrome extension: emergency levers") before reaching for the script during an actual incident. Preparing that recipe is a separate build task, not part of the first-submission ceremony.
+- **Post-publish byte verification.** Once you are live, `bash tools/release/verify-store.sh` checks the store-served item against the signed reference (required at first publish, and after any account-security event). Its usage and flags are documented in its own header; this runbook does not repeat them since the command differs by whether you have an unpacked install directory or a raw CRX.
+- **CWS API upload automation.** Not decided (D4, spec §8). Nothing here assumes it exists.
+- **Second unlisted item for beta-lane QA soak.** Contingent on D3 (spec §8), a separate setup ceremony once decided.
+
+---
+
+## Appendix A: Everything blocked on an open decision, in one place
+
+| Where | Blocked on | What it needs |
+|---|---|---|
+| Phase 2c, trader declaration | **D1** | Publisher display name, listing support email, privacy-policy contact email, trader entity + published address/phone, all reconciled as one unit (spec §8 D1) |
+| Phase 5, category field | **D2** | Category selection (Productivity → Tools is the working, undecided assumption) |
+| Phase 5, final name field | **D2** | Final store name confirmation ("XChain Wallet" is the working, undecided assumption) |
+| Phase 5, support email / trader fields on the form itself | **D1** | Same as Phase 2c; this is the same gate surfacing a second time on the form |
+
+Nothing in Phases 6 through 8 can happen until Phases 2 and 5 are unblocked, because there is no submission without the form being complete and the trader declaration filed.
+
+## Appendix B: Things this runbook could not verify against the repo, or is not certain about
+
+- **Exact Chrome Web Store console menu paths and field labels** (where "convert to group publisher" or "trader declaration" literally live in the current console UI). Google changes this console's layout without much notice, and this repo has no record of the live console to check against. Treat every console-navigation instruction above as "this feature exists and works this way," not as "click here"; confirm the actual click-path against the live console at the time, and if a described feature seems to have moved or been renamed, that is more likely a console change than an error in this runbook, but stop and re-verify rather than assuming.
+- **Whether the console still requires the trader/non-trader declaration in the same form step as support email.** The spec (§2) describes it as a forced declaration; this runbook could not confirm the exact console flow's field ordering from the repo.
+- **The precise wording the CWS review process uses for a domain-verification failure or a group-conversion prompt.** Not something a text search of this repo can confirm; treat this runbook's description of Phase 2 as the sequencing rule (what must happen before what), not a transcript of console copy.
+- **Whether `docs/BRIDGE.md` already has a placeholder for the extension ID or needs one added fresh.** Confirm the exact line to edit when you get there; this runbook only confirms the file is the right one (it documents `chrome-extension://<id>/...` for dApp integrators).
+
+## Appendix C: References
+
+- `claude/specs/wallet-publishing-chrome-extension.md`  - the spec this runbook operationalizes.
+- `claude/specs/wallet-release-rails.md`  §4 - the K7 credential row and custody rules.
+- `packages/extension/docs/STORE_LISTING_PACK.md` - paste-ready listing copy and permission justifications.
+- `packages/extension/docs/publish-log.md` - the row you append at upload time.
+- `packages/extension/docs/store-correspondence.md` - reviewer exchange log.
+- `packages/extension/docs/listing-assets/` - screenshots and promo tile.
+- `packages/extension/PRIVACY_POLICY.md` - the policy the hosted page and the data-disclosure tab must both match.
+- `packages/extension/docs/manifest-freeze.json` and `docs/QA_Checklist.md` "Chrome Web Store release provenance" - the pre-upload gates (manifest freeze, human diff, sha256 check) that run before this ceremony's Phase 4.
+- `tools/release/README.md`, `tools/release/verify.sh`, `tools/release/verify-store.sh`, `tools/release/rollback-rerelease.sh` - the artifact-provenance and post-publish tooling this runbook points at rather than duplicates.
+- `docs/BRIDGE.md` - where the assigned extension ID gets recorded for dApp integrators.
+- `claude/reports/launch/INCIDENT-RUNBOOK.md` section 14 - emergency levers if something goes wrong after publish.

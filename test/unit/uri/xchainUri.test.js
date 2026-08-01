@@ -17,6 +17,7 @@ import {
     parseXchainUri,
     describeXchainIntent,
     hardenUriIntentText,
+    safeChainIdParam,
 } from '../../../packages/core/src/uri/xchainUri.js';
 import { BIDI_PLACEHOLDER } from '../../../packages/core/src/shared/utils/textHardening.js';
 
@@ -240,5 +241,43 @@ describe('hardenUriIntentText', () => {
     it('tolerates a falsy intent (defensive: callers should never pass one)', () => {
         expect(hardenUriIntentText(null)).toBe(null);
         expect(hardenUriIntentText(undefined)).toBe(undefined);
+    });
+});
+
+describe('safeChainIdParam', () => {
+    // A chainId picks a chain rather than being displayed, so unlike the
+    // free-text fields it cannot be neutralized into something harmless: it
+    // either looks like a registry id or it is dropped. Exported so the
+    // scanned-QR road (ScanRoute's bip21.js branch) applies the same gate the
+    // xchain: road already applied to this very param; that road had none.
+    it('accepts registry-shaped ids', () => {
+        for (const ok of ['bitcoin-mainnet', 'litecoin-regtest', 'dogecoin-testnet', 'a', 'A1-b2']) {
+            expect(safeChainIdParam(ok), ok).toBe(ok);
+        }
+    });
+
+    it('drops anything that could ride an unvetted string into a routing decision', () => {
+        for (const bad of [
+            '../../evil', 'bitcoin mainnet', 'bitcoin/mainnet', '-leading-hyphen',
+            'has_underscore', 'ünicode', '<script>', 'a'.repeat(65), '',
+        ]) {
+            expect(safeChainIdParam(bad), bad).toBeUndefined();
+        }
+    });
+
+    it('drops non-strings rather than passing them into screen state', () => {
+        for (const bad of [undefined, null, 0, 1, true, {}, [], ['bitcoin-mainnet']]) {
+            expect(safeChainIdParam(bad)).toBeUndefined();
+        }
+    });
+
+    it('is the same gate the parser applies, on both roads into chainId', () => {
+        // Guards the refactor that introduced it: the parser must still drop a
+        // hostile chain= on the BIP21 road and a hostile first segment on the
+        // legacy path-style road.
+        expect(parseXchainUri('xchain:bc1qexample?chain=../../evil').chainId).toBeUndefined();
+        expect(parseXchainUri('xchain:bc1qexample?chain=bitcoin-mainnet').chainId).toBe('bitcoin-mainnet');
+        expect(parseXchainUri('xchain://../../etc/passwd/BTC').chainId).toBeUndefined();
+        expect(parseXchainUri('xchain://bitcoin-mainnet/BTC').chainId).toBe('bitcoin-mainnet');
     });
 });

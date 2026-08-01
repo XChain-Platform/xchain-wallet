@@ -315,6 +315,21 @@ checked against `packages/extension/docs/manifest-freeze.json`) and gate
 the release build; the two rows after them are steps a human does, not
 things a script can do for you.
 
+- ⬜ **Privacy-policy URL is live, before the store submission form is even
+  opened ( §5 D5).** The listing points reviewers at
+  `https://xchain.io/wallet/privacy/`, and the CWS submission form validates
+  that the URL resolves; a first submission or a resubmission against a
+  down or stale URL fails at the form, not at review. The page is generated
+  from this repo's own `packages/extension/PRIVACY_POLICY.md` by
+  `xchain-websites/xchain.io/build/privacy.build.js`, and
+  `xchain-websites/test/wallet-privacy-policy-sync.test.js` (run in the
+  `xchain-websites` repo's `npm test`) fails if the hosted page has drifted
+  from this file, the same mismatch-rejection risk spec §3.3 names one layer
+  down. Whenever this file changes, in `xchain-websites`: run
+  `node xchain.io/build/build.js`, confirm the sync test passes, commit the
+  regenerated `xchain.io/wallet/privacy/index.html`, and deploy that repo,
+  all BEFORE the store publish step below. The websites deploy is owned by
+  the release operator, same as this checklist.
 - ⬜ `pnpm test:smoke` passes, which includes the manifest-freeze rules
   (`permissions-frozen`, `host-permissions-frozen`,
   `content-script-matches-frozen`, `war-matches-match-content-script`).
@@ -344,6 +359,26 @@ things a script can do for you.
   `bash tools/release/verify-store.sh` against the store-installed build
   passes. A never-green run of this script means the script is broken and
   must be fixed, never waived (see the script's own header).
+- ⬜ **Store-version monitor is LIVE before the public flip ( §2,
+  §4 exit criteria).** `tools/release/store-version-monitor.mjs` reads
+  `packages/extension/docs/publish-log.md` and compares it against the
+  version the Chrome Web Store is actually serving for each configured
+  item (main, and beta once that item exists); a live version with no
+  matching log row is the rogue-publish incident signal - a build went
+  out through the console without the logged, one-operator process,
+  which is what a compromised or phished publisher account produces.
+  §4 lists this monitor as one of the four rollout exit criteria
+  alongside the two-machine store install and the 24h auto-update
+  observation, so it gates the flip from unlisted to public the same as
+  the other three, not just "built" the way this row can otherwise be
+  checked off too early. Do NOT compare against the latest release tag
+  instead of the log: the store lawfully lags the tag during review and
+  after a rejection, and a tag-based check false-alarms on every normal
+  release. As of this writing the script exists (tested, driven by hand
+  against fixtures) but is installed nowhere; this row stays ⬜ until an
+  operator confirms the origin-host cron is actually running, per
+  `tools/release/README.md`'s `store-version-monitor.mjs` row and the
+  script's own `--help` output for the install line and exit codes.
 
 ---
 
