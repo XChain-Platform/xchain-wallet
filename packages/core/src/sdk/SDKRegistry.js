@@ -115,6 +115,12 @@ export class SDKRegistry {
         this._networkOptions = {
             timeout: networkOptions.timeout ?? DEFAULT_SDK_NETWORK_OPTIONS.timeout,
             retry: { ...DEFAULT_SDK_NETWORK_OPTIONS.retry, ...(networkOptions.retry ?? {}) },
+            // : `pool` carries the connection agents through to
+            // xchain-sdk's HTTP clients. The desktop shell puts SOCKS5
+            // agents here when Tor routing is on, which is the only way
+            // the toggle can reach the SDK's own sockets. Undefined
+            // everywhere else, so nothing changes for the other shells.
+            pool: networkOptions.pool,
         };
         /** @type {Map<string, XChainSDKLike>} */
         this._instances = new Map();
@@ -232,7 +238,25 @@ export class SDKRegistry {
             // `timeout` + `retry` per client; the dev mock ignores them.
             timeout: this._networkOptions.timeout,
             retry: this._networkOptions.retry,
+            ...(this._networkOptions.pool ? { pool: this._networkOptions.pool } : {}),
         });
+    }
+
+    /**
+     * Swap the connection agents and drop every cached SDK instance so the
+     * next `get()` dials through the new ones .
+     *
+     * Dropping the instances is the point, not housekeeping: xchain-sdk
+     * builds its axios client once per instance, so a live instance would
+     * keep using the agent it was born with. Toggling Tor on and seeing
+     * traffic keep going direct is precisely the failure this feature
+     * exists to end.
+     *
+     * @param {{ httpAgent?: any, httpsAgent?: any }|null} pool
+     */
+    setPool(pool) {
+        this._networkOptions.pool = pool ?? undefined;
+        this._instances.clear();
     }
 }
 

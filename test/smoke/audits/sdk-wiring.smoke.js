@@ -303,12 +303,30 @@ const gate = readFileSync(
     join(wsRoot, 'tools', 'build-reproduce', 'check-no-dev-mock.sh'),
     'utf8',
 );
-for (const marker of ['Dev SDK stub', 'devmockpsbt', 'CONTRACT_LINT_FAILED', 'ENCODER_NOT_CONFIGURED']) {
+for (const marker of ['Dev SDK stub', 'devmockpsbt']) {
     assert.ok(
         gate.includes(`"${marker}"`),
-        `check-no-dev-mock.sh checks marker: ${marker}`,
+        `check-no-dev-mock.sh checks mock-implementation marker: ${marker}`,
     );
 }
+//  §6: the positive SDK-unique markers moved into a per-target
+// table, because the desktop renderer imports xchain-sdk/src/wallet.js
+// directly and never pulls in the package index, so the index-only
+// literals below are legitimately absent there. Asserted per target
+// rather than as bare strings, so the shells that DO route through the
+// index cannot quietly lose their positive check.
+for (const shell of ['web', 'extension']) {
+    const row = gate.split('\n').find((l) => l.includes(`"packages/${shell}/dist|`));
+    assert.ok(row, `check-no-dev-mock.sh scans packages/${shell}/dist`);
+    for (const marker of ['CONTRACT_LINT_FAILED', 'ENCODER_NOT_CONFIGURED']) {
+        assert.ok(row.includes(marker),
+            `packages/${shell}/dist requires SDK-unique marker: ${marker}`);
+    }
+}
+const desktopRow = gate.split('\n').find((l) => l.includes('"packages/desktop/renderer/dist|'));
+assert.ok(desktopRow, 'check-no-dev-mock.sh scans the desktop renderer bundle');
+assert.ok(/SDKWalletError/.test(desktopRow),
+    'desktop renderer requires a wallet-module SDK marker (it has no package index)');
 
 // : both shell Vite configs must give the link:-resolved SDK the CJS
 // transform (commonjsOptions.include) and resolve the polyfill shim +

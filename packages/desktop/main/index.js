@@ -42,7 +42,7 @@ import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell, Notific
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { registry as registryLib, sdk as sdkLib, flows as flowsLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { createDevMockSdk } from '@xchain-wallet/extension/src/background/sdkFactory.js';
 
@@ -61,6 +61,7 @@ import {
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { attachUpdater } from './updater.js';
+import { applyTorRouting } from './torRouting.js';
 import {
     createRuntime,
     ensureHost,
@@ -176,6 +177,17 @@ function buildRuntime() {
             chainRegistry,
             sdkFactory: createDevMockSdk,
         }),
+        // : Tor routing has to take effect on the next request,
+        // not the next launch. The shared host calls this after any
+        // settings.update whose patch touches `privacy`.
+        onPrivacySettingsChanged: async (settings, { sdkRegistry }) => {
+            await applyTorRouting({
+                settings,
+                sdkRegistry,
+                session: session.defaultSession,
+                log: (m) => console.info(m),
+            });
+        },
         // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
         notify: ({ title, body }) => {
@@ -414,6 +426,25 @@ app.whenReady().then(async () => {
         await ensureHost(runtime);
     } catch (err) {
         console.error('[xchain] desktop auto-unlock failed:', err);
+    }
+
+    // : re-apply Tor routing as soon as settings are readable.
+    // Without this, a user who turned it on, quit, and relaunched would
+    // run direct until they happened to toggle it again, with the UI
+    // showing it on the whole time. That is the same lie in a new place.
+    // Settings live in the vault, so this only works once unlocked; a
+    // still-locked wallet has made no requests yet either.
+    try {
+        const settings = await flowsLib.getSettings(runtime.vault);
+        await applyTorRouting({
+            settings,
+            sdkRegistry: runtime.sdkRegistry,
+            session: session.defaultSession,
+            log: (m) => console.info(m),
+        });
+    } catch (err) {
+        console.info('[xchain] Tor routing not applied at boot (vault locked?):',
+            String(err?.message ?? err));
     }
 
     // §40.12 / Step 18: allow WebHID access for Ledger + Trezor vendor

@@ -21,8 +21,10 @@
         "@xchain-wallet/extension": "workspace:*",
         "electron-updater": "^6.3.0",
         "lightweight-charts": "^4.2.0",
+        "openpgp": "^6.3.1",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
+        "undici": "^8.9.0",
         "xchain-sdk": "link:../../../xchain-sdk"
     },
     "devDependencies": {

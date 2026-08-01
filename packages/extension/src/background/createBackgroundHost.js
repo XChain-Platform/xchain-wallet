@@ -669,6 +669,12 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
+        // : called after a settings.update whose patch touches
+        // `privacy`, so a shell that routes requests itself can re-apply
+        // before the next one. Desktop uses it for Tor routing; the web
+        // and extension shells cannot proxy their own traffic and pass
+        // nothing, which is why this is a dep rather than shared logic.
+        onPrivacySettingsChanged,
         // Resolver that turns a web-accessible-resource path into a URL a
         // dApp can load (getSupportedChains uses it for chain icons).
         // Defaults inside registerBridgeHandlers to chrome.runtime.getURL;
@@ -1123,6 +1129,24 @@ export function createBackgroundHost(deps) {
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'signThrottle')) {
             throttleVault = vault;
             await refreshThrottleLimitsFromVault();
+        }
+        // : privacy settings that change how requests are MADE
+        // have to take effect on the next request, not the next restart.
+        // Tor routing is the case in point: a user flips it on, keeps
+        // browsing their balances, and every one of those requests would
+        // otherwise still go direct while the UI says the toggle is on.
+        // Only the desktop shell supplies this; the others have no host
+        // capable of proxying and pass nothing.
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'privacy')
+            && typeof onPrivacySettingsChanged === 'function') {
+            try {
+                await onPrivacySettingsChanged(result, { sdkRegistry });
+            } catch (err) {
+                // A failure here must not swallow the user's saved
+                // setting, but it must be loud: it means the wallet is
+                // not routing the way the UI now claims.
+                console.error('[xchain] privacy settings apply failed:', err);
+            }
         }
         return result;
     });

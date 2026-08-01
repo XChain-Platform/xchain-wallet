@@ -12,5 +12,8 @@ For the authoritative design specification, see the `SPEC.md` document maintaine
 - `Reproducible_Builds.md` - build verification guide (from spec §51.4)
 - `Verify_Release.md` - artifact signature verification (from spec §55.2)
 - `QA_Checklist.md` - per-phase manual QA checklist (from spec §52.8)
+- `Data_Collection.md` - what the wallet does and does not collect; the single source every store form transcribes ( §6c)
+- `Privacy_Policy.md` - the plain-language rendering of the above, for publication at a stable xchain.io URL
+- `Export_Compliance.md` - the encryption stance for store submissions
 
 These land as the corresponding implementations land.

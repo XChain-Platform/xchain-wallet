@@ -40,6 +40,25 @@ for (const field of ['torRouting', 'changeAddressRotation', 'hideSmallBalances',
 assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur row present');
 assert.match(src, /Labels survive restore/, 'labels-survive-restore row present');
 
+// : the Tor row is the one toggle that is NOT unconditional. It
+// was offered in all three shells and implemented in none, which made it
+// a privacy claim the code did not keep. It now renders only where the
+// host can actually route: desktop, whose SDK runs in the Electron main
+// process. A browser page cannot speak SOCKS at all, and an MV3
+// extension could only proxy the user's entire browser.
+assert.match(src, /import \{ shellCapabilities \}/,
+    'PrivacySection imports the shell-capability check');
+assert.match(src, /\{shellCapabilities\(\)\.socksProxy && \(/,
+    'the Tor toggle is gated on the shell actually supporting SOCKS');
+// The gate must WRAP the Tor row specifically, not sit somewhere else
+// in the file while the row stays unconditional.
+const torGate = src.indexOf('shellCapabilities().socksProxy && (');
+const torRow = src.indexOf("onToggle('torRouting'");
+assert.ok(torGate > 0 && torRow > torGate && torRow - torGate < 600,
+    'the capability gate encloses the Tor toggle row');
+assert.ok(!/Route SDK requests through a local Tor SOCKS5 proxy when available/.test(src),
+    'the old hint is gone: it promised routing that did not exist');
+
 // Primitives module exports what the section consumes.
 const primSrc = readFileSync(primitivesPath, 'utf8');
 for (const name of ['ROW', 'STACK', 'ROW_HINT', 'ToggleRow', 'Status']) {

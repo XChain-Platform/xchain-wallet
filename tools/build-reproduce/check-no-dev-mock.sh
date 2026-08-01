@@ -49,9 +49,27 @@
 #   .github/workflows/ci.yml (build job)
 set -euo pipefail
 
-DIST_DIRS=(
-    "packages/web/dist"
-    "packages/extension/dist"
+# Each entry: <bundle dir>|<comma-separated SDK-unique literals>. Any one of
+# the literals appearing in an executable chunk proves the real SDK bundled.
+#
+# The marker set is PER TARGET because the shells reach the SDK differently.
+# Web and extension go through the package index (sdkFactory), so the
+# index-only literals appear in their bundles. The desktop renderer
+# deliberately does not: it imports `xchain-sdk/src/wallet.js` directly to
+# keep the package index out of the popup graph (renderer/signerFactories/
+# ledgerFactory.js), so CONTRACT_LINT_FAILED and ENCODER_NOT_CONFIGURED are
+# legitimately absent there. Giving every target the same list would have
+# made this gate unsatisfiable for desktop - the third repeat of the failure
+# this file's header already documents twice.
+#
+#  §6: desktop was missing entirely. `packages/desktop/renderer/dist`
+# is the executable renderer bundle; `packages/desktop/dist` is
+# electron-builder's INSTALLER output (asar + platform binaries) and is not
+# a source tree to grep.
+SCAN_TARGETS=(
+    "packages/web/dist|CONTRACT_LINT_FAILED,ENCODER_NOT_CONFIGURED"
+    "packages/extension/dist|CONTRACT_LINT_FAILED,ENCODER_NOT_CONFIGURED"
+    "packages/desktop/renderer/dist|SDKWalletError,MULTISIG_DERIVE_FAILED"
 )
 
 MARKERS=(
@@ -66,16 +84,14 @@ MARKERS=(
 
 #  positive check: absence of the mock proves nothing if the REAL SDK
 # also failed to bundle (the wallet would then run on a throwing placeholder).
-# These literals exist only in xchain-sdk's own source, so each web-style dist
-# must contain at least one of them in an executable chunk.
-REAL_SDK_MARKERS=(
-    "CONTRACT_LINT_FAILED"
-    "ENCODER_NOT_CONFIGURED"
-)
+# The literals live in the SCAN_TARGETS table above, per target, because
+# which SDK modules a shell pulls in is a property of that shell.
 
 failures=0
 
-for dir in "${DIST_DIRS[@]}"; do
+for entry in "${SCAN_TARGETS[@]}"; do
+    dir="${entry%%|*}"
+    sdk_markers="${entry#*|}"
     if [ ! -d "$dir" ]; then
         echo "SKIP $dir (not built)"
         continue
@@ -88,14 +104,15 @@ for dir in "${DIST_DIRS[@]}"; do
         fi
     done
     real_sdk_found=0
-    for marker in "${REAL_SDK_MARKERS[@]}"; do
+    IFS=',' read -r -a target_sdk_markers <<< "$sdk_markers"
+    for marker in "${target_sdk_markers[@]}"; do
         if grep -r -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
             real_sdk_found=1
             break
         fi
     done
     if [ "$real_sdk_found" -eq 0 ]; then
-        echo "FAIL $dir does not contain the real xchain-sdk (no SDK-unique literals found)"
+        echo "FAIL $dir does not contain the real xchain-sdk (none of: $sdk_markers)"
         failures=$((failures + 1))
     fi
 done

@@ -25,7 +25,12 @@ Email **security@dankest.llc** with:
 - The affected version (`packages/core/src/buildInfo.js → WALLET_VERSION`) and the shell you tested against (extension / web / desktop).
 - Any patches or mitigations you'd like considered.
 
-For sensitive reports, please encrypt the email body to our PGP key. The fingerprint will be published alongside the first GPG-signed release artifact (tracked as G180 in `claude/reports/xchain-wallet/SPEC_GAPS.md`); until then, the email channel is acceptable for first contact and we will coordinate an encrypted exchange before you share PoC details.
+For sensitive reports, please encrypt the email body to our PGP key.
+
+> **PGP fingerprint: not yet published (G180).**  
+> The release key ceremony is documented at `claude/reports/launch/GPG-KEY-CEREMONY-RUNBOOK.md` and has not been run yet. Once it has, the fingerprint will be published through **two independent channels**, this file and a page on xchain.io, so that a compromise of either one alone cannot silently rewrite the trust root you're checking a signature against. If the two ever disagree, trust neither and email us to ask which is current.
+>
+> Until both are live: the email channel above is acceptable for first contact. We will coordinate an encrypted exchange with you (a session key over a second channel, or a short-lived one-time key) before you share proof-of-concept details or anything else sensitive.
 
 We do not currently offer a paid bug bounty. We do offer public credit in release notes and the advisory itself, unless you prefer to remain anonymous.
 

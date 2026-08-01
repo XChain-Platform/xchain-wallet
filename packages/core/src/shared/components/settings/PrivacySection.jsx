@@ -26,6 +26,7 @@
 //     ViewPrivateKey to time its post-copy clipboard wipe.
 
 import { useSettings } from '../../hooks/useSettings.js';
+import { shellCapabilities } from '../../shellCapabilities.js';
 import {
     CLIPBOARD_AUTO_CLEAR_DEFAULT,
     CLIPBOARD_AUTO_CLEAR_MAX,
@@ -74,12 +75,20 @@ export function PrivacySection() {
 
     return (
         <div style={STACK}>
-            <ToggleRow
-                label="Tor routing"
-                hint="Route SDK requests through a local Tor SOCKS5 proxy when available."
-                checked={settings.privacy.torRouting}
-                onChange={(v) => onToggle('torRouting', v)}
-            />
+            {/* : shown only where the host can actually do it.
+                A browser page cannot speak SOCKS at all, and an MV3
+                extension could only proxy the user's whole browser
+                rather than the wallet, so offering the toggle there
+                would promise something no code could keep. It was
+                offered in all three shells and implemented in none. */}
+            {shellCapabilities().socksProxy && (
+                <ToggleRow
+                    label="Tor routing"
+                    hint="Send the wallet's requests through a local Tor SOCKS5 proxy (127.0.0.1:9050), so the servers it talks to see Tor rather than your address. Tor must already be running: if it is not reachable, requests fail rather than quietly going direct."
+                    checked={settings.privacy.torRouting}
+                    onChange={(v) => onToggle('torRouting', v)}
+                />
+            )}
             <ToggleRow
                 label="Change-address rotation"
                 /* : this drives flows/changeAddress.js. The second

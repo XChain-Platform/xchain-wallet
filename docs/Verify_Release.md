@@ -17,7 +17,7 @@ Per Target. **Companion docs:** [`docs/Reproducible_Builds.md`](Reproducible_Bui
 
 ## What you're checking
 
-Three independent claims combine into a real verification:
+Four independent claims combine into a real verification:
 
 1. **Bit-for-bit reproducibility** - rebuilding from a tagged commit
    produces the same pre-signing artifact bytes that the maintainer
@@ -27,11 +27,27 @@ Three independent claims combine into a real verification:
 3. **Signature authenticity** - the maintainer's release GPG key
    signed the hash manifest, and that key matches the fingerprint
    published in [`SECURITY.md`](../SECURITY.md).
+4. **Release identity** - the manifest says, inside the signed bytes,
+   which release it describes. A genuine manifest from a *different*
+   release passes claims 2 and 3 perfectly, so without this one you can
+   be handed an older signed release and never know.
 
-You need **all three** to claim verification. Skipping signatures
+You need **all four** to claim verification. Skipping signatures
 trusts the download host. Skipping hashes trusts the build environment.
-Skipping reproducibility trusts that the maintainer's machine wasn't
-compromised between source and signing.
+Skipping the identity check trusts that nobody swapped one signed
+release for another. Skipping reproducibility trusts that the
+maintainer's machine wasn't compromised between source and signing.
+
+**The short version.** `tools/release/verify.sh` does claims 2, 3 and 4
+in one command, and is the same script the maintainer runs before
+publishing:
+
+```bash
+bash tools/release/verify.sh --input <download-dir> --tag vX.Y.Z
+```
+
+The manual walk-through below exists so you can check each claim
+yourself without trusting our script either.
 
 ---
 
@@ -90,6 +106,14 @@ curl -fsSLO "${BASE}/<artifact-filename>"
 
 Use the artifact filename appropriate for your platform.
 
+The manifest is also published under its versioned name,
+`RELEASE_HASHES/vX.Y.Z.txt`. Prefer that one: the filename then states
+which release the manifest is for, and `verify.sh` checks it against
+what the manifest says about itself with no `--tag` needed. If you take
+the plain `RELEASE_HASHES.txt`, pass `--tag vX.Y.Z` so the same check
+can still run - `verify.sh` refuses to call a manifest verified when
+nothing says which release it belongs to.
+
 ---
 
 ## Step 3 - Verify the signature on the hash manifest
@@ -124,8 +148,74 @@ file you downloaded does not match the hash the maintainer published -
 likely a corrupt download (rare) or a tampered mirror (rare but
 serious).
 
+The manifest begins with `#` header lines. `shasum -c` ignores them;
+GNU `sha256sum -c` reports "N lines are improperly formatted" and
+carries on, which is noise, not a problem. Strip them if you would
+rather not read it:
+
+```bash
+grep -v '^#' RELEASE_HASHES.txt | grep "<artifact-filename>" | sha256sum -c -
+```
+
+One caveat worth knowing if you are checking the whole manifest at
+once: macOS ships a `/sbin/sha256sum` that prints that warning and then
+**exits 0 even when every line was malformed and nothing was checked**.
+Read the `: OK` lines, not just the exit code. (`verify.sh` rejects
+malformed lines itself rather than trusting either tool.)
+
+---
+
+## Step 4b - Check which release the manifest describes
+
+```bash
+head -8 RELEASE_HASHES.txt
+```
+
+```
+# XChain Wallet release manifest
+# manifest-version: 1
+# tag: v0.333.1
+# tag-commit: 9f3c...
+# built: 2026-07-31T18:02:11Z
+# dev-mock-gate: enforced
+# artifacts: 8
+```
+
+These lines are inside the signed bytes, so a good signature vouches
+for them too. Three things to read:
+
+- **`tag`** must be the release you meant to download. A manifest
+  lifted from another release hashes and verifies perfectly; this line
+  is the only thing that catches it.
+- **`tag-commit`** is the commit the tag resolved to at signing time.
+  Use it for the reproduce step below.
+- **`dev-mock-gate`** must say `enforced`. Anything else means the
+  release was signed without the check that keeps the development stub
+  SDK - which shows fabricated addresses and cannot really sign - out
+  of a shipped bundle. Treat that as a reason to ask before installing.
+
 At this point the artifact has been authenticated. You can install
 or run it.
+
+---
+
+## What the signature proves, per surface
+
+Byte-exact verification is only possible for artifacts served from our
+own download host. Three of the four store surfaces re-package or
+re-sign what we submit, so for those the manifest proves **what was
+submitted, not what was delivered to you**. This is a property of the
+stores, not something we can close:
+
+| Where you got it | What the manifest proves |
+|---|---|
+| downloads.xchain.io (web tarball, desktop installers) | Everything above: the bytes you have are the bytes we signed. |
+| Chrome Web Store | The store repacks our zip into a store-signed CRX. You cannot hash the CRX against our manifest; comparison is content-level at best. The store's own signature is what protects delivery. |
+| Google Play | Play re-signs and derives per-device APKs from the AAB we upload. Nothing you receive hashes to our manifest. |
+| App Store | Apple re-encrypts and thins the ipa. App Store users cannot hash what they were served. |
+
+If byte-exact verification matters to you, take the artifact from
+downloads.xchain.io rather than from a store.
 
 ---
 

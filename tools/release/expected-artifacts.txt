@@ -1,0 +1,69 @@
+# tools/release/expected-artifacts.txt - the artifact set a release must contain.
+#
+#  §6. Read by tools/release/lib.sh (xr_check_expected), enforced by
+# sign.sh before it writes a manifest.
+#
+# WHY THIS FILE EXISTS. sign.sh hashes whatever it finds. Without a
+# declared set, a staging directory holding three of nine artifacts
+# produces a manifest that is internally perfect - every hash correct,
+# signature good, verify.sh green - and describes a release that was
+# never built. The gate runs in both directions:
+#
+#   required   at least one artifact must match, or signing fails.
+#              This is what catches a shell that did not build.
+#   optional   allowed to be present, never demanded.
+#
+#   Anything in the staging directory matching NO line below is a hard
+#   failure. That is what catches a leftover from the previous version,
+#   a stray build output, or a file someone else put there.
+#
+# `latest*.yml` never appears here: those are electron-updater's mutable
+# channel pointers and are excluded from the manifest entirely (lib.sh).
+#
+# Blockmaps (`*.blockmap`) are deliberately absent, so staging one is a
+# hard failure. Differential updates are a non-goal ( §7); a
+# blockmap in the release directory means the desktop build emitted
+# delta metadata that would be served but never verified.
+#
+# WHEN THE ARTIFACT SET CHANGES, this file changes in the SAME commit.
+# A stale list either blocks a legitimate release or, worse, silently
+# stops demanding a shell that quietly dropped out of the build.
+#
+# Format:  <required|optional>  <glob matched against the artifact basename>
+
+# --- Web SPA ------------------------------------------------------------
+required  xchain-wallet-web-v*.tar.gz
+
+# --- Chrome extension ---------------------------------------------------
+# The store zip. What the Chrome Web Store returns to users is a
+# store-signed CRX repacked from this, so the manifest proves what was
+# submitted, not what was delivered (§3, docs/Verify_Release.md).
+required  xchain-wallet-extension-v*.zip
+
+# --- Desktop (electron-builder) -----------------------------------------
+# Extension globs rather than exact names: electron-builder's defaults
+# embed productName ("XChain Wallet", with a space) and the arch suffix
+# varies by target. Pinning an exact per-arch naming convention belongs
+# to the desktop spec ; until it does, these match what the
+# builder actually emits without pretending to a convention that is not
+# configured.
+#
+# All three OS families are required. "One release = all shipped shells"
+# (§2): a tag that produced only the artifacts the release machine could
+# build natively is exactly the version skew this gate exists to refuse.
+# Satisfying the Windows and macOS rows needs the §5 CI matrix (S4).
+required  *.dmg
+required  *mac*.zip
+required  *.exe
+required  *win*.zip
+required  *.AppImage
+required  *.deb
+
+# --- Mobile (dormant) ---------------------------------------------------
+# Capacitor shells are scoped post-v1.0 ( Android,  iOS).
+# Optional, not required, so a release today does not demand them - but
+# declared, so the day one is staged it is covered by the manifest
+# instead of hard-failing as undeclared. Both are store-bound: covered
+# by the signature, not hosted on downloads.xchain.io (§3).
+optional  xchain-wallet-android-v*.aab
+optional  xchain-wallet-ios-v*.ipa
