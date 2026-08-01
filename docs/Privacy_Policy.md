@@ -1,6 +1,6 @@
 # XChain Wallet privacy policy
 
-> **DRAFT, all but publishable.** Every statement about the wallet
+> **DRAFT, not yet publishable.** Every statement about the wallet
 > itself is verified against the code. The big one is now answered too:
 > what our servers keep was **measured on the live hosts 2026-08-01**
 > (combined access logs including client IP, rotated daily, kept 14 days;
