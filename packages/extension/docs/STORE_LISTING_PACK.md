@@ -98,7 +98,8 @@ The summary and description text below are therefore final as written, pending o
 ⬜ Category selection (spec §8 D2; Productivity → Tools is the working assumption, not yet decided)  
 ⬜ Final store name confirmation (spec §8 D2; "XChain Wallet" is the working assumption)  
 ⬜ Privacy-policy public URL live and validated by the CWS form (spec §8 D5, `https://xchain.io/wallet/privacy` proposed; deploying it is stage S6, not verified live from this stage)  
-⬜ Support email and trader declaration published (spec §8 D1, one unit with the privacy-policy contact identity)
+✅ Support email decided 2026-08-01: **`info@dankest.llc`**, matching what the Play listing publishes, and proven to receive (accepted by Google from origin-host, arrival confirmed by the operator). Publisher display name decided: **`Dankest, LLC`**.  
+⬜ Trader declaration: entity is `Dankest, LLC`, but the postal address and phone it publishes permanently are still to be supplied by the operator (spec §8 D1, the one part of that unit still open)
 
 ## 6. Change log
 

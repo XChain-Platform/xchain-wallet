@@ -34,7 +34,9 @@
 
 ## Phase 1: Account registration and hygiene
 
-⬜ **Register the developer account** with an org-controlled Google identity, not a personal Gmail. One-time $5 registration fee.  
+⬜ **Register the developer account** at **https://chrome.google.com/webstore/devconsole** (URL confirmed against Google's own docs 2026-08-01), signed in as **dankestllc@gmail.com** (operator decision 2026-08-01: reuse the Play publisher identity rather than mint a second one). That account is already identity-verified with Google under `Dankest, LLC` with the D-U-N-S, so the trader details this listing later publishes will match what Play already shows, and reviewers cross-check exactly that. Check the avatar before you click anything: a Chrome profile signed into a different Google account is the easy way to register the wrong identity, and the extension ID that follows is permanent. One-time registration fee ($5 historically; Google's current docs do not state the amount, so read what the console asks for before paying).  
+⬜ **If the console asks for a publisher display name during signup, use `Dankest, LLC`** to match Play. That field is editable later, unlike the trader details, so it is not a D1 commitment; it just avoids two stores disagreeing in the meantime.  
+⬜ **The blast-radius trade this decision accepts:** one phished account now reaches both stores. That is what the group-publisher conversion in Phase 2a exists to unwind, so do not skip it before first public release.  
 ⬜ **Set up 2FA with a hardware security key or passkey.** Do this at registration time, before anything else touches the account. Never enable SMS or TOTP as a fallback; if the console offers one as a "backup" option, decline it.  
 ⬜ **Grant no OAuth access to any third-party tool from this identity.** This includes CI/automation tools you may be tempted to wire up early "to save time later." Post-launch CI automation (D4, spec §6) is deliberately not decided yet, and when it is, the token it uses is scoped narrowly and reviewed, not a blanket OAuth grant to the publisher account itself.  
 ⬜ **Record the recovery codes into the K7 slot of the recovery store** (LastPass, per rails §4), in the same sitting you generate them. A generated credential with nowhere durable to live is a future outage, not a future convenience.  
@@ -45,8 +47,9 @@
 Compliance clocks on this account run as short as 7 days (rejection responses, policy warnings, takedown notices). An unread inbox is how a listing dies quietly, not loudly, so prove receipt before you submit anything, not after the first rejection arrives.
 
 ⬜ From an **external** account (not anything that already forwards into the same inbox), send a test email to the console's registered contact address.  
+**Done 2026-08-01, at the SMTP layer, for both addresses.** Sent from origin-host (external to Google Workspace) and Google ACCEPTED both: `info@dankest.llc` and `privacy@dankest.llc`, each `status=sent (250 2.0.0 OK ... gsmtp)` via `aspmx.l.google.com`. That proves the aliases exist and the path works, since a nonexistent address is refused at RCPT. **It does NOT prove inbox placement:** neither domain publishes SPF, so an unauthenticated message can be accepted and then filed as spam. Confirm visually, spam folder included, and treat a send from an unrelated provider (a personal Gmail) as the stronger test, because our own infrastructure carries its own reputation.  
 ⬜ Confirm it arrives in the monitored shared inbox, and confirm someone is actually watching that inbox on a cadence shorter than 7 days.  
-⬜ **Known gap:** inbound mail to an `@xchain.io` address depends on  (SMTP relay + host hardening), which is still open as of this writing. Interim: point the console's contact email at an existing, known-working mailbox, and migrate later via the console's contact-email change flow once  lands. Do not wait on  to do this test; test whatever mailbox you are actually using today.
+⬜ **Correction, measured 2026-08-01:** this runbook previously said inbound mail to `@xchain.io` depends on , and that was wrong.  is the OUTBOUND relay on origin-host (so cron and alert mail can leave the box); inbound is unrelated. `dig MX` shows BOTH `dankest.llc` and `xchain.io` pointing at Google Workspace (`aspmx.l.google.com` et al), so either domain can receive. What MX records do NOT prove is that a given address resolves to a mailbox or alias, so confirm the specific address in Google Admin (or mail it) before you put it in the console. Note also that neither domain publishes SPF, which is a deliverability risk for anything you send FROM them, not a receiving problem. Interim: point the console's contact email at an existing, known-working mailbox, and migrate later via the console's contact-email change flow once  lands. Do not wait on  to do this test; test whatever mailbox you are actually using today.
 
 ---
 
@@ -232,10 +235,10 @@ Once public: the store's staged-rollout percentage is not available to this list
 
 | Where | Blocked on | What it needs |
 |---|---|---|
-| Phase 2c, trader declaration | **D1** | Publisher display name, listing support email, privacy-policy contact email, trader entity + published address/phone, all reconciled as one unit (spec §8 D1) |
+| Phase 2c, trader declaration | **D1, PARTIALLY ANSWERED** | Settled 2026-08-01: publisher `Dankest, LLC`, support `info@dankest.llc`, privacy contact `privacy@dankest.llc` (created and proven to receive that day), domain `xchain.io`. **Remaining: the trader postal address and phone**, which publish permanently and are the operator's to supply |
 | Phase 5, category field | **D2** | Category selection (Productivity → Tools is the working, undecided assumption) |
 | Phase 5, final name field | **D2** | Final store name confirmation ("XChain Wallet" is the working, undecided assumption) |
-| Phase 5, support email / trader fields on the form itself | **D1** | Same as Phase 2c; this is the same gate surfacing a second time on the form |
+| Phase 5, support email / trader fields on the form itself | **D1, PARTIALLY ANSWERED** | Support email is decided (`info@dankest.llc`); the trader address and phone are not. Same gate as Phase 2c surfacing a second time |
 
 Nothing in Phases 6 through 8 can happen until Phases 2 and 5 are unblocked, because there is no submission without a complete form and the trader declaration filed. Phase 3 is no longer among them: the privacy-policy URL went live on 2026-08-01 with the apex flip, and its row above is struck from this table.
 

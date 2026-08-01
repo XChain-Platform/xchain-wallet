@@ -13,22 +13,25 @@ kept 14 days; Cloudflare fronts the xchain.io hosts and keeps its own).
 TWO ITEMS REMAIN, and both are decisions rather than facts. Both are
 tracked in docs/Data_Collection.md and owned by:
 
-  1. PENDING (data controller and privacy contact of record). The Contact
-     section below says privacy@dankest.llc, which is what the published
-     extension policy has said since 2026-04 and is therefore already the
-     public answer. Whether that stays, or moves to a dedicated privacy
-     address under a named controller entity, is part of the one-unit
-     public-identity decision D1 in
-     claude/specs/wallet-publishing-chrome-extension.md. Do not change it
-     here alone: five identity surfaces have to agree and reviewers
-     cross-check them.
+  1. SETTLED 2026-08-01 (operator, D1). The data controller of record is
+     Dankest, LLC, the publisher name registered on both stores, and the
+     privacy contact is privacy@dankest.llc, which was CREATED that day and
+     proven to receive: a message from origin-host was accepted by Google
+     (250 2.0.0 OK via aspmx.l.google.com) and confirmed as arrived by the
+     operator. The address had been published here since 2026-04 without
+     anyone checking it existed, which is the failure this closes. Still do
+     not change it in this file alone: it is one of five identity surfaces
+     that have to agree, and reviewers cross-check them.
   2. PENDING (jurisdiction-specific sections). Whether a GDPR lawful-basis
      statement or a CCPA notice is required depends on where the company
      operates and where the apps are listed. No such section is published
      today, in this document or in the extension policy it replaced.
 
 Neither is a hole in the text below. The text states what is true today;
-these two notes record that one line and one omission are provisional.
+the remaining note records that one omission is provisional. Nothing in the
+published text changed when item 1 settled, because the text already named
+Dankest, LLC and privacy@dankest.llc: the decision confirmed what was
+published rather than altering it.
 
 A studio-wide policy covering this same ground was published for Dankest,
 LLC on 2026-08-01 (~/Sites/dankest.llc, page privacy.html). THE TWO MUST

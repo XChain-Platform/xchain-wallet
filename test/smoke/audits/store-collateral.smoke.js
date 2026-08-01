@@ -141,7 +141,16 @@ const NOT_EGRESS = new Map([
 ]);
 const HOSTISH = /\b(?:[a-z0-9-]+\.)+(?:io|com|net|org|info|space|llc|local|xchain)\b/g;
 
-const policyHosts = [...new Set((read(DOCS.policy).match(HOSTISH) || []))]
+// Comments are stripped first, because the rule is about what the policy
+// DISCLOSES. The internal status block is maintainer prose that never reaches
+// the published page (xchain-websites strips it), so a host named there is not
+// a disclosure. This is not hypothetical: recording the mail-deliverability
+// evidence for the privacy contact put `aspmx.l.google.com` in that block and
+// turned this check red, demanding that a Google MX host be declared as a
+// wallet egress destination. Stripping is the right fix rather than another
+// ignore-list entry, which would have hidden the class instead of the case.
+const publishedPolicy = read(DOCS.policy).replace(/<!--[\s\S]*?-->/g, ' ');
+const policyHosts = [...new Set((publishedPolicy.match(HOSTISH) || []))]
     .filter((h) => !NOT_EGRESS.has(h));
 
 assert.ok(policyHosts.length >= 12,
