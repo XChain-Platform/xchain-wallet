@@ -17,15 +17,20 @@
 #
 # Usage:
 #   bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/ \
-#     --tag vX.Y.Z --target /srv/downloads/wallet
+#     --tag vX.Y.Z --target /srv/downloads/wallet \
+#     --public-base https://downloads.xchain.io/wallet
 #   bash tools/release/publish.sh ... --target user@origin-host:/srv/downloads/wallet
+#   bash tools/release/publish.sh ... --staging   # §7.5 rehearsal set
 #   bash tools/release/publish.sh ... --dry-run
 #
 # Options:
-#   --input <dir>    the signed staging directory
-#   --tag <vX.Y.Z>   the release being published
-#   --target <path>  local path or rsync host:path for wallet/
-#   --dry-run        print the plan and change nothing
+#   --input <dir>       the signed staging directory
+#   --tag <vX.Y.Z>      the release being published
+#   --target <path>     local path or rsync host:path for wallet/
+#   --public-base <url> where that target is served from, for the edge check
+#   --staging           publish the rehearsal set to the staging feed (§7.5)
+#   --no-edge-verify    skip the edge check; must be typed, never defaulted
+#   --dry-run           print the plan and change nothing
 #
 # UPLOAD ORDER IS THE WHOLE POINT. The channel pointers go LAST, after
 # every binary they name is already in place. Uploaded first, or in
@@ -50,6 +55,22 @@
 # signed manifests for one version make tampering indistinguishable from
 # housekeeping, so this refuses to overwrite an existing release rather
 # than asking. Corrections are a new version (§6b).
+#
+# THE EDGE CAN INVERT THE UPLOAD ORDER (§7.3). Ordering the upload at the
+# ORIGIN buys nothing if Cloudflare is still serving a cached 404 for a
+# binary that landed thirty seconds ago: the client reads a fresh pointer
+# and fetches a file the edge says does not exist. So between the binaries
+# and the pointers there is a phase that fetches every artifact THROUGH
+# the public URL and requires a 200. The guarantee is only worth stating
+# at the layer clients actually read from.
+#
+# PROD VS REHEARSAL IS NOT VISIBLE IN A FILE LISTING (§7.5). A rehearsal
+# build is the same code and the same version with a different feed baked
+# in, and electron-builder names artifacts by version, not by channel, so
+# the two directories hold identically-named, byte-different twins. Two
+# guards, both structural: the pointers in the input must all belong to
+# the expected channel, and the staging feed root carries a `.staging-feed`
+# marker that a prod publish refuses to write into (and vice versa).
 
 set -euo pipefail
 
@@ -65,13 +86,19 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INPUT_DIR=""
 TAG=""
 TARGET=""
+PUBLIC_BASE=""
 DRY_RUN=0
+STAGING=0
+EDGE_VERIFY=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --input|-i) INPUT_DIR="$2"; shift 2 ;;
         --tag|-t) TAG="$2"; shift 2 ;;
         --target) TARGET="$2"; shift 2 ;;
+        --public-base) PUBLIC_BASE="${2%/}"; shift 2 ;;
+        --staging) STAGING=1; shift ;;
+        --no-edge-verify) EDGE_VERIFY=0; shift ;;
         --dry-run|-n) DRY_RUN=1; shift ;;
         --help|-h)
             awk '/^#\*+$/{seen++; next} seen>=2 && /^set -euo pipefail/{exit} seen>=2{print}' "$0"
@@ -85,6 +112,120 @@ done
 [[ -n "$TAG" ]] || { echo "publish.sh: --tag <vX.Y.Z> is required" >&2; exit 2; }
 [[ -n "$TARGET" ]] || { echo "publish.sh: --target <path or host:path> is required" >&2; exit 2; }
 [[ -d "$INPUT_DIR" ]] || { echo "publish.sh: input dir '$INPUT_DIR' does not exist" >&2; exit 2; }
+
+if [[ "$STAGING" -eq 1 ]]; then
+    EXPECT_CHANNEL="staging"
+else
+    EXPECT_CHANNEL="stable"
+fi
+
+# Remote helpers, defined before the first check that needs to know which
+# kind of target this is. A target with a colon before any slash is an
+# rsync host:path; anything else is a local directory.
+is_remote() { [[ "$TARGET" == *:* && "$TARGET" != /* && "$TARGET" != .* ]]; }
+
+target_path() {
+    if is_remote; then echo "${TARGET#*:}"; else echo "$TARGET"; fi
+}
+
+# EVERYTHING REMOTE GOES THROUGH RSYNC, NEVER ssh. The K11 deploy key is
+# pinned to a forced `rrsync` command so that holding it grants writes
+# into one directory and nothing else (host runbook §4). Under that
+# restriction `ssh host "test -e ..."` does not run: rrsync answers
+# "SSH_ORIGINAL_COMMAND does not run rsync" and exits. This script used
+# ssh for three things (an existence probe, the immutability check, and
+# mkdir), so a correctly-hardened feed would have failed every publish.
+# The probes are reads and the mkdir is `--mkpath`, both of which rrsync
+# allows, so nothing is given up by expressing them as rsync.
+#
+# GNU rsync REQUIRED, and this is not pedantry. macOS ships openrsync
+# (protocol 29, "rsync 2.6.9 compatible"), which sends `--dirs` as a long
+# option that rrsync's allowlist does not carry, so every upload dies with
+# "invalid rsync-command syntax or options" and no hint that the CLIENT is
+# the problem. Measured on the release machine 2026-08-01.
+RSYNC="${XCHAIN_RSYNC:-}"
+if [[ -z "$RSYNC" ]]; then
+    for candidate in /opt/homebrew/bin/rsync /usr/local/bin/rsync rsync; do
+        if command -v "$candidate" >/dev/null 2>&1; then RSYNC="$candidate"; break; fi
+    done
+fi
+
+if is_remote && "$RSYNC" --version 2>&1 | head -1 | grep -qi openrsync; then
+    echo "publish.sh: $RSYNC is openrsync, which cannot talk to a forced-command" >&2
+    echo "  rrsync feed: it sends --dirs as a long option that rrsync rejects," >&2
+    echo "  and the error names the syntax rather than the client. Install GNU" >&2
+    echo "  rsync (brew install rsync) or set XCHAIN_RSYNC to one." >&2
+    exit 2
+fi
+
+# True if a path exists at the target. Remote: a --list-only read, which
+# is what the deploy key is allowed to do.
+# NOTE ON REMOTE PATHS: under a forced rrsync command the client's paths
+# are relative to the restricted directory, so a remote --target names it
+# relatively (`xchain-deploy@host:wallet`), not absolutely. An absolute
+# path is rejected by rrsync as an escape attempt, which is the control
+# working, not a bug.
+#
+# "COULD NOT ASK" IS NOT "IS NOT THERE". Probing the path directly and
+# reading a non-zero exit as absence conflates a wrong SSH key, a refused
+# connection and a dead host with "that file does not exist" - and one of
+# this function's two callers is the IMMUTABILITY check, where absence
+# means "this tag is free to publish". A key problem would have read as
+# permission to overwrite a published release. So the parent is listed
+# instead: a failure to list at all is fatal and loud, and only a
+# successful listing is allowed to answer the question.
+target_exists() {
+    local rel="$1" base dir name out
+    base="$(target_path)"
+    if ! is_remote; then
+        [[ -e "${base%/}/$rel" ]]
+        return
+    fi
+
+    dir="$(dirname "$rel")"
+    name="$(basename "$rel")"
+    if ! out="$("$RSYNC" --list-only -e ssh "${TARGET%%:*}:${base%/}/${dir}/" 2>&1)"; then
+        echo "publish.sh: cannot list ${base%/}/${dir} at $TARGET" >&2
+        printf '%s\n' "$out" | sed 's/^/  /' >&2
+        echo "  Refusing to continue. This is deliberately fatal rather than" >&2
+        echo "  treated as 'not found': the immutability check reads absence as" >&2
+        echo "  'this tag is unpublished', so a bad key or an unreachable host" >&2
+        echo "  would otherwise look like permission to overwrite a release." >&2
+        echo "  If the deploy key is the problem, note that a forced-command" >&2
+        echo "  rrsync target needs its own ssh_config Host entry with" >&2
+        echo "  IdentityFile + IdentitiesOnly." >&2
+        exit 2
+    fi
+    printf '%s\n' "$out" | awk '{ $1=$2=$3=$4=""; sub(/^ +/, ""); print }' | grep -qxF "$name"
+}
+
+# CHECKS RUN CHEAPEST FIRST. They are all pre-upload, so their order is
+# free, and the differences are large: this one reads only its own
+# arguments, the channel assertion reads a directory listing, verify.sh
+# hashes hundreds of megabytes, and the two after it open an SSH
+# connection. A missing flag should not cost a full manifest verify, and
+# it certainly should not cost a login to the release host.
+#
+# Edge verification is only meaningful against something an edge fronts.
+# A local target has no edge, so it is skipped and said out loud; a remote
+# one without --public-base is refused, because the alternative is a
+# release that silently keeps the weaker guarantee (§7.3).
+if [[ "$EDGE_VERIFY" -eq 1 && -z "$PUBLIC_BASE" ]] && is_remote; then
+    echo "publish.sh: --public-base is required for a remote target." >&2
+    echo "  Uploading in the right order at the ORIGIN proves nothing about" >&2
+    echo "  what the edge serves: Cloudflare can hold a cached 404 for a" >&2
+    echo "  binary that has already landed, so a client reads a fresh" >&2
+    echo "  pointer and fetches a file the edge says is missing. Pass the" >&2
+    echo "  public base (e.g. https://downloads.xchain.io/wallet), or type" >&2
+    echo "  --no-edge-verify to publish without that check." >&2
+    exit 2
+fi
+
+# Are these the bytes for the feed we are about to write to? The
+# installers cannot answer that (identical names either way), the
+# pointers can.
+echo "publish.sh: checking the input is a '$EXPECT_CHANNEL' build ..." >&2
+node "$HERE/update-info.mjs" assert-channel "$INPUT_DIR" --channel "$EXPECT_CHANNEL" >&2
 
 MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
 for required in "$MANIFEST" "$MANIFEST.asc"; do
@@ -101,27 +242,40 @@ done
 echo "publish.sh: verifying the signed release before upload ..." >&2
 bash "$HERE/verify.sh" --input "$INPUT_DIR" --tag "$TAG" >&2
 
-# Remote helpers. A target with a colon before any slash is an rsync
-# host:path; anything else is a local directory.
-is_remote() { [[ "$TARGET" == *:* && "$TARGET" != /* && "$TARGET" != .* ]]; }
-
-remote_run() {
-    if is_remote; then
-        ssh "${TARGET%%:*}" "$1"
-    else
-        bash -c "$1"
-    fi
-}
-
-target_path() {
-    if is_remote; then echo "${TARGET#*:}"; else echo "$TARGET"; fi
-}
-
 BASE="$(target_path)"
 MANIFEST_REMOTE="$BASE/RELEASE_HASHES/$TAG.txt"
 
+# The other half of the prod/rehearsal guard, and the half that does not
+# depend on the input being what it claims. `.staging-feed` is written
+# once, by hand, when the staging feed is stood up (DOWNLOADS-HOST-RUNBOOK
+# §7); it is a property of the DESTINATION, so a correctly-built staging
+# set aimed at the live feed - the actually dangerous typo, since the
+# rehearsal happens minutes before the real publish and the two commands
+# differ by one word - is refused by the host rather than by a convention.
+if target_exists ".staging-feed"; then
+    TARGET_IS_STAGING=1
+else
+    TARGET_IS_STAGING=0
+fi
+
+if [[ "$STAGING" -eq 1 && "$TARGET_IS_STAGING" -eq 0 ]]; then
+    echo "publish.sh: --staging, but $TARGET carries no .staging-feed marker." >&2
+    echo "  This is either the live feed (in which case a rehearsal build was" >&2
+    echo "  about to be published to real users, whose installers are named" >&2
+    echo "  identically to the real ones) or a staging feed that was stood up" >&2
+    echo "  without its marker. Check which before adding the file." >&2
+    exit 1
+fi
+if [[ "$STAGING" -eq 0 && "$TARGET_IS_STAGING" -eq 1 ]]; then
+    echo "publish.sh: $TARGET is the STAGING feed (.staging-feed is present)," >&2
+    echo "  but this is a production publish. The rehearsal set and the real" >&2
+    echo "  release are never mixed in one directory (§7.5): they are" >&2
+    echo "  byte-different files under identical names." >&2
+    exit 1
+fi
+
 # Immutability check.
-if remote_run "test -e '$MANIFEST_REMOTE'" 2>/dev/null; then
+if target_exists "RELEASE_HASHES/$TAG.txt"; then
     echo "publish.sh: $TAG is already published." >&2
     echo "  Published versions and their manifests are never modified in" >&2
     echo "  place (§3): two signed manifests for one version make tampering" >&2
@@ -153,20 +307,56 @@ if [[ ${#YMLS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-echo "publish.sh: plan for $TAG -> $TARGET" >&2
+echo "publish.sh: plan for $TAG -> $TARGET ($EXPECT_CHANNEL)" >&2
 echo "  1. ${#BINARIES[@]} artifact(s)" >&2
 echo "  2. signed manifest as RELEASE_HASHES/$TAG.txt (+ .asc)" >&2
-echo "  3. ${#YMLS[@]} channel pointer(s), LAST" >&2
+if [[ "$EDGE_VERIFY" -eq 1 && -n "$PUBLIC_BASE" ]]; then
+    echo "  3. edge check: every artifact must return 200 via $PUBLIC_BASE" >&2
+elif [[ "$EDGE_VERIFY" -eq 0 ]]; then
+    echo "  3. edge check SKIPPED (--no-edge-verify)" >&2
+else
+    echo "  3. edge check skipped: local target, nothing fronts it" >&2
+fi
+echo "  4. ${#YMLS[@]} channel pointer(s), LAST" >&2
+echo "  5. purge the edge cache for those pointer paths" >&2
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "publish.sh: --dry-run, nothing uploaded." >&2
     exit 0
 fi
 
+# Percent-encode one path segment.
+#
+# NOT optional, and not a test artifact. `productName` is "XChain Wallet",
+# and the generic provider writes the RAW basename into the update-info
+# yml (the space-to-dash `safeArtifactName` substitution in
+# app-builder-lib is gated on `provider === "github"`, which we are not).
+# So every published desktop artifact has a space in its name, every
+# client fetches it as `%20`, and an edge check that pastes the raw name
+# into a URL asks curl for a malformed request and fails a release that
+# is perfectly fine.
+#
+# ASCII only, which is what electron-builder's naming produces from
+# productName + version + arch. A non-ASCII productName would need a real
+# encoder; the smoke pins the names so that change cannot pass unnoticed.
+url_encode() {
+    local s="$1" out="" i c
+    for (( i = 0; i < ${#s}; i++ )); do
+        c="${s:i:1}"
+        case "$c" in
+            [A-Za-z0-9._~-]) out="$out$c" ;;
+            *) out="$out$(printf '%%%02X' "'$c")" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
 copy_to() {
     local src="$1" dest="$2"
     if is_remote; then
-        rsync -a "$src" "${TARGET%%:*}:$dest"
+        # --mkpath so the tree is created by the same allowed operation
+        # that writes into it; a forced-command key cannot run mkdir.
+        "$RSYNC" -a --mkpath -e ssh "$src" "${TARGET%%:*}:$dest"
     else
         mkdir -p "$(dirname "$dest")"
         cp -p "$src" "$dest"
@@ -174,7 +364,9 @@ copy_to() {
 }
 
 # --- Phase 1: artifacts -------------------------------------------------
-remote_run "mkdir -p '$BASE/desktop' '$BASE/extension' '$BASE/web' '$BASE/RELEASE_HASHES'"
+if ! is_remote; then
+    mkdir -p "$BASE/desktop" "$BASE/extension" "$BASE/web" "$BASE/RELEASE_HASHES"
+fi
 for rel in "${BINARIES[@]}"; do
     name="${rel#./}"
     case "$name" in
@@ -194,6 +386,60 @@ echo "publish.sh: uploading the signed manifest as RELEASE_HASHES/$TAG.txt" >&2
 copy_to "$MANIFEST" "$BASE/RELEASE_HASHES/$TAG.txt"
 copy_to "$MANIFEST.asc" "$BASE/RELEASE_HASHES/$TAG.txt.asc"
 
+# --- Phase 2b: prove the edge serves what the origin now holds ----------
+#
+# Checked through the PUBLIC url, which is the only address a client ever
+# uses. Content-Length is compared when the edge returns one: a 200 alone
+# would be satisfied by a stale cached copy of a same-named artifact from
+# a previous build, which is precisely what a re-cut release produces.
+if [[ "$EDGE_VERIFY" -eq 1 && -n "$PUBLIC_BASE" ]]; then
+    echo "publish.sh: checking the edge serves ${#BINARIES[@]} artifact(s) ..." >&2
+    edge_failures=0
+    for rel in "${BINARIES[@]}"; do
+        name="${rel#./}"
+        case "$name" in
+            *.tar.gz) sub="web" ;;
+            xchain-wallet-extension-*.zip) sub="extension" ;;
+            *) sub="desktop" ;;
+        esac
+
+        # --get with -I would drop the body; -I alone is a HEAD, which is
+        # what we want: these are hundreds of megabytes and the bytes are
+        # already proven by the manifest.
+        headers="$(curl -sSIL --max-time 60 "$PUBLIC_BASE/$sub/$(url_encode "$name")" 2>&1)" || {
+            echo "  EDGE-FAIL  $sub/$name: request failed" >&2
+            edge_failures=$((edge_failures + 1))
+            continue
+        }
+        status="$(printf '%s\n' "$headers" | awk '/^HTTP\//{code=$2} END{print code}')"
+        if [[ "$status" != "200" ]]; then
+            echo "  EDGE-FAIL  $sub/$name: HTTP $status" >&2
+            edge_failures=$((edge_failures + 1))
+            continue
+        fi
+
+        remote_len="$(printf '%s\n' "$headers" \
+            | awk 'BEGIN{IGNORECASE=1} /^content-length:/{gsub(/\r/,"",$2); len=$2} END{print len}')"
+        local_len="$(wc -c < "$INPUT_DIR/$name" | tr -d ' ')"
+        if [[ -n "$remote_len" && "$remote_len" != "$local_len" ]]; then
+            echo "  EDGE-FAIL  $sub/$name: edge serves $remote_len bytes, we uploaded $local_len" >&2
+            edge_failures=$((edge_failures + 1))
+        fi
+    done
+
+    if [[ "$edge_failures" -gt 0 ]]; then
+        echo >&2
+        echo "publish.sh: $edge_failures artifact(s) are not correctly served." >&2
+        echo "  STOPPING BEFORE THE POINTERS, which is the whole point of this" >&2
+        echo "  check: the artifacts are uploaded but no yml names them yet, so" >&2
+        echo "  no client is looking for them and nothing is broken in the" >&2
+        echo "  field. Purge the edge for these paths, or wait out the cached" >&2
+        echo "  404, then re-run - phase 1 is idempotent." >&2
+        exit 1
+    fi
+    echo "publish.sh: edge ok" >&2
+fi
+
 # --- Phase 3: channel pointers, LAST ------------------------------------
 for rel in "${YMLS[@]}"; do
     name="${rel#./}"
@@ -201,9 +447,54 @@ for rel in "${YMLS[@]}"; do
     copy_to "$INPUT_DIR/$name" "$BASE/desktop/$name"
 done
 
+# --- Phase 4: purge the pointers from the edge --------------------------
+#
+# Belt AND braces on purpose. The cache rule (runbook §2/§3) should keep
+# pointers out of the edge cache entirely, but a rule that was typed and
+# never re-tested is the failure mode a rollback discovers at the worst
+# moment, and a purge costs one request.
+#
+# THE TOKEN IS FED ON STDIN, NEVER AS AN ARGUMENT. `curl -H "Authorization:
+# Bearer $TOKEN"` puts a live credential in the process table, where every
+# local user can read it out of `ps` for the life of the call. `--config -`
+# takes the same header from stdin.
+if [[ ${#YMLS[@]} -gt 0 && -n "${CLOUDFLARE_ZONE_ID:-}" && -n "${CLOUDFLARE_PURGE_TOKEN:-}" ]]; then
+    purge_urls=""
+    for rel in "${YMLS[@]}"; do
+        name="${rel#./}"
+        purge_urls="$purge_urls${purge_urls:+,}\"$PUBLIC_BASE/desktop/$(url_encode "$name")\""
+    done
+
+    echo "publish.sh: purging ${#YMLS[@]} pointer path(s) from the edge ..." >&2
+    purge_response="$(curl -sS --max-time 30 --config - <<EOF
+url = "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache"
+request = "POST"
+header = "Authorization: Bearer $CLOUDFLARE_PURGE_TOKEN"
+header = "Content-Type: application/json"
+data = "{\"files\": [$purge_urls]}"
+EOF
+    )" || purge_response=''
+
+    if printf '%s' "$purge_response" | grep -q '"success":[[:space:]]*true'; then
+        echo "publish.sh: edge cache purged" >&2
+    else
+        # Not fatal: the release is published and correct. But it is not
+        # silent either, because an unpurged pointer is a fleet that does
+        # not see the release until the TTL expires.
+        echo "publish.sh: WARNING - the purge did not report success." >&2
+        echo "  The release IS published; clients may not see the new pointer" >&2
+        echo "  until the edge TTL expires. Purge by hand and confirm." >&2
+    fi
+elif [[ ${#YMLS[@]} -gt 0 ]]; then
+    echo >&2
+    echo "publish.sh: NOT purging - CLOUDFLARE_ZONE_ID / CLOUDFLARE_PURGE_TOKEN unset." >&2
+    echo "  Purge these paths by hand before treating the release as live:" >&2
+    for rel in "${YMLS[@]}"; do
+        echo "    ${PUBLIC_BASE:-<public base>}/desktop/${rel#./}" >&2
+    done
+fi
+
 echo "publish.sh: ok - $TAG is live" >&2
 echo >&2
-echo "  Not done yet: purge the Cloudflare cache for the yml paths if the" >&2
-echo "  cache-bypass rule is not in place, then run the §6 step 7" >&2
-echo "  clean-machine verify against the PUBLISHED manifest, not the" >&2
-echo "  local one." >&2
+echo "  Not done yet: run the §6 step 7 clean-machine verify against the" >&2
+echo "  PUBLISHED manifest, not the local one." >&2

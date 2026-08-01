@@ -117,6 +117,34 @@ export function classify(dir) {
 }
 
 /**
+ * The channel a pointer filename belongs to.
+ *
+ * From the naming rule in this file's header: `<channel><osSuffix><archSuffix>.yml`,
+ * where every suffix begins with `-`. So the channel is the stem up to the
+ * first `-`, and `stable.yml`, `stable-mac.yml` and `stable-linux-arm64.yml`
+ * all answer `stable`.
+ *
+ * WHY THIS IS WORTH A FUNCTION. It is what tells a PROD publish from a
+ * REHEARSAL one (§7.5). Both build the same version from the same commit,
+ * so electron-builder names their installers identically - byte-different
+ * twins under one name - and the ONLY thing in either directory that says
+ * which feed the bytes were built for is the channel stem on the pointer.
+ * Publishing a rehearsal build to the live feed is therefore not a typo
+ * anyone would catch by looking: the file listing is identical.
+ *
+ * The one assumption, stated because it is invisible otherwise: a channel
+ * name may not contain `-`. Ours are `stable` and `staging`. A future
+ * `beta-2` would silently read as channel `beta`, so name channels
+ * without dashes or revisit this.
+ *
+ * @param {string} filename
+ * @returns {string}
+ */
+export function pointerChannel(filename) {
+    return basename(filename).replace(/\.yml$/, '').split('-')[0];
+}
+
+/**
  * Read the `app-update.yml` electron-builder baked into a packaged app.
  *
  * This is the file the SHIPPED binary reads to decide which feed and
@@ -241,6 +269,11 @@ const USAGE = `usage: update-info.mjs <command> [args]
       feed URL and channel ( §7.5). Exits 1 on any mismatch, and 1
       if the directory holds no packaged app at all - a silent pass on an
       empty search is how this check would rot.
+
+  assert-channel <dir> --channel <channel>
+      Assert every channel pointer in <dir> belongs to this channel, so a
+      rehearsal build cannot be published to the live feed (§7.5). Exits 1
+      on any foreign or mixed channel, and 1 if there are no pointers.
 `;
 
 function fail(msg) {
@@ -318,6 +351,32 @@ function main(argv) {
         ];
         process.stdout.write(`${lines.join('\n')}\n`);
         return c.pointers.length === 0 ? 1 : 0;
+    }
+
+    if (command === 'assert-channel') {
+        const channel = flag(argv, '--channel');
+        if (!channel) fail('assert-channel needs --channel <name>');
+
+        const { pointers } = classify(dir);
+        if (pointers.length === 0) {
+            fail(`no channel pointers in ${dir}.\n`
+                + '  With none, this assertion has nothing to check and would pass\n'
+                + '  an empty or wrong directory straight through to the feed.');
+        }
+
+        const foreign = pointers.filter((n) => pointerChannel(n) !== channel);
+        if (foreign.length > 0) {
+            const seen = [...new Set(pointers.map(pointerChannel))].sort().join(', ');
+            fail(`${dir} holds channel pointer(s) for [${seen}], expected only "${channel}":\n`
+                + foreign.map((n) => `    ${n}`).join('\n')
+                + '\n\n  A prod and a rehearsal build of the same version produce\n'
+                + '  IDENTICALLY NAMED installers (electron-builder names by version,\n'
+                + '  not channel), so the pointer stem is the only thing in the\n'
+                + '  directory that says which feed these bytes were built for.\n'
+                + '  Publishing the wrong one is invisible in a file listing.');
+        }
+        process.stdout.write(`ok   ${pointers.length} pointer(s), all channel "${channel}"\n`);
+        return 0;
     }
 
     if (command === 'assert-feed') {

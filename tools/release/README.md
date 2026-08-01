@@ -52,7 +52,8 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `lib.sh` | Shared manifest routines: which files a manifest covers, in what order, and what its header says. Sourced by the other scripts so they cannot drift apart. | Live |
 | `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. | Gates live; signing blocked on G180 |
 | `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors `docs/Verify_Release.md`. | Live |
-| `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last. | Live (host pending) |
+| `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live |
+| `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live |
 | `deploy-web.sh` | §6 step 5b: unpack the web tarball into a versioned directory and flip a symlink. | Live |
 | `expected-artifacts.txt` | The declared artifact set a release must contain. Data, not code. | Live |
 
@@ -113,11 +114,22 @@ The authoritative checklist is §6 of
    `release-artifacts/vX.Y.Z/`.
 4. `XCHAIN_RELEASE_GPG_KEY=<fingerprint> pnpm release:sign`. The
    pristine-clone, dev-mock and artifact-set gates run first.
+4b. Rehearse the update against the staging feed ( §7.5): publish
+   the staging set with `--staging`, then install the PREVIOUS release's
+   rehearsal build and watch it take the new one. No production pointer
+   goes up before this passes.
 5. `bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/
-   --tag vX.Y.Z --target <deploy target> --dry-run`, then for real. It
-   verifies before uploading, refuses a version that already exists,
-   publishes the manifest under its versioned name, and uploads
-   the channel pointers last.
+   --tag vX.Y.Z --target origin-host-downloads:wallet
+   --public-base https://downloads.xchain.io/wallet --dry-run`, then for
+   real. It verifies before uploading, refuses a version that already
+   exists, refuses a rehearsal build (or the wrong feed), publishes the
+   manifest under its versioned name, fetches every artifact back through
+   the edge, and uploads the channel pointers last.
+
+   Needs GNU rsync, not the openrsync macOS ships: the feed's deploy key
+   is pinned to a forced `rrsync` command, and openrsync sends an option
+   its allowlist rejects. `publish.sh` refuses rather than letting you
+   debug the resulting syntax error.
 5b. `bash tools/release/deploy-web.sh --tarball <the published tarball>
    --tag vX.Y.Z --webroot <webroot>` for the SPA. Deploy the tarball
    that was signed, never a fresh local build.
@@ -140,7 +152,8 @@ See [`tools/build-reproduce/`](../build-reproduce/) and each package's
 - ✅ Dev-mock gate scans every shipped shell bundle, including the desktop renderer.
 - ⏸ Actual GPG signing pending G180 (release key generation + publication; ceremony runbook is  S3).
 - ✅ CI release lanes exist (`.github/workflows/release.yml`); the repository-settings half is a checklist in `docs/Release_CI_Setup.md` and is NOT yet configured, so the workflow must not run with real secrets until it is.
-- ⏸ `downloads.xchain.io` not yet stood up ( S6); the upload tooling (`publish.sh`) and the host runbook exist, the host does not. `docs/Verify_Release.md` still points at GitHub release assets.
+- ✅ The feed host is stood up on origin-host (tree, restricted deploy key, staging feed, hourly `feed-sweep.mjs` cron) and was exercised with a real signed publish end to end. **DNS, the Cloudflare cache rules and the purge token are still outstanding**, so nothing resolves at `downloads.xchain.io` yet and the edge check has never run against Cloudflare. `docs/Verify_Release.md` still points at GitHub release assets.
+- ✅ `publish.sh` and `feed-sweep.mjs` are driven for real, against a signed fixture and a live local HTTP origin, by `test/smoke/audits/publish-feed.smoke.js` and `feed-sweep.smoke.js`. The older coverage of `publish.sh` was greps over its own source, which is how the  stage-1 defect survived: the comments and the code disagreed and both read as correct.
 - ⏸ Cross-platform reproduce (macOS / Windows pre-signing artifacts) pending the desktop reproducibility follow-ups.
 
 **Known naming gap.** Desktop installers use electron-builder's default
