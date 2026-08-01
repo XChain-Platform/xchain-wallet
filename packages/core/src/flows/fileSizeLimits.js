@@ -40,6 +40,37 @@
 export const MAX_COMPILED_ACTION_BYTES = 8192;
 
 /**
+ * Taproot-envelope payload ceiling ( §4). Vendored byte-equal from
+ * xchain-documentation/protocol/constants.js ENVELOPE_MAX_PAYLOAD.
+ *
+ * It is DERIVED FROM WEIGHT, not chosen as a round number: the binding limit is
+ * Bitcoin Core's MAX_STANDARD_TX_WEIGHT of 400,000 WU, and 400,000 payload bytes
+ * build a 402,789 WU reveal that no node relays . Do not tidy it.
+ *
+ * It is measured on the SAME compiled stream as the 8192 above (the action push
+ * plus the rawData push): §3.2 pins the reassembled envelope payload as
+ * byte-identical to the compiled data stream the legacy lanes carry. Only the
+ * envelope's own 520-byte chunk framing is excluded, and that is not part of
+ * what these helpers count. So the two ceilings are interchangeable here and
+ * only the NUMBER changes with the encoding.
+ */
+export const ENVELOPE_MAX_PAYLOAD = 390000;
+
+/**
+ * The compiled-push ceiling for an encoding. Anything that is not the Taproot
+ * envelope keeps the legacy 8192: §4 raises the ceiling PER-ENCODING precisely
+ * so the chunk lanes do not inherit a ~50x abuse ceiling for no benefit.
+ *
+ * @param {string} [encoding] - 'TAPROOT' for the envelope; anything else legacy
+ * @returns {number}
+ */
+export function compiledCeilingFor(encoding) {
+    return String(encoding ?? '').toUpperCase() === 'TAPROOT'
+        ? ENVELOPE_MAX_PAYLOAD
+        : MAX_COMPILED_ACTION_BYTES;
+}
+
+/**
  * AES-256-GCM envelope bytes prepended to gated ciphertext:
  * [iv 12][tag 16] (sdk.gatedFile.encryptWithKey layout).
  */
@@ -101,7 +132,7 @@ function maxRawWithin(budget) {
  * @param {{ name: string, type: string, title?: string, memo?: string }} meta
  * @returns {string}
  */
-export function publicFileActionString({ name, type, title, memo }) {
+export function publicFileActionString({ name, type, title, memo, compression }) {
     const parts = [
         'FILE', '0',
         String(name ?? '').trim(),
@@ -109,6 +140,18 @@ export function publicFileActionString({ name, type, title, memo }) {
         typeof title === 'string' ? title.trim() : '',
         typeof memo === 'string' ? memo : '',
     ];
+    //  §5.1: COMPRESSION is the TENTH field. Setting it re-materializes every
+    // optional field before it as an empty separator, because the trailing-empty
+    // trim stops at the last non-empty value. So `FILE|0|N|T` becomes
+    // `FILE|0|N|T|||||||1`. The marker therefore costs SIX TO EIGHT bytes, not
+    // one, and how many depends on how much the trim had removed: a file with a
+    // title and memo pays 6, a bare name+type pays 8. A budget that ignores this
+    // overshoots exactly when the payload is already at the ceiling.
+    if (String(compression ?? '') !== '') {
+        while (parts.length < 10) parts.push('');
+        parts.push(String(compression));
+        return parts.join('|');
+    }
     while (parts.length > 2 && parts[parts.length - 1] === '') parts.pop();
     return parts.join('|');
 }
@@ -119,9 +162,14 @@ export function publicFileActionString({ name, type, title, memo }) {
  * @param {{ name: string, type: string, title?: string, memo?: string }} meta
  * @returns {number}
  */
-export function maxPublicFileBytes(meta) {
-    const a = utf8Bytes(publicFileActionString(meta));
-    return maxRawWithin(MAX_COMPILED_ACTION_BYTES - (a + pushPrefixSize(a)));
+export function maxPublicFileBytes(meta, { encoding } = {}) {
+    // Sized against BOTH worst cases at once, and they point in opposite
+    // directions: compression GROWS the action string (§5.1, six to eight bytes)
+    // but only ever SHRINKS the payload. So assume the marker IS present when
+    // measuring the action, and assume it is NOT when measuring the file. The
+    // result is a cap the upload cannot exceed whichever way try-and-keep lands.
+    const a = utf8Bytes(publicFileActionString({ ...meta, compression: '1' }));
+    return maxRawWithin(compiledCeilingFor(encoding) - (a + pushPrefixSize(a)));
 }
 
 /**
@@ -173,8 +221,8 @@ export function gatedBatchActionString({ name, type, title, memo, gateTicker, co
  *           gateMinAmount?: string | null }} meta
  * @returns {number}
  */
-export function maxGatedPlaintextBytes(meta) {
+export function maxGatedPlaintextBytes(meta, { encoding } = {}) {
     const a = utf8Bytes(gatedBatchActionString(meta));
-    const maxCiphertext = maxRawWithin(MAX_COMPILED_ACTION_BYTES - (a + pushPrefixSize(a)));
+    const maxCiphertext = maxRawWithin(compiledCeilingFor(encoding) - (a + pushPrefixSize(a)));
     return Math.max(0, maxCiphertext - AES_GCM_ENVELOPE_BYTES);
 }

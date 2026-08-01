@@ -57,11 +57,50 @@ describe('publicFileActionString (mirror of SDK FormatSelector.serialize)', () =
     });
 });
 
+describe('COMPRESSION marker accounting ( §5.1)', () => {
+    it('setting COMPRESSION re-materializes the trimmed optional fields', () => {
+        expect(publicFileActionString({ name: 'a.png', type: 'image/png', compression: '1' }))
+            .toBe('FILE|0|a.png|image/png|||||||1');
+        // COMPRESSION must land in the TENTH position (index 10 of 11 fields)
+        const parts = publicFileActionString({ name: 'a.png', type: 'image/png', compression: '1' }).split('|');
+        expect(parts).toHaveLength(11);
+        expect(parts[10]).toBe('1');
+    });
+    it('an absent marker leaves the historical string byte-identical', () => {
+        // every FILE ever published must keep serializing exactly as before
+        expect(publicFileActionString({ name: 'a.png', type: 'image/png' })).toBe('FILE|0|a.png|image/png');
+        expect(publicFileActionString({ name: 'a.png', type: 'image/png', compression: '' }))
+            .toBe('FILE|0|a.png|image/png');
+    });
+    it('[REGRESSION] the old cap admitted a barely-compressible file the encoder rejects', () => {
+        // The encoder compresses by DEFAULT and keeps the result only if it is
+        // smaller (§5.2), so a file that compresses by less than the marker costs
+        // grows the compiled action on net. At the pre- cap of 8166 that
+        // compiled to 8196 and was refused at the ceiling; the marker-aware cap
+        // leaves room for it. This is the band the old number could not see.
+        const meta = { name: 'a.png', type: 'image/png' };
+        const a = utf8len(publicFileActionString({ ...meta, compression: '1' }));
+        const compiledFor = (n) => a + pushPrefixSize(a) + n + pushPrefixSize(n);
+        expect(compiledFor(8166 - 4)).toBeGreaterThan(MAX_COMPILED_ACTION_BYTES);
+        expect(compiledFor(maxPublicFileBytes(meta) - 4)).toBeLessThanOrEqual(MAX_COMPILED_ACTION_BYTES);
+    });
+});
+
 describe('maxPublicFileBytes', () => {
-    it('computes the exact budget for the pinned example', () => {
-        // 'FILE|0|a.png|image/png' = 22 bytes -> 1-byte prefix -> 8169
-        // budget for the raw push -> 8166 + its 3-byte prefix = 8169.
-        expect(maxPublicFileBytes({ name: 'a.png', type: 'image/png' })).toBe(8166);
+    it('computes the exact budget for the pinned example, allowing for COMPRESSION', () => {
+        //  §5.1: the budget must survive the encoder appending COMPRESSION,
+        // which re-materializes the trimmed optional fields:
+        // 'FILE|0|a.png|image/png' (22) -> 'FILE|0|a.png|image/png|||||||1' (30).
+        // 8192 - (30 + 1-byte prefix) = 8161 for the raw push -> 8158 + 3-byte prefix.
+        expect(maxPublicFileBytes({ name: 'a.png', type: 'image/png' })).toBe(8158);
+    });
+    it('the Taproot envelope raises the same budget to the §4 ceiling', () => {
+        // the ONLY thing that changes is the ceiling; the action accounting is identical
+        expect(maxPublicFileBytes({ name: 'a.png', type: 'image/png' }, { encoding: 'TAPROOT' }))
+            .toBe(389964);
+        // and an unknown/legacy encoding must never inherit it
+        for (const enc of [undefined, 'P2WSH', 'OP_RETURN', 'nonsense'])
+            expect(maxPublicFileBytes({ name: 'a.png', type: 'image/png' }, { encoding: enc })).toBe(8158);
     });
     it('max + both push prefixes lands exactly at or under the compiled ceiling, +1 exceeds it', () => {
         for (const meta of [
@@ -69,7 +108,9 @@ describe('maxPublicFileBytes', () => {
             { name: 'file-with-a-much-longer-name.tar.gz', type: 'application/gzip', title: 'A title', memo: 'and a memo' },
             { name: 'ü.png', type: 'image/png', title: 'tïtle', memo: 'mémo' },
         ]) {
-            const a = utf8len(publicFileActionString(meta));
+            // measured against the action the cap ASSUMES (with COMPRESSION), which is
+            // the worst case the upload has to survive
+            const a = utf8len(publicFileActionString({ ...meta, compression: '1' }));
             const max = maxPublicFileBytes(meta);
             const compiled = (n) => a + pushPrefixSize(a) + n + pushPrefixSize(n);
             expect(compiled(max)).toBeLessThanOrEqual(MAX_COMPILED_ACTION_BYTES);

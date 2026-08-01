@@ -134,6 +134,8 @@ export {
 } from './gatedPublishAction.js';
 export {
     MAX_COMPILED_ACTION_BYTES,
+    ENVELOPE_MAX_PAYLOAD,
+    compiledCeilingFor,
     maxPublicFileBytes,
     maxGatedPlaintextBytes,
     publicFileActionString,
