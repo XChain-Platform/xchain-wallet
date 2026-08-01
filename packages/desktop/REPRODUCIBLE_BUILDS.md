@@ -144,7 +144,14 @@ between them is diagnostic:
 
 - `SOURCE_DATE_EPOCH=<commit author date>` - injected by `reproduce.sh`
   from the git commit being built. Honoured by electron-builder for
-  asar entry mtimes + mksquashfs (AppImage) + ar (deb). **Author date,
+  asar entry mtimes and `ar` (deb). **NOT honoured for the AppImage's
+  squashfs superblock**, which this line used to claim: two packaged
+  builds of one commit, same epoch, same container, produce
+  byte-different AppImages on both arches while the `.deb` files from
+  those same runs are byte-identical. The AppImage's squashfs
+  superblock carries `mkfs_time` from the build wall clock instead of
+  the epoch (measured 2026-08-01; see the `appImage` comment in
+  `electron-builder.config.cjs`). **Author date,
   `%at`, on both sides.** `reproduce.sh` used to read `%ct`, the
   committer date, while the release lane read `%at`. They are equal only
   for a commit that was never rebased or amended, and 10 of the last 200

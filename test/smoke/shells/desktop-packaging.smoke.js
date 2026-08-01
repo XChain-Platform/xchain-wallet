@@ -165,6 +165,50 @@ assert.ok(
     'Linux AppImage + deb targets configured',
 );
 
+// --- The three settings without which the Linux lane cannot build -----
+//
+// None of these was set, and the lane had never been run to find out: CI
+// is not configured, and the reproduce container uses `--dir`, which
+// packages nothing. Running a real packaged build (, 2026-08-01)
+// failed three times in a row, each time on a different one of these.
+// `*.AppImage` and `*.deb` are REQUIRED rows in expected-artifacts.txt,
+// so each of these is a launch blocker for Linux, not a nicety.
+{
+    // 1. electron-builder derives the Linux executable name from the
+    //    package.json `name`, not productName. Ours is a scoped package,
+    //    so the default sanitizes to `@xchain-walletdesktop` and the
+    //    AppImage builder rejects it outright.
+    const exe = config.linux.executableName;
+    assert.ok(typeof exe === 'string' && exe.length > 0,
+        'linux.executableName must be set explicitly: the default comes from the '
+        + 'package.json name (@xchain-wallet/desktop), which sanitizes to '
+        + '@xchain-walletdesktop and fails the AppImage build on every arch.');
+    assert.ok(/^[a-z0-9][a-z0-9._-]*$/.test(exe),
+        `linux.executableName "${exe}" must be lowercase alphanumerics, dots, `
+        + 'hyphens and underscores only. AppImage rejects anything else in a file '
+        + 'path, and Debian rejects it in a package name.');
+
+    // 2. fpm refuses to build a .deb without a homepage, and
+    //    electron-builder's v26 schema refuses `homepage` in the build
+    //    config, so it has to be app metadata.
+    const appPkg = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'));
+    assert.ok(/^https:\/\/\S+$/.test(appPkg.homepage || ''),
+        'packages/desktop/package.json needs an https homepage; without it fpm fails '
+        + 'with "Please specify project homepage" and the .deb is never produced.');
+
+    // 3. The default deb artifact name interpolates the package name and
+    //    therefore contained a SLASH, so electron-builder wrote
+    //    dist/@xchain-wallet/desktop_<v>_amd64.deb - into a subdirectory
+    //    that publish.sh and expected-artifacts.txt never look in. That
+    //    loses the artifact quietly rather than failing the release.
+    const debName = config.deb && config.deb.artifactName;
+    assert.ok(typeof debName === 'string' && debName.length > 0,
+        'deb.artifactName must be pinned; the default embeds the scoped package name.');
+    assert.ok(!/[/\s]/.test(debName),
+        `deb.artifactName "${debName}" must contain no slash and no whitespace: a slash `
+        + 'writes the package into a subdirectory nothing enumerates.');
+}
+
 assert.ok(Array.isArray(config.publish), 'publish config is an array');
 assert.equal(config.publish[0].provider, 'generic', 'electron-updater generic provider');
 assert.match(

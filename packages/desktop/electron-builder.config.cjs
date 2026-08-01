@@ -176,6 +176,12 @@ const config = {
     productName: 'XChain Wallet',
     copyright: 'Copyright © Dankest, LLC',
 
+    // NOTE: the `homepage` the .deb lane requires is NOT settable here.
+    // v26's schema sets additionalProperties:false at the root and
+    // rejects it outright ("configuration has an unknown property
+    // 'homepage'"), which is the good failure mode. It is app METADATA,
+    // so it lives in packages/desktop/package.json; see the comment there.
+
     // Explicit asar: reduces startup I/O + lets electron-builder
     // write deterministic archive entries. Native modules (none right
     // now: WebHID + Trezor Connect are pure JS) would need
@@ -330,6 +336,26 @@ const config = {
 
     // --- Linux ---------------------------------------------------------
     linux: {
+        // WITHOUT THIS THE ENTIRE LINUX LANE FAILS TO BUILD, and it had
+        // never been noticed because the lane had never been run: CI is
+        // not configured yet, and the reproduce container uses `--dir`,
+        // which packages nothing and so never reaches this code path.
+        //
+        // electron-builder derives the Linux executable name from the
+        // package.json `name` (appInfo.linuxPackageName), not from
+        // productName. Ours is `@xchain-wallet/desktop`, which sanitizes
+        // to `@xchain-walletdesktop`, and the AppImage builder rejects it:
+        //
+        //   ⨯ failed to build AppImage  error=executableName contains
+        //     characters that cannot be safely used in file paths:
+        //     @xchain-walletdesktop
+        //
+        // Both arches, hard failure, so no .AppImage is produced at all -
+        // and `*.AppImage` is a REQUIRED row in expected-artifacts.txt.
+        // `@` is equally illegal in a Debian package name, so the .deb was
+        // on the same path. Pinned explicitly here rather than left to a
+        // default that reads the npm scope of a private workspace package.
+        executableName: 'xchain-wallet',
         target: isStaging ? UPDATE_CAPABLE_TARGET.linux : [
             { target: 'AppImage', arch: ARCHES },
             { target: 'deb', arch: ARCHES },
@@ -343,11 +369,47 @@ const config = {
                 + 'Trezor via WebHID), and the full XChain action surface.',
     },
     appImage: {
-        // Make the AppImage's squashfs entries reproducible. mksquashfs
-        // honours SOURCE_DATE_EPOCH when invoked by electron-builder,
-        // so setting the env var is enough.
+        // THIS COMMENT USED TO SAY setting SOURCE_DATE_EPOCH was enough to
+        // make the AppImage reproducible. MEASURED 2026-08-01, it is not.
+        //
+        // Two packaged builds of the same commit, same epoch, same
+        // container produce byte-DIFFERENT AppImages on both arches, while
+        // the .deb files from those same runs are byte-identical. Reading
+        // the AppImage's squashfs superblock (validated: v4.0, offset
+        // 188392, block_size 131072) shows why:
+        //
+        //   mkfs_time         = 1785618191  (build wall clock)
+        //   SOURCE_DATE_EPOCH = 1785601315  (the commit's author date)
+        //
+        // So the superblock timestamp is written from the clock regardless
+        // of the env var. That is at least one cause; whether it is the
+        // only one is not established, because patching 4 bytes after the
+        // fact would desync the embedded block map electron-builder writes
+        // over the finished image.
+        //
+        // Consequence, and it is the whole of  DD7: the .deb can be
+        // verified byte-for-byte against what we publish, and the AppImage
+        // cannot. Do not restore the old claim without a measurement.
     },
     deb: {
+        // The default artifact name is `${name}_${version}_${arch}.${ext}`
+        // and `${name}` is the package.json name, `@xchain-wallet/desktop`.
+        // That is not a cosmetic problem: it contains a SLASH, so
+        // electron-builder was writing to
+        // `dist/@xchain-wallet/desktop_0.333.1_amd64.deb` - a file in a
+        // subdirectory nothing looks in. `publish.sh` enumerates the
+        // staging directory and `expected-artifacts.txt` matches basenames,
+        // so the .deb would have gone missing from the release rather than
+        // failed it. Debian's own rules also forbid `@` and uppercase in a
+        // package name, so the default was invalid twice over.
+        //
+        // Pinned to the Debian convention: <name>_<version>_<arch>.deb.
+        // NOTE this does NOT settle §7.1's open artifactName question for
+        // the other targets: the AppImage, dmg, exe and zips still carry
+        // `${productName}` and therefore a SPACE, and that remains the
+        // operator's call. This is only the target whose default name was
+        // structurally broken.
+        artifactName: 'xchain-wallet_${version}_${arch}.${ext}',
         // Pin compression + omit non-deterministic build fields.
         // fpm (which electron-builder invokes) respects SOURCE_DATE_EPOCH
         // for ar-archive mtimes.

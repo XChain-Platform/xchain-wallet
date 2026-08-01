@@ -3,6 +3,8 @@
     "version": "0.333.1",
     "license": "AGPL-3.0-or-later",
     "private": true,
+    "_homepageNote": "REQUIRED BY THE .deb LANE, not decoration. fpm refuses to build without a homepage and electron-builder surfaces it as a hard failure ('Please specify project homepage'), so with this unset the Linux lane cannot produce *.deb - a REQUIRED row in tools/release/expected-artifacts.txt. It must live here rather than in electron-builder.config.cjs, whose v26 schema rejects a root 'homepage' key. Product site, not the company site the root package.json carries, because this is the URL a Debian user reads out of the installed package's metadata.",
+    "homepage": "https://xchain.io",
     "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux) - Phase 2 §40.12: main-process signing isolation (§9.3.2), OS keychain auto-unlock, WebHID hardware signer pairing, electron-builder packaging with Level-2 reproducible pre-signing artifacts (§51), URI scheme registration, and electron-updater wiring.",
     "main": "./main/index.js",
     "type": "module",
