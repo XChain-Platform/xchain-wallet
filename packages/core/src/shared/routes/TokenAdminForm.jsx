@@ -1325,13 +1325,36 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
+            {/*
+              * D-165: the typed confirmation for a LOCK, on the path a normal
+              * wallet actually takes. It used to live only in the legacy
+              * review stage below, which `singleEncode = !isWatcherMode`
+              * renders for watcher wallets and nobody else - so 's
+              * confirm-page slice left the wallet's one irreversible action
+              * (every flag here is a one-way switch) behind a checkbox and a
+              * single click, while lesser and reversible actions kept their
+              * typed gates. Rendered only for `singleEncode` so each path has
+              * exactly one gate rather than two.
+              */}
+            {mode === 'lock' && singleEncode && !allLocksSet ? (
+                <Input
+                    label="Type LOCK to confirm"
+                    hint="Locking is permanent. Every flag checked above can never be unlocked."
+                    value={typedConfirm}
+                    onChange={(e) => setTypedConfirm(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            ) : null}
+
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
             <div className={styles.actions}>
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant={mode === 'lock' ? 'danger' : 'primary'}
                     block
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !ticker
@@ -1341,6 +1364,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
                         || (mode === 'access-lists' && !listsChanged)
                         || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
+                        || (mode === 'lock' && singleEncode && !typedConfirmOk)
                         || actionConfirm.composing}
                 >
                     {singleEncode ? 'Update token' : 'Preview'}

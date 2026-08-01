@@ -37,7 +37,7 @@ const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'descri
  * POV with balance hero + send/receive). The single goal here is to
  * surface every capability §40.5 grants the issuer:
  *
- *   - Mint additional supply              (hidden when supply is locked)
+ *   - Mint additional supply              (hidden only when LOCK_MINT is set; D-166)
  *   - Mint settings                       (edit ISSUE v2 mint-config fields; PC-01)
  *   - Destroy supply (burn)
  *   - Lock supply                         (hidden when already locked)
@@ -124,9 +124,9 @@ export function ManageToken({
     // PC-02 lock matrix: the Lock action itself stays reachable as long
     // as at least one of the seven independent ISSUE v3 locks is still
     // open, unlike the coarse `locked` flag above (a subset of four,
-    // used only for the hero pill / Mint's hiding). Every flag is
-    // one-way (see TokenAdminForm's LOCK_FLAGS), so once all seven are
-    // set there is nothing left for the Lock form to offer.
+    // used only for the hero pill now that D-166 moved Mint onto LOCK_MINT).
+    // Every flag is one-way (see TokenAdminForm's LOCK_FLAGS), so once all
+    // seven are set there is nothing left for the Lock form to offer.
     const tokenLocks = assetInfo?.locks || {};
     const allLocksSet = LOCK_FLAG_KEYS.every((k) => !!tokenLocks[k]);
     const totalSupply = assetInfo?.totalSupply ?? null;
@@ -429,7 +429,16 @@ export function ManageToken({
     const blockIssuerActions = isOwner === false;
     /** @type {Array<{ id: string, label: string, Icon: any, onSelect: (() => void) | undefined, danger?: boolean }>} */
     const actions = [
-        { id: 'mint', label: 'Mint', Icon: Icon.PrinterIcon, onSelect: (locked || blockIssuerActions) ? undefined : onMint },
+        // D-166: gated on the flag that actually forbids a MINT, not on the
+        // coarse `locked` pill. That pill is an OR over description /
+        // max_supply / mint / mint_supply, and only one of those stops the
+        // MINT command: `mint.js` consults LOCK_MINT and nothing else here.
+        // LOCK_MAX_SUPPLY freezes the CAP while leaving every unit under it
+        // mintable, LOCK_MINT_SUPPLY covers mint-now-via-token-update, and
+        // LOCK_DESCRIPTION is metadata. Measured on chain: an edition with
+        // 90 of 100 unminted and its description frozen quotes MINT `valid`,
+        // while this page offered no way to do it.
+        { id: 'mint', label: 'Mint', Icon: Icon.PrinterIcon, onSelect: (tokenLocks.mint || blockIssuerActions) ? undefined : onMint },
         // Unlike Mint (which submits a MINT command and is hidden once
         // supply is locked), Mint settings edits ISSUE v2's own config
         // fields and stays reachable regardless of the coarse `locked`
