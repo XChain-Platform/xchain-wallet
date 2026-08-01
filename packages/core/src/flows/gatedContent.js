@@ -22,6 +22,7 @@
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
 import { exportPrivateKey } from './exportPrivateKey.js';
+import { inflateGatedPlaintext, resolveGatedCompression } from './payloadCompression.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import {
     getDemoGatedGroupsForTick,
@@ -138,7 +139,7 @@ export async function scanGatedKeyHandoffs({ sdk, address, wif, opts }) {
  * }} params
  * @returns {Promise<Uint8Array>} decrypted plaintext bytes
  */
-export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash }) {
+export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash, compression = null }) {
     if (!sdk) throw new Error('unlockGatedFile: sdk is required');
     if (!address) throw new Error('unlockGatedFile: address is required');
     if (!actionIndex) throw new Error('unlockGatedFile: actionIndex is required');
@@ -169,7 +170,18 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash 
     }
 
     // Decrypt. GCM auth tag mismatch surfaces as a typed SDK error.
-    const plaintext = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+    const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+
+    // Inflate AFTER decrypt ( spec §5.4). Gated payloads are compressed
+    // before encryption, so this is the only place the original bytes can be
+    // recovered: the serving layer holds no key and never inflates ciphertext.
+    // Fail-closed: an invalid stream or a tripped ratio guard yields the
+    // decrypted bytes as stored-form, never partial output and never a throw.
+    const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
+    const result = await inflateGatedPlaintext(decrypted, declared);
+    const plaintext = Buffer.from(result.bytes);
+
+    // Cache the FINAL bytes so a repeat unlock neither re-inflates nor re-probes.
     PT_CACHE.set(ptKey(address, actionIndex), plaintext);
     return plaintext;
 }
@@ -277,6 +289,7 @@ export async function unlockGatedFileForAddress({
     keyHash,
     gateTicker,
     chainId,
+    compression = null,
 }) {
     if (!actionIndex) throw new Error('unlockGatedFileForAddress: actionIndex is required');
     if (!keyHash) throw new Error('unlockGatedFileForAddress: keyHash is required');
@@ -321,7 +334,11 @@ export async function unlockGatedFileForAddress({
                         err.code = 'GATED_FILE_NOT_FOUND';
                         throw err;
                     }
-                    plaintext = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+                    const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+                    // Inflate-after-decrypt, same rule as unlockGatedFile (§5.4).
+                    const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
+                    const inflatedResult = await inflateGatedPlaintext(decrypted, declared);
+                    plaintext = Buffer.from(inflatedResult.bytes);
                     PT_CACHE.set(ptKey(cacheAddr, actionIndex), plaintext);
                 }
                 return {
