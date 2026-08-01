@@ -66,10 +66,65 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
+      lockfile-sha256: ${{ steps.lockfile.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      #  §8, tag control. The remotes are shared with a second coder,
+      # so "can push a tag" must not equal "can start the signing machinery".
+      # The repository ruleset restricting `v*` creation is the first half
+      # and lives in repo settings (docs/Release_CI_Setup.md); this is the
+      # half that lives in the repo, and it is the ONLY release control
+      # independent of the maintainer's GitHub account. Under D6 (single
+      # maintainer) the environment approval comes from the same account
+      # that pushed the tag, so without this signature the account is a
+      # single point of total compromise.
+      #
+      # Ships EMPTY and fails closed, the same posture as the pinned update
+      # key in  S5: until the ceremony (stage A) puts a real key here,
+      # no release can run at all. That is deliberate. A gate that defaults
+      # to "allow" when unconfigured is not a gate.
+      - name: Tag must be GPG-signed by the release maintainer
+        run: |
+          set -euo pipefail
+          KEY="tools/release/tag-signing-key.asc"
+          FPR_FILE="tools/release/tag-signing-fingerprint.txt"
+
+          EXPECTED="$(tr -d ' \n' < "$FPR_FILE" || true)"
+
+          # A real fingerprint or nothing. The placeholder reads UNPINNED,
+          # and anything else malformed is treated the same way: refuse.
+          if ! printf '%s' "$EXPECTED" | grep -qE '^[0-9A-Fa-f]{40}$'; then
+            echo "::error::tag-signing key is not pinned yet"
+            echo "  $FPR_FILE reads '${EXPECTED}', not a 40-hex fingerprint."
+            echo "  Populate it and $KEY from the key ceremony before cutting"
+            echo "  a release. Failing closed: an unverified tag must not reach"
+            echo "  a signing lane."
+            exit 1
+          fi
+          gpg --batch --import "$KEY"
+          # Trust the pinned key ultimately so `verify-tag` does not fail on
+          # the web-of-trust rather than on the signature itself.
+          echo "${EXPECTED}:6:" | gpg --batch --import-ownertrust
+
+          if ! git verify-tag --raw "${GITHUB_REF_NAME}" 2>verify.txt; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not signed by a key we trust"
+            sed 's/^/  /' verify.txt
+            exit 1
+          fi
+
+          # `git verify-tag` succeeding is not enough: it passes for ANY key
+          # in the keyring. Bind it to the pinned fingerprint explicitly.
+          if ! grep -q "VALIDSIG ${EXPECTED}" verify.txt; then
+            echo "::error::tag ${GITHUB_REF_NAME} is signed, but not by the pinned key"
+            echo "  expected fingerprint: ${EXPECTED}"
+            sed 's/^/  /' verify.txt
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} verified against ${EXPECTED}"
+
       - name: Tag must match the committed version
         id: check
         run: |
@@ -84,6 +139,18 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building ${VERSION} at $(git rev-parse HEAD)"
+
+      # §8: "whatever the runner resolves is what gets signed with K3/K6 and
+      # shipped to the fleet", so the resolved dep tree is identified in the
+      # run's own output. Every lane installs --frozen-lockfile, so this one
+      # hash describes all of them.
+      - name: Record the lockfile hash
+        id: lockfile
+        run: |
+          set -euo pipefail
+          SHA="$(sha256sum pnpm-lock.yaml | cut -d' ' -f1)"
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "pnpm-lock.yaml sha256=${SHA}"
 
   # The unsigned lanes. These are the artifacts K1's manifest launders
   # into trust (§5 "Artifact provenance"), which is exactly why the run
@@ -147,6 +214,13 @@ jobs:
   desktop-linux:
     needs: verify-tag
     runs-on: ubuntu-latest
+    env:
+      # Read into a job env var so step-level `if:` can test it. §7.5: ONE
+      # stable non-guessable path, shared across releases, because each
+      # release's rehearsal build has it baked in and the NEXT release's
+      # rehearsal needs that build to find the new staging pointer. Rotating
+      # it per release would orphan the chain.
+      STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -163,16 +237,63 @@ jobs:
       - name: Dev-mock gate
         run: bash tools/build-reproduce/check-no-dev-mock.sh
       # Blockmaps are delta-update metadata and differential updates are a
-      # non-goal (§7). Dropped here so they never reach the staging dir,
-      # where expected-artifacts.txt would refuse them.
-      - name: Drop delta metadata
-        run: rm -f packages/desktop/dist/*.blockmap
+      # non-goal (§7). builder-debug.yml is electron-builder's own dump; it
+      # shares the extension with the channel pointers and must not be
+      # mistaken for one, or shipped. Both dropped here so they never reach
+      # the staging dir, where expected-artifacts.txt would refuse them.
+      - name: Drop delta metadata and build byproducts
+        run: rm -f packages/desktop/dist/*.blockmap packages/desktop/dist/builder-debug.yml
+      # Expected URL + channel come from the builder config, not from a
+      # literal here: this workflow must never name the feed (see the
+      # no-publish guard in test/smoke/audits/release-ci.smoke.js).
+      - name: Assert the packaged feed config ( §7.5)
+        run: node tools/release/update-info.mjs assert-feed packages/desktop/dist
+             --from-config packages/desktop/electron-builder.config.cjs
+      # The `*.yml` line is the channel pointers (stable-linux.yml and
+      # stable-linux-arm64.yml). Without it the lane uploads binaries that
+      # nothing ever points at: the release publishes clean and no
+      # installed wallet is ever offered it. Arch-suffixed names are why
+      # this is a glob and why publish.sh regenerates the list from disk.
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-linux
           path: |
             packages/desktop/dist/*.AppImage
             packages/desktop/dist/*.deb
+            packages/desktop/dist/*.yml
+          if-no-files-found: error
+
+      # ---- §7.5 rehearsal variant -------------------------------------
+      #
+      # AppImage only: it is the one Linux format electron-updater can
+      # actually swap in place, and a staging variant of a format with no
+      # auto-update path exercises nothing. Builds to `dist-staging`
+      # (selected by the config off XCHAIN_STAGING_FEED_URL) because
+      # electron-builder names artifacts by VERSION, not channel: a staging
+      # AppImage and a prod AppImage are byte-different twins under the same
+      # filename, and sharing a directory would let one be signed and
+      # published as the other.
+      #
+      # Uploaded under its own artifact name and NEVER into the release
+      # staging directory, so it cannot reach RELEASE_HASHES or the feed.
+      - name: Build the rehearsal variant (staging feed)
+        if: env.STAGING_FEED != ''
+        env:
+          XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+        run: pnpm -C packages/desktop dist -- --linux --x64 --arm64
+      - name: Assert the rehearsal variant points at STAGING
+        if: env.STAGING_FEED != ''
+        env:
+          XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+        run: node tools/release/update-info.mjs assert-feed packages/desktop/dist-staging
+             --from-config packages/desktop/electron-builder.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: env.STAGING_FEED != ''
+        with:
+          name: desktop-linux-rehearsal
+          path: |
+            packages/desktop/dist-staging/*.AppImage
+            packages/desktop/dist-staging/*.yml
           if-no-files-found: error
 
   # ---- Signing lanes -------------------------------------------------
@@ -187,6 +308,8 @@ jobs:
     needs: verify-tag
     runs-on: macos-latest
     environment: release-signing
+    env:
+      STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -210,20 +333,63 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm -C packages/desktop dist -- --mac --x64 --arm64
-      - name: Drop delta metadata
-        run: rm -f packages/desktop/dist/*.blockmap
+      - name: Drop delta metadata and build byproducts
+        run: rm -f packages/desktop/dist/*.blockmap packages/desktop/dist/builder-debug.yml
+      # Expected URL + channel come from the builder config, not from a
+      # literal here: this workflow must never name the feed (see the
+      # no-publish guard in test/smoke/audits/release-ci.smoke.js).
+      - name: Assert the packaged feed config ( §7.5)
+        run: node tools/release/update-info.mjs assert-feed packages/desktop/dist
+             --from-config packages/desktop/electron-builder.config.cjs
+      # `*.yml` is the channel pointer: stable-mac.yml, one file covering
+      # both arches. See the linux lane for why it is not optional.
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-macos
           path: |
             packages/desktop/dist/*.dmg
             packages/desktop/dist/*mac*.zip
+            packages/desktop/dist/*.yml
+          if-no-files-found: error
+
+      # ---- §7.5 rehearsal variant -------------------------------------
+      #
+      # zip only: on macOS electron-updater swaps the ZIP, never the dmg,
+      # so a staging dmg would rehearse nothing. Signed and notarized with
+      # the same identity as the real build, because the publisher-match
+      # half of the update chain is exactly what the rehearsal is for.
+      - name: Build the rehearsal variant (staging feed)
+        if: env.STAGING_FEED != ''
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+        run: pnpm -C packages/desktop dist -- --mac --x64 --arm64
+      - name: Assert the rehearsal variant points at STAGING
+        if: env.STAGING_FEED != ''
+        env:
+          XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+        run: node tools/release/update-info.mjs assert-feed packages/desktop/dist-staging
+             --from-config packages/desktop/electron-builder.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: env.STAGING_FEED != ''
+        with:
+          name: desktop-macos-rehearsal
+          path: |
+            packages/desktop/dist-staging/*mac*.zip
+            packages/desktop/dist-staging/*.yml
           if-no-files-found: error
 
   desktop-windows:
     needs: verify-tag
     runs-on: windows-latest
     environment: release-signing
+    env:
+      STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -233,26 +399,84 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # This lane had no SOURCE_DATE_EPOCH pin while linux and macOS both
+      # did, so Windows artifacts embedded the build time and could never
+      # reproduce. Reproducibility is per-artifact: two green lanes and one
+      # unpinned one is not "mostly reproducible", it is a Windows build
+      # nobody can check.
+      - name: Pin SOURCE_DATE_EPOCH to the tag commit
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
       # D3 = Azure Trusted Signing: cloud signing, no hardware token, so
       # this lane can run on a hosted runner at all. An EV cert on a
       # dongle could not.
       - name: Build and sign (Windows x64 + arm64)
         env:
+          # AZURE_TENANT_ID / CLIENT_ID / CLIENT_SECRET are read by the
+          # Azure SDK itself, not by electron-builder.config.cjs.
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # The remaining three are config values. `endpoint` is REQUIRED by
+          # the v26 azureSignOptions type and is region-specific, so it
+          # cannot be defaulted; without it the config falls back to the
+          # classic-cert path and the lane would produce UNSIGNED artifacts
+          # while looking like it was configured for Azure.
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
         run: pnpm -C packages/desktop dist -- --win --x64 --arm64
-      - name: Drop delta metadata
+      - name: Drop delta metadata and build byproducts
         shell: bash
-        run: rm -f packages/desktop/dist/*.blockmap
+        run: rm -f packages/desktop/dist/*.blockmap packages/desktop/dist/builder-debug.yml
+      # Expected URL + channel come from the builder config, not from a
+      # literal here: this workflow must never name the feed (see the
+      # no-publish guard in test/smoke/audits/release-ci.smoke.js).
+      - name: Assert the packaged feed config ( §7.5)
+        shell: bash
+        run: node tools/release/update-info.mjs assert-feed packages/desktop/dist
+             --from-config packages/desktop/electron-builder.config.cjs
+      # `*.yml` is the channel pointer: stable.yml, with no OS suffix on
+      # Windows and both arches in the one file. See the linux lane.
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-windows
           path: |
             packages/desktop/dist/*.exe
             packages/desktop/dist/*win*.zip
+            packages/desktop/dist/*.yml
+          if-no-files-found: error
+
+      # ---- §7.5 rehearsal variant -------------------------------------
+      #
+      # nsis only: the zip has no auto-update path on Windows. Signed with
+      # the same identity, since electron-updater's publisher-match check is
+      # half of what the rehearsal exists to exercise.
+      - name: Build the rehearsal variant (staging feed)
+        if: env.STAGING_FEED != ''
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+        run: pnpm -C packages/desktop dist -- --win --x64 --arm64
+      - name: Assert the rehearsal variant points at STAGING
+        if: env.STAGING_FEED != ''
+        shell: bash
+        env:
+          XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+        run: node tools/release/update-info.mjs assert-feed packages/desktop/dist-staging
+             --from-config packages/desktop/electron-builder.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: env.STAGING_FEED != ''
+        with:
+          name: desktop-windows-rehearsal
+          path: |
+            packages/desktop/dist-staging/*.exe
+            packages/desktop/dist-staging/*.yml
           if-no-files-found: error
 
   # Tells the maintainer, in the run's own output, exactly what §6 asks
@@ -273,6 +497,11 @@ jobs:
             echo "| Workflow run ID | \`${{ github.run_id }}\` |"
             echo "| Run head SHA | \`${{ github.sha }}\` |"
             echo "| Tag | \`${{ github.ref_name }}\` |"
+            echo "| pnpm-lock.yaml sha256 | \`${{ needs.verify-tag.outputs.lockfile-sha256 }}\` |"
+            echo
+            echo "The lockfile hash is here because whatever the runners resolved"
+            echo "is what got signed and shipped (§8). It is part of the record,"
+            echo "not decoration."
             echo
             echo "### Next, on the release machine (not here)"
             echo
@@ -280,6 +509,10 @@ jobs:
             echo "2. Download the artifacts from THIS run id and no other."
             echo "3. Reproduce-check linux desktop + extension + web from a pristine tag clone."
             echo "4. Stage them and run \`pnpm release:sign\`. K1 lives only on that machine."
+            echo "5. Rehearse the update (§7.5) against the STAGING feed using the"
+            echo "   \`*-rehearsal\` artifacts from this run, and only then publish."
+            echo "   No release's channel pointer goes to the live feed before its"
+            echo "   rehearsal passes."
             echo
             echo "Nothing has been published. No store has been submitted."
           } >> "$GITHUB_STEP_SUMMARY"

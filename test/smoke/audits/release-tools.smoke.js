@@ -58,7 +58,7 @@ for (const p of ['tools/release/sign.sh', 'tools/release/verify.sh',
 // binary it names, and a web release unpacked over the running site.
 const publishSrc = read('tools/release/publish.sh');
 assert.ok(/channel pointer, last|LAST/.test(publishSrc),
-    'publish.sh uploads latest*.yml last');
+    'publish.sh uploads the channel pointers last');
 assert.ok(/already published/.test(publishSrc),
     'publish.sh refuses to overwrite a published version');
 assert.ok(/verify\.sh/.test(publishSrc),
@@ -111,10 +111,23 @@ for (const [name, src] of [['sign.sh', signSrc], ['verify.sh', verifySrc]]) {
 assert.ok(/XCHAIN_RELEASE_GPG_KEY/.test(signSrc), 'sign.sh references the GPG key env var');
 assert.ok(/G180/.test(signSrc), 'sign.sh cites G180 in its diagnostic');
 assert.ok(/RELEASE_HASHES\.txt\.asc/.test(signSrc), 'sign.sh writes the .asc detached signature');
-assert.ok(/find \. -maxdepth 1 -type f/.test(libSrc), 'lib.sh hashes top-level files only');
-assert.ok(/LC_ALL=C sort/.test(libSrc), 'lib.sh sorts deterministically for reproducibility');
-assert.ok(/! -name 'latest\*\.yml'/.test(libSrc),
-    'lib.sh excludes the mutable latest*.yml channel pointers from the manifest');
+//  §7.1. lib.sh no longer decides which files are channel pointers;
+// it asks update-info.mjs, so that sign.sh and publish.sh cannot drift into
+// two different answers. Pinned because the previous answer - a
+// `latest*.yml` name glob - matched nothing at channel `stable` and broke
+// signing and publishing at once, silently.
+assert.ok(/update-info\.mjs/.test(libSrc),
+    'lib.sh delegates the artifact/pointer split to update-info.mjs');
+assert.ok(!/-name\s+'latest\*\.yml'/.test(libSrc),
+    'lib.sh no longer globs for latest*.yml, which matches nothing at channel stable');
+assert.ok(/xr_list_update_info/.test(libSrc),
+    'lib.sh exposes the channel-pointer list publish.sh uploads last');
+
+const publishSrcOrder = read('tools/release/publish.sh');
+assert.ok(/\. "\$HERE\/lib\.sh"/.test(publishSrcOrder),
+    'publish.sh sources lib.sh, so its split is the one sign.sh hashed');
+assert.ok(/no channel pointers in/.test(publishSrcOrder),
+    'publish.sh refuses a release with no channel pointer (invisible to every install)');
 assert.ok(/gpg --verify/.test(verifySrc), 'verify.sh runs gpg --verify');
 assert.ok(/--no-sig/.test(verifySrc) && /--recompute/.test(verifySrc),
     'verify.sh accepts --no-sig and --recompute');
@@ -152,7 +165,12 @@ try {
     const repo = join(work, 'repo');
     mkdirSync(join(repo, 'tools', 'release'), { recursive: true });
     mkdirSync(join(repo, 'tools', 'build-reproduce'), { recursive: true });
-    for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt']) {
+    // update-info.mjs is in this list because lib.sh calls it to decide
+    // what is an artifact and what is a channel pointer. Leave it out and
+    // sign.sh reports a completely empty artifact set, which reads as a
+    // staging problem rather than a missing file.
+    for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt',
+        'update-info.mjs']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     cpSync(join(root, 'tools/build-reproduce/check-no-dev-mock.sh'),
@@ -175,9 +193,25 @@ try {
             writeFileSync(join(dir, name), `bytes of ${name}\n`);
         }
         for (const name of extra) writeFileSync(join(dir, name), 'extra\n');
-        // Channel pointers: present in a real feed dir, never in the manifest.
-        writeFileSync(join(dir, 'latest.yml'), 'version: 9.9.9\n');
-        writeFileSync(join(dir, 'latest-mac.yml'), 'version: 9.9.9\n');
+        // Channel pointers: present in a real staging dir, never in the
+        // manifest. Real names and real SHAPE, both load-bearing. The
+        // names because our channel is `stable`, so `latest*.yml` is not
+        // what a build emits ( §7.1); the shape because the split
+        // is decided on content, and a stub reading `version: 9.9.9`
+        // alone would be classified as an artifact and hard-fail the
+        // expected-artifacts gate - which is exactly what this fixture
+        // used to assert was fine.
+        for (const name of ['stable.yml', 'stable-mac.yml', 'stable-linux.yml',
+            'stable-linux-arm64.yml']) {
+            writeFileSync(join(dir, name),
+                'version: 9.9.9\n'
+                + 'files:\n'
+                + '  - url: XChain Wallet-9.9.9.dmg\n'
+                + '    sha512: ZmFrZQ==\n'
+                + 'path: XChain Wallet-9.9.9.dmg\n'
+                + 'sha512: ZmFrZQ==\n'
+                + "releaseDate: '2026-07-31T00:00:00.000Z'\n");
+        }
         return dir;
     };
 
@@ -347,7 +381,7 @@ try {
         check('manifest header counts the artifacts',
             header.artifacts === String(ARTIFACTS.length), JSON.stringify(header));
         check('manifest excludes the mutable channel pointers',
-            !/latest(-mac)?\.yml/.test(manifest), manifest);
+            !/stable(-mac|-linux|-linux-arm64)?\.yml/.test(manifest), manifest);
         check('manifest covers every staged artifact',
             ARTIFACTS.every((a) => manifest.includes(`./${a}`)), manifest);
         check('signature file was written', existsSync(`${manifestPath}.asc`));

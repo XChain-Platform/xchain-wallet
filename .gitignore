@@ -1,9 +1,17 @@
 /node_modules
 /packages/*/node_modules
 /packages/*/dist
+#  §7.5 rehearsal output. Listed separately because `/packages/*/dist`
+# does NOT match `dist-staging`, and these are SIGNED binaries pointed at a
+# non-public feed: exactly the thing not to commit by accident.
+/packages/*/dist-staging
 /packages/*/build
 /packages/*/coverage
 /packages/desktop/renderer/dist
+# The Capacitor webDir: a verbatim copy of packages/web/dist staged by
+# packages/mobile/scripts/build.js. Generated, and committing it would create a
+# second copy of the SPA that could drift from the one the web shell ships.
+/packages/mobile/www
 /test/e2e/node_modules
 
 # electron-builder buildResources dir - tracked (entitlements + icon

@@ -2,13 +2,55 @@ packages:
   - 'packages/*'
   - 'test/e2e'
 
+# WHY THIS FILE DUPLICATES package.json's `pnpm` BLOCK.
+#
+# pnpm moved these settings between two homes. pnpm 9 (the version pinned
+# in `packageManager`) reads `pnpm.*` from the root package.json and
+# IGNORES the blocks below. pnpm 10 does the reverse: it reads these and
+# warns that "the pnpm field in package.json is no longer read".
+#
+# Neither errors on the one it ignores. So while the two disagree, the
+# effective configuration flips silently the day anyone bumps pnpm. That
+# is not hypothetical: pnpm-lock.yaml's own `overrides:` block records
+# package.json's values verbatim, which is how it was proven that the
+# package.json copy is the live one today ( stage 3).
+#
+# Both copies must therefore stay IDENTICAL, and
+# test/smoke/audits/pnpm-config-parity.smoke.js fails the build if they
+# drift. Change one, change the other, in the same commit.
+
+# Security pins on transitive dependencies. Kept at `^` rather than `>=`:
+# an uncapped `>=4.0.6` permits a future 5.x major to be pulled in
+# silently, which is the opposite of what a pin is for.
 overrides:
-  tar: '>=7.5.7'
-  ws: '>=8.20.1'
+  tar: ^7.5.7
+  ws: ^8.20.1
   brace-expansion@1: ^1.1.15
   brace-expansion@2: ^2.1.1
   brace-expansion@5: ^5.0.6
   vite: '>=6.4.3 <7'
-  protobufjs: '>=7.5.8'
-  form-data: '>=4.0.6'
+  protobufjs: ^7.5.8
+  form-data: ^4.0.6
   '@tootallnate/once': ^2.0.1
+  axios: ^1.16.1
+
+#  §8: "lifecycle scripts disabled or allowlisted". This is the
+# allowlist. Anything NOT named here has its preinstall/install/postinstall
+# blocked, so a newly-added or compromised transitive dependency cannot run
+# arbitrary code at install time on a release runner.
+#
+# Every entry earns its place by needing to fetch or build a binary:
+#   electron            downloads the Electron runtime
+#   esbuild             downloads its platform binary (vite depends on it)
+#   electron-winstaller selects a 7z build for the host arch
+#   sharp               checks/builds its image bindings
+#   tiny-secp256k1      builds its secp256k1 bindings
+#
+# Adding to this list is a supply-chain decision, not a build fix. If a
+# dependency starts demanding a build script, ask why before listing it.
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - esbuild
+  - sharp
+  - tiny-secp256k1

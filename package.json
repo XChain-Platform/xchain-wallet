@@ -58,7 +58,14 @@
             "@tootallnate/once": "^2.0.1",
             "axios": "^1.16.1",
             "form-data": "^4.0.6"
-        }
+        },
+        "onlyBuiltDependencies": [
+            "electron",
+            "electron-winstaller",
+            "esbuild",
+            "sharp",
+            "tiny-secp256k1"
+        ]
     },
     "devDependencies": {
         "@babel/parser": "^7.29.2",

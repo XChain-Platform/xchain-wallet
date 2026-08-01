@@ -96,7 +96,8 @@ Verifies the maintainer's GPG signature over the release manifest
 (`packages/desktop/main/updateVerify.js`).
 
 This is a real dependency in a wallet, so the reason has to be worth
-it. electron-updater checks a SHA512 from `latest*.yml`, which is
+it. electron-updater checks a SHA512 from the channel pointer
+(`stable-linux.yml` and friends), which is
 served by the same host as the binary, so it is a checksum from the
 party that served the file rather than a signature. On Windows and
 macOS the OS code-signature check is a genuine second factor; on Linux

@@ -23,7 +23,7 @@
 // The threat this is written against, stated once so every case below
 // has a point: an attacker who owns downloads.xchain.io, or the
 // Cloudflare account in front of it, can serve any binary they like
-// AND a matching SHA512 in latest*.yml, because the yml is a checksum
+// AND a matching SHA512 in the channel pointer, because the yml is a checksum
 // from the same party that served the file. On Windows and macOS the OS
 // signature check catches that. On Linux nothing did.
 //

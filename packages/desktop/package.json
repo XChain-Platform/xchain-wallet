@@ -30,7 +30,8 @@
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
         "electron": "^41.3.0",
-        "electron-builder": "^25.1.0",
+        "electron-builder": "^26.15.7",
+        "electron-builder-squirrel-windows": "^26.15.7",
         "vite": "^6.4.3"
     }
 }

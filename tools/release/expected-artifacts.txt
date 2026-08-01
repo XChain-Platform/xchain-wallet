@@ -17,8 +17,12 @@
 #   failure. That is what catches a leftover from the previous version,
 #   a stray build output, or a file someone else put there.
 #
-# `latest*.yml` never appears here: those are electron-updater's mutable
-# channel pointers and are excluded from the manifest entirely (lib.sh).
+# Channel pointers never appear here: they are electron-updater's mutable
+# update-info files and are excluded from the manifest entirely (lib.sh).
+# They are identified by CONTENT, not by name - our channel is `stable`,
+# so the real names are `stable.yml` / `stable-mac.yml` / `stable-linux.yml`
+# / `stable-linux-arm64.yml`, and the old `latest*.yml` glob matched none
+# of them ( §7.1).
 #
 # Blockmaps (`*.blockmap`) are deliberately absent, so staging one is a
 # hard failure. Differential updates are a non-goal ( §7); a
@@ -41,12 +45,17 @@ required  xchain-wallet-web-v*.tar.gz
 required  xchain-wallet-extension-v*.zip
 
 # --- Desktop (electron-builder) -----------------------------------------
-# Extension globs rather than exact names: electron-builder's defaults
-# embed productName ("XChain Wallet", with a space) and the arch suffix
-# varies by target. Pinning an exact per-arch naming convention belongs
-# to the desktop spec ; until it does, these match what the
-# builder actually emits without pretending to a convention that is not
-# configured.
+# Extension globs rather than exact names: electron-builder embeds
+# productName ("XChain Wallet", with a space) in every one.
+#
+# The per-arch naming convention this used to defer to  for is now
+# SET: every macOS and Windows artifact carries its architecture
+# ("-x64" / "-arm64"), because electron-updater selects an artifact by
+# substring-matching `process.arch` against the filename. That is an
+# update-correctness rule, not a cosmetic one; see the DD4 block in
+# packages/desktop/electron-builder.config.cjs. The globs below stay
+# extension-based on purpose, so adding an arch to the matrix does not
+# also require editing this file.
 #
 # All three OS families are required. "One release = all shipped shells"
 # (§2): a tag that produced only the artifacts the release machine could

@@ -11,7 +11,8 @@
 // Update-manifest verification ( S5, decision D5).
 //
 // THE HOLE THIS CLOSES. electron-updater downloads an artifact and
-// checks its SHA512 against `latest*.yml`. On Windows and macOS the OS
+// checks its SHA512 against the channel pointer (`stable-linux.yml` and
+// friends;  §7.1). On Windows and macOS the OS
 // code-signature check is a genuine second factor, so a bad binary is
 // caught even if the feed lies. On Linux there is no such factor: the
 // AppImage is unsigned, and the hash it is checked against is served

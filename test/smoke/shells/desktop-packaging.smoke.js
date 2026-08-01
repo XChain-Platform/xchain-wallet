@@ -106,7 +106,7 @@ for (const rel of [
 
 const config = requireCjs(join(desktop, 'electron-builder.config.cjs'));
 
-assert.equal(config.appId, 'io.xchain.wallet', 'appId is io.xchain.wallet');
+assert.equal(config.appId, 'io.xchain.wallet.desktop', 'appId is io.xchain.wallet.desktop');
 assert.equal(config.productName, 'XChain Wallet', 'productName is XChain Wallet');
 assert.equal(config.asar, true, 'asar packaging enabled');
 assert.equal(config.npmRebuild, false, 'npmRebuild disabled (no native deps)');
@@ -141,11 +141,21 @@ assert.ok(
 );
 
 assert.ok(config.win, 'win target config present');
-assert.equal(config.win.publisherName, 'Dankest, LLC', 'Windows publisherName set');
-assert.ok(
-    config.win.rfc3161TimeStampServer,
-    'Windows RFC 3161 timestamp server pinned (signatures survive cert expiry)',
-);
+
+// electron-builder v26 moved signtool settings into `win.signtoolOptions`
+// ( stage 2). Read from whichever signing block this build selected:
+// with Azure env vars set the config emits `azureSignOptions` instead, and
+// the two are mutually exclusive. Both carry publisherName, because it is
+// what electron-updater matches an update's publisher against.
+const winSigning = config.win.signtoolOptions || config.win.azureSignOptions;
+assert.ok(winSigning, 'a Windows signing block is configured');
+assert.equal(winSigning.publisherName, 'Dankest, LLC', 'Windows publisherName set');
+if (config.win.signtoolOptions) {
+    assert.ok(
+        config.win.signtoolOptions.rfc3161TimeStampServer,
+        'Windows RFC 3161 timestamp server pinned (signatures survive cert expiry)',
+    );
+}
 
 assert.ok(config.linux, 'linux target config present');
 assert.ok(

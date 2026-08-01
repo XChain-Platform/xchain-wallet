@@ -35,9 +35,12 @@ The two mobile names are declared but optional: the Capacitor shells
 are scoped post-v1.0 ( Android,  iOS). They are pinned
 here so both shells cannot invent divergent names later.
 
-`latest*.yml` may sit in the same directory - it is electron-updater's
-mutable channel pointer and is deliberately excluded from the manifest
-(see "Manifest format" below).
+Channel pointers (`stable.yml`, `stable-mac.yml`, `stable-linux.yml`,
+`stable-linux-arm64.yml`) may sit in the same directory - they are
+electron-updater's mutable pointers and are deliberately excluded from
+the manifest (see "Manifest format" below). They are identified by
+content, not by name: our channel is `stable`, so nothing is called
+`latest` ( §7.1).
 
 Build invocation per shell is documented in `CONTRIBUTING.md` →
 "Per-shell builds".
@@ -114,7 +117,7 @@ The authoritative checklist is §6 of
    --tag vX.Y.Z --target <deploy target> --dry-run`, then for real. It
    verifies before uploading, refuses a version that already exists,
    publishes the manifest under its versioned name, and uploads
-   `latest*.yml` last.
+   the channel pointers last.
 5b. `bash tools/release/deploy-web.sh --tarball <the published tarball>
    --tag vX.Y.Z --webroot <webroot>` for the SPA. Deploy the tarball
    that was signed, never a fresh local build.

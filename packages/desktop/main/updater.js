@@ -12,11 +12,26 @@
 //
 // Checks for updates against the URL declared in
 // electron-builder.config.cjs's `publish` block (currently
-// https://downloads.xchain.io/wallet/desktop/). electron-updater fetches
-// `latest.yml` (Windows) / `latest-mac.yml` (macOS) / `latest-linux.yml`
-// (Linux) from that URL, compares against the running version, and if
-// newer, downloads the artifact into the userData dir, verifies
-// the SHA512 from the yml manifest, and swaps it in on next launch.
+// https://downloads.xchain.io/wallet/desktop/).
+//
+// electron-updater fetches the update-info file for its CHANNEL, not a
+// file called "latest". Our channel is `stable`, so the shipped §2
+// matrix is four pointers ( §7.1, names confirmed against a real
+// build 2026-07-31):
+//
+//     stable.yml              Windows, x64 + arm64 in one file
+//     stable-mac.yml          macOS, x64 + arm64 in one file
+//     stable-linux.yml        Linux x64
+//     stable-linux-arm64.yml  Linux arm64 (non-x64 Linux is arch-suffixed)
+//
+// It compares against the running version and, if newer, downloads the
+// artifact into the userData dir, checks the SHA512 from the yml, and
+// swaps it in on next launch. That SHA512 is a checksum from the same
+// host as the binary, which is why `updateVerify.js` exists.
+//
+// Do not reintroduce the name `latest*.yml` here or in the release
+// tooling: at channel `stable` it matches nothing, and everything that
+// went looking for it failed silently rather than loudly.
 //
 // Signing check: electron-updater on Windows + macOS validates that
 // the downloaded artifact is signed with the same publisher as the
@@ -40,6 +55,8 @@
 // accidentally trying to self-update against the prod URL.
 
 import { rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
     fetchReleaseManifest,
@@ -49,6 +66,72 @@ import {
 
 /** Where the signed release manifests live. Matches the publish block. */
 export const UPDATE_FEED_BASE_URL = 'https://downloads.xchain.io/wallet/';
+
+/**
+ * Turn an electron-updater feed URL into the base the signed manifests
+ * live under.
+ *
+ * The feed is `<base>desktop/` (per-OS installers plus channel pointers);
+ * the manifests are `<base>RELEASE_HASHES/<tag>.txt`. One trailing path
+ * segment apart, by the §3 layout.
+ *
+ * @param {string} feedUrl
+ * @returns {string} base URL, trailing slash included
+ */
+export function manifestBaseFromFeedUrl(feedUrl) {
+    const normalised = String(feedUrl ?? '').replace(/\/*$/, '/');
+    return normalised.replace(/desktop\/$/, '');
+}
+
+/**
+ * The manifest base this BUILD should use, read from the `app-update.yml`
+ * electron-builder baked into the bundle.
+ *
+ * WHY NOT THE CONSTANT. §7.5 rehearsal variants are ordinary builds with a
+ * staging feed baked in. electron-updater already follows that baked URL,
+ * but `fetchReleaseManifest` used a hardcoded production constant, so a
+ * staging build would have downloaded its update from staging and then
+ * demanded the signed manifest from PRODUCTION. Staging artifacts are
+ * deliberately excluded from the production manifest (§7.5), so the hash
+ * lookup could never match: every rehearsal would fail verification, and it
+ * would look like a broken updater rather than a misrouted lookup. Reading
+ * the baked file keeps the update and its proof on the same feed, whichever
+ * feed that is.
+ *
+ * This is NOT a feed-override affordance in the §7.5 sense. It reads a file
+ * inside the application bundle, written at build time, not an env var or an
+ * external config; on macOS editing it breaks the bundle signature, and on
+ * every OS an attacker who can rewrite files inside the installed app has
+ * already won.
+ *
+ * Falls back to the production constant when there is no packaged
+ * `app-update.yml`, which in practice means running from source in dev,
+ * where the updater no-ops anyway.
+ *
+ * @param {Object} [opts]
+ * @param {string} [opts.resourcesPath]
+ * @param {(p: string, enc: string) => string} [opts.readFile]
+ * @returns {string}
+ */
+export function resolveFeedBaseUrl({
+    resourcesPath = process.resourcesPath,
+    readFile = readFileSync,
+} = {}) {
+    if (!resourcesPath) return UPDATE_FEED_BASE_URL;
+    try {
+        const text = readFile(join(resourcesPath, 'app-update.yml'), 'utf8');
+        // Horizontal whitespace only. `\s*` also matches the newline, so
+        // `url:` with an empty value would capture the FOLLOWING line and
+        // resolve the feed base from, say, `channel: stable`. That is a
+        // wrong URL, not a fallback.
+        const match = /^url:[ \t]*([^\n]*)$/m.exec(text);
+        if (!match) return UPDATE_FEED_BASE_URL;
+        const url = match[1].trim().replace(/^['"]|['"]$/g, '');
+        return url ? manifestBaseFromFeedUrl(url) : UPDATE_FEED_BASE_URL;
+    } catch {
+        return UPDATE_FEED_BASE_URL;
+    }
+}
 
 /**
  * @typedef {Object} UpdaterEvent
@@ -69,7 +152,7 @@ export const UPDATE_FEED_BASE_URL = 'https://downloads.xchain.io/wallet/';
 export async function attachUpdater({
     loader = defaultLoader,
     onEvent,
-    feedBaseUrl = UPDATE_FEED_BASE_URL,
+    feedBaseUrl = resolveFeedBaseUrl(),
     fetchImpl,
     pinned,
 }) {

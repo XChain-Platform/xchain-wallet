@@ -55,23 +55,70 @@ xr_sha256_cmd() {
     fi
 }
 
+# Absolute path to update-info.mjs, which owns the one definition of
+# "is this file a channel pointer" ( §7.1). Resolved from this
+# file's own location so sourcing from any cwd works.
+xr_update_info_js() {
+    local here
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    echo "$here/update-info.mjs"
+}
+
 # List the artifacts a manifest covers, as `./name`, LC_ALL=C sorted.
 #
-# `latest*.yml` is excluded: those are electron-updater's mutable
+# Channel pointers are excluded: those are electron-updater's mutable
 # pointers into the feed. They change whenever the channel is
-# re-pointed (a rollback rewrites latest.yml to the PREVIOUS release,
-# §6b), so covering them would make a rollback look like tampering and
-# leave a signed manifest that no longer describes its own directory.
+# re-pointed (a rollback restores the PREVIOUS release's pointer, §6b),
+# so covering them would make a rollback look like tampering and leave a
+# signed manifest that no longer describes its own directory. Excluding
+# them costs nothing in trust: the updater authenticates the ARTIFACT it
+# downloaded against this manifest (packages/desktop/main/updateVerify.js),
+# so a tampered pointer can only name bytes the manifest does not cover,
+# and the install is refused.
+#
+# WHICH FILES THOSE ARE IS NOT A NAME GLOB. This used to exclude
+# `latest*.yml`. The desktop build sets `channel: 'stable'`, so it emits
+# `stable-mac.yml` and the glob matched NOTHING: every pointer was
+# hashed into the manifest, and expected-artifacts.txt then hard-failed
+# them as undeclared, which meant no desktop release could be signed at
+# all. Widening the glob to `*.yml` would have been worse - a real build
+# drops `builder-debug.yml` in the same directory. So the decision is
+# delegated to update-info.mjs, which reads content, and there is exactly
+# one implementation of it rather than one here and one in publish.sh.
 xr_list_artifacts() {
-    local dir="$1"
-    (
-        cd "$dir" || return 2
-        find . -maxdepth 1 -type f \
-            ! -name 'RELEASE_HASHES.txt' \
-            ! -name 'RELEASE_HASHES.txt.asc' \
-            ! -name 'latest*.yml' \
-            | LC_ALL=C sort
-    )
+    local dir="$1" js out
+    js="$(xr_update_info_js)"
+
+    if ! command -v node >/dev/null 2>&1; then
+        echo "release/lib.sh: node not found; it decides which files are" >&2
+        echo "  channel pointers rather than this script guessing by name." >&2
+        return 2
+    fi
+    if [[ ! -f "$js" ]]; then
+        echo "release/lib.sh: $js is missing." >&2
+        echo "  Without it there is no artifact/pointer split at all, and the" >&2
+        echo "  empty list that follows looks exactly like an empty staging" >&2
+        echo "  directory. Refusing rather than reporting nothing." >&2
+        return 2
+    fi
+
+    # Captured, not piped. Through a pipe the exit status belongs to sed,
+    # so a crashed tool reports success with no output - indistinguishable
+    # from a directory that legitimately holds nothing.
+    if ! out="$(node "$js" artifacts "$dir")"; then
+        echo "release/lib.sh: update-info.mjs failed to list $dir" >&2
+        return 2
+    fi
+    printf '%s\n' "$out" | grep . | sed 's|^|./|' || true
+}
+
+# List the channel pointers in a directory, as `./name`, LC_ALL=C sorted.
+# Empty output is a legitimate answer here; publish.sh is the caller that
+# decides whether having none is a failure.
+xr_list_update_info() {
+    local dir="$1" js
+    js="$(xr_update_info_js)"
+    node "$js" pointers "$dir" 2>/dev/null | sed 's|^|./|'
 }
 
 # Write "$dir/RELEASE_HASHES.txt" with the signed header + sorted hashes.

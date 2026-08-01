@@ -66,6 +66,23 @@ including one added in a pull request from a branch.
 | `AZURE_CLIENT_SECRET` | K6 | `desktop-windows` |
 | `AZURE_CODE_SIGNING_NAME` | K6 account name | `desktop-windows` |
 | `AZURE_CERT_PROFILE_NAME` | K6 certificate profile | `desktop-windows` |
+| `AZURE_CODE_SIGNING_ENDPOINT` | K6 signing endpoint, region-specific | `desktop-windows` |
+| `XCHAIN_STAGING_FEED_URL` | §7.5 rehearsal feed | all three desktop lanes |
+
+⬜ **`AZURE_CODE_SIGNING_ENDPOINT` is not optional.** electron-builder's
+`azureSignOptions` requires it and it cannot be defaulted, because it is
+tied to the region the Trusted Signing account was created in. Without
+it the build config falls back to the classic-cert path, so the Windows
+lane produces **unsigned artifacts while appearing to be configured for
+Azure signing**. It is the one Azure value whose absence is silent.
+
+⬜ **`XCHAIN_STAGING_FEED_URL` must be ONE stable value, reused for every
+release** ( §7.5). Each release's rehearsal build has it baked in
+at build time, and the NEXT release's rehearsal needs that build to find
+the new staging pointer. Rotating it per release orphans the chain.
+Rotate only on suspicion of leak, and treat that as a planned migration.
+Leave it unset and every rehearsal step is skipped; production builds
+are unaffected either way.
 
 ⬜ Confirm the existing repository secret `XCHAIN_SDK_DEPLOY_KEY` (used
 by `ci.yml`) stays a repository secret. It is read-only and unrelated;

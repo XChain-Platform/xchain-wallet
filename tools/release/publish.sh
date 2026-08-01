@@ -27,12 +27,20 @@
 #   --target <path>  local path or rsync host:path for wallet/
 #   --dry-run        print the plan and change nothing
 #
-# UPLOAD ORDER IS THE WHOLE POINT. `latest*.yml` goes LAST, after every
-# binary it names is already in place. Uploaded first, or in parallel,
-# there is a window where a desktop client reads a yml pointing at a
-# binary that is not there yet: the update fails, the user sees an error
-# for a release that is perfectly fine, and the window is exactly as
-# long as the largest upload.
+# UPLOAD ORDER IS THE WHOLE POINT. The channel pointers go LAST, after
+# every binary they name is already in place. Uploaded first, or in
+# parallel, there is a window where a desktop client reads a yml pointing
+# at a binary that is not there yet: the update fails, the user sees an
+# error for a release that is perfectly fine, and the window is exactly
+# as long as the largest upload.
+#
+# WHICH FILES ARE THE POINTERS is asked of update-info.mjs, not guessed
+# from a name. This script used to split on `latest*.yml`; the desktop
+# build sets `channel: 'stable'` and emits `stable-mac.yml`, so the
+# pointer list came back EMPTY (nothing was ever uploaded last, because
+# nothing was recognised as a pointer at all) while the same files fell
+# through into the binary phase and were uploaded FIRST. Both halves of
+# the ordering guarantee were inverted at once, silently. See  §7.1.
 #
 # The same reasoning runs backwards during a rollback (§6b): re-uploading
 # the previous yml is safe precisely because §3 retention guarantees its
@@ -46,6 +54,13 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Sourced for xr_list_artifacts / xr_list_update_info. The artifact-vs-
+# pointer split has to be the SAME split sign.sh hashed into the manifest;
+# a second copy of the rule here is how the manifest and the upload
+# quietly stop describing the same set of files.
+# shellcheck source=tools/release/lib.sh
+. "$HERE/lib.sh"
 
 INPUT_DIR=""
 TAG=""
@@ -120,13 +135,23 @@ fi
 # release machine is a Mac, whose system bash is 3.2.
 YMLS=()
 while IFS= read -r line; do [[ -n "$line" ]] && YMLS+=("$line"); done < <(
-    cd "$INPUT_DIR" && find . -maxdepth 1 -type f -name 'latest*.yml' | LC_ALL=C sort)
+    xr_list_update_info "$INPUT_DIR")
 BINARIES=()
 while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
-    cd "$INPUT_DIR" && find . -maxdepth 1 -type f \
-        ! -name 'latest*.yml' \
-        ! -name 'RELEASE_HASHES.txt*' \
-        | LC_ALL=C sort)
+    xr_list_artifacts "$INPUT_DIR")
+
+# A desktop release with no channel pointer installs nobody. Nothing
+# downstream would fail: the artifacts land, the manifest verifies, the
+# feed looks healthy, and every wallet in the field simply never hears
+# about the version. Refuse here, where it is still a build problem.
+if [[ ${#YMLS[@]} -eq 0 ]]; then
+    echo "publish.sh: no channel pointers in $INPUT_DIR." >&2
+    echo "  A release with no update-info yml is invisible to every" >&2
+    echo "  installed wallet, permanently, with nothing logged. Check that" >&2
+    echo "  the desktop lanes ran and that their *.yml files were collected" >&2
+    echo "  into the staging directory ( §7.1)." >&2
+    exit 1
+fi
 
 echo "publish.sh: plan for $TAG -> $TARGET" >&2
 echo "  1. ${#BINARIES[@]} artifact(s)" >&2

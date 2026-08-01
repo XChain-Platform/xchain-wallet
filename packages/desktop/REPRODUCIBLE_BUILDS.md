@@ -89,7 +89,14 @@ diagnostic:
   `assetsInlineLimit: 0` to prevent small-file inlining variance.
 - electron-builder: `npmRebuild: false`, `buildDependenciesFromSource:
   false`, deterministic uninstaller names, SHA256-pinned rfc3161
-  timestamp server.
+  timestamp server (which lives under `win.signtoolOptions` since the
+  v26 upgrade), and `nsis.differentialPackage: false` so no delta
+  metadata is emitted for updates we do not serve.
+- **The toolchain version is part of the output.** electron-builder is
+  pinned in `packages/desktop/package.json` and resolved through the
+  committed lockfile; a major bump (25 → 26,  stage 2) changes the
+  produced bytes, so pre-signing hashes published against an earlier
+  builder do not carry over and must be regenerated.
 
 ## Update trust chain
 
@@ -97,7 +104,9 @@ diagnostic:
 
 - **Windows / macOS**: signature must match the currently-installed
   app's publisher. Downgrade attacks across publishers are blocked.
-- **Linux (.AppImage / .deb)**: the `latest-linux.yml` manifest
+- **Linux (.AppImage / .deb)**: the `stable-linux.yml` manifest
+  (`stable-linux-arm64.yml` on arm64; update-info files are named after
+  the CHANNEL, and ours is `stable`)
   carries the SHA512 of the artifact. The manifest itself is fetched
   over HTTPS from `downloads.xchain.io` - integrity for Linux users
   depends on HTTPS TLS + the maintainer's control of that hostname.
