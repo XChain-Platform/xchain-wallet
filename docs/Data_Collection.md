@@ -134,16 +134,33 @@ sentinel, so no donation output is added.
 ## Unsettled: needs an operator answer
 
 These cannot be read out of the code, and the privacy policy cannot be
-published without them.
+published without them. **One of the three (server logging) was settled on
+2026-08-01 by measuring the live hosts; two remain, and both are decisions
+rather than facts.**
 
-1. **Do our own servers log and retain client IPs?**
-   `explorer.xchain.io`, `encoder.xchain.io`, `hub.xchain.io` and
-   `downloads.xchain.io` receive the addresses a user watches alongside
-   their IP. Whether access logs are kept, for how long, and whether
-   anything correlates queries by IP is an operations fact. Rows 1 to 4
-   and 8 above are the wallet's largest real privacy surface and the
-   policy has to say what happens at the other end. Cloudflare fronts
-   these hosts, which is a second log to account for.
+1. ~~**Do our own servers log and retain client IPs?**~~
+   **SETTLED 2026-08-01 by measurement on the live hosts**, not by asking:
+
+   - Every one of `explorer.xchain.io`, `encoder.xchain.io`,
+     `hub.xchain.io` and `downloads.xchain.io` has a
+     `CustomLog ... combined` directive in its Apache vhost on
+     origin-host. The "combined" format is
+     `%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"`, so **yes,
+     the client IP is logged**, along with the request line, referer and
+     user-agent.
+   - Retention is `/etc/logrotate.d/apache2`: **daily rotation,
+     `rotate 14`**, so roughly **14 days** and then deletion.
+   - Nothing correlates queries by IP: there is no account, no cookie and
+     no identifier in the request to correlate them with.
+   - Cloudflare does front the `xchain.io` hosts (confirmed: they answer
+     with `server: cloudflare`), so its own logs are a second copy under
+     its own policy. The company site `dankest.llc` is served directly
+     from Apache and is NOT behind Cloudflare (confirmed:
+     `Server: Apache/2.4.52`).
+
+   **This is a claim with an expiry date.** It describes a configuration,
+   and configurations change. Re-measure before each store submission,
+   and change this file before the policy.
 2. **Who is the data controller of record, and what is the contact
    address for privacy requests?** Dankest, LLC is the publisher;
    confirm the entity name and whether privacy mail goes to

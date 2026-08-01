@@ -1,11 +1,20 @@
 # XChain Wallet privacy policy
 
-> **DRAFT, not yet publishable.** Every statement about the wallet
-> itself is verified against the code. What is missing is what happens
-> at the other end: whether our own servers keep logs, and for how long.
-> Three items are marked **[UNSETTLED]** below and are listed in
-> `docs/Data_Collection.md`. Every store submission is hard-blocked on a
-> live URL for this document, so settling them is on the critical path.
+> **DRAFT, all but publishable.** Every statement about the wallet
+> itself is verified against the code. The big one is now answered too:
+> what our servers keep was **measured on the live hosts 2026-08-01**
+> (combined access logs including client IP, rotated daily, kept 14 days;
+> Cloudflare fronts the xchain.io hosts and keeps its own).
+>
+> **Two items remain, and both are decisions rather than facts:** the data
+> controller and privacy contact of record, and whether any
+> jurisdiction-specific section (GDPR lawful basis, CCPA notice) is
+> required. Both are listed in `docs/Data_Collection.md`.
+>
+> A studio-wide policy covering this same ground was published for
+> Dankest, LLC on 2026-08-01 (`~/Sites/dankest.llc`, page
+> `privacy.html`). **The two must not drift**: it is the URL a store
+> listing points at, and this is the document of record behind it.
 >
 > Source of record for the facts here: `docs/Data_Collection.md`. Change
 > that file first, then this one.
@@ -13,7 +22,7 @@
 **Publisher:** Dankest, LLC
 **Applies to:** XChain Wallet in every form we ship: the web wallet, the
 Chrome extension, and the desktop app for Windows, macOS and Linux.
-**Last updated:** [UNSETTLED: publication date]
+**Last updated:** 1 August 2026
 
 ---
 
@@ -92,13 +101,21 @@ encrypted with your password. Only `https` links are accepted.
 IP address and which version you are running. Nothing is downloaded or
 installed without you choosing to.
 
-**[UNSETTLED: what our servers keep.]** This section must state whether
-`explorer.xchain.io`, `encoder.xchain.io`, `hub.xchain.io` and
-`downloads.xchain.io` record access logs, whether those logs contain IP
-addresses, how long they are kept, and that Cloudflare sits in front of
-them and keeps its own. Without this the paragraphs above describe what
-we send but not what is kept, which is the part a reader actually wants.
+**What our servers keep.** Measured on the live hosts on 1 August 2026,
+not assumed. `explorer.xchain.io`, `encoder.xchain.io`, `hub.xchain.io`
+and `downloads.xchain.io` each write an Apache access log in the
+standard "combined" format: your IP address, the time, the request, the
+response status, the referring page, and your browser's user-agent
+string. Those logs rotate **daily and are kept for 14 days**, then they
+are deleted. No account is attached to them, because there are no
+accounts, and we do not correlate them across services or use them to
+build a picture of a person.
 
+One thing we cannot control, so you should know it: those hosts sit
+behind **Cloudflare**, which absorbs attacks on our behalf. Cloudflare
+therefore sees requests to them and keeps its own logs under its own
+policy. Our company site, dankest.llc, is served directly and does not
+go through them.
 ## The Android app
 
 The Android app is the same wallet, wrapped so it can be installed. A few

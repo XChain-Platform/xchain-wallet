@@ -64,7 +64,7 @@ Open source, AGPL-3.0-or-later. Built by Dankest, LLC.
 | Category | Finance |
 | Contact email (app listing) | support@xchain.io if/when  makes it deliverable; otherwise info@dankest.llc |
 | Website (app listing) | https://xchain.io once the  apex flip lands; the ACCOUNT-level website is https://dankest.llc and already serves 200 |
-| Privacy policy | **UNPUBLISHED, blocks submission.** The text exists (docs/Privacy_Policy.md, incl. the S4 mobile section); dankest.llc/privacy is 404 and xchain.io/privacy is 403. See PLAY_ENROLLMENT.md. |
+| Privacy policy | `https://dankest.llc/privacy.html` **WRITTEN AND DEPLOYED to origin-host 2026-08-01, but not yet reachable: the dankest.llc DNS still points at the old host.** One A-record change makes it live. See PLAY_ENROLLMENT.md. |
 
 ## Trader declaration (EU DSA)
 
