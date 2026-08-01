@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { neutralizeControlText } from './textHardening.js';
+
 // (c): name a bet's outcome the way the market names it.
 //
 // A BET action carries the outcome as an INDEX, so everything derived from
@@ -32,18 +34,11 @@
 // characters are dropped, runs of whitespace collapse, and a long label is
 // truncated so it cannot push the rest of the sentence off the screen.
 
-// U+202A-U+202E (LRE/RLE/PDF/LRO/RLO), U+2066-U+2069 (LRI/RLI/FSI/PDI),
-// U+200E/U+200F (LRM/RLM). Mirrors the SDK's BIDI_CONTROLS.
-const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F]/g;
-
-// Zero-width space/non-joiner/joiner, word joiner, BOM.
-const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/g;
-
-// C0/C1 controls, which would otherwise break the line the label sits on.
-const CONTROLS = /[\u0000-\u001F\u007F-\u009F]/g;
-
-// Visible stand-in for a removed bidi control, as the SDK uses.
-const BIDI_PLACEHOLDER = '\u2426'; // SYMBOL FOR SUBSTITUTE FORM TWO
+// The bidi/zero-width/control/whitespace half of that (everything except
+// the quote rewrite and the length cap, which are specific to a label
+// spliced into a quoted span of fixed width) is shared with the deep-link
+// hardening this module's  sibling added: see
+// `shared/utils/textHardening.js`.
 
 // Long enough for a real outcome name ("Home team wins in regulation"),
 // short enough that a padded label cannot bury the market id after it.
@@ -57,17 +52,14 @@ const MAX_LABEL = 40;
  */
 export function safeOutcomeLabel(label) {
     if (label === null || label === undefined) return '';
-    let s = String(label)
-        .replace(BIDI_CONTROLS, BIDI_PLACEHOLDER)
-        .replace(ZERO_WIDTH, '')
-        .replace(CONTROLS, ' ')
-        // A quote inside the label would fake the end of the quoted span the
-        // callers below wrap it in.
-        .replace(/["“”]/g, "'")
-        .replace(/\s+/g, ' ')
-        .trim();
-    if (s.length > MAX_LABEL) s = `${s.slice(0, MAX_LABEL - 1)}…`;
-    return s;
+    // A quote inside the label would fake the end of the quoted span the
+    // callers below wrap it in. Rewritten before the shared pass: quote
+    // characters are untouched by bidi/zero-width/control/whitespace
+    // matching, so doing it first or last is equivalent, and doing it
+    // first keeps this function's only label-specific rule next to the
+    // comment explaining it.
+    const withoutQuotes = String(label).replace(/["“”]/g, "'");
+    return neutralizeControlText(withoutQuotes, { maxLength: MAX_LABEL });
 }
 
 /**

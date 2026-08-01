@@ -41,7 +41,7 @@
 // for payment URIs, action preview for xchain: URIs).
 
 import { parseBip21Uri, InvalidBip21Error } from '../../core/src/uri/bip21.js';
-import { parseXchainUri } from '../../core/src/uri/xchainUri.js';
+import { parseXchainUri, hardenUriIntentText } from '../../core/src/uri/xchainUri.js';
 
 /** URI schemes the app is allowed to claim. */
 export const TIER_1_SCHEME = 'xchain';
@@ -160,7 +160,14 @@ export function classifyDeepLink(url) {
         // renderer doesn't have to re-classify. Falls back to `parsed: null`
         // when the parser returns `kind: 'unknown'` so the renderer can
         // still surface a generic "couldn't parse" message.
-        const intent = parseXchainUri(url);
+        //
+        //  §3.6: hardened here rather than in the renderer because
+        // this is where an OS-supplied URI crosses into our process, and
+        // the intent goes out over IPC. The renderer has no listener yet,
+        // so nothing consumes this today; hardening now means whoever
+        // wires that listener inherits a neutralized intent instead of
+        // having to know they needed one.
+        const intent = hardenUriIntentText(parseXchainUri(url));
         return {
             scheme,
             raw: url,

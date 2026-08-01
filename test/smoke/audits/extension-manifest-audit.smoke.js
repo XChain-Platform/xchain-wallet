@@ -25,5 +25,5 @@ assert.equal(failed.length, 0,
     }`);
 
 console.log(
-    `OK: extension-manifest audit smoke (${results.length} rules pass: MV3 + CWS-valid version + version↔wallet sync + version_name mirror + extension-pkg sync + description ≤132 + homepage_url + 128 icon + action icon + content-scripts valid + permissions-minimal)`,
+    `OK: extension-manifest audit smoke (${results.length} rules pass: MV3 + CWS-valid version + version↔wallet sync + version_name mirror + extension-pkg sync + description ≤132 + homepage_url + 128 icon + action icon + content-scripts valid + permissions-minimal + manifest-freeze [permissions/host_permissions/content-script-matches] + web_accessible_resources match relationship)`,
 );

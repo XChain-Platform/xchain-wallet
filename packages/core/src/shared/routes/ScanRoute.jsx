@@ -25,7 +25,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
-import { parseXchainUri } from '../../uri/xchainUri.js';
+import { parseXchainUri, hardenUriIntentText } from '../../uri/xchainUri.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
 
 const BODY = {
@@ -85,7 +86,13 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         // intent split + chainId/tick breakdown that detectQrContent
         // surfaces only as a generic 'xchain-uri' wrapper.
         if (detected.type === 'xchain-uri') {
-            const intent = parseXchainUri(text, { chainRegistry });
+            //  §3.6: a scanned QR is the widest-open untrusted-input
+            // surface this parser has (no clipboard, no click-through - just
+            // whatever a camera points at), so the fields below run through
+            // the same hardening the deep-link boot paths apply before they
+            // ever become an editable form value. `address` stays raw; see
+            // `hardenUriIntentText`'s own comment for why.
+            const intent = hardenUriIntentText(parseXchainUri(text, { chainRegistry }));
             if (intent.kind === 'send') {
                 claimedRef.current = true;
                 setStopped(true);
@@ -115,13 +122,19 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             setStopped(true);
             const tickParam = detected.parts.params?.tick;
             const chainParam = detected.parts.params?.chain;
+            const memoParam = detected.parts.message ?? detected.parts.label;
+            // BIP21 parses separately from parseXchainUri (bip21.js, not
+            // xchainUri.js), but a scanned `bitcoin:`/`xchain:<addr>` link is
+            // the same untrusted-QR surface, so tick/memo get the same
+            // neutralization; `address` stays raw for the same reason
+            // `hardenUriIntentText` leaves it alone.
             onClassified({
                 kind: 'send',
                 address: detected.address,
                 amount: detected.parts.amount,
-                memo: detected.parts.message ?? detected.parts.label,
+                memo: typeof memoParam === 'string' ? neutralizeControlText(memoParam) : memoParam,
                 tick: typeof tickParam === 'string' && tickParam.length > 0
-                    ? tickParam.toUpperCase()
+                    ? neutralizeControlText(tickParam).toUpperCase()
                     : undefined,
                 chainId: typeof chainParam === 'string' && chainParam.length > 0
                     ? chainParam

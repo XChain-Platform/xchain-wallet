@@ -30,7 +30,7 @@
     },
     "content_scripts": [
         {
-            "matches": ["http://*/*", "https://*/*"],
+            "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
             "js": ["content/contentScript.js"],
             "run_at": "document_start",
             "all_frames": false
@@ -39,11 +39,11 @@
     "web_accessible_resources": [
         {
             "resources": ["inject/xchainProvider.js"],
-            "matches": ["http://*/*", "https://*/*"]
+            "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
         },
         {
             "resources": ["chain-icons/*"],
-            "matches": ["http://*/*", "https://*/*"]
+            "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
         }
     ],
     "permissions": ["storage", "sidePanel", "notifications", "alarms"],
@@ -54,5 +54,10 @@
             "name": "XChain Wallet",
             "uriTemplate": "popup.html?uri=%s"
         }
-    ]
+    ],
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "io.xchain.wallet.extension"
+        }
+    }
 }

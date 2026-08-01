@@ -1,0 +1,30 @@
+{
+    "_readme": [
+        " §6 manifest-freeze allowlist. Read by packages/core/scripts/extension-manifest-audit.js",
+        "(rules permissions-frozen, host-permissions-frozen, content-script-matches-frozen), which runs",
+        "in test/smoke/audits/extension-manifest-audit.smoke.js and therefore in `pnpm test:smoke` on",
+        "every CI run. Any drift in manifest.json's permissions, host_permissions, or content-script",
+        "matches away from the values pinned below fails the release build.",
+        "",
+        "SCOPE, STATED HONESTLY. This file lives in the same repository as manifest.json, so a single",
+        "commit can edit both together. That means this gate stops an ACCIDENT (a permission added for",
+        "one purpose that silently widens another, a stray edit that nobody meant to ship), not a",
+        "determined compromise by someone who already has write access to this repo. Because of that",
+        "limit, the release checklist (docs/QA_Checklist.md, \"Chrome Web Store release provenance\"",
+        "section) additionally requires the release operator to read a human diff of manifest.json",
+        "against the previous release tag before every submission. This file cannot replace that step.",
+        "",
+        "web_accessible_resources is deliberately NOT pinned here as a third copy of the match list.",
+        "Spec §3.5 requires all three lists (content-script matches, and both web_accessible_resources",
+        "match lists) to stay identical, so the audit enforces that as a RELATIONSHIP: every WAR entry's",
+        "matches array is checked against manifest.json's own content_scripts matches at audit time",
+        "(rule war-matches-match-content-script), not against a second frozen copy in this file. A",
+        "second copy would let the two go stale together without either check ever firing.",
+        "",
+        "Changing any value below is a deliberate manifest-surface decision (spec §8 D-items), not a",
+        "routine edit. Change it in the same commit that changes manifest.json, and say why."
+    ],
+    "permissions": ["storage", "sidePanel", "notifications", "alarms"],
+    "host_permissions": [],
+    "content_script_matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
+}

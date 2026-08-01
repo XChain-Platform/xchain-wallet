@@ -9,7 +9,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite build --watch --mode development",
-        "reproduce": "bash scripts/reproduce.sh"
+        "reproduce": "bash scripts/reproduce.sh",
+    "audit:remote-code": "node scripts/remote-code-audit.mjs dist"
     },
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^10.21.0",

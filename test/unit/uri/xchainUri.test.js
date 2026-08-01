@@ -13,7 +13,15 @@
 // chainRegistry-dependent coin-code resolution both shells rely on.
 
 import { describe, it, expect } from 'vitest';
-import { parseXchainUri, describeXchainIntent } from '../../../packages/core/src/uri/xchainUri.js';
+import {
+    parseXchainUri,
+    describeXchainIntent,
+    hardenUriIntentText,
+} from '../../../packages/core/src/uri/xchainUri.js';
+import { BIDI_PLACEHOLDER } from '../../../packages/core/src/shared/utils/textHardening.js';
+
+const RLO = String.fromCharCode(0x202E); // RIGHT-TO-LEFT OVERRIDE
+const NUL = String.fromCharCode(0x0000);
 
 // Minimal registry stub satisfying chainIdForCoinCode's contract.
 const chainRegistry = {
@@ -132,5 +140,105 @@ describe('parseXchainUri execute action', () => {
         const noContract = parseXchainUri('xchain:RBTC/execute', { chainRegistry });
         expect(describeXchainIntent(noContract, { i18n: { t } }))
             .toBe('uri.intent.unknown:{}');
+    });
+});
+
+//  §3.6 finding 1: the extension QA checklist's deep-link audit found
+// that memo/tick/method/params reach an editable form field carrying
+// whatever a link put there - U+202E and a CRLF survive into memo, a NUL
+// survives into tick. `hardenUriIntentText` is the fix, applied by every
+// shell at the boundary where a parsed intent becomes prefill state
+// (App.jsx boot effects, ScanRoute, Send's smart-paste), never inside
+// `parseXchainUri` itself.
+describe('hardenUriIntentText', () => {
+    it('neutralizes a bidi override in memo rather than letting it reorder the field', () => {
+        const intent = parseXchainUri(
+            `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent(`Pay${RLO}rent`)}`,
+            { chainRegistry },
+        );
+        expect(intent.memo).toContain(RLO);
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.memo).not.toContain(RLO);
+        expect(hardened.memo).toContain(BIDI_PLACEHOLDER);
+    });
+
+    it('collapses a CRLF in memo instead of letting it fake a second line', () => {
+        const intent = parseXchainUri(
+            `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent('rent\r\nAmount: 999')}`,
+            { chainRegistry },
+        );
+        expect(intent.memo).toContain('\r\n');
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.memo).not.toContain('\r');
+        expect(hardened.memo).not.toContain('\n');
+        expect(hardened.memo).toBe('rent Amount: 999');
+    });
+
+    it('drops a NUL from tick', () => {
+        const intent = parseXchainUri(
+            `xchain:TBTC/send?to=addr&amount=1&tick=${encodeURIComponent(`PEPE${NUL}COIN`)}`,
+            { chainRegistry },
+        );
+        expect(intent.tick).toContain(NUL);
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.tick).not.toContain(NUL);
+    });
+
+    it('neutralizes EXECUTE method and params the same way', () => {
+        const intent = parseXchainUri(
+            `xchain:RBTC/execute?contract=1&method=${encodeURIComponent(`fund${RLO}evil`)}&params=${encodeURIComponent(`a${NUL}b`)}`,
+            { chainRegistry },
+        );
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.method).not.toContain(RLO);
+        expect(hardened.method).toContain(BIDI_PLACEHOLDER);
+        expect(hardened.executeParams).not.toContain(NUL);
+    });
+
+    it('never touches address: a hostile character stays exactly as the link sent it', () => {
+        // The field is deliberately NOT neutralized - see the function's own
+        // comment. A destination is validated by its own checksum before
+        // signing, and mangling it here risks corrupting one that was fine.
+        const hostileAddress = `bc1q${RLO}attacker`;
+        const intent = parseXchainUri(
+            `xchain:TBTC/send?to=${encodeURIComponent(hostileAddress)}&amount=1`,
+            { chainRegistry },
+        );
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.address).toBe(hostileAddress);
+    });
+
+    it('never touches amount: downstream decimal parsing already rejects tampering', () => {
+        const hostileAmount = `1${RLO}0000`;
+        const intent = parseXchainUri(
+            `xchain:TBTC/send?to=addr&amount=${encodeURIComponent(hostileAmount)}`,
+            { chainRegistry },
+        );
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.amount).toBe(hostileAmount);
+    });
+
+    it('does not mutate the intent object it was given', () => {
+        const intent = parseXchainUri(
+            `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent(`Pay${RLO}rent`)}`,
+            { chainRegistry },
+        );
+        const before = { ...intent };
+        hardenUriIntentText(intent);
+        expect(intent).toEqual(before);
+    });
+
+    it('passes through kind/chainId/action untouched and leaves absent fields absent', () => {
+        const intent = parseXchainUri('xchain:TBTC/receive', { chainRegistry });
+        const hardened = hardenUriIntentText(intent);
+        expect(hardened.kind).toBe('receive');
+        expect(hardened.chainId).toBe(intent.chainId);
+        expect(hardened.memo).toBeUndefined();
+        expect(hardened.tick).toBeUndefined();
+    });
+
+    it('tolerates a falsy intent (defensive: callers should never pass one)', () => {
+        expect(hardenUriIntentText(null)).toBe(null);
+        expect(hardenUriIntentText(undefined)).toBe(undefined);
     });
 });

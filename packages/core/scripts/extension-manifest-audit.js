@@ -27,11 +27,36 @@
 //   9. content-scripts-valid         - matches array well-formed
 //  10. permissions-minimal           - no broad/host permissions without
 //                                      justification file
+//  11. permissions-frozen            - manifest.permissions equals the
+//                                      pinned allowlist ( §6)
+//  12. host-permissions-frozen       - manifest.host_permissions equals
+//                                      the pinned allowlist
+//  13. content-script-matches-frozen - the (single) content_scripts
+//                                      entry's matches equals the pinned
+//                                      allowlist
+//  14. war-matches-match-content-script - every web_accessible_resources
+//                                      entry's matches equals the manifest's
+//                                      OWN content_scripts matches (spec
+//                                      §3.5: all three lists stay identical)
 //
 // Rule 10 treats host_permissions as the dangerous surface; matching-all
 // (`<all_urls>`, `*://*/*`) without a recorded justification is flagged.
 // Content-script `matches` inherit wallet-bridge scope (§51) and are
 // considered justified.
+//
+// Rules 11-14 are the manifest-freeze gate ( §6, stage S4). 11-13
+// compare against packages/extension/docs/manifest-freeze.json, a pinned
+// allowlist checked into the same repo: any drift in permissions,
+// host_permissions, or content-script matches fails CI. Rule 14 does NOT
+// compare against a second frozen copy of the match list; it checks the
+// web_accessible_resources matches against manifest.json's own
+// content_scripts matches, so the two cannot drift apart from each other
+// even if they drifted together away from the allowlist. Comparison is by
+// sorted-set equality (order-independent, value-exact): reordering a
+// matches array is not a security-relevant change, an added/removed/altered
+// pattern is. See manifest-freeze.json's own header for the gate's scope
+// limits (it stops accidents, not a determined compromise; the release
+// checklist's human diff step covers the rest).
 //
 // Usage:
 //   node packages/core/scripts/extension-manifest-audit.js
@@ -49,9 +74,22 @@ const repoRoot = join(here, '..', '..', '..');
 const manifestPath = join(repoRoot, 'packages/extension/manifest.json');
 const rootPkgPath = join(repoRoot, 'package.json');
 const extensionPkgPath = join(repoRoot, 'packages/extension/package.json');
+const manifestFreezePath = join(repoRoot, 'packages/extension/docs/manifest-freeze.json');
 
 function readJSON(path) {
     return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+// Order-independent, value-exact array equality. A matches array is a set
+// of patterns as far as Chrome is concerned; sorting before compare means
+// a harmless reorder does not trip the freeze gate while an added, removed,
+// or altered pattern always does.
+function sameSet(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    const sa = [...a].sort();
+    const sb = [...b].sort();
+    return sa.every((v, i) => v === sb[i]);
 }
 
 function isCwsVersion(v) {
@@ -161,6 +199,56 @@ export function runExtensionManifestAudit() {
         detail: broad.length === 0
             ? `host_permissions = ${JSON.stringify(hostPerms)} (no match-all entries)`
             : `broad host_permissions flagged: ${JSON.stringify(broad)} (document justification before reinstating)`,
+    });
+
+    // --- Manifest-freeze gate ( §6) -------------------------------
+    const freeze = readJSON(manifestFreezePath);
+    const manifestPerms = manifest.permissions || [];
+    const manifestHostPerms = manifest.host_permissions || [];
+
+    results.push({
+        rule: 'permissions-frozen',
+        ok: sameSet(manifestPerms, freeze.permissions),
+        detail: `manifest.permissions = ${JSON.stringify(manifestPerms)}, frozen allowlist = ${JSON.stringify(freeze.permissions)} (packages/extension/docs/manifest-freeze.json)`,
+    });
+
+    results.push({
+        rule: 'host-permissions-frozen',
+        ok: sameSet(manifestHostPerms, freeze.host_permissions),
+        detail: `manifest.host_permissions = ${JSON.stringify(manifestHostPerms)}, frozen allowlist = ${JSON.stringify(freeze.host_permissions)} (packages/extension/docs/manifest-freeze.json)`,
+    });
+
+    const csEntries = Array.isArray(manifest.content_scripts) ? manifest.content_scripts : [];
+    const csMatches = csEntries.length === 1 ? (csEntries[0].matches || []) : null;
+    const csMatchesFrozenOk = csEntries.length === 1 && sameSet(csMatches, freeze.content_script_matches);
+    results.push({
+        rule: 'content-script-matches-frozen',
+        ok: csMatchesFrozenOk,
+        detail: csEntries.length !== 1
+            ? `content_scripts has ${csEntries.length} entr(y/ies); the freeze gate expects exactly 1`
+            : `content_scripts[0].matches = ${JSON.stringify(csMatches)}, frozen allowlist = ${JSON.stringify(freeze.content_script_matches)} (packages/extension/docs/manifest-freeze.json)`,
+    });
+
+    // Relational, not a second frozen copy: every web_accessible_resources
+    // entry's matches must equal the manifest's OWN content_scripts matches
+    // (spec §3.5), so the three lists cannot drift apart from each other
+    // even independently of the allowlist above.
+    const warEntries = Array.isArray(manifest.web_accessible_resources) ? manifest.web_accessible_resources : [];
+    let warOk = csMatches !== null && warEntries.length > 0;
+    const warDetails = [];
+    if (warOk) {
+        for (const entry of warEntries) {
+            const entryOk = sameSet(entry.matches, csMatches);
+            warDetails.push(`${JSON.stringify(entry.resources)} -> matches ${JSON.stringify(entry.matches)}${entryOk ? '' : ' (MISMATCH)'}`);
+            if (!entryOk) warOk = false;
+        }
+    }
+    results.push({
+        rule: 'war-matches-match-content-script',
+        ok: warOk,
+        detail: warEntries.length === 0
+            ? 'manifest.web_accessible_resources has no entries'
+            : `content_scripts[0].matches = ${JSON.stringify(csMatches)}; web_accessible_resources: ${warDetails.join('; ')}`,
     });
 
     return results;

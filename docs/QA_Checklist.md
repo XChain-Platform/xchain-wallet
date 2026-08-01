@@ -180,6 +180,67 @@ Use `packages/test-dapp/` against the extension under test.
 - ⬜ `xchain:<address>` opens the wallet (web shell registers via `navigator.registerProtocolHandler`).
 - ⬜ Extension popup deep-link opens with the URI as a routable intent (where wired).
 - ⬜ Desktop `xchain:` URI from the OS opens the wallet on macOS / Windows / Linux.
+- ⬜ `pnpm test:fuzz` includes `test/fuzz/harness/xchain-uri.fuzz.js` and is green. The
+  harness is the standing guard for the audit recorded below; a release that
+  skips it has not checked the wallet's widest untrusted-string surface.
+
+### Deep-link input audit ( §3.6)
+
+Run before a Chrome Web Store submission that touches the URI parser, the
+Send route, or the EXECUTE route. `popup.html?uri=` is a live boot path that
+survives the unlock cycle, and the camera scan route feeds the same parser,
+so whatever survives it lands in screen state.
+
+**Audit of record: 2026-07-31, against `packages/core/src/uri/xchainUri.js`
+at commit 827a74c3.** Method: the fast-check harness above (12 properties,
+200 runs each) plus a 31-case hand-driven hostile corpus. Result: the
+store-review question is answered YES, a crafted link opens a compose view
+and nothing more. Recorded so the next auditor can tell drift from a fresh
+finding:
+
+- ✅ Total function. No input throws, including non-strings; every result
+  carries one of the four documented kinds.
+- ✅ A link cannot start a signing flow. `Send`'s stage state initializes to
+  the literal `'form'` and the only transitions to review / confirm sit
+  inside the submit handler, so a prefill cannot begin past compose. The
+  popup's boot effect sets prefill state and a view and calls nothing else.
+- ✅ Routing values are gated. A hostile `chainId` from either the legacy
+  path form or the BIP21 `chain=` param is dropped rather than carried; the
+  EXECUTE contract index and gas limit are digits-only; `feePriority` is one
+  of three tiers or absent.
+- ✅ Send-shaped fields (`to` / `amount` / `tick` / `memo`) never populate an
+  EXECUTE intent, so one link cannot arm both forms.
+- ✅ No prototype pollution from any query key, `__proto__` and
+  `constructor` included; `Object.prototype` is unchanged after the corpus.
+- ✅ BIP21 `req-` params reject the whole URI, including percent-encoded
+  spellings (`%72eq-x`, `r%65q-x`).
+- ✅ Oversized input stays bounded. 500KB in each gated position parses well
+  under the 2s harness ceiling; the gate regexes are anchored and
+  length-bounded, so there is no backtracking blowup.
+
+Two findings, both recorded rather than fixed, neither blocking submission:
+
+- ⬜ **Deep-link fields skip the repo's own display hardening.** `memo`,
+  `tick`, `address`, and the EXECUTE `method` / `params` carry attacker-
+  supplied text to a signing surface unneutralized: U+202E and a CRLF
+  survive into `memo`, a NUL survives into `tick`. `safeOutcomeLabel` in
+  `packages/core/src/shared/utils/betOutcomeLabels.js` already implements
+  exactly the neutralization this wants (bidi controls to a visible
+  placeholder, zero-width and control characters dropped, whitespace
+  collapsed, length capped), and its header comment gives the reason:
+  attacker-controlled strings land on a signing screen. It is simply not
+  applied here. Bounded by the fact that the user sees and can edit these
+  fields in the compose form before confirm, which is why this is a
+  hardening gap and not a blocker.
+- ⬜ **An unrecognized action segment silently becomes a send.** By design
+  (`xchainUri.js` treats anything outside the receive / execute sets as
+  `kind: 'send'` and preserves the literal in `intent.action`), so
+  `xchain:BTC/drainwallet?...` and `xchain:BTC/approve?...` both route to
+  the Send compose form. Harmless while the shells route on `kind`. It
+  becomes a real hazard the moment any screen routes on `intent.action`,
+  because a typo'd or invented segment would then reach that screen. Treat
+  "shells route on `kind`, never on `action`" as the invariant that keeps
+  this safe, and re-check it whenever a new deep-link route is added.
 
 ---
 
@@ -191,6 +252,98 @@ Use `packages/test-dapp/` against the extension under test.
 - ⬜ `pnpm --filter @xchain-wallet/desktop dist:unpacked` produces the reproducible Linux bundle.
 - ⬜ `pnpm --filter @xchain-wallet/desktop reproduce` runs and matches `RELEASE_HASHES.txt`.
 - ⬜ Diagnostic dump (About → Copy diagnostics) produces JSON with the new version stamped.
+
+### Remote-code audit of the built extension bundle ( §3.2)
+
+- ⬜ `pnpm --filter @xchain-wallet/extension audit:remote-code` exits 0 against a
+  fresh build. Run it before any submission that changes dependencies or the
+  build.
+
+Manifest V3 bans remotely-hosted code outright, and it is the first thing a
+Chrome Web Store reviewer checks on a wallet. The command above
+(`packages/extension/scripts/remote-code-audit.mjs`) scans every shipped
+`.js` / `.html` / `.css` / `.json` in `dist/` for `eval`, the `Function`
+string constructor, `importScripts`, dynamic `import()`, script-element `src`
+assignment to a remote URL, and `WebAssembly.instantiateStreaming` /
+`compileStreaming`. It is a gate rather than a report: the three known-benign
+hits below are allow-listed in the script by code signature (not by filename,
+since Vite chunk names carry a content hash), and anything else exits
+non-zero. A new hit is either a real violation that blocks submission, or a
+new benign pattern that belongs in the script's `ALLOWED` list with its
+reason written out. Do not waive one by deleting the check.
+
+**Audit of record: 2026-07-31, 21 shipped text files.** The MV3 remote-code
+claim holds: nothing in the bundle fetches or evaluates code at runtime. The
+three static-scan hits below are all benign, and they are written down
+because a reviewer's own scanner will surface the same three and the operator
+should not have to re-derive the answer under a review clock:
+
+- `content/contentScript.js` creates a `<script>` element whose `src` is
+  `chrome.runtime.getURL('inject/xchainProvider.js')`. A packaged local
+  resource, not a remote one; this is the provider injection the listing
+  pack's content-script justification describes.
+- `chunks/wallet-*.js` contains `Function("binder", "return function ...")`
+  from the bundled `function-bind` shim. Dead in Chrome, which has had
+  `Function.prototype.bind` since forever, and blocked at runtime anyway by
+  MV3's default `script-src 'self'`. Worth pruning the dependency to remove
+  the flag entirely, but it is not a violation.
+- `chunks/chromeMessaging-*.js` contains React DOM's well-known
+  `innerHTML = "<script><\/script>"` element-creation workaround. React
+  internals, and likewise inert under the MV3 CSP.
+
+Watch the absolute-origin inventory the same scan produces. Every host that
+the shipped code can actually contact at runtime must appear in
+`packages/extension/PRIVACY_POLICY.md` and must match what the operator ticks
+in the store's data-disclosure tab; spec §3.3 names that mismatch as a common
+rejection cause. As of this audit the runtime set is: the configured
+blockchain RPC and XChain decoder / indexer / explorer endpoints;
+`api.coingecko.com` (Settings → Privacy, "Native coin price data", default
+on); TIS token-metadata document hosts and the embedded media they reference,
+including the `ipfs.io` and `arweave.net` gateways (Settings → Privacy,
+"Fetch token metadata", default on); and the external block-explorer favicons
+rendered on History detail (`mempool.space`, `blockstream.info`,
+`blockchair.com`, `litecoinspace.org`, `blockcypher.com`), which have no
+toggle. Everything else
+the scan reports is an inert documentation, licence, or demo-fixture string.
+
+### Chrome Web Store release provenance ( §6)
+
+Run before every Chrome Web Store upload (first submission, a beta-lane
+soak build, or a public update). The manifest-freeze rules below run
+automatically in `pnpm test:smoke` (`packages/core/scripts/extension-manifest-audit.js`,
+checked against `packages/extension/docs/manifest-freeze.json`) and gate
+the release build; the two rows after them are steps a human does, not
+things a script can do for you.
+
+- ⬜ `pnpm test:smoke` passes, which includes the manifest-freeze rules
+  (`permissions-frozen`, `host-permissions-frozen`,
+  `content-script-matches-frozen`, `war-matches-match-content-script`).
+  A failure here means `manifest.json`'s permissions, `host_permissions`,
+  or content-script/`web_accessible_resources` match lists drifted from
+  the pinned allowlist, or the three match lists drifted from each other.
+- ⬜ **Human diff of `manifest.json`.** The freeze gate above lives in the
+  same repo as `manifest.json`, so one commit can edit both together; it
+  stops accidents, not a determined compromise. Before every submission,
+  the release operator runs
+  `git diff <previous-release-tag> HEAD -- packages/extension/manifest.json`
+  and reads every line. Any change is a deliberate decision recorded
+  against a spec §8 D-item, never a side effect nobody noticed. Permission
+  changes silently trigger CWS re-review and can disable the extension for
+  installed users until they re-accept.
+- ⬜ **Pre-upload sha256 check.** The uploaded artifact is exclusively the
+  CI-emitted `xchain-wallet-extension-vX.Y.Z.zip`; never a locally built
+  zip (this repo's shared worktree has a documented incident class of
+  builds carrying a neighbour's uncommitted edits). Before upload, run:
+  `bash tools/release/verify.sh --input release-artifacts/vX.Y.Z/ --tag vX.Y.Z --artifact xchain-wallet-extension-vX.Y.Z.zip`
+  and confirm it reports the hash, header anchor, and (once G180 lands)
+  signature as OK. Record the checked sha256 in
+  `packages/extension/docs/publish-log.md`'s row for this upload, in the
+  same step as the upload.
+- ⬜ **Post-publish verify (first publish, and after any account-security
+  event; recommended every publish once routine).**
+  `bash tools/release/verify-store.sh` against the store-installed build
+  passes. A never-green run of this script means the script is broken and
+  must be fixed, never waived (see the script's own header).
 
 ---
 

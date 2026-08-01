@@ -415,7 +415,16 @@ function AppInner() {
             // Pass the registry so coin-code URIs (xchain:TBTC/...) resolve to
             // a chainId; without it intent.chainId is always undefined, which
             // Send tolerated but contract routes cannot.
-            const intent = coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY });
+            //
+            //  §3.6: `hardenUriIntentText` neutralizes the free-text
+            // fields (memo/tick/method/params) before they ever become
+            // prefill state, since this is the first point a query-string
+            // value from a `web+xchain:` click becomes something the popup
+            // renders. `address` stays whatever the link sent; see the
+            // function's own comment for why.
+            const intent = coreUri.hardenUriIntentText(
+                coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY }),
+            );
             if (intent && intent.kind === 'send') {
                 setSendPrefill({
                     address: intent.address,

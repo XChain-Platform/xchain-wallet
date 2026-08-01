@@ -179,7 +179,15 @@ try {
     git(repo, ['add', '-A']);
     git(repo, ['-c', 'user.email=smoke@test.invalid', '-c', 'user.name=smoke',
         'commit', '-qm', 'init']);
-    git(repo, ['tag', TAG]);
+    // `tag.gpgsign=false` for the same reason the commits above pass an
+    // identity: this throwaway repo must not inherit the operator's git
+    // config. The release-rails GPG work turned `tag.gpgsign` on globally
+    // on the dev box, which turns a lightweight `git tag` into a signed
+    // annotated one and fails it with "no tag message?", so without this
+    // the smoke is red on the machine that does real releases and green
+    // in a clean CI container. What is under test is sign.sh and
+    // verify.sh, never the fixture's own tag.
+    git(repo, ['-c', 'tag.gpgsign=false', 'tag', TAG]);
     const tagCommit = git(repo, ['rev-parse', TAG]).stdout.trim();
     assert.ok(/^[0-9a-f]{40}$/.test(tagCommit), 'throwaway repo has a tagged commit');
 
@@ -279,7 +287,7 @@ try {
         renameSync(gate, parked);
         git(repo, ['-c', 'user.email=smoke@test.invalid', '-c', 'user.name=smoke',
             'commit', '-qam', 'drop gate']);
-        git(repo, ['tag', 'v9.9.8']);
+        git(repo, ['-c', 'tag.gpgsign=false', 'tag', 'v9.9.8']);
         const r = sh(signArgs(stage(), 'v9.9.8'), { env: gateEnv });
         git(repo, ['reset', '-q', '--hard', TAG]);
         renameSync(parked, gate);

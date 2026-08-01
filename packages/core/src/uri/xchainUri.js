@@ -35,6 +35,7 @@
 
 import { parseBip21Uri, InvalidBip21Error } from './bip21.js';
 import { chainIdForCoinCode, coinCodeForChainId, isKnownCoinCode } from './coinCodes.js';
+import { neutralizeControlText } from '../shared/utils/textHardening.js';
 
 const PATH_PREFIX = 'xchain://';
 const BIP21_PREFIX = 'xchain:';
@@ -118,6 +119,52 @@ export function parseXchainUri(uri, deps) {
         return parseBip21Style(raw);
     }
     return { kind: 'unknown' };
+}
+
+// Intent fields that land in an editable form field a link can prefill,
+// have no legitimate reason to carry a bidi override or a raw control
+// character, and are not otherwise gated above: MEMO is free text a user
+// composes (not a channel for smuggling invisible formatting into a
+// signing screen), and tick / EXECUTE method / EXECUTE params / label /
+// message are short machine-facing tokens. `address` and `amount` are
+// deliberately excluded - see `hardenUriIntentText` below.
+const HARDENED_INTENT_FIELDS = ['memo', 'tick', 'method', 'executeParams', 'label', 'message'];
+
+/**
+ * Neutralize a parsed intent's free-text fields before a shell turns it
+ * into prefill state. `parseXchainUri` stays a pure parser; this is a
+ * deliberate second step, applied once at each place a shell reads an
+ * intent into `useState` (the popup / web boot effects, `ScanRoute`,
+ * `Send`'s smart-paste), so the URI is what gets hardened and a value the
+ * user later TYPES into the same field is never touched.
+ *
+ * Two fields are excluded on purpose, because "strip anything a signing
+ * screen shouldn't render raw" is the wrong rule for them:
+ *
+ * - `address`: this function never mutates it. A destination is validated
+ *   by its own checksum (base58check / bech32) before signing, and a bidi
+ *   or control character embedded in it cannot survive that decode, so a
+ *   hostile address is already unroutable without this function's help.
+ *   Touching the string here buys nothing and adds a way to corrupt an
+ *   address that was fine - a lost payment, which is a worse failure than
+ *   the one this function exists to close.
+ * - `amount`: every consumer parses it as a plain decimal (or rejects it)
+ *   before it reaches a signing surface, so a hidden character already
+ *   invalidates it downstream. Neutralizing it here would not change
+ *   whether a tampered amount gets signed, only whether the rejection
+ *   happens with or without this pass, so it is left as the parser
+ *   produced it.
+ *
+ * @param {XchainUriIntent} intent
+ * @returns {XchainUriIntent} a shallow copy with the hardened fields replaced
+ */
+export function hardenUriIntentText(intent) {
+    if (!intent) return intent;
+    const out = { ...intent };
+    for (const field of HARDENED_INTENT_FIELDS) {
+        if (typeof out[field] === 'string') out[field] = neutralizeControlText(out[field]);
+    }
+    return out;
 }
 
 function parseCoinCodeStyle(raw, chainRegistry) {

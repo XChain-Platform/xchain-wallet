@@ -43,8 +43,14 @@ assert.ok(/export function ScanRoute\(/.test(scanRouteSrc),
     'ScanRoute is exported');
 assert.ok(/import \{ detectQrContent \} from '\.\.\/\.\.\/uri\/detectQrContent\.js'/.test(scanRouteSrc),
     'ScanRoute imports the existing detectQrContent classifier (no duplicate logic)');
-assert.ok(/import \{ parseXchainUri \} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
+assert.ok(/import \{[^}]*\bparseXchainUri\b[^}]*\} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
     'ScanRoute imports parseXchainUri for the richer xchain: intent split');
+//  §3.6: the same import line now also pulls hardenUriIntentText, the
+// deep-link display-hardening fix (memo/tick land in prefill state
+// unneutralized otherwise). Asserted separately from the line above so a
+// regression in either import is its own failure, not a shared one.
+assert.ok(/import \{[^}]*\bhardenUriIntentText\b[^}]*\} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
+    'ScanRoute imports hardenUriIntentText and applies it to a scanned xchain: intent before routing');
 assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
 assert.ok(/<textarea/.test(scanRouteSrc),

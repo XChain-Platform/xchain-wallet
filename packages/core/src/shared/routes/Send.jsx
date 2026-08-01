@@ -34,6 +34,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -472,16 +473,20 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             if (parts.amount) setAmount(parts.amount);
             const tickParam = parts.params?.tick;
             if (typeof tickParam === 'string' && tickParam.length > 0) {
-                setTick(tickParam.toUpperCase());
+                //  §3.6: pasted text is the same untrusted-URI class as
+                // a deep link or a scanned QR, so tick/memo get the same
+                // neutralization those paths apply. `address` stays raw; see
+                // `hardenUriIntentText`'s comment for why.
+                setTick(neutralizeControlText(tickParam).toUpperCase());
             }
-            if (parts.message) setMemo(parts.message);
+            if (parts.message) setMemo(neutralizeControlText(parts.message));
             setPasteHint(`Filled from ${detected.scheme}: URI`);
         } else if (detected.type === 'xchain-uri') {
             e.preventDefault();
             // Route through the richer parser so the new coin-code form
             // (xchain:TBTC/send?to=…) yields intent.address rather than the
             // raw "TBTC/send" that the BIP21 fallback would surface.
-            const intent = uriLib.parseXchainUri(trimmed, { chainRegistry });
+            const intent = uriLib.hardenUriIntentText(uriLib.parseXchainUri(trimmed, { chainRegistry }));
             if (intent.address) setToAddress(intent.address);
             if (intent.tick) setTick(intent.tick.toUpperCase());
             if (intent.amount) setAmount(intent.amount);
