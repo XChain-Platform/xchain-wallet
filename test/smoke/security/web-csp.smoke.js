@@ -53,7 +53,29 @@ assert.ok(cspMetaTag().includes(CONTENT_SECURITY_POLICY), 'meta tag embeds the f
 
 // --- 3. vite.config wires the injector, build-only -----------------------
 
-assert.match(viteSrc, /import \{ CONTENT_SECURITY_POLICY \} from '\.\/src\/csp\.js'/, 'vite imports the policy');
+assert.match(
+    viteSrc,
+    /import \{ contentSecurityPolicyFor \} from '\.\/src\/csp\.js'/,
+    'vite imports the policy builder',
+);
+// : the injected policy is the one for THIS build's profile, and the
+// profile is resolved once so the meta tag and the stamp written into the dist
+// cannot disagree about which build this is.
+assert.match(
+    viteSrc,
+    /const BUILD_PROFILE = resolveBuildProfile\(\)/,
+    'vite resolves the build profile once',
+);
+assert.match(
+    viteSrc,
+    /content: contentSecurityPolicyFor\(BUILD_PROFILE\)/,
+    'the injected CSP is the profile-specific one, not always the default',
+);
+assert.match(
+    viteSrc,
+    /fileName: PROFILE_STAMP_FILE/,
+    'the built dist carries its profile, since packages/mobile copies it verbatim',
+);
 assert.match(viteSrc, /name: 'xchain-csp'/, 'defines the csp plugin');
 assert.match(viteSrc, /apply: 'build'/, 'csp plugin is build-only (dev HMR untouched)');
 assert.match(viteSrc, /transformIndexHtml\(\)/, 'csp plugin injects via transformIndexHtml');

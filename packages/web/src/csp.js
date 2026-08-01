@@ -42,6 +42,21 @@
 //     header to actually prevent framing.
 //   - img/font allow data: + blob: for QR codes and the favicon.
 
+// PROFILES (, ; rails §3 owns the names). The policy is not the
+// same on every shell, because the shells do not have the same capabilities.
+// `store` is the mobile build: there is no WebHID in a WKWebView or an Android
+// WebView, so the hardware-signer path is unreachable there BY DESIGN, and the
+// Trezor origins below would be a permanently-allowed third-party script origin
+// for a feature the build cannot have. In a wallet whose main structural
+// defence against an XSS payload is exactly this directive, an unusable
+// allowance is not neutral: it is a remote-code surface kept open for nothing,
+// and one more thing to explain to an app-store reviewer.
+export const BUILD_PROFILES = Object.freeze(['default', 'store']);
+export const DEFAULT_BUILD_PROFILE = 'default';
+
+/** Trezor Connect's hosted origin: script AND frame, or its UI cannot run. */
+const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
+
 /** @type {Record<string, string[]>} */
 const DIRECTIVES = {
     'default-src': ["'self'"],
@@ -66,12 +81,53 @@ const DIRECTIVES = {
     'frame-ancestors': ["'none'"],
 };
 
-/** The Content-Security-Policy value as a single header/meta string. */
-export const CONTENT_SECURITY_POLICY = Object.entries(DIRECTIVES)
-    .map(([name, values]) => `${name} ${values.join(' ')}`)
-    .join('; ');
+/**
+ * The directive set for a build profile.
+ *
+ * Subtractive on purpose: `store` is `default` minus what it cannot use, so a
+ * directive added for every shell is added once and a profile can only ever
+ * hold LESS than the full policy. A profile that could add origins would be a
+ * way to widen the wallet's main XSS defence in a build nobody reviews as
+ * closely as the web one.
+ *
+ * @param {string} [profile]
+ * @returns {Record<string, string[]>}
+ */
+export function directivesFor(profile = DEFAULT_BUILD_PROFILE) {
+    if (!BUILD_PROFILES.includes(profile)) {
+        throw new Error(
+            `csp: unknown build profile ${JSON.stringify(profile)};`
+            + ` expected one of ${BUILD_PROFILES.join(', ')}`,
+        );
+    }
+    const directives = Object.fromEntries(
+        Object.entries(DIRECTIVES).map(([name, values]) => [name, [...values]]),
+    );
+    if (profile === 'store') {
+        for (const name of ['script-src', 'frame-src']) {
+            directives[name] = directives[name].filter((v) => v !== TREZOR_CONNECT_ORIGIN);
+        }
+    }
+    return directives;
+}
 
-/** The full `<meta http-equiv="Content-Security-Policy">` tag. */
-export function cspMetaTag() {
-    return `<meta http-equiv="Content-Security-Policy" content="${CONTENT_SECURITY_POLICY}" />`;
+/**
+ * The Content-Security-Policy value as a single header/meta string.
+ * @param {string} [profile]
+ */
+export function contentSecurityPolicyFor(profile = DEFAULT_BUILD_PROFILE) {
+    return Object.entries(directivesFor(profile))
+        .map(([name, values]) => `${name} ${values.join(' ')}`)
+        .join('; ');
+}
+
+/** The default profile's policy. Kept as a constant: most callers are web. */
+export const CONTENT_SECURITY_POLICY = contentSecurityPolicyFor(DEFAULT_BUILD_PROFILE);
+
+/**
+ * The full `<meta http-equiv="Content-Security-Policy">` tag.
+ * @param {string} [profile]
+ */
+export function cspMetaTag(profile = DEFAULT_BUILD_PROFILE) {
+    return `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicyFor(profile)}" />`;
 }

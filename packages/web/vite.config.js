@@ -27,7 +27,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import { CONTENT_SECURITY_POLICY } from './src/csp.js';
+import { contentSecurityPolicyFor } from './src/csp.js';
+// Which feature set this build carries . Resolved once,
+// here, so the CSP and the stamp written into the dist cannot disagree.
+import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buildProfile.js';
+
+const BUILD_PROFILE = resolveBuildProfile();
 // Subresource Integrity . The CSP says WHERE scripts may come from; SRI
 // pins WHAT they contain, so a tampered bundle on the asset host cannot execute
 // in a page that holds the user's decrypted seed. Build-only, like the CSP.
@@ -84,11 +89,34 @@ const cspPlugin = {
                 tag: 'meta',
                 attrs: {
                     'http-equiv': 'Content-Security-Policy',
-                    content: CONTENT_SECURITY_POLICY,
+                    // Profile-aware : the mobile store build drops the
+                    // Trezor origins, which no WebView can reach anyway, rather
+                    // than shipping a permanently-allowed remote script origin
+                    // for a feature it does not have.
+                    content: contentSecurityPolicyFor(BUILD_PROFILE),
                 },
                 injectTo: 'head-prepend',
             },
+            {
+                // The profile the app was built with, readable at runtime. The
+                // stamp file below is for tooling; this is for the app and for
+                // anyone inspecting a served page.
+                tag: 'meta',
+                attrs: { name: 'xchain-build-profile', content: BUILD_PROFILE },
+                injectTo: 'head-prepend',
+            },
         ];
+    },
+    // `packages/mobile` copies this dist VERBATIM rather than compiling its
+    // own, so the profile has to travel INSIDE the bundle. Without it there is
+    // nothing to stop a `default` bundle being wrapped in a store artifact and
+    // labelled `store` in a signed manifest .
+    generateBundle() {
+        this.emitFile({
+            type: 'asset',
+            fileName: PROFILE_STAMP_FILE,
+            source: profileStampFor(BUILD_PROFILE),
+        });
     },
 };
 

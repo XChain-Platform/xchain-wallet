@@ -22,11 +22,12 @@
 // matters because `pnpm -r --if-present build` runs in the ordinary CI test
 // lane, where none of those exist; the native build lives in its own workflow.
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { versionPropertiesFor, versionXcconfigFor } from './version.js';
+import { PROFILE_STAMP_FILE, parseProfileStamp } from '../../web/buildProfile.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
@@ -40,7 +41,8 @@ const versionXcconfig = join(pkgRoot, 'ios', 'App', 'Version.xcconfig');
 // the release tag will carry. Never a counter, never a timestamp: see
 // version.js for why the number must be a property of the release.
 const require = createRequire(import.meta.url);
-const tag = process.env.XCHAIN_RELEASE_TAG || `v${require('../package.json').version}`;
+const releaseTag = process.env.XCHAIN_RELEASE_TAG || '';
+const tag = releaseTag || `v${require('../package.json').version}`;
 
 if (!existsSync(join(webDist, 'index.html'))) {
     console.error(
@@ -49,6 +51,40 @@ if (!existsSync(join(webDist, 'index.html'))) {
         + ' or run `pnpm -r build` from the repo root.',
     );
     process.exit(1);
+}
+
+// Which feature set the bundle we are about to wrap was built with
+// . This package compiles nothing: it copies the web
+// dist verbatim, so the profile is a property of a build that already
+// happened somewhere else, and the only honest way to know it is the stamp
+// the web build wrote into the dist.
+//
+// Enforced for a RELEASE build and advisory otherwise. A contributor running
+// `pnpm -r build` to get an APK onto a phone should not have to know this
+// exists; a release that ships a `default` bundle inside an artifact the
+// signed manifest labels `store` is the false claim the whole mechanism
+// exists to prevent, and by then the number is spent.
+const stampPath = join(webDist, PROFILE_STAMP_FILE);
+const stagedProfile = existsSync(stampPath)
+    ? parseProfileStamp(readFileSync(stampPath, 'utf8'))
+    : null;
+
+if (releaseTag && stagedProfile !== 'store') {
+    console.error(
+        `@xchain-wallet/mobile: refusing to stage a ${stagedProfile ?? 'unstamped'} web bundle`
+        + ` into a release build of ${releaseTag}.\n`
+        + 'Mobile store artifacts must carry the `store` profile. Rebuild the web shell with\n'
+        + '  XCHAIN_BUILD_PROFILE=store pnpm --filter @xchain-wallet/web build\n'
+        + 'and stage again. (An unstamped bundle is one whose profile nobody recorded,'
+        + ' which is not the same as a default build.)',
+    );
+    process.exit(1);
+}
+if (!releaseTag && stagedProfile !== 'store') {
+    console.warn(
+        `@xchain-wallet/mobile: staging a ${stagedProfile ?? 'unstamped'} web bundle.`
+        + ' Fine for local work; a release build refuses it.',
+    );
 }
 
 // Replaced wholesale rather than merged: a stale asset left behind from an

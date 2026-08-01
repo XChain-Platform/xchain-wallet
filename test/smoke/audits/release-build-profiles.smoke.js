@@ -33,7 +33,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..', '..');
@@ -240,6 +240,40 @@ for (const [name, profile] of ARTIFACTS) {
 }
 assert.ok(gate(desktopOnly).ok, 'a release with no store-profile artifact is not gated');
 
+// --- 7. The build side agrees with the release side --------------------
+//
+// The profile names now exist in two languages: `XR_PROFILES` in lib.sh, which
+// writes them into the manifest, and `BUILD_PROFILES` in csp.js, which decides
+// what a build actually contains. Two lists of the same names in two languages
+// is exactly the drift  spent a session reconciling, so they are
+// checked against each other rather than trusted to stay in step.
+
+const libProfiles = /XR_PROFILES=\(([^)]*)\)/.exec(readFileSync(lib, 'utf8'))?.[1]
+    ?.trim().split(/\s+/) ?? [];
+const { BUILD_PROFILES } = await import(
+    pathToFileURL(join(repo, 'packages', 'web', 'src', 'csp.js')).href
+);
+assert.deepEqual(
+    libProfiles,
+    [...BUILD_PROFILES],
+    'the release tooling and the build must mean the same thing by a profile name',
+);
+
+// The staging rule that makes the label truthful: `packages/mobile` compiles
+// nothing, it copies `packages/web/dist` verbatim, so without this a `default`
+// bundle could be wrapped in a store artifact and signed as `store`.
+const mobileBuild = readFileSync(join(repo, 'packages', 'mobile', 'scripts', 'build.js'), 'utf8');
+assert.match(
+    mobileBuild,
+    /releaseTag && stagedProfile !== 'store'/,
+    'a release build must refuse to stage a bundle that is not the store profile',
+);
+assert.match(
+    mobileBuild,
+    /process\.exit\(1\)/,
+    'and refuse by exiting, not by warning',
+);
+
 rmSync(work, { recursive: true, force: true });
 
 console.log(
@@ -250,5 +284,7 @@ console.log(
     + ' claim it does not hash, and a manifest with no profile lines at all; the declared'
     + ' set must name a profile for every glob and must not declare two for one artifact;'
     + ' and sign.sh refuses to record a `store` label while the store build profile is'
-    + ' unimplemented, without gating the desktop-only releases that are cuttable today)',
+    + ' unimplemented, without gating the desktop-only releases that are cuttable today.'
+    + ' : lib.sh and csp.js agree on the profile names, and a release build refuses'
+    + ' to stage a web bundle that is not the store profile)',
 );
