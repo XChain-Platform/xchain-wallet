@@ -54,7 +54,14 @@ const MuSig2 = require('../../../../../xchain-sdk/src/musig2.js');
 // itself initialises one on load.
 bitcoin.initEccLib(require('../../../../../xchain-sdk/node_modules/@bitcoinerlab/secp256k1'));
 
-const DAPP_ORIGIN = 'http://xchain-cosign-e2e.test';
+// HTTPS because  D6 narrowed the content-script matches to
+// `https://*/*` plus loopback: the wallet deliberately no longer injects
+// `window.xchain` into a plain-HTTP origin that is not localhost, so this
+// spec's `expect.poll(() => Boolean(window.xchain))` would simply time out
+// on the old `http://` origin and read as a wallet bug. Nothing else has to
+// change, because the origin is never really fetched: `serveDapp` fulfils it
+// through Playwright route interception, which needs no TLS and no server.
+const DAPP_ORIGIN = 'https://xchain-cosign-e2e.test';
 const PASSWORD = 'correct horse battery staple';
 // Agent accounts are Bitcoin-only at launch, and a fresh wallet's BTC address
 // is on mainnet.
