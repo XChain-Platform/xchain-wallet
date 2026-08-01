@@ -87,6 +87,21 @@ const uriArb = () => fc.oneof(
     fc.tuple(piece(), piece(), piece(), piece()).map(
         ([code, k1, v1, v2]) => `xchain:${code}/execute?contract=${v1}&method=${k1}&gas=${v2}&params=${v1}`,
     ),
+    // Arms pinned to a REAL coin code and to the named query keys. The random
+    // arms above almost never land on a known code AND a recognised key at the
+    // same time, so without these the free-text fields are barely ever
+    // populated and any property about them passes vacuously. The counter
+    // guards in those properties are what exposed that.
+    fc.tuple(piece(), piece(), piece(), piece()).map(
+        ([tick, memo, label, message]) =>
+            `xchain:BTC/send?to=bc1qexample&tick=${tick}&memo=${memo}&label=${label}&message=${message}`,
+    ),
+    fc.tuple(piece(), piece()).map(
+        ([tick, memo]) => `xchain:bc1qexample?tick=${tick}&memo=${memo}`,
+    ),
+    fc.tuple(piece(), piece()).map(
+        ([method, params]) => `xchain:BTC/execute?contract=42&method=${method}&params=${params}&gas=100000`,
+    ),
 );
 
 function parse(uri) {
@@ -226,13 +241,30 @@ describe('fuzz/xchain-uri', () => {
     });
 
     it('hardening only ever touches the documented free-text fields', () => {
+        // `params` is excluded from the top-level sweep because hardening now
+        // covers it too: the bag repeats the named fields under their raw
+        // query names, so leaving it out left one value safe under one name
+        // and raw under the other. It is replaced with a hardened COPY, so a
+        // reference comparison would flag it whether or not any value moved;
+        // the nested loop below is the real check, and it is stricter than
+        // skipping the key outright would be.
+        const NAMED = ['memo', 'tick', 'method', 'executeParams', 'label', 'message'];
+        const QUERY = ['memo', 'tick', 'method', 'params', 'label', 'message'];
         fc.assert(
             fc.property(uriArb(), (uri) => {
                 const raw = parse(uri);
+                const rawParams = raw.params ? { ...raw.params } : undefined;
                 const hardened = hardenUriIntentText(raw);
                 for (const key of Object.keys(raw)) {
-                    if (['memo', 'tick', 'method', 'executeParams', 'label', 'message'].includes(key)) continue;
+                    if (NAMED.includes(key) || key === 'params') continue;
                     if (hardened[key] !== raw[key]) return false;
+                }
+                if (rawParams) {
+                    if (Object.keys(hardened.params).length !== Object.keys(rawParams).length) return false;
+                    for (const key of Object.keys(rawParams)) {
+                        if (QUERY.includes(key)) continue;
+                        if (hardened.params[key] !== rawParams[key]) return false;
+                    }
                 }
                 return Object.keys(hardened).length === Object.keys(raw).length;
             }),
@@ -306,6 +338,35 @@ describe('fuzz/xchain-uri', () => {
             expect(elapsed, `oversized parse took ${elapsed.toFixed(0)}ms for ${uri.slice(0, 40)}...`)
                 .toBeLessThan(2000);
         }
+    });
+
+    it('the raw params bag never disagrees with the named field it repeats', () => {
+        // `intent.params` carries the same values again under their query-string
+        // names. If only the named copy is hardened, `intent.tick` is neutralized
+        // while `intent.params.tick` still holds the raw bytes, and the two names
+        // for one value disagree about whether it is safe. Nothing reads the bag
+        // today, which is exactly why this needs a test rather than a comment:
+        // the first consumer to reach for it would inherit the raw value silently.
+        const NAMED_TO_QUERY = {
+            memo: 'memo', tick: 'tick', method: 'method',
+            executeParams: 'params', label: 'label', message: 'message',
+        };
+        let compared = 0;
+        fc.assert(
+            fc.property(uriArb(), (uri) => {
+                const intent = hardenUriIntentText(parse(uri));
+                if (!intent.params) return true;
+                for (const [named, query] of Object.entries(NAMED_TO_QUERY)) {
+                    if (typeof intent[named] !== 'string') continue;
+                    if (typeof intent.params[query] !== 'string') continue;
+                    compared += 1;
+                    if (intent[named] !== intent.params[query]) return false;
+                }
+                return true;
+            }),
+            { numRuns: RUNS },
+        );
+        expect(compared, 'property never compared a pair; the corpus proved nothing').toBeGreaterThan(0);
     });
 
     it('a malformed param invalidates the URI rather than being half-applied', () => {

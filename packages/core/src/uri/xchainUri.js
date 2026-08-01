@@ -130,6 +130,36 @@ export function parseXchainUri(uri, deps) {
 // deliberately excluded - see `hardenUriIntentText` below.
 const HARDENED_INTENT_FIELDS = ['memo', 'tick', 'method', 'executeParams', 'label', 'message'];
 
+// The same values again, under the raw query-string names they arrive as in
+// `intent.params`. That bag repeats the named fields "for caller
+// convenience", so hardening only the named copy leaves `intent.tick`
+// neutralized while `intent.params.tick` still carries the raw bytes: the
+// same value, safe under one name and not the other, which is how a reader
+// reaches for the wrong one. `executeParams` arrives as the `params` key.
+// `to` / `amount` / `contract` / `gas` / `chain` are absent here for the same
+// reasons their named counterparts are excluded (checksum-validated, parsed
+// as a number, or gated by shape).
+const HARDENED_PARAM_KEYS = ['memo', 'tick', 'method', 'params', 'label', 'message'];
+
+/**
+ * Gate a chainId that arrived from untrusted input, returning it only if it
+ * looks like a registry id and `undefined` otherwise.
+ *
+ * Exported because a chainId reaches a ROUTING decision, and the same BIP21
+ * `chain=` param arrives by two different roads: through this parser, and
+ * through `bip21.js` when `ScanRoute` classifies a scanned `bitcoin:` QR.
+ * The second road had no gate, so a scanned link could ride an arbitrary
+ * string into screen state on a path where the first road drops it. One
+ * exported gate rather than a second copy of the regex, so the two roads
+ * cannot drift apart again.
+ *
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+export function safeChainIdParam(value) {
+    return typeof value === 'string' && CHAIN_ID_RE.test(value) ? value : undefined;
+}
+
 /**
  * Neutralize a parsed intent's free-text fields before a shell turns it
  * into prefill state. `parseXchainUri` stays a pure parser; this is a
@@ -158,30 +188,21 @@ const HARDENED_INTENT_FIELDS = ['memo', 'tick', 'method', 'executeParams', 'labe
  * @param {XchainUriIntent} intent
  * @returns {XchainUriIntent} a shallow copy with the hardened fields replaced
  */
-/**
- * Gate a chainId that arrived from untrusted input, returning it only if it
- * looks like a registry id and `undefined` otherwise.
- *
- * Exported because a chainId reaches a ROUTING decision, and the same BIP21
- * `chain=` param arrives by two different roads: through this parser, and
- * through `bip21.js` when `ScanRoute` classifies a scanned `bitcoin:` QR.
- * The second road had no gate, so a scanned link could ride an arbitrary
- * string into screen state on a path where the first road drops it. One
- * exported gate rather than a second copy of the regex, so the two roads
- * cannot drift apart again.
- *
- * @param {unknown} value
- * @returns {string | undefined}
- */
-export function safeChainIdParam(value) {
-    return typeof value === 'string' && CHAIN_ID_RE.test(value) ? value : undefined;
-}
-
 export function hardenUriIntentText(intent) {
     if (!intent) return intent;
     const out = { ...intent };
     for (const field of HARDENED_INTENT_FIELDS) {
         if (typeof out[field] === 'string') out[field] = neutralizeControlText(out[field]);
+    }
+    // Copied, not mutated in place: the caller's original intent stays as the
+    // parser produced it, so a caller that deliberately wants the raw bag
+    // still has one.
+    if (out.params && typeof out.params === 'object') {
+        const params = { ...out.params };
+        for (const key of HARDENED_PARAM_KEYS) {
+            if (typeof params[key] === 'string') params[key] = neutralizeControlText(params[key]);
+        }
+        out.params = params;
     }
     return out;
 }
