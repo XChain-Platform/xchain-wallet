@@ -164,10 +164,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
         run: corepack enable
-      - name: Use Node.js 22
+      # Pinned to an exact patch, and to the SAME one the reproduce
+      # container installs. Every lane in this file asked for major "22",
+      # which actions/setup-node resolves to whatever 22.x is newest on
+      # the day the lane runs - so two releases a month apart shipped
+      # bytes built by different toolchains, and neither matched the
+      # container a third party verifies with. REPRODUCIBLE_BUILDS.md
+      # rests on "the toolchain version is part of the output", which was
+      # true and was precisely the problem.
+      #
+      # tools/release/toolchain.json is the source of truth for this
+      # number; test/smoke/audits/reproducible-toolchain.smoke.js fails
+      # the build if any lane here drifts from it or floats again.
+      - name: Use Node.js (pinned, see tools/release/toolchain.json)
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.2
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -227,13 +239,13 @@ jobs:
         run: corepack enable
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
       - name: Build desktop (linux x64 + arm64)
-        run: pnpm -C packages/desktop dist -- --linux --x64 --arm64
+        run: pnpm -C packages/desktop dist --linux --x64 --arm64
       - name: Dev-mock gate
         run: bash tools/build-reproduce/check-no-dev-mock.sh
       # Blockmaps are delta-update metadata and differential updates are a
@@ -280,7 +292,7 @@ jobs:
         if: env.STAGING_FEED != ''
         env:
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
-        run: pnpm -C packages/desktop dist -- --linux --x64 --arm64
+        run: pnpm -C packages/desktop dist --linux --x64 --arm64
       - name: Assert the rehearsal variant points at STAGING
         if: env.STAGING_FEED != ''
         env:
@@ -316,7 +328,7 @@ jobs:
         run: corepack enable
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
@@ -332,7 +344,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm -C packages/desktop dist -- --mac --x64 --arm64
+        run: pnpm -C packages/desktop dist --mac --x64 --arm64
       - name: Drop delta metadata and build byproducts
         run: rm -f packages/desktop/dist/*.blockmap packages/desktop/dist/builder-debug.yml
       # Expected URL + channel come from the builder config, not from a
@@ -368,7 +380,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
-        run: pnpm -C packages/desktop dist -- --mac --x64 --arm64
+        run: pnpm -C packages/desktop dist --mac --x64 --arm64
       - name: Assert the rehearsal variant points at STAGING
         if: env.STAGING_FEED != ''
         env:
@@ -396,7 +408,7 @@ jobs:
         run: corepack enable
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # This lane had no SOURCE_DATE_EPOCH pin while linux and macOS both
@@ -425,7 +437,7 @@ jobs:
           AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
-        run: pnpm -C packages/desktop dist -- --win --x64 --arm64
+        run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Drop delta metadata and build byproducts
         shell: bash
         run: rm -f packages/desktop/dist/*.blockmap packages/desktop/dist/builder-debug.yml
@@ -462,7 +474,7 @@ jobs:
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
-        run: pnpm -C packages/desktop dist -- --win --x64 --arm64
+        run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Assert the rehearsal variant points at STAGING
         if: env.STAGING_FEED != ''
         shell: bash

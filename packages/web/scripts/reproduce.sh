@@ -41,7 +41,13 @@ cd "${REPO_ROOT}"
 
 # --- 1. Ref resolution + SOURCE_DATE_EPOCH ------------------------------
 COMMIT_SHA="$(git rev-parse --verify "${REF}^{commit}")"
-SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct "${COMMIT_SHA}")"
+# %at (AUTHOR date), because that is what the release lane injects.
+# This read %ct (COMMITTER date); the two are equal only for a commit
+# never rebased or amended, and 10 of the last 200 commits here diverge,
+# by up to 36 minutes. On any of those tags the verifier and the release
+# stamp different mtimes, the hashes cannot match, and the published
+# protocol tells the verifier to suspect tampering .
+SOURCE_DATE_EPOCH="$(git log -1 --pretty=%at "${COMMIT_SHA}")"
 
 echo "[reproduce] ref=${REF} commit=${COMMIT_SHA} epoch=${SOURCE_DATE_EPOCH}"
 echo "[reproduce] commit date=$(date -u -d "@${SOURCE_DATE_EPOCH}" '+%Y-%m-%d %H:%M:%S UTC')"
@@ -82,7 +88,12 @@ docker run --rm \
     -e "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" \
     -e "LC_ALL=C.UTF-8" \
     -e "TZ=UTC" \
-    -v "${WORKTREE_DIR}:/workspace:ro" \
+    `# WRITABLE. Under `:ro` this could never complete: build.sh runs
+     # pnpm install (writes node_modules) and a build (writes dist/),
+     # both inside /workspace, so the run died on EROFS at the first
+     # step. Isolation from the local checkout comes from the detached
+     # worktree above, not from the flag.` \
+    -v "${WORKTREE_DIR}:/workspace" \
     -v "${OUT_DIR_ABS}:/out" \
     "${IMAGE_TAG}"
 

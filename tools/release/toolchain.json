@@ -1,0 +1,59 @@
+{
+    "_comment": [
+        "Single source of truth for the toolchain that produces a release ( §51).",
+        "",
+        "REPRODUCIBLE_BUILDS.md's central claim is that 'the toolchain version is part",
+        "of the output': a verifier who builds with a different Node than the release",
+        "lane used gets different bytes and cannot tell that apart from tampering. That",
+        "claim only holds if one version is pinned for BOTH, which is what this file is.",
+        "",
+        "It was not pinned before. The release lanes asked actions/setup-node for major",
+        "'22', which resolves to whatever 22.x is newest ON THE DAY THE LANE RUNS, while",
+        "packages/desktop/Dockerfile pinned an exact (and different, and by then EOL for",
+        "our engines field) 20.18.0. Two releases cut a month apart used different Node",
+        "patches, a verifier got a third, and every resulting diff read as supply-chain",
+        "tampering to anyone following the published protocol.",
+        "",
+        "Consumers, all of which test/smoke/audits/reproducible-toolchain.smoke.js holds",
+        "to this file:",
+        "  - packages/desktop/Dockerfile      ARG NODE_VERSION / ARG NODE_SHA256_X64",
+        "  - .github/workflows/release.yml    every actions/setup-node node-version",
+        "  - packages/desktop/scripts/*.sh    asserted at runtime inside the container",
+        "",
+        "Bumping Node is therefore a deliberate edit here plus a re-run of the",
+        "reproduction, and it invalidates pre-signing hashes published against the old",
+        "pin exactly the way an electron-builder major does."
+    ],
+
+    "node": {
+        "version": "22.23.2",
+        "_versionNote": "22.x because the repo's engines field requires >=22 and the suites silently skip off it. Exact patch because a floating major is not a pin.",
+        "sha256": {
+            "x64": "d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
+        },
+        "_sha256Note": "Only linux-x64 is listed because the reproduce container is amd64-only (see baseImage). Verified against https://nodejs.org/dist/v22.23.2/SHASUMS256.txt.",
+        "distUrl": "https://nodejs.org/dist"
+    },
+
+    "baseImage": {
+        "ref": "debian:bookworm-slim",
+        "digest": "sha256:40b107342c492725bc7aacbe93a49945445191ae364184a6d24fedb28172f6f7",
+        "platform": "linux/amd64",
+        "_platformNote": [
+            "This digest's index carries exactly one real manifest, linux/amd64, so the",
+            "container is amd64 and nothing else. That is deliberate rather than a",
+            "limitation to fix: the release lane runs on ubuntu-latest (amd64) and",
+            "cross-builds the arm64 artifact from there, so an arm64 container would",
+            "reproduce a build we never cut. reproduce.sh passes --platform explicitly",
+            "so an arm64 verifier emulates on purpose instead of by accident."
+        ]
+    },
+
+    "linuxArches": ["x64", "arm64"],
+    "_linuxArchesNote": "Both are SHIPPED (spec §2) so both must be reproduced. build.sh and the release lane's linux job must build this same set; before this pin build.sh took no arch flags and covered x64 only, leaving the arm64 bundle with no published pre-signing hash at all.",
+
+    "sourceDateEpoch": {
+        "gitFormat": "%at",
+        "_note": "Author date, matching the release lane. reproduce.sh used %ct (committer date); those differ on any rebased or amended commit, which is 10 of the last 200 commits here, up to 36 minutes apart. A verifier hitting one of those tags got different asar mtimes and a diff that looked exactly like tampering."
+    }
+}

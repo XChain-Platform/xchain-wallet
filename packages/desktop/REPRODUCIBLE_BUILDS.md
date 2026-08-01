@@ -15,13 +15,50 @@ explicitly don't, and how to verify a release.
 
 ## What's reproducible
 
-- **The pre-signing Linux app bundle** produced by `dist:unpacked`
-  (electron-builder's `--dir` mode). This is the `linux-unpacked/`
-  directory inside `packages/desktop/dist/`, containing the asar
-  archive + the Electron binary + supporting resources.
-- **The SHA256 of every file in that directory** as captured in
+- **The pre-signing Linux app bundles** produced by `dist:unpacked`
+  (electron-builder's `--dir` mode), for **both shipped architectures**:
+  `linux-unpacked/` (x64) and `linux-arm64-unpacked/`, inside
+  `packages/desktop/dist/`. Each contains the asar archive + the
+  Electron binary + supporting resources.
+- **The SHA256 of every file in both directories** as captured in
   `RELEASE_HASHES.txt` (emitted by `scripts/build.sh` at the end of
   each run).
+
+Both arches are listed because both are released (§2 of the publishing
+spec). Until 2026-08-01 `build.sh` passed no architecture flags, so it
+built whatever the host was and this document's promise silently covered
+x64 only: the arm64 bundle real users install had no published
+pre-signing hash and no way for anyone to check it. The set now comes
+from `tools/release/toolchain.json`, and the guard test holds the release
+lane to the same list so neither side can quietly ship an arch the other
+does not cover.
+
+## What a third party cannot do yet, and why
+
+**Reproduction currently requires both repositories, so it is available to
+the maintainer and not to the public.** `packages/desktop` depends on the
+SDK as `"xchain-sdk": "link:../../../xchain-sdk"` - a filesystem link to a
+sibling repository, three levels above this one. Someone who follows the
+protocol below against a clone of `xchain-wallet` alone gets:
+
+```
+[vite]: Rollup failed to resolve import "xchain-sdk/src/wallet.js"
+```
+
+`xchain-sdk` is `private: true` and unpublished, so there is nothing for
+them to install. This is not a bug in the container or the script; it is
+the shape of the dependency, and it means the Level-2 claim at the top of
+this file is, today, a claim about a build only we can run. Closing it is
+a distribution decision (publish the SDK, vendor it into this repo, or
+depend on it by pinned git commit) and it is registered under 
+rather than quietly patched here.
+
+What works now: with both repos checked out side by side, `reproduce.sh`
+builds from a detached worktree of the SDK's committed state - never the
+sibling's working tree - and records the exact SDK commit in the manifest
+header. That matters even for us, because the same wallet tag against a
+different SDK commit is a different artifact, and without the header two
+manifests could disagree for a reason neither one stated.
 
 ## What's NOT reproducible
 
@@ -39,6 +76,15 @@ explicitly don't, and how to verify a release.
   pre-signing SHAs produced on a Mac runner / Windows runner the
   maintainer operates; a later phase may add VM-based reproduction
   for those.
+- **Anything on a host that is not amd64, natively.** The pinned base
+  image digest resolves to `linux/amd64` and nothing else, and
+  `reproduce.sh` passes `--platform linux/amd64` explicitly so that is a
+  stated cost rather than a surprise. This is deliberate: the release
+  lane runs on an amd64 runner and cross-builds the arm64 artifact from
+  there, so an arm64 container would faithfully reproduce a build we
+  never cut. Verifiers on Apple Silicon or arm64 Linux need working
+  emulation (Rosetta, or qemu via binfmt); reproduction has been
+  exercised that way and works, at a speed penalty.
 - **The Electron framework download itself.** electron-builder fetches
   prebuilt Electron binaries from Electron's dist server; we verify
   the SHA256 against electron-builder's baked-in manifest but we
@@ -56,19 +102,39 @@ cd xchain-wallet
 
 # Run reproduction against a specific tag.
 bash packages/desktop/scripts/reproduce.sh v0.58.0
-
-# Compare the resulting manifest against the official release's hashes.
-diff reproduce-out/RELEASE_HASHES.txt \
-     <(curl -fsSL https://github.com/XChain-platform/xchain-wallet/releases/download/v0.58.0/RELEASE_HASHES.txt)
 ```
 
-A zero-byte diff means the build is reproducible and the maintainer's
-pre-signing artifact matches what source produces. Any diff is
-diagnostic:
+That emits `reproduce-out/RELEASE_HASHES.txt`: the SHA256 of every file
+in both pre-signing Linux bundles.
+
+> **What you cannot yet diff it against, stated plainly.** This document
+> used to end the recipe with a diff against the release's published
+> `RELEASE_HASHES` manifest and call a zero-byte result the proof. That
+> comparison cannot succeed and never could. The published manifest
+> covers the PACKAGED artifacts a user downloads (`.AppImage`, `.deb`,
+> `.dmg`, `.exe`, the web tarball; see
+> `tools/release/expected-artifacts.txt`), while this script runs
+> electron-builder in `--dir` mode, which produces unpacked directories
+> and no installer at all. The two file sets do not overlap by a single
+> name, so the diff is guaranteed non-empty on a perfectly reproducible
+> build. Closing that loop needs a decision we have not taken: either
+> publish a separate pre-signing manifest per release, or have this
+> script build the packaged Linux artifacts and compare those directly
+> (they carry no code signature, so unlike macOS and Windows they are
+> reproducible as shipped). Tracked under ; until it lands, what
+> this script gives you is a self-consistency check between two of your
+> own runs, and a byte-level basis for comparing notes with another
+> verifier, not a check against us.
+
+Two runs of the same tag must produce byte-identical manifests. Any diff
+between them is diagnostic:
 
 - **Toolchain drift** - Node/pnpm pinning mismatch. Check your Docker
   image was built against the tag's `Dockerfile`, not a cached older
-  image.
+  image. `build.sh` now asserts the running Node against the version
+  the ref pins and aborts with that message rather than letting a stale
+  cached image express itself as a hash diff, which is the one drift no
+  file comparison can catch.
 - **Timestamp leakage** - electron-builder's `SOURCE_DATE_EPOCH`
   support missed a path. Open an issue; this is a bug on our side.
 - **Supply-chain tampering** - the maintainer's build environment
@@ -78,7 +144,25 @@ diagnostic:
 
 - `SOURCE_DATE_EPOCH=<commit author date>` - injected by `reproduce.sh`
   from the git commit being built. Honoured by electron-builder for
-  asar entry mtimes + mksquashfs (AppImage) + ar (deb).
+  asar entry mtimes + mksquashfs (AppImage) + ar (deb). **Author date,
+  `%at`, on both sides.** `reproduce.sh` used to read `%ct`, the
+  committer date, while the release lane read `%at`. They are equal only
+  for a commit that was never rebased or amended, and 10 of the last 200
+  commits in this repo diverge, by up to 36 minutes. On any of those tags
+  the verifier stamped a different instant into the asar than the release
+  did, so the hashes could not match and the protocol below told the
+  verifier to suspect tampering.
+- **The toolchain itself is pinned once, for both sides.**
+  `tools/release/toolchain.json` holds the exact Node version (and its
+  tarball SHA256) that the reproduce container installs *and* that every
+  release lane installs. This is the pin the section below depends on and
+  it did not exist before 2026-08-01: the lanes asked
+  `actions/setup-node` for major `22`, which resolves to whatever patch
+  is newest on the day the lane runs, while the container pinned an exact
+  `20.18.0`. Two releases cut a month apart were built by different
+  toolchains and neither matched what a verifier would produce.
+  `test/smoke/audits/reproducible-toolchain.smoke.js` fails the build if
+  any of the four homes drifts, or if a lane goes back to floating.
 - `LC_ALL=C.UTF-8 TZ=UTC` - pinned in both the Dockerfile and the
   in-container env so locale-sensitive tools (sort, date) emit
   deterministic output.
@@ -168,9 +252,13 @@ belongs to *this* document is only the reproducibility step inside it:
 
 ```bash
 bash packages/desktop/scripts/reproduce.sh vX.Y.Z ./release-out
-diff release-out/RELEASE_HASHES.txt <the signed manifest>
 ```
 
-Run it against a pristine clone at the tag, before signing. A zero-byte
-diff is the claim this file exists to support; anything else is
-diagnostic, and the sources of non-determinism above are where to look.
+Run it against a pristine clone at the tag, before signing, and keep
+`release-out/RELEASE_HASHES.txt` with the release record. The diff line
+that used to sit here pointed at the signed manifest, which covers a
+disjoint set of files (see the callout under "Verification protocol"), so
+it could not have passed; do not reintroduce it until the pre-signing
+manifest question is decided. What this step buys today is that the
+release was built from a pinned toolchain and that the bundle hashes are
+recorded at the moment of signing.

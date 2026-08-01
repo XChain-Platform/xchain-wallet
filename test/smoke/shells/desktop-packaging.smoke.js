@@ -379,9 +379,15 @@ assert.ok(
     /NODE_VERSION=\d/.test(dockerfile),
     'Dockerfile pins NODE_VERSION',
 );
+// Arch-suffixed since : the container is amd64-only (matching the
+// amd64 release runner it must produce identical bytes to), and the hash
+// is per tarball. That the value agrees with tools/release/toolchain.json
+// and with the release lanes is a separate, stricter check in
+// test/smoke/audits/reproducible-toolchain.smoke.js; this one only cares
+// that the download is integrity-checked at all.
 assert.ok(
-    /NODE_SHA256=[a-f0-9]{64}/.test(dockerfile),
-    'Dockerfile pins NODE_SHA256 (Node tarball integrity)',
+    /NODE_SHA256_X64=[a-f0-9]{64}/.test(dockerfile),
+    'Dockerfile pins NODE_SHA256_X64 (Node tarball integrity)',
 );
 assert.ok(
     /ARG PNPM_VERSION/.test(dockerfile),
@@ -411,9 +417,17 @@ assert.ok(
 );
 
 const reproduceSh = readFileSync(join(desktop, 'scripts', 'reproduce.sh'), 'utf8');
+// This assertion used to read `%ct` while its own message said "author
+// date", so it pinned the defect in place and described it as the fix.
+// %ct is the COMMITTER date and diverges from %at on any rebase or
+// amend; the release lane injects %at, so the two sides stamped
+// different mtimes into the asar and the reproduction could not match
+// . The version pin lives in tools/release/toolchain.json and
+// reproducible-toolchain.smoke.js holds both sides to it.
 assert.ok(
-    /git log -1 --pretty=%ct/.test(reproduceSh),
-    'reproduce.sh derives SOURCE_DATE_EPOCH from the commit author date',
+    /git log -1 --pretty=%at/.test(reproduceSh),
+    'reproduce.sh derives SOURCE_DATE_EPOCH from the commit author date (%at), '
+    + 'the same field the release lane uses',
 );
 assert.ok(
     /git worktree add/.test(reproduceSh),

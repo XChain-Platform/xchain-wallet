@@ -89,9 +89,17 @@ export function runReproBuildAudit() {
     out.push(rule('reproduce.sh-exists',
         reproSh !== null,
         'packages/desktop/scripts/reproduce.sh must exist'));
+    // %at (AUTHOR date), not %ct. This rule pinned %ct, and so did the
+    // desktop-packaging smoke, so the two places that could have caught
+    // the mismatch were both holding it in place. The release lane injects
+    // %at; committer date differs from author date on any rebase or amend
+    // (10 of the last 200 commits here), and the two sides then stamp
+    // different mtimes into the asar, so the reproduction cannot match and
+    // the published protocol reads that as possible tampering .
     out.push(rule('reproduce.sh-derives-source-date-epoch-from-git',
-        reproSh !== null && /git log -1 --pretty=%ct/.test(reproSh),
-        'reproduce.sh must derive SOURCE_DATE_EPOCH from the commit date (git log -1 --pretty=%ct)'));
+        reproSh !== null && /git log -1 --pretty=%at/.test(reproSh),
+        'reproduce.sh must derive SOURCE_DATE_EPOCH from the commit AUTHOR date '
+        + '(git log -1 --pretty=%at), the same field .github/workflows/release.yml uses'));
     out.push(rule('reproduce.sh-uses-worktree',
         reproSh !== null && /git worktree (?:add|remove)/.test(reproSh),
         'reproduce.sh must build from a fresh worktree (isolates from local changes)'));

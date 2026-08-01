@@ -7,9 +7,12 @@
 #
 # Pinning rules:
 #   - Base image pinned to a specific digest (not a tag) - tags move.
-#   - Node pinned at the LTS minor release active during the build
-#     window. Changing Node means changing this file (and bumping the
-#     minor version in the README so verifiers know what to use).
+#   - Node pinned to an EXACT patch, and to the same one the release
+#     lanes install. Both live in tools/release/toolchain.json and
+#     test/smoke/audits/reproducible-toolchain.smoke.js fails the build
+#     if this file and that one disagree. A version pinned here but
+#     floating in CI is not a pin: it silently guarantees the verifier
+#     and the maintainer build with different toolchains.
 #   - pnpm pinned via corepack - version comes from root package.json
 #     `packageManager`.
 #   - No `apt-get update` in the build step itself; all system deps
@@ -24,6 +27,13 @@
 # Debian bookworm slim, digest-pinned. Chosen over Alpine because
 # electron-builder's Linux target needs glibc + fpm (both less painful
 # on Debian-family bases).
+#
+# This digest's index carries exactly one real manifest, linux/amd64, so
+# the image is amd64 and only amd64. That matches the release lane, which
+# runs on ubuntu-latest and cross-builds the arm64 artifact from there -
+# an arm64 container would faithfully reproduce a build we never cut.
+# reproduce.sh passes --platform linux/amd64 explicitly so a verifier on
+# an arm64 host emulates deliberately rather than by accident.
 FROM debian:bookworm-slim@sha256:40b107342c492725bc7aacbe93a49945445191ae364184a6d24fedb28172f6f7
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -32,7 +42,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     # SOURCE_DATE_EPOCH is set at BUILD time by reproduce.sh (from the
     # tag's commit date), not baked into the image.
-    NODE_VERSION=20.18.0 \
     PNPM_HOME=/usr/local/pnpm
 
 # System deps:
@@ -62,10 +71,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && locale-gen C.UTF-8
 
 # Install Node at the pinned version. Official tarballs, SHA256-verified.
-# (Upgrading Node → bump NODE_VERSION + NODE_SHA256 together.)
-ENV NODE_SHA256=4543670b589593f8fa5f106111fd5139081da42bb165a9239f05195e405f240a
+#
+# These two defaults are the copy a third party gets from a bare
+# `docker build -f Dockerfile`, so they must equal what the release lanes
+# install. tools/release/toolchain.json is the source of truth, the smoke
+# test enforces the equality, and reproduce.sh passes the values through
+# as build args so a stale default cannot survive a real reproduction.
+# Upgrading Node means editing toolchain.json and these together.
+ARG NODE_VERSION=22.23.2
+ARG NODE_SHA256_X64=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
+ENV NODE_VERSION=${NODE_VERSION}
 RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-    && echo "${NODE_SHA256}  node-v${NODE_VERSION}-linux-x64.tar.xz" | sha256sum -c - \
+    && echo "${NODE_SHA256_X64}  node-v${NODE_VERSION}-linux-x64.tar.xz" | sha256sum -c - \
     && tar -xJf "node-v${NODE_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
     && rm "node-v${NODE_VERSION}-linux-x64.tar.xz" \
     && corepack enable \
@@ -86,7 +103,15 @@ RUN groupadd --gid 1000 builder \
 USER builder
 WORKDIR /workspace
 
-# `reproduce.sh` mounts the source tree at /workspace read-only + a
-# separate writable output directory at /out. The build script inside
-# the repo does the rest.
+# `reproduce.sh` mounts a throwaway git worktree at /workspace WRITABLE,
+# plus a separate output directory at /out. The build script inside the
+# repo does the rest.
+#
+# It used to mount /workspace read-only, which cannot work and never did:
+# `pnpm install` writes node_modules and electron-builder writes dist/,
+# both under /workspace, so the very first step died on EROFS. What the
+# `:ro` was reaching for - reproducing from the ref rather than from
+# whatever is lying around in the checkout - is already guaranteed by
+# building a detached worktree of the commit, which reproduce.sh creates
+# and deletes around the run. The flag added no isolation, only failure.
 ENTRYPOINT ["bash", "packages/desktop/scripts/build.sh"]
