@@ -52,20 +52,26 @@ import {
  * "reload" is a new connection over the same bytes), so records live on the
  * factory and a connection is just a view onto them.
  */
-function createFakeIndexedDB({ blockOpen = false, failOpen = false } = {}) {
+function createFakeIndexedDB({ blockOpen = false, failOpen = false, holdCommit = false } = {}) {
     /** @type {Map<string, { version: number, stores: Map<string, Map<string, unknown>>, connections: Set<any> }>} */
     const databases = new Map();
     const stats = { opens: 0, upgrades: 0, closes: 0 };
+    /** Commits parked by `holdCommit`, so a test can observe the window between
+     *  a request succeeding and the transaction actually committing. */
+    const heldCommits = [];
 
     function settle(fn, req, tx) {
+        tx?.requestStarted();
         queueMicrotask(() => {
             try {
                 req.result = fn();
                 req.onsuccess?.();
+                tx?.requestSettled(null);
             } catch (err) {
                 req.error = err;
                 req.onerror?.();
                 tx?.onerror?.();
+                tx?.requestSettled(err);
             }
         });
         return req;
@@ -85,7 +91,26 @@ function createFakeIndexedDB({ blockOpen = false, failOpen = false } = {}) {
                 if (conn.closed) throw new Error('InvalidStateError: database is closed');
                 const records = dbState.stores.get(name);
                 if (!records) throw new Error(`NotFoundError: no object store "${name}"`);
-                const tx = { onabort: null, onerror: null, error: null };
+                // A transaction is not its requests: it commits once every
+                // request it owns has settled, and `oncomplete` is the only
+                // event that means "durable". The backend resolves there
+                // rather than on `req.onsuccess` (a write resolved early
+                // raced `window.location.reload()` and got dropped), so a
+                // double that fires success but never completion leaves
+                // every save/load/clear pending forever.
+                const tx = { onabort: null, oncomplete: null, onerror: null, error: null };
+                let outstanding = 0;
+                let failed = false;
+                tx.requestStarted = () => { outstanding += 1; };
+                tx.requestSettled = (err) => {
+                    if (err) failed = true;
+                    outstanding -= 1;
+                    // An errored request aborts the transaction in real
+                    // IndexedDB, so it never completes; only a clean run does.
+                    if (outstanding !== 0 || failed) return;
+                    if (holdCommit) heldCommits.push(() => tx.oncomplete?.());
+                    else tx.oncomplete?.();
+                };
                 tx.objectStore = () => ({
                     get: (k) => settle(() => records.get(k), {}, tx),
                     put: (v, k) => settle(() => { records.set(k, v); }, {}, tx),
@@ -136,6 +161,12 @@ function createFakeIndexedDB({ blockOpen = false, failOpen = false } = {}) {
                 req.onsuccess?.();
             });
             return req;
+        },
+        /** Let every transaction parked by `holdCommit` commit. */
+        releaseCommits() {
+            const held = heldCommits.splice(0);
+            for (const commit of held) commit();
+            return held.length;
         },
         /** Another realm (or the wipe path) bumping/deleting the database. */
         fireVersionChange(name = DEFAULT_DB_NAME) {
@@ -293,6 +324,28 @@ describe('web vault persistence: the IndexedDB connection itself', () => {
         fakeIdb.fireVersionChange();
 
         await expect(backend.save(new Uint8Array([7]))).rejects.toThrow(/closed/);
+    });
+
+    it('resolves a write on the transaction commit, not on the request succeeding', async () => {
+        // NetworkSection does `await save(); window.location.reload()`. While
+        // save() resolved on req.onsuccess the reload could beat the real
+        // commit, and the write was simply lost (the active network silently
+        // reverting on the next unlock). The gap below is that race: the
+        // record is already in the store and the request has succeeded, yet
+        // the caller must still be waiting.
+        const idb = createFakeIndexedDB({ holdCommit: true });
+        globalThis.indexedDB = idb;
+
+        let resolved = false;
+        const save = new IndexedDBStorageBackend().save(VAULT_BYTES).then(() => { resolved = true; });
+        await new Promise((r) => { setTimeout(r, 0); });
+
+        expect(typeof idb.rawRecord()).toBe('string');
+        expect(resolved).toBe(false);
+
+        expect(idb.releaseCommits()).toBe(1);
+        await save;
+        expect(resolved).toBe(true);
     });
 
     it('rejects when the open is blocked', async () => {
