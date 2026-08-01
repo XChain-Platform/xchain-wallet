@@ -51,6 +51,11 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
+import {
+    listMembers,
+    ownerOffAllowList,
+    ownerOffAllowListMessage,
+} from '../../flows/allowListSelfCheck.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -402,6 +407,41 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // Source field (own-address picker) writes fromAddressId directly, so the
     // source can be any wallet address, including a dispenser address.
     const sourceAddress = fromAddress;
+
+    // D-161: the address the CHAIN will check against the allow-list, which is
+    // not always the one in the Source field. Mirrors the GET_ADDRESS rule in
+    // `actionParams` below, including its default: mode 'current' omits the
+    // param and the protocol falls back to SOURCE.
+    const gateAddress = addressMode === 'new'
+        ? (dispenserGetAddress?.address || sourceAddress?.address || '')
+        : addressMode === 'existing'
+            ? (existingAddress?.address || sourceAddress?.address || '')
+            : (sourceAddress?.address || '');
+
+    // D-161: an allow-list gates the dispenser's OWN pay-to address as well as
+    // the buyer, so a list of customers alone refuses every sale - silently,
+    // and at the buyer's expense. The members are already one read away (the
+    // list picker fetches them to show a count); this asks them a different
+    // question. Best-effort by design: an unreadable list produces no warning
+    // rather than one the user cannot act on.
+    const [allowListMembers, setAllowListMembers] = useState(
+        /** @type {string[] | null} */ (null),
+    );
+    useEffect(() => {
+        setAllowListMembers(null);
+        if (!allowListIdx || !chainId) return undefined;
+        if (typeof messaging.getListByActionIndex !== 'function') return undefined; // older host build
+        let live = true;
+        messaging.getListByActionIndex({ chainId, actionIndex: allowListIdx })
+            .then((detail) => { if (live) setAllowListMembers(listMembers(detail)); })
+            .catch(() => { /* best-effort: no warning beats a wrong one */ });
+        return () => { live = false; };
+    }, [allowListIdx, chainId, messaging]);
+    const allowListSelfWarning = ownerOffAllowList({
+        members: allowListMembers, getAddress: gateAddress,
+    })
+        ? ownerOffAllowListMessage(gateAddress)
+        : null;
 
     // Resolve the SOURCE address's balance of the entered ticker for the
     // escrow AmountField (Max + "available"). Debounced on the ticker for
@@ -1302,6 +1342,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </Button>
                 {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
             </div>
+
+            {/* D-161: "Restrict who can buy" is the reading that causes the
+                mistake - the chain checks this dispenser's own address against
+                the same list. Rendered beside the control that caused it rather
+                than at review, so the fix (pick another list, or clear it) is
+                one click away from the warning. */}
+            {allowListSelfWarning ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{allowListSelfWarning}</p>
+                </div>
+            ) : null}
 
             {feeTiers ? (
                 <FeeSelector

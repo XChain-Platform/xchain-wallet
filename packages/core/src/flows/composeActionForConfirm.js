@@ -292,6 +292,10 @@ export async function composeActionForConfirm({
         // reveal. Rides the envelope so the form can hand it back on Approve
         // and the submit path attaches it without re-quoting.
         deferredFeeOutput: composed.deferredFeeOutput || null,
+        // ...and every OTHER output the commit reserved but did not emit (a Mode B
+        // dispenser's oracle usage fee, an ADS donation, a native payment output).
+        // Left out of the envelope they were burned as miner fee on the reveal.
+        deferredOutputs: composed.deferredOutputs || [],
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT

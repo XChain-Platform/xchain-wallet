@@ -162,6 +162,8 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 // the previewed PSBT because it belongs on the reveal. Carry
                 // it so the submit path attaches it there.
                 deferredFeeOutput: composed.deferredFeeOutput || null,
+                // ...and the rest of the deferred set, which the fee alone omitted.
+                deferredOutputs: composed.deferredOutputs || [],
             }, composed),
         })
     ), [confirmAction, messaging, settings, walletId]);

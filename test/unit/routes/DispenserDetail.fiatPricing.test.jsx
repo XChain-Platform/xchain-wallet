@@ -76,8 +76,35 @@ const COIN_DISPENSER = {
     fiat_amount: null,
 };
 
-function mount(dispenser) {
+/**
+ * A USER-ORACLE (Mode B) dispenser, shaped as the explorer serves one: a fiat
+ * code and an ORACLE_ADDRESS, and NO fiat amount - the price is not on this row
+ * at all, it is on the oracle's own published feed. Taken from the real regtest
+ * row DISPENSER 1955 (`DISPENSER|0|LTC|XCHAIN|5||100|LTC||0||USD||rltc1qguj…`).
+ */
+const ORACLE_ADDRESS = 'rltc1qguj32tkf0lx9dtr3pgega4rxjl980rjdh8h6la';
+const ORACLE_DISPENSER = {
+    ...FIAT_DISPENSER,
+    action_index: '1955',
+    give_amount: '5',
+    fiat_amount: null,
+    oracle_address: ORACLE_ADDRESS,
+};
+
+/** What `oracle.feeds` answers for that address: one live quote, one still maturing. */
+const ORACLE_FEEDS = [{
+    key: 'LTC/XCHAIN/USD',
+    coin: 'LTC',
+    tick: 'XCHAIN',
+    fiat: 'USD',
+    live: { value: '1.5', fee: '0.01', effective: true },
+    pending: { value: '9.99', fee: '0.01', effective: false },
+    history: [],
+}];
+
+function mount(dispenser, extraMessaging = {}) {
     const messaging = {
+        ...extraMessaging,
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getDispenses: vi.fn().mockResolvedValue({ data: [] }),
@@ -134,6 +161,57 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // settlement, which is not the one on screen.
         mount(FIAT_DISPENSER);
         expect(await screen.findByText(/rate when your payment lands/i)).toBeInTheDocument();
+    });
+
+    // A Mode B dispenser is the harder half of the same rule. Its price is not on
+    // the dispenser row - it is published by a THIRD PARTY at the oracle address
+    // the row names - so the panel said only "Set by an oracle, in USD" and left
+    // the buyer with no number at all. That is unactionable in a way that costs
+    // money in both directions: pay too little and the dispense is refused with
+    // the coin KEPT (dispense.js runs its price match after the payment has
+    // moved), pay too much and the remainder is floored away as a tip.
+    it('reads the oracle price and states it, for a user-oracle dispenser', async () => {
+        const messaging = mount(ORACLE_DISPENSER, {
+            oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS),
+        });
+        expect(await screen.findByText(/1\.5 USD/)).toBeInTheDocument();
+        expect(messaging.oracleFeeds).toHaveBeenCalledWith({
+            chainId: CHAIN, address: ORACLE_ADDRESS,
+        });
+    });
+
+    it('quotes the LIVE feed, never the one still maturing', async () => {
+        // Every PRICE v1 publish is inert for 24 hours, so the pending row
+        // prices nothing yet. Showing it would be a price no payment made today
+        // can buy at - worse than no number, because it looks like one.
+        mount(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
+        await screen.findByText(/1\.5 USD/);
+        expect(document.body.textContent || '').not.toMatch(/9\.99/);
+    });
+
+    it('says the oracle is dark rather than implying a price, when it publishes none', async () => {
+        // A feed with nothing effective settles nothing, and a payment sent to
+        // a dispenser priced by it is refused and not returned. Silence here
+        // reads as "the price is just not shown yet".
+        mount(ORACLE_DISPENSER, {
+            oracleFeeds: vi.fn().mockResolvedValue([{ ...ORACLE_FEEDS[0], live: null }]),
+        });
+        await screen.findByText(/Pay to buy/);
+        expect(await screen.findByText(/publishing no price/i)).toBeInTheDocument();
+    });
+
+    it('does not quote another feed from the same oracle', async () => {
+        // One publisher may run many feeds; only the one matching this
+        // dispenser's own tick and currency prices it. Quoting a sibling would
+        // put another asset's price on this screen with total confidence.
+        mount(ORACLE_DISPENSER, {
+            oracleFeeds: vi.fn().mockResolvedValue([{
+                key: 'LTC/OTHER/USD', coin: 'LTC', tick: 'OTHER', fiat: 'USD',
+                live: { value: '42', fee: '0' }, pending: null, history: [],
+            }]),
+        });
+        await screen.findByText(/Pay to buy/);
+        expect(document.body.textContent || '').not.toMatch(/42 USD/);
     });
 
     it('still gives an exact coin figure for an ordinary coin-priced dispenser', async () => {

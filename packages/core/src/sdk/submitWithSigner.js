@@ -180,6 +180,11 @@ export async function submitWithSigner({
     // commit and on to the phase-2 reveal, which is the transaction the
     // indexer validates the protocol fee against.
     let deferredNativeFeeOutput = null;
+    // Every output the phase-1 commit reserved value for but did not emit. Supersedes
+    // deferredNativeFeeOutput (which it contains): the chunk lane emits NO custom output
+    // on the commit, so an oracle usage fee, an ADS donation or a native payment output
+    // was burned as miner fee when only the protocol fee was carried across.
+    let deferredOutputs = [];
     if (prebuiltPsbt) {
         // Preserve the phase events submitAction's lifecycle tracker consumes,
         // but do NO rebuild: the PSBT is the one the user approved.
@@ -201,6 +206,11 @@ export async function submitWithSigner({
         // without re-quoting, and so the previewed bytes stay exactly what the
         // §5.3.2 output-set check verified.
         deferredNativeFeeOutput = prebuiltPsbt.deferredFeeOutput || null;
+        // A composer built before the whole-set deferral still sends only the fee, so
+        // fall back to it rather than silently emitting nothing on the reveal.
+        deferredOutputs = Array.isArray(prebuiltPsbt.deferredOutputs) && prebuiltPsbt.deferredOutputs.length
+            ? prebuiltPsbt.deferredOutputs
+            : (deferredNativeFeeOutput ? [deferredNativeFeeOutput] : []);
     } else {
         // Step 1: create action string (no network call, just formatting).
         onProgress('creating', { action: actionData.action });
@@ -276,8 +286,13 @@ export async function submitWithSigner({
         // action rides a reveal, so the fee output is emitted there. Anything
         // else carries the action in the transaction just built, which already
         // contains the output.
-        if (feeOutput && isChunkEncoding(encoded.encoding)) {
-            deferredNativeFeeOutput = feeOutput;
+        if (isChunkEncoding(encoded.encoding)) {
+            if (feeOutput) deferredNativeFeeOutput = feeOutput;
+            // The oracle usage fee and the ADS donation live in effectiveEncoderOpts
+            // alongside the fee and are equally unemitted by the commit.
+            deferredOutputs = Array.isArray(effectiveEncoderOpts.customOutputs)
+                ? effectiveEncoderOpts.customOutputs.slice()
+                : [];
         }
     }
 
@@ -358,8 +373,10 @@ export async function submitWithSigner({
             // : the protocol fee rides the REVEAL, the transaction that
             // carries the action and therefore the one the indexer checks.
             // spendP2sh has always accepted customOutputs (xchain-sdk
-            // encoder.js); the wallet simply never passed any.
-            ...(deferredNativeFeeOutput ? { customOutputs: [deferredNativeFeeOutput] } : {}),
+            // encoder.js); the wallet simply never passed any. It is the WHOLE
+            // deferred set rather than the fee alone: the commit reserved value
+            // for each of them and emitted none, so any left out here is burned.
+            ...(deferredOutputs.length ? { customOutputs: deferredOutputs } : {}),
         });
         const phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,

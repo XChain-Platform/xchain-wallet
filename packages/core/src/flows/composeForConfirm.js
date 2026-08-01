@@ -188,6 +188,23 @@ export async function composeForConfirm({
         ? feeOutput
         : null;
 
+    //  solved this for the protocol fee and for nothing else, and the gap is a
+    // money leak rather than a rejection: on the chunk lane the encoder emits NO custom
+    // output on the commit (it folds each one's value and reveal-side byte cost into the
+    // script output), and the reveal is built by the submit path, which was handed only
+    // the fee. So every OTHER custom output - a Mode B dispenser's oracle usage fee
+    // , an ADS donation, a native payment output - was paid for by the commit's
+    // reservation and then burned as miner fee on the reveal, because nothing emitted it.
+    // Measured on Litecoin regtest 2026-07-31: a Mode B dispenser reserved 0.05005464 LTC
+    // in its carrier and the reveal spent all of it as fee, so the oracle was not paid and
+    // the create indexed `invalid: ORACLE_ADDRESS (missing oracle fee output)`.
+    // The WHOLE set is handed along, fee included, so the reveal emits what the commit
+    // reserved. Placement is still read off the encoding the encoder chose, never
+    // predicted.
+    const deferredOutputs = !bareNativePayment && isChunkEncoding(encoded.encoding)
+        ? (Array.isArray(finalEncoderOpts.customOutputs) ? finalEncoderOpts.customOutputs.slice() : [])
+        : [];
+
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
         : null;
@@ -252,6 +269,10 @@ export async function composeForConfirm({
         // the fee (it reads the quote); this tells the submit path where to put
         // it without re-quoting.
         deferredFeeOutput,
+        // Every output the phase-1 transaction reserved value for but did not emit, so
+        // the submit path can emit them all on the reveal. Supersedes deferredFeeOutput,
+        // which it contains; that field stays for callers built against  alone.
+        deferredOutputs,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,

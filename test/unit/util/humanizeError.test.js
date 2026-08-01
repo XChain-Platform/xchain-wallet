@@ -95,4 +95,65 @@ describe('humanizeError', () => {
         expect(strOut.cause).to.equal('insufficient_funds');
         expect(strOut.raw).to.equal('insufficient balance');
     });
+
+    // D-160. The keyword chain reads the message as EVIDENCE, which is right for
+    // a wire error and wrong for one the wallet wrote for this user:
+    // GatedSendKeysMissingError explains that a send without the unlock key
+    // "would be rejected by the network", matched `network`, and came out as a
+    // connectivity failure telling the user to retry - on the Send form, which
+    // calls this helper directly with no submitFailureMessage in front of it.
+    describe('an error that says its own message is user-ready (D-160)', () => {
+
+        /** The real shape: a wallet-authored explanation that names the network. */
+        function marked(message) {
+            const e = new Error(message);
+            e.userFacing = true;
+            return e;
+        }
+
+        it('passes it through instead of classifying it by keyword', () => {
+            const out = humanizeError(marked(
+                'PEPE has token-gated content, and this wallet holds none of its 2 unlock key(s). '
+                + 'A send without the key(s) attached would be rejected by the network. '
+                + 'Recover the keys first, then retry.',
+            ), 'send');
+            expect(out.cause).to.equal('unknown');
+            expect(out.message).to.match(/Recover the keys first/);
+            expect(out.message).to.not.match(/check your connection/i);
+        });
+
+        it('keeps the house-voice opener, so nothing that reads fine today changes shape', () => {
+            expect(humanizeError(marked('Explained in full.'), 'send').message)
+                .to.equal("Couldn't send. Explained in full.");
+        });
+
+        // The teeth: the same sentence WITHOUT the marker is still eaten, which
+        // is what makes this test a pin on the bypass rather than on the wording.
+        it('is the marker doing the work, not the phrasing', () => {
+            const out = humanizeError(new Error(
+                'A send without the key(s) attached would be rejected by the network.',
+            ), 'send');
+            expect(out.cause).to.equal('network');
+        });
+
+        it('does not exempt wire errors, which is the whole point of the helper', () => {
+            expect(humanizeError(new Error('fetch failed: ECONNREFUSED'), 'send').cause)
+                .to.equal('network');
+            expect(humanizeError({ message: 'insufficient funds', userFacing: false }, 'send').cause)
+                .to.equal('insufficient_funds');
+        });
+
+        // `cause` is a standard Error field that normally holds another ERROR,
+        // so only a string is honoured - otherwise a wrapped error would be
+        // handed to a consumer expecting a cause KEY.
+        it('honours a named cause only when it is a string', () => {
+            const withKey = marked('Not enough of this token.');
+            withKey.cause = 'insufficient_funds';
+            expect(humanizeError(withKey, 'send').cause).to.equal('insufficient_funds');
+
+            const wrapped = marked('Explained in full.');
+            wrapped.cause = new Error('inner');
+            expect(humanizeError(wrapped, 'send').cause).to.equal('unknown');
+        });
+    });
 });

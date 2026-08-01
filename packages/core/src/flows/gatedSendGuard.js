@@ -70,6 +70,13 @@ export class GatedSendKeysMissingError extends Error {
         );
         this.name = 'GatedSendKeysMissingError';
         this.code = 'GATED_SEND_KEYS_MISSING';
+        // D-160: this message is written for the user and must reach them
+        // whole. Without the marker `humanizeError`'s keyword chain matched
+        // its own phrase "rejected by the network" and replaced the whole
+        // recovery path with "The network is unreachable. Check your
+        // connection and try again." - on the Send form, which calls that
+        // helper directly.
+        this.userFacing = true;
         this.tick = tick;
         this.missingKeyHashes = missingKeyHashes;
     }
@@ -88,6 +95,10 @@ export class GatedRecipientPubkeyMissingError extends Error {
         );
         this.name = 'GatedRecipientPubkeyMissingError';
         this.code = 'GATED_SEND_NO_RECIPIENT_PUBKEY';
+        // D-160: this one reaches the user intact TODAY, but only because its
+        // wording happens to dodge the keyword chain - marked so that stays a
+        // decision rather than an accident of phrasing.
+        this.userFacing = true;
         this.tick = tick;
         this.destination = destination;
     }

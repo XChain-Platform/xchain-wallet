@@ -69,6 +69,32 @@ export function isNativeFeeForfeit(err) {
 }
 
 /**
+ * A watcher-lane refusal for an action the encoder chunked .
+ *
+ * Keyed on `name` and then on the message, for the same boundary-survival
+ * reason `isNativeFeeForfeit` is: the popup receives only `{ name, message }`
+ * (MessageHost.serializeError), so `instanceof` is gone by the time a form
+ * classifies this and a class check would silently never match in the shell
+ * where it matters most.
+ *
+ * It needs its own branch rather than falling through to the tail, because the
+ * tail prefers each form's `fallback` over the raw message - so the sentence
+ * this error exists to deliver ("a watch-only wallet cannot complete that
+ * sequence, and broadcasting the half spends coin for nothing") would be
+ * replaced by "Dispenser creation failed." That is the D-121 shape: a message
+ * written carefully and then discarded one layer up.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isWatcherChunkLane(err) {
+    if (!err || typeof err !== 'object') return false;
+    const e = /** @type {any} */ (err);
+    if (e.name === 'WatcherChunkLaneError') return true;
+    return /too large for one transaction: the network carries it as a/.test(String(e.message || ''));
+}
+
+/**
  * The sentence for a transaction that was signed and then failed to reach a
  * node. Shared with QueuedResultPanel's hint so the two surfaces agree.
  */
@@ -93,6 +119,9 @@ export function submitFailureMessage(
     err, { coinTicker, mandatory = false, requiredNative, fallback = '' } = {},
 ) {
     if (isNativeFeeForfeit(err)) return nativeFeeErrorMessage(err, { coinTicker, mandatory });
+    // Before every other classifier and before the fallback: the error already
+    // carries the whole remedy, and nothing else here would recognise it.
+    if (isWatcherChunkLane(err)) return String(/** @type {any} */ (err).message || '');
     const broadcastKind = broadcastFailureKindFromError(err);
     if (broadcastKind === 'transient') return SIGNED_NOT_BROADCAST_MESSAGE;
     // Encoder codes are checked only once the error is known NOT to be a

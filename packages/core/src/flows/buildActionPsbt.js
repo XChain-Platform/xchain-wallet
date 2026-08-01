@@ -35,6 +35,36 @@ import { logConsole } from '../shared/utils/logConsole.js';
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
+import { isChunkEncoding } from './nativeFeeLane.js';
+
+/**
+ * Thrown when a watcher-composed action needs a second, revealing transaction
+ * that this lane cannot produce .
+ *
+ * A typed error rather than a bare string so a form can recognise it: the
+ * remedy is "compose this from the wallet holding the key", not "try again".
+ */
+export class WatcherChunkLaneError extends Error {
+    /** @param {{ action: string, encoding: string }} fields */
+    constructor({ action, encoding }) {
+        super(`This ${action} is too large for one transaction: the network carries it as a `
+            + `${encoding} pair, a commit plus a revealing transaction that must be built and `
+            + 'signed after the first is confirmed. A watch-only wallet cannot complete that '
+            + 'sequence, and broadcasting only the first would spend coin into a script that '
+            + 'nothing can open and record no action at all. Compose it from the wallet holding '
+            + 'the key.');
+        this.name = 'WatcherChunkLaneError';
+        // D-160: `submitFailureMessage` already has a branch for this, but the
+        // six forms behind `useActionForm` build their `fallback` by calling
+        // `humanizeError` FIRST - and this message's own words ("the network
+        // carries it as a P2SH pair") match that helper's `network` keyword.
+        // The marker makes the sentence safe on any path, not only the one
+        // that happens to classify it first.
+        this.userFacing = true;
+        this.action = action;
+        this.encoding = encoding;
+    }
+}
 
 /**
  * @typedef {Object} BuildActionPsbtOpts
@@ -146,6 +176,33 @@ export async function buildActionPsbt(opts) {
         level: 'info',
         message: `createTx ok action=${opts.actionData.action} encoding=${encoded.encoding}`,
     });
+
+    // : this whole flow is the WATCHER / air-gapped lane - all three of its
+    // callers are encode-only (`action.psbt`, buildCoinpayPsbtRequest,
+    // buildGatedPublishPsbtRequest) - and it can only ever produce ONE
+    // transaction. A P2SH/P2WSH encoding needs two: the commit this built, which
+    // carries no action at all, and a REVEAL that spends its script output and is
+    // the transaction the indexer actually reads. Nothing outside
+    // `submitWithSigner` builds a reveal (it holds the only `spendP2sh` call site
+    // in the wallet), so the hex handed to the signer here cannot be completed.
+    //
+    // Broadcasting it anyway is not a no-op: the encoder folds the payload's
+    // value AND every custom output's value (the native protocol fee, a Mode B
+    // dispenser's oracle usage fee, an ADS donation) into the script output, so
+    // the commit spends real coin into a script only the missing reveal can open,
+    // and the action never happens. Measured 2026-07-31: a Mode B dispenser is 90
+    // action bytes, over the 80-byte OP_RETURN limit, so it takes this lane every
+    // time and its commit carried 0.05005464 LTC.
+    //
+    // Refusing before the user signs is the same verdict DeployContractForm
+    // already reaches for the chunked-deploy lane, in the one place every
+    // watcher-composed action passes through rather than in one form.
+    if (isChunkEncoding(encoded.encoding)) {
+        throw new WatcherChunkLaneError({
+            action: opts.actionData.action,
+            encoding: encoded.encoding,
+        });
+    }
 
     return {
         psbtHex: encoded.psbt,

@@ -45,6 +45,13 @@ import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
+import {
+    buyerListMessage,
+    buyerListVerdict,
+    dispenserRefusesEveryoneMessage,
+    listMembers,
+    ownerOffAllowList,
+} from '../../flows/allowListSelfCheck.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -111,6 +118,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [dispenser, setDispenser] = useState(/** @type {any | null} */ (null));
     const [action, setAction] = useState(/** @type {any | null} */ (null));
     const [dispenses, setDispenses] = useState(/** @type {any[]} */ ([]));
+    // The live quote of the ORACLE a Mode B dispenser is priced by. Its price is
+    // not on the dispenser row - it lives on the oracle's own published feed -
+    // so a panel that does not fetch it cannot state a price at all, and told
+    // buyers only that "an oracle" sets one. Null while unknown, which the copy
+    // distinguishes from a feed that has genuinely gone dark.
+    const [oracleQuote, setOracleQuote] = useState(/** @type {any | null} */ (null));
+    const [oracleQuoteChecked, setOracleQuoteChecked] = useState(false);
     // PC-21 trade lifecycle: non-dispense events (refills/edits, closes,
     // expirations) merged with dispenses into one timeline under a tab.
     const [lifecycle, setLifecycle] = useState(/** @type {any[]} */ ([]));
@@ -447,6 +461,37 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         || dispenser?.source
         || action?.source
         || '';
+    // A Mode B dispenser prices its fills from a quote published by SOMEONE
+    // ELSE, at an address named on the dispenser row - so the price a buyer
+    // needs is one lookup away and the panel used to make it nobody's job. The
+    // consequences of not knowing are asymmetric and both bad: pay too little
+    // and the dispense is refused with the coin KEPT (dispense.js runs the
+    // price match after the payment has already moved), pay too much and the
+    // remainder is floored away and kept as a tip.
+    useEffect(() => {
+        if (!oracleAddress || fiatAmount != null) { setOracleQuoteChecked(true); return undefined; }
+        if (typeof messaging?.oracleFeeds !== 'function') { setOracleQuoteChecked(true); return undefined; }
+        let cancelled = false;
+        messaging.oracleFeeds({ chainId, address: oracleAddress })
+            .then((feeds) => {
+                if (cancelled) return;
+                // An oracle may run many feeds in parallel; a dispenser is
+                // priced by exactly the one matching its own (coin, tick,
+                // fiat). Picking any other would quote a different asset's
+                // price with total confidence.
+                const match = (Array.isArray(feeds) ? feeds : []).find((f) => f
+                    && String(f.tick || '').toUpperCase() === String(giveTick || '').toUpperCase()
+                    && String(f.fiat || '').toUpperCase() === String(fiatCode || '').toUpperCase());
+                // `live`, never `pending`: a published quote is inert for 24
+                // hours, so the maturing one prices nothing yet and showing it
+                // would be a price no payment made today can buy at.
+                setOracleQuote(match?.live || null);
+                setOracleQuoteChecked(true);
+            })
+            .catch(() => { if (!cancelled) setOracleQuoteChecked(true); });
+        return () => { cancelled = true; };
+    }, [oracleAddress, fiatAmount, fiatCode, giveTick, chainId, messaging]);
+
     // Live status: everything that can change after the create - the 1-hour
     // "cancelling" close window, expiry, sold-out - plus the post-edit
     // expiration and allow/block lists. The by-action-index read path returns
@@ -514,6 +559,52 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (!buyerAddressId) return null;
         return buyerAddresses.find((a) => a.id === buyerAddressId) || null;
     }, [buyerAddressId, buyerAddresses]);
+
+    // D-162: the panel already tells a buyer this dispenser is restricted and
+    // names the list, then tells them to "check you are on the right side of
+    // the list before sending" - which is a read the wallet can just do. Both
+    // list details, fetched once per dispenser; best-effort, since a failed
+    // read must leave the existing generic warning standing rather than
+    // replace it with a specific claim that is not backed by anything.
+    const [allowMembers, setAllowMembers] = useState(/** @type {string[]|null} */ (null));
+    const [blockMembers, setBlockMembers] = useState(/** @type {string[]|null} */ (null));
+    useEffect(() => {
+        setAllowMembers(null);
+        setBlockMembers(null);
+        if (!chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
+        let live = true;
+        const read = (idx, set) => {
+            if (!idx) return;
+            messaging.getListByActionIndex({ chainId, actionIndex: String(idx) })
+                .then((detail) => { if (live) set(listMembers(detail)); })
+                .catch(() => { /* best-effort */ });
+        };
+        read(currentAllowList, setAllowMembers);
+        read(currentBlockList, setBlockMembers);
+        return () => { live = false; };
+    }, [chainId, currentAllowList, currentBlockList, messaging]);
+
+    // The verdict that does NOT depend on who pays: a dispenser whose own
+    // pay-to address is off its own allow-list sells to nobody, so checking
+    // your own membership cannot help (D-161, from the buyer's side).
+    const dispenserSelfBarred = ownerOffAllowList({
+        members: allowMembers, getAddress: dispAddr,
+    });
+    // And the one that does: whether any address THIS wallet holds on this
+    // chain would be accepted. A coin-paid dispenser takes a bare payment from
+    // anywhere, so the wallet cannot know the payer - it can only answer for
+    // the addresses it has.
+    const buyerVerdict = useMemo(() => buyerListVerdict({
+        addresses: buyerAddresses
+            .filter((a) => !chainId || a.chainId === chainId || a.chain_id === chainId)
+            .map((a) => a.address)
+            .filter(Boolean),
+        allowMembers,
+        blockMembers,
+    }), [buyerAddresses, chainId, allowMembers, blockMembers]);
+    const buyerListNotice = dispenserSelfBarred
+        ? dispenserRefusesEveryoneMessage()
+        : buyerListMessage(buyerVerdict);
 
     // D-37 : what the paying address actually holds of the payment
     // token, through the same hook that backs every other form's Max +
@@ -1608,8 +1699,23 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 : ''}
                             {' '}A payment from an address it refuses is <strong>not returned</strong>:
                             the {getCoin} is spent, the dispense is recorded invalid, and nothing
-                            comes back. Check you are on the right side of the list before sending.
+                            comes back.
                         </p>
+                    ) : null}
+                    {/*
+                      * D-162: the line above used to end "Check you are on the
+                      * right side of the list before sending", which hands the
+                      * buyer a lookup the wallet can do itself off the read the
+                      * list picker already makes. Two verdicts, and the first
+                      * does not depend on who pays: a dispenser whose own
+                      * pay-to address is off its allow-list sells to nobody
+                      * (D-161 from the other side), so no amount of checking
+                      * your own membership helps. Silent when the read failed
+                      * or the answer is "you are fine" - the generic warning
+                      * above still stands on its own.
+                      */}
+                    {buyerListNotice ? (
+                        <p role="alert" className={styles.warning}>{buyerListNotice}</p>
                     ) : null}
                     <p className={styles.hint}>
                         This dispenser accepts bare {getCoin} payments.
@@ -1640,8 +1746,26 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             <>
                                 <dt className={styles.detailsLabel}>Price per fill</dt>
                                 <dd className={styles.detailsValue}>
+                                    {/* A price, or an explicit statement that there
+                                        is none to show. "Set by an oracle" was
+                                        neither: it named the mechanism and left the
+                                        buyer to guess the number, on a payment that
+                                        is not returned if it guesses low. The oracle
+                                        prices ONE FILL, not one token - the indexer
+                                        divides the payment by the published value and
+                                        multiplies the result by GIVE_AMOUNT
+                                        (utility.reverseOraclePriceMatch), measured on
+                                        chain 2026-07-31 - so a fill of several tokens
+                                        costs the published figure once. */}
                                     {oracleAddress && fiatAmount == null
-                                        ? `Set by an oracle, in ${fiatCode}`
+                                        ? (oracleQuote?.value != null
+                                            ? `${oracleQuote.value} ${fiatCode}`
+                                            : (oracleQuoteChecked
+                                                ? `Set by the oracle at ${oracleAddress}, in ${fiatCode}, `
+                                                  + 'and it is publishing no price this wallet can read '
+                                                  + 'right now. A payment made against a dark oracle is '
+                                                  + 'refused and NOT returned.'
+                                                : `Set by an oracle, in ${fiatCode}`))
                                         : `${fiatAmount} ${fiatCode}`}
                                     {` (paid in ${getCoin} at the rate when your payment lands)`}
                                 </dd>

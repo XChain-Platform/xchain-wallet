@@ -58,6 +58,36 @@ export function humanizeError(err, verb = 'complete this') {
     const explorerRead = explorerReadFailure(err, verb);
     if (explorerRead) return { message: explorerRead.message, cause: explorerRead.cause, raw };
 
+    // D-160: the keyword chain below reads the message as EVIDENCE, which is
+    // right for a wire error and wrong for one the wallet wrote for this exact
+    // user. `GatedSendKeysMissingError` explains that a send without the unlock
+    // key "would be rejected by the network" - so it matched `network` and came
+    // out as "The network is unreachable. Check your connection and try again.",
+    // a connectivity verdict inviting a retry that cannot work, on the one
+    // screen (Send) that calls this helper directly with no `submitFailureMessage`
+    // in front of it. Its sibling `GatedRecipientPubkeyMissingError` survives
+    // whole only because its wording happens to dodge the keywords, which is not
+    // a property any author can rely on.
+    //
+    // So an error can now say "my message is already user-ready" and be passed
+    // through verbatim. Opt-IN by the thrower, deliberately: silently exempting
+    // every typed error would swallow the wire errors this helper exists to
+    // translate. `cause` stays 'unknown' unless the error names one, which is
+    // what an unrecognized-but-explained failure already resolves to (the only
+    // affordance keyed off a cause is the insufficient-funds one).
+    // The house-voice opener stays: this is a CLASSIFICATION bypass, not a
+    // formatting one, so a marked error renders exactly as an unrecognized one
+    // already does ("Couldn't send. <the explanation>") and nothing that reads
+    // fine today changes shape.
+    if (err && typeof err === 'object' && /** @type {any} */ (err).userFacing === true && raw) {
+        const named = /** @type {any} */ (err).cause;
+        return {
+            message: `Couldn't ${verb}. ${raw}`,
+            cause: typeof named === 'string' ? /** @type {any} */ (named) : 'unknown',
+            raw,
+        };
+    }
+
     /** @type {HumanizedErrorCause} */
     let cause = 'unknown';
     let message = `Couldn't ${verb}.`;

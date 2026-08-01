@@ -1477,6 +1477,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         // send is past one OP_RETURN, so it takes the chunk
                         // lane and its fee rides the reveal.
                         deferredFeeOutput: composed.deferredFeeOutput || null,
+                        deferredOutputs: composed.deferredOutputs || [],
                     };
                     return isHwSource
                         ? messaging.sendAssetHw({
