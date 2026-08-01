@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Screen, Button, Input, CopyButton, Icon, InfoTip } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -41,6 +42,12 @@ const MIN_PASSWORD_LENGTH = 8;
  * @param {'fresh' | 'add'} [props.mode]   'fresh' = first wallet (pre-host `wallet.import`); 'add' = adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
 export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
+    //  S4: The recovery phrase is displayed here. A screenshot of it, or the
+    // recents snapshot Android persists, is a copy of the wallet.
+    // No-op on every shell that installs no screen guard (web, extension,
+    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    useProtectedScreen();
+
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';

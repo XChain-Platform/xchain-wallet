@@ -1,0 +1,25 @@
+{
+    "name": "@xchain-wallet/mobile",
+    "version": "0.333.1",
+    "license": "AGPL-3.0-or-later",
+    "private": true,
+    "description": "Capacitor mobile shell for XChain Wallet (Android now, iOS later) - wraps the same built web SPA; no UI of its own",
+    "type": "module",
+    "//exports": "Deliberately empty: the shell has no importable JS surface. Without this, the workspace-alias builder (test/vitest/workspaceAlias.js) falls back to ./src/index.js and points an alias at a file that does not and should not exist.",
+    "exports": {},
+    "scripts": {
+        "build": "node scripts/build.js",
+        "sync": "node scripts/build.js && cap sync android",
+        "sync:ios": "node scripts/build.js && cap sync ios",
+        "version:code": "node scripts/version.js"
+    },
+    "dependencies": {
+        "@capacitor/android": "^8.5.0",
+        "@capacitor/core": "^8.5.0",
+        "@capacitor/ios": "^8.5.0",
+        "@xchain-wallet/web": "workspace:*"
+    },
+    "devDependencies": {
+        "@capacitor/cli": "^8.5.0"
+    }
+}

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     PageHeader,
@@ -61,6 +62,11 @@ const MIN_PASSWORD_LENGTH = 8;
  *        Opens the SweepForm for one chain row (App wires the view + props).
  */
 export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChain }) {
+    //  S4: Shows the old and new phrases side by side during migration.
+    // No-op on every shell that installs no screen guard (web, extension,
+    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    useProtectedScreen();
+
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';

@@ -1,0 +1,6 @@
+{
+  "//": "TEMPLATE for https://downloads.xchain.io/wallet/android/latest.json ( §6, D4). Publish it beside the APK, and only AFTER the APK and its manifest are in place - artifacts before any feed or notice update, per the rails atomicity rule. A feed naming a version nobody can download is an alarm with no exit.",
+  "//schema": "EXACTLY ONE field is read: `version`, a plain MAJOR.MINOR.PATCH. No message, no URL, no severity, no minimum-version. The client (packages/web/src/update/directUpdateCheck.js) composes all notice text itself and renders nothing from this file, because anything rendered from here would be attacker-controlled text inside a wallet. Extra keys like these comments are ignored, never displayed.",
+  "//not": "This is NOT remote config and NOT a kill switch. The most a compromised feed can do is make the app say a version exists. It cannot download, install, disable, link, or message.",
+  "version": "0.333.1"
+}

@@ -1,0 +1,98 @@
+apply plugin: 'com.android.application'
+
+// versionCode / versionName come from the release tag, never from this file
+// and never from a build counter ( §7; the formula and its reasoning
+// live in ../../scripts/version.js). `pnpm --filter @xchain-wallet/mobile
+// build` writes version.properties next to this project as part of staging
+// the web assets.
+//
+// A missing file is a hard failure on purpose. Gradle's alternative is to
+// fall back to a default, and the default that used to sit here was
+// versionCode 1: uploading that once burns the number for the life of the
+// app on Play, and there is no way to take it back. Failing the build costs
+// one command; the fallback costs a version namespace.
+def versionPropsFile = file('../version.properties')
+if (!versionPropsFile.exists()) {
+    throw new GradleException(
+        "packages/mobile/android/version.properties is missing. Run" +
+        " `pnpm --filter @xchain-wallet/mobile build` (it stages the web assets" +
+        " and derives the version from the release tag) before building."
+    )
+}
+def versionProps = new Properties()
+versionPropsFile.withInputStream { versionProps.load(it) }
+
+android {
+    namespace = "io.xchain.wallet.android"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.xchain.wallet.android"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode versionProps['versionCode'].toInteger()
+        versionName versionProps['versionName']
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            // R8 DECISION, PINNED ( §7): OFF, and this is the decision,
+            // not a default nobody looked at.
+            //
+            // The app's logic is JavaScript inside a WebView. R8 would shrink
+            // and rename the thin Java shell around it - a few hundred lines,
+            // most of it Capacitor's - while the megabytes that carry the
+            // wallet stay exactly as readable as they were. So it buys close
+            // to nothing here, and it costs: minified stack traces need a
+            // mapping file to read, and every R8 version bump changes output
+            // bytes, which is a moving target for the reproducible-build work
+            // D5 tracks. If R8 is ever turned on it needs keep rules for the
+            // reflection Capacitor uses to find @PluginMethod, and turning it
+            // on without them fails at runtime, in the WebView, silently.
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Debug builds carry the regtest network exemption via the
+            // src/debug source set; the suffix keeps one installable next to
+            // a release build so a developer never has to uninstall (which
+            // would wipe the vault) to test a signed APK.
+            applicationIdSuffix ".debug"
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // BiometricPrompt ( S2). androidx.biometric is the supported path
+    // to a Class-3 prompt bound to a Keystore CryptoObject; the platform
+    // FingerprintManager it replaces is deprecated and cannot express the
+    // per-use authorization this design depends on.
+    implementation "androidx.biometric:biometric:$androidxBiometricVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// Capacitor's template ends with a block that applies the google-services
+// plugin whenever a google-services.json appears. Removed rather than left
+// inert: Play Services / FCM is an explicit non-goal for this wallet (§1,
+// §9), so the only thing that block can ever do is quietly wire Firebase
+// into a self-custody wallet the day a file lands in this directory.

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
@@ -39,6 +40,12 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
  * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
 export function ImportWallet({ onBack, onImported, variant: importVariant = 'default', mode = 'fresh' }) {
+    //  S4: The phrase is TYPED here, and a keyboard-visible screen recording is
+    // as good as a screenshot of it.
+    // No-op on every shell that installs no screen guard (web, extension,
+    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    useProtectedScreen();
+
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';

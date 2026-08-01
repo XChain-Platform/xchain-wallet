@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Screen, Button, Input } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -46,6 +47,12 @@ import styles from './Locked.module.css';
  * @param {() => void} [props.onUnlocked]
  */
 export function Locked({ onUnlocked }) {
+    //  S4: The unlock screen: a recording of it is a recording of the password
+    // being typed.
+    // No-op on every shell that installs no screen guard (web, extension,
+    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    useProtectedScreen();
+
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';

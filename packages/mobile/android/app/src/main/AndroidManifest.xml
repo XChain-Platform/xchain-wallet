@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      allowBackup="false" is the single most consequential attribute in this
+      file ( §1). Android's default would ship the vault ciphertext
+      into Google cloud backup, and carry settings, contacts and connected
+      sites there effectively in the clear. The Keystore key that decrypts
+      the vault does not transfer, so the restored copy would be
+      undecryptable anyway: the default costs the user their privacy and
+      gives them nothing back. The two rules files below say the same thing
+      to the two API generations that read them, so flipping this attribute
+      alone cannot quietly re-enable the upload.
+    -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              App Links ( §1, S3). autoVerify makes Android fetch
+              https://xchain.io/.well-known/assetlinks.json at install and
+              route these links to us without a chooser. That file must list
+              the SHA-256 fingerprints of BOTH signing certs - K9 (Play) and
+              K10 (direct APK) - under this one applicationId, which is what
+              D3(a) buys: one id, two signers. A fingerprint missing from it
+              does not error anywhere; verification simply fails and the link
+              opens in the browser instead, silently.
+
+              The template and the publishing owner:
+              packages/mobile/assetlinks.template.json.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="xchain.io" android:pathPrefix="/wallet" />
+            </intent-filter>
+
+            <!--
+              The `xchain:` scheme is INBOUND COMPATIBILITY ONLY (§1). Any app
+              can claim it, so a link we publish under it is a link we invite
+              a lookalike wallet to answer - the classic fake-restore seed
+              harvest. Everything we publish (docs, website, QR posters) is an
+              https App Link above; this filter exists so links already in the
+              wild, and other apps that only know the scheme, still reach us.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="xchain" />
+            </intent-filter>
+
+        </activity>
+
+        <!--
+          FOUND BY BUILDING, not by reading (2026-08-01, first real Gradle
+          build). androidx.profileinstaller arrives transitively and merges in
+          an EXPORTED receiver, so the shipped manifest had two exported
+          components while this source file had one. §1 allows exactly one.
+
+          It is not an open door: the receiver is guarded by the signature-level
+          DUMP permission, so only adb or the system can reach it. It is removed
+          anyway, because it is a startup-performance component this wallet
+          neither needs nor controls, and because "exactly one exported
+          component" is worth more as a literal invariant than as an
+          approximation with a footnote. Removing the receiver does not disturb
+          the profileinstaller INITIALIZER, which is a separate provider entry.
+
+          The lesson generalizes: a source-level count cannot see what the
+          merger adds, so .github/workflows/mobile.yml re-checks the count
+          against the built bundle.
+        -->
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:node="remove" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Biometric unlock ( S2). Both are normal-protection: granted at
+      install, no runtime prompt, no review weight beyond appearing in the
+      listing's permission list.
+
+      USE_FINGERPRINT is the pre-API-28 spelling, and it is capped at
+      maxSdkVersion 27 so it disappears on every modern device. It is not
+      redundant: this app's floor is API 26 (D2), and on 26-27 androidx
+      .biometric routes through FingerprintManager, which without this
+      permission reports "no hardware" - the unlock button would simply never
+      appear on those devices, with nothing anywhere saying why.
+
+      Every permission in this file is review surface on the store listing
+      (§5), so the list stays at exactly what the shipped features use.
+    -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission
+        android:name="android.permission.USE_FINGERPRINT"
+        android:maxSdkVersion="27" />
+
+    <!--
+      QR scanning (§1 camera lane). The shared UI already scans with
+      getUserMedia (packages/core/src/ui/QrScanner.jsx), and Capacitor's
+      WebChromeClient forwards that request to the runtime permission dialog
+      - but only if the permission is declared here. Without this line the
+      scanner fails with "Camera permission denied" and no prompt is ever
+      shown, which reads to the user as a broken app rather than a refusal.
+
+      No @capacitor/camera plugin: the SPA needs a live video stream to
+      decode animated UR frames, not a photo, and adding the plugin would put
+      another callable surface on the bridge for a capability the WebView
+      already has.
+
+      camera is NOT required: a device without one is still a perfectly good
+      watch-only or paste-a-PSBT wallet, and `required="true"` would remove
+      the app from Play for those devices entirely.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+</manifest>

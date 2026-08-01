@@ -12,6 +12,9 @@ export {
     StorageBackend,
     InMemoryBackend,
     AbstractBackendMethodError,
+    VaultUnavailableError,
+    VaultLockedError,
+    VaultCorruptError,
 } from './backend.js';
 
 export {

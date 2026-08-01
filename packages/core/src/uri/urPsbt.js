@@ -44,6 +44,28 @@ import { crc32 } from './psbtQr.js';
 export const UR_PREFIX = 'ur:';
 export const UR_PSBT_TYPE = 'crypto-psbt';
 
+// Input bounds ( §1, S3: the mobile camera lane).
+//
+// EVERY NUMBER BELOW ARRIVES FROM A QR CODE SOMEONE ELSE PRINTED. That is
+// the whole point of the air-gapped lane: the user points a camera at a
+// screen or a piece of paper they were handed. A multi-part frame declares
+// its own `seqLen`, `messageLength` and fragment size, and the decoder
+// allocates against all three before a single byte has been authenticated -
+// there is no checksum to check until the message is whole. A frame reading
+// `seqLen = 100000000` is well-formed UR and costs one photograph to
+// present; unbounded, it takes the WebView down, and on the mobile shells
+// the WebView is the wallet.
+//
+// The bounds are set well above any legitimate PSBT and far below anything
+// that hurts: a 100 KB PSBT (a very large multisig spend) at the ~200-byte
+// fragments hardware signers emit is a few hundred parts, so 4096 leaves
+// room to spare while capping the index array at something trivial. The
+// fragment cap keeps one part from carrying the DoS on its own.
+export const UR_MAX_SEQ_LEN = 4096;
+export const UR_MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
+export const UR_MAX_FRAGMENT_BYTES = 64 * 1024;
+export const UR_MAX_FRAME_CHARS = 8 * 1024;
+
 export class UrError extends Error {
     constructor(msg) {
         super(`ur: ${msg}`);
@@ -380,6 +402,28 @@ class FountainAssembler {
 
     _validate(part) {
         if (this.expectedIndexes === null) {
+            // The first part dictates every allocation that follows, and it
+            // is the least trustworthy input in the system: nothing has been
+            // authenticated yet (the checksum only covers the assembled
+            // message). Bound it here, before the index array is built.
+            if (part.seqLen > UR_MAX_SEQ_LEN) {
+                throw new UrError(
+                    `fountain part declares ${part.seqLen} parts, over the ${UR_MAX_SEQ_LEN} cap`,
+                );
+            }
+            if (part.messageLength > UR_MAX_MESSAGE_BYTES) {
+                throw new UrError(
+                    `fountain message declares ${part.messageLength} bytes, over the cap`,
+                );
+            }
+            if (part.fragment.length > UR_MAX_FRAGMENT_BYTES) {
+                throw new UrError('fountain fragment is larger than the cap');
+            }
+            // A message cannot be shorter than nothing or longer than the
+            // parts that carry it; either would make the final slice a lie.
+            if (part.messageLength < 1 || part.messageLength > part.seqLen * part.fragment.length) {
+                throw new UrError('fountain message length is inconsistent with its parts');
+            }
             this.expectedIndexes = [];
             for (let i = 0; i < part.seqLen; i++) this.expectedIndexes.push(i);
             this.messageLength = part.messageLength;
@@ -483,6 +527,11 @@ class FountainAssembler {
  */
 export function parseUrFrame(frame) {
     if (typeof frame !== 'string') throw new UrError('frame must be a string');
+    // Bound before decoding: bytewords expansion allocates proportionally to
+    // this string, and a QR code can carry far more than any real UR frame.
+    if (frame.length > UR_MAX_FRAME_CHARS) {
+        throw new UrError(`frame is ${frame.length} chars, over the ${UR_MAX_FRAME_CHARS} cap`);
+    }
     const trimmed = frame.trim().toLowerCase();
     if (!trimmed.startsWith(UR_PREFIX)) throw new UrError('frame does not start with "ur:"');
     const rest = trimmed.slice(UR_PREFIX.length);
@@ -504,6 +553,9 @@ export function parseUrFrame(frame) {
     const seqLen = Number(m[2]);
     if (!Number.isInteger(seqNum) || !Number.isInteger(seqLen) || seqNum < 1 || seqLen < 1) {
         throw new UrError(`bad sequence ${seqNum}-${seqLen}`);
+    }
+    if (seqLen > UR_MAX_SEQ_LEN) {
+        throw new UrError(`sequence length ${seqLen} exceeds the ${UR_MAX_SEQ_LEN}-part cap`);
     }
     return { type, isSinglePart: false, seqNum, seqLen, cbor: decodeBytewordsMinimal(body) };
 }

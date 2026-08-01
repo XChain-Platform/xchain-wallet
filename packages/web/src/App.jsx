@@ -176,6 +176,7 @@ import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
+import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
 import { DevVariantBadge } from './DevVariantBadge.jsx';
@@ -559,23 +560,30 @@ function AppInner() {
 
     useEffect(() => { refresh(); }, [refresh]);
 
-    // §47 / Cluster L FOLLOWUP 1: consume `?uri=` from location.search
-    // when the SPA boots (e.g. after the user clicked an `xchain:` link
-    // and the browser routed it through the protocol-handler we
-    // registered at v0.191.0). Strip the param via history.replaceState
-    // so a refresh doesn't re-trigger the auto-route. Runs once on
-    // mount; the parser tolerates malformed input by returning
-    // `{ kind: 'unknown' }` which we ignore.
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const params = new URLSearchParams(window.location.search);
-        const raw = params.get('uri');
-        if (!raw) return;
+    // Apply one incoming wallet URI. Extracted from the mount effect below
+    // ( S3) because the native shells have no query string to read: an
+    // Android intent arrives through the XChainLinks plugin instead, and it
+    // must land on THIS code - where the parse, the text hardening and the
+    // unlock gating already are - rather than on a second intake path where
+    // one of those would eventually be forgotten.
+    //
+    // Nothing here unlocks anything or submits anything. Every branch ends at
+    // a prefilled FORM the user still has to act on, and `pendingUriView` is
+    // only applied once the session reports unlocked (see `refresh`).
+    const applyUriIntent = useCallback((raw) => {
         try {
             // Pass the registry so coin-code URIs (xchain:TBTC/...) resolve to
             // a chainId; without it intent.chainId is always undefined, which
             // Send tolerated but contract routes cannot.
-            const intent = coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY });
+            //
+            //  §3.6: `hardenUriIntentText` neutralizes the free-text
+            // fields (memo/tick/method/params) before they ever become
+            // prefill state, since this is the first point a `?uri=` query
+            // string becomes something the SPA renders. `address` stays
+            // whatever the link sent; see the function's own comment for why.
+            const intent = coreUri.hardenUriIntentText(
+                coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY }),
+            );
             if (intent && intent.kind === 'send') {
                 setSendPrefill({
                     address: intent.address,
@@ -606,13 +614,37 @@ function AppInner() {
             // Parser surfaces unknown via kind === 'unknown'; nothing else
             // throws here. Defensive try/catch in case future parser
             // changes regress.
+        }
+    }, []);
+
+    // §47 / Cluster L FOLLOWUP 1: consume `?uri=` from location.search
+    // when the SPA boots (e.g. after the user clicked an `xchain:` link
+    // and the browser routed it through the protocol-handler we
+    // registered at v0.191.0). Strip the param via history.replaceState
+    // so a refresh doesn't re-trigger the auto-route. Runs once on
+    // mount; the parser tolerates malformed input by returning
+    // `{ kind: 'unknown' }` which we ignore.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const raw = params.get('uri');
+        if (!raw) return;
+        try {
+            applyUriIntent(raw);
         } finally {
             params.delete('uri');
             const next = params.toString();
             const url = window.location.pathname + (next ? `?${next}` : '') + window.location.hash;
             window.history.replaceState(null, '', url);
         }
-    }, []);
+    }, [applyUriIntent]);
+
+    //  S3: the same intents, arriving as Android App Links or
+    // `xchain:` intents instead of a query string. A no-op in a browser.
+    // Not merged into the effect above: that one runs once at mount and
+    // strips a query param, while this one must stay subscribed for as long
+    // as the app is open, since a tap can arrive at any moment.
+    useEffect(() => subscribeToNativeDeepLinks(applyUriIntent), [applyUriIntent]);
 
     // No auto-unlock: the password is never persisted to Web API
     // storage, so a page reload always re-locks the wallet and the

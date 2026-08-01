@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     PageHeader,
@@ -45,6 +46,12 @@ import styles from './ViewPrivateKey.module.css';
  * @param {() => void} props.onBack
  */
 export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
+    //  S4: A private key on screen is the wallet. FLAG_SECURE also keeps this
+    // window out of the recents thumbnail, which Android writes to disk.
+    // No-op on every shell that installs no screen guard (web, extension,
+    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    useProtectedScreen();
+
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);

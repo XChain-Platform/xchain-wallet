@@ -1,0 +1,165 @@
+# Android build health for the Capacitor shell ( §7).
+#
+# THIS WORKFLOW SHIPS NOTHING. It proves the native project still builds and
+# that the version numbers still derive from the tag; every artifact it uploads
+# is unsigned and named to say so. Release artifacts are built AND signed in the
+# maintainer ceremony on the release machine (§6 step 2), and no signing secret
+# rides a runner in v1 - not even K9. The reason is worth keeping in front of
+# whoever tries to "finish" this workflow later: without reproducible builds
+# (D5), an artifact built on a runner cannot be verified by the person signing
+# it, so putting the key here would let a runner compromise put OUR signature on
+# ITS bytes. Keys off the runner while the runner still builds the shipped bytes
+# protects the keys and not the users. When D5 lands, builds come back here
+# behind a verify-then-sign ceremony.
+#
+# Scope of the triggers: tags gate every release, and PRs only when they touch
+# this package. Android is the slowest lane in the repo (SDK download, Gradle,
+# bundletool), and making every core-only PR pay for it buys nothing that the
+# tag-time run does not already catch.
+name: Mobile
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'packages/mobile/**'
+      - '.github/workflows/mobile.yml'
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned by version AND by hash: bundletool is fetched from a GitHub release,
+  # which is a mutable-by-the-owner URL, and it is the tool that produces the
+  # APK users install. Bump both lines together or the run fails closed.
+  BUNDLETOOL_VERSION: '1.18.3'
+  BUNDLETOOL_SHA256: 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step
+      # cannot resolve the store (same ordering as ci.yml).
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # AGP 8.13 / Gradle 8.14 want a modern JDK; 21 is the LTS both support.
+      - name: Use JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Builds the web SPA and then stages it into the Capacitor webDir. The
+      # `...` suffix pulls in this package's workspace dependencies, so web (and
+      # core beneath it) build first and in order.
+      - name: Build the web SPA and stage it into the shell
+        env:
+          # Empty on a PR, which makes the build number itself from
+          # package.json. On a tag this is the tag, and the assertion below
+          # proves the AAB carries exactly the number that tag derives.
+          XCHAIN_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: pnpm --filter "@xchain-wallet/mobile..." build
+
+      - name: Sync the native project
+        run: pnpm --filter @xchain-wallet/mobile exec cap sync android
+
+      # Unsigned on purpose: no signingConfig exists in this project, so Gradle
+      # emits an unsigned bundle and that is the whole intent.
+      - name: Build the unsigned AAB
+        working-directory: packages/mobile/android
+        run: ./gradlew --no-daemon bundleRelease
+
+      - name: Fetch bundletool (pinned + hash-checked)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o bundletool.jar \
+            "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          echo "${BUNDLETOOL_SHA256}  bundletool.jar" | sha256sum -c -
+
+      # The universal APK is DERIVED from the AAB rather than built separately
+      # (§6 step 2), so the direct-download lane and the Play lane cannot ship
+      # different code. bundletool signs the output with its own debug key when
+      # no keystore is given; that is fine here and is another reason nothing
+      # this workflow emits may be published.
+      - name: Derive the universal APK from that AAB
+        run: |
+          set -euo pipefail
+          java -jar bundletool.jar build-apks \
+            --bundle=packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+            --output=universal.apks \
+            --mode=universal
+          unzip -p universal.apks universal.apk > xchain-wallet-UNSIGNED-ci.apk
+          ls -l xchain-wallet-UNSIGNED-ci.apk
+
+      # The point of the whole tag-purity rule, checked against the artifact
+      # instead of against the source: whatever the tag says, the bundle carries.
+      - name: The bundle's versionCode is the one the tag derives
+        run: |
+          set -euo pipefail
+          tag="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}"
+          if [ -z "$tag" ]; then
+            tag="v$(node -p "require('./packages/mobile/package.json').version")"
+          fi
+          expected="$(node packages/mobile/scripts/version.js "$tag" | cut -d' ' -f1)"
+          actual="$(java -jar bundletool.jar dump manifest \
+            --bundle=packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+            --xpath=/manifest/@android:versionCode)"
+          echo "tag=$tag expected=$expected actual=$actual"
+          test "$expected" = "$actual"
+
+      # §1 allows the app exactly ONE exported component, and the source
+      # manifest is the wrong place to prove it: androidx.profileinstaller
+      # merged in a second exported receiver transitively, which the
+      # source-level smoke could not see and the first real build found
+      # immediately. Assert against the MERGED manifest, where the truth is.
+      - name: Exactly one exported component in the built bundle
+        run: |
+          set -euo pipefail
+          java -jar bundletool.jar dump manifest \
+            --bundle=packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+            > merged-manifest.xml
+          count="$(grep -c 'exported="true"' merged-manifest.xml || true)"
+          echo "exported components: $count"
+          grep -o 'android:exported="true"[^>]*android:name="[^"]*"' merged-manifest.xml || true
+          test "$count" = "1"
+          grep -q 'io.xchain.wallet.android.MainActivity' merged-manifest.xml
+
+      # The hardening that only exists if it survived the merge.
+      - name: Backup and cleartext posture survived into the bundle
+        run: |
+          set -euo pipefail
+          grep -q 'allowBackup="false"' merged-manifest.xml
+          grep -q 'usesCleartextTraffic="false"' merged-manifest.xml
+          test "$(grep -c 'android:name="android.permission' merged-manifest.xml)" -le 4
+
+      - name: Upload the unsigned smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          # Named UNSIGNED, and retained briefly, so nobody mistakes a runner
+          # artifact for a release. The release lane publishes from the ceremony,
+          # never from here.
+          name: android-UNSIGNED-smoke-${{ github.sha }}
+          path: |
+            packages/mobile/android/app/build/outputs/bundle/release/app-release.aab
+            xchain-wallet-UNSIGNED-ci.apk
+          retention-days: 7

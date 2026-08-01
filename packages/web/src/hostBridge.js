@@ -22,7 +22,11 @@
 //     the wallet, by design.
 //   - kdfParams live in `localStorage` via WebMetaBackend so the
 //     unlock flow can derive the master key before touching the
-//     IndexedDB ciphertext.
+//     IndexedDB ciphertext. Running inside the Capacitor shell, both
+//     stores move behind the native vault plugin instead ( S2,
+//     storage/backends.js); WebView storage is evictable, and on a
+//     shell with `allowBackup=false` that blob is the only copy of the
+//     vault that exists.
 //
 // The `sendMessage(type, request)` function exposes the MessageHost
 // under the same envelope shape the extension's popup uses (popup's
@@ -75,8 +79,18 @@ const webDiagnosticContext = async () => ({
         walletVersion: WALLET_VERSION,
     },
 });
-import { IndexedDBStorageBackend } from './storage/IndexedDBStorageBackend.js';
-import { WebMetaBackend } from './storage/WebMetaBackend.js';
+// Which stores this device uses is decided once, in backends.js: IndexedDB +
+// localStorage in a browser, the native plugin when the same bundle is running
+// inside the Capacitor shell ( S2). Every site below asks rather than
+// constructing a backend directly, because a mixture - creating into one store
+// and reading from the other - presents as "no wallet on this device".
+import {
+    createStorageBackend,
+    createMetaBackend,
+    installNativeWipeHook,
+    installNativeScreenGuard,
+} from './storage/backends.js';
+import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -694,7 +708,24 @@ function stopNotifications() {
  * @returns {Promise<{ hasWallet: boolean, hasSession: boolean, state: 'no-wallet' | 'locked' | 'unlocked' }>}
  */
 export async function getSessionStatus() {
-    const storage = new IndexedDBStorageBackend();
+    // Boot hook for the native shells ( S2). This is the first thing
+    // the app awaits, and it runs again on every refresh, which is what keeps
+    // the biometric enrollment flag honest after the user enrolls, disables,
+    // or re-registers a fingerprint in system settings. No-op in a browser.
+    try {
+        installNativeWipeHook();
+        installNativeScreenGuard();
+        await installNativeBiometricProvider();
+    } catch (_err) {
+        // A provider that cannot install must not stop the wallet from
+        // opening: the password form is the path that always works.
+    }
+    const storage = createStorageBackend();
+    // A throw here is deliberate and must NOT be caught into a default. On a
+    // native shell `load()` distinguishes "no wallet" from "locked keystore"
+    // and "unreadable blob"; App.jsx renders the rejection as an error state,
+    // which is the whole point. Swallowing it would report no-wallet and
+    // offer to create one over the top of the vault that is still there.
     const blob = await storage.load();
     const hasWallet = blob !== null;
     const hasSession = host !== null;
@@ -740,7 +771,7 @@ export async function createWalletLocal(req) {
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
     } = req;
 
-    const meta = new WebMetaBackend();
+    const meta = createMetaBackend();
     if (await meta.load()) {
         throw new Error('wallet.create: a wallet already exists; import or reset first');
     }
@@ -748,7 +779,7 @@ export async function createWalletLocal(req) {
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     try {
-        const storage = new IndexedDBStorageBackend();
+        const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         await v.open();  // blank document
         const flowsNs = await getFlows();
@@ -811,7 +842,7 @@ export async function importMnemonicLocal(req) {
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
     } = req;
 
-    const meta = new WebMetaBackend();
+    const meta = createMetaBackend();
     if (await meta.load()) {
         throw new Error('wallet.import: a wallet already exists; unlock or reset first');
     }
@@ -832,7 +863,7 @@ export async function importMnemonicLocal(req) {
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     try {
-        const storage = new IndexedDBStorageBackend();
+        const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         await v.open();
         const result = await flowsNs.importMnemonic({
@@ -894,14 +925,14 @@ export async function unlockWalletLocal(req) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.unlock: password is required');
     }
-    const meta = /** @type {any} */ (await new WebMetaBackend().load());
+    const meta = /** @type {any} */ (await createMetaBackend().load());
     if (!meta || !meta.kdfParams) {
         throw new NoVaultError();
     }
 
     const masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
     try {
-        const storage = new IndexedDBStorageBackend();
+        const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         try {
             await v.open();

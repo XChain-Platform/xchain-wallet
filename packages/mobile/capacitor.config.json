@@ -1,0 +1,13 @@
+{
+    "appId": "io.xchain.wallet.android",
+    "appName": "XChain Wallet",
+    "webDir": "www",
+    "android": {
+        "allowMixedContent": false,
+        "webContentsDebuggingEnabled": false
+    },
+    "server": {
+        "androidScheme": "https"
+    },
+    "plugins": {}
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Universal Links. iOS fetches https://xchain.io/.well-known/apple-app-site-association
+	     and honours only the paths that file claims: one prefix, /wallet/link/*, so explorer,
+	     docs and marketing URLs keep opening in the browser ( §3, ).
+
+	     `applinks` and nothing else on purpose. `webcredentials` would offer password autofill
+	     for a wallet that has no server-side account, and each key here is a capability the
+	     app is granted on the domain. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:xchain.io</string>
+	</array>
+</dict>
+</plist>

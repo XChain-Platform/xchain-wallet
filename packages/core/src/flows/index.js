@@ -495,6 +495,8 @@ export {
     clearBiometricCredential,
     registerBiometricCredential,
     unlockWithBiometric,
+    setBiometricProvider,
+    biometricProviderName,
     BiometricUnsupportedError,
     BiometricNotRegisteredError,
     BiometricPrfUnavailableError,

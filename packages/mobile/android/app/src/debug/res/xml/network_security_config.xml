@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG BUILDS ONLY ( §7). Gradle's source-set merge replaces the
+  release file with this one for the debug variant, so nothing here can
+  reach a signed release: the ceremony builds `bundleRelease`, which never
+  reads this directory.
+
+  Why it exists: the regtest stacks the wallet is verified against run over
+  plain http on a LAN box (see the platform's regtest recipes), and a
+  developer's phone has to reach them. Making that work by relaxing the
+  release policy would mean every user shipping with the exemption.
+
+  Still narrow even here: cleartext is permitted to the loopback and to the
+  private ranges a dev stack lives on, not globally. User-added CAs are
+  trusted in debug so a proxy can be attached while working on the wire
+  format - deliberately absent from the release config next door.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">devhost</domain>
+    </domain-config>
+</network-security-config>

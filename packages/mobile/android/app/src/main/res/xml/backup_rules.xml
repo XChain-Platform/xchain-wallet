@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 26-30 backup rules ( §1). The pre-Android-12 spelling of
+  data_extraction_rules.xml, kept because this app's floor is API 26 and
+  those devices read this file instead.
+
+  With android:allowBackup="false" on the application this is belt and
+  braces: nothing should reach the backup agent at all. It exists so that a
+  future change flipping allowBackup back on - for a settings sync, say -
+  cannot silently start uploading the vault as a side effect. The exclusion
+  is the invariant; allowBackup is just the current switch position.
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

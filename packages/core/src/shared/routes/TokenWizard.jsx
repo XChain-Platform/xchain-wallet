@@ -16,7 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- NetworkField,  Icon,} from '@xchain-wallet/core/ui';
+ NetworkField,  Icon, AddressField,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -27,6 +27,7 @@ import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirm
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     LOCK_FLAGS,
@@ -93,6 +94,11 @@ export function TokenWizard({ walletId, onBack }) {
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
+    // Whether the user has chosen the signer by hand. The auto-pick effect
+    // below re-runs whenever the chain changes and would otherwise walk a
+    // deliberate choice straight back to the newest address.
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [sourceChosenFor, setSourceChosenFor] = useState(/** @type {string | null} */ (null));
 
     // Details form state (some fields are only visible for certain
     // templates (see renderDetailsStage). Keeping all state here so
@@ -166,9 +172,14 @@ export function TokenWizard({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Auto-pick the highest external HD address on the current chain.
+    // Auto-pick the highest external HD address on the current chain - but
+    // never over a choice the user made for THIS chain. A subtoken is only
+    // valid from the address that owns its parent, so re-picking behind the
+    // user is not a cosmetic reset here: it silently restores the signer whose
+    // action the chain refuses.
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
+        if (sourceChosenFor === chainId) return;
         const addrs = (addressesByChain[chainId] || []).filter(
             (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
         );
@@ -182,7 +193,7 @@ export function TokenWizard({ walletId, onBack }) {
         } else {
             setFromAddressId(null);
         }
-    }, [chainId, addressesByChain]);
+    }, [chainId, addressesByChain, sourceChosenFor]);
 
     useEffect(() => {
         if (stage === 'preview') {
@@ -480,6 +491,30 @@ export function TokenWizard({ walletId, onBack }) {
         );
     }
 
+    // The signer, choosable. Every other authoring form in the wallet routes
+    // its From field here; this one auto-picked the newest HD address and
+    // offered no way past it, which made SUBTOKEN unreachable for any wallet
+    // whose parent owner was not that address - the chain refuses a child
+    // signed by anyone else, and no field on this screen could change who
+    // signed. Same picker, so the coin filtering and the address list are the
+    // wallet's own rather than this form's.
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Fee paid by"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourceChosenFor(chainId);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     // PC-06 access lists: the same TYPE=2 address-list picker the admin
     // access-lists mode uses, so create and edit bind lists identically.
     if (listPickerFor) {
@@ -519,6 +554,8 @@ export function TokenWizard({ walletId, onBack }) {
             setChainId,
             descriptor,
             fromAddress,
+            subtoken: template === 'subtoken',
+            onPickSource: () => setSourcePickerOpen(true),
             onBack: () => setStage('template'),
             onNext: () => setStage('details'),
         }));
@@ -898,7 +935,7 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    onBack, onNext,
+    subtoken, onPickSource, onBack, onNext,
 }) {
     return (
         <>
@@ -906,10 +943,18 @@ function renderChainStage({
             <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Fee paid by</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
+                <AddressField
+                    label="Fee paid by"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={onPickSource}
+                    iconLabel="Choose source address"
+                    hint={subtoken
+                        ? 'A subtoken can only be created by the address that owns its parent.'
+                        : undefined}
+                />
             ) : (
                 <div role="alert" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.

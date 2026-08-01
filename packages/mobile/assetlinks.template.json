@@ -1,0 +1,19 @@
+[
+  {
+    "//": "TEMPLATE, NOT THE PUBLISHED FILE.  §1/S3. Fill both sha256_cert_fingerprints values, then publish the RESULT at https://xchain.io/.well-known/assetlinks.json from the websites repo. The fingerprints cannot be filled in yet: K9 and K10 do not exist until the S0 operator ceremony generates them.",
+    "//owner": "Publishing is a websites-repo deploy (Cloudflare proxy is fine). It must be served as application/json; the path is extensionless, so Apache needs a ForceType on the vhost, and the edge must allow /.well-known/* unauthenticated - Android fetches it with its own client, not a browser.",
+    "//verify": "After publishing: curl -sI https://xchain.io/.well-known/assetlinks.json | grep -i content-type, then install the app and run `adb shell pm get-app-links io.xchain.wallet.android` - it must print 'verified' for xchain.io. A failure here is SILENT: links just open in the browser.",
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.xchain.wallet.android",
+      "//fingerprints": "BOTH lanes, under the one applicationId (D3(a)): the Play build is signed by Google's app-signing key (Play Console -> Setup -> App integrity -> App signing key certificate, SHA-256), and the direct APK by K10 (`keytool -list -v -keystore <k10> -alias <alias>`, or `apksigner verify --print-certs xchain-wallet-vX.Y.Z.apk`). Omitting either one breaks App Links for every user of that lane.",
+      "sha256_cert_fingerprints": [
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256",
+        "REPLACE_WITH_K10_DIRECT_APK_SHA256"
+      ]
+    }
+  }
+]

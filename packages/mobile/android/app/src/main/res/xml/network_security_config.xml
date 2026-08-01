@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release network policy ( §7). Cleartext is refused everywhere, with
+  no per-domain exception: this app talks to indexers, a hub, a price oracle
+  and a broadcast endpoint, and every one of them is a place where a
+  downgrade to http would put a user's addresses and their intent to spend
+  in front of anyone on the same network.
+
+  cleartextTrafficPermitted="false" here is the platform-level backstop for
+  the same rule usesCleartextTraffic="false" states in the manifest. Both are
+  set on purpose: the manifest attribute is what an auditor greps for, this
+  file is what the platform actually enforces when a networkSecurityConfig is
+  present at all.
+
+  User-added CAs are NOT trusted. A wallet whose traffic can be intercepted
+  by any certificate the user was talked into installing is a wallet whose
+  balance display can be lied to; the debuggability that trusting them buys
+  belongs in the debug overlay (src/debug/res/xml/), not in the shipped app.
+
+  The regtest exemption is a DEBUG-BUILD OVERLAY, not a flag in this file.
+  See src/debug/res/xml/network_security_config.xml: a release build cannot
+  inherit it, which is the point.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

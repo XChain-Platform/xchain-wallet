@@ -67,6 +67,71 @@ export class BiometricPrfUnavailableError extends Error {
     }
 }
 
+// ---------------------------------------------------------------------
+// Provider seam ( S2)
+// ---------------------------------------------------------------------
+//
+// WebAuthn+PRF is the implementation for browsers, and it is the default.
+// It is not the only one possible: inside an Android WebView there is no
+// platform authenticator to call, so `isBiometricSupported()` answers false
+// and the affordance disappears on the one platform whose users most expect
+// it. The mobile shell therefore installs a provider backed by native
+// BiometricPrompt + a hardware Keystore key.
+//
+// The seam is here, in core, rather than each shell branching at the call
+// site: `Locked.jsx` and `BiometricRow.jsx` are shared UI and must keep
+// working verbatim on every shell. Core still imports nothing from a shell -
+// the shell hands its provider in at boot.
+//
+// WHAT A PROVIDER WRAPS, and why it is the password and not the master key:
+// each wallet record's seed is encrypted under the PASSWORD (see
+// SignerPool.populate → unlockWalletRecord), not under the vault master key.
+// A provider that cached only the master key could open the vault document
+// and show balances, then fail at the first signature and fall back to a
+// password prompt - a biometric unlock that does not actually unlock. So a
+// provider releases the password, and the password remains the KDF root:
+// biometrics shorten the path to it, they never replace the derivation.
+//
+// @typedef {Object} BiometricProvider
+// @property {() => Promise<boolean>} isSupported
+// @property {() => boolean} isRegistered
+// @property {(opts: { password: string, accountName?: string }) => Promise<void>} register
+// @property {() => Promise<string>} unlock      resolves to the wallet password
+// @property {() => void} clear
+// @property {string} name
+
+/** @type {BiometricProvider | null} */
+let installedProvider = null;
+
+/**
+ * Install a shell-supplied provider. Call at shell boot, before any UI
+ * mounts. Passing null restores the WebAuthn default (used by tests).
+ *
+ * @param {BiometricProvider | null} provider
+ */
+export function setBiometricProvider(provider) {
+    if (provider === null) {
+        installedProvider = null;
+        return;
+    }
+    for (const method of ['isSupported', 'isRegistered', 'register', 'unlock', 'clear']) {
+        if (typeof provider?.[method] !== 'function') {
+            throw new Error(`setBiometricProvider: provider is missing ${method}()`);
+        }
+    }
+    installedProvider = provider;
+}
+
+/** @returns {BiometricProvider} */
+function activeProvider() {
+    return installedProvider ?? webAuthnProvider;
+}
+
+/** Which provider is answering. Diagnostics and tests; not a UI signal. */
+export function biometricProviderName() {
+    return activeProvider().name;
+}
+
 /**
  * Detect whether the host environment can register a biometric
  * credential. Three preconditions:
@@ -81,7 +146,7 @@ export class BiometricPrfUnavailableError extends Error {
  *
  * @returns {Promise<boolean>}
  */
-export async function isBiometricSupported() {
+async function webauthnIsSupported() {
     if (typeof navigator === 'undefined') return false;
     if (!navigator.credentials || typeof navigator.credentials.create !== 'function') {
         return false;
@@ -99,7 +164,7 @@ export async function isBiometricSupported() {
 }
 
 /** @returns {boolean} */
-export function isBiometricRegistered() {
+function webauthnIsRegistered() {
     const store = getStorage();
     if (!store) return false;
     try {
@@ -111,7 +176,7 @@ export function isBiometricRegistered() {
 }
 
 /** Discard the stored credential reference + ciphertext. */
-export function clearBiometricCredential() {
+function webauthnClear() {
     const store = getStorage();
     if (!store) return;
     try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
@@ -126,11 +191,11 @@ export function clearBiometricCredential() {
  * @param {string} [opts.accountName]    user-facing label shown by the OS
  * @returns {Promise<void>}
  */
-export async function registerBiometricCredential({ password, accountName = 'XChain Wallet' }) {
+async function webauthnRegister({ password, accountName = 'XChain Wallet' }) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('registerBiometricCredential: password is required');
     }
-    if (!(await isBiometricSupported())) {
+    if (!(await webauthnIsSupported())) {
         throw new BiometricUnsupportedError('webauthn or platform authenticator missing');
     }
 
@@ -206,10 +271,10 @@ export async function registerBiometricCredential({ password, accountName = 'XCh
  *
  * @returns {Promise<string>}
  */
-export async function unlockWithBiometric() {
+async function webauthnUnlock() {
     const record = readRecord();
     if (!record) throw new BiometricNotRegisteredError();
-    if (!(await isBiometricSupported())) {
+    if (!(await webauthnIsSupported())) {
         throw new BiometricUnsupportedError('webauthn or platform authenticator missing');
     }
 
@@ -227,6 +292,68 @@ export async function unlockWithBiometric() {
     const plaintext = await aeadDecrypt(key, ciphertext);
     key.fill(0);
     return new TextDecoder().decode(plaintext);
+}
+
+/** @type {BiometricProvider} */
+const webAuthnProvider = {
+    name: 'webauthn-prf',
+    isSupported: webauthnIsSupported,
+    isRegistered: webauthnIsRegistered,
+    register: webauthnRegister,
+    unlock: webauthnUnlock,
+    clear: webauthnClear,
+};
+
+// ---------------------------------------------------------------------
+// Public API: delegates to whichever provider this shell installed
+// ---------------------------------------------------------------------
+
+/** @returns {Promise<boolean>} */
+export function isBiometricSupported() {
+    // Never lets a provider fault reach the UI: an exception here would
+    // propagate out of the availability probe in Locked.jsx's effect and
+    // take the unlock screen down with it. An unavailable provider means
+    // "no biometrics", which is a state the password form already handles.
+    try {
+        return Promise.resolve(activeProvider().isSupported()).catch(() => false);
+    } catch (_err) {
+        return Promise.resolve(false);
+    }
+}
+
+/** @returns {boolean} */
+export function isBiometricRegistered() {
+    try {
+        return Boolean(activeProvider().isRegistered());
+    } catch (_err) {
+        return false;
+    }
+}
+
+/**
+ * Enroll: wrap the wallet password so the user's biometric can release it.
+ *
+ * @param {{ password: string, accountName?: string }} opts
+ * @returns {Promise<void>}
+ */
+export function registerBiometricCredential(opts) {
+    return activeProvider().register(opts);
+}
+
+/**
+ * Unwrap and return the wallet password. Caller passes the result to
+ * `messaging.unlockWallet`. Errors propagate: unlike the probes above, a
+ * failure here is the user's explicit action failing and must be shown.
+ *
+ * @returns {Promise<string>}
+ */
+export function unlockWithBiometric() {
+    return activeProvider().unlock();
+}
+
+/** Discard the enrollment. Called on disable AND on password change. */
+export function clearBiometricCredential() {
+    activeProvider().clear();
 }
 
 // ---------------------------------------------------------------------
