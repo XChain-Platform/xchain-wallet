@@ -79,15 +79,27 @@ carries.
 | 4 | Config and chain-registry lookups | `hub.xchain.io` | On every app or service-worker start | Your IP only. No wallet data. The response is Ed25519-signed against a pinned key and fails closed | Not surfaced as a toggle |
 | 5 | Coin price lookups | `api.coingecko.com`, a third party | Viewing a native-coin page, and a five-minute poll only while a price alert is armed | Your IP and which coins you looked at. No addresses | Opt-out: Settings, `privacy.priceDataEnabled`. Defaults on. The wallet's own hub-mirrored oracle is tried first |
 | 6 | Token metadata fetch | **A URL taken from the token's own on-chain record, so a server chosen by whoever issued the token** | Viewing a token whose description is a URL | Your IP, and to that issuer, that you looked at their token | Opt-out: Settings, `privacy.metadataFetchEnabled`. Defaults on |
-| 7 | Trezor Connect | `connect.trezor.io` (SatoshiLabs) | Only if you pair a Trezor. Web and desktop shells; the extension cannot load it under MV3 | Handled inside Trezor's own frame under their privacy policy. Public keys and addresses transit their transport | Only reached by choosing to use a Trezor |
-| 8 | Update check | `downloads.xchain.io` | Desktop only, on launch | Your IP and current version. Auto-download is off; installing is a click | No opt-out for the check itself |
+| 7 | Trezor Connect | `connect.trezor.io` (SatoshiLabs) | Only if you pair a Trezor. Web and desktop shells only. The extension ships no Trezor support (MV3 forbids the runtime-loaded vendor code it needs), and the mobile shells wrap the same web build but are compiled with a CSP that omits connect.trezor.io from script-src and frame-src, so the request cannot leave there either | Handled inside Trezor's own frame under their privacy policy. Public keys and addresses transit their transport | Only reached by choosing to use a Trezor |
+| 8 | Update check | `downloads.xchain.io` | Desktop on launch; Android at most once a day, and ONLY for a directly-downloaded APK (a Play install updates through Play and never makes this request) | Your IP and current version. Auto-download is off; installing is a click | No opt-out for the check itself |
 | 9 | Backup restore from a pointer | A URL **you** type | Only when you restore from a pointer | Whatever that host logs. The payload is already encrypted with your password. `https:` is enforced | Entirely user-initiated |
+| 10 | Block-explorer icon loads | `mempool.space`, `blockstream.info`, `litecoinspace.org`, `blockchair.com`, `blockcypher.com`, depending on the coin | Whenever a transaction detail view renders on mainnet or testnet, before you click anything | Your IP, and that you opened a transaction detail view | **None. There is no toggle for this one** |
+| 11 | IPFS and Arweave gateway fetches | `ipfs.io`, `arweave.net` | When a token's metadata document (row 6) or a media URL inside it is an `ipfs://` or `ar://` link | Your IP and the content id you resolved | Follows row 6: `privacy.metadataFetchEnabled` |
 
 Row 6 deserves a second look when filling in forms. It is the only case
 where the wallet contacts a host that neither we nor the user chose, and
 a token issuer can use it to learn who is looking at their token. It is
 on by default, which is a defensible product choice but must be
 disclosed rather than buried.
+
+**Row 10 deserves the same second look, for the opposite reason.** It is
+the only egress in this table with no user control at all: five
+third-party hosts, contacted on a routine screen, before the user clicks
+anything. It was missing from this table until 2026-08-01 while the
+privacy policy disclosed it, which is the wrong way round, since this
+document is what a store form gets transcribed from. `test/smoke/audits/
+store-collateral.smoke.js` now derives the host list FROM the policy, so
+a host disclosed there and absent here fails the build rather than
+waiting to be noticed.
 
 Ledger hardware wallets use WebHID over USB and make no network request
 at all.

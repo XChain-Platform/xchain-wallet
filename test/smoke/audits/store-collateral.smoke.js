@@ -123,16 +123,36 @@ assert.ok(/<!--[\s\S]*not yet publishable[\s\S]*-->/i.test(policyRaw),
 // Not a prose review - just that each disclosed egress destination is
 // named. A destination the wallet contacts and the declaration does not
 // mention is the exact shape of an untrue store answer.
-for (const host of [
-    'explorer.xchain.io',
-    'encoder.xchain.io',
-    'hub.xchain.io',
-    'downloads.xchain.io',
-    'api.coingecko.com',
-    'connect.trezor.io',
-]) {
+// DERIVED FROM THE POLICY, not a list someone remembers to extend. The
+// hardcoded six that used to sit here passed while the policy disclosed
+// SEVEN hosts this document did not name: the five block-explorer icon
+// hosts (no opt-out at all) and the two IPFS/Arweave gateways. That is the
+// wrong way round, because the declaration is what a store form gets
+// transcribed from, so under-declaring here is how an untrue store answer
+// gets filed. Now: every host the policy names must appear here too.
+//
+// IGNORED, each for a stated reason, because they are not egress:
+const NOT_EGRESS = new Map([
+    ['xchain.io', 'our own site, named as the policy URL and the wallet website'],
+    ['dankest.llc', 'the publisher, in the contact line'],
+    ['github.com', 'the source repository and issue tracker, not something the wallet contacts'],
+    ['chrome.storage.local', 'a browser storage API, matched only because it looks like a hostname'],
+    ['window.xchain', 'the injected provider object, same reason'],
+]);
+const HOSTISH = /\b(?:[a-z0-9-]+\.)+(?:io|com|net|org|info|space|llc|local|xchain)\b/g;
+
+const policyHosts = [...new Set((read(DOCS.policy).match(HOSTISH) || []))]
+    .filter((h) => !NOT_EGRESS.has(h));
+
+assert.ok(policyHosts.length >= 12,
+    `expected the policy to name at least a dozen hosts, found ${policyHosts.length}: `
+    + 'if this dropped, the extraction regex stopped matching and the check below is vacuous');
+
+for (const host of policyHosts) {
     assert.ok(record.includes(host),
-        `Data_Collection.md names the egress destination ${host}`);
+        `Privacy_Policy.md discloses ${host} but Data_Collection.md does not name it. The declaration is `
+        + 'what a store data-safety form gets transcribed from, so a host missing here becomes an untrue '
+        + 'store answer. Add it to the egress table.');
 }
 
 // The two privacy opt-outs that exist in code must be named, since the
