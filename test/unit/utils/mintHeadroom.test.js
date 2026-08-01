@@ -20,6 +20,7 @@ import {
     compareDecimal,
     mintWindowState,
     mintWindowMessage,
+    mintLockMessage,
 } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 
 describe('mintHeadroom', () => {
@@ -168,5 +169,47 @@ describe('mintWindowMessage', () => {
         expect(mintWindowMessage(mintWindowState({ tip: 10 }), 'EDT1')).toBeNull();
         expect(mintWindowMessage(mintWindowState({ mintStartBlock: 99, tip: null }), 'EDT1'))
             .toBeNull();
+    });
+});
+
+// D-167: the third bound, and the only permanent one. A token can hold most of
+// its supply unminted and still be finished - measured on a live edition with
+// 90 of 100 units unminted whose form said "10 available to mint" while the
+// chain answered `invalid: LOCK_MINT` to every attempt.
+
+describe('mintLockMessage', () => {
+    it('says minting is over, permanently, when LOCK_MINT is set', () => {
+        const msg = mintLockMessage({ mint: true }, 'lkx1');
+        expect(msg).toContain('LKX1');
+        expect(msg).toMatch(/permanently locked/i);
+        expect(msg).toMatch(/no more can ever be minted/i);
+    });
+
+    it('is silent for every OTHER lock, which is the whole point', () => {
+        // D-166's sibling: a coarse OR over the lock map is what hid a legal
+        // mint in the first place. Only LOCK_MINT forbids a MINT.
+        for (const lock of ['description', 'max_supply', 'max_mint', 'mint_supply', 'sleep', 'callback']) {
+            expect(mintLockMessage({ [lock]: true }, 'LKX1'), `${lock} suppressed minting`)
+                .toBeNull();
+        }
+    });
+
+    it('is silent on an absent or unreadable lock map, leaving the mint ungated', () => {
+        // Same direction `exceedsHeadroom` and `mintWindowState` fail in: a
+        // lookup that did not arrive must not block a mint the chain accepts.
+        expect(mintLockMessage(null, 'LKX1')).toBeNull();
+        expect(mintLockMessage(undefined, 'LKX1')).toBeNull();
+        expect(mintLockMessage({}, 'LKX1')).toBeNull();
+    });
+
+    it('outranks a window notice at the call site, because they say different things', () => {
+        // Pinned as an ordering fact rather than left to the form: a window
+        // reopens or closed on a schedule, and this never changes, so telling
+        // someone to wait for a block would be false.
+        const locked = mintLockMessage({ mint: true }, 'LKX1');
+        const windowed = mintWindowMessage(mintWindowState({ mintStartBlock: 500, tip: 400 }), 'LKX1');
+        expect(locked).toMatch(/permanently/i);
+        expect(windowed).toMatch(/opens at block/i);
+        expect(locked || windowed).toBe(locked);
     });
 });

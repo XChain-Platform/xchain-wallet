@@ -185,6 +185,29 @@ export function mintWindowState({ mintStartBlock = null, mintStopBlock = null, t
 }
 
 /**
+ * What to tell a minter about a token that can never be minted again, or null.
+ *
+ * D-167: the third bound `mintHeadroom` cannot express, and the only permanent
+ * one. `mint.js` refuses outright on `LOCK_MINT`, so a token can hold most of
+ * its supply unminted and still be finished - measured on a live edition with
+ * 90 of 100 units unminted, whose form said "10 available to mint" while the
+ * chain answered `invalid: LOCK_MINT` to every attempt.
+ *
+ * Kept separate from the window rather than folded into it because the two say
+ * different things to a user: a window reopens or has closed on a schedule, and
+ * this never changes. Which is also why it outranks the window at the call site.
+ *
+ * @param {{ mint?: boolean } | null | undefined} locks   the token record's lock map
+ * @param {string} tick
+ * @returns {string | null}
+ */
+export function mintLockMessage(locks, tick) {
+    if (!locks || !locks.mint) return null;
+    const name = String(tick || 'this token').toUpperCase();
+    return `Minting ${name} is permanently locked. No more can ever be minted.`;
+}
+
+/**
  * What to tell a minter about a window that is not open, or null when it is.
  *
  * Names the BLOCK rather than a duration: the chain gate is a height, and a

@@ -77,6 +77,8 @@ const MINTABLE_TICK = `LKM${STAMP}`;
 const EDITION_SIZE = 100;
 const EDITION_PER_TX = 10;
 const EDITION_DESCRIPTION = `mintable and unlocked ${STAMP}`;
+/** Test 3s token: the same mintable shape, locked against MINTING partway through. */
+const LOCKMINT_TICK = `LKX${STAMP}`;
 
 const explorerJson = async (path) => {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`);
@@ -188,6 +190,31 @@ async function approveAndGetTxid(page) {
  * Reached the way an owner reaches it - My Tokens is ownership-scoped, so a
  * token that is not this wallet's simply is not in the list.
  */
+/**
+ * Mints `amount` of `tick` through the Mint form and waits for the action.
+ *
+ * Used as a BASELINE rather than for its own sake: a later assertion that the
+ * form refuses a mint only means something if the same form accepted one on the
+ * same token minutes earlier.
+ */
+async function mintOnce(page, tick, amount) {
+    await reloadToHome(page);
+    await gotoPalette(page, 'Mint supply');
+    const mint = page.getByRole('main');
+    await expect(mint.getByRole('textbox', { name: /^Amount/ })).toBeVisible({ timeout: 30_000 });
+    await selectVenueChain(mint);
+    await page.getByRole('button', { name: /^Token:/ }).click();
+    await page.getByLabel('Search coins or tokens').fill(tick);
+    await page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).first().click();
+    await mint.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
+    await mint.getByRole('button', { name: 'Mint', exact: true }).click();
+    await expectConfirmScreen(page);
+    const minted = await waitForIndexedAction(await approveAndGetTxid(page));
+    expect(String(minted.status), `the chain refused a mint of ${tick} that should have settled`)
+        .toBe('valid');
+    return minted;
+}
+
 async function openTokenAdmin(page, item, tick = TICK) {
     await reloadToHome(page);
     await gotoPalette(page, 'My Tokens');
@@ -488,6 +515,143 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
                 + 'freezing the metadata should not retire the mint button')
                 .toBeGreaterThan(0);
+        });
+    });
+
+    test('a token locked against minting says so on both surfaces, and offers nothing', async ({ page }) => {
+        let source;
+
+        await test.step('create a mintable edition, and mint once while it is still open', async () => {
+            await createWallet(page, { password: PASSWORD, name: 'Mint Lock Wallet' });
+            await switchToRegtest(page, PASSWORD);
+
+            await gotoPalette(page, 'Issue token');
+            const probe = page.getByRole('main');
+            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(probe);
+            source = await probe.getByLabel('From').inputValue();
+            expect(source).toMatch(REGTEST_ADDRESS_RE);
+
+            await fundAddress(source, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            await seedPrices();
+
+            await gotoPalette(page, 'Create a token');
+            const main = page.getByRole('main');
+            await main.getByRole('button', { name: /^Limited edition/ }).click();
+            await selectVenueChain(main);
+            await main.getByRole('button', { name: 'Next', exact: true }).click();
+            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
+            await main.getByLabel('Token name (ticker)').fill(LOCKMINT_TICK);
+            await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
+            await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
+            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await expectConfirmScreen(page);
+            expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status))
+                .toBe('valid');
+
+            await mintOnce(page, LOCKMINT_TICK, EDITION_PER_TX);
+        });
+
+        await test.step('lock MINTING, which is the one flag that forbids it', async () => {
+            await openTokenAdmin(page, 'Lock', LOCKMINT_TICK);
+            const form = page.getByRole('main');
+            const submit = form.getByRole('button', { name: 'Update token' });
+            await expect(submit).toBeVisible({ timeout: 30_000 });
+
+            // D-165's gate again, on a different flag: the typed word is
+            // required whichever lock is being set, not just the one it was
+            // first driven with.
+            await form.getByRole('checkbox', { name: /^Minting/ }).check();
+            await expect(submit).toBeDisabled();
+            await form.getByLabel('Type LOCK to confirm').fill('LOCK');
+            await expect(submit).toBeEnabled();
+            await submit.click();
+
+            await expectConfirmScreen(page);
+            expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status),
+                'the chain refused LOCK_MINT on a token whose genesis carried lock fields')
+                .toBe('valid');
+            await waitForTokenField((t) => t?.locks?.mint, true, 'LOCK_MINT', LOCKMINT_TICK);
+        });
+
+        await test.step('the chain now refuses every mint, permanently', async () => {
+            const url = new URL(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote`);
+            url.searchParams.set('action', 'MINT');
+            url.searchParams.set('params', `0|${LOCKMINT_TICK}|${EDITION_PER_TX}`);
+            url.searchParams.set('source', source);
+            const quote = await (await fetch(url)).json();
+            expect(String(quote.status),
+                'the chain still accepts mints on a token whose LOCK_MINT is set')
+                .toMatch(/LOCK_MINT/i);
+        });
+
+        await test.step('Manage Token withdraws the Mint action - the other half of D-166', async () => {
+            // D-166 moved this gate onto `tokenLocks.mint`, and test 2 proved
+            // the NEGATIVE side (a description lock must not hide Mint). This
+            // is the positive side: the one flag that does forbid a MINT must
+            // still hide it, or the fix traded a false absence for a false
+            // presence.
+            await reloadToHome(page);
+            await gotoPalette(page, 'My Tokens');
+            const list = page.getByRole('main');
+            const row = list.getByRole('button').filter({ hasText: LOCKMINT_TICK }).first();
+            await expect(row).toBeVisible({ timeout: 60_000 });
+            await row.click();
+            await expect(page.getByRole('heading', { name: 'Manage Token' })
+                .or(page.getByText('Manage Token').first()))
+                .toBeVisible({ timeout: 30_000 });
+
+            const mintAction = page.getByRole('main').getByRole('button', { name: 'Mint', exact: true })
+                .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
+            expect(await mintAction.count(),
+                'Manage Token still offers Mint on a token the chain has permanently locked against '
+                + 'it, so D-166 traded a false absence for a false presence')
+                .toBe(0);
+        });
+
+        await test.step('and the Mint form itself refuses rather than advertising supply', async () => {
+            // D-167: the same shape as D-164 one bound over, and worse, because
+            // this one is permanent. `mintHeadroom` reads maxSupply, totalSupply
+            // and mintMax; `locks.mint` rides in the same `tokenInfo` object.
+            // 90 of 100 units are unminted, so the headroom is a full
+            // transaction's worth and the form used to say so.
+            await reloadToHome(page);
+            await gotoPalette(page, 'Mint supply');
+            const mint = page.getByRole('main');
+            await expect(mint.getByRole('textbox', { name: /^Amount/ })).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(mint);
+            await page.getByRole('button', { name: /^Token:/ }).click();
+            await page.getByLabel('Search coins or tokens').fill(LOCKMINT_TICK);
+            await page.getByLabel(new RegExp(`Open ${LOCKMINT_TICK} details`, 'i')).first().click();
+
+            const footer = await mint
+                .getByText(/available to mint|No supply cap|permanently locked|opens at block|closed at block/)
+                .first().innerText().catch(() => '');
+            expect(footer, 'the amount field still advertises supply on a mint-locked token')
+                .toMatch(/permanently locked/i);
+
+            // ABSENT rather than disabled, and that is the component's own
+            // rule: `AmountField` hides the inline Max button entirely when no
+            // `onMax` is passed ("when omitted, the inline Max button is
+            // hidden"), and a blocked mint passes none. Either state satisfies
+            // what this asserts - that no Max is offered - so it is written as
+            // "no ENABLED Max exists" rather than pinning one of the two.
+            const max = mint.getByRole('button', { name: 'Use max available amount' });
+            const maxOffered = await max.count() > 0 && await max.first().isEnabled();
+            expect(maxOffered, 'Max still offers an amount the chain can never accept')
+                .toBe(false);
+
+            await mint.getByRole('textbox', { name: /^Amount/ }).fill(String(EDITION_PER_TX));
+            await mint.getByRole('button', { name: 'Mint', exact: true }).click();
+            const alert = page.getByRole('alert').first();
+            await expect(alert, 'the form composed a mint the chain can never accept')
+                .toBeVisible({ timeout: 30_000 });
+            await expect(alert).toContainText(/permanently locked/i);
+            expect(await page.getByTestId('confirm-modal').count(),
+                'a permanently impossible mint reached the confirm screen')
+                .toBe(0);
         });
     });
 });

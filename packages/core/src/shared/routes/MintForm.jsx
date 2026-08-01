@@ -32,7 +32,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
-    mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage,
+    mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage, mintLockMessage,
 } from '../utils/mintHeadroom.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
@@ -173,7 +173,12 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         [tokenInfo, tipHeight],
     );
     const windowShut = mintWindow.state === 'before' || mintWindow.state === 'closed';
-    const windowNotice = mintWindowMessage(mintWindow, ticker);
+    // D-167: LOCK_MINT outranks the window, because the two say different
+    // things - a window opens or closed on a schedule, and this never changes.
+    // Same object, same read, third bound.
+    const lockNotice = mintLockMessage(tokenInfo?.locks, ticker);
+    const mintBlocked = !!lockNotice || windowShut;
+    const blockedNotice = lockNotice || mintWindowMessage(mintWindow, ticker);
     // The per-address cap cannot be turned into a remaining figure here: it is
     // cumulative over this address's whole MINT history and nothing the wallet
     // reads carries that total. So it is STATED rather than subtracted, which
@@ -378,8 +383,8 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // round trip they cannot win and tells them WHEN instead - the one
         // remedy the generic pre-flight sentence says does not exist
         // ("Waiting will not change this").
-        if (windowShut) {
-            setFormError(windowNotice);
+        if (mintBlocked) {
+            setFormError(blockedNotice);
             return;
         }
         if (exceedsHeadroom(amt, headroom)) {
@@ -707,15 +712,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
-                onMax={!windowShut && headroom !== null && Number(headroom) > 0
+                onMax={!mintBlocked && headroom !== null && Number(headroom) > 0
                     ? () => { setAmount(headroom); setFormError(null); }
                     : undefined}
-                maxDisabled={windowShut || headroom === null || Number(headroom) <= 0}
+                maxDisabled={mintBlocked || headroom === null || Number(headroom) <= 0}
                 // D-164: the window outranks the quantity. "10 available to
                 // mint" over a closed window is a claim the network refuses on
                 // the same screen, so the window's own sentence replaces it
                 // rather than sitting beside it.
-                balanceText={windowNotice || (headroom !== null && ticker
+                balanceText={blockedNotice || (headroom !== null && ticker
                     ? `${formatWithThousands(headroom)} ${String(ticker).toUpperCase()} available to mint`
                         + (addressCap
                             ? `, ${formatWithThousands(addressCap)} per address in total`
