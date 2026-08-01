@@ -131,3 +131,80 @@ export function exceedsHeadroom(amount, headroom) {
     if (headroom === null || headroom === undefined) return false;
     return compareDecimal(amount, headroom) === 1;
 }
+
+/**
+ * Where the chain tip sits relative to a token's public-mint window.
+ *
+ * D-164: `mintHeadroom` bounds a mint by supply and by MAX_MINT, which is what
+ *  needed - and a token can also be un-mintable for a reason that has
+ * nothing to do with quantity. `mint.js` refuses with `MINT_START_BLOCK` below
+ * MINT_START_BLOCK and with `MINT_STOP_BLOCK` above MINT_STOP_BLOCK, so a form
+ * that offers "10 available to mint" while the window is shut is stating
+ * something the same screen is about to be told is false.
+ *
+ * Both bounds are optional and independent: a token may open at a block and
+ * never close, or be open from genesis and close at one. `null` for either, or
+ * an unknown tip, leaves that side unbounded - an unreadable record must not
+ * block a mint the chain would accept.
+ *
+ * @param {object} args
+ * @param {string | number | null} [args.mintStartBlock]
+ * @param {string | number | null} [args.mintStopBlock]
+ * @param {number | null} [args.tip]   current chain height
+ * @returns {{ state: 'open' | 'before' | 'closed' | 'unknown', startBlock: number | null,
+ *             stopBlock: number | null, blocksAway: number | null }}
+ */
+export function mintWindowState({ mintStartBlock = null, mintStopBlock = null, tip = null } = {}) {
+    const num = (v) => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = Number(v);
+        // 0 is how the explorer renders "unset" for these fields, the same
+        // collapse `mintMax` documents, so it cannot mean "opens at genesis".
+        return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const startBlock = num(mintStartBlock);
+    const stopBlock = num(mintStopBlock);
+    const height = Number.isFinite(Number(tip)) && Number(tip) > 0 ? Number(tip) : null;
+
+    if (startBlock === null && stopBlock === null) {
+        return { state: 'open', startBlock, stopBlock, blocksAway: null };
+    }
+    if (height === null) return { state: 'unknown', startBlock, stopBlock, blocksAway: null };
+    if (startBlock !== null && height < startBlock) {
+        return { state: 'before', startBlock, stopBlock, blocksAway: startBlock - height };
+    }
+    if (stopBlock !== null && height > stopBlock) {
+        return { state: 'closed', startBlock, stopBlock, blocksAway: null };
+    }
+    return {
+        state: 'open',
+        startBlock,
+        stopBlock,
+        blocksAway: stopBlock !== null ? stopBlock - height : null,
+    };
+}
+
+/**
+ * What to tell a minter about a window that is not open, or null when it is.
+ *
+ * Names the BLOCK rather than a duration: the chain gate is a height, and a
+ * time estimate would be a second claim this function cannot stand behind on a
+ * chain whose block rate the wallet does not control.
+ *
+ * @param {ReturnType<typeof mintWindowState>} window
+ * @param {string} tick
+ * @returns {string | null}
+ */
+export function mintWindowMessage(window, tick) {
+    if (!window) return null;
+    const name = String(tick || 'this token').toUpperCase();
+    if (window.state === 'before') {
+        const away = window.blocksAway === null ? '' : ` (${window.blocksAway} blocks away)`;
+        return `Minting ${name} opens at block ${window.startBlock}${away}. `
+            + 'The network refuses mints until then.';
+    }
+    if (window.state === 'closed') {
+        return `Minting ${name} closed at block ${window.stopBlock}. No more can be minted.`;
+    }
+    return null;
+}

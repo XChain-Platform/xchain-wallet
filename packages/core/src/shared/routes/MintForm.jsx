@@ -31,7 +31,9 @@ import {
 import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { mintHeadroom, exceedsHeadroom } from '../utils/mintHeadroom.js';
+import {
+    mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage,
+} from '../utils/mintHeadroom.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -141,6 +143,42 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // there is no Max to offer and no number to quote; say so instead of
     // leaving a bare field that looks like a still-loading one.
     const uncapped = !!tokenInfo && headroom === null;
+
+    // D-164: a token can also be un-mintable for a reason that is not a
+    // quantity. `mint.js` gates on MINT_START_BLOCK and MINT_STOP_BLOCK, and
+    // this form used to offer a full transaction's worth while the window was
+    // shut - and then show the network's refusal of that exact amount
+    // underneath it. Both blocks arrive in the same `tokenInfo` object the
+    // headroom above is computed from; the only thing that was missing is the
+    // tip, which the wizard already reads the same way for its callback rail.
+    const [tipHeight, setTipHeight] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        if (!chainId) return undefined;
+        if (typeof messaging?.getIndexerWatermark !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getIndexerWatermark({ chainId })
+            .then((r) => {
+                if (!cancelled) setTipHeight(r && r.watermark != null ? Number(r.watermark) : null);
+            })
+            .catch(() => { if (!cancelled) setTipHeight(null); });
+        return () => { cancelled = true; };
+    }, [chainId, ticker, messaging, walletId]);
+
+    const mintWindow = useMemo(
+        () => mintWindowState({
+            mintStartBlock: tokenInfo?.mintStartBlock ?? null,
+            mintStopBlock: tokenInfo?.mintStopBlock ?? null,
+            tip: tipHeight,
+        }),
+        [tokenInfo, tipHeight],
+    );
+    const windowShut = mintWindow.state === 'before' || mintWindow.state === 'closed';
+    const windowNotice = mintWindowMessage(mintWindow, ticker);
+    // The per-address cap cannot be turned into a remaining figure here: it is
+    // cumulative over this address's whole MINT history and nothing the wallet
+    // reads carries that total. So it is STATED rather than subtracted, which
+    // is the honest version of the same warning.
+    const addressCap = tokenInfo?.mintAddressMax ?? null;
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
@@ -335,6 +373,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // preflight, plus the dry run), but only behind three individual
         // "sign anyway" overrides, and a user who takes them pays a
         // protocol fee for an action the chain will reject.
+        // D-164: the same reason, one bound over. A mint outside the window is
+        // refused whatever its size, so stopping it here costs the user a
+        // round trip they cannot win and tells them WHEN instead - the one
+        // remedy the generic pre-flight sentence says does not exist
+        // ("Waiting will not change this").
+        if (windowShut) {
+            setFormError(windowNotice);
+            return;
+        }
         if (exceedsHeadroom(amt, headroom)) {
             const TICK = ticker.trim().toUpperCase();
             setFormError(Number(headroom) > 0
@@ -660,13 +707,20 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
-                onMax={headroom !== null && Number(headroom) > 0
+                onMax={!windowShut && headroom !== null && Number(headroom) > 0
                     ? () => { setAmount(headroom); setFormError(null); }
                     : undefined}
-                maxDisabled={headroom === null || Number(headroom) <= 0}
-                balanceText={headroom !== null && ticker
+                maxDisabled={windowShut || headroom === null || Number(headroom) <= 0}
+                // D-164: the window outranks the quantity. "10 available to
+                // mint" over a closed window is a claim the network refuses on
+                // the same screen, so the window's own sentence replaces it
+                // rather than sitting beside it.
+                balanceText={windowNotice || (headroom !== null && ticker
                     ? `${formatWithThousands(headroom)} ${String(ticker).toUpperCase()} available to mint`
-                    : (uncapped && ticker ? 'No supply cap' : null)}
+                        + (addressCap
+                            ? `, ${formatWithThousands(addressCap)} per address in total`
+                            : '')
+                    : (uncapped && ticker ? 'No supply cap' : null))}
             />
             <AddressField
                 label="Destination (optional)"
