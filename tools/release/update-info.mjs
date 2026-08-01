@@ -145,6 +145,35 @@ export function pointerChannel(filename) {
 }
 
 /**
+ * The pointer filename a given channel/OS/arch resolves to.
+ *
+ * The rule is in this file's header, read out of app-builder-lib's
+ * `getUpdateInfoFileName()`. It lived there as prose only, which is one
+ * transcription error away from being wrong in a way nothing catches: a
+ * pointer name that no client fetches produces no error anywhere, it
+ * produces a fleet that is never offered an update.
+ *
+ * `os` is the electron/node platform ('win32' | 'darwin' | 'linux'), and
+ * `arch` a `process.arch` value. Arch only affects the name on Linux,
+ * where each arch gets its own file; Windows and macOS put every arch in
+ * one pointer, which is why `selectFileForArch` (rehearse.mjs) exists.
+ *
+ * @param {{channel: string, os: string, arch?: string}} lane
+ * @returns {string}
+ */
+export function pointerNameFor({ channel, os, arch = 'x64' }) {
+    if (!channel) throw new Error('pointerNameFor: channel is required');
+    if (os === 'win32') return `${channel}.yml`;
+    if (os === 'darwin') return `${channel}-mac.yml`;
+    if (os !== 'linux') throw new Error(`pointerNameFor: unknown os "${os}"`);
+    // armv7l is special-cased upstream to `-arm`, NOT `-armv7l`. If the
+    // DD1 lane is ever picked up, this line is why its pointer resolves.
+    if (arch === 'x64') return `${channel}-linux.yml`;
+    const suffix = arch === 'armv7l' ? 'arm' : arch;
+    return `${channel}-linux-${suffix}.yml`;
+}
+
+/**
  * Read the `app-update.yml` electron-builder baked into a packaged app.
  *
  * This is the file the SHIPPED binary reads to decide which feed and

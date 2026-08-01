@@ -31,6 +31,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
+import { LANES } from '../../../tools/release/rehearsal-matrix.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const publish = join(root, 'tools', 'release', 'publish.sh');
@@ -83,11 +85,15 @@ function makeRelease(name, channel) {
 
     // Written through lib.sh, not hand-rolled, so the fixture is the same
     // shape sign.sh produces - including the artifact/pointer split, which
-    // is the thing under test.
+    // is the thing under test, and the build-profile lines verify.sh now
+    // requires . The expected-artifacts list is passed for the same
+    // reason sign.sh passes it: without it the manifest claims to be
+    // version 2 and omits the one thing version 2 exists for.
     execFileSync('bash', ['-c',
         `. "${join(root, 'tools/release/lib.sh')}" && `
         + `xr_write_manifest "${dir}" "${TAG}" "${'0'.repeat(40)}" `
-        + '"2026-07-31T00:00:00Z" "enforced"'], { env: process.env });
+        + `"2026-07-31T00:00:00Z" "enforced" "${join(root, 'tools/release/expected-artifacts.txt')}"`],
+    { env: process.env });
 
     execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
         join(dir, 'RELEASE_HASHES.txt')], { env: { ...process.env, GNUPGHOME: gnupg } });
@@ -126,6 +132,80 @@ function run(args, env = {}) {
 
 const prodRelease = makeRelease('release-prod', 'stable');
 const stagingRelease = makeRelease('release-staging', 'staging');
+
+/**
+ * A passing §7.5 rehearsal record for a signed release directory.
+ *
+ * Written by hand rather than produced by `rehearse.mjs run`, which would
+ * need a whole staging feed stood up. What is under test here is that
+ * publish.sh CONSULTS the record and refuses without a valid one; that
+ * the record's own contents mean what they say is tested where it is
+ * generated, in rehearsal.smoke.js.
+ *
+ * The default path is the one publish.sh looks in when no --rehearsal is
+ * given, so the happy path exercises the no-flag case a release actually
+ * uses.
+ */
+function writeRehearsalRecord(releaseDir, { manifestFrom = releaseDir, ...over } = {}) {
+    const path = join(work, `REHEARSAL-${TAG}.json`);
+    writeFileSync(path, `${JSON.stringify({
+        'record-version': 1,
+        tag: TAG,
+        'prod-manifest-sha256': createHash('sha256')
+            .update(readFileSync(join(manifestFrom, 'RELEASE_HASHES.txt'))).digest('hex'),
+        'swap-requirement': 'one-os',
+        'requirement-reason': 'smoke fixture',
+        'pinned-key-override': null,
+        lanes: LANES.map((l) => ({ id: l.id, ok: true })),
+        swaps: [{ lane: 'mac-arm64', device: 'Mac Studio', from: '0.333.0' }],
+        ...over,
+    }, null, 2)}\n`);
+    return path;
+}
+
+// --------------------------------------------- the rehearsal gate (§7.5)
+
+{
+    // No record at all. This is the default state of any release nobody
+    // rehearsed, so it is the case that has to fail.
+    const target = makeTarget('feed-no-rehearsal');
+    const r = await run(['--input', prodRelease, '--tag', TAG, '--target', target]);
+    assert.equal(r.status, 1, 'a prod publish with no rehearsal record is refused');
+    assert.match(r.out, /no rehearsal record/);
+    assert.equal(existsSync(join(target, 'desktop')), false, 'and nothing was uploaded');
+}
+
+{
+    // A record for a DIFFERENT set of signed bytes: the re-cut case, where
+    // the tag is right and the release is not the one that was rehearsed.
+    //
+    // The hash is overridden outright rather than taken from the staging
+    // release, which was the first attempt and did not fail: the two
+    // fixtures hold the same artifact bytes under the same tag and commit,
+    // and pointers are excluded from the manifest, so their manifests came
+    // out BYTE-IDENTICAL. Real staging artifacts differ from prod ones (a
+    // different feed is baked in), so that collision is a property of this
+    // fixture and not of a release - but it is why the case now states the
+    // difference instead of assuming one.
+    const target = makeTarget('feed-stale-rehearsal');
+    writeRehearsalRecord(prodRelease, { 'prod-manifest-sha256': 'b'.repeat(64) });
+    const r = await run(['--input', prodRelease, '--tag', TAG, '--target', target]);
+    assert.equal(r.status, 1, 'a record bound to other bytes is refused');
+    assert.match(r.out, /different production manifest/);
+    assert.equal(existsSync(join(target, 'desktop')), false);
+}
+
+{
+    // A rehearsal that never showed a swap on any OS.
+    const target = makeTarget('feed-no-swap');
+    writeRehearsalRecord(prodRelease, { swaps: [] });
+    const r = await run(['--input', prodRelease, '--tag', TAG, '--target', target]);
+    assert.equal(r.status, 1, 'feed-side probes alone do not satisfy the gate');
+    assert.match(r.out, /no observed swap/);
+}
+
+// Good from here on, so the rest of the file tests what it was written to.
+writeRehearsalRecord(prodRelease);
 
 // -------------------------------------------------- the happy prod path
 

@@ -26,14 +26,30 @@
 # Manifest format ( §6 hardening):
 #
 #     # XChain Wallet release manifest
-#     # manifest-version: 1
+#     # manifest-version: 2
 #     # tag: v0.333.1
 #     # tag-commit: <40-hex commit the tag resolves to>
 #     # built: 2026-07-31T18:02:11Z
 #     # dev-mock-gate: enforced | SKIPPED
 #     # artifacts: 9
+#     # profile default: ./xchain-wallet-web-v0.333.1.tar.gz
+#     # profile store: ./xchain-wallet-ios-v0.333.1.ipa
 #     <sha256>  ./xchain-wallet-web-v0.333.1.tar.gz
 #     ...
+#
+# Version 2 added the profile lines . A build profile is which
+# SET OF FEATURES was compiled in, and v1 has exactly two: `default`
+# (web, desktop, extension) and `store` (the mobile store builds, which
+# compile OUT the surfaces the app-store review posture hides, 
+# §2.3). Two artifacts of one tag can therefore contain different code,
+# and a record whose whole job is to prove what shipped could not say
+# which was which. The mapping is one profile per artifact, taken from
+# the same committed expected-artifacts.txt that gates the set, so it is
+# a property of the declared release rather than of the machine.
+#
+# There is no version-1 compatibility branch: nothing has been published
+# yet (RELEASE_HASHES/ holds no manifests), so a v1 reader would be dead
+# code written for a file that does not exist.
 #
 # The header is inside the signed bytes on purpose: a manifest whose
 # version is not covered by the signature can be lifted from one release
@@ -121,10 +137,94 @@ xr_list_update_info() {
     node "$js" pointers "$dir" 2>/dev/null | sed 's|^|./|'
 }
 
+# The build profiles a release may contain (; rails §3 owns the
+# list). Adding a third is a spec change, not an implementation choice,
+# because every reader of a manifest has to know what the name means.
+XR_PROFILES=(default store)
+
+# True if $1 is a declared profile name.
+xr_is_profile() {
+    local candidate="$1" p
+    for p in "${XR_PROFILES[@]}"; do
+        [[ "$candidate" == "$p" ]] && return 0
+    done
+    return 1
+}
+
+# Echo the build profile an artifact belongs to, per the expected list.
+#
+# Ambiguity is refused rather than resolved by order: if an artifact
+# matches two globs that declare DIFFERENT profiles, the honest answer is
+# that the list does not say which features it was built with, and
+# picking the first match would write a guess into a signed record.
+# Args: artifact_basename expected_file
+xr_profile_for() {
+    local name="${1#./}" expected="$2"
+    local status pattern profile found=""
+
+    while read -r status pattern profile _rest || [[ -n "$status" ]]; do
+        case "$status" in ''|'#'*) continue ;; esac
+        # shellcheck disable=SC2254  # $pattern is a glob by design.
+        case "$name" in
+            $pattern)
+                if [[ -n "$found" && "$found" != "$profile" ]]; then
+                    echo "release/lib.sh: '$name' matches globs declaring both" \
+                         "'$found' and '$profile'; the list cannot say what it was built with." >&2
+                    return 1
+                fi
+                found="$profile"
+                ;;
+        esac
+    done < "$expected"
+
+    if [[ -z "$found" ]]; then
+        echo "release/lib.sh: no profile declared for artifact '$name'." >&2
+        return 1
+    fi
+    echo "$found"
+}
+
+# Refuse a release that labels an artifact `store` before the store build
+# profile exists as a build mechanism.
+#
+# Recording a profile is not producing one. The compile-time flags that
+# make a `store` build differ from a `default` one are not written yet
+# ( §2.3, first one named by ), so writing `store` into a
+# signed, append-only record today would be a FALSE claim: a verifier would
+# read it as "the review-hidden surfaces are absent" from a build that
+# still contains them. That is worse than saying nothing, so it fails shut
+# and the status file says how to open it.
+# Args: dir expected_file
+xr_assert_store_profile_buildable() {
+    local dir="$1" expected="$2" here status name has_store=0
+
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        [[ "$(xr_profile_for "$name" "$expected")" == "store" ]] && has_store=1
+    done < <(xr_list_artifacts "$dir" | grep .)
+    [[ "$has_store" -eq 0 ]] && return 0
+
+    status="$(head -1 "$here/store-profile-status.txt" 2>/dev/null || true)"
+    if [[ "$status" != IMPLEMENTED* ]]; then
+        echo "release/lib.sh: this release stages a store-profile artifact, but the" >&2
+        echo "  store build profile is not implemented (tools/release/store-profile-status.txt" >&2
+        echo "  reads '${status:-<unreadable>}'). Signing would record a feature set the" >&2
+        echo "  build does not actually have. See  /  §2.3." >&2
+        return 1
+    fi
+}
+
 # Write "$dir/RELEASE_HASHES.txt" with the signed header + sorted hashes.
-# Args: dir tag tag_commit built_utc dev_mock_gate_state
+# Args: dir tag tag_commit built_utc dev_mock_gate_state [expected_file]
+#
+# expected_file is optional ONLY for verify.sh --recompute, which writes a
+# manifest already stamped "(none)" for tag and commit and announces
+# itself as not a release. A real release always passes it: without it
+# there are no profile lines, and sign.sh would be writing a v2 manifest
+# that omits the one thing v2 exists for.
 xr_write_manifest() {
-    local dir="$1" tag="$2" commit="$3" built="$4" gate="$5"
+    local dir="$1" tag="$2" commit="$3" built="$4" gate="$5" expected="${6:-}"
     local sha
     sha="$(xr_sha256_cmd)" || return 2
 
@@ -137,14 +237,40 @@ xr_write_manifest() {
         return 1
     fi
 
+    # Resolved BEFORE the manifest is opened for writing: an undeclared or
+    # ambiguous profile must leave no half-written manifest behind.
+    #
+    # ONE ARTIFACT PER LINE, not a space-separated list per profile.
+    # electron-builder embeds productName in every desktop filename, so
+    # half this release is called "XChain Wallet-0.333.1-x64.dmg"; a list
+    # would have to be escaped to survive being read back, and an
+    # escaping bug in a signed record is worse than a longer header.
+    # Everything after the first ": " is exactly one name.
+    local -a profile_lines=()
+    if [[ -n "$expected" ]]; then
+        local p name this
+        for p in "${XR_PROFILES[@]}"; do
+            while IFS= read -r name; do
+                [[ -z "$name" ]] && continue
+                this="$(xr_profile_for "$name" "$expected")" || return 1
+                [[ "$this" == "$p" ]] && profile_lines+=("# profile $p: $name")
+            done < <(printf '%s\n' "$files" | grep .)
+        done
+        if [[ ${#profile_lines[@]} -eq 0 ]]; then
+            echo "release/lib.sh: no artifact resolved to a build profile." >&2
+            return 1
+        fi
+    fi
+
     {
         echo "# XChain Wallet release manifest"
-        echo "# manifest-version: 1"
+        echo "# manifest-version: 2"
         echo "# tag: $tag"
         echo "# tag-commit: $commit"
         echo "# built: $built"
         echo "# dev-mock-gate: $gate"
         echo "# artifacts: $count"
+        [[ ${#profile_lines[@]} -gt 0 ]] && printf '%s\n' "${profile_lines[@]}"
     } > "$dir/RELEASE_HASHES.txt"
 
     (
@@ -153,6 +279,72 @@ xr_write_manifest() {
         printf '%s\n' "$files" | grep . | xargs -I{} $sha {} \
             >> "RELEASE_HASHES.txt"
     ) || return 2
+}
+
+# Check that a manifest's profile lines account for its artifacts exactly
+# once each, and name only declared profiles.
+#
+# This is the read side of  and needs no repo: the claim is inside
+# the signed bytes. What it catches is the case the field exists for, an
+# artifact quietly added to (or dropped from) a release whose feature set
+# the header still describes as before.
+# Args: manifest_path stripped_manifest_path
+xr_check_profiles() {
+    local manifest="$1" stripped="$2"
+    local -a covered=()
+    local line body profile name seen
+
+    while IFS= read -r line; do
+        body="${line#\# profile }"
+        profile="${body%%: *}"
+        name="${body#*: }"
+        if ! xr_is_profile "$profile"; then
+            echo "verify: manifest names an undeclared build profile: '$profile'" >&2
+            return 1
+        fi
+        if [[ -z "$name" || "$name" == "$body" ]]; then
+            echo "verify: unreadable profile line: $line" >&2
+            return 1
+        fi
+        for seen in "${covered[@]:-}"; do
+            if [[ "$seen" == "$name" ]]; then
+                echo "verify: '$name' is claimed by more than one build profile." >&2
+                return 1
+            fi
+        done
+        covered+=("$name")
+    done < <(grep '^# profile ' "$manifest" || true)
+
+    if [[ ${#covered[@]} -eq 0 ]]; then
+        echo "verify: manifest carries no profile lines, so it does not say which" >&2
+        echo "  feature set each artifact was built with (manifest-version 2, )." >&2
+        return 1
+    fi
+
+    # Both directions, for the same reason the artifact-set gate runs both:
+    # an uncovered artifact is one whose feature set nobody declared, and a
+    # covered-but-absent one means the manifest describes bytes it does not
+    # hash.
+    local hashed
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        hashed="${line#*  }"
+        local found=0
+        for name in "${covered[@]}"; do
+            [[ "$name" == "$hashed" ]] && { found=1; break; }
+        done
+        if [[ "$found" -eq 0 ]]; then
+            echo "verify: '$hashed' is hashed but belongs to no build profile." >&2
+            return 1
+        fi
+    done < "$stripped"
+
+    for name in "${covered[@]}"; do
+        if ! grep -qF "  ${name}" "$stripped"; then
+            echo "verify: profile lines claim '$name', which the manifest does not hash." >&2
+            return 1
+        fi
+    done
 }
 
 # Echo one header field's value from a manifest, empty if absent.
@@ -223,11 +415,11 @@ xr_check_expected() {
     fi
 
     local -a req_pats=() opt_pats=()
-    local status pattern
+    local status pattern profile
     # `|| [[ -n "$status" ]]` so a file with no trailing newline does not
     # silently drop its last row - which, in this file, would mean
     # silently dropping a required artifact.
-    while read -r status pattern _rest || [[ -n "$status" ]]; do
+    while read -r status pattern profile _rest || [[ -n "$status" ]]; do
         case "$status" in
             ''|'#'*) continue ;;
             required) req_pats+=("$pattern") ;;
@@ -238,6 +430,15 @@ xr_check_expected() {
                 return 1
                 ;;
         esac
+        # The profile column is checked HERE, at parse time, rather than
+        # when a manifest is written: a missing one is a stale list, and
+        # the release that discovers it should be the one being declared,
+        # not the one already staged and waiting for a signature.
+        if ! xr_is_profile "$profile"; then
+            echo "release/lib.sh: $expected: '$pattern' declares profile" \
+                 "'${profile:-<missing>}'; expected one of: ${XR_PROFILES[*]}" >&2
+            return 1
+        fi
     done < "$expected"
 
     if [[ ${#req_pats[@]} -eq 0 ]]; then

@@ -1,0 +1,12 @@
+{
+  "mode": "library",
+  "note": "Headers builder-util-runtime sets for an update check. A LOWER BOUND: a packaged app sends these through Electron net, which adds Chromium headers of its own. Use --listen against a real build for the authoritative capture.",
+  "builder-util-runtime": "9.5.1",
+  "capturedAt": "2026-08-01T13:08:41.662Z",
+  "headers": {
+    "User-Agent": "electron-builder",
+    "Cache-Control": "no-cache"
+  },
+  "requestUrlShape": "https://example.invalid/wallet/desktop/stable-mac.yml?noCache=1juun1qhu",
+  "requestUrlNote": "The OS and architecture are disclosed by WHICH pointer is requested, not by any header. The noCache value is Date.now() in base 32, so each check discloses the client clock to ~ms."
+}

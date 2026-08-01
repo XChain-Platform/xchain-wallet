@@ -1,0 +1,254 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+// Build profiles in the release manifest (; rails §3,  §5).
+//
+// A build profile is WHICH FEATURE SET was compiled in. v1 has two:
+// `default` (web, desktop, extension) and `store` (the mobile builds, which
+// compile out the surfaces app-store review posture hides). Two artifacts of
+// one tag can therefore hold different code, and before this the manifest -
+// the record whose entire job is to prove what shipped - could not say which
+// was which.
+//
+// This runs the REAL tools/release/lib.sh against a staged directory rather
+// than asserting on their source, because every bug this found was a parsing
+// bug that reading the code would not have shown: the first version of the
+// header put a space-separated artifact list on one line per profile, which
+// is unparseable the moment electron-builder names half the release
+// "XChain Wallet-0.333.1-x64.dmg".
+//
+// The failure cases matter more than the happy path. A profile claim that
+// silently disagrees with the artifact list is worse than no claim at all,
+// so each way of breaking it is asserted to be caught, by message.
+
+import { strict as assert } from 'node:assert';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repo = join(here, '..', '..', '..');
+const lib = join(repo, 'tools', 'release', 'lib.sh');
+const expected = join(repo, 'tools', 'release', 'expected-artifacts.txt');
+const verify = join(repo, 'tools', 'release', 'verify.sh');
+
+// A realistic release, names included: the desktop ones carry productName
+// with a space, and the two mobile artifacts are the whole point.
+const ARTIFACTS = [
+    ['xchain-wallet-web-v0.333.1.tar.gz', 'default'],
+    ['xchain-wallet-extension-v0.333.1.zip', 'default'],
+    ['XChain Wallet-0.333.1-x64.dmg', 'default'],
+    ['XChain Wallet-0.333.1-mac-arm64.zip', 'default'],
+    ['XChain Wallet Setup 0.333.1-x64.exe', 'default'],
+    ['XChain Wallet-0.333.1-win-x64.zip', 'default'],
+    ['XChain Wallet-0.333.1-x64.AppImage', 'default'],
+    ['xchain-wallet_0.333.1_amd64.deb', 'default'],
+    ['xchain-wallet-android-v0.333.1.aab', 'store'],
+    ['xchain-wallet-v0.333.1.apk', 'store'],
+    ['xchain-wallet-ios-v0.333.1.ipa', 'store'],
+];
+
+const work = mkdtempSync(join(tmpdir(), 'xc1008-'));
+const dir = join(work, 'v0.333.1');
+mkdirSync(dir, { recursive: true });
+for (const [name] of ARTIFACTS) writeFileSync(join(dir, name), `pretend ${name}\n`);
+
+function bash(script, opts = {}) {
+    return execFileSync('bash', ['-c', script], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...opts,
+    });
+}
+
+// Returns { ok, out } instead of throwing, for the cases that must fail.
+function bashResult(script) {
+    try {
+        return { ok: true, out: bash(script) };
+    } catch (err) {
+        return { ok: false, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
+    }
+}
+
+const manifest = join(dir, 'RELEASE_HASHES.txt');
+const write = `source ${JSON.stringify(lib)}; `
+    + `xr_check_expected ${JSON.stringify(dir)} ${JSON.stringify(expected)} && `
+    + `xr_write_manifest ${JSON.stringify(dir)} v0.333.1 abc123 2026-08-01T07:00:00Z enforced `
+    + JSON.stringify(expected);
+
+// --- 1. The gate and the writer accept a real release ------------------
+
+let res = bashResult(write);
+assert.ok(res.ok, `the artifact-set gate + manifest writer must accept a full release:\n${res.out}`);
+
+const text = readFileSync(manifest, 'utf8');
+assert.match(text, /^# manifest-version: 2$/m, 'profile lines are what version 2 means');
+
+// --- 2. Every artifact is on exactly one profile line, spaces and all ---
+
+const profileLines = text.split('\n').filter((l) => l.startsWith('# profile '));
+assert.equal(
+    profileLines.length,
+    ARTIFACTS.length,
+    'one profile line per artifact; a list on one line cannot survive a name with spaces',
+);
+for (const [name, profile] of ARTIFACTS) {
+    assert.ok(
+        profileLines.includes(`# profile ${profile}: ./${name}`),
+        `${name} must be declared as profile ${profile}`,
+    );
+}
+// The direct APK is `store`, and that is a fact about what users get: it is
+// built from the same AAB, so anything compiled out for review is missing
+// from the direct download too ( §6).
+assert.ok(
+    profileLines.includes('# profile store: ./xchain-wallet-v0.333.1.apk'),
+    'the direct APK carries the store feature set, not the default one',
+);
+
+// --- 3. verify.sh accepts it, including one artifact at a time ----------
+
+const verifyCmd = (extra = '') => `bash ${JSON.stringify(verify)} --input ${JSON.stringify(dir)}`
+    + ` --no-sig --tag v0.333.1 ${extra}`;
+
+res = bashResult(verifyCmd());
+assert.ok(res.ok, `verify.sh must accept a well-formed profiled manifest:\n${res.out}`);
+res = bashResult(verifyCmd('--artifact "XChain Wallet-0.333.1-x64.dmg"'));
+assert.ok(res.ok, `single-artifact mode must still parse profile lines:\n${res.out}`);
+
+// --- 4. Every way of breaking the claim is caught ----------------------
+
+const good = text;
+const breakages = [
+    [
+        'an artifact whose profile line was dropped',
+        good.split('\n').filter((l) => l !== '# profile store: ./xchain-wallet-ios-v0.333.1.ipa').join('\n'),
+        /belongs to no build profile/,
+    ],
+    [
+        'a profile name nobody declared',
+        good.replace('# profile store:', '# profile sotre:'),
+        /undeclared build profile/,
+    ],
+    [
+        'one artifact claimed by two profiles',
+        good.replace(
+            '# profile store: ./xchain-wallet-ios-v0.333.1.ipa',
+            '# profile store: ./xchain-wallet-ios-v0.333.1.ipa\n# profile default: ./xchain-wallet-ios-v0.333.1.ipa',
+        ),
+        /claimed by more than one build profile/,
+    ],
+    [
+        'a profile line for an artifact the manifest does not hash',
+        `${good.trimEnd()}\n# profile store: ./xchain-wallet-ios-v0.333.2.ipa\n`,
+        /which the manifest does not hash/,
+    ],
+    [
+        'no profile lines at all, which is what a v1 manifest looks like',
+        good.split('\n').filter((l) => !l.startsWith('# profile ')).join('\n'),
+        /carries no profile lines/,
+    ],
+];
+
+for (const [what, broken, pattern] of breakages) {
+    writeFileSync(manifest, broken);
+    res = bashResult(verifyCmd());
+    assert.ok(!res.ok, `verify.sh must REFUSE ${what}`);
+    assert.match(res.out, pattern, `and say why, for ${what}`);
+}
+writeFileSync(manifest, good);
+res = bashResult(verifyCmd());
+assert.ok(res.ok, 'and the restored manifest verifies again');
+
+// --- 5. The declared set must name a profile for every glob ------------
+
+const declared = readFileSync(expected, 'utf8');
+const rows = declared.split('\n')
+    .filter((l) => /^(required|optional)\s/.test(l))
+    .map((l) => l.trim().split(/\s+/));
+assert.ok(rows.length > 0, 'expected-artifacts.txt declares nothing');
+for (const row of rows) {
+    assert.equal(row.length, 3, `every declared artifact needs a profile column: ${row.join(' ')}`);
+    assert.ok(['default', 'store'].includes(row[2]), `unknown profile in: ${row.join(' ')}`);
+}
+
+// A stale list is caught where it is written, not where it is used: the
+// release that discovers a missing profile should be the one being declared,
+// not the one already staged and waiting for a signature.
+const staleList = join(work, 'expected-stale.txt');
+writeFileSync(staleList, declared.replace(/^(required\s+xchain-wallet-web-v\*\.tar\.gz)\s+default$/m, '$1'));
+res = bashResult(
+    `source ${JSON.stringify(lib)}; xr_check_expected ${JSON.stringify(dir)} ${JSON.stringify(staleList)}`,
+);
+assert.ok(!res.ok, 'a declared artifact with no profile must fail the gate');
+assert.match(res.out, /declares profile '<missing>'/, 'and name the row that is stale');
+
+// Two globs that disagree about one artifact is refused rather than resolved
+// by order: picking the first match would write a guess into a signed record.
+const ambiguous = join(work, 'expected-ambiguous.txt');
+writeFileSync(ambiguous, `${declared}\noptional  xchain-wallet-ios-v*.ipa            default\n`);
+res = bashResult(
+    `source ${JSON.stringify(lib)}; xr_write_manifest ${JSON.stringify(dir)} v0.333.1 abc123 `
+    + `2026-08-01T07:00:00Z enforced ${JSON.stringify(ambiguous)}`,
+);
+assert.ok(!res.ok, 'an artifact matching two profiles must not be given one anyway');
+assert.match(res.out, /matches globs declaring both/, 'and the message must name the conflict');
+
+// --- 6. A label the build cannot earn is refused ------------------------
+//
+// Recording a profile is not producing one. Until the §2.3 compile-time
+// flags exist, a `store` label in a signed record would be a FALSE claim: a
+// verifier would read it as "the review-hidden surfaces are absent" from a
+// build that still contains them. That is worse than saying nothing.
+
+const statusFile = join(repo, 'tools', 'release', 'store-profile-status.txt');
+const statusNow = readFileSync(statusFile, 'utf8');
+const gate = (target) => bashResult(
+    `source ${JSON.stringify(lib)}; xr_assert_store_profile_buildable `
+    + `${JSON.stringify(target)} ${JSON.stringify(expected)}`,
+);
+
+if (statusNow.startsWith('IMPLEMENTED')) {
+    // The gate has been lifted, which is a deliberate act with its own
+    // evidence. Assert the shape of the claim rather than the refusal.
+    assert.match(
+        statusNow.split('\n')[0],
+        /^IMPLEMENTED \S+/,
+        'lifting the store-profile gate must name the item that built it',
+    );
+} else {
+    const res6 = gate(dir);
+    assert.ok(!res6.ok, 'a release staging mobile artifacts must not be signable yet');
+    assert.match(res6.out, /store build profile is not implemented/, 'and must say why');
+}
+
+// A desktop-only release is unaffected, which is the only release anyone
+// can actually cut today: the gate must not block the shells that work.
+const desktopOnly = join(work, 'desktop-only');
+mkdirSync(desktopOnly, { recursive: true });
+for (const [name, profile] of ARTIFACTS) {
+    if (profile === 'default') writeFileSync(join(desktopOnly, name), `pretend ${name}\n`);
+}
+assert.ok(gate(desktopOnly).ok, 'a release with no store-profile artifact is not gated');
+
+rmSync(work, { recursive: true, force: true });
+
+console.log(
+    'OK: release build-profile smoke (: manifest-version 2 carries one'
+    + ' `# profile <name>: <artifact>` line per artifact, written from the committed'
+    + ' expected-artifacts.txt profile column; names with spaces survive the round trip;'
+    + ' verify.sh refuses a dropped line, an undeclared profile name, a double claim, a'
+    + ' claim it does not hash, and a manifest with no profile lines at all; the declared'
+    + ' set must name a profile for every glob and must not declare two for one artifact;'
+    + ' and sign.sh refuses to record a `store` label while the store build profile is'
+    + ' unimplemented, without gating the desktop-only releases that are cuttable today)',
+);

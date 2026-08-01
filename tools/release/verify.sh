@@ -164,6 +164,14 @@ xr_assert_wellformed "$STRIPPED"
 # capture it before any narrowing.
 FULL_COUNT="$(grep -c . "$STRIPPED" || true)"
 
+# Build profiles, checked here for the same reason and against the same
+# full document: which feature set each artifact carries is a claim about
+# the whole release . Only manifests that carry a header are
+# checked; an unsigned recompute has no profile claim to keep.
+if xr_has_header "$MANIFEST"; then
+    xr_check_profiles "$MANIFEST" "$STRIPPED" || exit 1
+fi
+
 if [[ -n "$ARTIFACT" ]]; then
     NARROWED="$(mktemp)"
     trap 'rm -f "$STRIPPED" "$NARROWED"' EXIT

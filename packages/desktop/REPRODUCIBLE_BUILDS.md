@@ -104,14 +104,37 @@ diagnostic:
 
 - **Windows / macOS**: signature must match the currently-installed
   app's publisher. Downgrade attacks across publishers are blocked.
-- **Linux (.AppImage / .deb)**: the `stable-linux.yml` manifest
-  (`stable-linux-arm64.yml` on arm64; update-info files are named after
-  the CHANNEL, and ours is `stable`)
-  carries the SHA512 of the artifact. The manifest itself is fetched
-  over HTTPS from `downloads.xchain.io` - integrity for Linux users
-  depends on HTTPS TLS + the maintainer's control of that hostname.
-  A stronger chain (GPG-signed manifests, TUF-style role separation)
-  is a post-1.0 consideration.
+- **Linux (.AppImage / .deb)**: the `stable-linux.yml` update-info file
+  (`stable-linux-arm64.yml` on arm64; these are named after the CHANNEL,
+  and ours is `stable`) carries the SHA512 of the artifact. On its own
+  that is a checksum served by the same host as the binary, not a
+  signature, so it would leave Linux integrity resting entirely on TLS
+  plus our control of the hostname.
+
+**That is no longer where it rests.**  S5 shipped the stronger
+chain, so the paragraph above describes only what `electron-updater`
+itself does. Before any update installs, on every platform,
+`main/updateVerify.js` fetches the K1-signed `RELEASE_HASHES/<tag>.txt`
+for the version being offered, verifies the detached signature against a
+copy of the release key **compiled into the app**
+(`UPDATE_PINNED_PUBKEY_ARMORED` + `UPDATE_PINNED_FINGERPRINT`), and
+refuses to install an artifact the signed manifest does not cover. It
+fails closed: there is no "could not check, carry on" branch, and
+`downloadAndInstall()` is the only install path, so no second unverified
+route exists to be wired up later.
+
+For Linux that promotes the trust root from the download host to the
+pinned key, which is the whole point: compromising `downloads.xchain.io`
+or the CDN in front of it afterwards buys an attacker nothing. The cost
+is that rotating K1 requires shipping a wallet release.
+
+The verifier now derives the manifest's base URL from the bundle's own
+`app-update.yml` rather than a compiled-in production constant, so an
+update and its proof always ride the same feed. That is not a
+feed-override affordance: it reads a build-time file inside the signed
+bundle. It exists because a staging rehearsal build otherwise downloaded
+from staging and demanded its proof from production, where staging
+artifacts are deliberately absent, and so could never pass.
 
 ## Trezor Connect trust boundary
 
@@ -129,17 +152,25 @@ migration path (local bundling + `app://` scheme).
 
 ## Per-release checklist
 
-When cutting an official release:
+This section used to carry its own release recipe, which had drifted
+away from the real one in three ways that all pointed the same
+direction - towards a release that looks done and updates nobody. It
+told you to publish `latest-*.yml`, a filename that has never existed at
+channel `stable` and that nothing fetches; to sign a `.sig` per artifact
+rather than the one manifest that is actually signed; and to create the
+tag unsigned, which the release workflow now refuses. A second copy of a
+procedure is a copy that goes stale, so it has been removed rather than
+corrected.
 
-1. Run `pnpm install --frozen-lockfile` + full test suite locally.
-2. Tag the commit (`git tag vX.Y.Z`).
-3. Run `scripts/reproduce.sh vX.Y.Z ./release-out`.
-4. Copy `release-out/RELEASE_HASHES.txt` into the release tag's
-   attachments + a `RELEASE_HASHES.md` in the repo.
-5. Produce signed artifacts via `pnpm --filter @xchain-wallet/desktop
-   run dist` with signing env vars set. macOS + Windows runs happen
-   on platform-specific runners; Linux signing runs anywhere.
-6. Sign each artifact's SHA256 with the release GPG key + publish the
-   `.sig` alongside the artifact.
-7. Update `latest-*.yml` on `downloads.xchain.io` so running installs
-   pick up the new version via electron-updater.
+**The authoritative checklist is [`tools/release/README.md`](../../tools/release/README.md)**,
+instantiated per release under `claude/reports/wallet-releases/`. What
+belongs to *this* document is only the reproducibility step inside it:
+
+```bash
+bash packages/desktop/scripts/reproduce.sh vX.Y.Z ./release-out
+diff release-out/RELEASE_HASHES.txt <the signed manifest>
+```
+
+Run it against a pristine clone at the tag, before signing. A zero-byte
+diff is the claim this file exists to support; anything else is
+diagnostic, and the sources of non-determinism above are where to look.

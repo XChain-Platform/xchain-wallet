@@ -232,9 +232,13 @@ fi
 EXPECTED="$REPO_ROOT/tools/release/expected-artifacts.txt"
 xr_check_expected "$INPUT_DIR" "$EXPECTED"
 
+# A profile the build cannot actually produce must not be signed into the
+# record as though it had .
+xr_assert_store_profile_buildable "$INPUT_DIR" "$EXPECTED"
+
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE"
+xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" "$EXPECTED"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
 gpg --batch --yes \

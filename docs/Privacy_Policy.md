@@ -99,6 +99,57 @@ addresses, how long they are kept, and that Cloudflare sits in front of
 them and keeps its own. Without this the paragraphs above describe what
 we send but not what is kept, which is the part a reader actually wants.
 
+## The Android app
+
+The Android app is the same wallet, wrapped so it can be installed. A few
+things work differently there, and they are the things worth knowing
+before you install it.
+
+**The camera.** The app asks for camera permission the first time you
+scan a QR code, and only then. The camera feed is decoded on your phone,
+frame by frame, and nothing is photographed, saved, or sent anywhere. Say
+no and every other part of the wallet still works; you just type or paste
+instead of scanning.
+
+**Your fingerprint.** If you turn on biometric unlock, your phone's
+hardware stores an encrypted copy of your wallet password, and it will
+only release that copy after your fingerprint or face is checked, once,
+for that one unlock. The wallet never sees your fingerprint: Android does
+the checking and only tells us yes or no. Adding a new fingerprint to
+your phone destroys the stored copy on purpose, so you go back to typing
+your password until you turn it on again.
+
+**Backups, and why there are none.** The app tells Android **not** to
+include it in cloud backup and **not** to transfer during device-to-device
+setup. This is deliberate twice over. Your wallet file is encrypted with
+a key that physically cannot leave your phone, so a restored copy on a
+new phone would be unreadable anyway. And the rest of it, your settings,
+your address book, the sites you connected to, is not something we want
+sitting in anyone's cloud.
+
+The consequence is worth stating plainly: **moving to a new phone means
+importing your recovery phrase.** If you have not written it down, a lost
+phone is a lost wallet. That is the trade every self-custody wallet makes,
+and we would rather you read it here than discover it later.
+
+**Screenshots.** On the screens that show your recovery phrase or a
+private key, and on the unlock screen, the app tells Android to block
+screenshots and screen recording. That also keeps those screens out of
+the thumbnail Android saves when you switch apps, which is written to
+your phone's storage. Everywhere else, screenshots work normally, because
+sending someone a picture of your receive code is a perfectly ordinary
+thing to do.
+
+**Update checks (only if you installed the APK directly).** If you
+installed from Google Play, Play handles updates and this does not apply.
+If you downloaded the APK yourself, the app checks a single static file
+at `downloads.xchain.io` at most once a day to see whether a newer
+version exists. The request carries nothing but the request: no wallet
+address, no identifier, no account. All it can learn is that some device
+somewhere checked. The wording of any notice you see is written into the
+app itself, not fetched, and nothing is ever downloaded or installed
+automatically. You can switch the check off in Settings.
+
 ## Routing through Tor (desktop app only)
 
 The desktop app can send all of its network traffic through a local Tor

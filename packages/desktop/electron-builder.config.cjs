@@ -317,9 +317,11 @@ const config = {
         // Deterministic uninstaller name; the default injects a timestamp.
         uninstallDisplayName: '${productName}',
         // Differential updates are a non-goal ( §7), so do not emit
-        // the delta metadata for them. This also stops `latest.yml` from
-        // advertising a blockMapSize for a file we deliberately do not
-        // publish. NOTE: this only covers nsis. The macOS zip blockmap is
+        // the delta metadata for them. This also stops the channel pointer
+        // (`stable.yml` on Windows - never `latest.yml`, which is the
+        // default channel's name and not ours) from advertising a
+        // blockMapSize for a file we deliberately do not publish.
+        // NOTE: this only covers nsis. The macOS zip blockmap is
         // produced unconditionally whenever update info is written (there
         // is no opt-out in app-builder-lib), so the `rm -f *.blockmap`
         // step in release.yml is load-bearing, not belt-and-braces.

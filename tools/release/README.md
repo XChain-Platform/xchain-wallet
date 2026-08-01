@@ -21,19 +21,40 @@ end users follow that recipe to verify what this pipeline produces.
 The pipeline expects a built artifact directory. What may and must
 appear in it is not prose: it is declared in
 [`expected-artifacts.txt`](expected-artifacts.txt), which `sign.sh`
-enforces before it writes a manifest.
+enforces before it writes a manifest. Each declared artifact also names
+its **build profile** - `default` (web, desktop, extension) or `store`
+(the mobile builds, which compile out the surfaces app-store review
+posture hides) - and that mapping is written into the signed manifest,
+one `# profile <name>: <artifact>` line each, so two artifacts of one
+tag holding different code are distinguishable in the record (,
+rails §3). The manifest format itself is documented at the top of
+[`lib.sh`](lib.sh), which both `sign.sh` and `verify.sh` source.
 
 - `*.dmg` / `*mac*.zip`     - desktop macOS
 - `*.exe` / `*win*.zip`     - desktop Windows
 - `*.AppImage` / `*.deb`    - desktop Linux
-- `xchain-wallet-extension-vX.Y.Z.zip`  - extension store bundle
+- `xchain-wallet-extension-vX.Y.Z.zip`  - extension store bundle (its
+  `manifest.json` permissions, `host_permissions`, and content-script
+  matches are frozen against `packages/extension/docs/manifest-freeze.json`
+  and gated in `pnpm test:smoke`; see that file and
+  `docs/QA_Checklist.md` "Chrome Web Store release provenance" for the
+  human diff step the freeze gate cannot replace)
 - `xchain-wallet-web-vX.Y.Z.tar.gz`     - static web SPA bundle
-- `xchain-wallet-android-vX.Y.Z.aab`    - Play upload bundle (dormant)
+- `xchain-wallet-android-vX.Y.Z.aab`    - Play upload bundle (K9-signed)
+- `xchain-wallet-vX.Y.Z.apk`            - direct Android download (K10-signed)
 - `xchain-wallet-ios-vX.Y.Z.ipa`        - App Store upload (dormant)
 
-The two mobile names are declared but optional: the Capacitor shells
-are scoped post-v1.0 ( Android,  iOS). They are pinned
-here so both shells cannot invent divergent names later.
+The mobile names are declared but optional: the Capacitor shells are
+scoped post-v1.0 ( Android,  iOS). They are pinned here so
+both shells cannot invent divergent names later.
+
+The two Android files are one build, not two: `tools/release/android-ceremony.sh`
+produces the AAB and then derives the universal APK from that same bundle
+with `bundletool --mode=universal`, so the store lane and the direct lane
+ship identical code signed by different keys. Only the APK is hosted;
+the AAB is hashed into the manifest as the record of what was submitted,
+because Play re-signs and serves device-split APKs that cannot be verified
+against our manifest at all.
 
 Channel pointers (`stable.yml`, `stable-mac.yml`, `stable-linux.yml`,
 `stable-linux-arm64.yml`) may sit in the same directory - they are
@@ -52,10 +73,67 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `lib.sh` | Shared manifest routines: which files a manifest covers, in what order, and what its header says. Sourced by the other scripts so they cannot drift apart. | Live |
 | `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. | Gates live; signing blocked on G180 |
 | `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors `docs/Verify_Release.md`. | Live |
-| `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live |
-| `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live |
+| `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live (host pending) |
+| `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
+| `rehearse.mjs` |  §7.5: probes every shipped update lane against the staging feed (pointer, per-arch selection, download, sha512, signed manifest), records human-attested swaps, and gates the production publish on the result. | Live (host pending) |
+| `rehearsal-matrix.mjs` | The shipped update lanes and the named hardware each is smoked on (DD4). Data, not code. | Live |
 | `deploy-web.sh` | §6 step 5b: unpack the web tarball into a versioned directory and flip a symlink. | Live |
 | `expected-artifacts.txt` | The declared artifact set a release must contain. Data, not code. | Live |
+| `verify-store.sh` |  §4 post-publish verification: verifies the CI-built extension zip via `verify.sh`, then diffs it file-by-file against the store-served item (`--unpacked-dir` or `--crx`), skipping `_metadata/` and structurally diffing `manifest.json`. | Live |
+| `manifest-diff.mjs` | Structural JSON diff helper for `verify-store.sh`: deep-equal ignoring named top-level keys (default `update_url`, `key`). | Live |
+| `rollback-rerelease.sh` |  §4 rollback-as-re-release recipe: validates preconditions (tag exists, new version is strictly higher) and prints the manual re-release sequence. There is no rollback lever; see the script's own header. | Live |
+| `store-version-monitor.mjs` |  §2 publish monitor: compares each configured item's live Chrome Web Store version against `packages/extension/docs/publish-log.md`; a live version with no matching log row is the rogue-publish (compromised-publisher) signal. Exits 0 clean / 1 alert / 2 config error (item id unset or log unreadable) / 3 inconclusive (fetch failure or unrecognized page shape - never folded into clean). Run `node tools/release/store-version-monitor.mjs --help` for flags and the origin-host cron line. | Script built; NOT installed anywhere yet (see `docs/QA_Checklist.md` "Chrome Web Store release provenance") |
+
+### Installing the store-version monitor on origin-host (NOT done yet)
+
+This is a written install recipe, not a claim of an installed cron: no
+part of this session touched origin-host or any other production host,
+and the item IDs the monitor needs do not exist until the first upload
+happens (spec §2). An operator runs this after that upload, before
+flipping the item to public (§4 exit criteria; also tracked as a row in
+`docs/QA_Checklist.md` "Chrome Web Store release provenance").
+
+1. Copy the script to the host - it is not part of any existing deploy,
+   same as `feed-sweep.mjs` beside it (see that row's "host pending"
+   status above):
+   ```bash
+   scp tools/release/store-version-monitor.mjs origin-host:/opt/xchain/store-version-monitor.mjs
+   ```
+   Record the copied commit hash somewhere on the host (a sibling
+   `.store-version-monitor.provenance` file, same pattern as the
+   watchdog's hand-deployed copy) so a future re-copy is deliberate,
+   not a guess at whether the host is stale.
+2. Confirm Node 22 on the host: `node --version` (this repo's suites and
+   scripts require exactly Node 22; the script uses the global `fetch`
+   Node 18+ ships, but stay on the pinned version anyway).
+3. Add the crontab entry. `MAILTO` is what makes cron's own mail
+   delivery reach a human - the same mechanism already proven live on
+   origin-host for the / refresh-status checks (
+   closed the SMTP-relay half of that). Redirect stdout only, so a
+   clean run (silent on stderr) mails nothing and a run that finds
+   something (ALERT or INCONCLUSIVE, both write to stderr) always does:
+   ```
+   MAILTO=<shared inbox - spec §2 "Correspondence routing" / D1, not yet decided;
+           interim per the spec, point this at whatever mailbox is currently
+           live for store correspondence>
+   0 */6 * * * CWS_MAIN_ITEM_ID=<recorded extension id> \
+     CWS_BETA_ITEM_ID=<recorded beta extension id, once that item exists> \
+     /usr/bin/node /opt/xchain/store-version-monitor.mjs >/dev/null
+   ```
+   Item IDs are not secrets (they are already public in every installed
+   user's `chrome-extension://<id>/` URL and in the store listing link),
+   so they can sit in the crontab in plain text like any other config
+   value; nothing this script needs is a credential.
+4. The ops-channel leg (posting the same alert to a chat channel, not
+   just the inbox) rides the still-open  channel decision. Do not
+   build or wire that leg speculatively; add it as a second crontab
+   command (or a second sink inside the script) once that decision
+   lands, not before.
+5. Verify the install without waiting for a real incident: run
+   `CWS_MAIN_ITEM_ID=<id> node /opt/xchain/store-version-monitor.mjs`
+   by hand on the host once, confirm it exits 0 with a clean summary on
+   stdout and nothing on stderr, then leave the cron to carry it going
+   forward.
 
 ### Verifying one artifact
 
@@ -114,22 +192,40 @@ The authoritative checklist is §6 of
    `release-artifacts/vX.Y.Z/`.
 4. `XCHAIN_RELEASE_GPG_KEY=<fingerprint> pnpm release:sign`. The
    pristine-clone, dev-mock and artifact-set gates run first.
-4b. Rehearse the update against the staging feed ( §7.5): publish
-   the staging set with `--staging`, then install the PREVIOUS release's
-   rehearsal build and watch it take the new one. No production pointer
-   goes up before this passes.
+4b. Sign the staging set too. K1 signs both (operator decision
+   2026-07-31), so the order is sign prod -> sign staging -> rehearse ->
+   publish prod, and the rehearsal exercises the key that actually
+   matters rather than a stand-in.
+4c. Rehearse the update against the staging feed ( §7.5). Publish
+   the staging set, then probe every lane, then attest the swap you
+   watched:
+
+   ```
+   bash tools/release/publish.sh --input release-artifacts/vX.Y.Z-staging/ \
+     --tag vX.Y.Z --target <staging target> --staging
+   node tools/release/rehearse.mjs run --feed <staging base url> \
+     --tag vX.Y.Z --channel staging --prod-input release-artifacts/vX.Y.Z/
+   # install the PREVIOUS release's rehearsal build, watch it take this one:
+   node tools/release/rehearse.mjs attest --record release-artifacts/REHEARSAL-vX.Y.Z.json \
+     --lane mac-arm64 --from <previous version> --by <who watched it>
+   ```
+
+   `run` checks the half that needs no hardware - the pointer resolves,
+   each arch selects its OWN installer, the bytes match, and the K1-signed
+   manifest covers them - for all six lanes from one machine. `attest`
+   records the half that does: an observed install and swap on named
+   hardware. `rehearse.mjs requirement` says whether this release needs
+   one OS or all of them, from the diff rather than from judgement.
+   No production pointer goes up before this passes, and step 5 refuses
+   without the record.
 5. `bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/
-   --tag vX.Y.Z --target origin-host-downloads:wallet
+   --tag vX.Y.Z --target <deploy target>
    --public-base https://downloads.xchain.io/wallet --dry-run`, then for
-   real. It verifies before uploading, refuses a version that already
+   real. It requires a passing rehearsal record bound to the manifest in
+   hand, verifies before uploading, refuses a version that already
    exists, refuses a rehearsal build (or the wrong feed), publishes the
    manifest under its versioned name, fetches every artifact back through
    the edge, and uploads the channel pointers last.
-
-   Needs GNU rsync, not the openrsync macOS ships: the feed's deploy key
-   is pinned to a forced `rrsync` command, and openrsync sends an option
-   its allowlist rejects. `publish.sh` refuses rather than letting you
-   debug the resulting syntax error.
 5b. `bash tools/release/deploy-web.sh --tarball <the published tarball>
    --tag vX.Y.Z --webroot <webroot>` for the SPA. Deploy the tarball
    that was signed, never a fresh local build.
@@ -152,8 +248,10 @@ See [`tools/build-reproduce/`](../build-reproduce/) and each package's
 - ✅ Dev-mock gate scans every shipped shell bundle, including the desktop renderer.
 - ⏸ Actual GPG signing pending G180 (release key generation + publication; ceremony runbook is  S3).
 - ✅ CI release lanes exist (`.github/workflows/release.yml`); the repository-settings half is a checklist in `docs/Release_CI_Setup.md` and is NOT yet configured, so the workflow must not run with real secrets until it is.
-- ✅ The feed host is stood up on origin-host (tree, restricted deploy key, staging feed, hourly `feed-sweep.mjs` cron) and was exercised with a real signed publish end to end. **DNS, the Cloudflare cache rules and the purge token are still outstanding**, so nothing resolves at `downloads.xchain.io` yet and the edge check has never run against Cloudflare. `docs/Verify_Release.md` still points at GitHub release assets.
+- ⏸ `downloads.xchain.io` not yet stood up ( S6); the upload tooling (`publish.sh`), the monitoring (`feed-sweep.mjs`) and the host runbook exist, the host does not. `docs/Verify_Release.md` still points at GitHub release assets.
 - ✅ `publish.sh` and `feed-sweep.mjs` are driven for real, against a signed fixture and a live local HTTP origin, by `test/smoke/audits/publish-feed.smoke.js` and `feed-sweep.smoke.js`. The older coverage of `publish.sh` was greps over its own source, which is how the  stage-1 defect survived: the comments and the code disagreed and both read as correct.
+- ✅ The §7.5 rehearsal is enforced, not merely written down: `publish.sh` refuses a production publish without a rehearsal record bound to the signed manifest in hand, so a re-cut release cannot inherit the previous cut's green. Driven end to end, with every refusal path, by `test/smoke/audits/rehearsal.smoke.js`.
+- ⏸ The swap half of the rehearsal is blocked on DD4 for five of six lanes: `rehearse.mjs coverage` reports which, and refuses to call a lane launch-ready with no named device. `mac-arm64` is the only lane with hardware today.
 - ⏸ Cross-platform reproduce (macOS / Windows pre-signing artifacts) pending the desktop reproducibility follow-ups.
 
 **Known naming gap.** Desktop installers use electron-builder's default

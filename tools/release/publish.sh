@@ -29,6 +29,7 @@
 #   --target <path>     local path or rsync host:path for wallet/
 #   --public-base <url> where that target is served from, for the edge check
 #   --staging           publish the rehearsal set to the staging feed (§7.5)
+#   --rehearsal <file>  the passing rehearsal record for this release
 #   --no-edge-verify    skip the edge check; must be typed, never defaulted
 #   --dry-run           print the plan and change nothing
 #
@@ -71,6 +72,16 @@
 # guards, both structural: the pointers in the input must all belong to
 # the expected channel, and the staging feed root carries a `.staging-feed`
 # marker that a prod publish refuses to write into (and vice versa).
+#
+# AND THE REHEARSAL MUST HAVE HAPPENED (§7.5). "No release's yml goes to
+# wallet/desktop/ before its staging rehearsal passes" is the rule; a rule
+# with nothing enforcing it is one that gets skipped on the release that
+# is running late, which is the release most likely to need it. So a
+# production publish requires a rehearsal RECORD, and the record is bound
+# to the signed manifest in hand, not merely to the tag: re-cutting a
+# release after a failed lane produces new bytes that nobody rehearsed,
+# under the same version. Staging publishes are exempt for the obvious
+# reason - publishing the staging set is step one OF the rehearsal.
 
 set -euo pipefail
 
@@ -90,6 +101,7 @@ PUBLIC_BASE=""
 DRY_RUN=0
 STAGING=0
 EDGE_VERIFY=1
+REHEARSAL_RECORD=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -98,6 +110,7 @@ while [[ $# -gt 0 ]]; do
         --target) TARGET="$2"; shift 2 ;;
         --public-base) PUBLIC_BASE="${2%/}"; shift 2 ;;
         --staging) STAGING=1; shift ;;
+        --rehearsal) REHEARSAL_RECORD="$2"; shift 2 ;;
         --no-edge-verify) EDGE_VERIFY=0; shift ;;
         --dry-run|-n) DRY_RUN=1; shift ;;
         --help|-h)
@@ -236,6 +249,29 @@ for required in "$MANIFEST" "$MANIFEST.asc"; do
         exit 1
     fi
 done
+
+# --- The rehearsal gate (§7.5) ------------------------------------------
+#
+# Production only. Runs before verify.sh because it costs a small JSON
+# read plus one hash of the manifest, while verify.sh hashes every
+# artifact: there is no reason to spend minutes proving bytes that are
+# not allowed out.
+#
+# The default location matches `rehearse.mjs run --out`, so the ordinary
+# case needs no flag and the flag exists for a maintainer who keeps
+# records somewhere else. There is deliberately NO skip switch. The one
+# case that legitimately has no swap to show - the very first release,
+# where no earlier build exists to update FROM - is handled inside the
+# record as `bootstrap`, where it is visible and dated, rather than by a
+# command-line flag that would outlive the situation that justified it.
+if [[ "$STAGING" -eq 0 ]]; then
+    if [[ -z "$REHEARSAL_RECORD" ]]; then
+        REHEARSAL_RECORD="$(cd "$INPUT_DIR/.." && pwd)/REHEARSAL-$TAG.json"
+    fi
+    echo "publish.sh: checking the §7.5 rehearsal record ..." >&2
+    node "$HERE/rehearse.mjs" assert \
+        --record "$REHEARSAL_RECORD" --tag "$TAG" --prod-input "$INPUT_DIR" >&2
+fi
 
 # Verify before uploading, not after. An artifact that fails here has
 # cost nothing; one that fails after upload is already reachable.

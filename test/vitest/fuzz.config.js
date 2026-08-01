@@ -16,6 +16,17 @@ export default defineConfig({
     root: fileURLToPath(new URL('../..', import.meta.url)),
     plugins: [react()],
     test: {
+        // Bounded fork pool. Vitest defaults to one worker per core (32 on the
+        // dev box), so a single run claimed the whole machine while many agent
+        // sessions shared it. An abruptly killed run also leaves its pool
+        // orphaned, and orphaned workers busy-spin at roughly a full core each
+        // until something reaps them, so a smaller pool caps both the
+        // steady-state cost and the blast radius. Raise on a dedicated runner
+        // if suite wall-time regresses.
+        pool: 'forks',
+        poolOptions: {
+            forks: { maxForks: 8 },
+        },
         environment: 'jsdom',
         include: ['test/fuzz/harness/**/*.fuzz.js'],
         setupFiles: ['./test/fuzz/setup.js'],

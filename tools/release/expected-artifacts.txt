@@ -33,17 +33,29 @@
 # A stale list either blocks a legitimate release or, worse, silently
 # stops demanding a shell that quietly dropped out of the build.
 #
-# Format:  <required|optional>  <glob matched against the artifact basename>
+# THE THIRD COLUMN IS THE BUILD PROFILE (, rails §3): which set of
+# features was compiled into that artifact. `default` is the full app
+# (web, desktop, extension); `store` is the mobile store build, which
+# compiles OUT the surfaces the app-store review posture hides (
+# §2.3). Two artifacts of one tag can hold different code, so the profile
+# is written into the signed manifest and every declared glob must name
+# one. A missing or unknown profile fails the gate here, at declaration
+# time, rather than when a release is already staged.
+#
+# The direct APK is `store` and that is not a typo:  §6 derives it
+# from the same AAB, so it is the store build's code signed by a
+# different key. Anything compiled out for review is therefore also
+# absent from the direct download.
+#
+# Format:  <required|optional>  <glob matched against the artifact basename>  <profile>
 
 # --- Web SPA ------------------------------------------------------------
-required  xchain-wallet-web-v*.tar.gz
-
+required  xchain-wallet-web-v*.tar.gz       default
 # --- Chrome extension ---------------------------------------------------
 # The store zip. What the Chrome Web Store returns to users is a
 # store-signed CRX repacked from this, so the manifest proves what was
 # submitted, not what was delivered (§3, docs/Verify_Release.md).
-required  xchain-wallet-extension-v*.zip
-
+required  xchain-wallet-extension-v*.zip    default
 # --- Desktop (electron-builder) -----------------------------------------
 # Extension globs rather than exact names: electron-builder embeds
 # productName ("XChain Wallet", with a space) in every one.
@@ -61,18 +73,33 @@ required  xchain-wallet-extension-v*.zip
 # (§2): a tag that produced only the artifacts the release machine could
 # build natively is exactly the version skew this gate exists to refuse.
 # Satisfying the Windows and macOS rows needs the §5 CI matrix (S4).
-required  *.dmg
-required  *mac*.zip
-required  *.exe
-required  *win*.zip
-required  *.AppImage
-required  *.deb
-
-# --- Mobile (dormant) ---------------------------------------------------
-# Capacitor shells are scoped post-v1.0 ( Android,  iOS).
+required  *.dmg                             default
+required  *mac*.zip                         default
+required  *.exe                             default
+required  *win*.zip                         default
+required  *.AppImage                        default
+required  *.deb                             default
+# --- Mobile -------------------------------------------------------------
 # Optional, not required, so a release today does not demand them - but
-# declared, so the day one is staged it is covered by the manifest
-# instead of hard-failing as undeclared. Both are store-bound: covered
-# by the signature, not hosted on downloads.xchain.io (§3).
-optional  xchain-wallet-android-v*.aab
-optional  xchain-wallet-ios-v*.ipa
+# declared, so the day one is staged it is covered by the manifest instead
+# of hard-failing as undeclared.
+#
+# The Android pair is NOT two builds and NOT the same lane ( §6):
+# the ceremony builds ONE AAB and derives the universal APK from that same
+# bundle, so the two files are the same code signed by different keys.
+#
+#   .aab   store-bound, signed by K9, uploaded to Play, NEVER hosted
+#          publicly. Hashed into the manifest anyway: the manifest is the
+#          record of what was submitted, since Play re-signs and serves
+#          device-split APKs that cannot be verified against it at all.
+#   .apk   the DIRECT download, signed by K10, hosted on
+#          downloads.xchain.io. This is the only verifiable Android
+#          artifact, and the one users check by hand
+#          (`apksigner verify --print-certs`), so it is the one whose
+#          absence from a manifest would matter most.
+#
+# iOS stays store-bound-only: there is no direct-install lane on that
+# platform to have a second artifact for .
+optional  xchain-wallet-android-v*.aab      store
+optional  xchain-wallet-v*.apk              store
+optional  xchain-wallet-ios-v*.ipa          store

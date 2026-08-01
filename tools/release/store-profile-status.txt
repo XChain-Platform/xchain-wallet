@@ -1,0 +1,25 @@
+UNIMPLEMENTED
+
+# Whether the `store` build profile EXISTS as a build mechanism .
+#
+# The manifest can now record which profile an artifact was cut from
+# (rails §3), but recording is not producing. The compile-time flags that
+# make a `store` build actually differ from a `default` one - the ones
+#  §2.3 requires and  names the first of - are not written
+# yet. Until they are, labelling a staged ipa or aab `store` in a signed,
+# append-only record would be a FALSE claim, which is worse than no claim:
+# a verifier reading it would conclude the review-hidden surfaces are
+# absent from a build that still contains them.
+#
+# So sign.sh refuses to sign any release containing a `store`-profile
+# artifact while this file reads UNIMPLEMENTED. It costs nothing today (no
+# mobile artifact can be built: neither store account exists) and it stops
+# the first mobile release from quietly inheriting a label nothing earned.
+#
+# TO LIFT IT: implement the §2.3 build-time flags, prove a `store` build
+# differs from a `default` one, then replace the first line with
+#
+#     IMPLEMENTED <XC-item that built it>
+#
+# in the SAME commit as the flags. Anything else on that line keeps the
+# gate closed, deliberately: a typo must fail shut.

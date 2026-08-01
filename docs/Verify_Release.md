@@ -96,23 +96,36 @@ Every release tag publishes:
   release.
 - `RELEASE_HASHES.txt.asc` - GPG signature on the manifest.
 
+Releases are served from `downloads.xchain.io`, not from GitHub release
+assets. The manifest lives under its **versioned** name, which is the
+form to prefer: the filename then states which release it describes, and
+`verify.sh` can check that claim against the manifest's own header with
+no `--tag` needed.
+
 ```bash
 TAG=vX.Y.Z
-BASE="https://github.com/XChain-platform/xchain-wallet/releases/download/${TAG}"
-curl -fsSLO "${BASE}/RELEASE_HASHES.txt"
-curl -fsSLO "${BASE}/RELEASE_HASHES.txt.asc"
-curl -fsSLO "${BASE}/<artifact-filename>"
+BASE="https://downloads.xchain.io/wallet"
+curl -fsSL -o RELEASE_HASHES.txt     "${BASE}/RELEASE_HASHES/${TAG}.txt"
+curl -fsSL -o RELEASE_HASHES.txt.asc "${BASE}/RELEASE_HASHES/${TAG}.txt.asc"
+curl -fsSLO --path-as-is "${BASE}/desktop/<artifact-filename>"
 ```
 
-Use the artifact filename appropriate for your platform.
+Use the artifact filename appropriate for your platform. Desktop
+installers are under `desktop/`, the web tarball under `web/`, and the
+extension zip under `extension/`.
 
-The manifest is also published under its versioned name,
-`RELEASE_HASHES/vX.Y.Z.txt`. Prefer that one: the filename then states
-which release the manifest is for, and `verify.sh` checks it against
-what the manifest says about itself with no `--tag` needed. If you take
-the plain `RELEASE_HASHES.txt`, pass `--tag vX.Y.Z` so the same check
-can still run - `verify.sh` refuses to call a manifest verified when
-nothing says which release it belongs to.
+**Note the space.** Every desktop artifact name contains one (the product
+name is two words), so a URL you paste by hand needs it percent-encoded
+as `%20`. For example:
+
+```bash
+curl -fsSLO "${BASE}/desktop/XChain%20Wallet-0.334.0-arm64-mac.zip"
+```
+
+If you took a manifest named plainly `RELEASE_HASHES.txt` from somewhere
+else, pass `--tag vX.Y.Z` to `verify.sh` so the same check can still run:
+it refuses to call a manifest verified when nothing says which release it
+belongs to.
 
 ---
 
@@ -168,21 +181,23 @@ malformed lines itself rather than trusting either tool.)
 ## Step 4b - Check which release the manifest describes
 
 ```bash
-head -8 RELEASE_HASHES.txt
+grep '^#' RELEASE_HASHES.txt
 ```
 
 ```
 # XChain Wallet release manifest
-# manifest-version: 1
+# manifest-version: 2
 # tag: v0.333.1
 # tag-commit: 9f3c...
 # built: 2026-07-31T18:02:11Z
 # dev-mock-gate: enforced
 # artifacts: 8
+# profile default: ./xchain-wallet-web-v0.333.1.tar.gz
+# profile store: ./xchain-wallet-ios-v0.333.1.ipa
 ```
 
 These lines are inside the signed bytes, so a good signature vouches
-for them too. Three things to read:
+for them too. Four things to read:
 
 - **`tag`** must be the release you meant to download. A manifest
   lifted from another release hashes and verifies perfectly; this line
@@ -193,6 +208,14 @@ for them too. Three things to read:
   release was signed without the check that keeps the development stub
   SDK - which shows fabricated addresses and cannot really sign - out
   of a shipped bundle. Treat that as a reason to ask before installing.
+- **`profile`** says which feature set each artifact was built with.
+  `default` is the full app: web, desktop and the extension. `store` is
+  the mobile build, which compiles OUT the surfaces the app stores'
+  review rules keep us from shipping there, so an Android or iOS build
+  genuinely contains less code than the desktop one of the same
+  version. Every artifact appears on exactly one of these lines; the
+  Android APK you download directly is `store` too, because it is built
+  from the same bundle that goes to the store.
 
 At this point the artifact has been authenticated. You can install
 or run it.
@@ -216,6 +239,27 @@ stores, not something we can close:
 
 If byte-exact verification matters to you, take the artifact from
 downloads.xchain.io rather than from a store.
+
+### Updates are checked the same way, without you
+
+Everything above describes verifying by hand. The desktop app does the
+equivalent automatically before it installs an update: it fetches the
+signed manifest for the version being offered, verifies the signature
+against a copy of the release key **compiled into the app itself**, and
+refuses to install an artifact whose hash the manifest does not cover.
+The check runs between the download and the install, and it is the only
+install path there is - there is no second, unverified route for a bug
+or a later change to wire up.
+
+Two consequences worth understanding:
+
+- On Linux this is the *only* authenticity check. The `.AppImage` and
+  `.deb` carry no operating-system signature, and the SHA-512 in the
+  update-info file is served by the same host as the binary, so it is a
+  checksum from the same party, not a signature. The pinned key is what
+  makes a compromise of the download host survivable.
+- Because the key is compiled in, rotating it means shipping a wallet
+  update. That is what pinning costs and what it buys.
 
 ---
 

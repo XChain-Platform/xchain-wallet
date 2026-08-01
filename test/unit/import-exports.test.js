@@ -84,9 +84,21 @@ function findRoot() {
     throw new Error('cannot locate wallet root (pnpm-workspace.yaml + packages/)');
 }
 
+// Build output is NOT source. Skipping it is not a convenience: this guard
+// parses every file it finds, and a minified 3.7 MB bundle costs hundreds of
+// megabytes of Babel AST. With the shells' dist/ trees present the walk was
+// already carrying ~13 MB of bundles; the mobile shell stages the web build
+// into two more places (its Capacitor webDir and the copy under android/),
+// which took a local `pnpm test:unit` after a build straight into
+// "Reached heap limit". Nothing in these directories is written by hand, so
+// nothing in them can carry the import bug this file looks for.
+const GENERATED_DIRS = new Set([
+    'node_modules', 'dist', 'dist-staging', 'build', 'coverage', 'www', 'android', 'ios',
+]);
+
 function walkJs(dir, out = []) {
     for (const ent of safeReaddir(dir)) {
-        if (ent.name === 'node_modules' || ent.name.startsWith('.')) continue;
+        if (GENERATED_DIRS.has(ent.name) || ent.name.startsWith('.')) continue;
         const p = resolve(dir, ent.name);
         if (ent.isDirectory()) walkJs(p, out);
         else if (/\.(js|jsx)$/.test(ent.name)) out.push(p);

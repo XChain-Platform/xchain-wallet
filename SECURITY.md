@@ -108,6 +108,38 @@ Read that document before reporting. It tells you what we already know, what we 
 
 When release-signing infrastructure ships (tracked as G158 / G159 / G180), the procedure for verifying a release artifact will be documented at `docs/Verify_Release.md`. Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and `packages/desktop/Reproducible_Builds.md` document the procedure.
 
+### Android APK signing certificate
+
+**NOT YET GENERATED.** The direct-download signing key (K10) is created in the
+release-key ceremony; until then there is nothing true to put here, and a
+placeholder that looked like a fingerprint would be worse than an empty slot.
+
+When it exists, its SHA-256 certificate fingerprint goes below, and **this file
+is the canonical copy**. The copy on the download page is a convenience only:
+a fingerprint served by the same origin as the file it authenticates proves
+nothing if that origin is compromised, so the value people should compare
+against is the one in this repository, reachable independently.
+
+    Fingerprint (SHA-256): <PENDING K10 CEREMONY>
+
+Verify a downloaded APK against it with:
+
+```bash
+apksigner verify --print-certs xchain-wallet-vX.Y.Z.apk
+```
+
+Two things this fingerprint is not:
+
+- It is **not** the fingerprint of the Google Play build. Play re-signs
+  uploads with its own app-signing key and serves device-split APKs, so a
+  Play install cannot be verified against this value, or against our release
+  manifest, at all. The directly downloaded APK is the only verifiable
+  Android artifact we ship.
+- It **cannot be rotated**. Android refuses an update signed by a different
+  key, so replacing K10 means every direct install must uninstall (which
+  erases the on-device wallet) and reinstall. If this value ever changes,
+  it will be accompanied by a signed advisory saying why.
+
 ---
 
 ## Versions covered
