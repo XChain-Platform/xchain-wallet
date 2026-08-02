@@ -12,8 +12,11 @@
     position: relative;
     display: flex;
     flex-direction: row;
-    height: var(--xc-screen-h, 100vh);
-    height: var(--xc-screen-h, 100dvh);
+    /* : the fallback is --xc-viewport-h (tokens.css), not 100dvh. It
+       is the viewport MINUS the top safe-area inset that body pads by, so
+       the shell ends where the screen ends instead of overhanging it. */
+    height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
+    height: var(--xc-screen-h, var(--xc-viewport-h, 100dvh));
     background: var(--xc-bg);
     color: var(--xc-text);
 }

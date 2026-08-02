@@ -90,6 +90,26 @@
     --xc-focus-ring: rgba(26, 123, 172, 0.45);
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+
+    /* : how tall the app shell may be. NOT plain 100dvh, because
+     * `body` below pads itself by the top safe-area inset, so a shell that
+     * is a full viewport tall starts BELOW the viewport top and therefore
+     * ends below its bottom. That overflow is what made the document
+     * scrollable by exactly the inset on iOS: scroll to the bottom to reach
+     * the tab bar and the whole shell slides up, putting the header under
+     * the status bar. Measured on an iPhone 17 Pro simulator (inset 62pt,
+     * shell overhanging by 62pt) and an iPad Pro 13-inch (24pt).
+     *
+     * Subtracting the inset makes the shell exactly fill what is visible, so
+     * there is nothing to scroll and the top chrome cannot travel. Every
+     * inset is 0 off iOS, so this is literally 100dvh on web, desktop and
+     * the extension popup.
+     *
+     * Only the TOP inset is subtracted: body deliberately carries no bottom
+     * padding (see below), and the left/right insets reduce the shell's
+     * width, which needs no height math. */
+    --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
+    --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
 }
 
 /* Dark palette. : two triggers, one payload.
@@ -274,6 +294,35 @@ body {
     color: var(--xc-text);
     background: var(--xc-bg);
     -webkit-font-smoothing: antialiased;
+
+    /* Keep the app out from under the hardware. On an iPhone with a Dynamic
+     * Island or a notch, the WebView is laid out edge to edge, so without this
+     * the first thing on the page renders BEHIND the camera cutout - measured
+     * on an iPhone 17 Pro Max simulator, where the island sat squarely on top
+     * of the XChain logo and the status bar overlapped it.
+     *
+     * Left and right matter in landscape, where the notch eats one side, and
+     * the bottom is the home indicator. Every value is 0 on desktop, in a
+     * browser tab and on a device with no cutout, so this costs those shells
+     * nothing.
+     *
+     * Deliberately on `body` rather than inside a screen component: it applies
+     * once, to whatever the app renders, instead of every route remembering.
+     * Anything that genuinely wants to bleed into the inset (a full-bleed
+     * header background) opts out locally with a negative margin.
+     *
+     * COUPLED to --xc-viewport-h above, and the pair must stay in step: this
+     * padding moves the shell's top edge down, so the shell's height has to
+     * come down by the same amount or the document scrolls .
+     *
+     * NO bottom inset here on purpose. BottomTabBar and LeftNav already pad
+     * themselves by `env(safe-area-inset-bottom)`, and they are pinned to the
+     * viewport rather than to body flow, so adding it here as well would open
+     * a second gap under the tab bar on exactly the devices this is meant to
+     * fix. The bottom stays owned by the two components that render there. */
+    padding-top: env(safe-area-inset-top, 0);
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
 }
 
 *,
