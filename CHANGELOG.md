@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.334.0] - 2026-08-01
+
 ### Fixed
+- About panel and diagnostic dump reported an older version than the build they were running.
 - Derivation-parity guard runs in CI with the SDK anchor wired, reserved-id descriptor integrity check, humanized action labels and error copy across forms, fiatToCoin never emits exponential notation.
 
 ### Added

@@ -4,7 +4,7 @@
 # XChain Platform Wallet
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.333.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.334.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/tests-388%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="License">
@@ -74,7 +74,7 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 
 ## Status
 
-Pre-v1.0 (current version: `0.333.1`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
+Pre-v1.0 (current version: `0.334.0`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
 
 ## Quick Start
 
