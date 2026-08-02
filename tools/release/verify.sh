@@ -166,9 +166,15 @@ FULL_COUNT="$(grep -c . "$STRIPPED" || true)"
 
 # Build profiles, checked here for the same reason and against the same
 # full document: which feature set each artifact carries is a claim about
-# the whole release . Only manifests that carry a header are
-# checked; an unsigned recompute has no profile claim to keep.
-if xr_has_header "$MANIFEST"; then
+# the whole release . Only manifests that describe an actual
+# RELEASE are checked; an unsigned recompute has no profile claim to keep.
+#
+# This was gated on xr_has_header until 2026-08-02, which could not tell the
+# two apart, because a recompute manifest carries the same header line a
+# signed one does. The check therefore ran against precisely the manifests
+# documented not to have profile lines, and this script refused to read its
+# own --recompute output on any tag.
+if xr_is_release_manifest "$MANIFEST"; then
     xr_check_profiles "$MANIFEST" "$STRIPPED" || exit 1
 fi
 
