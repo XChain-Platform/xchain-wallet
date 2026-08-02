@@ -14,8 +14,16 @@
 // Synchronized-version note: this constant is updated alongside every
 // package.json bump per the wallet's synchronized-versioning rule.
 // See CHANGELOG.md for the version's release context.
+//
+// It is the version a USER sees, in the About panel and the diagnostic
+// dump, which makes it the copy that matters most and the one that went
+// wrong quietest: it sat at 0.333.0 while the root and the shipped
+// extension were at 0.333.1, so About under-reported the build for as long
+// as that drift lasted, and the only check on it compared this constant to
+// core's package.json, which was equally stale (, 2026-08-01).
+// test/smoke/audits/version-lockstep.smoke.js now holds it to the ROOT.
 
-export const WALLET_VERSION = '0.333.0';
+export const WALLET_VERSION = '0.333.1';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'GNU Affero General Public License v3.0 (AGPL-3.0)';

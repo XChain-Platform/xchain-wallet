@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/bridge-spec",
-    "version": "0.333.0",
+    "version": "0.333.1",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "description": "TypeScript type definitions and reference client for the window.xchain dApp bridge",

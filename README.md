@@ -222,7 +222,11 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 
 ## Versioning
 
-All packages in this repository (root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/mobile`, `packages/bridge-spec`, `packages/test-dapp`, and `e2e`) **ship at the same version number**. The root `package.json` version is the single source of truth; every sub-package's `package.json` tracks the root in lockstep. `CHANGELOG.md` at the repo root is authoritative; sub-packages do not maintain their own changelogs.
+Every package under `packages/` **ships at the same version number** as the root. The root `package.json` version is the single source of truth; each sub-package's `package.json` tracks it in lockstep, and so does `packages/extension/manifest.json`, which is the copy the Chrome Web Store reads. `CHANGELOG.md` at the repo root is authoritative; sub-packages do not maintain their own changelogs.
+
+**`test/e2e` is exempt.** It is a private test harness that is never published or installed by a user, so its version identifies nothing and tracking the root would be ceremony. It carries its own version deliberately.
+
+The membership rule is "everything under `packages/`" rather than a list of names, because a list is what let this drift in the first place: six packages sat a patch version behind the root while this paragraph claimed otherwise, and nothing noticed (). `test/smoke/audits/version-lockstep.smoke.js` now enforces it, and a newly added package is in scope the moment it exists.
 
 ## Parent Platform
 
