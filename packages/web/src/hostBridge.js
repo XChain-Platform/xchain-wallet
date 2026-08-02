@@ -896,7 +896,13 @@ export async function importMnemonicLocal(req) {
         });
         startNotifications();
         await meta.save({ kdfParams });
-        return { format: result.format, walletName: result.wallet.name };
+        // `walletId` rides along because the fresh-install caller may need to
+        // keep working with the wallet it just made: the  pairing lane
+        // imports the shared phrase here and then asks the host to derive that
+        // wallet's pairing payload, which is addressed BY id. Without it the
+        // lane imported the phrase and then dead-ended on "the shell returned
+        // no wallet id" - a hard stop after the wallet already existed.
+        return { format: result.format, walletName: result.wallet.name, walletId: result.wallet.id };
     } finally {
         masterKey.fill(0);
     }

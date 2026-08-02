@@ -162,6 +162,7 @@ export async function handleWalletImport(request, deps) {
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     let format;
+    let walletId;
     try {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
@@ -182,6 +183,7 @@ export async function handleWalletImport(request, deps) {
         await vault.save();
         vault.close();
         format = result.format;
+        walletId = result.wallet.id;
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
@@ -192,7 +194,13 @@ export async function handleWalletImport(request, deps) {
     if (typeof deps.onUnlocked === 'function') {
         await deps.onUnlocked();
     }
-    return { format, walletName: name };
+    // `walletId` rides along for the same reason the host-registered
+    // `wallet.import` returns a whole wallet record: a fresh-install caller may
+    // have more to do with the wallet it just made. The  pairing lane
+    // imports the shared phrase here and then asks the host for that wallet's
+    // pairing payload, addressed BY id; without it the lane dead-ended after
+    // the wallet already existed.
+    return { format, walletName: name, walletId };
 }
 
 async function assertFreshVault(deps) {
