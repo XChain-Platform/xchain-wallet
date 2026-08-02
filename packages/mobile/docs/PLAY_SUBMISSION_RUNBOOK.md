@@ -76,9 +76,22 @@ new measurement in front of a reviewer who fetches the old text - which is exact
 the form-versus-policy mismatch §5 calls a rejection class, and a credibility hit
 for a privacy-forward wallet.
 
-**Order of operations:** commit `docs/Privacy_Policy.md` → deploy it to
-`xchain.io/wallet/privacy/` → re-fetch and confirm the page says "we do not keep
-your IP address" → then open the store form.
+**And it is not simply "commit and deploy", which is what this said first.** That
+file's own header reads `DRAFT, not yet publishable`, and one question is still
+open in `docs/Data_Collection.md`: **Q3, whether a GDPR lawful-basis statement or
+a CCPA notice is required**, which depends on where the company operates and
+where the apps are listed. Publishing the corrected text while that section is
+missing trades a stale accuracy problem for a fresh completeness one.
+
+**Order of operations:**
+
+1. Answer Q3 (operator/legal). It is the last open question in
+   `docs/Data_Collection.md`.
+2. Drop the DRAFT header from `docs/Privacy_Policy.md` and commit it.
+3. Deploy to `xchain.io/wallet/privacy/`.
+4. Re-fetch and confirm the live page says "we do not keep your IP address" and
+   is dated 2 August 2026 or later.
+5. Only then open the store form.
 
 **0b and 0d are the two custody rows, and they are the ones a schedule quietly
 eats.** §4 calls the console account the worst compromise in the table: an attacker
