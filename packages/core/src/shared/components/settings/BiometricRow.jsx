@@ -11,16 +11,25 @@
 // BiometricRow (§35): Safety panel row that owns the §26 / G063 biometric
 // unlock affordance. Three states:
 //
-//   not-supported    Platform authenticator absent / WebAuthn missing.
-//                    Renders a status line and disables interaction.
+//   not-supported    Nothing on this device can release the password.
+//                    Renders the provider's own reason and disables
+//                    interaction.
 //   supported-off    No credential registered. Reveals an inline password
 //                    field; on submit, runs `registerBiometricCredential`
-//                    so the wallet password is wrapped under the PRF
-//                    output of the new credential.
+//                    so the wallet password is wrapped by whatever the
+//                    active provider wraps it with.
 //   supported-on     Credential registered. Shows a Disable button that
-//                    wipes the credential reference + ciphertext from
-//                    localStorage. (The platform credential itself can
+//                    discards the wrap. (The platform credential itself can
 //                    only be cleared via OS settings, by design.)
+//
+// This component names NO vendor and NO browser API, and a smoke test
+// enforces that . It used to hardcode two desktop-platform brand
+// names and explain unavailability in terms of the browser credential API,
+// which on a phone is wrong twice over: neither brand is what the device
+// does, and the true reason there is usually "nothing is enrolled yet" - a
+// reason the native provider already had and this row discarded. All such
+// wording now comes from `describeBiometric()`, so adding a third shell means
+// teaching its provider to speak, not editing shared UI.
 //
 // The component re-checks support + registration on mount and after any
 // state change so toggling between OS settings + the wallet stays in
@@ -29,7 +38,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import {
-    isBiometricSupported,
+    describeBiometric,
     isBiometricRegistered,
     clearBiometricCredential,
     registerBiometricCredential,
@@ -37,7 +46,11 @@ import {
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
 
 export function BiometricRow() {
-    const [supported, setSupported] = useState(/** @type {boolean | null} */ (null));
+    // null while the probe is in flight; afterwards the provider's full
+    // self-description, which is where every user-facing noun below comes from.
+    const [description, setDescription] = useState(
+        /** @type {null | Awaited<ReturnType<typeof describeBiometric>>} */ (null),
+    );
     const [registered, setRegistered] = useState(isBiometricRegistered());
     const [showEnableForm, setShowEnableForm] = useState(false);
     const [password, setPassword] = useState('');
@@ -45,14 +58,14 @@ export function BiometricRow() {
     const [error, setError] = useState(/** @type {string | null} */ (null));
     // : re-run the pairing attempt on the recorded action. Biometric
     // registration failures (prompt timeout, user-cancelled the OS dialog,
-    // transient WebAuthn error) are always retryable with the same password
+    // transient provider error) are always retryable with the same password
     // still in the field, so the error surface offers a one-click "Try again".
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
     useEffect(() => {
         let cancelled = false;
-        isBiometricSupported().then((ok) => {
-            if (!cancelled) setSupported(Boolean(ok));
+        describeBiometric().then((described) => {
+            if (!cancelled) setDescription(described);
         });
         return () => { cancelled = true; };
     }, []);
@@ -98,26 +111,23 @@ export function BiometricRow() {
         cursor: 'pointer',
     };
 
-    if (supported === null) {
+    if (description === null) {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={labelStyle}>Biometric unlock</span>
-                    <span style={ROW_HINT}>Checking platform authenticator…</span>
+                    <span style={ROW_HINT}>Checking this device…</span>
                 </div>
             </div>
         );
     }
 
-    if (!supported) {
+    if (!description.supported) {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={labelStyle}>Biometric unlock</span>
-                    <span style={ROW_HINT}>
-                        Not available: this device or browser doesn&rsquo;t expose a
-                        WebAuthn platform authenticator with PRF support.
-                    </span>
+                    <span style={ROW_HINT}>Not available. {description.reason}</span>
                 </div>
             </div>
         );
@@ -129,7 +139,7 @@ export function BiometricRow() {
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={labelStyle}>Biometric unlock</span>
                     <span style={ROW_HINT}>
-                        Enabled. Use Touch ID / Windows Hello / device biometric on the unlock screen.
+                        Enabled. Use {description.mechanism} on the unlock screen.
                     </span>
                 </div>
                 <button type="button" onClick={handleDisable} style={buttonStyle}>
@@ -145,8 +155,7 @@ export function BiometricRow() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                     <span style={labelStyle}>Enable biometric unlock</span>
                     <span style={ROW_HINT}>
-                        Confirm your wallet password. The password is wrapped under your
-                        platform authenticator&rsquo;s PRF output and never persisted in plaintext.
+                        Confirm your wallet password. {description.wrapNote}
                     </span>
                 </div>
                 <input
@@ -199,7 +208,7 @@ export function BiometricRow() {
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={labelStyle}>Biometric unlock</span>
                 <span style={ROW_HINT}>
-                    Use Touch ID, Windows Hello, or your device biometric to unlock without typing your password.
+                    Use {description.mechanism} to unlock without typing your password.
                 </span>
             </div>
             <button

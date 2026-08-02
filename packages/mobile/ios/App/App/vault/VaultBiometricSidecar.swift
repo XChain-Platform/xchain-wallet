@@ -38,10 +38,20 @@ import Foundation
 import LocalAuthentication
 import Security
 
+/// What the JS side needs to describe this device to its owner .
+///
+/// `detail` is a developer string and stays one; `reasonCode` is the stable
+/// token the shared JS maps to plain language, so this shell and the Android
+/// one cannot describe the same condition in two different voices. The
+/// mechanism is reported rather than assumed because only the device knows
+/// whether it will ask for a face or a finger - which is precisely what the
+/// shared settings row used to guess wrong.
 struct BiometricAvailability {
     let available: Bool
     let enrolled: Bool
     let detail: String
+    let reasonCode: String
+    let mechanism: String
 }
 
 final class VaultBiometricSidecar {
@@ -66,8 +76,46 @@ final class VaultBiometricSidecar {
             enrolled: wrapExists(),
             detail: canEvaluate
                 ? "biometry available"
-                : (error?.localizedDescription ?? "biometry unavailable")
+                : (error?.localizedDescription ?? "biometry unavailable"),
+            reasonCode: canEvaluate ? "ok" : Self.reasonCode(for: error),
+            mechanism: Self.mechanism(for: context.biometryType)
         )
+    }
+
+    /// Map LocalAuthentication's error to the shared vocabulary. The default
+    /// is deliberately `unsupported` rather than the localized description:
+    /// an unmapped code must produce our generic sentence, never a raw system
+    /// string in the middle of wallet copy.
+    private static func reasonCode(for error: NSError?) -> String {
+        guard let code = error.map({ LAError.Code(rawValue: $0.code) }) ?? nil else {
+            return "unsupported"
+        }
+        switch code {
+        case .biometryNotEnrolled:
+            return "none_enrolled"
+        case .biometryNotAvailable:
+            return "no_hardware"
+        case .biometryLockout:
+            return "lockout"
+        case .passcodeNotSet:
+            return "passcode_not_set"
+        default:
+            return "unsupported"
+        }
+    }
+
+    /// Face ID and Touch ID are Apple's own names for these, so on this shell
+    /// naming them is accuracy rather than the vendor-guessing  removed
+    /// from the shared component.
+    private static func mechanism(for type: LABiometryType) -> String {
+        switch type {
+        case .faceID:
+            return "Face ID"
+        case .touchID:
+            return "Touch ID"
+        default:
+            return "your device biometric"
+        }
     }
 
     /// Store `secret` behind a fresh biometric match.

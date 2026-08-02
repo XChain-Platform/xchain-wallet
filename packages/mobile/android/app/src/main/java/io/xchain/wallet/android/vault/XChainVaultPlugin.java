@@ -120,6 +120,10 @@ public class XChainVaultPlugin extends Plugin {
         reply.put("available", status.available);
         reply.put("enrolled", status.enrolled);
         reply.put("detail", status.detail);
+        // : the code is what the JS maps to plain language; `detail`
+        // stays a developer string and is never shown to a user.
+        reply.put("reasonCode", status.reasonCode);
+        reply.put("mechanism", status.mechanism);
         call.resolve(reply);
     }
 

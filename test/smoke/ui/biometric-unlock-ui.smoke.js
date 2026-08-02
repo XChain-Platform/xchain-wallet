@@ -110,8 +110,8 @@ assert.match(safetySrc, /<BiometricRow \/>/, 'SafetySection renders BiometricRow
 
 assert.match(
     rowSrc,
-    /isBiometricSupported/,
-    'BiometricRow probes platform support',
+    /describeBiometric/,
+    'BiometricRow asks the active provider to describe this device',
 );
 assert.match(
     rowSrc,
@@ -130,7 +130,7 @@ assert.match(
 );
 assert.match(
     rowSrc,
-    /supported === null/,
+    /description === null/,
     'Pending probe state rendered before answer',
 );
 assert.match(
@@ -138,6 +138,26 @@ assert.match(
     /Not available/,
     'Unsupported state rendered',
 );
+
+// : shared UI names no vendor and no API. This row is rendered on
+// Android and iOS as well as in a browser, and it used to tell a phone user
+// about Touch ID, Windows Hello, WebAuthn and PRF - three of which are not
+// what their device does and the fourth of which they have no way to act on.
+// The vocabulary now belongs to whichever provider is answering, so this
+// assertion is the thing that stops it drifting back into shared code.
+for (const vendor of [/Touch ID/i, /Windows Hello/i, /WebAuthn/i, /\bPRF\b/, /Face ID/i]) {
+    assert.equal(
+        vendor.test(rowSrc),
+        false,
+        `BiometricRow must not name ${vendor} itself; providers describe themselves`,
+    );
+}
+for (const field of ['description.mechanism', 'description.reason', 'description.wrapNote']) {
+    assert.ok(
+        rowSrc.includes(`{${field}}`),
+        `BiometricRow renders ${field} rather than its own wording`,
+    );
+}
 assert.match(
     rowSrc,
     /password\.length === 0/,

@@ -54,6 +54,31 @@ const { bytesToBase64, base64ToBytes } = coreCrypto;
 let enrolledCache = false;
 
 /**
+ * Plain-language reasons, keyed on the stable `reasonCode` the native halves
+ * emit . The native `detail` beside it is a developer string
+ * ("no biometric enrolled", an `NSError` localizedDescription) and is NEVER
+ * shown: it is for logs. What the user reads is composed here, in the one
+ * place both native shells share, so Android and iOS cannot drift into
+ * describing the same condition differently.
+ *
+ * An unknown code falls through to the generic sentence rather than leaking
+ * the raw detail, which is the failure this item is about.
+ */
+const REASONS = Object.freeze({
+    no_hardware: 'This device has no fingerprint or face sensor.',
+    hw_unavailable: 'The biometric sensor is not available right now. Try again in a moment.',
+    none_enrolled: 'No fingerprint or face is set up on this device yet.'
+        + ' Add one in your device security settings, then come back.',
+    lockout: 'Too many failed attempts. Unlock this device with its PIN or passcode,'
+        + ' then try again.',
+    security_update_required: 'This device needs a system security update before biometric'
+        + ' unlock can be used.',
+    passcode_not_set: 'This device has no screen lock. Set a PIN, pattern, or passcode first,'
+        + ' then add a fingerprint or face.',
+    unsupported: 'This device cannot use biometric unlock.',
+});
+
+/**
  * Ask the native side whether a wrap exists and refresh the cache. Called at
  * boot (see installNativeBiometricProvider) and after every mutation, because
  * the shared UI's `isBiometricRegistered()` cannot await.
@@ -81,9 +106,51 @@ export const nativeBiometricProvider = {
     name: 'native-biometric-prompt',
 
     /**
+     * Generic only as a floor: the real wording comes from `describe()` below,
+     * which asks the device what it actually has. Android answers with what
+     * its sensors report, iOS with Face ID or Touch ID by name. This constant
+     * is what the UI falls back to when the probe itself failed.
+     */
+    mechanism: 'your device biometric',
+
+    wrapNote: 'Your password is encrypted with a key held in this device secure'
+        + ' hardware, released only by your biometric, and is never stored in plain text.',
+
+    /**
+     * Supported, and in the user's own terms when not.
+     *
+     * `available` is the native side's judgement (Android maps
+     * `BiometricManager.canAuthenticate(BIOMETRIC_STRONG)`, iOS asks
+     * LocalAuthentication), and the `reasonCode` beside it is what turns
+     * "unavailable" into something the user can act on.
+     *
+     * @returns {Promise<{ supported: boolean, reason?: string, mechanism?: string }>}
+     */
+    async describe() {
+        if (!hasNativeVault()) return { supported: false };
+        let reply;
+        try {
+            reply = await callNativeVault('biometricStatus');
+        } catch (_err) {
+            // The probe itself failed, so we know nothing about the device and
+            // must not invent a reason for it. Core supplies the generic one.
+            return { supported: false };
+        }
+        const mechanism = typeof reply?.mechanism === 'string' && reply.mechanism
+            ? reply.mechanism
+            : undefined;
+        if (reply?.available) return { supported: true, mechanism };
+        return {
+            supported: false,
+            reason: REASONS[reply?.reasonCode] || undefined,
+            mechanism,
+        };
+    },
+
+    /**
      * Hardware present AND a Class-3 biometric actually enrolled on the
-     * device. Both are the native side's judgement; it maps
-     * BiometricManager.canAuthenticate(BIOMETRIC_STRONG) for us.
+     * device. Kept because the provider contract requires it; `describe()` is
+     * what the UI asks, and both read the same native answer.
      */
     async isSupported() {
         if (!hasNativeVault()) return false;
@@ -112,8 +179,9 @@ export const nativeBiometricProvider = {
         if (typeof password !== 'string' || password.length === 0) {
             throw new Error('registerBiometricCredential: password is required');
         }
-        if (!(await nativeBiometricProvider.isSupported())) {
-            throw new BiometricUnsupportedError('no Class 3 biometric enrolled on this device');
+        const described = await nativeBiometricProvider.describe();
+        if (!described.supported) {
+            throw new BiometricUnsupportedError(described.reason || REASONS.unsupported);
         }
         const secret = bytesToBase64(new TextEncoder().encode(password));
         const reply = await callNativeVault('biometricEnroll', { secret });

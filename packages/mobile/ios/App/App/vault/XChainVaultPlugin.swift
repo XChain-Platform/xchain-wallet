@@ -119,7 +119,11 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
             "status": "OK",
             "available": status.available,
             "enrolled": status.enrolled,
-            "detail": status.detail
+            "detail": status.detail,
+            // : the code is what the JS maps to plain language;
+            // `detail` stays a developer string and is never shown to a user.
+            "reasonCode": status.reasonCode,
+            "mechanism": status.mechanism
         ])
     }
 

@@ -82,15 +82,30 @@ final class VaultBiometricSidecar {
         void onResult(byte[] secret, String status, String detail);
     }
 
+    /**
+     * What the JS side needs to describe this device to its owner .
+     *
+     * {@code detail} is a developer string and stays one; {@code reasonCode} is
+     * the stable token the shared JS maps to plain language, so Android and
+     * iOS cannot describe the same condition in two different voices. The
+     * mechanism is reported rather than assumed for the same reason the copy
+     * moved out of the shared component: only the device knows whether its
+     * owner will present a finger or a face.
+     */
     static final class Status {
         final boolean available;
         final boolean enrolled;
         final String detail;
+        final String reasonCode;
+        final String mechanism;
 
-        Status(boolean available, boolean enrolled, String detail) {
+        Status(boolean available, boolean enrolled, String detail,
+               String reasonCode, String mechanism) {
             this.available = available;
             this.enrolled = enrolled;
             this.detail = detail;
+            this.reasonCode = reasonCode;
+            this.mechanism = mechanism;
         }
     }
 
@@ -113,29 +128,60 @@ final class VaultBiometricSidecar {
         int can = BiometricManager.from(context)
                 .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG);
         String detail;
+        String reasonCode;
         switch (can) {
             case BiometricManager.BIOMETRIC_SUCCESS:
                 detail = "ok";
+                reasonCode = "ok";
                 break;
             case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:
                 detail = "no biometric hardware";
+                reasonCode = "no_hardware";
                 break;
             case BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE:
                 detail = "biometric hardware unavailable";
+                reasonCode = "hw_unavailable";
                 break;
             case BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED:
                 detail = "no biometric enrolled";
+                reasonCode = "none_enrolled";
                 break;
             case BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED:
                 detail = "security update required";
+                reasonCode = "security_update_required";
                 break;
             default:
                 detail = "unsupported (" + can + ")";
+                reasonCode = "unsupported";
         }
         return new Status(
                 can == BiometricManager.BIOMETRIC_SUCCESS,
                 wrapFile().exists(),
-                detail);
+                detail,
+                reasonCode,
+                mechanism());
+    }
+
+    /**
+     * What this device will actually ask its owner for, in their words.
+     *
+     * BiometricManager will not say which modality it would use, so the
+     * sensors are the closest honest answer. Feature STRINGS rather than the
+     * PackageManager constants: FEATURE_FINGERPRINT is deprecated and the
+     * face/iris ones postdate this app's API 26 floor, and an unknown feature
+     * string simply answers false - which is the right answer on a device
+     * that has no such sensor either way.
+     */
+    private String mechanism() {
+        android.content.pm.PackageManager pm = context.getPackageManager();
+        boolean finger = pm.hasSystemFeature("android.hardware.fingerprint");
+        boolean face = pm.hasSystemFeature("android.hardware.biometrics.face");
+        boolean iris = pm.hasSystemFeature("android.hardware.biometrics.iris");
+        if (finger && (face || iris)) return "your fingerprint or face";
+        if (finger) return "your fingerprint";
+        if (face) return "your face";
+        if (iris) return "your eyes";
+        return "your device biometric";
     }
 
     /**

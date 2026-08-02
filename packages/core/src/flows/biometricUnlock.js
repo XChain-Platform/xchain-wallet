@@ -92,6 +92,18 @@ export class BiometricPrfUnavailableError extends Error {
 // provider releases the password, and the password remains the KDF root:
 // biometrics shorten the path to it, they never replace the derivation.
 //
+// HOW A PROVIDER DESCRIBES ITSELF . The shared UI used to hardcode
+// "Touch ID / Windows Hello / device biometric" and explain unavailability in
+// terms of WebAuthn and PRF. On a phone that is wrong twice over: it names an
+// Apple brand and a Microsoft one on Android, and it explains a browser API to
+// someone whose actual problem is that no fingerprint is enrolled - a reason
+// the native provider already had and threw away. So the vocabulary belongs to
+// the provider, not to the component: each one names its own mechanism and
+// gives its own plain-language reason, and `describeBiometric()` below is the
+// single thing the UI asks. `mechanism`, `wrapNote` and `describe` are all
+// OPTIONAL, so a provider that supplies none still renders correct generic
+// copy rather than nothing.
+//
 // @typedef {Object} BiometricProvider
 // @property {() => Promise<boolean>} isSupported
 // @property {() => boolean} isRegistered
@@ -99,6 +111,9 @@ export class BiometricPrfUnavailableError extends Error {
 // @property {() => Promise<string>} unlock      resolves to the wallet password
 // @property {() => void} clear
 // @property {string} name
+// @property {string} [mechanism]   what the USER uses, in their words
+// @property {string} [wrapNote]    how the password is protected, in their words
+// @property {() => Promise<{ supported: boolean, reason?: string, mechanism?: string }>} [describe]
 
 /** @type {BiometricProvider | null} */
 let installedProvider = null;
@@ -134,33 +149,54 @@ export function biometricProviderName() {
 
 /**
  * Detect whether the host environment can register a biometric
- * credential. Three preconditions:
+ * credential, AND say why not when it cannot. Three preconditions:
  *   1. WebAuthn is exposed (`navigator.credentials.create/get`).
  *   2. The static `PublicKeyCredential` global is defined (so we can
  *      probe platform-authenticator availability).
  *   3. A platform authenticator is present (Touch ID / Windows Hello /
  *      Android biometric).
  *
+ * The reasons are separated because they ask different things of the user:
+ * an absent API means "this browser cannot", an absent authenticator means
+ * "set one up and come back". Collapsing both into one sentence is what
+ *  was filed about.
+ *
  * PRF support cannot be probed in advance. It is discovered at
  * registration time when `prf.results.first` is missing.
  *
- * @returns {Promise<boolean>}
+ * @returns {Promise<{ supported: boolean, reason?: string }>}
  */
-async function webauthnIsSupported() {
-    if (typeof navigator === 'undefined') return false;
-    if (!navigator.credentials || typeof navigator.credentials.create !== 'function') {
-        return false;
-    }
-    if (typeof globalThis.PublicKeyCredential === 'undefined') return false;
-    const PKC = globalThis.PublicKeyCredential;
-    if (typeof PKC.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') {
-        return false;
+async function webauthnDescribe() {
+    if (typeof navigator === 'undefined'
+        || !navigator.credentials
+        || typeof navigator.credentials.create !== 'function'
+        || typeof globalThis.PublicKeyCredential === 'undefined'
+        || typeof globalThis.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') {
+        return {
+            supported: false,
+            reason: 'This browser does not support the sign-in technology biometric unlock needs.',
+        };
     }
     try {
-        return Boolean(await PKC.isUserVerifyingPlatformAuthenticatorAvailable());
+        const present = await globalThis.PublicKeyCredential
+            .isUserVerifyingPlatformAuthenticatorAvailable();
+        if (present) return { supported: true };
+        return {
+            supported: false,
+            reason: 'This device has no built-in fingerprint, face, or PIN unlock that this'
+                + ' browser can use. Set one up in your system settings, then come back.',
+        };
     } catch (_err) {
-        return false;
+        return {
+            supported: false,
+            reason: 'This browser could not check whether a built-in unlock method is available.',
+        };
     }
+}
+
+/** @returns {Promise<boolean>} */
+async function webauthnIsSupported() {
+    return (await webauthnDescribe()).supported;
 }
 
 /** @returns {boolean} */
@@ -297,6 +333,14 @@ async function webauthnUnlock() {
 /** @type {BiometricProvider} */
 const webAuthnProvider = {
     name: 'webauthn-prf',
+    // Three vendor names on purpose HERE and nowhere else: in a browser we
+    // genuinely cannot tell which of them the user will be shown, and this is
+    // the provider that owns that uncertainty. The native providers know
+    // exactly, and say so.
+    mechanism: 'Touch ID, Windows Hello, or your device unlock',
+    wrapNote: 'Your password is encrypted with a key only your device unlock can'
+        + ' release, and is never stored in plain text.',
+    describe: webauthnDescribe,
     isSupported: webauthnIsSupported,
     isRegistered: webauthnIsRegistered,
     register: webauthnRegister,
@@ -307,6 +351,73 @@ const webAuthnProvider = {
 // ---------------------------------------------------------------------
 // Public API: delegates to whichever provider this shell installed
 // ---------------------------------------------------------------------
+
+/**
+ * Generic copy, used when a provider does not supply its own. Every string a
+ * user reads about biometric unlock is either one of these or a provider's,
+ * and none of them names a vendor: a component that guesses the mechanism is
+ * the defect  records.
+ */
+export const BIOMETRIC_GENERIC_MECHANISM = 'your device biometric';
+export const BIOMETRIC_GENERIC_UNAVAILABLE = 'Biometric unlock is not available on this device.';
+export const BIOMETRIC_GENERIC_WRAP_NOTE = 'Your password is encrypted and is never stored in plain text.';
+
+/**
+ * Everything the UI needs to talk about biometric unlock on THIS device, in
+ * the words of whichever provider is answering.
+ *
+ * Never rejects and never returns a partial object: an unavailable or faulty
+ * provider is a state the password form already handles, and a settings row
+ * that throws would take the whole panel with it.
+ *
+ * @returns {Promise<{
+ *   provider: string,
+ *   supported: boolean,
+ *   reason: string | null,
+ *   mechanism: string,
+ *   wrapNote: string,
+ * }>}
+ */
+export async function describeBiometric() {
+    const provider = activeProvider();
+    let supported = false;
+    let reason = null;
+    let mechanism = typeof provider.mechanism === 'string' && provider.mechanism
+        ? provider.mechanism
+        : BIOMETRIC_GENERIC_MECHANISM;
+
+    try {
+        if (typeof provider.describe === 'function') {
+            const described = await provider.describe();
+            supported = Boolean(described?.supported);
+            if (typeof described?.reason === 'string' && described.reason) {
+                reason = described.reason;
+            }
+            // A provider may only learn the mechanism from the same probe
+            // (iOS cannot say Face ID vs Touch ID without asking).
+            if (typeof described?.mechanism === 'string' && described.mechanism) {
+                mechanism = described.mechanism;
+            }
+        } else {
+            supported = Boolean(await provider.isSupported());
+        }
+    } catch (_err) {
+        supported = false;
+        reason = null;
+    }
+
+    return {
+        provider: provider.name,
+        supported,
+        // Supported means there is nothing to explain; unsupported always
+        // explains something, even when the provider declined to.
+        reason: supported ? null : (reason || BIOMETRIC_GENERIC_UNAVAILABLE),
+        mechanism,
+        wrapNote: typeof provider.wrapNote === 'string' && provider.wrapNote
+            ? provider.wrapNote
+            : BIOMETRIC_GENERIC_WRAP_NOTE,
+    };
+}
 
 /** @returns {Promise<boolean>} */
 export function isBiometricSupported() {
