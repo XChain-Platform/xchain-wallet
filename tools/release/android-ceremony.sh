@@ -59,11 +59,13 @@ ANDROID_DIR="$MOBILE_DIR/android"
 
 TAG=""
 OUTPUT_DIR=""
+REHEARSAL=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --tag|-t) TAG="${2:-}"; shift 2 ;;
         --output|-o) OUTPUT_DIR="${2:-}"; shift 2 ;;
+        --rehearsal) REHEARSAL=1; shift ;;
         --help|-h)
             sed -n '17,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0 ;;
@@ -89,6 +91,44 @@ for var in XCHAIN_K9_KEYSTORE XCHAIN_K9_ALIAS XCHAIN_K10_KEYSTORE XCHAIN_K10_ALI
 done
 [ -f "$XCHAIN_K9_KEYSTORE" ] || die "K9 keystore not found at $XCHAIN_K9_KEYSTORE"
 [ -f "$XCHAIN_K10_KEYSTORE" ] || die "K10 keystore not found at $XCHAIN_K10_KEYSTORE"
+
+# Optional 0600 password files. A PATH is not a secret, so this keeps the
+# property the header insists on - no password on a command line, none in the
+# environment - while letting the ceremony run without a human typing two
+# passphrases. Omit them and both tools prompt, exactly as before.
+for var in XCHAIN_K9_PASSFILE XCHAIN_K10_PASSFILE; do
+    eval "value=\${$var:-}"
+    [ -z "$value" ] && continue
+    [ -f "$value" ] || die "$var points at $value, which does not exist"
+    perms="$(stat -f '%Lp' "$value" 2>/dev/null || stat -c '%a' "$value")"
+    [ "$perms" = "600" ] || die "$var must be 0600, found $perms on $value"
+done
+
+# ---------------------------------------------------------------------
+# 0. Provenance. This script builds the WORKING TREE; the tag only names
+#    the artifacts. That is fine for a rehearsal and unacceptable for a
+#    release, because bytes nobody can point at a commit would carry our
+#    signature - and this worktree is shared and NFS-exported, so other
+#    people's uncommitted edits are the normal case, not the exception.
+# ---------------------------------------------------------------------
+HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+DIRTY_COUNT="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+# --verify --quiet, because a plain rev-parse ECHOES the unresolved argument on
+# failure, which then reads as a sha and defeats the "does this tag exist" test.
+# The `|| true` is load-bearing under `set -e`: --verify --quiet exits 1 for a
+# tag that does not exist, and a failing command substitution in an assignment
+# kills the shell, so the guard below would never print its explanation.
+TAG_SHA="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$TAG^{commit}" 2>/dev/null || true)"
+[ -n "$TAG_SHA" ] || TAG_SHA="none"
+
+if [ "$REHEARSAL" -eq 1 ]; then
+    echo "==> REHEARSAL. These artifacts must never be published or uploaded."
+    echo "    HEAD $HEAD_SHA, $DIRTY_COUNT uncommitted path(s) in the tree."
+else
+    [ "$TAG_SHA" != "none" ] || die "tag $TAG does not exist in this repository. Cut and sign the tag first, or pass --rehearsal."
+    [ "$TAG_SHA" = "$HEAD_SHA" ] || die "HEAD ($HEAD_SHA) is not $TAG ($TAG_SHA). Check the tag out before signing what it names."
+    [ "$DIRTY_COUNT" = "0" ] || die "$DIRTY_COUNT uncommitted path(s) in the worktree. A release signs committed bytes only; pass --rehearsal if that is what you meant."
+fi
 
 BUNDLETOOL="${BUNDLETOOL:-$REPO_ROOT/bundletool.jar}"
 [ -f "$BUNDLETOOL" ] || die "bundletool jar not found at $BUNDLETOOL (set BUNDLETOOL=<path>)"
@@ -120,16 +160,39 @@ APK_NAME="xchain-wallet-v${ARTIFACT_VERSION}.apk"
 # 1. Build, from the tag, on this machine
 # ---------------------------------------------------------------------
 
-echo "==> staging the web build into the shell"
-( cd "$REPO_ROOT" && XCHAIN_RELEASE_TAG="$TAG" pnpm --filter "@xchain-wallet/mobile..." build )
+echo "==> staging the web build into the shell (store profile)"
+# XCHAIN_BUILD_PROFILE=store is not optional here: `scripts/build.js` refuses to
+# stage a default-profile bundle into a release build, because an artifact whose
+# profile nobody recorded is not the same as a default one (/).
+# Both Android artifacts therefore carry the store feature set, since §6 derives
+# the universal APK from this same bundle on purpose - that coupling is the open
+# question in, not an accident of this script.
+( cd "$REPO_ROOT" && XCHAIN_RELEASE_TAG="$TAG" XCHAIN_BUILD_PROFILE=store pnpm --filter "@xchain-wallet/mobile..." build )
 ( cd "$REPO_ROOT" && pnpm --filter @xchain-wallet/mobile exec cap sync android )
 
 echo "==> gradle bundleRelease"
 # Dependency verification is enforced here and warn-only in CI (§7): a
 # release build fails hard on any mismatch, because these are the bytes
 # that get signed.
-( cd "$ANDROID_DIR" && ./gradlew --no-daemon --write-verification-metadata sha256 help >/dev/null 2>&1 || true )
-( cd "$ANDROID_DIR" && ./gradlew --no-daemon clean bundleRelease )
+#
+# This step used to run `--write-verification-metadata sha256 help` first,
+# swallowing failures with `|| true`. That is worse than not verifying: a
+# ceremony that regenerates its own trust anchors accepts whatever is on disk
+# at signing time, which is exactly the substitution the metadata exists to
+# catch. It also could not work - `help` resolves none of the release
+# configurations, which is why the platform-specific `aapt2` artifact was
+# missing from the metadata until the first real ceremony hit it. Regenerating
+# is now a deliberate, reviewable step of its own: see the failure message.
+if ! ( cd "$ANDROID_DIR" && ./gradlew --no-daemon clean bundleRelease ); then
+    echo >&2
+    echo "android-ceremony.sh: the release build failed." >&2
+    echo "If it failed dependency VERIFICATION, do not paper over it here. Check the" >&2
+    echo "named artifacts against their upstream publisher, then regenerate the" >&2
+    echo "metadata deliberately and review the diff before signing anything:" >&2
+    echo "  (cd $ANDROID_DIR && ./gradlew --no-daemon --write-verification-metadata sha256 bundleRelease)" >&2
+    echo "  git diff -- packages/mobile/android/gradle/verification-metadata.xml" >&2
+    exit 1
+fi
 
 RAW_AAB="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
 [ -f "$RAW_AAB" ] || die "gradle did not produce $RAW_AAB"
@@ -143,11 +206,20 @@ cp "$RAW_AAB" "$WORK_DIR/$AAB_NAME"
 # 2. Sign the AAB with K9 (Play upload key)
 # ---------------------------------------------------------------------
 
-echo "==> signing the AAB with K9 (you will be prompted for the keystore password)"
-jarsigner -verbose:summary \
-    -sigalg SHA256withRSA -digestalg SHA-256 \
-    -keystore "$XCHAIN_K9_KEYSTORE" \
-    "$WORK_DIR/$AAB_NAME" "$XCHAIN_K9_ALIAS"
+if [ -n "${XCHAIN_K9_PASSFILE:-}" ]; then
+    echo "==> signing the AAB with K9 (password read from its 0600 file)"
+    jarsigner -verbose:summary \
+        -sigalg SHA256withRSA -digestalg SHA-256 \
+        -keystore "$XCHAIN_K9_KEYSTORE" \
+        -storepass:file "$XCHAIN_K9_PASSFILE" \
+        "$WORK_DIR/$AAB_NAME" "$XCHAIN_K9_ALIAS"
+else
+    echo "==> signing the AAB with K9 (you will be prompted for the keystore password)"
+    jarsigner -verbose:summary \
+        -sigalg SHA256withRSA -digestalg SHA-256 \
+        -keystore "$XCHAIN_K9_KEYSTORE" \
+        "$WORK_DIR/$AAB_NAME" "$XCHAIN_K9_ALIAS"
+fi
 jarsigner -verify "$WORK_DIR/$AAB_NAME" >/dev/null || die "K9 signature did not verify"
 
 # ---------------------------------------------------------------------
@@ -165,12 +237,26 @@ java -jar "$BUNDLETOOL" build-apks \
     --mode=universal
 unzip -p "$WORK_DIR/universal.apks" universal.apk > "$WORK_DIR/$APK_NAME"
 
-echo "==> signing the APK with K10 (you will be prompted for the keystore password)"
-apksigner sign \
-    --ks "$XCHAIN_K10_KEYSTORE" \
-    --ks-key-alias "$XCHAIN_K10_ALIAS" \
-    --out "$WORK_DIR/$APK_NAME.signed" \
-    "$WORK_DIR/$APK_NAME"
+if [ -n "${XCHAIN_K10_PASSFILE:-}" ]; then
+    echo "==> signing the APK with K10 (password read from its 0600 file)"
+    apksigner sign \
+        --ks "$XCHAIN_K10_KEYSTORE" \
+        --ks-key-alias "$XCHAIN_K10_ALIAS" \
+        `# --key-pass is deliberately absent. apksigner reads passwords from a` \
+        `# file LINE BY LINE, so naming the same file twice makes the second` \
+        `# read hit EOF ("end of file reached"). In a PKCS12 keystore the key` \
+        `# password is the store password, so one read is the correct number.` \
+        --ks-pass "file:$XCHAIN_K10_PASSFILE" \
+        --out "$WORK_DIR/$APK_NAME.signed" \
+        "$WORK_DIR/$APK_NAME"
+else
+    echo "==> signing the APK with K10 (you will be prompted for the keystore password)"
+    apksigner sign \
+        --ks "$XCHAIN_K10_KEYSTORE" \
+        --ks-key-alias "$XCHAIN_K10_ALIAS" \
+        --out "$WORK_DIR/$APK_NAME.signed" \
+        "$WORK_DIR/$APK_NAME"
+fi
 mv "$WORK_DIR/$APK_NAME.signed" "$WORK_DIR/$APK_NAME"
 apksigner verify --verbose "$WORK_DIR/$APK_NAME" >/dev/null || die "K10 signature did not verify"
 
@@ -180,6 +266,22 @@ apksigner verify --verbose "$WORK_DIR/$APK_NAME" >/dev/null || die "K10 signatur
 
 mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
 mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
+
+# Say, next to the bytes, exactly what they were built from. Without this a
+# rehearsal artifact and a release artifact are indistinguishable on disk, and
+# the rehearsal one is signed by the same unrotatable key.
+{
+    echo "tag:        $TAG"
+    echo "head:       $HEAD_SHA"
+    echo "tag_commit: $TAG_SHA"
+    echo "dirty_paths: $DIRTY_COUNT"
+    echo "rehearsal:  $([ "$REHEARSAL" -eq 1 ] && echo yes || echo no)"
+    echo "built_at:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUTPUT_DIR/PROVENANCE.txt"
+if [ "$REHEARSAL" -eq 1 ]; then
+    echo "REHEARSAL ARTIFACTS. Do not upload to Play, do not publish, delete when done." \
+        > "$OUTPUT_DIR/DO-NOT-PUBLISH.txt"
+fi
 
 echo
 echo "==> staged in $OUTPUT_DIR:"

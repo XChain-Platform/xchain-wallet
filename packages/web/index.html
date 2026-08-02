@@ -2,7 +2,16 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <!--
+          `viewport-fit=cover` is what makes `env(safe-area-inset-*)` return
+          real numbers. Without it those values are ZERO on every device, which
+          is why the two existing `env(safe-area-inset-bottom)` rules in
+          BottomTabBar and LeftNav had never actually inset anything, and why
+          the iPhone shell drew its logo underneath the Dynamic Island. The
+          insets are applied in `core/ui/tokens.css`; this line only makes them
+          exist. No effect on desktop browsers, where every inset is 0.
+        -->
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <link rel="icon" type="image/png" href="/favicon.png" />
         <title>XChain Wallet</title>
         <!--
