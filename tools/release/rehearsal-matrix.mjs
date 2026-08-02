@@ -12,10 +12,35 @@
 // each one is smoked on ( §2, §7.5, DD4).
 //
 // WHAT A "LANE" IS HERE. Not an artifact and not a build lane: an
-// OS/arch pair that receives updates, plus the ONE artifact format
-// electron-updater can actually swap in place on it. dmg, deb and the
+// OS/arch pair that receives updates, plus one artifact format
+// electron-updater can actually swap in place on it. The dmg and the
 // Windows zip are shipped install formats with NO auto-update path, so
 // they are not lanes - a rehearsal of them would exercise nothing (§7.5).
+//
+// THE .deb IS A LANE, AND THIS FILE SAID IT WAS NOT (corrected 2026-08-02,
+//  §5). The claim here, on the download page and in the spec was that
+// "electron-updater's deb path needs privilege escalation at install time",
+// so deb users get a notification and a manual link and nothing swaps. That
+// is not what the pinned electron-updater does. Measured against the
+// installed 6.8.3 and a real two-arch packaged build:
+//
+//   - `DebUpdater` exists and is a complete updater: it selects the `.deb`
+//     out of the pointer, downloads it, and on install runs `dpkg -i`
+//     through `pkexec` (or gksudo/kdesudo/sudo). The escalation is not a
+//     missing feature, it is the install step, and it prompts the user.
+//   - Which Linux updater a build gets is decided by `resources/package-type`,
+//     a file the deb target writes into the packaged app. Our `.deb` ships
+//     it, containing the literal string `deb` (verified with `dpkg-deb -c`
+//     on the built artifact), so every deb install instantiates `DebUpdater`
+//     rather than the AppImage one.
+//   - Both `stable-linux.yml` and `stable-linux-arm64.yml` already list the
+//     `.deb` next to the AppImage, so the feed has been serving the deb
+//     update path all along.
+//
+// The consequence of believing otherwise was not a missing feature: it was
+// that the ONE update path that ends in a root-privileged package install
+// was the one path excluded from the staging rehearsal, from the staging
+// build's target set, and from what we told users about being patched.
 //
 // THE TWO HALVES OF A LANE'S PROOF, and only one of them needs hardware:
 //
@@ -91,22 +116,64 @@ export const LANES = [
         note: 'The one lane whose hardware the program already owns.',
     },
     {
-        id: 'linux-x64',
+        id: 'linux-x64-appimage',
         os: 'linux',
         arch: 'x64',
         format: 'AppImage',
         device: null,
-        note: 'AppImage only; deb is notify-only until escalation is verified (§5).',
+        note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing.',
     },
     {
-        id: 'linux-arm64',
+        id: 'linux-arm64-appimage',
         os: 'linux',
         arch: 'arm64',
         format: 'AppImage',
         device: null,
-        note: 'Own pointer (stable-linux-arm64.yml), so no selection to get wrong.',
+        note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb.',
+    },
+    {
+        id: 'linux-x64-deb',
+        os: 'linux',
+        arch: 'x64',
+        format: 'deb',
+        device: null,
+        note: 'DebUpdater. The only shipped update path that ends in a root install '
+            + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed.',
+    },
+    {
+        id: 'linux-arm64-deb',
+        os: 'linux',
+        arch: 'arm64',
+        format: 'deb',
+        device: null,
+        note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage. The swap itself '
+            + 'has been observed once, in a container, by drills/deb-update-swap.mjs.',
     },
 ];
+
+/**
+ * The Linux artifact formats we ship, mapped to whether electron-updater
+ * has an updater for them.
+ *
+ * WHY THIS IS DATA. The question "does this format auto-update?" was
+ * answered once, from memory, in a comment, and stayed wrong through six
+ * build stages and onto a public download page. It is answerable from the
+ * installed package - `test/smoke/audits/linux-update-lanes.smoke.js`
+ * checks this table against the classes electron-updater actually exports
+ * and against LANES above, so a format that gains (or loses) an updater in
+ * an upstream bump fails a test instead of quietly changing what users get.
+ *
+ * `rpm` and `pacman` are listed because upstream ships updaters for them:
+ * they are not shipped formats today (§5 lists them as post-launch), and
+ * the day one is added it must arrive as a lane, not as an extra row in
+ * expected-artifacts.txt.
+ */
+export const LINUX_FORMAT_UPDATE_SUPPORT = {
+    AppImage: { updater: 'AppImageUpdater', shipped: true, installStep: 'in-place swap of the running .AppImage' },
+    deb: { updater: 'DebUpdater', shipped: true, installStep: 'pkexec/sudo dpkg -i, prompts for admin rights' },
+    rpm: { updater: 'RpmUpdater', shipped: false, installStep: 'pkexec/sudo dnf/zypper/rpm install' },
+    pacman: { updater: 'PacmanUpdater', shipped: false, installStep: 'pkexec/sudo pacman -U' },
+};
 
 /**
  * Source paths whose change raises the per-release rehearsal requirement

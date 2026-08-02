@@ -93,6 +93,55 @@ if (!source || source.startsWith('-') || !output || output.startsWith('-')) {
     fail(`unexpected argument shape; expected <source> <output> first: ${JSON.stringify(args)}`);
 }
 
+// THE DEB LANE'S LEFTOVERS, REMOVED BEFORE THE IMAGE IS SEALED (
+// §5, added 2026-08-02).
+//
+// electron-builder builds the AppImage and the .deb CONCURRENTLY out of one
+// directory. Both Linux targets report `isAsyncSupported`, `AsyncTaskManager`
+// has no concurrency control, and `FpmTarget.build()` writes two files into
+// `dist/linux*-unpacked/resources` - `package-type` and `apparmor-profile` -
+// while `AppImageTarget.build()` is copying that same directory into its
+// stage tree.
+//
+// `package-type` is not inert. It is the file electron-updater reads to
+// decide WHICH updater a Linux build gets: `deb` selects `DebUpdater`,
+// whose install step is `dpkg -i` under `pkexec`, a root-privileged package
+// install. An AppImage that captured it would offer its users the `.deb`
+// from the same channel pointer, pass the sha512, pass the K1-signed
+// manifest that legitimately covers it, ask for the administrator password,
+// install a system package nobody chose - and leave the AppImage they are
+// actually running untouched. Every layer of the trust chain reports
+// success, because every layer is doing its job on the wrong artifact.
+//
+// Measured on four artifacts from two independent container builds
+// (2026-08-02): the AppImage copy wins that race every time, so no shipped
+// AppImage carries either file. But nothing ORDERS those two targets. The
+// property was observed, not guaranteed, and it is decided by which
+// filesystem call lands first on a build machine we do not control.
+//
+// This wrapper is the last thing that runs before the image is sealed - the
+// same argument that put the mkfs_time patch here - so it is where the
+// guarantee can be made instead of hoped for. Removing them also removes a
+// second source of AppImage non-determinism, since a race that can go
+// either way is a build that can produce either image.
+const DEB_LANE_LEFTOVERS = ['package-type', 'apparmor-profile'];
+for (const name of DEB_LANE_LEFTOVERS) {
+    const stray = path.join(source, 'resources', name);
+    let present;
+    try {
+        present = fs.existsSync(stray);
+    } catch (error) {
+        fail(`cannot check ${stray}: ${error.message}`);
+    }
+    if (!present) continue;
+    try {
+        fs.rmSync(stray, { force: true });
+    } catch (error) {
+        fail(`cannot remove the deb lane's ${name} from the AppImage stage: ${error.message}`);
+    }
+    process.stderr.write(`${TAG} removed ${name} left in the stage tree by the deb lane\n`);
+}
+
 const rawEpoch = process.env.SOURCE_DATE_EPOCH;
 const epoch = rawEpoch === undefined ? undefined : Number(rawEpoch);
 if (rawEpoch !== undefined && (!Number.isInteger(epoch) || epoch < 0 || epoch > MAX_U32)) {

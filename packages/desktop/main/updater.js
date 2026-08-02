@@ -29,6 +29,16 @@
 // swaps it in on next launch. That SHA512 is a checksum from the same
 // host as the binary, which is why `updateVerify.js` exists.
 //
+// "Swaps it in" means something different per Linux format, and the
+// difference is a privilege boundary rather than a detail ( §5,
+// measured 2026-08-02): the AppImage is replaced in place by the running
+// process, while the `.deb` is installed by `dpkg -i` run through
+// `pkexec`, so the user is asked for administrator rights. Both paths are
+// live on both arches today. `downloadAndInstall()` below proves the
+// bytes against K1 BEFORE either one runs, which is what makes the second
+// acceptable: nothing reaches a root install without a maintainer
+// signature over its hash.
+//
 // Do not reintroduce the name `latest*.yml` here or in the release
 // tooling: at channel `stable` it matches nothing, and everything that
 // went looking for it failed silently rather than loudly.
@@ -134,6 +144,101 @@ export function resolveFeedBaseUrl({
 }
 
 /**
+ * Which Linux packaging a running build claims to be, read from the file
+ * electron-updater reads: `resources/package-type`.
+ *
+ * @param {Object} [opts]
+ * @param {string} [opts.resourcesPath]
+ * @param {(p: string, enc: string) => string} [opts.readFile]
+ * @returns {string|null} `deb` | `rpm` | `pacman` | null
+ */
+export function readPackageType({
+    resourcesPath = process.resourcesPath,
+    readFile = readFileSync,
+} = {}) {
+    if (!resourcesPath) return null;
+    try {
+        const raw = readFile(join(resourcesPath, 'package-type'), 'utf8');
+        const value = String(raw).trim();
+        return value || null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Choose the updater instance for this build.
+ *
+ * WHY WE CHOOSE AT ALL, INSTEAD OF TAKING `mod.autoUpdater`. On Linux
+ * electron-updater picks the updater class by reading
+ * `resources/package-type` out of the running bundle: `deb` gives
+ * `DebUpdater`, whose install step is `dpkg -i` run through `pkexec`, i.e.
+ * a root-privileged package install. That file is written by the deb
+ * target into `dist/linux-unpacked/resources` - the SAME directory the
+ * AppImage target packages from, while both targets are running
+ * CONCURRENTLY over it (`AsyncTaskManager` has no concurrency control and
+ * both Linux targets report `isAsyncSupported`).
+ *
+ * Measured 2026-08-02 on four packaged artifacts from two independent
+ * container builds: the AppImage copy wins that race every time, so no
+ * shipped AppImage carries `package-type` today, and the mksquashfs
+ * wrapper now removes it from the stage tree so it cannot start. But
+ * nothing in electron-builder ORDERS those two targets, so the property
+ * was never guaranteed - it was observed.
+ *
+ * If it ever flipped, every check downstream would still pass: the
+ * AppImage user's app would ask for the `.deb`, find it listed in the same
+ * `stable-linux.yml`, match its sha512, match the K1-signed manifest that
+ * legitimately covers it, and then ask for the admin password to install a
+ * system package the user never chose - while the AppImage they are
+ * running stays exactly as it was. Every layer of the update trust chain
+ * would report success.
+ *
+ * So the running app decides for itself, from the one fact it cannot be
+ * wrong about: `APPIMAGE` is set in the environment by the AppImage
+ * runtime that started it. If the process is an AppImage, it gets the
+ * AppImage updater whatever the bundle claims.
+ *
+ * @param {any} mod  the loaded electron-updater module
+ * @param {Object} [opts]
+ * @param {string} [opts.platform]
+ * @param {Record<string, string|undefined>} [opts.env]
+ * @param {string} [opts.resourcesPath]
+ * @param {(p: string, enc: string) => string} [opts.readFile]
+ * @returns {{ updater: any, mislabelledAs: string|null }}
+ */
+export function selectUpdater(mod, {
+    platform = process.platform,
+    env = process.env,
+    resourcesPath = process.resourcesPath,
+    readFile = readFileSync,
+} = {}) {
+    const takeDefault = () => ({
+        updater: mod?.autoUpdater ?? mod?.default?.autoUpdater ?? mod?.default,
+        mislabelledAs: null,
+    });
+
+    if (platform !== 'linux') return takeDefault();
+
+    // Not an AppImage: electron-updater's own reading of `package-type` is
+    // the right answer (deb -> DebUpdater, absent -> AppImageUpdater, which
+    // then reports itself inactive because APPIMAGE is unset).
+    if (!env.APPIMAGE) return takeDefault();
+
+    const packageType = readPackageType({ resourcesPath, readFile });
+    if (!packageType) return takeDefault();
+
+    const AppImageUpdater = mod?.AppImageUpdater ?? mod?.default?.AppImageUpdater;
+    if (typeof AppImageUpdater !== 'function') {
+        // Cannot correct it, so do not proceed with the wrong one. An
+        // updater that no-ops is a missed update; a DebUpdater on an
+        // AppImage is a root install of the wrong artifact.
+        return { updater: null, mislabelledAs: packageType };
+    }
+    return { updater: new AppImageUpdater(), mislabelledAs: packageType };
+}
+
+/**
  * @typedef {Object} UpdaterEvent
  * @property {'checking' | 'available' | 'not-available' | 'error' | 'downloaded' | 'progress' | 'verifying' | 'rejected'} type
  * @property {any} [info]
@@ -147,6 +252,7 @@ export function resolveFeedBaseUrl({
  * @param {Object} opts
  * @param {() => Promise<any>} [opts.loader]  dynamic-import `electron-updater`; injectable for tests
  * @param {(event: UpdaterEvent) => void} opts.onEvent   forwards updater events (the caller typically relays to the renderer)
+ * @param {Object} [opts.select]  overrides for `selectUpdater` (platform/env/resourcesPath/readFile); tests only
  * @returns {Promise<{ checkForUpdates: () => Promise<void>, isActive: boolean }>}
  */
 export async function attachUpdater({
@@ -155,6 +261,7 @@ export async function attachUpdater({
     feedBaseUrl = resolveFeedBaseUrl(),
     fetchImpl,
     pinned,
+    select,
 }) {
     if (typeof onEvent !== 'function') {
         throw new Error('attachUpdater: onEvent must be a function');
@@ -187,7 +294,17 @@ export async function attachUpdater({
     }
 
     const mod = await loader();
-    const autoUpdater = mod?.autoUpdater ?? mod?.default?.autoUpdater ?? mod?.default;
+    const { updater: autoUpdater, mislabelledAs } = selectUpdater(mod, select);
+    if (mislabelledAs) {
+        // Loud, and not a user-facing toast: this is a build defect, not
+        // something the user can act on. It means an AppImage shipped
+        // carrying `package-type: <mislabelledAs>`, which would have routed
+        // this install down that package manager's updater.
+        console.error(
+            `[xchain] this AppImage carries package-type "${mislabelledAs}"; `
+            + 'forcing the AppImage updater ( §5)',
+        );
+    }
     if (!autoUpdater || typeof autoUpdater.checkForUpdates !== 'function') {
         throw new Error('attachUpdater: loaded module does not expose autoUpdater.checkForUpdates');
     }
@@ -210,6 +327,50 @@ export async function attachUpdater({
     // in-app notification, then autoUpdater.downloadUpdate() runs +
     // we relay progress events back.
     autoUpdater.autoDownload = false;
+
+    // AND NOTHING INSTALLS ON QUIT (added 2026-08-02; this file claimed
+    // "there is no second path at all" while there was one).
+    //
+    // `autoInstallOnAppQuit` defaults to TRUE, and `BaseUpdater` registers
+    // the quit handler the moment a DOWNLOAD completes - inside
+    // `runDownload()` below, before `verifyDownloadedUpdate` has fetched
+    // the signed manifest, let alone checked it. So an ordinary quit
+    // during that window installs an artifact nothing has proved: the
+    // window is however long the manifest fetch takes, over whatever
+    // network the user is on, and on the deb lane the install it performs
+    // is a root-privileged `dpkg -i` (§5).
+    //
+    // The rejection path deletes the download, which narrowed the hole but
+    // did not close it: deletion is best-effort, it only runs after a
+    // verdict exists, and the dangerous case is the one with no verdict
+    // yet. Turning the handler off makes the claim above true - the
+    // verified `quitAndInstall()` in `downloadAndInstall()` is the only
+    // way an update is ever installed. `quitAndInstall()` is unaffected:
+    // it calls `install()` itself and does not go through the quit hook.
+    autoUpdater.autoInstallOnAppQuit = false;
+
+    // AND NO DOWNGRADES, EXPLICITLY, BECAUSE THE DEFAULT IS ONE ASSIGNMENT
+    // AWAY FROM FLIPPING ( §7.4).
+    //
+    // The rollback doctrine rests on one property of electron-updater:
+    // it never installs a version at or below the running one, so restoring
+    // a previous release's yml is a safe first move during an incident -
+    // clients on either version simply see "no update". Verified at 6.8.3:
+    // `isUpdateAvailable` returns `allowDowngrade && isLatestVersionOlder`,
+    // and `allowDowngrade` defaults to false.
+    //
+    // The trap is the `channel` SETTER. Assigning `autoUpdater.channel`
+    // sets `allowDowngrade = true` as a side effect, documented only in a
+    // comment on the setter. Our channel arrives inside `app-update.yml`
+    // and never goes through it, so the default holds today - but §7.6
+    // plans a `beta` channel, and the obvious way to implement a beta
+    // opt-in is exactly `autoUpdater.channel = 'beta'`. That one line would
+    // silently make every rollback yml installable as a downgrade, on a
+    // fleet whose incident procedure assumes it cannot happen.
+    //
+    // Pinned here so the property is a decision rather than a default, and
+    // so re-enabling it has to be written down.
+    autoUpdater.allowDowngrade = false;
 
     // The most recent `update-downloaded` payload. electron-updater
     // reports the file it wrote here and nowhere else, and the install

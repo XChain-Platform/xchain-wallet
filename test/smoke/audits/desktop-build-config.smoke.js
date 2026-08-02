@@ -239,13 +239,26 @@ function loadConfig(env = {}) {
         'macOS rehearses the zip (electron-updater never swaps the dmg)');
     assert.deepEqual(cfg.win.target.map((t) => t.target), ['nsis'],
         'Windows rehearses nsis (the zip has no auto-update path)');
-    assert.deepEqual(cfg.linux.target.map((t) => t.target), ['AppImage'],
-        'Linux rehearses the AppImage (deb has no in-place swap)');
+    // BOTH Linux formats, because both auto-update ( §5, corrected
+    // 2026-08-02). The deb was excluded here on the belief that
+    // electron-updater cannot swap it; `DebUpdater` swaps it by running
+    // `dpkg -i` under `pkexec`, and the shipped `.deb` carries the
+    // `resources/package-type` file that selects that class. Excluding it
+    // meant the one update path ending in a ROOT install was the one path
+    // no rehearsal could ever exercise, because no staging `.deb` existed.
+    assert.deepEqual(cfg.linux.target.map((t) => t.target), ['AppImage', 'deb'],
+        'Linux rehearses both formats that electron-updater can install');
 
+    // Per TARGET, not per OS: Linux now rehearses two formats, and a
+    // flattened check would let one of them build a single arch as long as
+    // the other covered both.
     for (const [os, targets] of [['mac', cfg.mac.target], ['win', cfg.win.target],
         ['linux', cfg.linux.target]]) {
-        assert.deepEqual(targets.flatMap((t) => t.arch).sort(), ['arm64', 'x64'],
-            `${os} rehearses both shipped arches (per-arch resolution is its own failure surface)`);
+        for (const t of targets) {
+            assert.deepEqual([...t.arch].sort(), ['arm64', 'x64'],
+                `${os} rehearses ${t.target} on both shipped arches `
+                + '(per-arch resolution is its own failure surface)');
+        }
     }
 }
 

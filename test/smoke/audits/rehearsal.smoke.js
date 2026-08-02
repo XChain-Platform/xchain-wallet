@@ -89,6 +89,13 @@ const ARTIFACTS = {
     [`XChain Wallet-${VERSION}-arm64-mac.zip`]: 'mac-arm64-bytes',
     [`XChain Wallet-${VERSION}.AppImage`]: 'linux-x64-bytes',
     [`XChain Wallet-${VERSION}-arm64.AppImage`]: 'linux-arm64-bytes',
+    // The debs are lanes too ( §5, corrected 2026-08-02): DebUpdater
+    // selects them out of these same two pointers and installs them with
+    // `dpkg -i` under pkexec. The arch tokens are Debian's, not
+    // electron-builder's - `amd64`, not `x64` - which is its own reason to
+    // spell these names out here.
+    [`xchain-wallet_${VERSION}_amd64.deb`]: 'linux-x64-deb-bytes',
+    [`xchain-wallet_${VERSION}_arm64.deb`]: 'linux-arm64-deb-bytes',
 };
 
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
@@ -148,8 +155,18 @@ function makeFeed(name, { mutate = () => {}, tamper = () => {} } = {}) {
             `XChain Wallet-${VERSION}-x64-mac.zip`,
             `XChain Wallet-${VERSION}-arm64-mac.zip`,
         ]),
-        [`${CHANNEL}-linux.yml`]: pointerBody([`XChain Wallet-${VERSION}.AppImage`]),
-        [`${CHANNEL}-linux-arm64.yml`]: pointerBody([`XChain Wallet-${VERSION}-arm64.AppImage`]),
+        // Each Linux pointer carries BOTH formats, which is what a real
+        // build emits (verified against a two-arch packaged build,
+        // 2026-08-02): one pointer serves the AppImage lane and the deb
+        // lane, and the two are told apart by extension, not by arch.
+        [`${CHANNEL}-linux.yml`]: pointerBody([
+            `XChain Wallet-${VERSION}.AppImage`,
+            `xchain-wallet_${VERSION}_amd64.deb`,
+        ]),
+        [`${CHANNEL}-linux-arm64.yml`]: pointerBody([
+            `XChain Wallet-${VERSION}-arm64.AppImage`,
+            `xchain-wallet_${VERSION}_arm64.deb`,
+        ]),
     };
 
     mutate({ files, pointers });
@@ -217,7 +234,8 @@ const probeAll = (feedDir, opts = {}) => {
 const good = makeFeed('feed-good');
 {
     const results = await probeAll(good.dir);
-    assert.equal(results.length, 6, 'every shipped lane is probed');
+    assert.equal(results.length, 8, 'every shipped lane is probed (four OS/arch pairs, '
+        + 'plus the two Linux deb lanes that share the AppImage pointers)');
     for (const r of results) {
         assert.ok(r.ok, `lane ${r.id} passes: ${r.failed} ${r.reason}`);
         assert.equal(r.checks.signedManifest, 'ok', `${r.id} checked the signed manifest`);
@@ -228,7 +246,7 @@ const good = makeFeed('feed-good');
     // an arm64 build; asserting only "it passed" would not notice two
     // lanes resolving to the same file.
     const selected = results.map((r) => r.selected);
-    assert.equal(new Set(selected).size, 6, 'no two lanes resolve to the same artifact');
+    assert.equal(new Set(selected).size, 8, 'no two lanes resolve to the same artifact');
     for (const r of results) {
         const expected = r.arch === 'x64' && r.os === 'linux' ? null : r.arch;
         if (expected) {
@@ -245,10 +263,21 @@ const good = makeFeed('feed-good');
         assert.equal(r.checks.selection, 'by-arch', `${id} must resolve by name, not by order`);
         assert.equal(r.checks.candidates, 2, `${id} really did have a choice to get wrong`);
     }
-    // ...and the Linux lanes legitimately have only one candidate, which
-    // is why the same fallback is allowed there.
-    for (const id of ['linux-x64', 'linux-arm64']) {
-        assert.equal(results.find((x) => x.id === id).checks.candidates, 1);
+    // ...and the Linux lanes legitimately have only one candidate EACH,
+    // which is why the same fallback is allowed there. Note what that
+    // means now that both formats share a pointer: the two candidates in
+    // `stable-linux.yml` are told apart by EXTENSION before arch is ever
+    // considered, so an AppImage install can never fall back onto the deb
+    // (which would be a root-privileged install of the wrong artifact).
+    for (const id of ['linux-x64-appimage', 'linux-arm64-appimage',
+        'linux-x64-deb', 'linux-arm64-deb']) {
+        assert.equal(results.find((x) => x.id === id).checks.candidates, 1,
+            `${id} sees exactly the one artifact of its own format`);
+    }
+    for (const [id, ext] of [['linux-x64-appimage', '.AppImage'], ['linux-x64-deb', '.deb'],
+        ['linux-arm64-appimage', '.AppImage'], ['linux-arm64-deb', '.deb']]) {
+        assert.ok(results.find((x) => x.id === id).selected.endsWith(ext),
+            `${id} resolved its own format`);
     }
 }
 
@@ -262,9 +291,13 @@ const good = makeFeed('feed-good');
     } });
     const results = await probeAll(feed.dir);
     const bad = results.filter((r) => !r.ok);
-    assert.equal(bad.length, 1, 'exactly the stranded lane fails');
-    assert.equal(bad[0].id, 'linux-arm64');
-    assert.equal(bad[0].failed, 'pointer');
+    // Two lanes, not one: `stable-linux-arm64.yml` is the only pointer the
+    // arm64 AppImage AND the arm64 deb have. Losing it strands both, and
+    // nothing else.
+    assert.deepEqual(bad.map((r) => r.id).sort(),
+        ['linux-arm64-appimage', 'linux-arm64-deb'],
+        'exactly the lanes that read the deleted pointer fail');
+    assert.ok(bad.every((r) => r.failed === 'pointer'));
 }
 
 {
@@ -358,14 +391,21 @@ const good = makeFeed('feed-good');
             const name = `XChain Wallet-${VERSION}.AppImage`;
             files[name] = 'attacker-payload';
             // Rewritten to match, so the feed is internally consistent.
-            pointers[`${CHANNEL}-linux.yml`] = pointerBody([name], files);
+            // The deb entry is left honest, so this case also shows the
+            // refusal is per-ARTIFACT: swapping one format's bytes must
+            // not fail, or pass, the other format sharing the pointer.
+            pointers[`${CHANNEL}-linux.yml`] = pointerBody(
+                [name, `xchain-wallet_${VERSION}_amd64.deb`], files,
+            );
         },
     });
     const results = await probeAll(feed.dir);
-    const r = results.find((x) => x.id === 'linux-x64');
+    const r = results.find((x) => x.id === 'linux-x64-appimage');
     assert.ok(!r.ok, 'a payload the pointer vouches for must still be refused');
     assert.equal(r.failed, 'verify');
     assert.match(r.reason, /does not match the signed hash/);
+    assert.ok(results.find((x) => x.id === 'linux-x64-deb').ok,
+        'the untouched deb sharing that pointer still passes');
 }
 
 {

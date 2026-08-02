@@ -98,9 +98,24 @@ const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 // that channel and there is nothing to rehearse.
 const buildAppx = process.env.XCHAIN_BUILD_APPX === '1' && !isStaging;
 
-// §7.5: a rehearsal variant is built ONLY for the format electron-updater
-// can actually swap in place on that OS. A staging dmg, deb or win-zip
-// exercises nothing, because none of them has an auto-update path.
+// §7.5: a rehearsal variant is built ONLY for the formats electron-updater
+// can actually swap in place on that OS. A staging dmg or win-zip
+// exercises nothing, because neither has an auto-update path.
+//
+// THE .deb BELONGS HERE AND WAS MISSING (added 2026-08-02,  §5). It
+// sat in the same sentence as the dmg on the strength of one belief: that
+// electron-updater's deb path "needs privilege escalation" and therefore
+// does not exist. It exists. `DebUpdater` in the pinned electron-updater
+// 6.8.3 selects the `.deb` from the pointer, downloads it and installs it
+// with `dpkg -i` under `pkexec`; the escalation IS the install step, and it
+// prompts. Our packaged `.deb` ships `resources/package-type` containing
+// `deb` (verified with `dpkg-deb -c` on a real build), which is exactly
+// what makes electron-updater pick that class, and both Linux pointers have
+// been listing the `.deb` next to the AppImage all along.
+//
+// So the update path that ends in a ROOT-privileged package install was the
+// one path a rehearsal could never cover, because the staging build emitted
+// no `.deb` for a staging feed to serve. See tools/release/rehearsal-matrix.mjs.
 //
 // This restriction lives in the CONFIG, not in a CLI argument, because the
 // CLI form does not do it: a `--mac zip` run was observed building the dmg
@@ -111,7 +126,10 @@ const buildAppx = process.env.XCHAIN_BUILD_APPX === '1' && !isStaging;
 const UPDATE_CAPABLE_TARGET = {
     mac: [{ target: 'zip', arch: ARCHES }],
     win: [{ target: 'nsis', arch: ARCHES }],
-    linux: [{ target: 'AppImage', arch: ARCHES }],
+    linux: [
+        { target: 'AppImage', arch: ARCHES },
+        { target: 'deb', arch: ARCHES },
+    ],
 };
 
 // --- Artifact names carry their architecture ( DD4) ----------------

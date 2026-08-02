@@ -253,12 +253,22 @@ The authoritative checklist is §6 of
 
    `run` checks the half that needs no hardware - the pointer resolves,
    each arch selects its OWN installer, the bytes match, and the K1-signed
-   manifest covers them - for all six lanes from one machine. `attest`
+   manifest covers them - for all eight lanes from one machine. `attest`
    records the half that does: an observed install and swap on named
    hardware. `rehearse.mjs requirement` says whether this release needs
    one OS or all of them, from the diff rather than from judgement.
    No production pointer goes up before this passes, and step 5 refuses
    without the record.
+
+   **The deb lane has a drill of its own**, `drills/deb-update-swap.mjs`,
+   because its install step is the only one that ends in a root-privileged
+   `dpkg -i` and no feed-side probe can reach it. Run inside a throwaway
+   container against two real builds one version apart, it installs the
+   older `.deb`, drives the real `DebUpdater` against a local feed, and
+   requires both that the escalated command line was produced and that the
+   installed package version actually moved. It refuses to run anywhere
+   that is not obviously disposable - it installs a system package. First
+   run 2026-08-02, arm64: `0.334.0 -> 0.334.1`.
 5. `bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/
    --tag vX.Y.Z --target <deploy target>
    --public-base https://downloads.xchain.io/wallet --dry-run`, then for
@@ -292,7 +302,7 @@ See [`tools/build-reproduce/`](../build-reproduce/) and each package's
 - ⏸ `downloads.xchain.io` not yet stood up ( S6); the upload tooling (`publish.sh`), the monitoring (`feed-sweep.mjs`) and the host runbook exist, the host does not. `docs/Verify_Release.md` still points at GitHub release assets.
 - ✅ `publish.sh` and `feed-sweep.mjs` are driven for real, against a signed fixture and a live local HTTP origin, by `test/smoke/audits/publish-feed.smoke.js` and `feed-sweep.smoke.js`. The older coverage of `publish.sh` was greps over its own source, which is how the  stage-1 defect survived: the comments and the code disagreed and both read as correct.
 - ✅ The §7.5 rehearsal is enforced, not merely written down: `publish.sh` refuses a production publish without a rehearsal record bound to the signed manifest in hand, so a re-cut release cannot inherit the previous cut's green. Driven end to end, with every refusal path, by `test/smoke/audits/rehearsal.smoke.js`.
-- ⏸ The swap half of the rehearsal is blocked on DD4 for five of six lanes: `rehearse.mjs coverage` reports which, and refuses to call a lane launch-ready with no named device. `mac-arm64` is the only lane with hardware today.
+- ⏸ The swap half of the rehearsal is blocked on DD4 for seven of eight lanes (the two Linux deb lanes were added 2026-08-02,  §5): `rehearse.mjs coverage` reports which, and refuses to call a lane launch-ready with no named device. `mac-arm64` is the only lane with hardware today.
 - ⏸ Cross-platform reproduce (macOS / Windows pre-signing artifacts) pending the desktop reproducibility follow-ups.
 - ✅ **Every desktop lane built ONE architecture, not two, and nothing said so** (, found 2026-08-01 by running the reproduce container for the first time). All six invocations read `pnpm -C packages/desktop dist -- --linux --x64 --arm64`. pnpm 9 forwards that `--` into the script's argv verbatim (npm strips it), and electron-builder is yargs-based, so a bare `--` ends option parsing and every flag behind it lands in `argv._` unread. electron-builder then packaged the runner's own arch: linux-x64 from ubuntu, one arch per OS across the matrix. `expected-artifacts.txt` matches by extension rather than per arch, so the signing gate would have passed the release, `stable-linux-arm64.yml` would never have been written, and every arm64 install would have had no download and no update - permanently, and silently. Separator dropped in all six lanes and in `packages/desktop/scripts/build.sh`; `test/smoke/audits/reproducible-toolchain.smoke.js` fails on any pnpm invocation that reintroduces it.
 - ✅ **And the gate that let it through is closed** (2026-08-01). Dropping the separator fixed the cause; the reason it went unseen was that `expected-artifacts.txt` declared artifact CLASSES and never counts, so `*.dmg` was satisfied by one dmg. Rows now carry a fourth arch column, `lib.sh` attributes each artifact to an architecture using electron-builder's own naming tokens, and a release missing either arch of any of the six lanes fails by name. The same check refuses an artifact that belongs to NO architecture, which is the un-suffixed combined NSIS installer  - so that decision is now blocking rather than silent. `test/smoke/audits/release-arch-coverage.smoke.js`, 8 drift mutations driven, 8 killed.

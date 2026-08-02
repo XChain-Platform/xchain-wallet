@@ -25,7 +25,7 @@
 //      check the sha512 the pointer claims, then run the REAL  S5
 //      gate (`updateVerify.js`) over the bytes against the K1-signed
 //      manifest on the same feed. Every step is a property of the FEED,
-//      so all six lanes are checked from one machine, no hardware.
+//      so all eight lanes are checked from one machine, no hardware.
 //
 //   2. Install and swap.  Whether the downloaded artifact actually
 //      replaces the running app. That needs the OS and the arch, so it
@@ -686,11 +686,11 @@ async function main(argv) {
         for (const lane of LANES) {
             const hit = seen.get(lane.id);
             if (hit) {
-                process.stdout.write(`✅ ${lane.id.padEnd(12)} swapped at ${hit.tag} on ${hit.device}\n`);
+                process.stdout.write(`✅ ${lane.id.padEnd(22)} swapped at ${hit.tag} on ${hit.device}\n`);
             } else {
                 blocked += 1;
                 const why = lane.device ? `device ${lane.device}, never rehearsed` : 'NO DEVICE NAMED (DD4)';
-                process.stdout.write(`⬜ ${lane.id.padEnd(12)} ${why}\n`);
+                process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}\n`);
             }
         }
         if (blocked) {
