@@ -48,7 +48,19 @@ pnpm -C packages/test-dapp build   # if a build script is configured
 npx http-server packages/test-dapp -p 5500
 ```
 
-Open http://localhost:5500 in the browser - any page served over http/https will have `window.xchain` injected by the content script.
+Open http://localhost:5500 in the browser. `window.xchain` is injected there because the content script matches exactly these three patterns, and no others:
+
+```
+https://*/*
+http://localhost/*
+http://127.0.0.1/*
+```
+
+**Corrected 2026-08-02.** This line used to say "any page served over http/https", which stopped being true on 2026-07-31 when the operator narrowed the content-script scope ( D6) to delete the plain-HTTP injection surface. The instruction above still works because loopback is exempt, so the staleness was invisible.
+
+**The trap this leaves, and it bites at the worst moment.** Spec §4's rollout exit criteria require driving connect and sign against this test dApp from a store-installed build **on at least two machines**. The obvious way to test from a second machine is to point it at the first machine's server by LAN address, and `http://192.168.x.x:5500` is neither `localhost` nor `127.0.0.1`, so the content script does not run, `window.xchain` never appears, and it reads exactly like a wallet bug. That is the same symptom D6 produced in `test/e2e/tests/cosigner/cosign-approval.extension.spec.js`, where the spec's own comment blamed the wallet. Serve the dApp on the machine you are testing from, or put it behind TLS. Do not widen the manifest to fix a test setup: widening triggers CWS re-review and can disable the extension for installed users until they re-accept.
+
+The three patterns above are set-compared against `packages/extension/manifest.json` by `test/smoke/audits/extension-provider-origins.smoke.js`, so this list cannot go stale again.
 
 ## 4. Run through `runExample`
 
