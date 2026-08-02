@@ -9,5 +9,8 @@
     "server": {
         "androidScheme": "https"
     },
-    "plugins": {}
+    "plugins": {},
+    "ios": {
+        "contentInset": "always"
+    }
 }

@@ -110,17 +110,21 @@ When release-signing infrastructure ships (tracked as G158 / G159 / G180), the p
 
 ### Android APK signing certificate
 
-**NOT YET GENERATED.** The direct-download signing key (K10) is created in the
-release-key ceremony; until then there is nothing true to put here, and a
-placeholder that looked like a fingerprint would be worse than an empty slot.
+The direct-download signing key (K10) was generated 2026-08-01. Its SHA-256
+certificate fingerprint is below, and **this file is the canonical copy**. The
+copy on the download page is a convenience only: a fingerprint served by the
+same origin as the file it authenticates proves nothing if that origin is
+compromised, so the value people should compare against is the one in this
+repository, reachable independently.
 
-When it exists, its SHA-256 certificate fingerprint goes below, and **this file
-is the canonical copy**. The copy on the download page is a convenience only:
-a fingerprint served by the same origin as the file it authenticates proves
-nothing if that origin is compromised, so the value people should compare
-against is the one in this repository, reachable independently.
+    Fingerprint (SHA-256):
+    4B:5D:E0:91:CF:39:97:31:06:11:B8:46:8B:67:79:DC:
+    72:F5:8A:2A:94:0E:53:4F:1E:0A:59:AD:D8:25:9E:28
 
-    Fingerprint (SHA-256): <PENDING K10 CEREMONY>
+This key signs only the APK downloaded directly from us. An APK installed from
+Google Play carries a **different** signature: Play App Signing means Google
+re-signs what it serves, so a Play install cannot be checked against the value
+above, and that is expected rather than a warning sign.
 
 Verify a downloaded APK against it with:
 
