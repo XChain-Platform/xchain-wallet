@@ -71,13 +71,30 @@ Open source, AGPL-3.0-or-later. Built by Dankest, LLC.
 Trader. Same entity as the Chrome Web Store listing, and it appears publicly:
 
     Dankest, LLC
+    30 N Gould St Ste N
+    Sheridan, WY 82801
+    United States
     info@dankest.llc
+    +1 949-510-5364
 
-**Keep this consistent across stores.** The Chrome Web Store spec ( §2)
-still names support@xchain.io for the same declaration. Two different public
+**Settled in full 2026-08-01 (operator,  D1).** The address is a
+registered agent's, which is why publishing it permanently is not the exposure
+a home address would be. The phone is the operator's personal mobile, published
+by explicit decision after the SIM-swap exposure was raised: a number tied
+publicly to a named crypto company is a targeting signal, and the carrier
+account behind it is a recovery path that hardware-key 2FA on the store
+accounts does not cover. Recorded as a deliberate choice so nobody substitutes
+a different number at the console. If it is ever replaced by a forwarding line
+(a VOIP number ringing the same handset satisfies the DSA identically), the
+swap lands on every store listing in one pass.
+
+**Keep this consistent across stores.** The email question is settled:
+`info@dankest.llc` is the one that demonstrably receives mail today (accepted
+by Google from origin-host, arrival confirmed by the operator), and the older
+`support@xchain.io` proposal in the Chrome spec lost. Two different public
 trader contacts for one legal entity is the kind of small inconsistency that a
-reviewer or a regulator notices, so whichever address wins should win in both
-places. info@dankest.llc is the one that demonstrably receives mail today.
+reviewer or a regulator notices, so the address block above is the one to
+transcribe into every store form, this one included.
 
 ## Country availability
 

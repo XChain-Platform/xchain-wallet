@@ -19,9 +19,14 @@
 // `fetchImpl` injected into `run()`.
 
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+
+// Resolved from this file, not from cwd: the real publish log is read
+// below, and the runner's cwd is not something this check should depend on.
+const here = dirname(fileURLToPath(import.meta.url));
 
 import {
     checkItem,
@@ -239,5 +244,120 @@ writeFileSync(logPath, LOG);
     assert.match(result.stdout, /usage: store-version-monitor/);
 }
 
+// ------------------------------- the parser against the REAL publish log
+//
+// Everything above drives `LOG`, a fixture written in this file. A fixture
+// and a parser written together always agree; the file the monitor actually
+// reads is `packages/extension/docs/publish-log.md`, and the operator
+// appends rows to it BY HAND, mid-ceremony, in the same step as an upload
+// (SUBMISSION-RUNBOOK.md Phase 6).
+//
+// So the shape of that real table is load-bearing and was unverified. If it
+// drifts from what the parser expects, the parser does not throw: it
+// returns fewer rows, or none. The monitor then finds a live version with
+// "no row in the publish log" and reports the ROGUE-PUBLISH ALERT against a
+// perfectly legitimate release. That is the specific outcome spec §2 warns
+// about, because an alert that cries wolf on every normal release trains
+// everyone to ignore the one that matters.
+//
+// It cannot be checked by parsing real rows, because there are none yet and
+// there will not be until the first upload. It CAN be checked by taking the
+// scaffold's own worked EXAMPLE row, which is written in the format a real
+// row must follow, and reading it as if it were real.
+
+const REAL_LOG_PATH = join(here, '..', '..', '..', 'packages', 'extension', 'docs', 'publish-log.md');
+const realLog = readFileSync(REAL_LOG_PATH, 'utf8');
+
+const realRows = parsePublishLog(realLog);
+
+{
+    // De-EXAMPLE the scaffold row: same table, same columns, values the
+    // parser is not told to skip. It must then parse as one row MORE than
+    // the file already yields, with every field landing in the right
+    // column.
+    //
+    // Relative, not absolute. An earlier cut asserted "exactly one row"
+    // and a mutation caught what that really meant: the day the first real
+    // publish appends its row, the count becomes two and this check fails
+    // on the legitimate path. A gate that goes red the first time the
+    // ceremony succeeds is a gate someone deletes, and they would be right.
+    //
+    // The sentinel values must not contain "example", which is the very
+    // thing the parser is told to skip.
+    const SENTINEL_VERSION = '9.9.9';
+    const SENTINEL_OPERATOR = 'shape-check';
+
+    if (/0\.0\.0-EXAMPLE/.test(realLog)) {
+        const asReal = realLog
+            .replace(/0\.0\.0-EXAMPLE/g, SENTINEL_VERSION)
+            .replace(/EXAMPLE-operator \(not a real entry\)/g, SENTINEL_OPERATOR);
+
+        const shapeRows = parsePublishLog(asReal);
+        assert.equal(shapeRows.length, realRows.length + 1,
+            `the worked EXAMPLE row in ${REAL_LOG_PATH} does not parse as a row when read as a real entry `
+            + `(expected ${realRows.length + 1} rows, got ${shapeRows.length}). The monitor reads this exact `
+            + 'table. If its shape has drifted from the parser, a legitimate release reads as a rogue '
+            + 'publish, which is the false alarm spec §2 says must never happen.');
+
+        const row = shapeRows.find((r) => r.version === SENTINEL_VERSION);
+        assert.ok(row, 'the de-EXAMPLEd scaffold row is not among the parsed rows');
+        assert.match(row.sha256, /^`?[0-9a-f]{64}`?$/,
+            'column 2 of the real table is a 64-hex sha256 (backticks allowed, the file uses code formatting)');
+        assert.ok(['main', 'beta'].includes(row.item),
+            `column 3 of the real table is the item, expected main or beta, got "${row.item}"`);
+        assert.equal(row.operator, SENTINEL_OPERATOR, 'column 4 of the real table is the operator');
+        assert.match(row.date, /^\d{4}-\d{2}-\d{2}$/, 'column 5 of the real table is an ISO date');
+    } else {
+        // The scaffold row is how the table's shape stays checkable before
+        // any real publish exists. Once it is gone, real rows have to be
+        // carrying that job, or nothing is.
+        assert.ok(realRows.length > 0,
+            `${REAL_LOG_PATH} no longer contains the worked EXAMPLE row AND parses no real rows, so nothing `
+            + 'verifies that its table is still a shape the monitor can read. Restore the example row or '
+            + 'keep the real rows that replaced it.');
+    }
+}
+
+{
+    // The scaffold banner and the contents must agree, in both directions.
+    // The day a real row is appended and the header still says no publish
+    // has happened, the file lies to whoever is reading it during an
+    // incident, which is the only time anyone reads it in a hurry.
+    const saysScaffold = /\*\*Status:\*\*\s*SCAFFOLD/i.test(realLog)
+        || /No real publish has happened yet/i.test(realLog);
+
+    if (saysScaffold) {
+        assert.equal(realRows.length, 0,
+            `${REAL_LOG_PATH} still declares itself a SCAFFOLD ("no real publish has happened yet") but `
+            + `parses ${realRows.length} real row(s). Update the status block in the same step as the `
+            + 'first real row, or the incident runbook points at a file that contradicts itself.');
+    } else {
+        assert.ok(realRows.length > 0,
+            `${REAL_LOG_PATH} has dropped its SCAFFOLD banner but parses no real rows. Either a row was `
+            + 'removed (this log is append-only, per spec §2) or the table shape drifted and the parser '
+            + 'can no longer see the rows that are there.');
+    }
+
+    // Real rows, once they exist, are hand-typed. The parser accepts any
+    // five cells, so a typo does not fail here: it produces a row that can
+    // never match a live version, which the monitor reports as a rogue
+    // publish. Validate them at commit time instead of at 3am.
+    for (const r of realRows) {
+        assert.match(r.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/,
+            `publish-log row has a malformed version "${r.version}". It must match the uploaded `
+            + "manifest.json's version exactly, or the monitor can never match it against the live store.");
+        assert.match(r.sha256, /^`?[0-9a-f]{64}`?$/,
+            `publish-log row for ${r.version} has a malformed zip sha256. It is the only record of WHICH `
+            + 'bytes went live, and the post-publish verification is checked against it.');
+        assert.ok(['main', 'beta'].includes(r.item),
+            `publish-log row for ${r.version} has item "${r.item}", expected main or beta. The monitor `
+            + 'matches rows to items by this exact string, so anything else makes the row invisible.');
+        assert.ok(r.operator && !/example/i.test(r.operator),
+            `publish-log row for ${r.version} has no named operator (spec §6: one named operator per release)`);
+        assert.match(r.date, /^\d{4}-\d{2}-\d{2}$/,
+            `publish-log row for ${r.version} has a malformed date "${r.date}", expected YYYY-MM-DD`);
+    }
+}
+
 rmSync(dir, { recursive: true, force: true });
-console.log('store-version-monitor.smoke.js: ok');
+console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md)');

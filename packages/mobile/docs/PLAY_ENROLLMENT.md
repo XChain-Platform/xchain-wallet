@@ -100,7 +100,16 @@ four build stages are already done.
    org identity as an admin. One login losing access should not orphan the
    listing. Record the members in the K8 custody row.
 2. Complete the **trader declaration** (EU DSA): trader, `Dankest, LLC`,
-   `support@xchain.io`. It appears publicly on the listing.
+   `30 N Gould St Ste N, Sheridan, WY 82801, United States`,
+   `info@dankest.llc`, `+1 949-510-5364`. All of it appears publicly on the
+   listing, permanently. Settled in full 2026-08-01 ( D1): the address is
+   a registered agent's, the phone is the operator's personal mobile published
+   by explicit decision, and `info@dankest.llc` supersedes the
+   `support@xchain.io` this step used to name, being the one proven to receive
+   mail and the one the Chrome listing publishes. Transcribe all of it from
+   `PLAY_LISTING.md` rather than from memory, and never substitute a different
+   phone number here: the whole point of the block is that all three stores
+   publish the same contacts.
 3. Fill the **financial features declaration** and the **Data safety** form
    from the answers already written down in `PLAY_LISTING.md` and
    `DATA_SAFETY.md` in this directory. Do not improvise them in the console;

@@ -8,7 +8,7 @@
 **Scope:** the FIRST submission of the `io.xchain.wallet.extension` item to the Chrome Web Store, from account registration through the unlisted-to-public flip. Everything here is the operational sequence; the decisions behind it live in `claude/specs/wallet-publishing-chrome-extension.md` .  
 **Audience:** the operator, sitting at the Chrome Web Store developer console, doing this for the first time. Read the whole thing before opening the console. Several steps below are irreversible or ordering-sensitive; doing them out of order is not recoverable by redoing them in the right order afterward.
 
-**This runbook is currently BLOCKED.** Two spec decisions are still open (D1, D2) and this document refuses to hand you copy-paste text for the steps that need them. The exact blocking points are marked **STOP: D1** and **STOP: D2** below, and both are collected again in Appendix A. Do not invent an answer to either one to get past a stop; that is exactly the mistake this ceremony exists to prevent (§8 of the spec is explicit that these are operator decisions, not defaults).
+**This runbook is NO LONGER BLOCKED.** Both spec decisions it waited on were answered on 2026-08-01: D2 (category `Productivity` → `Tools`, name `XChain Wallet`) and D1 in full, the public-identity set being entity `Dankest, LLC`, the registered-agent postal address in Sheridan WY, `info@dankest.llc`, and the published phone. Every value is written out at the step that needs it, and both former **STOP** blocks now carry answers instead of refusals. The rule that produced them still stands for anything that comes up later: do not invent a value to get past a step, because §8 of the spec is explicit that these are operator decisions, not defaults.
 
 ---
 
@@ -75,14 +75,24 @@ This is the access you confirmed you had (or knew who to ask for) in Phase 0. If
 
 ### 2c. Trader declaration
 
-**STOP: D1.** The trader declaration publishes name, postal address, email, **and** phone number, permanently, on the public listing. This is not reversible in the sense that matters: even if you could later edit the fields, the original values were public and indexed the moment they went live. Spec §8 D1 decides the whole public-identity set as one unit, and it is still open:
+**D1 IS CLOSED as of 2026-08-01. This stop is cleared.** The trader declaration publishes name, postal address, email, **and** phone number, permanently, on the public listing. This is not reversible in the sense that matters: even if you later edit the fields, the original values were public and indexed the moment they went live. Type these exactly, transcribed from here rather than from memory:
 
-> publisher display name ("Dankest, LLC" vs "XChain"), verified domain (xchain.io, already handled in 2b), listing support email (spec §2 proposes `support@xchain.io`), privacy-policy contact email (currently `privacy@dankest.llc` plus a GitHub issues link, per the pending note in `docs/Privacy_Policy.md`), and the trader entity plus published address/phone.
+> **Entity:** `Dankest, LLC` (decided 2026-07-31)  
+> **Postal address:** decided 2026-08-01, a registered-agent address, so it exists to be public:
+>
+> ```
+> Dankest, LLC
+> 30 N Gould St Ste N
+> Sheridan, WY 82801
+> United States
+> ```
+>
+> **Email:** `info@dankest.llc` (decided 2026-08-01, identical to what the Play listing publishes, and proven to receive: accepted by Google from origin-host, arrival confirmed by the operator)  
+> **Phone:** `+1 949-510-5364` (decided 2026-08-01)
 
-Do not fill in the trader declaration form with a best guess "for now." Five surfaces have to agree before submission (the four above plus this declaration), and reviewers cross-check them. Get D1 answered as one unit, then come back to this step.
+**About the phone, so that nobody "corrects" it later.** It is the operator's personal mobile, and it was chosen knowingly, after the exposure was put to them explicitly: a number published permanently against a named crypto company is a SIM-swap targeting signal, and the carrier account behind it is the recovery path for mail, banking and exchange accounts that hardware-key 2FA on the publisher account does not protect. The operator decided to publish it anyway. Do not silently substitute a different number at the console: if this is ever swapped for a forwarding line (a VOIP number that rings the same phone satisfies the DSA requirement identically, since the rule is a working means of contact, not a carrier line), that change lands on all three store listings in the same pass, or the one-entity-two-contacts inconsistency this ceremony keeps warning about is one we created ourselves.
 
-⬜ D1 answered by the operator, all five surfaces reconciled (this declaration, `docs/Privacy_Policy.md`'s contact line, the listing support email, the publisher display name, and the verified domain already done in 2b).  
-⬜ Trader declaration submitted, matching the reconciled identity.
+⬜ Trader declaration submitted, matching the reconciled identity above: entity, address, email and phone.
 
 ---
 
@@ -164,20 +174,17 @@ Everything paste-ready lives in `packages/extension/docs/STORE_LISTING_PACK.md`.
 | Data-disclosure tab (what the extension stores/transmits) | `docs/Privacy_Policy.md`, "What stays on your device" and "What the extension sends off your device, and why". Tick the boxes to match this document exactly; a mismatch here is spec §3.3's named rejection cause. |
 
 ⬜ Single-purpose, permission justifications, and content-script justification pasted from `STORE_LISTING_PACK.md`.  
-⬜ Listing name and description pasted (name is a working title, see **STOP: D2** below).  
+⬜ Listing name and description pasted (name **`XChain Wallet`**, decided 2026-08-01; it must equal `manifest.json`'s own `name`, which a smoke now enforces).  
 ⬜ Four listing assets uploaded from `packages/extension/docs/listing-assets/`.  
 ⬜ Data-disclosure tab ticked to match `docs/Privacy_Policy.md` exactly.  
 ⬜ Privacy-policy URL field set to `https://xchain.io/wallet/privacy/`.
 
-**STOP: D2.** Two fields on this form are not decided:
+**D2 DECIDED 2026-08-01 (operator), so this stop is cleared.** Both fields on this form now have answers:
 
-- **Category.** Spec §8 D2 leaves this open; "Productivity → Tools" is the working assumption in `STORE_LISTING_PACK.md` §5, explicitly marked not-yet-decided.
-- **Final store name.** "XChain Wallet" is the working title used throughout the listing pack and this runbook, also explicitly marked not-yet-decided in spec §8 D2.
+- **Category: `Productivity` → `Tools`.** Where comparable browser wallets sit, and what the listing pack assumed throughout. It needs no explanation under review, and the single-purpose statement already reads as a tool. The console's own taxonomy is the authority on the exact wording of the two levels: if it offers something other than a `Tools` subcategory under `Productivity`, pick the nearest and record what you actually chose in `STORE_LISTING_PACK.md` §5 rather than assuming this document was right about a menu it cannot see.
+- **Final store name: `XChain Wallet`.** It must equal `manifest.json`'s `name`, because CWS takes the listing title from the package; `test/smoke/audits/extension-listing-pack.smoke.js` fails if the two ever differ, so do not retype it here from memory.
 
-Do not pick a category or lock in the final name to unblock yourself. If the operator has decided D2 by the time you reach this step, update `STORE_LISTING_PACK.md` §5's two remaining ⬜ rows first (that file is the source of truth for listing copy, not this runbook), then come back and fill the form from it.
-
-⬜ D2 answered by the operator (category and final name).  
-⬜ Category and name fields filled from the now-updated `STORE_LISTING_PACK.md`.
+⬜ Category and name fields filled from `STORE_LISTING_PACK.md` §4 and §5.
 
 **Support email and trader-declaration fields on this form are the same D1 gate as Phase 2c.** If you reached this phase with D1 still open, you should not have gotten past Phase 2; if you did, stop here and go back.
 
@@ -235,14 +242,15 @@ Once public: the store's staged-rollout percentage is not available to this list
 
 | Where | Blocked on | What it needs |
 |---|---|---|
-| Phase 2c, trader declaration | **D1, PARTIALLY ANSWERED** | Settled 2026-08-01: publisher `Dankest, LLC`, support `info@dankest.llc`, privacy contact `privacy@dankest.llc` (created and proven to receive that day), domain `xchain.io`. **Remaining: the trader postal address and phone**, which publish permanently and are the operator's to supply |
-| Phase 5, category field | **D2** | Category selection (Productivity → Tools is the working, undecided assumption) |
-| Phase 5, final name field | **D2** | Final store name confirmation ("XChain Wallet" is the working, undecided assumption) |
-| Phase 5, support email / trader fields on the form itself | **D1, PARTIALLY ANSWERED** | Support email is decided (`info@dankest.llc`); the trader address and phone are not. Same gate as Phase 2c surfacing a second time |
+**This table is EMPTY as of 2026-08-01.** Every row it held has an answer, and they are recorded at the steps that need them rather than here, so that nobody transcribes a value out of an appendix:
 
-Nothing in Phases 6 through 8 can happen until Phases 2 and 5 are unblocked, because there is no submission without a complete form and the trader declaration filed. Phase 3 is no longer among them: the privacy-policy URL went live on 2026-08-01 with the apex flip, and its row above is struck from this table.
+- **D1, closed.** Publisher `Dankest, LLC`, support `info@dankest.llc`, privacy contact `privacy@dankest.llc` (created and proven to receive that day), domain `xchain.io`, postal address `30 N Gould St Ste N, Sheridan, WY 82801, United States` (a registered agent's), phone `+1 949-510-5364` (the operator's personal mobile, chosen knowingly; see Phase 2c). Covers both the Phase 2c declaration and the Phase 5 form fields, which were the same gate surfacing twice.
+- **D2, closed.** Category `Productivity` → `Tools`, final name `XChain Wallet`, which must equal `manifest.json`'s `name` and is now enforced by a smoke.
+- **Phase 3, cleared.** The privacy-policy URL went live on 2026-08-01 with the apex flip.
 
-What is left is decisions, not deploys. The blocked-on-deploy row that sat here (the apex flip,) cleared on 2026-08-01, which leaves D1 and D2: one operator, sitting down once, answering both as single units.
+**Nothing in this ceremony is blocked on a decision any more.** What stands between here and a submitted listing is the ceremony itself: an operator at the console, working Phases 1 through 8 in order.
+
+Two open decisions remain on the ITEM, and neither gates this document: **D3**, the beta/soak lane, which governs §4's soak for every release after the first and is a separate setup ceremony; and **D4**, CWS API upload automation, explicitly post-launch.
 
 ## Appendix B: Things this runbook could not verify against the repo, or is not certain about
 
