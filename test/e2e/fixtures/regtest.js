@@ -670,6 +670,69 @@ export async function warmPreflight({ action, params, source }, timeoutMs = 120_
 }
 
 /**
+ * Reads a native-coin fee quote, retrying past the venue's cold-path stall.
+ *
+ * WHY THIS EXISTS, measured on the devhost BTC regtest venue 2026-08-02.
+ * `/api/feequote` intermittently answers `502 {"code":"UPSTREAM_ERROR"}`, and
+ * the explorer logs `processFeeQuoteRequest error: timeout of 5000ms exceeded`
+ * for each one. Twelve identical calls gave 10 valid / 2 failed, and the
+ * latency split is the tell: most answer in ~25ms, some take exactly 5.01s,
+ * and some cross the 5s line and 502.
+ *
+ * It is NOT the indexer. Timed from inside the container network, the
+ * indexer's own `/api/v1/feequote` answers in 10-14ms, every time. The
+ * explorer's `/status` is 8-11ms in the same window. The 5s belongs to an
+ * intermittent stall on the explorer's fee-quote path, and
+ * `XChainIndexerConnector` caps that hop at `INDEXER_API_TIMEOUT_MS || 5000`,
+ * which is unset on this venue - so the timeout is the messenger, not the
+ * cause. Root cause is; this helper is the test-side mitigation.
+ *
+ * The shape is deliberately `warmPreflight`'s, because the underlying venue
+ * behaviour is the same one that helper already documents: the explorer
+ * MEMOIZES these answers, so the first call pays the cold cost and the second
+ * hits the memo. Reading a fee quote exactly once, cold, at the top of a spec
+ * is the worst possible moment, and 22 regtest specs did precisely that with
+ * no retry - which is why a suite failure here reads as "the venue cannot
+ * price this action" and sends the next session hunting a price-seed problem
+ * that is not there.
+ *
+ * @param {{ action: string, params: string, source?: string, feeOutputSats?: string }} q
+ * @param {number} [timeoutMs]
+ * @returns {Promise<any>} the parsed quote, once it comes back valid
+ */
+export async function warmFeeQuote({ action, params, source, feeOutputSats }, timeoutMs = 60_000) {
+    const q = new URLSearchParams({ action });
+    if (params !== undefined) q.set('params', params);
+    if (source !== undefined) q.set('source', source);
+    if (feeOutputSats !== undefined) q.set('feeOutputSats', String(feeOutputSats));
+    const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/feequote?${q.toString()}`;
+
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+            last = await res.json();
+            // `valid` is the only success signal that matters: a 200 carrying
+            // `valid: false` means the venue really cannot price this action
+            // (a stale oracle), which is a different problem and must NOT be
+            // retried into a timeout - so return it and let the spec assert.
+            if (last && last.valid === true) return last;
+            if (last && last.code !== 'UPSTREAM_ERROR') return last;
+        } catch {
+            // Transport-level blip; same treatment as an UPSTREAM_ERROR.
+        }
+        await new Promise((r) => setTimeout(r, 1_000));
+    }
+    throw new Error(
+        `fee quote for ${action} never came back valid within ${timeoutMs}ms. Every attempt was `
+        + `UPSTREAM_ERROR (the explorer's 5s indexer-hop timeout,) rather than an `
+        + `invalid quote, so this is venue state and not a wallet defect - last: `
+        + `${JSON.stringify(last)}`,
+    );
+}
+
+/**
  * Makes the next broadcast fail, with a chosen node reject reason.
  *
  * §8.6 scenarios 3 and 4 hinge on the wallet CLASSIFYING a post-sign

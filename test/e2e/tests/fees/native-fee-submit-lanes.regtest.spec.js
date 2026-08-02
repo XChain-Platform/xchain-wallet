@@ -58,6 +58,7 @@ import {
     minerRpc,
     switchToRegtest,
     unlockAfterReload,
+    warmFeeQuote,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -82,8 +83,12 @@ async function nudgeChain() {
 
 /** The venue's own answer for what this action's protocol fee costs in coin. */
 async function feeQuote(params) {
-    const q = new URLSearchParams({ action: 'ISSUE', params });
-    return explorerJson(`feequote?${q.toString()}`);
+    // Retried, not read once. This venue's fee-quote path stalls past the
+    // explorer's 5s indexer-hop timeout often enough to redden this spec on a
+    // perfectly healthy stack (), and reading it cold at the top of a
+    // run is the likeliest moment to hit it. The failure then reads as a
+    // price-seed problem that is not there.
+    return warmFeeQuote({ action: 'ISSUE', params });
 }
 
 async function gotoPalette(page, title) {
