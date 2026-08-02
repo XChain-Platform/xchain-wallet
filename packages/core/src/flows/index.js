@@ -146,6 +146,7 @@ export {
     encoderSignerOptions,
     TAPSCRIPT_CAPABLE_SOURCES,
 } from './signerCapability.js';
+export { storedSizeSummary, storedSizeLine } from './storedSizeSummary.js';
 export { getProjectForTick } from './projectQueries.js';
 export { getMessagingInbox, getMessagingInboxSweep } from './messagingInbox.js';
 export {

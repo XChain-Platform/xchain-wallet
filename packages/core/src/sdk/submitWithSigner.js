@@ -480,6 +480,13 @@ export async function submitWithSigner({
         signed: finalSigned,
         indexed: null,
         nativeFeeQuote: preflight.quote,
+        //  §8 / : what compression ACTUALLY did, reported by the
+        // encoder rather than inferred here. With the default ON a caller cannot
+        // tell from its own request whether the bytes were compressed, and the
+        // wallet has to show the real on-chain size. Shape:
+        // { compressed, rawLength, storedLength, reason }; absent on lanes that
+        // carry no payload at all.
+        ...(encoded.compression ? { compression: encoded.compression } : {}),
     };
 
     // Step 5: optional indexer confirmation.

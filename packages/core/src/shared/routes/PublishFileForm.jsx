@@ -421,6 +421,12 @@ export function PublishFileForm({ walletId, onBack }) {
     }
 
     if (stage === 'done') {
+        // The encoder REPORTS what compression did; the wallet must not infer it,
+        // because with the default ON neither asking nor not asking tells you what
+        // actually happened (§5.2 keeps the compressed form only when it is smaller).
+        const storedLine = flowsLib.storedSizeLine(
+            flowsLib.storedSizeSummary(result?.compression, fileMeta?.bytes?.length),
+        );
         if (result?.psbtHex && !result?.txid) {
             return wrap(
                 <WatcherResultPanel
@@ -439,6 +445,12 @@ export function PublishFileForm({ walletId, onBack }) {
                         <p className={styles.successLabel}>Transaction</p>
                         <code className={styles.txid}>{txid}</code>
                     </>
+                ) : null}
+                {storedLine ? (
+                    /*  §8: the size the user actually paid for. Compression is
+                       on by default, so this is routinely a fraction of the file they
+                       picked and there is no other way for them to find that out. */
+                    <p className={styles.hint}>{storedLine}</p>
                 ) : null}
                 <p className={styles.hint}>
                     Once it confirms, the file lives on the chain permanently and
