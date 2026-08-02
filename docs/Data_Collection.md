@@ -1,8 +1,10 @@
 # Data collection: the declaration of record
 
-**Status: DRAFT.** Three facts still need an operator answer before this
-can back a store submission; they are listed at the bottom under
-"Unsettled".
+**Status: DRAFT.** 1 question still needs an operator answer before this
+can back a store submission; it is listed at the bottom under
+"Unsettled", with a stable `Q<n>` id. This count is checked against that
+list by `test/smoke/audits/store-collateral.smoke.js`; it read "Three
+facts" for a day after the second was settled.
 
 **Item:**  §6c. **Audience:** whoever fills in a store form or
 edits the privacy policy.
@@ -138,48 +140,139 @@ sentinel, so no donation output is added.
 - `alarms`: wakes the service worker so the notification connection does
   not silently die.
 - `host_permissions`: **empty.**
-- A content script matches all `http`/`https` pages to inject the dApp
-  provider (`window.xchain`). It is a `postMessage` relay only; it reads
-  no page content and makes no cross-origin request. All connection and
-  approval policy is enforced in the background worker.
+- A content script matches `https://*/*`, `http://localhost/*` and
+  `http://127.0.0.1/*` to inject the dApp provider (`window.xchain`). It
+  is a `postMessage` relay only; it reads no page content and makes no
+  cross-origin request. All connection and approval policy is enforced in
+  the background worker.
+
+  **Corrected 2026-08-02.** This line said "matches all `http`/`https`
+  pages" for two days after the operator narrowed it ( D6,
+  2026-07-31, which deleted the plain-HTTP injection surface). It is the
+  scope a store form asks about, in the document store forms are
+  transcribed from, so it is now derived rather than restated:
+  `test/smoke/audits/extension-data-disclosure.smoke.js` compares this
+  list against `packages/extension/manifest.json` and fails on drift.
+
+The Chrome Web Store asks these questions in its own vocabulary, on the
+console's Privacy practices tab. The translation of this document into
+that form lives in `packages/extension/docs/DATA_DISCLOSURE.md`, beside
+`packages/mobile/docs/DATA_SAFETY.md` (Play) and
+`packages/mobile/docs/PRIVACY_NUTRITION_LABELS.md` (Apple). Three forms,
+one set of facts, and the facts are here.
 
 ## Unsettled: needs an operator answer
 
 These cannot be read out of the code, and the privacy policy cannot be
-published without them. **One of the three (server logging) was settled on
-2026-08-01 by measuring the live hosts; two remain, and both are decisions
-rather than facts.**
+published without them. **Two of the three are now settled; one remains,
+and it is a decision rather than a fact.**
 
-1. ~~**Do our own servers log and retain client IPs?**~~
-   **SETTLED 2026-08-01 by measurement on the live hosts**, not by asking:
+Each question carries a stable id. `docs/Privacy_Policy.md`'s internal
+status block cites the same ids, and
+`test/smoke/audits/store-collateral.smoke.js` fails if the two files
+disagree about which are still open. They numbered the same questions
+differently until 2026-08-02, so the policy's "tracked in
+docs/Data_Collection.md" pointer landed on the wrong row.
 
-   - Every one of `explorer.xchain.io`, `encoder.xchain.io`,
-     `hub.xchain.io` and `downloads.xchain.io` has a
-     `CustomLog ... combined` directive in its Apache vhost on
-     origin-host. The "combined" format is
-     `%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"`, so **yes,
-     the client IP is logged**, along with the request line, referer and
-     user-agent.
-   - Retention is `/etc/logrotate.d/apache2`: **daily rotation,
-     `rotate 14`**, so roughly **14 days** and then deletion.
-   - Nothing correlates queries by IP: there is no account, no cookie and
-     no identifier in the request to correlate them with.
-   - Cloudflare does front the `xchain.io` hosts (confirmed: they answer
-     with `server: cloudflare`), so its own logs are a second copy under
-     its own policy. The company site `dankest.llc` is served directly
-     from Apache and is NOT behind Cloudflare (confirmed:
-     `Server: Apache/2.4.52`).
+1. **[Q1 SETTLED 2026-08-01]** ~~**Do our own servers log and retain
+   client IPs?**~~
+   **Settled by measurement on the live hosts**, not by asking:
 
-   **This is a claim with an expiry date.** It describes a configuration,
-   and configurations change. Re-measure before each store submission,
-   and change this file before the policy.
-2. **Who is the data controller of record, and what is the contact
-   address for privacy requests?** Dankest, LLC is the publisher;
-   confirm the entity name and whether privacy mail goes to
-   `legal@dankest.llc` or a dedicated address.
-3. **Is any jurisdiction-specific section required** (GDPR lawful basis,
-   CCPA notice)? This depends on where the entity operates and where the
-   apps are listed, not on the code.
+   **CORRECTED 2026-08-02 (). The 2026-08-01 answer was wrong,
+   and it was wrong in the direction that made us look worse than we
+   are.** It was derived by reading the Apache format string rather than
+   by looking at what the logs actually contain. `combined` begins with
+   `%h`, and `%h` is *whoever opened the TCP connection*, which behind a
+   reverse proxy is the proxy. What follows was measured on the live
+   host, by classifying the logged source addresses:
+
+   - `explorer`, `encoder` and `hub` are all **Cloudflare-proxied**, and
+     origin-host has **no `mod_remoteip` loaded and no `CF-Connecting-IP`
+     handling configured anywhere in `/etc/apache2`**.
+   - So `%h` records a Cloudflare edge address, not a visitor's. Measured
+     2026-08-02 over a full day of traffic: explorer **844 of 846**
+     distinct sources inside Cloudflare's published ranges, encoder
+     **119 of 120**, hub **162 of 162**. The handful of others are
+     direct-to-origin callers, not wallet traffic through the normal
+     path.
+   - **We therefore do not retain wallet users' IP addresses**, and there
+     is no IP-to-address linkage anywhere in our logs to disclose.
+   - What we *do* retain is the request line. On `explorer` that carries
+     **wallet addresses** (857 of 7,520 request lines on the day this was
+     measured). `encoder` carries **none**: it takes addresses in POST
+     bodies, which `combined` does not log. `hub` carries none at all.
+     So the exposure was one host, never three.
+   - **Retention on that one host is now 1 day** (operator decision
+     2026-08-02, ): `/etc/logrotate.d/xchain-explorer`, `daily`,
+     `rotate 1`. The log lives at `/var/log/apache2/explorer/access.log`,
+     in its own directory so it falls outside the `*.log` glob in
+     `/etc/logrotate.d/apache2` that keeps every other vhost at 14 days.
+     Full request paths survive for the window in which anyone actually
+     debugs, and no wallet address survives past 24 hours.
+   - Cloudflare still sees and logs the real visitor IP **at the edge**,
+     under its own policy. That is a genuine third-party disclosure and
+     it stays disclosed. The company site `dankest.llc` is served
+     directly from Apache and is NOT behind Cloudflare.
+
+   **This is a claim with an expiry date, and now you know which one.**
+   Two configuration changes would silently make it false again, and
+   both are things a sensible admin might do for good reasons:
+
+   1. **Enabling `mod_remoteip`** (or any `CF-Connecting-IP` handling).
+      That is the *correct* fix if you ever want real client IPs for
+      analytics or fail2ban, and the moment it lands, `%h` becomes the
+      visitor's address and every store form's "not collected" answer
+      becomes false.
+   2. **Moving the explorer log back** under `/var/log/apache2/*.log`,
+      which silently restores 14-day retention of wallet addresses.
+
+   Re-measure both before each store submission, and change this file
+   before the policy:
+
+   ```
+   ssh origin-host.xchain.io "sudo apache2ctl -M | grep -i remoteip; \
+     sudo grep -rhE 'RemoteIPHeader|CF-Connecting-IP' /etc/apache2/"
+   ssh origin-host.xchain.io "sudo logrotate -d /etc/logrotate.conf 2>&1 \
+     | grep -E 'rotating pattern: /var/log/apache2'"
+   ```
+
+   The first must print nothing. The second must show
+   `/var/log/apache2/explorer/*.log ... (1 rotations)` alongside
+   `/var/log/apache2/*.log ... (14 rotations)`.
+2. **[Q2 SETTLED 2026-08-01 (operator, D1)]** ~~**Who is the data
+   controller of record, and what is the contact address for privacy
+   requests?**~~ The controller of record is **Dankest, LLC**, the
+   publisher name registered on both stores. The privacy contact is
+   **`privacy@dankest.llc`**, which was created that day and **proven to
+   receive**: a message sent from origin-host was accepted by Google
+   (`250 2.0.0 OK` via `aspmx.l.google.com`) and the operator confirmed
+   it arrived. The address had been published in the policy since
+   2026-04 without anyone checking it existed, which is the failure this
+   closes.
+
+   **The `legal@dankest.llc` candidate this question used to offer is
+   retired, and it is worth saying why rather than deleting it.** That
+   address appears in the licence header of nearly every file in the
+   repo, so it is the plausible-looking wrong answer for anyone filling
+   in a privacy-contact field from memory. It is the commercial-licensing
+   contact. Privacy requests go to `privacy@dankest.llc` and nowhere
+   else.
+
+   This is one of five identity surfaces that have to agree and that
+   reviewers cross-check, so it is never changed here alone; see
+   `docs/Trader_Identity.md`, which is the declaration of record for the
+   published set.
+
+   **Recorded 2026-08-02:** this question stayed open in THIS file for a
+   day after the policy's own status block recorded it as settled, which
+   is backwards. This file is the source of record and the policy is its
+   rendering; the rule at the top of this document ("if a fact changes,
+   change it here first") was broken in the direction that matters least
+   to notice and most to trust.
+3. **[Q3 PENDING]** **Is any jurisdiction-specific section required**
+   (GDPR lawful basis, CCPA notice)? This depends on where the entity
+   operates and where the apps are listed, not on the code. No such
+   section is published today, in this document or in the policy.
 
 ## Tor routing (desktop only)
 

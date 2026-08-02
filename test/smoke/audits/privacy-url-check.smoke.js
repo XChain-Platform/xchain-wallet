@@ -97,6 +97,57 @@ result = await checkPrivacyUrl({ fetchImpl: stub(respond({ body: pageWith('an un
 assert.equal(result.code, EXIT.FAILURE, 'a wrong page is a FAILURE');
 assert.match(result.errors.join(' '), /does not contain the policy text at all/, 'reported as wholly absent');
 
+// --- 3b. The edge rewrites the contact address (found live 2026-08-02). -----
+//
+// Cloudflare's Email Address Obfuscation replaces every mailto in the served
+// HTML with a `__cf_email__` span carrying the address XORed against its own
+// first byte, decoded browser-side by a bundled script. The deployed bytes
+// are correct and the generated page in xchain-websites carries a plain
+// mailto, so neither repo could see this: it only exists at the edge, and it
+// only showed up by running the tool against the live URL.
+//
+// Left undecoded it reported the hosted policy as DIVERGING at the contact
+// line on every single run. That is a false alarm on the one check whose
+// design goal is to never cry outage, and a check that is red when nothing is
+// wrong gets waived. The waived check is the one that misses the real 404,
+// which this tool exists because of.
+const cfObfuscate = (text, address) => {
+    const key = 0x7a;
+    const hex = [key, ...[...address].map((c) => c.charCodeAt(0) ^ key)]
+        .map((b) => b.toString(16).padStart(2, '0')).join('');
+    return text.replace(address,
+        `<a href="/cdn-cgi/l/email-protection#${hex}">`
+        + `<span class="__cf_email__" data-cfemail="${hex}">[email&#160;protected]</span></a>`);
+};
+
+const CONTACT = 'privacy@dankest.llc';
+assert.ok(POLICY_TEXT.includes(CONTACT),
+    `fixture assumption stale: the policy no longer publishes ${CONTACT}, which is what the edge rewrites`);
+
+const obfuscated = cfObfuscate(POLICY_TEXT, CONTACT);
+assert.notEqual(obfuscated, POLICY_TEXT, 'the fixture actually obfuscated something');
+assert.ok(!obfuscated.includes(CONTACT), 'and the plain address is genuinely gone from the served bytes');
+
+result = await checkPrivacyUrl({ fetchImpl: stub(respond({ body: pageWith(obfuscated) })) });
+assert.equal(result.code, EXIT.LIVE,
+    'a page whose only difference is Cloudflare email obfuscation is LIVE, not stale: the deployed bytes '
+    + 'are correct and the transformation is the edge\'s');
+assert.equal(result.errors.length, 0, 'and it reports nothing');
+
+// Degrade safely: a malformed payload must leave the text alone rather than
+// substitute plausible-looking garbage into a legal document.
+const garbled = pageWith(POLICY_TEXT).replace('</body>',
+    '<span class="__cf_email__" data-cfemail="zzzz">[email&#160;protected]</span></body>');
+result = await checkPrivacyUrl({ fetchImpl: stub(respond({ body: garbled })) });
+assert.equal(result.code, EXIT.LIVE, 'an undecodable obfuscation payload does not break an otherwise good page');
+
+// And the decoding must not paper over a genuinely stale contact address: an
+// obfuscated OLD address still has to read as divergence.
+const staleContact = cfObfuscate(POLICY_TEXT.replace(CONTACT, 'legal@dankest.llc'), 'legal@dankest.llc');
+result = await checkPrivacyUrl({ fetchImpl: stub(respond({ body: pageWith(staleContact) })) });
+assert.equal(result.code, EXIT.FAILURE,
+    'an obfuscated but WRONG contact address is still a failure; decoding must not become a blanket excuse');
+
 // --- 4. Could not tell. Never folded into either verdict. ------------------
 
 for (const status of [403, 429, 500, 503]) {

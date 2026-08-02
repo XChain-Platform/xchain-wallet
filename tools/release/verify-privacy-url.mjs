@@ -193,9 +193,54 @@ export function policyTextFromMarkdown(markdown) {
     return normalizeText(body);
 }
 
+/**
+ * Undo Cloudflare's Email Address Obfuscation.
+ *
+ * The edge rewrites every mailto in the served HTML into
+ * `<a href="/cdn-cgi/l/email-protection#<hex>"><span class="__cf_email__"
+ * data-cfemail="<hex>">[email&#160;protected]</span></a>`, and a bundled
+ * script decodes it in the browser. The hex is the address XORed byte by
+ * byte with its own first byte.
+ *
+ * Without this, the check reports the hosted policy as DIVERGING at the
+ * contact line on every run, while the deployed bytes are correct. That is a
+ * false alarm on the one check whose whole design goal is to never cry
+ * outage:  S10 built four separate fixes for exactly this class of
+ * bug in its Markdown-side comparison, and this is the same bug arriving
+ * from the edge instead. A check that is red when nothing is wrong gets
+ * waived, and a waived check is the one that misses the real 404.
+ *
+ * Found 2026-08-02 by running the tool against the live page after the
+ * apex flip, which is the only way this was ever going to surface: the
+ * generated page in the websites repo carries a plain `mailto:` and is
+ * correct, so nothing in either repo could see it.
+ */
+export function decodeCloudflareEmails(html) {
+    const decode = (hex) => {
+        if (!/^[0-9a-f]{4,}$/i.test(hex) || hex.length % 2) return null;
+        const key = parseInt(hex.slice(0, 2), 16);
+        let out = '';
+        for (let i = 2; i < hex.length; i += 2) {
+            out += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ key);
+        }
+        // Only accept something that actually looks like an address, so a
+        // malformed payload degrades to the original text rather than to
+        // plausible-looking garbage inside a legal document.
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out) ? out : null;
+    };
+
+    return String(html)
+        // The visible span, which is what the text comparison actually reads.
+        .replace(/<span[^>]*class="[^"]*__cf_email__[^"]*"[^>]*data-cfemail="([0-9a-f]+)"[^>]*>[\s\S]*?<\/span>/gi,
+            (whole, hex) => decode(hex) ?? whole)
+        // The href form, for pages where the address is the link target only.
+        .replace(/\/cdn-cgi\/l\/email-protection#([0-9a-f]+)/gi,
+            (whole, hex) => { const a = decode(hex); return a ? `mailto:${a}` : whole; });
+}
+
 /** The page's visible text: scripts, styles and tags out, entities folded. */
 export function pageTextFromHtml(html) {
-    const stripped = String(html)
+    const stripped = decodeCloudflareEmails(html)
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<!--[\s\S]*?-->/g, ' ')

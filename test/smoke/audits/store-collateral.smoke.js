@@ -118,6 +118,91 @@ for (const marker of [/\[UNSETTLED/, /\bPENDING\b/, /not yet publishable/i, /\bD
 assert.ok(/<!--[\s\S]*not yet publishable[\s\S]*-->/i.test(policyRaw),
     'Privacy_Policy.md must keep its internal status block while facts are pending');
 
+// --- 1c. The record and the policy agree on which questions are open ---
+//
+// Added 2026-08-02. The record's open-questions list and the policy's
+// internal status block are two accounts of the same thing, and they had
+// drifted: the policy recorded the data-controller question as SETTLED on
+// 2026-08-01 (D1: Dankest, LLC, privacy@dankest.llc, created and proven to
+// receive) while the record still listed it as an open question and offered
+// `legal@dankest.llc` as a candidate. That is backwards. This file is the
+// source of record and the policy is its rendering, and the record's own
+// rule says a fact changes here first.
+//
+// The two also numbered the same questions differently, so the policy's
+// "tracked in docs/Data_Collection.md" pointer resolved to the wrong row.
+// Stable `Q<n>` ids fix the pointer; this rule keeps the statuses honest.
+//
+// The comparison is on PENDING ids only. A settled question may legitimately
+// be dropped from the policy's block once nobody needs to be reminded of it,
+// but a question that is still open has to be open in both places, or one of
+// the two documents is telling a store reviewer the wallet is further along
+// than it is.
+const questionStatus = (text) => {
+    const found = new Map();
+    for (const [, id, status] of text.matchAll(/\bQ(\d+)\s+(SETTLED|PENDING)\b/g)) {
+        found.set(`Q${id}`, status);
+    }
+    return found;
+};
+
+const recordQs = questionStatus(record);
+const policyQs = questionStatus(policy);
+
+assert.ok(recordQs.size >= 2,
+    `only ${recordQs.size} Q<n> ids were found in Data_Collection.md; expected at least 2. The open-questions `
+    + 'list lost its ids, so the agreement check below is now vacuous.');
+assert.ok(policyQs.size >= 1,
+    `no Q<n> id was found in Privacy_Policy.md's status block; expected at least 1. It must cite the record's `
+    + 'own question ids rather than renumbering them, which is how the pointer broke in the first place.');
+
+const pendingIn = (m) => [...m].filter(([, s]) => s === 'PENDING').map(([id]) => id).sort();
+assert.deepEqual(pendingIn(policyQs), pendingIn(recordQs),
+    'Data_Collection.md and Privacy_Policy.md disagree about which questions are still open.\n'
+    + `  record pending: ${pendingIn(recordQs).join(', ') || '(none)'}\n`
+    + `  policy pending: ${pendingIn(policyQs).join(', ') || '(none)'}\n`
+    + 'The record is the source of record and the policy is its rendering, so a fact changes in the record '
+    + 'first. A question open in one and settled in the other means a store form is about to be filled in '
+    + 'from whichever copy the operator happened to open.');
+
+// The record's own status banner states how many questions are open. That is
+// a third copy of the same count, in the first thing anyone reads, and it said
+// "Three facts" for a day after the second was settled. Derived from the list.
+const bannerCount = read(DOCS.record).match(/\*\*Status: DRAFT\.\*\*\s*(\d+)\s+questions?/);
+assert.ok(bannerCount,
+    'docs/Data_Collection.md must state its open-question count as a numeral in the status banner '
+    + '(for example "**Status: DRAFT.** 1 question still needs an operator answer"), so the count can be '
+    + 'checked against the list instead of being spelled out and forgotten.');
+assert.equal(Number(bannerCount[1]), pendingIn(recordQs).length,
+    `docs/Data_Collection.md's status banner says ${bannerCount[1]} open question(s) while the list has `
+    + `${pendingIn(recordQs).length} (${pendingIn(recordQs).join(', ') || 'none'}). The banner is the first `
+    + 'thing anyone reads before filling in a store form.');
+
+// Every id the policy cites must exist in the record, or it is citing a row
+// that is not there. Caught in the direction the drift actually went.
+const orphans = [...policyQs.keys()].filter((id) => !recordQs.has(id));
+assert.deepEqual(orphans, [],
+    `Privacy_Policy.md cites ${orphans.join(', ')}, which docs/Data_Collection.md does not define. The policy `
+    + 'must cite the record\'s own question ids.');
+
+// The retired privacy-contact candidate must not come back. `legal@dankest.llc`
+// is the commercial-licensing address and it sits in the licence header of
+// nearly every file here, which makes it the plausible wrong answer for anyone
+// filling in a privacy-contact field from memory. Scoped to the record's
+// open-questions section so that naming it in order to retire it is fine:
+// a check that fires on correct writing is one people delete.
+const unsettledSection = read(DOCS.record).split('## Unsettled')[1] || '';
+const publishedContact = (read(DOCS.policy).match(/<(privacy@[^>]+)>/) || [])[1];
+assert.ok(publishedContact,
+    'Privacy_Policy.md must publish a privacy contact address, which the record is then held to.');
+assert.ok(unsettledSection.includes(publishedContact),
+    `docs/Data_Collection.md's open-questions section must name the privacy contact the policy actually `
+    + `publishes (${publishedContact}).`);
+assert.ok(!/whether privacy mail goes to\s*`?legal@/.test(unsettledSection.replace(/\s+/g, ' ')),
+    'docs/Data_Collection.md still offers legal@dankest.llc as a privacy-contact candidate. That question is '
+    + 'settled (D1) and legal@dankest.llc is the commercial-licensing address; privacy requests go to the '
+    + 'address the policy publishes.');
+
 // --- 2. The declaration must cover what the code actually does ---------
 //
 // Not a prose review - just that each disclosed egress destination is

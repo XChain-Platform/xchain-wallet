@@ -40,6 +40,7 @@ const DOCS = [
     'packages/extension/docs/STORE_LISTING_PACK.md',
     'packages/extension/docs/publish-log.md',
     'packages/extension/docs/store-correspondence.md',
+    'packages/extension/docs/DATA_DISCLOSURE.md',
 ];
 
 // Repo-relative paths only: a citation is a path if it starts at one of the

@@ -7,13 +7,20 @@ build/privacy.build.js strips every HTML comment before rendering.
 
 DRAFT, not yet publishable. Every statement about the wallet itself is
 verified against the code. What our servers keep was measured on the live
-hosts 2026-08-01 (combined access logs including client IP, rotated daily,
-kept 14 days; Cloudflare fronts the xchain.io hosts and keeps its own).
+hosts 2026-08-02 : the API hosts are Cloudflare-proxied and Apache
+logs the EDGE address, not the visitor, so no client IP is retained; the one
+log carrying wallet addresses, explorer, is now kept 1 day. Cloudflare fronts
+these hosts and keeps its own logs under its own policy.
 
-TWO ITEMS REMAIN, and both are decisions rather than facts. Both are
-tracked in docs/Data_Collection.md and owned by:
+ONE ITEM REMAINS. It is tracked in docs/Data_Collection.md, which is the
+source of record, and the ids below are that file's own question ids.
+test/smoke/audits/store-collateral.smoke.js fails if the two files disagree
+about which questions are still open. Until 2026-08-02 the two documents
+numbered the same questions differently, so this block's pointer landed on
+the wrong row of that file, and Q2 sat SETTLED here while it was still
+listed as an open question there.
 
-  1. SETTLED 2026-08-01 (operator, D1). The data controller of record is
+  Q2 SETTLED 2026-08-01 (operator, D1). The data controller of record is
      Dankest, LLC, the publisher name registered on both stores, and the
      privacy contact is privacy@dankest.llc, which was CREATED that day and
      proven to receive: a message from origin-host was accepted by Google
@@ -22,7 +29,7 @@ tracked in docs/Data_Collection.md and owned by:
      anyone checking it existed, which is the failure this closes. Still do
      not change it in this file alone: it is one of five identity surfaces
      that have to agree, and reviewers cross-check them.
-  2. PENDING (jurisdiction-specific sections). Whether a GDPR lawful-basis
+  Q3 PENDING (jurisdiction-specific sections). Whether a GDPR lawful-basis
      statement or a CCPA notice is required depends on where the company
      operates and where the apps are listed. No such section is published
      today, in this document or in the extension policy it replaced.
@@ -51,7 +58,7 @@ written about somebody else's build.
 
 **Publisher:** Dankest, LLC  
 **Applies to:** XChain Wallet in every form we ship: the web wallet, the browser extension, the desktop app for Windows, macOS and Linux, and the Android and iOS apps.  
-**Last updated:** 1 August 2026
+**Last updated:** 2 August 2026
 
 ---
 
@@ -85,7 +92,7 @@ Where that encrypted data physically sits depends on which version you installed
 
 ## What leaves your device, and where it goes
 
-**Your addresses go to a blockchain explorer.** To show balances and history, the wallet asks `explorer.xchain.io` about the addresses in your wallet. To prepare a transaction, it sends the addresses and amounts involved to `encoder.xchain.io`. These services run on our infrastructure. They see the addresses you hold and, like any web request, the IP address you connect from.
+**Your addresses go to a blockchain explorer.** To show balances and history, the wallet asks `explorer.xchain.io` about the addresses in your wallet. To prepare a transaction, it sends the addresses and amounts involved to `encoder.xchain.io`. These services run on our infrastructure. They see the addresses you hold. Your IP address reaches Cloudflare, which sits in front of them; our own servers do not record it, and the section "What our servers keep" below explains exactly what they do record.
 
 You can point the wallet at a different explorer or encoder in Settings, including one you run yourself. If you do, that operator sees this instead of us.
 
@@ -105,7 +112,11 @@ You can point the wallet at a different explorer or encoder in Settings, includi
 
 **Update checks.** These differ by version and are described in each section below. Where the wallet checks for updates, the request carries nothing but the request: no wallet address, no identifier, no account.
 
-**What our servers keep.** Measured on the live hosts on 1 August 2026, not assumed. `explorer.xchain.io`, `encoder.xchain.io`, `hub.xchain.io` and `downloads.xchain.io` each write an Apache access log in the standard "combined" format: your IP address, the time, the request, the response status, the referring page, and your browser's user-agent string. Those logs rotate **daily and are kept for 14 days**, then they are deleted. No account is attached to them, because there are no accounts, and we do not correlate them across services or use them to build a picture of a person.
+**What our servers keep.** Measured on the live hosts on 2 August 2026, not assumed, and corrected that day: an earlier version of this section claimed more than we actually keep.
+
+`explorer.xchain.io`, `encoder.xchain.io`, `hub.xchain.io` and `downloads.xchain.io` all sit behind Cloudflare. Because of how that is set up, the address our own servers write into their logs is **Cloudflare's, not yours**. We checked this rather than assuming it: across a full day of traffic, 844 of the 846 distinct addresses in the explorer log were Cloudflare's own, 119 of 120 on encoder, and every single one on hub and downloads. So **we do not keep your IP address.**
+
+What those logs do keep is the request itself: the time, what was asked for, the response status, the referring page and your browser's user-agent. On `explorer.xchain.io` the thing being asked for is often a wallet address, so that log is kept for **one day** and then deleted. The others keep no addresses at all: `encoder.xchain.io` receives them inside the body of a request, which is not written to the log, and `hub.xchain.io` never sees one. No account is attached to any of it, because there are no accounts, and we do not correlate across services or build a picture of a person.
 
 One thing we cannot control, so you should know it: those hosts sit behind **Cloudflare**, which absorbs attacks on our behalf. Cloudflare therefore sees requests to them and keeps its own logs under its own policy. Our company site, dankest.llc, is served directly and does not go through them.
 
