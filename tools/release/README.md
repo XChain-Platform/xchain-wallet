@@ -85,14 +85,37 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `verify-privacy-url.mjs` |  §5/D5 pre-submission check: is the public privacy-policy URL live, answering directly (no redirect hop), and serving this repo's current `docs/Privacy_Policy.md` word for word. Compares prose, not bytes, since the hosted page is rendered Markdown. Exits 0 live / 1 not live, redirecting, or stale / 2 config error / 3 inconclusive (403, timeout, network - never folded into live). **Do not use `curl` for this instead: Cloudflare answers plain tooling with 403 on every path of this domain, live page or not.** | Live, and green as of 2026-08-01: the apex flip landed and the URL serves the merged all-shells policy, confirmed through the edge in a browser and against the origin via `--html`. Takes operator-supplied bytes with `--html <file>` when Cloudflare 403s the host, the same way `verify-store.sh` takes a real store unpack rather than scraping |
 | `store-version-monitor.mjs` |  §2 publish monitor: compares each configured item's live Chrome Web Store version against `packages/extension/docs/publish-log.md`; a live version with no matching log row is the rogue-publish (compromised-publisher) signal. Exits 0 clean / 1 alert / 2 config error (item id unset or log unreadable) / 3 inconclusive (fetch failure or unrecognized page shape - never folded into clean). Run `node tools/release/store-version-monitor.mjs --help` for flags and the origin-host cron line. | Script built; NOT installed anywhere yet (see `docs/QA_Checklist.md` "Chrome Web Store release provenance") |
 
-### Installing the store-version monitor on origin-host (NOT done yet)
+### Installing the store-version monitor on origin-host (DEPLOYED 2026-08-01, DISARMED)
 
-This is a written install recipe, not a claim of an installed cron: no
-part of this session touched origin-host or any other production host,
-and the item IDs the monitor needs do not exist until the first upload
-happens (spec §2). An operator runs this after that upload, before
-flipping the item to public (§4 exit criteria; also tracked as a row in
-`docs/QA_Checklist.md` "Chrome Web Store release provenance").
+**Status: the script is on the host and the crontab entry is staged and
+commented out.** Arming it needs one thing that cannot exist yet, the
+store-assigned extension ID, so the last step waits for the first upload
+(§4 exit criteria; also a row in `docs/QA_Checklist.md` "Chrome Web Store
+release provenance"). It is disarmed rather than absent on purpose: with
+`CWS_MAIN_ITEM_ID` unset the script exits 2 and writes to stderr, so an
+armed cron would mail a config error every six hours and train everyone
+to ignore the one alert that matters.
+
+Everything else was verified running on origin-host: the log refresh, the
+parse, and a real request to the Chrome Web Store (exit 3, inconclusive,
+which is the correct answer for an item ID that does not exist).
+
+**Two things the original recipe below got wrong, corrected by doing it:**
+
+1. **`/opt/xchain` is root-owned**, so `scp` straight into it fails with
+   permission denied even though the files inside are `jdog`-owned. Copy
+   to `/tmp` and `sudo install -o jdog -g jdog -m 0755` into place.
+2. **`PUBLISH_LOG_PATH` is required and the recipe omitted it.** The
+   script defaults the log path relative to its own location in the repo,
+   which on the host resolves to `/packages/extension/docs/publish-log.md`
+   and does not exist, so the monitor would have exited 2 forever with a
+   valid item ID. The staged crontab line refreshes the log from
+   `origin/master` on each run and points `PUBLISH_LOG_PATH` at that copy,
+   which keeps ONE source of truth: a hand-copied log on the host goes
+   stale the moment a publish row is appended, and a stale log turns a
+   legitimate release into a rogue-publish ALERT.
+
+The original steps follow, still accurate for what they cover.
 
 1. Copy the script to the host - it is not part of any existing deploy,
    same as `feed-sweep.mjs` beside it (see that row's "host pending"
