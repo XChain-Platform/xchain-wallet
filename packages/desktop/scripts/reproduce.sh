@@ -58,55 +58,66 @@ echo "[reproduce] commit date=$(date -u -d "@${SOURCE_DATE_EPOCH}" '+%Y-%m-%d %H
 mkdir -p "${OUT_DIR}"
 OUT_DIR_ABS="$(cd "${OUT_DIR}" && pwd)"
 
-# --- 1b. The SDK this repo cannot build without -------------------------
+# --- 1b. The SDK, which is now an ordinary dependency --------------------
 #
-# packages/desktop depends on `xchain-sdk` as `link:../../../xchain-sdk`:
-# a filesystem link to a SIBLING REPOSITORY, three levels above the wallet
-# root. That is why the verification protocol in REPRODUCIBLE_BUILDS.md
-# has never been executable as written - it says to clone xchain-wallet
-# and run this script, and a clone has no such directory, so the renderer
-# build dies at `Rollup failed to resolve import "xchain-sdk/src/wallet.js"`.
+# THIS USED TO BE FATAL, AND THE FATAL IS GONE ( D8 / ).
+# packages/desktop depended on `xchain-sdk` as `link:../../../xchain-sdk`,
+# a filesystem link to a SIBLING REPOSITORY three levels above the wallet
+# root, which is why the protocol in REPRODUCIBLE_BUILDS.md was never
+# executable as written: it says to clone xchain-wallet and run this
+# script, a clone has no such directory, and the renderer build died at
+# `Rollup failed to resolve import "xchain-sdk/src/wallet.js"`.
 #
-# Resolving that properly is a distribution decision nobody has taken (the
-# SDK is `private: true` and unpublished): publish it, vendor it, or pin it
-# by commit. Until then this script can still reproduce for anyone who has
-# both repos checked out side by side, which is the maintainer and the
-# release procedure. It builds from a detached worktree of the SDK's
-# committed state, never the sibling's working tree, and records the exact
-# SDK commit in the manifest - because a build whose second input is
-# whatever happened to be checked out is not a reproduction of anything.
+# The distribution decision that blocked it has been taken. The SDK is
+# published, the three shells depend on `npm:@dankest-llc/xchain-sdk@X.Y.Z`,
+# and the lockfile carries its integrity hash - so the SDK now arrives with
+# every other dependency, from the lockfile, pinned. A standalone clone
+# reproduces, which is the whole promise of this file.
+#
+# The sibling checkout is therefore OPTIONAL and is used for one thing: a
+# maintainer who built with `pnpm run sdk:link` is not reproducing the
+# published dependency, and the manifest should say which SDK commit they
+# actually used rather than implying the pinned one. Absent, the pinned
+# version from the lockfile is the answer and is recorded instead.
 SDK_DIR="${XCHAIN_SDK_DIR:-${REPO_ROOT}/../xchain-sdk}"
 SDK_REF="${XCHAIN_SDK_REF:-HEAD}"
-if [ ! -d "${SDK_DIR}/.git" ]; then
-    cat >&2 <<MSG
-[reproduce] FATAL: no xchain-sdk repository at ${SDK_DIR}
-
-  packages/desktop depends on it as link:../../../xchain-sdk, so the
-  renderer cannot be bundled without it. The SDK is not published, so a
-  standalone clone of xchain-wallet cannot currently be reproduced by a
-  third party at all; see REPRODUCIBLE_BUILDS.md.
-
-  Check out xchain-sdk beside xchain-wallet, or point XCHAIN_SDK_DIR at it.
-MSG
-    exit 1
+SDK_COMMIT=""
+SDK_PINNED="$(node -e "
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync('${REPO_ROOT}/packages/desktop/package.json', 'utf8'));
+    process.stdout.write(pkg.dependencies?.['xchain-sdk'] || 'UNKNOWN');
+" 2>/dev/null || echo UNKNOWN)"
+if [ -d "${SDK_DIR}/.git" ]; then
+    SDK_COMMIT="$(git -C "${SDK_DIR}" rev-parse --verify "${SDK_REF}^{commit}")"
+    echo "[reproduce] sdk sibling=${SDK_DIR} commit=${SDK_COMMIT} (pinned dep: ${SDK_PINNED})"
+else
+    echo "[reproduce] sdk from the lockfile: ${SDK_PINNED} (no sibling checkout, which is fine)"
 fi
-SDK_COMMIT="$(git -C "${SDK_DIR}" rev-parse --verify "${SDK_REF}^{commit}")"
-echo "[reproduce] sdk=${SDK_DIR} commit=${SDK_COMMIT}"
 
 # --- 2. Worktree checkout (isolates reproduction from local changes) ---
 WORKTREE_DIR="$(mktemp -d -t xchain-reproduce.XXXXXX)"
-SDK_WORKTREE_DIR="$(mktemp -d -t xchain-reproduce-sdk.XXXXXX)"
+SDK_WORKTREE_DIR=""
 cleanup() {
     git -C "${REPO_ROOT}" worktree remove --force "${WORKTREE_DIR}" 2>/dev/null || rm -rf "${WORKTREE_DIR}"
-    git -C "${SDK_DIR}" worktree remove --force "${SDK_WORKTREE_DIR}" 2>/dev/null || rm -rf "${SDK_WORKTREE_DIR}"
+    if [ -n "${SDK_WORKTREE_DIR}" ]; then
+        git -C "${SDK_DIR}" worktree remove --force "${SDK_WORKTREE_DIR}" 2>/dev/null || rm -rf "${SDK_WORKTREE_DIR}"
+    fi
 }
 trap cleanup EXIT
 
 git worktree add --detach "${WORKTREE_DIR}" "${COMMIT_SHA}"
 echo "[reproduce] worktree at ${WORKTREE_DIR}"
 
-git -C "${SDK_DIR}" worktree add --detach "${SDK_WORKTREE_DIR}" "${SDK_COMMIT}"
-echo "[reproduce] sdk worktree at ${SDK_WORKTREE_DIR}"
+# Only when a sibling SDK exists, and still from its COMMITTED state rather
+# than its working tree: a build whose second input is whatever a neighbour
+# happened to leave checked out is not a reproduction of anything. With no
+# sibling the container installs the pinned SDK from the registry like any
+# other dependency, which is the case a third-party verifier is in.
+if [ -n "${SDK_COMMIT}" ]; then
+    SDK_WORKTREE_DIR="$(mktemp -d -t xchain-reproduce-sdk.XXXXXX)"
+    git -C "${SDK_DIR}" worktree add --detach "${SDK_WORKTREE_DIR}" "${SDK_COMMIT}"
+    echo "[reproduce] sdk worktree at ${SDK_WORKTREE_DIR}"
+fi
 
 # --- 3. Pull the pinned toolchain from the ref being reproduced --------
 #
@@ -171,10 +182,14 @@ docker run --rm \
     -e "HOME=/workspace/.reproduce-home" \
     -e "XCHAIN_WALLET_COMMIT=${COMMIT_SHA}" \
     -e "XCHAIN_SDK_COMMIT=${SDK_COMMIT}" \
+    -e "XCHAIN_SDK_PINNED=${SDK_PINNED}" \
     -v "${WORKTREE_DIR}:/workspace" \
-    `# /workspace/packages/desktop/../../.. is "/", so the link: target
-     # xchain-sdk resolves to exactly this path inside the container.` \
-    -v "${SDK_WORKTREE_DIR}:/xchain-sdk" \
+    `# The SDK mount is now conditional. It is only meaningful when the
+     # dependency is a link: - under the pinned registry dependency the
+     # container installs the SDK from the lockfile and /xchain-sdk is
+     # never consulted. Mounting it anyway would be harmless but
+     # misleading, since it would suggest the sibling was an input.` \
+    ${SDK_WORKTREE_DIR:+-v "${SDK_WORKTREE_DIR}:/xchain-sdk"} \
     -v "${OUT_DIR_ABS}:/out" \
     "${IMAGE_TAG}"
 

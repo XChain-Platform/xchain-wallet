@@ -131,7 +131,13 @@ for (const [shell, viteConfigPath, pkgPath] of [
         ['repl', 'repl-browser.js'],
     ]) {
         assert.ok(
-            new RegExp(`\\b${mod}:\\s*${mod}BrowserShim`).test(cfg),
+            // Object form (`ws: wsBrowserShim`) or array form
+            // (`{ find: 'ws', replacement: wsBrowserShim }`): the web config uses
+            // the second since  added regex finds for the surface swaps.
+            new RegExp(
+                `\\b${mod}:\\s*${mod}BrowserShim`
+                + `|find: '${mod}', replacement: ${mod}BrowserShim`,
+            ).test(cfg),
             `${shell} vite.config aliases ${mod} -> ${mod}BrowserShim`,
         );
         assert.ok(
@@ -143,8 +149,8 @@ for (const [shell, viteConfigPath, pkgPath] of [
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
     assert.match(
         pkg.dependencies?.['xchain-sdk'] || '',
-        /^(?:link:|\^1\.(?:1[1-9]|[2-9]\d)\.0$)/,
-        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline): or link: for sibling-repo dev`,
+        /^npm:@dankest-llc\/xchain-sdk@\d+\.\d+\.\d+$/,
+        `${shell} depends on xchain-sdk as an EXACT registry alias (npm:@dankest-llc/xchain-sdk@X.Y.Z). 'link:' is refused:  D8 moved dev linking into node_modules (pnpm run sdk:link) so a committed manifest cannot un-pin the SDK a release is signed over`,
     );
     assert.match(
         pkg.devDependencies?.['vite-plugin-node-polyfills'] || '',

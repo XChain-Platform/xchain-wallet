@@ -33,32 +33,46 @@ from `tools/release/toolchain.json`, and the guard test holds the release
 lane to the same list so neither side can quietly ship an arch the other
 does not cover.
 
-## What a third party cannot do yet, and why
+## A third party CAN now reproduce, and could not until 2026-08-01
 
-**Reproduction currently requires both repositories, so it is available to
-the maintainer and not to the public.** `packages/desktop` depends on the
-SDK as `"xchain-sdk": "link:../../../xchain-sdk"` - a filesystem link to a
-sibling repository, three levels above this one. Someone who follows the
-protocol below against a clone of `xchain-wallet` alone gets:
+This section used to say the opposite, and the reason it changed is worth
+keeping. `packages/desktop` depended on the SDK as
+`"xchain-sdk": "link:../../../xchain-sdk"`, a filesystem link to a sibling
+repository three levels above this one, and `xchain-sdk` was `private: true`
+and unpublished. So anyone following the protocol below against a clone of
+`xchain-wallet` alone got:
 
 ```
 [vite]: Rollup failed to resolve import "xchain-sdk/src/wallet.js"
 ```
 
-`xchain-sdk` is `private: true` and unpublished, so there is nothing for
-them to install. This is not a bug in the container or the script; it is
-the shape of the dependency, and it means the Level-2 claim at the top of
-this file is, today, a claim about a build only we can run. Closing it is
-a distribution decision (publish the SDK, vendor it into this repo, or
-depend on it by pinned git commit) and it is registered under 
-rather than quietly patched here.
+with nothing they could install to fix it. That made the Level-2 claim at
+the top of this file a claim about a build only we could run.
 
-What works now: with both repos checked out side by side, `reproduce.sh`
-builds from a detached worktree of the SDK's committed state - never the
-sibling's working tree - and records the exact SDK commit in the manifest
-header. That matters even for us, because the same wallet tag against a
-different SDK commit is a different artifact, and without the header two
-manifests could disagree for a reason neither one stated.
+**The distribution decision has been taken ( D8, , ).**
+The SDK is published, all three shells depend on
+`npm:@dankest-llc/xchain-sdk@X.Y.Z`, and `pnpm-lock.yaml` carries its
+integrity hash, so the SDK arrives from the lockfile like every other
+dependency and a standalone clone reproduces. Verified by doing it: a copy
+of this repo with no sibling checkout anywhere near it installs
+`--frozen-lockfile` and builds the web and extension bundles, and the
+dev-mock gate confirms the real SDK is in both.
+
+The alias is what keeps the diff small: the package is installed under the
+folder name `xchain-sdk`, so every `import 'xchain-sdk'` in the codebase is
+unchanged, while the lockfile now names the exact tarball.
+
+Two things follow that are easy to miss:
+
+- **The pin is what a release is signed over.** A `link:` records a path,
+  not a version, so before this change nothing in a signed manifest said
+  WHICH SDK went into the artifacts. Now the lockfile does.
+- **A maintainer using `pnpm run sdk:link` is not reproducing the pinned
+  dependency.** That command swaps the installed SDK for a symlink to a
+  local checkout, inside `node_modules` so no manifest or lockfile changes.
+  When a sibling checkout is present `reproduce.sh` still records its exact
+  commit in the manifest header, because the same wallet tag against a
+  different SDK is a different artifact.
 
 ## What's NOT reproducible
 

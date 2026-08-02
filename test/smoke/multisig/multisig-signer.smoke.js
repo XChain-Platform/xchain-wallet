@@ -311,8 +311,8 @@ for (const [shell, pkgPath] of [
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = readFileSync(pkgPath, 'utf8');
-    assert.ok(/"xchain-sdk":\s*"(?:link:|\^1\.(?:1[2-9]|[2-9]\d)\.0)/.test(pkg),
-        `${shell} pkg pins xchain-sdk ≥ ^1.12.0 or uses link: for sibling-repo dev`);
+    assert.ok(/"xchain-sdk":\s*"npm:@dankest-llc\/xchain-sdk@\d+\.\d+\.\d+"/.test(pkg),
+        `${shell} depends on xchain-sdk as an EXACT registry alias (npm:@dankest-llc/xchain-sdk@X.Y.Z). 'link:' is refused:  D8 moved dev linking into node_modules (pnpm run sdk:link) so a committed manifest cannot un-pin the SDK a release is signed over`);
 }
 
 // ─── Signer subclasses still pass the rest of their existing smoke ──

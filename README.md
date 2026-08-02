@@ -84,7 +84,17 @@ cd xchain-wallet
 pnpm install
 ```
 
-The repository depends on a sibling `xchain-sdk` checkout. Both `packages/web/package.json` and `packages/extension/package.json` link `xchain-sdk` from `../../../xchain-sdk`. Clone [xchain-sdk](https://github.com/XChain-Platform/xchain-sdk) next to `xchain-wallet` before installing.
+No sibling checkout is needed. The shells depend on the SDK as a published package, `npm:@dankest-llc/xchain-sdk@X.Y.Z`, installed under the folder name `xchain-sdk` so every `import 'xchain-sdk'` works unchanged. `pnpm install` is all it takes, and the lockfile pins the exact version a release is built and signed over.
+
+**Working on the SDK and the wallet at the same time:**
+
+```bash
+pnpm run sdk:link      # point node_modules at a local checkout
+pnpm run sdk:status    # show which SDK each shell is resolving
+pnpm run sdk:unlink    # go back to the pinned published version
+```
+
+`sdk:link` looks for `../xchain-sdk` and takes `--sdk <path>` or `XCHAIN_SDK_PATH` otherwise. It changes nothing but symlinks inside `node_modules`, so no manifest or lockfile edit can escape into a commit and quietly un-pin the SDK for everyone else. Forgetting to run it gives you the pinned package, which is the safe direction to fail in.
 
 ### Run the web SPA
 

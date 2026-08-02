@@ -77,9 +77,10 @@ const polyfillShimResolver = {
 };
 
 // xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`;
-// resolve the subpath from the SDK's own context (see the web config).
+// resolve the subpath from the SDK's own context (see the web config),
+// through node_modules rather than a sibling directory .
 const musigBaseCrypto = createRequire(
-    fileURLToPath(new URL('../../../xchain-sdk/package.json', import.meta.url)),
+    createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
 
 function copyManifestPlugin() {

@@ -185,8 +185,18 @@ const polyfillShimResolver = {
 // which would 504 the SDK in the browser. Resolve the real file from the
 // SDK's own context (works on Mac and the VM share alike) and alias the
 // bare subpath to it below.
+//
+// RESOLVED THROUGH node_modules, NOT through a sibling directory .
+// This read `../../../xchain-sdk/package.json`, a path three levels above
+// the wallet root, so a build needed the SDK checked out beside the wallet
+// and every CI lane died here: `release.yml` clones only this repo. The
+// dependency is now a registry install, so the SDK is an ordinary package
+// and `require.resolve` finds it wherever the installer put it - including
+// under `pnpm run sdk:link`, which swaps the same node_modules entry for a
+// symlink and therefore keeps resolving the musig subpath from the linked
+// tree exactly as before.
 const musigBaseCrypto = createRequire(
-    fileURLToPath(new URL('../../../xchain-sdk/package.json', import.meta.url)),
+    createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
 
 export default defineConfig({

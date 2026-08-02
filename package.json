@@ -44,7 +44,10 @@
         "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y",
         "release:gate": "pnpm run ci && pnpm run test:e2e:regtest",
         "release:sign": "bash tools/release/sign.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/$(node -p \"require('./package.json').version\")",
-        "release:verify": "bash tools/release/verify.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/$(node -p \"require('./package.json').version\")"
+        "release:verify": "bash tools/release/verify.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/$(node -p \"require('./package.json').version\")",
+        "sdk:link": "node tools/dev/sdk-link.mjs link",
+        "sdk:unlink": "node tools/dev/sdk-link.mjs unlink",
+        "sdk:status": "node tools/dev/sdk-link.mjs status"
     },
     "pnpm": {
         "overrides": {
