@@ -41,7 +41,7 @@ machine on 2026-08-02 with cache-busting query strings and an empty user agent.
 | 0b | Hardware-key 2FA on the console account (K8) | 🟡 **passkey in place 2026-08-02; two hardware keys ordered, not yet enrolled.** Finish when they arrive: enrol both, then remove SMS/Authenticator fallback |
 | 0c | K9 + K10 exist on the release machine | ✅ done 2026-08-01 |
 | 0d | K10's sealed offline copy | ⬜ **operator, still owed** (K10 was generated online by decision; the offline copy is now the only protection against losing it) |
-| 0e | Privacy policy at a fetchable public URL | ⚠️ URL exists (`https://xchain.io/wallet/privacy/` → 200) but the **deployed text is stale**; see below |
+| 0e | Privacy policy at a fetchable public URL | ✅ **`https://xchain.io/wallet/privacy/` → 200, and the corrected text is live** (re-measured 2026-08-02 after the deploy); see below |
 | 0f | Country availability decided (D8) | ✅ **decided 2026-08-02: worldwide minus named exclusions**, list in `PLAY_LISTING.md` |
 | 0g | Data safety answers settled | ✅ settled 2026-08-02 |
 | 0h | `verification-metadata.xml` committed | ⬜, reviewed, awaiting the commit |
@@ -62,36 +62,32 @@ as "the privacy policy still needs publishing", which was a URL shape mistaken f
 a missing page. The Cloudflare 403 that pushed the choice to `dankest.llc` in the
 first place no longer reproduces either ().
 
-**⚠️ The real blocker is the CONTENT, not the URL ().** Fetched and read
-2026-08-02, the live page is the **pre-correction** policy: it is dated 1 August
-2026 and says the wallet's first-party hosts log "your IP address … kept for 14
-days". `docs/Privacy_Policy.md` in this repo says the opposite, on the strength of
-a measurement taken the next day: those hosts sit behind Cloudflare, so the address
-written into our logs is **Cloudflare's, not the user's**, and the explorer log is
-kept for **one day**, not fourteen.
+**The content was the real blocker, and it CLEARED the same day (,).** For part of 2026-08-02 the live page was the pre-correction policy:
+dated 1 August and saying the first-party hosts logged "your IP address … kept
+for 14 days", while the repo said the opposite after re-measuring - those hosts
+sit behind Cloudflare, so the address in our logs is **Cloudflare's, not the
+user's**, and the explorer log is kept **one day**. Filling the forms in that
+window would have put answers derived from the new measurement in front of a
+reviewer fetching the old text, which is the mismatch §5 calls a rejection class.
 
-That correction is **uncommitted**, so it is not deployed. And `DATA_SAFETY.md` and
-`PRIVACY_NUTRITION_LABELS.md` were both rewritten against the corrected reading when was settled. So filling the forms today would put answers derived from the
-new measurement in front of a reviewer who fetches the old text - which is exactly
-the form-versus-policy mismatch §5 calls a rejection class, and a credibility hit
-for a privacy-forward wallet.
+**Re-measured after the deploy landed:** the live page is dated **2 August 2026**,
+says **"we do not keep your IP address"**, says "kept for one day", and no longer
+contains "14 days". Policy, `DATA_SAFETY.md` and the observable traffic now agree.
 
-**And it is not simply "commit and deploy", which is what this said first.** That
-file's own header reads `DRAFT, not yet publishable`, and one question is still
-open in `docs/Data_Collection.md`: **Q3, whether a GDPR lawful-basis statement or
-a CCPA notice is required**, which depends on where the company operates and
-where the apps are listed. Publishing the corrected text while that section is
-missing trades a stale accuracy problem for a fresh completeness one.
+One thing to know rather than trip over: `docs/Privacy_Policy.md` still carries a
+`DRAFT, not yet publishable` note and **Q3 is still open** in
+`docs/Data_Collection.md` (whether a GDPR lawful-basis statement or a CCPA notice
+is required). Both live inside HTML comments that `build/privacy.build.js` strips,
+so neither reaches the published page, and neither was treated as blocking
+publication. Q3 remains a content question worth answering; it is not a gate on
+this form.
 
-**Order of operations:**
+**Before you open the form, re-fetch anyway.** One command, and it is the only
+thing standing between a correct set of answers and a stale page:
 
-1. Answer Q3 (operator/legal). It is the last open question in
-   `docs/Data_Collection.md`.
-2. Drop the DRAFT header from `docs/Privacy_Policy.md` and commit it.
-3. Deploy to `xchain.io/wallet/privacy/`.
-4. Re-fetch and confirm the live page says "we do not keep your IP address" and
-   is dated 2 August 2026 or later.
-5. Only then open the store form.
+```
+curl -s https://xchain.io/wallet/privacy/ | grep -c 'do not keep your IP address'
+```
 
 **0b and 0d are the two custody rows, and they are the ones a schedule quietly
 eats.** §4 calls the console account the worst compromise in the table: an attacker
