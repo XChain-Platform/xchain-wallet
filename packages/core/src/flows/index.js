@@ -141,6 +141,11 @@ export {
     publicFileActionString,
     gatedBatchActionString,
 } from './fileSizeLimits.js';
+export {
+    signerSupportsTapscript,
+    encoderSignerOptions,
+    TAPSCRIPT_CAPABLE_SOURCES,
+} from './signerCapability.js';
 export { getProjectForTick } from './projectQueries.js';
 export { getMessagingInbox, getMessagingInboxSweep } from './messagingInbox.js';
 export {
