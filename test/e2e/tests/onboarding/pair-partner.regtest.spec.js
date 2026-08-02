@@ -237,6 +237,81 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                     .toBe(true);
             });
 
+            await test.step(': the QR hand-off this lane exists for does not render', async () => {
+                // Everything else in this spec moves the pairing code as TEXT,
+                // which is the one thing a real air-gapped pair cannot do: the
+                // offline half shares no clipboard with the online one. The
+                // screen's answer to that is a QR. It is not drawn.
+                //
+                // MEASURED, not reasoned: a DEFAULT wallet has three mainnet
+                // chains active, and its payload is ~1900 characters against the
+                // route's own MAX_QR_CHARS of 1200 - so `qrTooBig` is true and
+                // the exchange screen renders "too many chains switched on for a
+                // single QR code. Copy the text below instead" with no QR at all.
+                // Three chains is not an exotic configuration; it is what every
+                // wallet ships with, so the QR branch is unreachable in practice.
+                //
+                // The wallet already owns the fix: `AnimatedQrFrames` takes an
+                // ARRAY of frames and §20.3 chunks PSBTs across them with
+                // `encodeXcwChunks`, and `detectQrContent` already classifies an
+                // `xcw-chunk`. This lane passes `frames={[localCode]}` - one
+                // frame - and neither side wires the collector.
+                //
+                // Pinned as the CURRENT behaviour on purpose. The moment the
+                // payload is chunked (or shrunk past the cap) the else-branch
+                // below runs instead and actually decodes the QR, so this step
+                // keeps doing real work rather than needing a rewrite.
+                const code = watcherCode.code;
+                const qrWrap = watcher.page.getByTestId('animated-qr-frames');
+                const tooBig = watcher.page.getByText(/too many chains switched on for a single QR/i);
+
+                if (await qrWrap.count() === 0) {
+                    await expect(tooBig,
+                        'the exchange screen shows neither a QR nor the "too many chains" notice, so '
+                        + 'the partner is given no hand-off mechanism and no explanation either')
+                        .toBeVisible({ timeout: 30_000 });
+                    expect(code.length > 1200,
+                        `no QR was drawn, but the payload is only ${code.length} characters, which is `
+                        + 'INSIDE the 1200-character cap - so something other than size is suppressing '
+                        + 'it and this is a different defect from ')
+                        .toBe(true);
+                    return;
+                }
+
+                // The fixed world: a QR exists, so it has to be readable by the
+                // same decoder a partner device would point at the screen, and
+                // it has to carry the code printed beside it. Decoded from the
+                // LOADED <img> rather than by re-fetching its data URL: the
+                // wallet ships a strict CSP, and reading the pixels the browser
+                // already painted is closer to what a camera sees.
+                const img = qrWrap.locator('img');
+                await expect(img, 'the QR wrapper mounted but never drew a frame')
+                    .toBeVisible({ timeout: 30_000 });
+                const decoded = await watcher.page.evaluate(async () => {
+                    if (typeof window.BarcodeDetector !== 'function') return { skipped: true };
+                    const el = document.querySelector('[data-testid="animated-qr-frames"] img');
+                    if (!el) return { missing: true };
+                    if (!el.complete) await new Promise((r) => { el.onload = r; el.onerror = r; });
+                    const bitmap = await createImageBitmap(el);
+                    const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+                    const codes = await detector.detect(bitmap);
+                    return { value: codes.length ? codes[0].rawValue : null, w: bitmap.width, h: bitmap.height };
+                });
+                expect(decoded.skipped, 'this browser has no BarcodeDetector, so the QR was not read')
+                    .toBeUndefined();
+                expect(decoded.missing, 'the QR image vanished between the wait and the read')
+                    .toBeUndefined();
+                expect(decoded.value !== null,
+                    `the QR the wallet shows its partner could NOT be decoded at the size it is drawn `
+                    + `(${decoded.w}x${decoded.h} for a ${code.length}-character payload). A partner `
+                    + 'pointing a camera at this screen gets nothing')
+                    .toBe(true);
+                expect(decoded.value === code,
+                    'the QR decodes, but to something other than the pairing code printed beside it, '
+                    + 'so the two halves of the screen disagree about what is being handed over')
+                    .toBe(true);
+            });
+
             await test.step('PRIVACY: the code carries public material only', async () => {
                 const payload = decodePairingCode(watcherCode.code);
 
