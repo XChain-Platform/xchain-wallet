@@ -319,8 +319,17 @@ export function TokenWizard({ walletId, onBack }) {
                 setFormError('Parent ticker is required for subtokens.');
                 return;
             }
-            if (!/^[A-Za-z0-9]+$/.test(parentToken)) {
-                setFormError('Parent ticker must be A–Z, 0–9.');
+            // The parent is a REFERENCE to a token that already exists, not a
+            // name being coined here, so it has to be able to address what the
+            // ledger actually holds. A parent may itself be a subtoken: the
+            // indexer resolves a child's parent as `parts.slice(0,-1).join('.')`
+            // (issue.js), so `A.B.C` is a child of `A.B` and nests to any depth,
+            // priced at the same discounted ISSUE_SUBTOKEN rate. Demanding a
+            // single alphanumeric run made every grandchild uncreatable from the
+            // only surface that can author a subtoken at all.
+            if (!/^[A-Za-z0-9]+(\.[A-Za-z0-9]+)*$/.test(parentToken.trim())) {
+                setFormError('Parent ticker must be A–Z, 0–9, with a dot between levels '
+                    + '(PARENT, or PARENT.CHILD for a deeper one).');
                 return;
             }
         }
@@ -1040,7 +1049,8 @@ function renderDetailsStage({
             {show.parentToken ? (
                 <Input
                     label="Parent ticker"
-                    hint="An existing token you own. The subtoken's full ticker will be PARENT.CHILD."
+                    hint={'An existing token you own, which can itself be a subtoken. '
+                        + "The new token's full ticker will be PARENT.CHILD."}
                     value={parentToken}
                     onChange={(e) => setParentToken(e.target.value.toUpperCase())}
                     autoCapitalize="characters"
