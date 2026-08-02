@@ -194,9 +194,20 @@ docker run --rm \
     "${IMAGE_TAG}"
 
 # --- 6. Emit summary ---------------------------------------------------
-echo "[reproduce] done. Manifest:"
+echo "[reproduce] done. Packaged manifest:"
 cat "${OUT_DIR_ABS}/RELEASE_HASHES.txt"
 echo
-echo "Compare the above against the official RELEASE_HASHES.md in the"
-echo "release tag's attachments. Mismatches indicate either a build"
-echo "environment drift (toolchain pinning bug) or supply-chain tampering."
+cat <<'MSG'
+[reproduce] These are the PACKAGED Linux artifacts, under the same
+[reproduce] filenames the release publishes, so this manifest compares
+[reproduce] directly with the official one:
+[reproduce]
+[reproduce]   diff <(grep -v '^#' official.txt | grep -E '\.(AppImage|deb)$' | sort) \
+[reproduce]        <(grep -v '^#' <OUT>/RELEASE_HASHES.txt | sort)
+[reproduce]
+[reproduce] A zero-byte diff means our published bytes are what this
+[reproduce] source produces. A mismatch indicates build-environment drift
+[reproduce] (a toolchain pinning bug) or supply-chain tampering; the
+[reproduce] per-file UNPACKED_HASHES.txt beside it is what narrows a
+[reproduce] mismatch down to the file that moved.
+MSG

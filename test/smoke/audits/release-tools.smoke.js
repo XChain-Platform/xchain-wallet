@@ -144,12 +144,24 @@ const ARTIFACTS = [
     // Spaces are deliberate: electron-builder's defaults embed
     // productName ("XChain Wallet"), and the manifest + checksum
     // round trip has to survive them.
+    //
+    // Both arches of every desktop lane, because the gate now requires
+    // them ( §8). This list previously held one arch, an
+    // un-suffixed `Setup 9.9.9.exe` and an arch-less `-win.zip`, and the
+    // gate signed it without complaint - which is precisely the release
+    // shape that would have stranded every arm64 install.
+    'XChain Wallet-9.9.9-x64.dmg',
     'XChain Wallet-9.9.9-arm64.dmg',
+    'XChain Wallet-9.9.9-x64-mac.zip',
     'XChain Wallet-9.9.9-arm64-mac.zip',
-    'XChain Wallet Setup 9.9.9.exe',
-    'XChain Wallet-9.9.9-win.zip',
+    'XChain Wallet Setup 9.9.9-x64.exe',
+    'XChain Wallet Setup 9.9.9-arm64.exe',
+    'XChain Wallet-9.9.9-x64-win.zip',
+    'XChain Wallet-9.9.9-arm64-win.zip',
     'XChain Wallet-9.9.9.AppImage',
+    'XChain Wallet-9.9.9-arm64.AppImage',
     'xchain-wallet_9.9.9_amd64.deb',
+    'xchain-wallet_9.9.9_arm64.deb',
 ];
 
 const work = mkdtempSync(join(tmpdir(), 'xc-rel-'));
@@ -299,7 +311,10 @@ try {
     // 6. A required artifact is missing: without this gate the manifest
     //    is internally perfect and describes a release that never built.
     {
-        const r = sh(signArgs(stage([], ['XChain Wallet Setup 9.9.9.exe'])), { env: gateEnv });
+        const r = sh(signArgs(stage([], [
+            'XChain Wallet Setup 9.9.9-x64.exe',
+            'XChain Wallet Setup 9.9.9-arm64.exe',
+        ])), { env: gateEnv });
         check('sign.sh refuses a partial artifact set', r.status === 1, `exit ${r.status}`);
         check('sign.sh names the unmatched required pattern',
             /MISSING.*\*\.exe/.test(r.stderr), r.stderr);
@@ -486,6 +501,52 @@ try {
         const tampered = sh([VERIFY, '--input', dir, '--tag', TAG, '--no-sig'], { env });
         check('verify.sh catches a tampered artifact', tampered.status === 1,
             `${tampered.stdout}${tampered.stderr}`);
+
+        // --- verify.sh must be able to read what verify.sh writes -------
+        //
+        // Found 2026-08-02 by running the submission ceremony's Phase 4 step
+        // against the real v0.334.0 CI artifact: `--recompute` wrote a
+        // manifest that `verify.sh` then REFUSED, on any tag. The profile
+        // check was gated on xr_has_header, but a recompute manifest carries
+        // the same "# manifest-version: 2" line a signed one does, so the
+        // check ran against exactly the manifests documented to have no
+        // profile lines.
+        //
+        // It matters more than a tool arguing with itself. Signing is still
+        // blocked on the release-key ceremony, so --recompute is the ONLY way
+        // an operator can hash-verify an artifact today, and the runbook's
+        // Phase 4 sends them down it.
+        const rt = stage();
+        rmSync(join(rt, 'RELEASE_HASHES.txt'), { force: true });
+        rmSync(join(rt, 'RELEASE_HASHES.txt.asc'), { force: true });
+        const recomputed = sh([VERIFY, '--input', rt, '--recompute'], { env });
+        check('verify.sh --recompute writes a manifest', recomputed.status === 0, recomputed.stderr);
+        const rtManifest = readFileSync(join(rt, 'RELEASE_HASHES.txt'), 'utf8');
+        check('and stamps it as not describing a release',
+            /^# tag: \(none\)$/m.test(rtManifest), rtManifest.slice(0, 300));
+        check('and gives it no build-profile lines',
+            !/^# profile /m.test(rtManifest), rtManifest.slice(0, 400));
+
+        const readBack = sh([VERIFY, '--input', rt, '--no-sig'], { env });
+        check('verify.sh reads back its own --recompute output', readBack.status === 0,
+            `${readBack.stdout}${readBack.stderr}`);
+        check('and says plainly that nothing anchors it',
+            /nothing anchors it/.test(readBack.stderr), readBack.stderr);
+
+        // The profile check must still bite on a manifest that DOES claim a
+        // release, or the fix above would have bought the green by deleting
+        // the rule rather than by scoping it.
+        const declawed = stage();
+        const declawedSign = sh(signArgs(declawed), { env });
+        check('fixture: the declawed stage signs first', declawedSign.status === 0, declawedSign.stderr);
+        const declawedPath = join(declawed, 'RELEASE_HASHES.txt');
+        writeFileSync(declawedPath,
+            readFileSync(declawedPath, 'utf8').split('\n').filter((l) => !l.startsWith('# profile ')).join('\n'));
+        const stripped = sh([VERIFY, '--input', declawed, '--tag', TAG, '--no-sig'], { env });
+        check('verify.sh still refuses a RELEASE manifest with no profile lines',
+            stripped.status === 1, `${stripped.stdout}${stripped.stderr}`);
+        check('and names the missing profile claim',
+            /profile/i.test(stripped.stderr), stripped.stderr);
 
         // The escape hatch survives, but leaves a permanent signed trace.
         const skipped = stage();

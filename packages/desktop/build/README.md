@@ -43,5 +43,33 @@ electron-builder reads asset files from this directory.
   finds nothing, which is exactly how this went unnoticed. Deleting one
   now fails the build.
 
+- `appx/` - **Microsoft Store tile assets, committed 2026-08-01
+  ( §15).** Four PNGs, and their absence is the same silent defect
+  as the missing app icon above: `AppxTarget` substitutes its own
+  `SampleAppx.*.png` vendor artwork for any of these it does not find,
+  with no warning, so the Store listing and the Start Menu tile would
+  have shipped electron-builder's sample images. That is the third time
+  this family of defect has been found here ( mobile, 
+  desktop, this).
+
+  - `StoreLogo.png` (50×50) - the Store listing icon
+  - `Square150x150Logo.png` (150×150) - medium Start tile
+  - `Square44x44Logo.png` (44×44) - taskbar / app list
+  - `Wide310x150Logo.png` (310×150) - wide Start tile
+
+  Derived from `icon.png`, which is the source of record and already
+  carries the approved geometry, rather than re-cropped from the vector:
+  the smallest of these is 44px, well clear of the 16px case that made
+  per-size vector rendering necessary for the `.ico`. The wide tile is
+  the one new composition - a transparent 310×150 canvas with the mark at
+  78% of the tile HEIGHT (the same fraction the square icons use of their
+  width), centred both ways. Alpha is preserved on all four; the tile
+  background is set in the builder config (`appx.backgroundColor`, brand
+  accent `#1A7BAC`), not baked into the images.
+
+  Regenerate with `sharp` (already a dependency, and on the release
+  lifecycle allowlist), resizing from `icon.png` with `kernel: 'lanczos3'`
+  and `fit: 'contain'` on a transparent background.
+
 - `background.png` - DMG installer background, optional. If absent,
   electron-builder uses a plain grey background.

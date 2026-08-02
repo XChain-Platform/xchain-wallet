@@ -30,9 +30,26 @@ tag holding different code are distinguishable in the record (,
 rails §3). The manifest format itself is documented at the top of
 [`lib.sh`](lib.sh), which both `sign.sh` and `verify.sh` source.
 
-- `*.dmg` / `*mac*.zip`     - desktop macOS
-- `*.exe` / `*win*.zip`     - desktop Windows
-- `*.AppImage` / `*.deb`    - desktop Linux
+Each row also declares the **architectures** it must cover, and that
+column is not cosmetic: the globs below are extension-shaped, so `*.dmg`
+is satisfied by ONE dmg, and the release where all six lanes built a
+single arch (§8 below) passed this gate with a clean manifest. Every
+declared arch must now be present, and an artifact that matches an
+arch-partitioned row while carrying no arch token at all is a hard
+failure rather than a default-arch guess: a broken `artifactName` and a
+deliberately multi-arch file look identical from here. `-` declares "not
+arch-partitioned" out loud.
+
+The one known multi-arch file, electron-builder's un-suffixed both-arch
+NSIS installer, is not shipped (, operator 2026-08-01) and is
+suppressed at the source by `nsis.buildUniversalInstaller: false`. No row
+declares the `multi` allowance, so if one ever reaches staging, that flag
+has been lost and the release fails here rather than growing a third
+installer on the feed.
+
+- `*.dmg` / `*mac*.zip`     - desktop macOS (x64 + arm64)
+- `*.exe` / `*win*.zip`     - desktop Windows (x64 + arm64)
+- `*.AppImage` / `*.deb`    - desktop Linux (x64 + arm64)
 - `xchain-wallet-extension-vX.Y.Z.zip`  - extension store bundle (its
   `manifest.json` permissions, `host_permissions`, and content-script
   matches are frozen against `packages/extension/docs/manifest-freeze.json`
@@ -278,12 +295,14 @@ See [`tools/build-reproduce/`](../build-reproduce/) and each package's
 - ⏸ The swap half of the rehearsal is blocked on DD4 for five of six lanes: `rehearse.mjs coverage` reports which, and refuses to call a lane launch-ready with no named device. `mac-arm64` is the only lane with hardware today.
 - ⏸ Cross-platform reproduce (macOS / Windows pre-signing artifacts) pending the desktop reproducibility follow-ups.
 - ✅ **Every desktop lane built ONE architecture, not two, and nothing said so** (, found 2026-08-01 by running the reproduce container for the first time). All six invocations read `pnpm -C packages/desktop dist -- --linux --x64 --arm64`. pnpm 9 forwards that `--` into the script's argv verbatim (npm strips it), and electron-builder is yargs-based, so a bare `--` ends option parsing and every flag behind it lands in `argv._` unread. electron-builder then packaged the runner's own arch: linux-x64 from ubuntu, one arch per OS across the matrix. `expected-artifacts.txt` matches by extension rather than per arch, so the signing gate would have passed the release, `stable-linux-arm64.yml` would never have been written, and every arm64 install would have had no download and no update - permanently, and silently. Separator dropped in all six lanes and in `packages/desktop/scripts/build.sh`; `test/smoke/audits/reproducible-toolchain.smoke.js` fails on any pnpm invocation that reintroduces it.
+- ✅ **And the gate that let it through is closed** (2026-08-01). Dropping the separator fixed the cause; the reason it went unseen was that `expected-artifacts.txt` declared artifact CLASSES and never counts, so `*.dmg` was satisfied by one dmg. Rows now carry a fourth arch column, `lib.sh` attributes each artifact to an architecture using electron-builder's own naming tokens, and a release missing either arch of any of the six lanes fails by name. The same check refuses an artifact that belongs to NO architecture, which is the un-suffixed combined NSIS installer  - so that decision is now blocking rather than silent. `test/smoke/audits/release-arch-coverage.smoke.js`, 8 drift mutations driven, 8 killed.
 - ✅ The release toolchain is pinned end to end (`tools/release/toolchain.json`): the lanes asked `actions/setup-node` for major `22` while the reproduce container pinned `20.18.0`, so no verifier could ever have matched a release. Same guard file.
 
 **Known naming gap.** Desktop installers use electron-builder's default
 names, which embed `productName` ("XChain Wallet", with a space) and an
 arch suffix that varies by target. `expected-artifacts.txt` therefore
-matches them by extension rather than by a convention. Pinning an
-explicit `artifactName` that matches the
+matches them by extension rather than by a convention, with the arch
+column above carrying the per-arch requirement the globs cannot. Pinning
+an explicit `artifactName` that matches the
 `xchain-wallet-<surface>-vX.Y.Z` convention belongs to the desktop spec
-.
+( §7.1, with the operator).

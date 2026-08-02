@@ -180,9 +180,17 @@ const pkg = JSON.parse(read('package.json'));
     assert.ok(/linuxArches/.test(buildSh),
         'build.sh must read its arch flags from tools/release/toolchain.json, not hardcode '
         + 'them. It previously passed no flags at all and quietly built the host arch only.');
-    assert.ok(/dist:unpacked --linux/.test(buildSh),
-        'build.sh must pass --linux plus explicit arch flags to dist:unpacked; with no '
-        + 'flags electron-builder defaults to the host arch and the manifest covers one arch.');
+    // `dist`, not `dist:unpacked`, since DD7: the reproduce path builds the
+    // PACKAGED Linux artifacts so its manifest carries the filenames the
+    // release publishes. The arch-flag requirement is unchanged and is
+    // still the reason this assertion exists.
+    assert.ok(/run dist --linux/.test(buildSh),
+        'build.sh must pass --linux plus explicit arch flags to the packaging target; with '
+        + 'no flags electron-builder defaults to the host arch and the manifest covers one arch.');
+    assert.ok(!/run dist:unpacked/.test(buildSh),
+        'build.sh must not go back to --dir mode: an unpacked manifest shares no filename '
+        + 'with the published release manifest, so the documented comparison cannot succeed '
+        + '( DD7).');
 }
 
 // ------------------------- the `--` that ate every architecture flag

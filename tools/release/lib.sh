@@ -359,6 +359,29 @@ xr_has_header() {
     grep -q '^# manifest-version: ' "$1" 2>/dev/null
 }
 
+# Does this manifest claim to describe an actual release?
+#
+# `verify.sh --recompute` writes a manifest that announces itself as NOT a
+# release by stamping "(none)" for tag and tag-commit (see xr_write_manifest),
+# and such a manifest deliberately carries no build-profile lines because
+# there is no release whose feature set it could be claiming.
+#
+# This exists because xr_has_header could not tell the two apart: a recompute
+# manifest carries the same "# manifest-version: 2" line a signed one does,
+# so gating the profile check on a header ran it against exactly the manifests
+# that are documented not to have profiles. verify.sh therefore refused to
+# read its own --recompute output, on any tag (found 2026-08-02 by running the
+# ceremony's Phase 4 step against the real v0.334.0 CI artifact). That matters
+# more than it looks: signing is still blocked on the release-key ceremony, so
+# --recompute is the ONLY way an operator can hash-verify an artifact today.
+# Args: manifest_path
+xr_is_release_manifest() {
+    local tag
+    xr_has_header "$1" || return 1
+    tag="$(xr_header_field "$1" 'tag')"
+    [[ -n "$tag" && "$tag" != "(none)" ]]
+}
+
 # Reject a manifest whose hash lines are not well-formed.
 #
 # This is NOT belt-and-braces, it closes a real hole. macOS ships
@@ -393,15 +416,206 @@ xr_assert_wellformed() {
     fi
 }
 
+# What the arch column may say. The first four are architectures; the
+# shipped matrix is x64 + arm64 ( §2) and the other two are here so
+# that the day DD1 adds armv7l, or DD3 flips macOS to a universal binary,
+# the change is one column rather than a code change.
+#
+# `multi` is not an architecture. It names an artifact that carries MORE
+# THAN ONE arch and therefore belongs to no lane - electron-builder's
+# combined NSIS installer is the only one we have seen . It is an
+# ALLOWANCE, never a requirement: a row may declare it to say "an
+# un-suffixed combined artifact here is deliberate", and the gate then
+# tolerates one, but it never demands one, because a combined artifact is
+# by definition not a lane anybody updates.
+XR_ARCH_TOKENS=(x64 arm64 armv7l universal multi)
+
+# True if $1 is a token the arch column may carry.
+xr_is_arch_token() {
+    local candidate="$1" a
+    for a in "${XR_ARCH_TOKENS[@]}"; do
+        [[ "$candidate" == "$a" ]] && return 0
+    done
+    return 1
+}
+
+# Echo the architecture an artifact's NAME attributes it to, or nothing.
+#
+# The names are electron-builder's, and the mapping is its own
+# (`builder-util/out/arch.js: getArtifactArchName`), verified against the
+# installed 26.15.7 rather than remembered: x64 becomes `amd64` for deb,
+# `x86_64` for AppImage/rpm/flatpak, and stays `x64` everywhere else.
+#
+# THE EMPTY ANSWER IS THE LOAD-BEARING ONE. An artifact with no arch token
+# is not "probably the default arch" - it is a file the gate cannot assign
+# to a fleet, and the caller fails on it. That is what catches the combined
+# Windows installer, which is the same shape as a naming bug and must not
+# be waved through as either.
+#
+# The one exception is the AppImage, and it is a property of the config
+# rather than a guess: `expandArtifactNamePattern` drops the arch token for
+# the DEFAULT arch unless the artifactName is user-forced, and ours is not
+# for that target (electron-builder.config.cjs sets deb.artifactName only).
+# So `XChain Wallet-<v>.AppImage` IS the x64 build, and pinning an
+# AppImage artifactName later would give it a `-x86_64` token that this
+# same function reads without the exception.
+#
+# The arches we do NOT ship are recognised on purpose. An armv7l or
+# universal artifact must not fall through to the AppImage exception and
+# be counted as the x64 build - that would let a lane satisfy the x64
+# requirement with a file no x64 machine can run. Named, it reports as an
+# arch the row does not declare, which is the true answer.
+xr_artifact_arch() {
+    local name="${1#./}"
+    case "$name" in
+        *arm64*|*aarch64*) echo arm64; return 0 ;;
+        *armv7l*|*armhf*) echo armv7l; return 0 ;;
+        *universal*) echo universal; return 0 ;;
+        *i386*|*i686*|*ia32*) echo ia32; return 0 ;;
+        *x86_64*|*amd64*|*-x64*|*_x64*) echo x64; return 0 ;;
+    esac
+    case "$name" in
+        *.AppImage) echo x64; return 0 ;;
+    esac
+    echo ""
+}
+
+# Check one declared row's per-architecture coverage.
+#
+# Prints a problem count on stdout and the problems themselves on stderr,
+# so the caller's failure tally stays one-per-problem the way the rest of
+# the gate counts.
+#
+# Args: pattern archspec required(1|0) artifact...
+xr_check_arch_row() {
+    local pattern="$1" archspec="$2" required="$3"
+    shift 3
+
+    if [[ "$archspec" == "-" ]]; then
+        echo 0
+        return 0
+    fi
+
+    local -a want=() seen=()
+    local tok name arch a found dup problems=0 matched_any=0 allow_multi=0
+
+    # Split on commas via tr rather than by reassigning IFS: this function
+    # runs inside a command substitution under `set -e`, where a stray
+    # non-zero status is fatal, so the body stays deliberately boring.
+    for tok in $(printf '%s' "$archspec" | tr ',' ' '); do
+        if [[ "$tok" == "multi" ]]; then
+            allow_multi=1
+        else
+            want+=("$tok")
+        fi
+    done
+
+    for name in "$@"; do
+        if [[ -z "$name" ]]; then continue; fi
+        # shellcheck disable=SC2254  # $pattern is a glob by design.
+        case "${name#./}" in $pattern) ;; *) continue ;; esac
+        matched_any=1
+        arch="$(xr_artifact_arch "$name")"
+
+        if [[ -z "$arch" ]]; then
+            if [[ "$allow_multi" -eq 1 ]]; then continue; fi
+            echo "UNATTRIBUTED  '${name#./}' matches required pattern '$pattern' but" >&2
+            echo "              carries no architecture token, so nothing can say which" >&2
+            echo "              fleet it is for. electron-builder emits an un-suffixed" >&2
+            echo "              COMBINED NSIS installer holding both arches, and the" >&2
+            echo "              generated stable.yml points every Windows client at it" >&2
+            echo "              . Decide it rather than ship it: stop emitting" >&2
+            echo "              the file, or add 'multi' to this row's arch column to" >&2
+            echo "              declare it deliberate." >&2
+            problems=$((problems + 1))
+            continue
+        fi
+
+        found=0
+        for a in "${want[@]:-}"; do
+            if [[ "$a" == "$arch" ]]; then found=1; fi
+        done
+        if [[ "$found" -eq 0 ]]; then
+            echo "UNEXPECTED-ARCH  '${name#./}' is a $arch artifact, but '$pattern'" >&2
+            echo "              declares only: $archspec" >&2
+            problems=$((problems + 1))
+            continue
+        fi
+
+        # TWO ARTIFACTS CLAIMING ONE ARCHITECTURE, which the coverage
+        # check below cannot see: it only asks whether each arch appears
+        # AT LEAST once, so a duplicate reads as healthy.
+        #
+        # The live example is electron-builder's NSIS uninstaller
+        # intermediate, `<name>-x64.__uninstaller.exe`, ~100M and sitting
+        # in `dist/` next to the installer while the build runs. A
+        # successful run removes it (measured on a real Windows build,
+        # 2026-08-02), so this is not a bug we have - it is the one we
+        # would have had no way to see: it matches `*.exe`, classifies as
+        # x64, and would have been hashed into the manifest and uploaded
+        # to the feed as a second, unrunnable "installer".
+        #
+        # The honest answer is that the list cannot say which of two is
+        # the release artifact, so it refuses instead of picking.
+        dup=0
+        for a in "${seen[@]:-}"; do
+            if [[ "$a" == "$arch" ]]; then dup=1; fi
+        done
+        if [[ "$dup" -eq 1 ]]; then
+            echo "DUPLICATE-ARCH  two artifacts matching '$pattern' claim $arch;" >&2
+            echo "              '${name#./}' is the second." >&2
+            echo "              Nothing can say which one is the release artifact, so" >&2
+            echo "              this refuses rather than picking. A build intermediate" >&2
+            echo "              left in the staging directory is the usual cause." >&2
+            problems=$((problems + 1))
+            continue
+        fi
+        seen+=("$arch")
+    done
+
+    # An optional row that produced nothing is the case it exists for.
+    if [[ "$required" -eq 0 && "$matched_any" -eq 0 ]]; then
+        echo "$problems"
+        return 0
+    fi
+
+    for a in "${want[@]:-}"; do
+        if [[ -z "$a" ]]; then continue; fi
+        found=0
+        for arch in "${seen[@]:-}"; do
+            if [[ "$arch" == "$a" ]]; then found=1; fi
+        done
+        if [[ "$found" -eq 0 ]]; then
+            echo "MISSING-ARCH  pattern '$pattern' has no $a artifact (declared: $archspec)." >&2
+            echo "              The glob matches the other architecture happily, which is" >&2
+            echo "              how a release that built ONE arch passed this gate before" >&2
+            echo "              ( §8). That release leaves every $a install with no" >&2
+            echo "              download and no update, and writes no ${a}-suffixed" >&2
+            echo "              channel pointer for anything to fetch." >&2
+            problems=$((problems + 1))
+        fi
+    done
+
+    echo "$problems"
+}
+
 # Gate the staged artifact set against the committed expected list.
 #
-# Two directions, and both matter. A missing REQUIRED pattern means a
+# Three directions now, and all matter. A missing REQUIRED pattern means a
 # shell did not build (or was never staged) and the manifest would look
 # perfectly clean while covering half a release. An artifact matching NO
 # pattern means something is in the signing input that no one declared -
 # a stray build output, a leftover from the previous version, a file an
 # attacker dropped into the staging dir. Signing either one launders it
 # into the release's trust root.
+#
+# THE THIRD DIRECTION IS PER-ARCHITECTURE, and it was missing until
+# 2026-08-01 ( §8). The globs are extension-shaped on purpose, so
+# `*.dmg` is satisfied by ONE dmg: a release that built x64 and silently
+# dropped arm64 - which is exactly what the `--` argv bug did to all six
+# lanes - passed this gate with a clean manifest. The arch column closes
+# it, and catches the opposite defect too: an artifact that belongs to no
+# architecture at all .
 #
 # Args: dir expected_file
 xr_check_expected() {
@@ -414,16 +628,16 @@ xr_check_expected() {
         return 1
     fi
 
-    local -a req_pats=() opt_pats=()
-    local status pattern profile
+    local -a req_pats=() opt_pats=() req_arch=() opt_arch=()
+    local status pattern profile arches tok
     # `|| [[ -n "$status" ]]` so a file with no trailing newline does not
     # silently drop its last row - which, in this file, would mean
     # silently dropping a required artifact.
-    while read -r status pattern profile _rest || [[ -n "$status" ]]; do
+    while read -r status pattern profile arches _rest || [[ -n "$status" ]]; do
         case "$status" in
             ''|'#'*) continue ;;
-            required) req_pats+=("$pattern") ;;
-            optional) opt_pats+=("$pattern") ;;
+            required) req_pats+=("$pattern"); req_arch+=("$arches") ;;
+            optional) opt_pats+=("$pattern"); opt_arch+=("$arches") ;;
             *)
                 echo "release/lib.sh: $expected: unknown status '$status'" \
                      "(expected 'required' or 'optional')" >&2
@@ -439,6 +653,26 @@ xr_check_expected() {
                  "'${profile:-<missing>}'; expected one of: ${XR_PROFILES[*]}" >&2
             return 1
         fi
+        # Same argument for the arch column, and one more: an EMPTY one
+        # would silently restore the pre-2026-08-01 behaviour on that row,
+        # which is the failure this column exists to end. `-` is the way to
+        # say "this artifact is not arch-partitioned", out loud.
+        if [[ -z "$arches" ]]; then
+            echo "release/lib.sh: $expected: '$pattern' declares no arch column." >&2
+            echo "  Use '-' for an artifact with no architecture split (the web" >&2
+            echo "  tarball, the extension zip, a universal mobile build), or a" >&2
+            echo "  comma-separated set from: ${XR_ARCH_TOKENS[*]}" >&2
+            return 1
+        fi
+        if [[ "$arches" != "-" ]]; then
+            for tok in $(printf '%s' "$arches" | tr ',' ' '); do
+                if ! xr_is_arch_token "$tok"; then
+                    echo "release/lib.sh: $expected: '$pattern' declares arch" \
+                         "'$tok'; expected one of: ${XR_ARCH_TOKENS[*]} (or '-')" >&2
+                    return 1
+                fi
+            done
+        fi
     done < "$expected"
 
     if [[ ${#req_pats[@]} -eq 0 ]]; then
@@ -452,7 +686,7 @@ xr_check_expected() {
         [[ -n "$line" ]] && artifacts+=("${line#./}")
     done < <(xr_list_artifacts "$dir")
 
-    local failures=0 name pat matched
+    local failures=0 name pat matched i n
 
     for pat in "${req_pats[@]}"; do
         matched=0
@@ -464,6 +698,28 @@ xr_check_expected() {
             echo "MISSING  no artifact matches required pattern: $pat" >&2
             failures=$((failures + 1))
         fi
+    done
+
+    # Per-arch coverage, for the rows that declare one. Runs even when a
+    # row matched nothing above: the two messages answer different
+    # questions ("did this shell build?" vs "did it build both arches?")
+    # and a release missing one arch of one lane should read as exactly
+    # that rather than inherit the other row's wording.
+    # Indexed by counter rather than `${!arr[@]}`: under `set -u` an empty
+    # array is an error in the bash versions this repo still targets (see
+    # publish.sh on mapfile), and `opt_pats` is legitimately empty when a
+    # list declares nothing optional.
+    i=0
+    while [[ "$i" -lt "${#req_pats[@]}" ]]; do
+        n="$(xr_check_arch_row "${req_pats[$i]}" "${req_arch[$i]}" 1 "${artifacts[@]:-}")"
+        failures=$((failures + n))
+        i=$((i + 1))
+    done
+    i=0
+    while [[ "$i" -lt "${#opt_pats[@]}" ]]; do
+        n="$(xr_check_arch_row "${opt_pats[$i]}" "${opt_arch[$i]}" 0 "${artifacts[@]:-}")"
+        failures=$((failures + n))
+        i=$((i + 1))
     done
 
     for name in "${artifacts[@]:-}"; do

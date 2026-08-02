@@ -101,6 +101,26 @@ function link(source, destination) {
 // at `/usr/bin/env node`. electron-builder spawns mksquashfs directly, so
 // the kernel resolves the shebang, and the build environment is not
 // obliged to have a `node` on PATH just because it is running one.
+//
+// AND DECLARE THE MODULE TYPE, WHICH IS NOT OPTIONAL AND COST A BUILD TO
+// LEARN. The wrapper source is `.cjs`, but it has to be installed under
+// the name electron-builder spawns - `mksquashfs`, no extension - so the
+// extension can no longer say what it is. Node then falls back to the
+// nearest `package.json` walking UP from the installed file, and where
+// that lands depends entirely on where the electron-builder cache is:
+//
+//   HOME outside the repo   ->  no package.json above it, CommonJS, fine
+//   HOME inside the repo    ->  finds the workspace root, `"type":
+//                               "module"`, and the wrapper dies at its
+//                               first `require` with
+//                               "require is not defined in ES module scope"
+//
+// The reproduce container is the second case (`HOME=/workspace/.reproduce-home`),
+// so the AppImage lane could not build there AT ALL - and nothing noticed,
+// because until DD7 that container ran electron-builder in `--dir` mode
+// and never invoked mksquashfs. Writing the type next to the installed
+// file pins it regardless of where the shim root lives, which is what
+// this field is for.
 function installWrapper(destination) {
     const source = fs.readFileSync(WRAPPER_SOURCE, 'utf8');
     const newline = source.indexOf('\n');
@@ -109,6 +129,24 @@ function installWrapper(destination) {
     }
     fs.writeFileSync(destination, `#!${process.execPath}${source.slice(newline)}`, { mode: 0o755 });
     fs.chmodSync(destination, 0o755);
+
+    // The shim directory is one we created and marked, so an existing
+    // package.json here would be ours from a previous run; anything else
+    // is a surprise worth refusing rather than overwriting.
+    const marker = path.join(path.dirname(destination), 'package.json');
+    if (fs.existsSync(marker)) {
+        let existing;
+        try {
+            existing = JSON.parse(fs.readFileSync(marker, 'utf8'));
+        } catch {
+            fail(`${marker} exists and is not JSON; refusing to overwrite it`);
+        }
+        if (existing.type !== 'commonjs') {
+            fail(`${marker} exists and does not declare "type": "commonjs"`);
+        }
+        return;
+    }
+    fs.writeFileSync(marker, `${JSON.stringify({ type: 'commonjs' }, null, 4)}\n`);
 }
 
 async function materialize(arch, log) {

@@ -262,4 +262,44 @@ function loadConfig(env = {}) {
     assert.deepEqual(prod.linux.target.map((t) => t.target), ['AppImage', 'deb']);
 }
 
+// --- No Windows install format without an update story ( §4) -----
+//
+// THIS IS ABOUT `msi`, AND IT IS NOT A STYLE RULE. electron-updater ships
+// exactly ONE Windows updater: `NsisUpdater`, which downloads and runs an
+// NSIS .exe. There is no MsiUpdater in the package at all (checked in
+// electron-updater 6.x: AppImage, Deb, Pacman, Rpm, Mac, Nsis - no Msi).
+//
+// So a plain `msi` target does not merely add an artifact. It creates a
+// population of installs that can NEVER be updated by the feed this whole
+// spec exists to build, and the failure is silent: the app checks, finds a
+// version, downloads an installer it cannot apply. For a wallet that is a
+// security liability, not an inconvenience.
+//
+// `msiWrapped` is the format that answers the enterprise-deployment case
+// without that cost - it REQUIRES the nsis target and re-bundles that
+// installer, so the install is the NSIS one and updates keep working. It
+// is a registered follow-up (§4), gated on evidenced GPO/Intune demand,
+// not a refusal.
+//
+// If a lane is added here later, this assertion is the place that makes
+// the update story an explicit decision rather than an oversight.
+{
+    const UPDATABLE_OR_DECLARED = new Set([
+        'nsis', // NsisUpdater
+        'zip', //  no update path, declared on the download page (§5 rule)
+        'appx', // the Store owns updates; attachUpdater short-circuits (§15)
+    ]);
+    for (const env of [{}, { XCHAIN_BUILD_APPX: '1' }]) {
+        const cfg = loadConfig(env);
+        for (const t of cfg.win.target) {
+            const name = typeof t === 'string' ? t : t.target;
+            assert.ok(UPDATABLE_OR_DECLARED.has(name),
+                `win target '${name}' has no declared update story. electron-updater`
+                + ' has no MSI updater, so a plain `msi` lane strands every install it'
+                + ' produces; use msiWrapped (which keeps the NSIS update path) and'
+                + ' record the decision in  §4 before adding it here.');
+        }
+    }
+}
+
 console.log('desktop-build-config smoke: ok');

@@ -184,6 +184,24 @@ export function pointerNameFor({ channel, os, arch = 'x64' }) {
  * @param {string} dir  a `dist/` directory to search
  * @returns {Array<{path: string, config: Record<string,string>}>}
  */
+/*
+ * WHEN THE FILE EXISTS AT ALL, which is not "always after a build".
+ * Measured against app-builder-lib 26.15.7 and a real build of every
+ * platform, 2026-08-02, because the answer differs per OS:
+ *
+ *   linux   written by `PublishManager`'s onAfterPack, and by FpmTarget
+ *           for the deb, so even a `--dir` tree has one.
+ *   darwin  onAfterPack RETURNS EARLY unless the targets include `dmg` or
+ *           `zip`, so a `--dir` mac build carries NO app-update.yml. The
+ *           .app is otherwise complete, which makes the absence easy to
+ *           read as a defect. It is not.
+ *   win32   same shape, gated on a suitable Windows target.
+ *
+ * The consequence for the caller: `assert-feed` is only meaningful AFTER
+ * packaging, and all three release lanes run it after their `dist` step
+ * (verified in release.yml). Point it at a `dist:unpacked` mac tree and it
+ * correctly reports nothing to check, which it treats as a failure.
+ */
 export function readBundledFeedConfigs(dir) {
     const found = [];
 

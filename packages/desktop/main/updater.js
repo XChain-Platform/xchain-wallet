@@ -160,18 +160,29 @@ export async function attachUpdater({
         throw new Error('attachUpdater: onEvent must be a function');
     }
 
-    // MAC APP STORE BUILDS MUST NOT SELF-UPDATE ( §13). Electron
-    // sets process.mas on a build packaged for the store, and there the
-    // App Store owns updates entirely: there is no feed for that channel,
-    // an app that ships its own updater is rejected at review, and under
-    // the sandbox it could not swap its own bundle anyway. Short-circuit
-    // BEFORE loading electron-updater, so a store build never even
-    // registers the listeners or reaches the network.
-    if (process.mas) {
+    // STORE BUILDS MUST NOT SELF-UPDATE ( §13 macOS, §15 Windows).
+    // Both platforms hand updates to the store, and both tell the app so:
+    // Electron sets `process.mas` on a Mac App Store build and
+    // `process.windowsStore` on an MSIX/AppX one. In either channel there
+    // is no feed of ours to check, an app that ships its own updater is a
+    // certification failure, and the package could not replace itself
+    // anyway - macOS because of the sandbox, Windows because an MSIX
+    // install is immutable and updated only through the Store pipeline.
+    //
+    // The two flags differ in one way worth knowing: `process.mas` is a
+    // build-time property of the packaging, while `process.windowsStore`
+    // is set when the app is RUNNING from an MSIX package, so the same
+    // bytes report differently depending on how they were installed. That
+    // is the behaviour we want either way - what matters is whether the
+    // running app is store-managed, not what it was compiled for.
+    //
+    // Short-circuit BEFORE loading electron-updater, so a store build
+    // never registers the listeners or reaches the network.
+    if (process.mas || process.windowsStore) {
         return {
             isActive: false,
-            async checkForUpdates() { /* the App Store owns updates */ },
-            async downloadAndInstall() { /* the App Store owns updates */ },
+            async checkForUpdates() { /* the store owns updates */ },
+            async downloadAndInstall() { /* the store owns updates */ },
         };
     }
 

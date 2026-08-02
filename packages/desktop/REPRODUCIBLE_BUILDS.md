@@ -15,14 +15,17 @@ explicitly don't, and how to verify a release.
 
 ## What's reproducible
 
-- **The pre-signing Linux app bundles** produced by `dist:unpacked`
-  (electron-builder's `--dir` mode), for **both shipped architectures**:
-  `linux-unpacked/` (x64) and `linux-arm64-unpacked/`, inside
-  `packages/desktop/dist/`. Each contains the asar archive + the
-  Electron binary + supporting resources.
-- **The SHA256 of every file in both directories** as captured in
-  `RELEASE_HASHES.txt` (emitted by `scripts/build.sh` at the end of
-  each run).
+- **The packaged Linux artifacts, exactly as shipped** - `.AppImage` and
+  `.deb`, for **both shipped architectures** - as captured in
+  `RELEASE_HASHES.txt` (emitted by `scripts/build.sh` at the end of each
+  run). These carry no code signature, which is what makes them
+  verifiable as the bytes a user downloads rather than as a proxy for
+  them, and it is why Linux is the platform where this promise is whole.
+- **The pre-signing app bundles** that packaging produces on the way
+  there: `linux-unpacked/` (x64) and `linux-arm64-unpacked/`, inside
+  `packages/desktop/dist/`, hashed file by file into
+  `UNPACKED_HASHES.txt`. That file is a diagnostic, not a claim: it is
+  how you find WHICH file differs once the packaged hashes disagree.
 
 Both arches are listed because both are released (§2 of the publishing
 spec). Until 2026-08-01 `build.sh` passed no architecture flags, so it
@@ -118,35 +121,50 @@ cd xchain-wallet
 bash packages/desktop/scripts/reproduce.sh v0.58.0
 ```
 
-That emits `reproduce-out/RELEASE_HASHES.txt`: the SHA256 of every file
-in both pre-signing Linux bundles.
+That emits two files in `reproduce-out/`:
 
-> **What you cannot yet diff it against, stated plainly.** This document
-> used to end the recipe with a diff against the release's published
-> `RELEASE_HASHES` manifest and call a zero-byte result the proof. That
-> comparison cannot succeed and never could. The published manifest
-> covers the PACKAGED artifacts a user downloads (`.AppImage`, `.deb`,
-> `.dmg`, `.exe`, the web tarball; see
-> `tools/release/expected-artifacts.txt`), while this script runs
-> electron-builder in `--dir` mode, which produces unpacked directories
-> and no installer at all. The two file sets do not overlap by a single
-> name, so the diff is guaranteed non-empty on a perfectly reproducible
-> build. Closing that loop needs a decision we have not taken: either
-> publish a separate pre-signing manifest per release, or have this
-> script build the packaged Linux artifacts and compare those directly.
-> **The blocker under the second option is gone as of 2026-08-01**: it
-> rested on packaged Linux determinism being unproven, and that has now
-> been measured rather than assumed. Two independent packaged builds of
-> one commit in the pinned container produced byte-identical `.AppImage`
-> and `.deb` on both arches (it took the two `mksquashfs` fixes described
-> under "Non-determinism sources we've addressed"; before them the
-> AppImage did not reproduce). Linux artifacts carry no code signature,
-> so unlike macOS and Windows they are reproducible exactly as shipped.
-> Which option to take is still an open decision ( DD7), not a
-> gap in evidence. Tracked under ; until it lands, what
-> this script gives you is a self-consistency check between two of your
-> own runs, and a byte-level basis for comparing notes with another
-> verifier, not a check against us.
+- **`RELEASE_HASHES.txt`** - the packaged Linux artifacts, under the same
+  filenames the release publishes. **This is the one you compare against
+  us.**
+- `UNPACKED_HASHES.txt` - every file of the unpacked bundles, which
+  packaging leaves behind as an intermediate. Not comparable with
+  anything we publish; it is what localises a mismatch to a file once
+  `RELEASE_HASHES.txt` has already found one.
+
+### Diff it against the release
+
+```bash
+# The official manifest for the tag (see docs/Verify_Release.md for the
+# GPG step, which you should do first).
+curl -fsSL -o official.txt "https://downloads.xchain.io/wallet/desktop/RELEASE_HASHES/v0.58.0.txt"
+
+# Both files are plain `sha256sum` output over the same filenames, so
+# comparing them is a line diff. The official manifest also covers the
+# macOS, Windows and web artifacts, which are not reproducible here, so
+# both sides are filtered to the Linux ones.
+diff <(grep -v '^#' official.txt | grep -E '\.(AppImage|deb)$' | sort) \
+     <(grep -v '^#' reproduce-out/RELEASE_HASHES.txt | sort)
+```
+
+A zero-byte diff means your bytes are our bytes.
+
+> **This comparison used to be impossible, and the document said so.**
+> Until 2026-08-01 the recipe ended with a diff against the published
+> manifest while `build.sh` ran electron-builder in `--dir` mode: the
+> published manifest covers PACKAGED artifacts, `--dir` produces unpacked
+> directories and no installer at all, and the two sets did not overlap by
+> a single filename. The diff was guaranteed non-empty on a perfectly
+> reproducible build. That was recorded honestly as an open decision
+> ( DD7) rather than papered over, and the decision has now been
+> taken: **the reproduce path builds the packaged Linux artifacts, so the
+> manifest carries the names users actually download.** Linux artifacts
+> carry no code signature, so unlike macOS and Windows they reproduce
+> exactly as shipped - which is why this is possible here and not there.
+> The precondition was measured rather than assumed: two independent
+> packaged builds of one commit in the pinned container produce
+> byte-identical `.AppImage` and `.deb` on both arches, and it took the
+> two `mksquashfs` fixes described under "Non-determinism sources we've
+> addressed" to get there.
 
 Two runs of the same tag must produce byte-identical manifests. Any diff
 between them is diagnostic:

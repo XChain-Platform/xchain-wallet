@@ -89,6 +89,15 @@ const ARCHES = ['x64', 'arm64'];
 // owns updates for that channel, so there is no feed to rehearse against.
 const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 
+// The Microsoft Store lane ( §15), opt-in for the same three
+// reasons as MAS. It needs a Partner-Center-assigned publisher identity
+// nobody has yet; it can only be produced on a Windows 10+ host (or a
+// macOS host driving a Parallels VM, which no CI runner is), so an
+// unconditional target would break every mac and linux build; and a
+// rehearsal build must never carry it, because the Store owns updates for
+// that channel and there is nothing to rehearse.
+const buildAppx = process.env.XCHAIN_BUILD_APPX === '1' && !isStaging;
+
 // §7.5: a rehearsal variant is built ONLY for the format electron-updater
 // can actually swap in place on that OS. A staging dmg, deb or win-zip
 // exercises nothing, because none of them has an auto-update path.
@@ -380,9 +389,22 @@ const config = {
         artifactName: WIN_ARTIFACT,
         // See the mac.icon comment: explicit on every platform.
         icon: 'build/icon.ico',
-        target: isStaging ? UPDATE_CAPABLE_TARGET.win : [
-            { target: 'nsis', arch: ARCHES },
-            { target: 'zip', arch: ARCHES },
+        // The store target is appended OUTSIDE the staging ternary on
+        // purpose. Written inside the production branch, `buildAppx`'s own
+        // `&& !isStaging` would be unreachable - the ternary already
+        // excludes it - so the guard would read as protection while doing
+        // nothing, and widening the staging branch later would silently
+        // start emitting store packages into the rehearsal tree. Out here,
+        // that flag is the only thing keeping appx out of a staging build,
+        // which is what the smoke can then actually check.
+        target: [
+            ...(isStaging ? UPDATE_CAPABLE_TARGET.win : [
+                { target: 'nsis', arch: ARCHES },
+                { target: 'zip', arch: ARCHES },
+            ]),
+            // The Microsoft Store channel, added only when a build is
+            // actually aimed at it (see buildAppx).
+            ...(buildAppx ? [{ target: 'appx', arch: ARCHES }] : []),
         ],
 
         // electron-builder v26 moved every signtool setting off `win` and
@@ -411,6 +433,30 @@ const config = {
     },
     nsis: {
         artifactName: NSIS_ARTIFACT,
+        // TWO INSTALLERS, ONE PER ARCH. NOT THREE (, operator
+        // decision 2026-08-01, reversing the same day's earlier call to
+        // publish all three).
+        //
+        // By default electron-builder ALSO emits an un-suffixed installer
+        // carrying both architectures - 193M against 113M and 96M - which
+        // was found on the first successful Windows build and is easy to
+        // miss, because `expected-artifacts.txt` matched `*.exe` by
+        // extension and all three satisfied it equally.
+        //
+        // This suppresses it at the source rather than deleting it after
+        // the fact, and the difference matters: with the flag false,
+        // `NsisTarget.build()` builds each arch's installer as that arch
+        // finishes and never accumulates a multi-arch set, so there is no
+        // 193M file to forget to delete, to publish by accident, or to
+        // explain on the download page. A post-build `rm` would have to be
+        // remembered by every lane, which is the shape of defect this
+        // release tooling keeps finding.
+        //
+        // The gate is the backstop, not the mechanism: `*.exe` declares
+        // `x64,arm64` with no `multi`, so if this ever flips back, the
+        // un-suffixed installer fails signing as UNATTRIBUTED rather than
+        // quietly reappearing on the feed.
+        buildUniversalInstaller: false,
         oneClick: false,
         allowToChangeInstallationDirectory: true,
         perMachine: false,
@@ -422,11 +468,91 @@ const config = {
         // (`stable.yml` on Windows - never `latest.yml`, which is the
         // default channel's name and not ours) from advertising a
         // blockMapSize for a file we deliberately do not publish.
-        // NOTE: this only covers nsis. The macOS zip blockmap is
-        // produced unconditionally whenever update info is written (there
-        // is no opt-out in app-builder-lib), so the `rm -f *.blockmap`
-        // step in release.yml is load-bearing, not belt-and-braces.
+        // NOTE: this only covers nsis. A blockmap is produced whenever
+        // update info is written, and there is no opt-out in
+        // app-builder-lib, so the `rm -f *.blockmap` step in release.yml
+        // is load-bearing rather than belt-and-braces.
+        //
+        // MEASURED on a real mac build 2026-08-02, because "the macOS zip
+        // blockmap" undercounted it: the lane emits FOUR, one per zip AND
+        // one per dmg. The dmg ones exist because `dmg.writeUpdateInfo`
+        // is true below, which also puts both dmg files in
+        // `stable-mac.yml` even though electron-updater can never offer
+        // one (MacUpdater selects with `findFile(files, "zip", ["pkg",
+        // "dmg"])`). Harmless, and registered as  rather than
+        // changed here, because it alters what a published pointer
+        // contains.
         differentialPackage: false,
+    },
+
+    // --- Microsoft Store ( §15) ----------------------------------
+    //
+    // A SECOND Windows channel, not a variant of the first. The direct
+    // download is an Authenticode-signed NSIS installer hosted by us and
+    // updated through our own feed; this is an MSIX/AppX package signed by
+    // Microsoft at ingestion and updated by the Store.
+    //
+    // THE ONE THING THAT IS EASIER HERE THAN ON macOS: this is not a
+    // sandbox. AppxTarget writes `Windows.FullTrustApplication` as the
+    // entry point and auto-adds the `runFullTrust` capability (verified in
+    // app-builder-lib 26.15.7), so the hardware-signer question that
+    // decides whether the Mac App Store channel ships at all (§13) does
+    // not arise in the same form: a full-trust MSIX app reaches WebHID
+    // devices the way the unpackaged app does. It still gets filesystem
+    // and registry virtualization, which is a VAULT-LOCATION question and
+    // is recorded as such in §15 rather than assumed away.
+    //
+    // SAME INHERITANCE TRAP AS `mas`, and it bites here too: AppxTarget
+    // computes its options as `deepAssign({}, win, config.appx)`, so
+    // `win.artifactName` would name a store package
+    // `XChain Wallet-<v>-x64-win.appx` - our direct-download convention,
+    // on the one artifact that must never be mistaken for a hosted file.
+    appx: {
+        artifactName: '${productName}-${version}-${arch}-appx.${ext}',
+
+        // IDENTITY IS ASSIGNED BY PARTNER CENTER, AND EVERY DEFAULT HERE
+        // IS WRONG IN A DIFFERENT WAY.
+        //
+        // `identityName` defaults to the package.json name, which is
+        // `@xchain-wallet/desktop`. AppX identity must be alphanumeric,
+        // period and dash only, 3-50 characters, so that default fails the
+        // manifest write outright - the same shape as the Linux
+        // `executableName` defect in §5, and the same good failure mode.
+        //
+        // `publisher` is worse, because its default SUCCEEDS. With no
+        // code-signing certificate present, `computePublisherName` returns
+        // the literal string `CN=ms` and logs "AppX is not signed"; with a
+        // certificate present but no explicit publisher, it uses that
+        // CERTIFICATE's subject, which is the Authenticode identity and
+        // not necessarily the Store one. Either way the package builds and
+        // is then rejected at ingestion for an identity mismatch, which is
+        // the expensive place to learn it.
+        //
+        // Both are env-driven because both are account-specific values
+        // nobody holds yet (ceremony A). The defaults below are valid
+        // shapes so a local smoke can build; they are NOT submission
+        // values, and §15 says so in the same words.
+        identityName: process.env.APPX_IDENTITY_NAME || 'DankestLLC.XChainWallet',
+        publisher: process.env.APPX_PUBLISHER || null,
+        publisherDisplayName: 'Dankest, LLC',
+        applicationId: 'XChainWallet',
+        languages: ['en-US'],
+
+        // Explicit rather than inherited from the auto-add, so that the
+        // capability set is reviewable in one place and a future addition
+        // has to be written down. `runFullTrust` is obligatory for an
+        // Electron app; nothing else is requested, and in particular no
+        // broadFileSystemAccess, which is a Store review flag.
+        capabilities: ['runFullTrust'],
+
+        // The tile background behind the logo, brand accent
+        // (--xc-accent-primary). electron-builder's default is #464646.
+        backgroundColor: '#1A7BAC',
+
+        // Store submissions require the fourth version part to be 0, which
+        // is what electron-builder produces with this off. Turning it on
+        // sets a build number there and the submission is refused.
+        setBuildNumber: false,
     },
 
     // --- Linux ---------------------------------------------------------

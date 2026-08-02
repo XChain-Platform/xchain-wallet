@@ -278,13 +278,26 @@ cd xchain-wallet
 git checkout ${TAG}
 bash packages/desktop/scripts/reproduce.sh ${TAG}
 
-diff reproduce-out/RELEASE_HASHES.txt RELEASE_HASHES.txt
+# Compare OUR published hashes with YOUR rebuilt ones. Only the Linux
+# artifacts are reproducible as shipped (they carry no code signature),
+# so both sides are filtered to them. Both manifests are plain
+# `sha256sum` output over the same filenames, so this is a line diff.
+diff <(grep -v '^#' RELEASE_HASHES.txt | grep -E '\.(AppImage|deb)$' | sort) \
+     <(grep -v '^#' reproduce-out/RELEASE_HASHES.txt | sort)
 ```
 
-A zero-byte diff means the artifact matches what source produces.
-Any diff is diagnostic - see the desktop doc's
+A zero-byte diff means the artifacts we published are what this
+source produces. Any mismatch is diagnostic - `reproduce-out/`
+also holds `UNPACKED_HASHES.txt`, which hashes the bundle file by
+file and is how you find which one moved; see the desktop doc's
 [diagnostics section](../packages/desktop/REPRODUCIBLE_BUILDS.md)
 ("Toolchain drift / Timestamp leakage / Supply-chain tampering").
+
+> Before 2026-08-01 this step read `diff reproduce-out/RELEASE_HASHES.txt
+> RELEASE_HASHES.txt`, which could never come back clean: the reproduce
+> script built unpacked directories while the published manifest covers
+> packaged artifacts, so the two shared no filename. The reproduce path
+> now builds the packaged Linux artifacts ( DD7).
 
 ### Desktop (macOS / Windows)
 

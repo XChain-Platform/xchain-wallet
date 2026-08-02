@@ -295,6 +295,49 @@ const good = makeFeed('feed-good');
 }
 
 {
+    // A STRAY COMBINED INSTALLER ON THE FEED .
+    //
+    // The operator decided on 2026-08-01 to ship only the two per-arch
+    // installers, and `nsis.buildUniversalInstaller: false` stops the
+    // un-suffixed both-arch file being produced at all. The signing gate
+    // refuses it if it ever returns.
+    //
+    // This case covers the window between those two: a feed that somehow
+    // carries it anyway must not misroute anybody. It would be easy to
+    // assume it does, because the generated yml's `path:` field names the
+    // combined file - which reads, at a glance, as "every client gets the
+    // 193M one". It does not: `getFileList` prefers `updateInfo.files` and
+    // only falls back to `path` when `files` is absent, and `findFile`
+    // then picks the first entry whose URL contains `process.arch`.
+    //
+    // Listed FIRST here on purpose: that is the position from which a
+    // name-blind selection would hand it to everybody, so if selection
+    // ever regresses to `first-listed`, this case fails.
+    const feed = makeFeed('feed-stray-combined-installer', {
+        mutate: ({ files, pointers }) => {
+            const combined = `XChain Wallet Setup ${VERSION}.exe`;
+            files[combined] = 'win-combined-both-arches-bytes';
+            pointers[`${CHANNEL}.yml`] = pointerBody([
+                combined,
+                `XChain Wallet Setup ${VERSION}-x64.exe`,
+                `XChain Wallet Setup ${VERSION}-arm64.exe`,
+            ], files);
+        },
+    });
+    const results = await probeAll(feed.dir);
+    assert.ok(results.every((r) => r.ok),
+        `every lane must still resolve with a stray combined installer present:\n${
+            JSON.stringify(results.filter((r) => !r.ok), null, 2)}`);
+    for (const [id, want] of [['win-x64', '-x64.exe'], ['win-arm64', '-arm64.exe']]) {
+        const r = results.find((x) => x.id === id);
+        assert.equal(r.checks.selection, 'by-arch',
+            `${id} must select by arch, not fall back to the combined installer`);
+        assert.ok(r.selected.endsWith(want),
+            `${id} resolved to ${r.selected}, not its own installer`);
+    }
+}
+
+{
     // The feed serves different bytes than the pointer claims.
     const feed = makeFeed('feed-swapped-bytes', {
         tamper: ({ files }) => {

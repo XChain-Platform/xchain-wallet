@@ -43,15 +43,29 @@ const verify = join(repo, 'tools', 'release', 'verify.sh');
 
 // A realistic release, names included: the desktop ones carry productName
 // with a space, and the two mobile artifacts are the whole point.
+//
+// BOTH ARCHITECTURES OF EVERY DESKTOP LANE, and the names are
+// electron-builder's real ones rather than approximations. This list used
+// to be one arch (and had `-mac-arch` the wrong way round), which the gate
+// accepted happily until the arch column landed - the same blind spot that
+// let all six lanes ship one arch for real ( §8). Note the x64
+// AppImage carries NO arch token: that is electron-builder's default-arch
+// rule, not an omission here, and lib.sh's classifier knows it.
 const ARTIFACTS = [
     ['xchain-wallet-web-v0.333.1.tar.gz', 'default'],
     ['xchain-wallet-extension-v0.333.1.zip', 'default'],
     ['XChain Wallet-0.333.1-x64.dmg', 'default'],
-    ['XChain Wallet-0.333.1-mac-arm64.zip', 'default'],
+    ['XChain Wallet-0.333.1-arm64.dmg', 'default'],
+    ['XChain Wallet-0.333.1-x64-mac.zip', 'default'],
+    ['XChain Wallet-0.333.1-arm64-mac.zip', 'default'],
     ['XChain Wallet Setup 0.333.1-x64.exe', 'default'],
-    ['XChain Wallet-0.333.1-win-x64.zip', 'default'],
-    ['XChain Wallet-0.333.1-x64.AppImage', 'default'],
+    ['XChain Wallet Setup 0.333.1-arm64.exe', 'default'],
+    ['XChain Wallet-0.333.1-x64-win.zip', 'default'],
+    ['XChain Wallet-0.333.1-arm64-win.zip', 'default'],
+    ['XChain Wallet-0.333.1.AppImage', 'default'],
+    ['XChain Wallet-0.333.1-arm64.AppImage', 'default'],
     ['xchain-wallet_0.333.1_amd64.deb', 'default'],
+    ['xchain-wallet_0.333.1_arm64.deb', 'default'],
     ['xchain-wallet-android-v0.333.1.aab', 'store'],
     ['xchain-wallet-v0.333.1.apk', 'store'],
     ['xchain-wallet-ios-v0.333.1.ipa', 'store'],
@@ -177,15 +191,21 @@ const rows = declared.split('\n')
     .map((l) => l.trim().split(/\s+/));
 assert.ok(rows.length > 0, 'expected-artifacts.txt declares nothing');
 for (const row of rows) {
-    assert.equal(row.length, 3, `every declared artifact needs a profile column: ${row.join(' ')}`);
+    assert.equal(row.length, 4,
+        `every declared artifact needs a profile AND an arch column: ${row.join(' ')}`);
     assert.ok(['default', 'store'].includes(row[2]), `unknown profile in: ${row.join(' ')}`);
+    // '-' is the way to say "not arch-partitioned" out loud; an empty
+    // column would silently restore the pre-arch-gate behaviour.
+    assert.ok(row[3] === '-' || row[3].split(',').every(
+        (t) => ['x64', 'arm64', 'armv7l', 'universal', 'multi'].includes(t),
+    ), `unknown arch token in: ${row.join(' ')}`);
 }
 
 // A stale list is caught where it is written, not where it is used: the
 // release that discovers a missing profile should be the one being declared,
 // not the one already staged and waiting for a signature.
 const staleList = join(work, 'expected-stale.txt');
-writeFileSync(staleList, declared.replace(/^(required\s+xchain-wallet-web-v\*\.tar\.gz)\s+default$/m, '$1'));
+writeFileSync(staleList, declared.replace(/^(required\s+xchain-wallet-web-v\*\.tar\.gz)\s+default\s+-$/m, '$1'));
 res = bashResult(
     `source ${JSON.stringify(lib)}; xr_check_expected ${JSON.stringify(dir)} ${JSON.stringify(staleList)}`,
 );
