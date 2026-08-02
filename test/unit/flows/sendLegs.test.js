@@ -320,14 +320,32 @@ describe('summaries and totals', () => {
 
 // The load-bearing check: the params this module builds, run through the REAL
 // SDK serializer, must produce distinct legs on the wire and the expected
-// format version. Skipped (not failed) when the sibling xchain-sdk checkout is
-// absent, since the wallet's unit suite must run without it.
+// format version.
+//
+// RESOLVED BY PACKAGE NAME, NOT BY SIBLING PATH . This read
+// `../../../../xchain-sdk/src/formatSelector.js`, four levels up and out of
+// the repo, so it found the SDK only on a machine that happened to have a
+// sibling checkout. Everywhere else - CI, a clean clone, a release runner -
+// the catch below turned the load-bearing check into a silent skip, and a
+// test that skips where it matters most is worse than one that is absent,
+// because the suite still reports green.
+//
+// The SDK is now an ordinary registry dependency
+// (`npm:@dankest-llc/xchain-sdk`), so the package name resolves out of
+// node_modules on every machine. The fallback stays for the maintainer case
+// where a sibling checkout is deliberately linked in via `pnpm run sdk:link`.
 const require_ = createRequire(import.meta.url);
 let FormatSelector = null;
-try {
-    FormatSelector = require_('../../../../xchain-sdk/src/formatSelector.js');
-} catch {
-    FormatSelector = null;
+for (const specifier of [
+    'xchain-sdk/src/formatSelector.js',
+    '../../../../xchain-sdk/src/formatSelector.js',
+]) {
+    try {
+        FormatSelector = require_(specifier);
+        break;
+    } catch {
+        FormatSelector = null;
+    }
 }
 
 describe.skipIf(!FormatSelector)('against the real SDK serializer', () => {

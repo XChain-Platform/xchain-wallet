@@ -47,12 +47,21 @@ const crypto  = require('crypto');
 // bech32m, so it cannot even parse the P2TR address this account IS. Using the
 // SDK's copy also means the PSBT is built by the same library the co-signer
 // decodes it with.
-const bitcoin = require('../../../../../xchain-sdk/node_modules/bitcoinjs-lib');
+// RESOLVED THROUGH THE INSTALLED SDK, NOT A SIBLING CHECKOUT .
+// These read `../../../../../xchain-sdk/node_modules/...`, five levels up and
+// into a sibling repository's private dependency tree, so this spec ran only
+// on a machine that happened to have that checkout. The SDK is a registry
+// dependency now, so anchoring a require at its package.json reaches the same
+// copies through the lockfile instead: still the SDK's own bitcoinjs and ECC
+// backend, which is the point of the comment above, but resolvable from a
+// clean clone.
+const sdkRequire = createRequire(require.resolve('xchain-sdk/package.json'));
+const bitcoin = sdkRequire('bitcoinjs-lib');
 const { secp256k1 } = require('@noble/curves/secp256k1');
-const MuSig2 = require('../../../../../xchain-sdk/src/musig2.js');
+const MuSig2 = sdkRequire('./src/musig2.js');
 // Taproot address/script work needs an ECC backend, exactly as the co-signer
 // itself initialises one on load.
-bitcoin.initEccLib(require('../../../../../xchain-sdk/node_modules/@bitcoinerlab/secp256k1'));
+bitcoin.initEccLib(sdkRequire('@bitcoinerlab/secp256k1'));
 
 // HTTPS because  D6 narrowed the content-script matches to
 // `https://*/*` plus loopback: the wallet deliberately no longer injects

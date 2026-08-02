@@ -203,9 +203,19 @@ describe('payloadCompression ( Part B)', () => {
         it('what the SDK compressed-then-encrypted, the wallet decrypts-then-inflates', async () => {
             // Mirrors the real pipeline: SDK composes (compress -> encrypt),
             // wallet consumes (decrypt -> inflate).
-            const { default: GatedFileUtils } = await import('../../../../xchain-sdk/src/gatedFile.js')
-                .catch(() => ({ default: null }));
-            if (!GatedFileUtils) return; // sibling SDK not checked out
+            // By package name first : the SDK is a registry
+            // dependency now, so this resolves out of node_modules on every
+            // machine. It used to read four levels up to a sibling checkout
+            // and quietly `return` where there was none, which meant this
+            // cross-service check never ran in CI while the suite reported
+            // green. The relative path stays as the `pnpm run sdk:link`
+            // fallback.
+            const GatedFileUtils = await import('xchain-sdk/src/gatedFile.js')
+                .then((m) => m.default)
+                .catch(() => import('../../../../xchain-sdk/src/gatedFile.js')
+                    .then((m) => m.default)
+                    .catch(() => null));
+            if (!GatedFileUtils) return; // no SDK resolvable at all
 
             const gatedFile = new GatedFileUtils();
             const plaintext = Buffer.from('cross-service gated payload. '.repeat(300), 'utf8');
