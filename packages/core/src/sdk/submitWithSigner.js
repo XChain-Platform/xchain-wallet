@@ -317,6 +317,26 @@ export async function submitWithSigner({
         }
     };
 
+    //  §6 / : a TAPROOT envelope comes back as a PAIR from this one
+    // call, and THIS lifecycle does not complete pairs. It signs one PSBT, then
+    // branches to a second transaction only for P2SH/P2WSH, so an envelope would
+    // have its commit broadcast and its reveal silently dropped: the coin lands in
+    // a one-time P2TR output whose only exit is the §3.5 key-path cancel.
+    //
+    // Refuse BEFORE signing anything rather than half-complete it. This is the same
+    // instinct the SDK's own lifecycle already applies to a custom signer it cannot
+    // drive, and §6 is explicit that the alternative "manufactures a stranded-funds
+    // event, not an error message". Nothing reaches this branch today because the
+    // wallet never asks for TAPROOT; it exists so that turning the encoding on
+    // fails loudly here instead of quietly costing a user their coin.
+    if (encoded && encoded.revealPsbt) {
+        throw new Error(
+            'submitWithSigner: the encoder returned a Taproot envelope commit/reveal pair, '
+            + 'which this signing path cannot complete. Refusing before broadcast: completing '
+            + 'only the commit would strand the funds ( §3.5/§6).',
+        );
+    }
+
     // Step 3: sign via the injected Signer.
     onProgress('signing', { encoding: encoded.encoding });
     const signed = await signer.signPsbt({
