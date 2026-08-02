@@ -34,6 +34,14 @@ const SWEEP_FORMS = [
     'DestroyForm.jsx', 'LinkForm.jsx', 'SleepForm.jsx',
     'PublishFileForm.jsx', 'AttachContentForm.jsx', 'OracleForm.jsx',
     'CallbackForm.jsx', 'SweepForm.jsx', 'TokenAdminForm.jsx',
+    // , added 2026-08-01. It was on NEITHER list, so this smoke passed
+    // while the one authoring surface for an ownership sale composed ORDER and
+    // DISPENSER with no fee output at all: on LTC/DOGE the transaction
+    // confirmed and the indexer answered "insufficient fee (native coin output
+    // required)" while the form reported the sale as open. Measured as ORDER
+    // 2127 (invalid, fee null) against 2130 (valid, payment_mode 1) after the
+    // fix, on the same venue minutes apart.
+    'SellOwnershipForm.jsx',
 ];
 for (const f of SWEEP_FORMS) {
     const src = routes(f);
@@ -256,7 +264,53 @@ assert.doesNotMatch(gated, /<NativeFeeToggle/, 'GatedPublishForm (BATCH lane) ha
 const batchComposer = routes('BatchComposerForm.jsx');
 assert.doesNotMatch(batchComposer, /<NativeFeeToggle/, 'BatchComposerForm (BATCH) has no toggle');
 
+// ---- DISCOVERY GUARD : a curated list can only ever miss the NEXT
+// omission, which is exactly how SellOwnershipForm survived the PC-51 sweep and
+// §11.3's audit of it. Rather than trust the lists above to stay complete, scan
+// every route for one that BUILDS a quotable action payload and does not thread
+// the flag. Anything genuinely exempt has to say so here, by name and reason.
+const { readdirSync } = await import('node:fs');
+const routesDir = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
+
+// Quotable actions that must carry a native-coin fee output off Bitcoin. BATCH
+// is deliberately absent: it is fee-quote DENIED (see the gated lane above).
+const QUOTABLE = /\b(?:action|ACTION)\s*[:=]\s*'(ORDER|DISPENSER|ISSUE|SWAP|DIVIDEND|BROADCAST)'/;
+
+const EXEMPT = new Map([
+    // Composes nothing itself; it delegates each leg to the form that owns it,
+    // and those forms are asserted above.
+    ['ParallelComposer.jsx', 'delegates every leg to an already-swept form'],
+    // BATCH lane, fee-quote denied.
+    ['BatchComposerForm.jsx', 'BATCH is fee-quote denied'],
+    ['GatedPublishForm.jsx', 'BATCH lane, fee-quote denied'],
+    // NOT a clean exemption: this one is , a real instance of the same
+    // gap this guard exists to catch. It is listed rather than fixed because
+    // the cross-chain SWAP lane cannot currently be broadcast (§9.1, blocked by
+    // the  encoder bug), so the fix could not be driven and an untested
+    // change to a money path should not ship. Remove this line when  is
+    // closed - do not let it become furniture.
+    ['CrossChainSwapForm.jsx', ': real gap, unverifiable while  blocks the lane'],
+    // Also NOT clean: , and the most consequential of the three, since
+    // Close is how an owner reclaims what a dispenser holds in escrow. Unlike
+    //  this lane IS drivable today, so it is the better one to take
+    // next. Remove this line when  is closed.
+    ['DispenserDetail.jsx', ': real gap, drivable, deliberately not fixed untested'],
+]);
+
+for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
+    const src = routes(file);
+    if (!QUOTABLE.test(src)) continue;                 // not an authoring surface
+    if (EXEMPT.has(file)) continue;
+    assert.match(
+        src, /payFeeInNativeCoin/,
+        `${file} builds a quotable action but never threads payFeeInNativeCoin. Off Bitcoin the `
+        + 'native-coin fee is MANDATORY , so the action confirms on chain and is then '
+        + 'rejected "insufficient fee (native coin output required)" while the form reports '
+        + 'success. Give it the useNativeFee treatment, or add it to EXEMPT with a reason.',
+    );
+}
+
 console.log(
     'native-fee-sweep smoke: all assertions passed (PC-51 sweep +  mandatory-chain '
-    + 'derivation +  BET lane, form/flow/host +  contract lane)',
+    + 'derivation +  BET lane, form/flow/host +  contract lane +  discovery)',
 );
