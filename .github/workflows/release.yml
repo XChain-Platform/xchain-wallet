@@ -206,7 +206,21 @@ jobs:
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
 
+      # Heap, not flags: the FIRST release run (v0.334.0) died here with
+      # `FATAL ERROR: Reached heap limit ... JavaScript heap out of memory`,
+      # aborting at ~2.0 GB after 44s. Node sizes its default old-space from
+      # the machine it starts on, so a developer box with far more RAM builds
+      # this happily and a GitHub-hosted runner does not: the failure was
+      # invisible until the workflow first ran, and it is not reproducible
+      # locally on anything roomy.
+      #
+      # 6 GB on a 16 GB runner leaves ample headroom while giving the bundler
+      # room for the whole graph. Raising the ceiling is the right fix rather
+      # than trimming the build, because nothing here is leaking - it is one
+      # large synchronous bundle of a wallet that carries every chain.
       - name: Build web + extension
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm -C packages/web build
           pnpm -C packages/extension build
