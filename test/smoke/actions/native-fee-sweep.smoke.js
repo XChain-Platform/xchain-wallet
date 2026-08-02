@@ -290,11 +290,11 @@ const EXEMPT = new Map([
     // change to a money path should not ship. Remove this line when  is
     // closed - do not let it become furniture.
     ['CrossChainSwapForm.jsx', ': real gap, unverifiable while  blocks the lane'],
-    // Also NOT clean: , and the most consequential of the three, since
-    // Close is how an owner reclaims what a dispenser holds in escrow. Unlike
-    //  this lane IS drivable today, so it is the better one to take
-    // next. Remove this line when  is closed.
-    ['DispenserDetail.jsx', ': real gap, drivable, deliberately not fixed untested'],
+    // Also NOT clean: . Narrower than first filed - the v1 CLOSE this
+    // file composes owes no fee at all (formats[1] has no EXPIRATION and is not
+    // format 0, so fees.AMOUNT stays 0), but the v2 EDIT path sets EXPIRATION,
+    // which IS priced. Drivable today. Remove this line when  is closed.
+    ['DispenserDetail.jsx', ': v2 edit path is fee-bearing and unthreaded'],
 ]);
 
 for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
