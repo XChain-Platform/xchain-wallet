@@ -358,6 +358,79 @@ assert.match(
     + ' because the spec still claims it',
 );
 
+// SSC-1 door 2 : the native HTTP proxy, which does NOT go through the
+// plugin registry, so everything above leaves it wide open.
+//
+// Measured on an API 36 emulator (2026-08-01), before the block:
+//   fetch('/_capacitor_http_interceptor_?u=<any url>')
+//   -> status 200, 559 bytes, the target's real body, from a fresh iframe
+//      realm as well as the main one.
+//
+// That is a genuine CSP bypass rather than a surface the CSP misses: the URL
+// requested is https://localhost/... - the app's OWN origin - so
+// `connect-src 'self'` permits it and the cross-origin fetch happens natively
+// afterwards. `WebViewLocalServer.shouldInterceptRequest` checks that prefix
+// before its own URI matcher and reads the target from the `u` parameter.
+// Comments stripped for the assertions below. This file's javadoc quotes the
+// very strings and status codes being asserted, so matching the raw text
+// passes on prose alone: a draft of this guard let "refusal downgraded to a
+// null return" through, because the word 403 still appeared in a comment
+// explaining why a 403 was used.
+const proxyClient = readFileSync(
+    join(
+        android,
+        'app/src/main/java/io/xchain/wallet/android/security/NoNativeHttpProxyWebViewClient.java',
+    ),
+    'utf8',
+)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+
+// Assert the CALL from inside onCreate, not merely that a method by this name
+// exists: deleting the call site while leaving the definition is what a bad
+// merge does, and the iOS twin's first guard passed exactly that case.
+const onCreateBody = mainActivity.match(
+    /public void onCreate\(Bundle savedInstanceState\) \{([\s\S]*?)\n    \}/,
+);
+assert.ok(onCreateBody, 'MainActivity still overrides onCreate');
+assert.match(
+    onCreateBody[1],
+    /blockNativeHttpProxy\(\)/,
+    'SSC-1 door 2: onCreate must install the WebViewClient that refuses'
+    + ' /_capacitor_http_interceptor_',
+);
+assert.ok(
+    mainActivity.indexOf('blockNativeHttpProxy()')
+        > mainActivity.indexOf('super.onCreate('),
+    'the swap runs AFTER super.onCreate: the bridge does not exist before it',
+);
+for (const proxyPath of ['/_capacitor_http_interceptor_', '/_capacitor_https_interceptor_']) {
+    assert.ok(
+        proxyClient.includes(`"${proxyPath}"`),
+        `SSC-1: ${proxyPath} must be refused (the two are NOT prefixes of each other,`
+        + ' so covering only the live name silently drops the alias)',
+    );
+}
+assert.match(
+    proxyClient,
+    /403/,
+    'the refusal must be an ANSWER, not a null return: null means "not handled" and'
+    + ' hands the request straight back to the loader',
+);
+assert.match(
+    proxyClient,
+    /extends BridgeWebViewClient[\s\S]*?shouldInterceptRequest/,
+    'the refusal must sit in shouldInterceptRequest, the same call the proxy would'
+    + ' have been served from - a JS-layer patch is not a control, because'
+    + " frame-src 'self' yields a fresh unpatched fetch from an iframe realm",
+);
+assert.match(
+    mainActivity,
+    /getWebViewClient\(\) instanceof NoNativeHttpProxyWebViewClient[\s\S]{0,300}?throw new IllegalStateException/,
+    'the swap must be asserted and FAIL LOUDLY: a client something later replaces'
+    + ' would look exactly like success',
+);
+
 // Biometric lifecycle: the three properties that make the sidecar safe. Each
 // has a convenient wrong version (a validity window, weak biometrics, a key
 // that survives re-enrollment), so assert the right ones are present.
@@ -521,9 +594,22 @@ assert.equal(
     2,
     'both lanes: Play app-signing and K10, under the one applicationId (D3a)',
 );
+// K10 exists as of 2026-08-01, so its fingerprint is a real value here and
+// must be the SAME value SECURITY.md publishes: those two disagreeing is the
+// failure users cannot detect, because the file that authenticates the APK
+// would name a key that did not sign it. The other entry stays a placeholder
+// on purpose - it is Google's app-signing certificate under Play App Signing,
+// which does not exist until the first upload.
+const [playFp, k10Fp] = assetlinks[0].target.sha256_cert_fingerprints;
 assert.ok(
-    assetlinks[0].target.sha256_cert_fingerprints.every((f) => f.startsWith('REPLACE_WITH_')),
-    'placeholders, not invented fingerprints',
+    playFp.startsWith('REPLACE_WITH_'),
+    'the Play app-signing fingerprint stays a placeholder until the first upload',
+);
+assert.match(k10Fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/, 'K10 fingerprint is a real SHA-256, uppercase colon-separated');
+const security = readFileSync(join(wsRoot, 'SECURITY.md'), 'utf8');
+assert.ok(
+    security.replace(/\s+/g, '').includes(k10Fp.replace(/\s+/g, '')),
+    'the K10 fingerprint in assetlinks matches the canonical copy in SECURITY.md',
 );
 
 // Camera: declared, and NOT required, so the app still lists for devices
@@ -538,11 +624,44 @@ assert.match(
 // off command lines.
 const ceremony = readFileSync(join(wsRoot, 'tools', 'release', 'android-ceremony.sh'), 'utf8');
 assert.match(ceremony, /refusing to run in CI/, 'the ceremony refuses to run unattended');
+// No password VALUE on a command line. A PATH to a 0600 file is not a secret,
+// and reading one is what lets the ceremony run without a human typing two
+// passphrases, so `-storepass:file <path>` and `--ks-pass file:<path>` are
+// allowed while the value-carrying and environment-carrying forms are not.
+// Comments are stripped first: the script EXPLAINS why --key-pass is absent,
+// and prose naming a flag is not the same as passing one.
+const ceremonyCode = ceremony
+    .split('\n')
+    .filter((l) => !/^\s*`?#/.test(l))
+    .join('\n');
 assert.doesNotMatch(
-    ceremony,
-    /-storepass\s|--ks-pass\s|-keypass\s/,
-    'no password ever reaches a command line; jarsigner and apksigner prompt',
+    ceremonyCode,
+    /-storepass\s|-keypass\s|--ks-pass\s+(?!"?file:)|--key-pass\s+(?!"?file:)|:env\s|--ks-pass\s+"?pass:/,
+    'no password VALUE ever reaches a command line or an environment variable',
 );
+// The ceremony may NAME the regeneration command in its failure message; it
+// must never RUN one. A ceremony that rewrites its own trust anchors at
+// signing time accepts whatever is on disk, which is the substitution the
+// metadata exists to catch. (It used to run it, with `|| true`.)
+assert.doesNotMatch(
+    ceremonyCode.split('\n').filter((l) => !/^\s*echo\s/.test(l)).join('\n'),
+    /--write-verification-metadata/,
+    'the ceremony never executes --write-verification-metadata; regenerating is a separate reviewed step',
+);
+assert.match(
+    ceremony,
+    /do not paper over it here/,
+    'a verification failure tells the operator how to regenerate deliberately, and to review the diff',
+);
+assert.match(ceremony, /XCHAIN_BUILD_PROFILE=store/, 'store artifacts are built with the store profile');
+for (const guard of [
+    /does not exist in this repository/,
+    /is not \$\{?TAG|HEAD \(\$HEAD_SHA\) is not/,
+    /uncommitted path\(s\) in the worktree/,
+]) {
+    assert.match(ceremony, guard, `the ceremony refuses to sign unprovenanced bytes (${guard})`);
+}
+assert.match(ceremony, /PROVENANCE\.txt/, 'every run records what it was built from, next to the bytes');
 assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not built again');
 const expectedArtifacts = readFileSync(
     join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',
@@ -681,10 +800,23 @@ for (const host of [
 }
 const listing = readFileSync(join(mobile, 'docs', 'PLAY_LISTING.md'), 'utf8');
 assert.match(listing, /D8/, 'country availability is still an open operator decision');
+// K10 was generated 2026-08-01, so the slot now holds a real fingerprint and
+// the honesty requirement moves: it must be a well-formed SHA-256 (never an
+// invented or truncated one), and the file must still say plainly that a Play
+// install carries a DIFFERENT signature, because Play App Signing means Google
+// re-signs what it serves and a user checking that install against this value
+// would otherwise conclude they had been given a forgery.
+const securityMd = readFileSync(join(wsRoot, 'SECURITY.md'), 'utf8');
 assert.match(
-    readFileSync(join(wsRoot, 'SECURITY.md'), 'utf8'),
-    /PENDING K10 CEREMONY/,
-    'the fingerprint slot exists and is honestly empty until the key does',
+    securityMd.replace(/\s+/g, ''),
+    /([0-9A-F]{2}:){31}[0-9A-F]{2}/,
+    'the K10 fingerprint slot holds a full 32-byte SHA-256',
+);
+assert.doesNotMatch(securityMd, /PENDING K10 CEREMONY/, 'the placeholder is gone now that the key exists');
+assert.match(
+    securityMd,
+    /Play[\s\S]{0,200}different[\s\S]{0,200}signature|different[\s\S]{0,120}signature/i,
+    'SECURITY.md says a Play install cannot be checked against this fingerprint',
 );
 assert.match(
     readFileSync(join(wsRoot, 'docs', 'Privacy_Policy.md'), 'utf8'),
@@ -709,7 +841,7 @@ console.log(
     + ' http downgrade, all on the one exported activity; XChainLinks queues the cold-start link and'
     + ' clears it on read; the JS half agrees on the plugin name and refuses lookalike hosts;'
     + ' assetlinks ships as a two-fingerprint template rather than invented values; camera is optional'
-    + ' hardware; the ceremony refuses to run in CI, passes no password on any command line, derives'
+    + ' hardware; the ceremony refuses to run in CI, passes no password VALUE on any command line (0600 files by path only), refuses to sign a dirty tree or a tag that is not HEAD, records provenance beside the bytes, and never regenerates its own dependency-verification metadata, derives'
     + ' the APK from the AAB, and both artifact names are declared in expected-artifacts.txt.'
     + ' S4: allowBackup=false with BOTH the cloud-backup and device-transfer surfaces excluded and'
     + ' the API 26-30 rules beside them; cleartext refused and user-added CAs untrusted in release,'
@@ -718,5 +850,5 @@ console.log(
     + ' and deliberately not to receive/settings; the update feed carries one semver field and the'
     + ' client renders none of it, identifies nobody and refuses redirects; the capability floor is'
     + ' feature-detected before React mounts; and the listing pack, wire audit, privacy-policy mobile'
-    + ' section and honestly-empty K10 fingerprint slot are all in the repo)',
+    + ' section and the real K10 fingerprint (key generated 2026-08-01) matching assetlinks and SECURITY.md are all in the repo)',
 );

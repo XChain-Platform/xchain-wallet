@@ -2,9 +2,11 @@ package io.xchain.wallet.android;
 
 import android.os.Bundle;
 
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
 import io.xchain.wallet.android.links.XChainLinksPlugin;
+import io.xchain.wallet.android.security.NoNativeHttpProxyWebViewClient;
 import io.xchain.wallet.android.vault.XChainVaultPlugin;
 
 /**
@@ -24,6 +26,44 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(XChainLinksPlugin.class);
         super.onCreate(savedInstanceState);
         dropUnusedCapacitorPlugins();
+        blockNativeHttpProxy();
+    }
+
+    /**
+     * SSC-1 door 2 : refuse Capacitor's native cross-origin HTTP
+     * proxy, which does NOT go through the plugin registry and therefore
+     * survives {@link #dropUnusedCapacitorPlugins()} entirely. The rule, the
+     * measurement and the reasoning live in
+     * {@link NoNativeHttpProxyWebViewClient}.
+     *
+     * <p>ORDERING, which is load-bearing and is better here than on iOS.
+     * {@code super.onCreate} reaches {@code Bridge.create()}, which calls
+     * {@code webView.loadUrl(appUrl)} - so the page load is already REQUESTED
+     * by the time this runs. That is fine: {@code loadUrl} only posts to the
+     * WebView's message loop, and this line runs on the same UI thread before
+     * that loop is free, so the client is swapped before any resource request
+     * is issued. The swap must stay on the UI thread and stay synchronous with
+     * onCreate for that argument to hold.
+     */
+    private void blockNativeHttpProxy() {
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            throw new IllegalStateException(
+                "SSC-1: no bridge after super.onCreate; cannot block the native HTTP proxy."
+            );
+        }
+        bridge.setWebViewClient(new NoNativeHttpProxyWebViewClient(bridge));
+
+        // Assert the swap took. Setting a client that something later replaces
+        // would look exactly like success, and the failure mode is a wallet
+        // shipping a working cross-origin proxy behind its own CSP.
+        if (!(bridge.getWebViewClient() instanceof NoNativeHttpProxyWebViewClient)) {
+            throw new IllegalStateException(
+                "SSC-1: the WebViewClient did not stay swapped; the native HTTP"
+                    + " proxy is still reachable. A Capacitor upgrade has changed"
+                    + " how the client is installed; re-do this rather than shipping it."
+            );
+        }
     }
 
     /**
