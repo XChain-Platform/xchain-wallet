@@ -22,12 +22,18 @@
 // matters because `pnpm -r --if-present build` runs in the ordinary CI test
 // lane, where none of those exist; the native build lives in its own workflow.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { versionPropertiesFor, versionXcconfigFor } from './version.js';
 import { PROFILE_STAMP_FILE, parseProfileStamp } from '../../web/buildProfile.js';
+
+// The staged-bundle stamp. The same literal appears in
+// `android/app/src/main/../build.gradle`, which cannot import this file;
+// `test/smoke/shells/mobile-shell.smoke.js` fails if the two ever disagree.
+const WEBDIR_STAMP_FILE = 'webdir-stamp.txt';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
@@ -95,6 +101,23 @@ rmSync(www, { recursive: true, force: true });
 mkdirSync(www, { recursive: true });
 cpSync(webDist, www, { recursive: true });
 
+// A stamp naming exactly which bundle this is, so Gradle can refuse to package
+// a DIFFERENT one (see WEBDIR_STAMP_FILE below and app/build.gradle).
+//
+// WHY THIS EXISTS. Staging into `www` does not put anything into the APK.
+// Capacitor copies `www` to `android/app/src/main/assets/public` in a separate
+// step (`cap copy android`), and Gradle packages whatever that directory
+// happens to hold. Skip the copy and the build succeeds, the version is right,
+// every source-level gate passes, and the APK ships the PREVIOUS web bundle.
+// That is not hypothetical: it cost a build cycle on 2026-08-02, when a fix
+// was reproduced as still-broken on an APK that contained it.
+//
+// The release ceremony runs `cap sync` and is not exposed to this. What is
+// exposed is every hand-driven `./gradlew` - which is how a developer checks a
+// change on a device, and therefore exactly where a wrong answer is most
+// expensive.
+writeFileSync(join(www, WEBDIR_STAMP_FILE), `${webDirStamp(www)}\n`);
+
 // Both native halves are numbered from the one tag in the one place, so an
 // iOS build and an Android build of a release can never disagree about which
 // release they are. Written unconditionally: the Xcode project carries no
@@ -106,3 +129,29 @@ mkdirSync(dirname(versionXcconfig), { recursive: true });
 writeFileSync(versionXcconfig, versionXcconfigFor(tag));
 
 console.log(`@xchain-wallet/mobile: staged ${webDist} -> www, versioned as ${tag}`);
+
+/**
+ * Content hash of a staged webDir, ignoring the stamp file itself.
+ *
+ * Content and not mtimes: `cap copy` rewrites timestamps, and two directories
+ * that differ only in when they were written are the same bundle. Paths are
+ * included and separators normalised so a moved or renamed file registers, and
+ * the list is sorted so directory order never enters the answer.
+ *
+ * @param {string} dir
+ * @returns {string} sha256 hex
+ */
+function webDirStamp(dir) {
+    const entries = [];
+    (function walk(current) {
+        for (const item of readdirSync(current, { withFileTypes: true })) {
+            const abs = join(current, item.name);
+            if (item.isDirectory()) { walk(abs); continue; }
+            const rel = relative(dir, abs).split(sep).join('/');
+            if (rel === WEBDIR_STAMP_FILE) continue;
+            entries.push(`${rel}:${createHash('sha256').update(readFileSync(abs)).digest('hex')}`);
+        }
+    }(dir));
+    entries.sort();
+    return createHash('sha256').update(entries.join('\n')).digest('hex');
+}

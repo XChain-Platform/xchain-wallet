@@ -192,6 +192,30 @@ jobs:
           echo "boot-check tag at $b, module entry at $m"
           test "$b" -lt "$m"
 
+      # The bundle inside the artifact is the bundle that was staged.
+      #
+      # Gradle already refuses at configuration time when assets/public does
+      # not match packages/mobile/www (app/build.gradle), which covers the
+      # hand-driven `./gradlew` this exists for. This is the same claim checked
+      # one layer further out, against the bytes that would be signed: the
+      # stamp rides inside the AAB, so it is verifiable by anyone holding the
+      # artifact, without trusting the machine that built it.
+      #
+      # Same lesson as the merged manifest and the boot-check ordering above:
+      # a source-level assertion cannot see what packaging did.
+      - name: The staged web bundle is the one inside the bundle
+        run: |
+          set -euo pipefail
+          rm -rf aab-stamp
+          unzip -o -q packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
+            'base/assets/public/webdir-stamp.txt' -d aab-stamp
+          shipped="$(cat aab-stamp/base/assets/public/webdir-stamp.txt)"
+          staged="$(cat packages/mobile/www/webdir-stamp.txt)"
+          echo "shipped: $shipped"
+          echo "staged:  $staged"
+          test -n "$shipped"
+          test "$shipped" = "$staged"
+
       - name: Upload the unsigned smoke artifacts
         uses: actions/upload-artifact@v4
         with:

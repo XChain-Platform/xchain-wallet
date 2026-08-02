@@ -235,13 +235,34 @@ function hashTree(root) {
 
 const webDist = join(wsRoot, 'packages', 'web', 'dist');
 const www = join(mobile, 'www');
+const WEBDIR_STAMP_FILE = 'webdir-stamp.txt';
 if (existsSync(webDist) && existsSync(www)) {
     const distHashes = hashTree(webDist);
     const wwwHashes = hashTree(www);
+    // The one file the staging step adds rather than copies: a content hash of
+    // everything else, so Gradle can refuse to package a bundle that is not
+    // this one (see below). Excluded here rather than the assertion loosened,
+    // so any OTHER extra file still fails.
+    assert.ok(wwwHashes.delete(WEBDIR_STAMP_FILE), 'the staged webDir carries its stamp');
     assert.deepEqual(
         [...wwwHashes.entries()].sort(),
         [...distHashes.entries()].sort(),
-        'the staged webDir is byte-identical to packages/web/dist',
+        'the staged webDir is otherwise byte-identical to packages/web/dist',
+    );
+    // The stamp is only a guard if both halves of it agree on the filename,
+    // and Gradle cannot import the JS that writes it.
+    const buildJs = readFileSync(join(mobile, 'scripts', 'build.js'), 'utf8');
+    const appGradle = readFileSync(join(mobile, 'android', 'app', 'build.gradle'), 'utf8');
+    assert.match(buildJs, new RegExp(`WEBDIR_STAMP_FILE = '${WEBDIR_STAMP_FILE}'`));
+    assert.ok(
+        appGradle.includes(`../../www/${WEBDIR_STAMP_FILE}`)
+        && appGradle.includes(`src/main/assets/public/${WEBDIR_STAMP_FILE}`),
+        'Gradle compares the staged stamp against the packaged one, by the same name',
+    );
+    assert.match(
+        appGradle,
+        /NOT the one staged/,
+        'and refuses the build rather than warning: a stale bundle looks like a working one',
     );
 } else {
     // Not a skip that hides a failure: without a web build there is nothing to

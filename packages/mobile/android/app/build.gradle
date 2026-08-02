@@ -22,6 +22,54 @@ if (!versionPropsFile.exists()) {
 def versionProps = new Properties()
 versionPropsFile.withInputStream { versionProps.load(it) }
 
+// The APK must contain the bundle that was staged, not the one that happened
+// to be lying in assets/public .
+//
+// Staging into `packages/mobile/www` puts nothing into the APK. Capacitor
+// copies that directory to `app/src/main/assets/public` in a SEPARATE step
+// (`cap copy android`), and Gradle packages whatever is there. Skip the copy
+// and everything succeeds - right version, every source-level gate green - and
+// the APK ships the previous web bundle. That cost a build cycle on
+// 2026-08-02, when a fix was reproduced as still-broken on a build that
+// contained it.
+//
+// `scripts/build.js` writes a content hash of what it staged into both
+// directories (the stamp rides along with the copy, because it is inside
+// `www`). Equal stamps mean the copy happened after the staging. The check is
+// deliberately at configuration time, so it fails before anything is compiled
+// rather than after a two-minute build.
+//
+// The ceremony runs `cap sync` and never sees this. It exists for the
+// hand-driven `./gradlew` a developer uses to check a change on a device,
+// which is exactly where a stale answer is most expensive.
+def stagedStamp = file('../../www/webdir-stamp.txt')
+def packagedStamp = file('src/main/assets/public/webdir-stamp.txt')
+if (!stagedStamp.exists()) {
+    throw new GradleException(
+        "packages/mobile/www/webdir-stamp.txt is missing. Run" +
+        " `pnpm --filter @xchain-wallet/mobile build` to stage the web assets," +
+        " then `npx cap copy android`, before building."
+    )
+}
+if (!packagedStamp.exists()) {
+    throw new GradleException(
+        "android/app/src/main/assets/public/webdir-stamp.txt is missing: the staged" +
+        " web bundle has never been copied into this project. Run" +
+        " `npx cap copy android` (from packages/mobile) before building, or the APK" +
+        " ships whatever assets/public last held."
+    )
+}
+if (stagedStamp.text.trim() != packagedStamp.text.trim()) {
+    throw new GradleException(
+        "the web bundle in android/app/src/main/assets/public is NOT the one staged" +
+        " in packages/mobile/www.\n" +
+        "  staged:   " + stagedStamp.text.trim() + "\n" +
+        "  packaged: " + packagedStamp.text.trim() + "\n" +
+        "Run `npx cap copy android` from packages/mobile. Without it this build would" +
+        " have packaged the previous bundle and told you nothing."
+    )
+}
+
 android {
     namespace = "io.xchain.wallet.android"
     compileSdk = rootProject.ext.compileSdkVersion
