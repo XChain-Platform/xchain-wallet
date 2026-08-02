@@ -334,7 +334,7 @@ export class SoftwareSigner extends Signer {
      * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
      */
-    async signPsbt({ psbtHex, chainId, signingPaths, reveal }) {
+    async signPsbt({ psbtHex, chainId, signingPaths, reveal, envelopeReveal }) {
         this._assertUnlocked();
         this._assertSdkRegistry('signPsbt');
         if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
@@ -359,9 +359,17 @@ export class SoftwareSigner extends Signer {
         // #0"). The reveal's only inputs are those chunk outputs (all the caller's own
         // key, one source), so sign every input and finalize with the SDK's reveal
         // finalizer, exactly as sdk.submitAction's lifecycleManager does for phase 2.
-        const { txHex, txid, psbtHex: signedPsbtHex } = reveal
-            ? sdk.wallet.signRevealPsbt(psbtHex, wif)
-            : sdk.wallet.signPsbt(psbtHex, wif, { inputIndices });
+        //  §3.2/§3.5: a TAPROOT ENVELOPE reveal is a different animal again. It
+        // is a BIP341 script-path spend, so it needs a SCHNORR signature over the
+        // envelope leaf and the standard taproot finalizer; neither the ECDSA key
+        // path nor the chunk-lane finalizer above applies to it. signEnvelopeRevealPsbt
+        // signs input 0 only, because §3.5 pins the commit outpoint there and any
+        // further reveal input belongs to the caller, not to this key.
+        const { txHex, txid, psbtHex: signedPsbtHex } = envelopeReveal
+            ? sdk.wallet.signEnvelopeRevealPsbt(psbtHex, wif)
+            : (reveal
+                ? sdk.wallet.signRevealPsbt(psbtHex, wif)
+                : sdk.wallet.signPsbt(psbtHex, wif, { inputIndices }));
         logConsole.record({
             source: 'signer:software',
             level: 'info',

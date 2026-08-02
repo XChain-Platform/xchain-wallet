@@ -219,11 +219,31 @@ export function PublishFileForm({ walletId, onBack }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
+    // : can this publish actually ride a Taproot envelope? BOTH halves must
+    // hold, and each rules out a different disaster.
+    //
+    // The SIGNER half (§6): a reveal that cannot be signed strands the commit, so
+    // hardware and watch-only never qualify (flows/signerCapability.js).
+    //
+    // The CHAIN half: offering a 390 KB ceiling on a chain with no Taproot would
+    // let the user pick a file the encoder cannot carry, and they would find out
+    // at submit. `p2tr` in addressTypes is the descriptor's own statement that the
+    // chain does Taproot: BTC yes, DOGE never (no segwit at all). LTC is
+    // protocol-capable and armed at 3160000, but its descriptor still reserves
+    // p2tr, so the wallet stays conservative there until that lands rather than
+    // guessing ahead of the registry.
+    const envelopeAvailable = Boolean(
+        flowsLib.signerSupportsTapscript(fromAddress)
+        && descriptor?.addressTypes?.includes('p2tr'),
+    );
+
     // Encoding-aware ceiling for the CURRENT metadata (PC-28): exact,
-    // not the old flat 7000-byte artwork guess.
-    const publicCapFor = (name, type) => flowsLib.maxPublicFileBytes({
-        name, type, title, memo,
-    });
+    // not the old flat 7000-byte artwork guess. With the envelope available this
+    // is the §4 per-encoding ceiling rather than the legacy compiled one.
+    const publicCapFor = (name, type) => flowsLib.maxPublicFileBytes(
+        { name, type, title, memo },
+        envelopeAvailable ? { encoding: 'TAPROOT' } : {},
+    );
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -336,6 +356,15 @@ export function PublishFileForm({ walletId, onBack }) {
                     rawData,
                     payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
+                    //  §6: opt in to size-aware selection, and ASSERT the signer's
+                    // tapscript capability rather than letting AUTO assume it. AUTO only
+                    // reaches for the envelope when that flag is true, so an unaffirmed
+                    // signer stays on P2WSH instead of committing to a reveal it cannot
+                    // produce. Only sent when the envelope is actually available, so
+                    // nothing changes for chains or accounts that cannot use it.
+                    ...(envelopeAvailable
+                        ? { encoding: 'AUTO', options: flowsLib.encoderSignerOptions(fromAddress) }
+                        : {}),
                 };
                 r = hw
                     ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
@@ -624,6 +653,15 @@ export function PublishFileForm({ walletId, onBack }) {
                             current title and memo. The ceiling is exact per
                             upload: shorter names and titles leave a little more
                             room for the file itself.
+                            {envelopeAvailable
+                                ? ' This chain and account support the compact Taproot'
+                                  + ' encoding, which is what makes the larger ceiling'
+                                  + ' possible. Files are compressed automatically when'
+                                  + ' that makes them smaller, so what lands on-chain is'
+                                  + ' often well under the size shown here.'
+                                : ' Files are compressed automatically when that makes'
+                                  + ' them smaller, so what lands on-chain is often less'
+                                  + ' than the file size.'}
                         </p>
                     )}
 

@@ -121,6 +121,19 @@ export class RemoteSigner extends Signer {
     }
 
     async signPsbt(params) {
+        //  §6 / : a Taproot envelope reveal is a BIP341 script-path
+        // spend, and no shipping hardware firmware signs one through this transport.
+        // Refuse HERE rather than let it travel and fail at the device: by then the
+        // caller may already have broadcast the commit, and §6 is explicit that
+        // completing only the commit manufactures a stranded-funds event. The
+        // signer-capability gate (flows/signerCapability.js) should have kept
+        // hardware off this path entirely; this is the backstop for when it does not.
+        if (params && params.envelopeReveal) {
+            throw new SignerStatusError(
+                this._id, 'error',
+                'signPsbt: this signer cannot sign a Taproot envelope reveal (BIP341 script path)',
+            );
+        }
         const res = await this._callOrThrow('signPsbt', params);
         if (!res || typeof res.txHex !== 'string' || typeof res.txid !== 'string') {
             throw new SignerStatusError(

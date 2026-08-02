@@ -8,31 +8,51 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: the wallet's own signing lifecycle refuses a Taproot envelope pair
-// rather than half-completing it ( §6/§3.5, ).
+// Unit: the wallet completes a Taproot envelope pair ( §6/§3.5, ).
 //
-// The wallet does NOT go through the SDK's lifecycleManager; submitWithSigner is
-// a second implementation of the same job, and it had the same gap  fixed
-// in the SDK: it signs one PSBT, broadcasts it, and branches to a second
-// transaction only for P2SH/P2WSH. Handed a commit/reveal pair it would put the
-// commit on chain and drop the reveal, leaving the coin in a one-time P2TR
-// output whose only exit is the §3.5 key-path cancel.
+// The wallet does NOT use the SDK's lifecycleManager; submitWithSigner is a
+// second implementation of the same job, and it had the same gap  fixed
+// in the SDK: sign one PSBT, broadcast it, and branch to a second transaction
+// only for P2SH/P2WSH. A commit/reveal pair would have had its commit broadcast
+// and its reveal dropped.
 //
-// Nothing reaches this branch today, because the wallet never asks for TAPROOT.
-// That is exactly why the guard is worth a test: the day someone turns the
-// encoding on, this must fail loudly instead of quietly costing a user coin.
+// What these tests pin is ORDER, not merely "both happen". §6: "the reveal must
+// be signable before the commit is broadcast; anything else manufactures a
+// stranded-funds event, not an error message". So the tests that matter most are
+// the ones where something goes WRONG and nothing reaches the chain.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
+import { listPendingCommits } from '../../../packages/core/src/shared/utils/envelopeRecoveryMemory.js';
 
-function harness({ withReveal }) {
-    const broadcastTx = vi.fn(async () => ({}));
-    const signPsbt = vi.fn(async () => ({ txHex: 'deadbeef', txid: 'COMMITTXID' }));
+const ENVELOPE = {
+    commitTxid: 'aa'.repeat(32),
+    commitVout: 0,
+    commitValue: 12345,
+    commitAddress: 'bcrt1pexample',
+    internalPubkey: 'bb'.repeat(32),
+    tapleafHash: 'cc'.repeat(32),
+};
+
+function harness({ withReveal = true, revealSignThrows = false, revealBroadcastThrows = false } = {}) {
+    const trace = [];
+    const broadcastTx = vi.fn(async () => { trace.push('broadcast');
+        if (revealBroadcastThrows && trace.filter(t => t === 'broadcast').length === 2) throw new Error('node rejected the reveal');
+        return {}; });
+    const signPsbt = vi.fn(async ({ envelopeReveal }) => {
+        if (envelopeReveal) {
+            trace.push('signReveal');
+            if (revealSignThrows) throw new Error('this signer cannot sign a script path');
+            return { txHex: 'reveal-hex', txid: 'REVEALTXID' };
+        }
+        trace.push('signCommit');
+        return { txHex: 'commit-hex', txid: 'COMMITTXID' };
+    });
     const encoder = {
         createTx: vi.fn(async () => ({
-            psbt: '70736274ff',                       // opaque to the guard
+            psbt: '70736274ff',
             encoding: 'TAPROOT',
-            ...(withReveal ? { revealPsbt: '70736274ff' } : {}),
+            ...(withReveal ? { revealPsbt: '70736274ff', envelope: ENVELOPE } : {}),
         })),
         broadcastTx,
         spendP2sh: vi.fn(async () => ({ psbt: '70736274ff' })),
@@ -43,7 +63,7 @@ function harness({ withReveal }) {
             actions: { createAction: () => ({ actionString: 'FILE|0|a.txt|text/plain', action: 'FILE', version: 0 }) },
         }),
     };
-    return { sdkRegistry, signPsbt, broadcastTx, encoder };
+    return { sdkRegistry, signPsbt, broadcastTx, trace };
 }
 
 const call = ({ sdkRegistry, signPsbt }) => submitWithSigner({
@@ -53,27 +73,63 @@ const call = ({ sdkRegistry, signPsbt }) => submitWithSigner({
     actionData: { action: 'FILE', params: {} },
     encoderOpts: { pubkey: '03abc', rawData: 'x' },
     signer: { signPsbt },
-    signingPaths: [{ inputIndex: 0 }],
+    signingPaths: [{ inputIndex: 0, path: "m/86'/0'/0'/0/3" }],
 });
 
-describe('submitWithSigner and the Taproot envelope pair ', () => {
-    it('REFUSES a commit/reveal pair, and refuses it BEFORE signing or broadcasting', async () => {
-        const h = harness({ withReveal: true });
-        await expect(call(h)).rejects.toThrow(/envelope commit\/reveal pair|cannot complete/i);
-        // the two facts that make this a guard rather than a message
-        expect(h.signPsbt).not.toHaveBeenCalled();
-        expect(h.broadcastTx).not.toHaveBeenCalled();
+describe('submitWithSigner completes the envelope pair ', () => {
+    beforeEach(() => { localStorage.clear(); });
+
+    it('signs BOTH halves before anything is broadcast, then commit -> reveal', async () => {
+        const h = harness();
+        await call(h);
+        expect(h.trace).toEqual(['signCommit', 'signReveal', 'broadcast', 'broadcast']);
     });
 
-    it('names the consequence, so the next reader does not "fix" it by dropping the guard', async () => {
-        const h = harness({ withReveal: true });
-        await expect(call(h)).rejects.toThrow(/strand/i);
+    it('an unsignable reveal broadcasts NOTHING', async () => {
+        // the whole reason the reveal is signed first
+        const h = harness({ revealSignThrows: true });
+        await expect(call(h)).rejects.toThrow();
+        expect(h.trace).not.toContain('broadcast');
     });
 
-    it('a single-PSBT response is untouched by the guard', async () => {
+    it('persists the §3.5 recovery record BEFORE the commit is broadcast', async () => {
+        const h = harness();
+        await call(h);
+        // the record is cleared once the reveal lands, so assert it against a run
+        // where the reveal never does
+        const h2 = harness({ revealBroadcastThrows: true });
+        await expect(call(h2)).rejects.toThrow();
+        const [rec] = listPendingCommits();
+        expect(rec).toBeTruthy();
+        expect(rec.commitTxid).toBe(ENVELOPE.commitTxid);
+        expect(rec.tapleafHash).toBe(ENVELOPE.tapleafHash);
+        expect(rec.internalKeyPath).toBe("m/86'/0'/0'/0/3");
+    });
+
+    it('clears the recovery record once the reveal is on chain', async () => {
+        const h = harness();
+        await call(h);
+        expect(listPendingCommits()).toHaveLength(0);
+    });
+
+    it('returns the REVEAL txid as the action txid (§3.1)', async () => {
+        const h = harness();
+        const result = await call(h);
+        expect(result.txid).toBe('REVEALTXID');
+    });
+
+    it('a rejected reveal surfaces the signed reveal so it can be retried', async () => {
+        const h = harness({ revealBroadcastThrows: true });
+        await expect(call(h)).rejects.toMatchObject({
+            signedTxHex: 'reveal-hex',
+            phase: 'envelope_reveal',
+        });
+    });
+
+    it('a single-PSBT response never takes any of this path', async () => {
         const h = harness({ withReveal: false });
-        await call(h).catch(() => { /* later stages are out of scope here */ });
-        // the guard must not fire on the lanes that work today
-        expect(h.signPsbt).toHaveBeenCalled();
+        await call(h).catch(() => { /* later stages out of scope */ });
+        expect(h.trace).not.toContain('signReveal');
+        expect(listPendingCommits()).toHaveLength(0);
     });
 });

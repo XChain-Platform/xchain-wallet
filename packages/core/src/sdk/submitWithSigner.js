@@ -33,6 +33,7 @@ import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
 import { isBareNativePayment } from '../flows/nativePayment.js';
+import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 
 /**
  * Thrown when a transaction was signed successfully but the broadcast
@@ -318,32 +319,49 @@ export async function submitWithSigner({
     };
 
     //  §6 / : a TAPROOT envelope comes back as a PAIR from this one
-    // call, and THIS lifecycle does not complete pairs. It signs one PSBT, then
-    // branches to a second transaction only for P2SH/P2WSH, so an envelope would
-    // have its commit broadcast and its reveal silently dropped: the coin lands in
-    // a one-time P2TR output whose only exit is the §3.5 key-path cancel.
-    //
-    // Refuse BEFORE signing anything rather than half-complete it. This is the same
-    // instinct the SDK's own lifecycle already applies to a custom signer it cannot
-    // drive, and §6 is explicit that the alternative "manufactures a stranded-funds
-    // event, not an error message". Nothing reaches this branch today because the
-    // wallet never asks for TAPROOT; it exists so that turning the encoding on
-    // fails loudly here instead of quietly costing a user their coin.
-    if (encoded && encoded.revealPsbt) {
-        throw new Error(
-            'submitWithSigner: the encoder returned a Taproot envelope commit/reveal pair, '
-            + 'which this signing path cannot complete. Refusing before broadcast: completing '
-            + 'only the commit would strand the funds ( §3.5/§6).',
-        );
-    }
+    // call, and the ORDER is the safety property, not merely completing both. §6:
+    // "the reveal must be signable before the commit is broadcast; anything else
+    // manufactures a stranded-funds event, not an error message". So the reveal is
+    // signed HERE, while nothing is on chain and a throw costs only an error, and
+    // the recovery record is persisted before either transaction goes out (§3.5).
+    const envelopePair = Boolean(encoded && encoded.revealPsbt);
+    let envelopeRevealSigned = null;
 
-    // Step 3: sign via the injected Signer.
+    // Step 3: sign via the injected Signer.    // Step 3: sign via the injected Signer.
     onProgress('signing', { encoding: encoded.encoding });
     const signed = await signer.signPsbt({
         psbtHex: encoded.psbt,
         chainId,
         signingPaths: expandSigningPaths(encoded.psbt),
     });
+
+    // Step 3b: the envelope reveal, signed while nothing is on chain yet.
+    if (envelopePair) {
+        envelopeRevealSigned = await signer.signPsbt({
+            psbtHex: encoded.revealPsbt,
+            chainId,
+            signingPaths: expandSigningPaths(encoded.revealPsbt),
+            // routes to sdk.wallet.signEnvelopeRevealPsbt: a Schnorr script-path
+            // signature over the envelope leaf. A signer that cannot do it throws
+            // here, before the commit exists.
+            envelopeReveal: true,
+        });
+        // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
+        // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
+        // cannot persist, and a throw here means we never broadcast: an unrecorded
+        // commit is an unrecoverable one.
+        if (encoded.envelope) {
+            recordPendingCommit({
+                commitTxid:      encoded.envelope.commitTxid,
+                commitVout:      encoded.envelope.commitVout,
+                commitValue:     encoded.envelope.commitValue,
+                commitAddress:   encoded.envelope.commitAddress,
+                internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
+                tapleafHash:     encoded.envelope.tapleafHash,
+                coin:            chainId,
+            });
+        }
+    }
 
     // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction
     // (and ultimately the §49.5 queued-broadcast surface) can recover
@@ -363,10 +381,37 @@ export async function submitWithSigner({
         });
     }
 
-    // Step 4b: P2SH/P2WSH two-phase: encoder paid to a script, we now
-    // spend that output with a second tx. Signer signs phase-2 too.
     let finalTxid = signed.txid;
     let finalSigned = signed;
+
+    // Step 4a: the envelope reveal, already signed. The decoder indexes the REVEAL,
+    // so its txid is the action's identity (§3.1), not the commit's.
+    if (envelopePair && envelopeRevealSigned) {
+        onProgress('envelope_revealing', { commitTxid: signed.txid });
+        try {
+            await encoder.broadcastTx(envelopeRevealSigned.txHex);
+        } catch (err) {
+            // The commit is on chain and the reveal is not: the one stranding path
+            // signing-first cannot remove. Surface it as a broadcast failure carrying
+            // the signed reveal so the queued-rebroadcast surface can retry it; the
+            // recovery record persisted above is what allows a cancel instead.
+            throw new BroadcastFailedError({
+                cause: err,
+                signedTxHex: envelopeRevealSigned.txHex,
+                txid: envelopeRevealSigned.txid,
+                chainId,
+                signedAt: Date.now(),
+                encoding: encoded.encoding,
+                phase: 'envelope_reveal',
+            });
+        }
+        clearPendingCommit(encoded.envelope?.commitTxid, encoded.envelope?.commitVout);
+        finalTxid = envelopeRevealSigned.txid;
+        finalSigned = envelopeRevealSigned;
+    }
+
+    // Step 4b: P2SH/P2WSH two-phase: encoder paid to a script, we now
+    // spend that output with a second tx. Signer signs phase-2 too.
     const needsPhase2 = encoded.encoding === 'P2SH' || encoded.encoding === 'P2WSH';
     if (needsPhase2) {
         onProgress('p2sh_spending', { phase1Txid: signed.txid });
