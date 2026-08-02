@@ -72,6 +72,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      # actions/checkout recreates the TRIGGERING tag as a lightweight ref
+      # pointing straight at the commit, which discards the annotated tag
+      # object and with it the signature. Every check below then fails as
+      # `cannot verify a non-tag object of type commit` - not because the tag
+      # is unsigned, but because the runner no longer has a tag to verify.
+      # Re-fetch it by force so what gets verified is the object the
+      # maintainer actually signed.
+      #
+      # Found by the first release this workflow ever ran (v0.334.0, cut
+      # 2026-08-01). It could not have been found any earlier: the gate fails
+      # closed and no v* tag existed, so this line is the first thing the
+      # first tag bought.
+      - name: Restore the annotated tag object (checkout flattens it)
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
       #  §8, tag control. The remotes are shared with a second coder,
       # so "can push a tag" must not equal "can start the signing machinery".
       # The repository ruleset restricting `v*` creation is the first half
