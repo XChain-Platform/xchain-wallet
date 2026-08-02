@@ -159,6 +159,22 @@ export async function attachUpdater({
     if (typeof onEvent !== 'function') {
         throw new Error('attachUpdater: onEvent must be a function');
     }
+
+    // MAC APP STORE BUILDS MUST NOT SELF-UPDATE ( §13). Electron
+    // sets process.mas on a build packaged for the store, and there the
+    // App Store owns updates entirely: there is no feed for that channel,
+    // an app that ships its own updater is rejected at review, and under
+    // the sandbox it could not swap its own bundle anyway. Short-circuit
+    // BEFORE loading electron-updater, so a store build never even
+    // registers the listeners or reaches the network.
+    if (process.mas) {
+        return {
+            isActive: false,
+            async checkForUpdates() { /* the App Store owns updates */ },
+            async downloadAndInstall() { /* the App Store owns updates */ },
+        };
+    }
+
     const mod = await loader();
     const autoUpdater = mod?.autoUpdater ?? mod?.default?.autoUpdater ?? mod?.default;
     if (!autoUpdater || typeof autoUpdater.checkForUpdates !== 'function') {

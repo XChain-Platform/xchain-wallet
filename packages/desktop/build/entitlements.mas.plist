@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Mac App Store entitlements ( §13).
+
+  SEPARATE FROM entitlements.mac.plist ON PURPOSE, and the difference is
+  not cosmetic. The direct-download build is signed with a Developer ID
+  certificate under the HARDENED RUNTIME and is notarized. An App Store
+  build is signed with an Apple Distribution certificate under the APP
+  SANDBOX and is reviewed. The two mechanisms are different, the required
+  keys are different, and a build signed with the wrong file is either
+  rejected at upload or broken at runtime.
+
+  electron-builder picks this file up by convention for the `mas` target
+  (build/entitlements.mas.plist), and the config also names it
+  explicitly - because `mas` config is deepAssign(mac, mas), so WITHOUT an
+  explicit override a MAS build would inherit `mac.entitlements` and get
+  signed with the Developer ID entitlements below, which carry no sandbox
+  key at all. Silent, and fatal at review.
+
+  Every key here is a capability the wallet actually uses. The App Store
+  requires justifying each one, and an unused entitlement is both a review
+  question and an unnecessary grant.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Mandatory for the Mac App Store. This single key is what makes an
+         App Store build different from the direct-download one: the app
+         runs in a container and every capability below must be requested
+         explicitly. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Outbound HTTPS only: the explorer/indexer API, the price oracle
+         and the update CHECK are all client connections. No server key:
+         the wallet never listens. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Ledger and Trezor. Both ride WebHID (pure JS, no native module),
+         which needs USB device access. THIS IS THE ENTITLEMENT THE WHOLE
+         MAS LANE HANGS ON: if the sandbox will not pass a hardware signer
+         through with it, an App Store build is a wallet that cannot talk
+         to a hardware wallet, and that is a product decision rather than a
+         packaging one. Unproven until tested against real hardware - see
+         the spec's §13 risk note. -->
+    <key>com.apple.security.device.usb</key>
+    <true/>
+
+    <!-- Encrypted-vault backup export and restore, and PSBT files for the
+         air-gapped signing flow. Scoped to files the USER picks in a save
+         or open panel; the app gets no ambient filesystem access. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Deliberately NOT granted, recorded so nobody adds them by reflex
+         while chasing a build error:
+           - files.downloads.read-write : the save panel already covers it
+           - device.camera             : QR scanning is a mobile surface
+           - print                     : nothing prints
+           - network.server            : the wallet never listens
+           - cs.allow-jit / allow-unsigned-executable-memory : hardened
+             runtime keys, meaningless under the sandbox, and a review flag
+    -->
+</dict>
+</plist>

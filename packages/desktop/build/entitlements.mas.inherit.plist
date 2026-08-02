@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Child-process entitlements for the Mac App Store build ( §13).
+
+  Electron is multi-process: the main app bundle contains Helper apps
+  (renderer, GPU, plugin). Under the App Sandbox each of those is signed
+  separately, and they must INHERIT the parent's sandbox rather than
+  declare their own capabilities. That is what com.apple.security.inherit
+  means, and it is the only correct content for this file - repeating the
+  parent's grants here would be wrong, not merely redundant.
+
+  electron-builder picks this up by convention as
+  build/entitlements.mas.inherit.plist; the config names it explicitly for
+  the same inheritance reason the parent file documents.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
+</dict>
+</plist>

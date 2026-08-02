@@ -82,6 +82,13 @@ const isStaging = Boolean(STAGING_FEED_URL);
 // Electron. linux-armv7l is post-launch on demand (DD1).
 const ARCHES = ['x64', 'arm64'];
 
+// Mac App Store channel ( §13). Opt-in, because the target cannot
+// build without an Apple Distribution certificate and a provisioning
+// profile: leaving it on would break every dev and CI mac build that has
+// neither. A staging/rehearsal build never gets it either - the App Store
+// owns updates for that channel, so there is no feed to rehearse against.
+const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
+
 // §7.5: a rehearsal variant is built ONLY for the format electron-updater
 // can actually swap in place on that OS. A staging dmg, deb or win-zip
 // exercises nothing, because none of them has an auto-update path.
@@ -176,6 +183,32 @@ const config = {
     productName: 'XChain Wallet',
     copyright: 'Copyright © Dankest, LLC',
 
+    // --- Reproducible AppImage ( DD7) ----------------------------
+    //
+    // The AppImage was the one shipped artifact that did NOT reproduce,
+    // because mksquashfs takes TWO timestamps from the wall clock: the
+    // per-file mtimes it reads into the inode table, and the squashfs
+    // superblock's own mkfs_time. squashfs-tools 4.4 has a flag for each
+    // (-all-time, -mkfs-time); the pinned build is 4.3-git (2017) and has
+    // neither, so this hook swaps in a wrapper that writes both from
+    // SOURCE_DATE_EPOCH. Pinning only the superblock was measured NOT to
+    // be enough. See scripts/appimage-toolset.cjs for why the hook is the
+    // right seam and scripts/mksquashfs-deterministic.cjs for the patch.
+    //
+    // Deliberately NOT a step in release.yml or the Dockerfile: a lane
+    // that forgets it would publish a non-reproducible AppImage and say
+    // nothing, and a lane added later would have to remember. Here it
+    // cannot be left out of anything that builds Linux.
+    beforePack: async (context) => {
+        if (context.electronPlatformName !== 'linux') {
+            return;
+        }
+        const {
+            prepareDeterministicAppImageToolset,
+        } = require('./scripts/appimage-toolset.cjs');
+        await prepareDeterministicAppImageToolset(context.arch);
+    },
+
     // NOTE: the `homepage` the .deb lane requires is NOT settable here.
     // v26's schema sets additionalProperties:false at the root and
     // rejects it outright ("configuration has an unknown property
@@ -246,6 +279,14 @@ const config = {
     // --- macOS ---------------------------------------------------------
     mac: {
         artifactName: MAC_ARTIFACT,
+        // Named EXPLICITLY on every platform, not left to
+        // electron-builder's implicit `build/icon.*` lookup. That lookup
+        // is silent when it finds nothing: the first real mac lane run
+        // (2026-08-01) logged "default Electron icon is used" and shipped
+        // an app whose Info.plist read CFBundleIconFile = electron.icns.
+        // A missing file now fails the build instead of shipping someone
+        // else's logo. Assets + regeneration recipe: build/README.md.
+        icon: 'build/icon.icns',
         category: 'public.app-category.finance',
         // `darkModeSupport` uses the system theme; we do this already
         // via tokens.css so the native window chrome matches.
@@ -259,6 +300,13 @@ const config = {
         target: isStaging ? UPDATE_CAPABLE_TARGET.mac : [
             { target: 'dmg', arch: ARCHES },
             { target: 'zip', arch: ARCHES },
+            // The App Store channel, added only when a build is actually
+            // aimed at it. Unconditional would break every developer and
+            // CI mac build that has no Apple Distribution certificate,
+            // and a rehearsal build must never carry it: `mas` has no
+            // auto-update path, so a staging variant of it exercises
+            // nothing (same reasoning as UPDATE_CAPABLE_TARGET).
+            ...(buildMas ? [{ target: 'mas', arch: ARCHES }] : []),
         ],
         // Signing identity comes from CSC_LINK / CSC_KEY_PASSWORD
         // (electron-builder picks these up automatically). If unset,
@@ -282,9 +330,56 @@ const config = {
         writeUpdateInfo: true,
     },
 
+    // --- Mac App Store ( §13) ------------------------------------
+    //
+    // A SECOND macOS channel, not a variant of the first. The direct
+    // download is Developer ID + hardened runtime + notarization, updating
+    // through our own feed. This one is Apple Distribution + App Sandbox +
+    // App Review, and the App Store owns updates entirely.
+    //
+    // EVERY FIELD BELOW IS AN OVERRIDE, AND THAT IS THE POINT. Verified
+    // against app-builder-lib 26.15.7 rather than assumed: the mas config
+    // is computed as `deepAssign({}, mac, config.mas)` (macPackager
+    // getPlatformConfig), so anything set on `mac` silently becomes the
+    // default here. Two of those would be actively wrong:
+    //
+    //   - `mac.entitlements` would sign a store build with the Developer
+    //     ID entitlements, which carry NO com.apple.security.app-sandbox
+    //     key. The sandbox is the one thing the App Store requires.
+    //   - `mac.hardenedRuntime: true` would apply the hardened runtime to
+    //     a store build. MacTargetHelper reads it as
+    //     `isMas ? config.hardenedRuntime === true : ...`, so the inherited
+    //     `true` is honoured. Hardened runtime is the notarization
+    //     mechanism, not the store one; the sandbox replaces it.
+    //
+    // Neither would fail the build. Both would fail at upload or review,
+    // which is the expensive place to find out.
+    mas: {
+        // WITHOUT THIS the store .pkg inherits mac.artifactName and lands
+        // as `...-x64-mac.pkg`, which reads as a direct-download artifact
+        // and sits in the same directory as one. §7.5 already had to fix
+        // the cost of identically-shaped, differently-destined files; do
+        // not reintroduce it on a channel whose whole point is that it
+        // goes somewhere else.
+        artifactName: '${productName}-${version}-${arch}-mas.${ext}',
+        entitlements: 'build/entitlements.mas.plist',
+        entitlementsInherit: 'build/entitlements.mas.inherit.plist',
+        hardenedRuntime: false,
+        // Apple issues this per app id; it is not a secret but it IS
+        // account-specific, so it stays env-driven like every other
+        // credential here. Absent, electron-builder passes "none" and the
+        // signature is unusable for the store - fine for a local
+        // `mas-dev` smoke, never for a submission.
+        provisioningProfile: process.env.MAS_PROVISIONING_PROFILE || null,
+        // The store lists by category; this mirrors mac.category.
+        category: 'public.app-category.finance',
+    },
+
     // --- Windows -------------------------------------------------------
     win: {
         artifactName: WIN_ARTIFACT,
+        // See the mac.icon comment: explicit on every platform.
+        icon: 'build/icon.ico',
         target: isStaging ? UPDATE_CAPABLE_TARGET.win : [
             { target: 'nsis', arch: ARCHES },
             { target: 'zip', arch: ARCHES },
@@ -356,6 +451,10 @@ const config = {
         // on the same path. Pinned explicitly here rather than left to a
         // default that reads the npm scope of a private workspace package.
         executableName: 'xchain-wallet',
+        // See the mac.icon comment: explicit on every platform. Linux
+        // takes the PNG master and electron-builder derives the sizes the
+        // .desktop entry and the AppImage need.
+        icon: 'build/icon.png',
         target: isStaging ? UPDATE_CAPABLE_TARGET.linux : [
             { target: 'AppImage', arch: ARCHES },
             { target: 'deb', arch: ARCHES },
@@ -369,27 +468,26 @@ const config = {
                 + 'Trezor via WebHID), and the full XChain action surface.',
     },
     appImage: {
-        // THIS COMMENT USED TO SAY setting SOURCE_DATE_EPOCH was enough to
-        // make the AppImage reproducible. MEASURED 2026-08-01, it is not.
-        //
-        // Two packaged builds of the same commit, same epoch, same
-        // container produce byte-DIFFERENT AppImages on both arches, while
-        // the .deb files from those same runs are byte-identical. Reading
-        // the AppImage's squashfs superblock (validated: v4.0, offset
-        // 188392, block_size 131072) shows why:
+        // SOURCE_DATE_EPOCH ALONE IS NOT ENOUGH HERE, and this comment
+        // once claimed it was. Measured 2026-08-01: two packaged builds of
+        // one commit, one epoch, one container produced byte-DIFFERENT
+        // AppImages on both arches while the .deb files from the same runs
+        // were byte-identical. The squashfs superblock (validated v4.0 at
+        // offset 188392, block_size 131072) said why:
         //
         //   mkfs_time         = 1785618191  (build wall clock)
         //   SOURCE_DATE_EPOCH = 1785601315  (the commit's author date)
         //
-        // So the superblock timestamp is written from the clock regardless
-        // of the env var. That is at least one cause; whether it is the
-        // only one is not established, because patching 4 bytes after the
-        // fact would desync the embedded block map electron-builder writes
-        // over the finished image.
+        // mksquashfs writes that field from the clock, and the pinned
+        // build of it (4.3-git, 2017) predates every flag that would say
+        // otherwise. Fixed by the `beforePack` hook at the top of this
+        // file, which substitutes a mksquashfs wrapper that writes the
+        // epoch into the superblock before anything downstream hashes the
+        // image. The AppImage now reproduces byte-for-byte.
         //
-        // Consequence, and it is the whole of  DD7: the .deb can be
-        // verified byte-for-byte against what we publish, and the AppImage
-        // cannot. Do not restore the old claim without a measurement.
+        // Do not remove that hook, and do not restore any claim about this
+        // artifact - in either direction - without re-running the two-build
+        // comparison. This one survived unmeasured for months.
     },
     deb: {
         // The default artifact name is `${name}_${version}_${arch}.${ext}`

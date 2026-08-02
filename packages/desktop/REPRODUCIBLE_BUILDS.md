@@ -119,9 +119,17 @@ in both pre-signing Linux bundles.
 > name, so the diff is guaranteed non-empty on a perfectly reproducible
 > build. Closing that loop needs a decision we have not taken: either
 > publish a separate pre-signing manifest per release, or have this
-> script build the packaged Linux artifacts and compare those directly
-> (they carry no code signature, so unlike macOS and Windows they are
-> reproducible as shipped). Tracked under ; until it lands, what
+> script build the packaged Linux artifacts and compare those directly.
+> **The blocker under the second option is gone as of 2026-08-01**: it
+> rested on packaged Linux determinism being unproven, and that has now
+> been measured rather than assumed. Two independent packaged builds of
+> one commit in the pinned container produced byte-identical `.AppImage`
+> and `.deb` on both arches (it took the two `mksquashfs` fixes described
+> under "Non-determinism sources we've addressed"; before them the
+> AppImage did not reproduce). Linux artifacts carry no code signature,
+> so unlike macOS and Windows they are reproducible exactly as shipped.
+> Which option to take is still an open decision ( DD7), not a
+> gap in evidence. Tracked under ; until it lands, what
 > this script gives you is a self-consistency check between two of your
 > own runs, and a byte-level basis for comparing notes with another
 > verifier, not a check against us.
@@ -144,14 +152,32 @@ between them is diagnostic:
 
 - `SOURCE_DATE_EPOCH=<commit author date>` - injected by `reproduce.sh`
   from the git commit being built. Honoured by electron-builder for
-  asar entry mtimes and `ar` (deb). **NOT honoured for the AppImage's
-  squashfs superblock**, which this line used to claim: two packaged
-  builds of one commit, same epoch, same container, produce
-  byte-different AppImages on both arches while the `.deb` files from
-  those same runs are byte-identical. The AppImage's squashfs
-  superblock carries `mkfs_time` from the build wall clock instead of
-  the epoch (measured 2026-08-01; see the `appImage` comment in
-  `electron-builder.config.cjs`). **Author date,
+  asar entry mtimes and `ar` (deb). **The AppImage needed two extra
+  fixes of our own, because `mksquashfs` honours it for nothing.** This
+  line has now been wrong in both directions, so here is the measurement
+  rather than the claim. It first said the epoch was enough; two packaged
+  builds of one commit produced byte-different AppImages on both arches
+  while the `.deb` files from the same runs matched. The cause was named
+  as the squashfs superblock's `mkfs_time`, taken from the wall clock -
+  correct, but only half of it. With that field pinned the two builds
+  *still* differed, and diffing them showed the 131 MB of file data
+  byte-identical with the differences confined to the superblock's table
+  offsets, ~14 KB of metadata tables and the derived block map: the
+  signature of per-file **inode mtimes**, which the stage tree carries
+  from the copy that assembles it.
+  squashfs-tools 4.4 added `-all-time` and `-mkfs-time` for exactly these
+  two clocks. electron-builder pins **4.3-git (2017)**, which has neither
+  and ignores `SOURCE_DATE_EPOCH` entirely, so both are normalised by
+  `scripts/mksquashfs-deterministic.cjs`, a wrapper installed over the
+  pinned binary by the `beforePack` hook in
+  `electron-builder.config.cjs`. Verified 2026-08-01 by two independent
+  packaged builds of one commit in the pinned container: **all four Linux
+  artifacts byte-identical, both `.AppImage` and both `.deb`**, and the
+  resulting image still reads as a valid SQUASHFS 4:0 filesystem whose
+  creation time is the commit's author date. Guarded by
+  `test/smoke/audits/appimage-determinism.smoke.js`. Do not restore any
+  claim here, in either direction, without re-running that comparison.
+  **Author date,
   `%at`, on both sides.** `reproduce.sh` used to read `%ct`, the
   committer date, while the release lane read `%at`. They are equal only
   for a commit that was never rebased or amended, and 10 of the last 200

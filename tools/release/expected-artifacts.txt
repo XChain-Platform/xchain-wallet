@@ -103,3 +103,4 @@ required  *.deb                             default
 optional  xchain-wallet-android-v*.aab      store
 optional  xchain-wallet-v*.apk              store
 optional  xchain-wallet-ios-v*.ipa          store
+optional  *-mas.pkg                        store
