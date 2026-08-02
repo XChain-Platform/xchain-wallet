@@ -56,8 +56,17 @@ Step 1 rather than lowering them.
 2. Register **two** hardware keys: one you carry, one that stays somewhere
    safe. Two, because a single key is a single point of failure and Google's
    recovery path for an org account is slow.
+   **Status 2026-08-02: a passkey is enrolled and two hardware keys are on
+   order.** A passkey is a real improvement over nothing and it is not the
+   control this row asks for: it is bound to a device rather than to something
+   you can put in a safe, and it does not survive that device being lost or
+   compromised. Finish the row when the keys arrive.
 3. Turn OFF SMS and Authenticator-app fallback once the keys work. A phone
    number left on the account is a SIM-swap path around the key.
+   **Not yet done, and it is the half that matters most**: while an SMS
+   fallback is live, the passkey and the keys are both bypassable by a SIM
+   swap, which is the exact attack the §4 K8 row calls the worst event in the
+   table.
 4. Generate backup codes. They go into the K8 custody slot per rails §4
    (LastPass note, same pattern as the backup runbook Part A).
 5. Optional but recommended: enrol the account in
@@ -114,8 +123,10 @@ four build stages are already done.
    from the answers already written down in `PLAY_LISTING.md` and
    `DATA_SAFETY.md` in this directory. Do not improvise them in the console;
    if an answer needs to change, change it in those files first.
-4. Set **country availability** (D8). Still an open operator/legal decision;
-   see `PLAY_LISTING.md`.
+4. Set **country availability**. **D8 DECIDED 2026-08-02: worldwide minus named
+   exclusions**; transcribe the list from `PLAY_LISTING.md`. Unlike the
+   `applicationId`, this field is editable later, which is why it errs toward
+   exclusion where the law is unsettled.
 
 ---
 
@@ -137,32 +148,76 @@ short as 7 days.
 `https://xchain.io/` returns **403** behind Cloudflare bot protection. The
 account-level website field is now pointed at a URL Google can actually read.
 
-### STILL OPEN: the privacy policy URL
+### CORRECTED 2026-08-02: the privacy policy URL was never the problem
 
-    https://dankest.llc/privacy    404
+    https://dankest.llc/privacy          404      <- what this doc measured
+    https://dankest.llc/privacy.html     200      <- that host's real page
+    https://xchain.io/wallet/privacy/    200      <- USE THIS ONE
+    https://xchain.io/privacy            404
 
-Every listing needs a privacy policy at a URL the reviewer and Google can fetch,
-and it must match the Data safety answers. The text already exists in this repo at
-`docs/Privacy_Policy.md`, including the mobile section written in S4; what is
-missing is publishing it. Two options, and the org-level decision above argues for
-the first:
+This section concluded "the policy still needs publishing" from the first line
+alone. It did not. `dankest.llc` serves `.html` URLs with no extensionless rewrite
+(`/about` 404s, `/about.html` is 200), so that 404 was a URL shape rather than a
+missing page - and the product policy has been live at
+`https://xchain.io/wallet/privacy/` the whole time, 200 to a plain non-browser
+client. That is the URL the Chrome listing already publishes and the default in
+`test/smoke/audits/privacy-url-check.smoke.js`; all three store forms naming one
+URL is the point. The Cloudflare 403 that pushed this to `dankest.llc` in the first
+place no longer reproduces either ().
 
-- `https://dankest.llc/privacy`, a studio-wide policy, on the host that already
-  serves 200. Fastest, and consistent with an account that will publish several
-  apps.
-- `https://xchain.io/privacy`, per-product, which needs the  apex flip and
-  the Cloudflare allow first, or Google fetches a 403.
+**But the deployed TEXT is stale, and that is a real gate ().** The live
+page is dated 1 August 2026 and still says the wallet's first-party hosts log "your
+IP address … kept for 14 days". `docs/Privacy_Policy.md` in this repo says the
+opposite after re-measuring the next day (the logged address is Cloudflare's, not
+the user's; the explorer log is kept one day), that correction is **uncommitted and
+therefore undeployed**, and the Data safety and nutrition-label answers were both
+rewritten against the corrected reading. Deploy before opening any store form. Full
+detail and the order of operations are in `PLAY_SUBMISSION_RUNBOOK.md` Phase 0e.
 
-### STILL OPEN, and unrelated to the account: App Links on `xchain.io`
+### App Links on `xchain.io`: the EDGE half cleared itself, the file half is ours
 
 This one cannot move to `dankest.llc`. The App Links declared in S3 are for
 `https://xchain.io/wallet`, so Android fetches
-`https://xchain.io/.well-known/assetlinks.json` with its own client, and the
-current 403 means verification fails **silently**: links open in the browser
-instead of the app, with nothing anywhere saying why. It needs the  apex
-flip plus an explicit edge allow for `/.well-known/*`. The iOS lane hits the
-identical problem with its AASA file.
+`https://xchain.io/.well-known/assetlinks.json` with its own client, and a 403
+would mean verification fails **silently**: links open in the browser instead of
+the app, with nothing anywhere saying why.
+
+**Re-measured 2026-08-02 and the 403 no longer reproduces** ():
+`https://xchain.io/wallet` returns 200 and the `.well-known` path returns **404
+with `cf-cache-status: DYNAMIC`**, which is the origin being reached and the file
+being genuinely absent - the correct answer today. Nothing here touched
+Cloudflare, so it is an unattributed fix that could revert as quietly as it
+arrived, and a 200 from this machine is not Android's verifier, which fetches
+through Google's infrastructure.
+
+**So the remaining blocker is ours, not the edge's**, and it cannot be cleared
+before the first upload: `assetlinks.template.json` carries K10's real fingerprint
+and a placeholder where GOOGLE's app-signing certificate goes, and that certificate
+does not exist until an AAB has been uploaded. The order is upload → read Google's
+cert → publish the real file → `adb shell pm get-app-links`, and it is Phase 3 and
+Phase 6 of `PLAY_SUBMISSION_RUNBOOK.md`. The iOS lane hits the identical shape with
+its AASA file.
 ## What happens next on my side
+
+**DONE 2026-08-01: both keystores exist.** K9 `SHA256: 90:07:01:A5:…:32:CB` and K10
+`SHA256: 4B:5D:E0:91:…:9E:28`, PKCS12, RSA 4096, on the release machine under
+`~/.xchain-release/` (0700), with no passphrase ever on a command line or in a
+transcript. K10's fingerprint is now in `SECURITY.md` (canonical) and in
+`assetlinks.template.json`. `android-ceremony.sh` has been driven end to end as a
+rehearsal and produced a K9-signed AAB plus a K10-signed universal APK derived from
+that same bundle.
+
+**Two custody rows are still owed by the operator**, and they are the two this
+account cannot be left without: hardware-key 2FA on the console (§4 calls a console
+compromise the worst event in the whole key table), and **K10's sealed offline copy**
+- K10 was generated online on an explicit decision, which cannot be undone, so the
+offline copy is now the only protection against losing a key that can never be
+rotated.
+
+From here, the procedure is `PLAY_SUBMISSION_RUNBOOK.md`.
+
+<details>
+<summary>The original plan, kept for the record</summary>
 
 Once the console is up and the hardware keys are on it, say so and I will
 generate the two keystores here on the provisioned release machine:
@@ -178,3 +233,5 @@ never reach a command line. After that I can run
 `tools/release/android-ceremony.sh` end to end for the first time, and the
 K10 fingerprint fills the slots already waiting for it in `SECURITY.md` and
 `assetlinks.template.json`.
+
+</details>

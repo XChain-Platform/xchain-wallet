@@ -784,9 +784,42 @@ assert.ok(
 );
 
 // Listing pack: in-repo so a resubmission never improvises (§8).
-for (const doc of ['docs/PLAY_LISTING.md', 'docs/DATA_SAFETY.md']) {
+for (const doc of ['docs/PLAY_LISTING.md', 'docs/DATA_SAFETY.md', 'docs/PLAY_SUBMISSION_RUNBOOK.md']) {
     assert.ok(existsSync(join(mobile, doc)), `listing pack has ${doc}`);
 }
+
+// The submission runbook is the one document an operator follows with the
+// console open, so the facts it hands them have to be the repo's facts. Three
+// of them drift independently of it, and each would fail in a way the operator
+// could not diagnose from inside the console.
+const runbook = readFileSync(join(mobile, 'docs', 'PLAY_SUBMISSION_RUNBOOK.md'), 'utf8');
+const declaredArtifacts = readFileSync(
+    join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',
+);
+for (const pattern of ['xchain-wallet-android-v*.aab', 'xchain-wallet-v*.apk']) {
+    assert.ok(declaredArtifacts.includes(pattern), `expected-artifacts declares ${pattern}`);
+    // The runbook writes them with a concrete version; compare the stems.
+    const stem = pattern.replace('*', 'X.Y.Z');
+    assert.ok(runbook.includes(stem), `the runbook names the artifact as ${stem}`);
+}
+assert.ok(
+    existsSync(join(wsRoot, 'tools', 'release', 'android-ceremony.sh'))
+    && runbook.includes('tools/release/android-ceremony.sh'),
+    'the runbook points at a ceremony script that exists',
+);
+// Ordering, which is the whole reason Phase 6 is where it is: Google's app
+// signing certificate does not exist until the first AAB is uploaded, so an
+// assetlinks.json published before that carries a placeholder and App Link
+// verification fails silently.
+assert.ok(
+    runbook.indexOf('internal testing') < runbook.indexOf('.well-known/assetlinks.json'),
+    'the runbook reads Google\'s signing cert from the first upload BEFORE publishing assetlinks',
+);
+assert.match(
+    runbook,
+    /Never hosted publicly/,
+    'the AAB is store-bound; only the K10-signed APK is ever downloaded',
+);
 const dataSafety = readFileSync(join(mobile, 'docs', 'DATA_SAFETY.md'), 'utf8');
 // The form is derived from an audit of the wire, not from intent: every
 // first-party endpoint the app can call has to appear in it.

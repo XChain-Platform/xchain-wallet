@@ -98,14 +98,45 @@ transcribe into every store form, this one included.
 
 ## Country availability
 
-**OPERATOR/LEGAL DECISION, NOT FILLED IN (D8).** The recommendation on record
-is worldwide minus named exclusions, with the UK called out explicitly: the UK
-financial-promotions regime has been the reason crypto apps were delisted, and
-the decision needs a person who can accept that exposure.
+**DECIDED 2026-08-02 (operator): worldwide, minus the named exclusions below.**
+This closes D8.
 
-State plainly when signing off: **the exclusions bind the Play listing only.**
-The direct APK is jurisdiction-blind by design, no geo-mechanism is proposed
-for it, and that asymmetry is the thing being agreed to, not an oversight.
+**The one thing to know before reading the list: this field is not permanent.**
+Unlike the `applicationId` and the first `versionCode`, country availability is
+editable in the Play Console at any time. The cost of starting conservative and
+opening up later is a few clicks; the cost of starting open and being wrong is a
+regulator. So the list errs toward exclusion where the law is unsettled.
+
+### Tier 1: excluded, no further input needed
+
+| Country / region | Why |
+|---|---|
+| **United Kingdom** | The financial-promotions regime is the reason crypto apps have been delisted there. This is the exposure D8 existed to name, and it is being declined rather than accepted. |
+| Cuba, Iran, North Korea, Syria | Comprehensive US sanctions. Play does not distribute there in any case; excluding them explicitly means the listing states the position rather than relying on Google's list staying the same. |
+| Crimea, Donetsk, Luhansk | Same, region-scoped. |
+| Russia, Belarus | Sanctions plus Play's own payment restrictions. |
+| Mainland China | Play is not available there. |
+
+### Tier 2: excluded now, worth a legal look before opening up
+
+A handful of jurisdictions have had outright bans or heavy restrictions on
+crypto services, and the law in several of them has moved more than once in the
+last few years. **Excluded at launch on that basis alone, not on a current legal
+reading**, because the field is editable and re-opening a market is cheap:
+
+Bangladesh, Nepal, Algeria, Egypt, Qatar, Bolivia, Morocco.
+
+Whoever wants any of these opened should get a current answer for that specific
+country rather than a general one. Nothing here blocks the build or the first
+submission.
+
+### The asymmetry being agreed to, stated plainly
+
+**These exclusions bind the Play listing only.** The direct APK is
+jurisdiction-blind by design, no geo-mechanism is proposed for it, and the
+download page reaches every one of the countries above. That is the thing being
+agreed to, not an oversight: the direct lane exists precisely so that the wallet
+is reachable where a store's rules are not our rules.
 
 ---
 
