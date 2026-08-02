@@ -15,5 +15,6 @@ For the authoritative design specification, see the `SPEC.md` document maintaine
 - `Data_Collection.md` - what the wallet does and does not collect; the single source every store form transcribes ( §6c)
 - `Privacy_Policy.md` - the plain-language rendering of the above, for publication at a stable xchain.io URL
 - `Export_Compliance.md` - the encryption stance for store submissions
+- `Trader_Identity.md` - the EU DSA trader declaration (entity, address, email, phone) every store publishes; one set of values so Chrome, Play and the App Store cannot diverge ( D1)
 
 These land as the corresponding implementations land.

@@ -62,8 +62,8 @@ Open source, AGPL-3.0-or-later. Built by Dankest, LLC.
 | Field | Value |
 |---|---|
 | Category | Finance |
-| Contact email (app listing) | support@xchain.io if/when  makes it deliverable; otherwise info@dankest.llc |
-| Website (app listing) | https://xchain.io once the  apex flip lands; the ACCOUNT-level website is https://dankest.llc and already serves 200 |
+| Contact email (app listing) | `info@dankest.llc`. **Settled 2026-08-01 ( D1)**, and no longer conditional: this row used to say "support@xchain.io if/when  makes it deliverable", which left a retired address sitting in a field a human transcribes. `info@dankest.llc` is the one proven to receive mail and the one every other store publishes. If it is ever moved to `support@xchain.io`, that moves in `docs/Trader_Identity.md` and on every listing in the same pass |
+| Website (app listing) | `https://xchain.io`. The  apex flip LANDED 2026-08-01 (it is what made the wallet privacy URL resolve at the apex instead of only at newsite.xchain.io), so this is no longer pending. The ACCOUNT-level website stays `https://dankest.llc` |
 | Privacy policy | `https://dankest.llc/privacy.html` **WRITTEN AND DEPLOYED to origin-host 2026-08-01, but not yet reachable: the dankest.llc DNS still points at the old host.** One A-record change makes it live. See PLAY_ENROLLMENT.md. |
 
 ## Trader declaration (EU DSA)
