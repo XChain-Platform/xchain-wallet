@@ -30,6 +30,8 @@ import { PreflightPanel } from '../components/PreflightPanel.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import {
     estimateNativeSendFeeTiers,
@@ -268,6 +270,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const feeCoinTicker = descriptor?.coin
         ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
         : '';
+
+    //  / PC-51: the owner actions on this screen compose DISPENSER
+    // updates, and off Bitcoin the native-coin output IS the protocol fee
+    // . Without this flag the action confirms on chain and the indexer
+    // then rejects it "insufficient fee (native coin output required)" while
+    // this screen reports the edit as applied.
+    //
+    // Threaded on ALL THREE owner paths, not just the one known to be priced.
+    // Which DISPENSER updates carry a fee is consensus knowledge (the gas
+    // schedule plus the expiration free-days rule) that changes without the
+    // wallet, and `protocolFeeRow.js` is explicit that the client must not keep
+    // a list of unpriced actions to check against. The submit path quotes for
+    // real and `applyNativeFeePreflight` builds no fee output for a zero quote,
+    // so threading it everywhere is correct on a free action and correct when
+    // consensus starts pricing one; enumerating would be wrong the day it does.
+    const nativeFee = useNativeFee(chainId);
     const feeSelector = feeTiers ? (
         <FeeSelector
             label="Network fee"
@@ -763,6 +781,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     GIVE_ESCROW: amt,
                 },
                 ...(feePerKb != null ? { feePerKb } : {}),
+                // : `flag` is true or undefined, never false, so on Bitcoin
+                // (where the fee is opt-in) this leaves the payload untouched.
+                payFeeInNativeCoin: nativeFee.flag,
             };
             const res = cancelHw
                 ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
@@ -849,6 +870,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 },
                 params,
                 ...(feePerKb != null ? { feePerKb } : {}),
+                // : `flag` is true or undefined, never false, so on Bitcoin
+                // (where the fee is opt-in) this leaves the payload untouched.
+                payFeeInNativeCoin: nativeFee.flag,
             };
             const res = cancelHw
                 ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
@@ -901,6 +925,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 },
                 params: cancelParams,
                 ...(feePerKb != null ? { feePerKb } : {}),
+                // : `flag` is true or undefined, never false, so on Bitcoin
+                // (where the fee is opt-in) this leaves the payload untouched.
+                payFeeInNativeCoin: nativeFee.flag,
             };
             const res = cancelHw
                 ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
@@ -1035,6 +1062,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         : null}
                 />
                 {feeSelector}
+                {/* : off Bitcoin this is mandatory, so the toggle renders
+                    as a disclosure rather than a choice - the same treatment the
+                    other DISPENSER authoring surfaces give it. */}
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={ownerAddress}
@@ -1145,6 +1176,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </p>
                 ) : null}
                 {feeSelector}
+                {/* : off Bitcoin this is mandatory, so the toggle renders
+                    as a disclosure rather than a choice - the same treatment the
+                    other DISPENSER authoring surfaces give it. */}
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={ownerAddress}
@@ -1305,6 +1340,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </div>
                 ) : null}
                 {feeSelector}
+                {/* : off Bitcoin this is mandatory, so the toggle renders
+                    as a disclosure rather than a choice - the same treatment the
+                    other DISPENSER authoring surfaces give it. */}
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
                 <SignCredentials
                         unlocked={signerReady}
                     fromAddress={ownerAddress}

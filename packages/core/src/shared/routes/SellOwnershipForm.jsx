@@ -265,7 +265,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     chainId,
                     from: base.from,
                     actionData: { action, params },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    //  FOLLOW-UP: the watcher lane does NOT go through
+                    // `base`, so the fee mode threaded onto the submit path
+                    // above never reached it. Selling a name is priced
+                    // (GAS_SCHEDULE.OWNERSHIP_ESCROW), so a watcher-mode sale
+                    // off Bitcoin composed a PSBT with no FEE_DESTINATION
+                    // output, the user approved it, and the indexer then
+                    // rejected the action "insufficient fee (native coin output
+                    // required)" while this form reported the sale as open -
+                    // the exact bug  fixed, surviving on the one lane
+                    // its fix did not touch.
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (mechanism === 'dispenser') {
                 r = hw

@@ -283,18 +283,6 @@ const EXEMPT = new Map([
     // BATCH lane, fee-quote denied.
     ['BatchComposerForm.jsx', 'BATCH is fee-quote denied'],
     ['GatedPublishForm.jsx', 'BATCH lane, fee-quote denied'],
-    // NOT a clean exemption: this one is , a real instance of the same
-    // gap this guard exists to catch. It is listed rather than fixed because
-    // the cross-chain SWAP lane cannot currently be broadcast (§9.1, blocked by
-    // the  encoder bug), so the fix could not be driven and an untested
-    // change to a money path should not ship. Remove this line when  is
-    // closed - do not let it become furniture.
-    ['CrossChainSwapForm.jsx', ': real gap, unverifiable while  blocks the lane'],
-    // Also NOT clean: . Narrower than first filed - the v1 CLOSE this
-    // file composes owes no fee at all (formats[1] has no EXPIRATION and is not
-    // format 0, so fees.AMOUNT stays 0), but the v2 EDIT path sets EXPIRATION,
-    // which IS priced. Drivable today. Remove this line when  is closed.
-    ['DispenserDetail.jsx', ': v2 edit path is fee-bearing and unthreaded'],
 ]);
 
 for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
@@ -308,6 +296,45 @@ for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
         + 'rejected "insufficient fee (native coin output required)" while the form reports '
         + 'success. Give it the useNativeFee treatment, or add it to EXEMPT with a reason.',
     );
+
+}
+
+// PER-LANE, and deliberately NOT scoped by QUOTABLE.
+//
+// The sweep above only proves `payFeeInNativeCoin` appears SOMEWHERE in a
+// form, while a form has up to three submit lanes: the legacy submit
+// (`base`), the hardware lane, and the watcher encode-only lane, which does
+// NOT go through `base` and takes its options as `encoderOpts` instead.
+//
+// That gap is not hypothetical, and neither is the scope choice. 
+// fixed SellOwnershipForm by threading the submit path and mounting the
+// toggle; the file therefore contained the string, the sweep went green, and
+// the watcher lane still composed a PSBT with no fee output. Worse, that form
+// is QUOTABLE=false - it composes through a variable (`actionData: { action,
+// params }`) rather than a literal - so the loop above never even looked at
+// it. Scoping this check the same way would have reproduced the blind spot.
+//
+// The invariant used instead is the honest one: IF a form has a native-fee
+// lane at all, THEN every encoderOpts it builds must carry the flag. That
+// needs no list of priced actions (which `protocolFeeRow.js` is explicit the
+// client must not keep) and it covers forms QUOTABLE cannot see.
+//
+// `useNativeFee`'s own doc names this failure mode - "a form that forgot one
+// path silently dropped the fee mode on that lane" - and exists to prevent
+// it. This is the assertion that enforces what the hook intends.
+for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
+    const src = routes(file);
+    if (!/useNativeFee\(/.test(src)) continue;         // no native-fee lane to be consistent with
+    const encoderOptsBlocks = src.match(/encoderOpts:\s*\{[\s\S]{0,600}?\n\s*\}/g) || [];
+    for (const block of encoderOptsBlocks) {
+        assert.ok(
+            block.includes('payFeeInNativeCoin'),
+            `${file} threads payFeeInNativeCoin on some lane but builds an encoderOpts block `
+            + 'without it. That is the watcher/compose lane, and it does NOT inherit the flag '
+            + 'from the submit path, so the FEE_DESTINATION output is missing from the PSBT the '
+            + `user approves. Thread nativeFee.flag into every encoderOpts. Block:\n${block}`,
+        );
+    }
 }
 
 console.log(
