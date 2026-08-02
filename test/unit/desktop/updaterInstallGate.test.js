@@ -32,7 +32,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { attachUpdater } from '../../../packages/desktop/main/updater.js';
+import { attachUpdater, UPDATE_REQUEST_HEADERS } from '../../../packages/desktop/main/updater.js';
 
 /** A stand-in for the electron-updater module, recording what is set on it. */
 function fakeModule() {
@@ -74,6 +74,32 @@ describe('the install gate', () => {
         await attach(mod);
 
         expect(autoUpdater.allowDowngrade).toBe(false);
+    });
+
+    it('sends no per-install identifier, whatever electron-updater would', async () => {
+        // Upstream sends `x-user-staging-id`: a UUID generated once per
+        // install, persisted to <userData>/.updaterId, and sent on every
+        // check. Captured against the real updater (docs/update-check-capture.json):
+        // two checks by one install repeat it, a fresh install differs. The
+        // download page says no identifier persists between checks, and
+        // this is what makes that true.
+        const { mod, autoUpdater } = fakeModule();
+        await attach(mod);
+
+        expect(autoUpdater.requestHeaders).toEqual({
+            'x-user-staging-id': '00000000-0000-0000-0000-000000000000',
+        });
+        // `computeFinalHeaders` merges requestHeaders LAST, so a constant
+        // here replaces the generated UUID rather than sitting beside it.
+        expect(UPDATE_REQUEST_HEADERS['x-user-staging-id']).toMatch(/^0{8}-0{4}-0{4}-0{4}-0{12}$/);
+
+        // And nothing here may be named `authorization` or `private-token`:
+        // upstream reads those two to decide whether to append `?noCache=`,
+        // and losing that query lets an intermediate cache pin the fleet to
+        // a stale pointer.
+        for (const key of Object.keys(UPDATE_REQUEST_HEADERS)) {
+            expect(['authorization', 'private-token']).not.toContain(key.toLowerCase());
+        }
     });
 
     it('does not assign autoUpdater.channel anywhere in the main process', async () => {

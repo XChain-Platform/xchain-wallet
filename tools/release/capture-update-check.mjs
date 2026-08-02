@@ -26,12 +26,28 @@
 //              staging feed URL is this server) and you have a capture
 //              of the shipped app. This is the authoritative mode.
 //
+//   --drive    Stand up that same origin AND point the REAL
+//              `electron-updater` at it, with a stub app adapter instead
+//              of Electron. Records what the updater itself sends, which
+//              is strictly more than the library mode below: headers the
+//              UPDATER adds are invisible to `configureRequestOptions`.
+//
 //   (default)  Drive a request through builder-util-runtime's own
 //              `configureRequestOptions`, the function that decides
 //              every header electron-updater sends, at the version this
 //              repo pins. This answers the library-policy half today,
 //              without a packaged app, and it is honest about being only
 //              that half.
+//
+// THE DEFAULT MODE MISSED A HEADER, AND IT WAS THE ONE THAT MATTERED
+// (found 2026-08-02,  §7.6). `configureRequestOptions` sets the
+// user agent and the cache header; `AppUpdater.getUpdateInfoAndProvider`
+// then adds `x-user-staging-id`, a UUID generated once per install,
+// persisted to `<userData>/.updaterId`, and sent on EVERY check. It is by
+// definition an identifier that persists between checks, and the download
+// page said in as many words that no such identifier existed. A capture
+// that never ran the updater could not see it. `--drive` runs the
+// updater.
 //
 // ATTEMPTED AND NOT YET ACHIEVED, 2026-08-01: taking the authoritative
 // capture from a LOCALLY built bundle. Recorded here so the next attempt
@@ -116,6 +132,139 @@ async function listen(out, port) {
     );
 }
 
+/**
+ * Stand up an origin, point the real updater at it, and record what
+ * arrives.
+ *
+ * Three checks, because the interesting property is not "which headers"
+ * but "does anything persist":
+ *
+ *   1 and 2 share one userData directory, as two checks by one install do.
+ *   3 uses a fresh one, as a different install does.
+ *
+ * If a value repeats across 1 and 2 and differs in 3, it identifies the
+ * install. That is the test the page's privacy claim needed and never got.
+ */
+async function drive(out) {
+    const { mkdtempSync, rmSync } = require('node:fs');
+    const { tmpdir } = require('node:os');
+    const { join } = require('node:path');
+
+    const captured = [];
+    const server = createServer((req, res) => {
+        captured.push(record(req));
+        // A minimal well-formed pointer, so the updater completes its check
+        // rather than erroring before it has sent everything it sends.
+        res.writeHead(200, { 'content-type': 'text/yaml' });
+        res.end('version: 9.9.9\nfiles:\n  - url: nothing.bin\n    sha512: AA==\n    size: 1\n'
+            + 'path: nothing.bin\nsha512: AA==\nreleaseDate: \'2026-01-01T00:00:00.000Z\'\n');
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const url = `http://127.0.0.1:${server.address().port}/`;
+
+    const desktopRequire = createRequire(
+        new URL('../../packages/desktop/package.json', import.meta.url),
+    );
+    // NsisUpdater purely because its constructor needs nothing from
+    // Electron; the pointer FILENAME still follows the host platform
+    // (Provider.getChannelFilePrefix reads runtimeOptions.platform), so the
+    // capture is honest about what this OS would request.
+    const { NsisUpdater } = desktopRequire('electron-updater');
+    const { NodeHttpExecutor } = desktopRequire('builder-util');
+
+    const dirs = [];
+    async function checkOnce(userDataPath, requestHeaders) {
+        // electron-updater reads the bundled config off disk during a
+        // check, so the stub needs one. Pointed at the local origin, never
+        // at the production feed.
+        writeFileSync(join(userDataPath, 'app-update.yml'),
+            `provider: generic\nurl: ${url}\nchannel: stable\n`);
+        const updater = new NsisUpdater(null, {
+            version: '0.0.1',
+            name: 'XChain Wallet',
+            isPackaged: true,
+            appUpdateConfigPath: join(userDataPath, 'app-update.yml'),
+            userDataPath,
+            baseCachePath: userDataPath,
+            whenReady: async () => {},
+            relaunch: () => {},
+            quit: () => {},
+            onQuit: () => {},
+        });
+        updater.httpExecutor = new NodeHttpExecutor();
+        // Upstream auto-downloads by default (the shipped app turns this
+        // off; see main/updater.js). Leaving it on here would make the
+        // capture fetch a fake artifact instead of just checking.
+        updater.autoDownload = false;
+        if (requestHeaders) updater.requestHeaders = { ...requestHeaders };
+        updater.logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+        updater.setFeedURL({ provider: 'generic', url, channel: 'stable' });
+        await updater.checkForUpdates();
+    }
+
+    // The shipped app's own header policy, imported rather than restated:
+    // a capture that described a policy of its own would be the same class
+    // of mistake as a page that described a request nobody captured.
+    const { UPDATE_REQUEST_HEADERS } = await import(
+        new URL('../../packages/desktop/main/updater.js', import.meta.url)
+    );
+
+    const shared = mkdtempSync(join(tmpdir(), 'xchain-capture-a-'));
+    const fresh = mkdtempSync(join(tmpdir(), 'xchain-capture-b-'));
+    const shipped = mkdtempSync(join(tmpdir(), 'xchain-capture-c-'));
+    dirs.push(shared, fresh, shipped);
+    try {
+        // Upstream defaults, twice from one install and once from another.
+        await checkOnce(shared);
+        await checkOnce(shared);
+        await checkOnce(fresh);
+        // Then the same thing as the wallet configures it.
+        await checkOnce(shipped, UPDATE_REQUEST_HEADERS);
+        await checkOnce(shipped, UPDATE_REQUEST_HEADERS);
+    } finally {
+        server.close();
+        for (const d of dirs) rmSync(d, { recursive: true, force: true });
+    }
+
+    const idOf = (r) => (r.headers.find(([k]) => k.toLowerCase() === 'x-user-staging-id') || [])[1];
+    const [first, second, other, shippedFirst, shippedSecond] = captured.map(idOf);
+
+    writeFileSync(out, `${JSON.stringify({
+        mode: 'drive',
+        note: 'The REAL electron-updater, driven against a local origin with a stub app '
+            + 'adapter. Transport is Node rather than Chromium, so a packaged app may add '
+            + 'headers of its own on top of these - but every header the UPDATER sets is '
+            + 'here, which the library mode could not show.',
+        'electron-updater': desktopRequire('electron-updater/package.json').version,
+        capturedAt: new Date().toISOString(),
+        persistentIdentifier: {
+            header: 'x-user-staging-id',
+            upstreamDefault: {
+                sameInstallRepeatsIt: first != null && first === second,
+                differentInstallDiffers: other != null && other !== first,
+                storedAt: '<userData>/.updaterId',
+                what: 'A UUID electron-updater generates on first check and reuses forever. '
+                    + 'It is sent on every update check, so the feed could count and follow '
+                    + 'an install across IP changes.',
+            },
+            asShipped: {
+                value: shippedFirst,
+                constantAcrossChecks: shippedFirst != null && shippedFirst === shippedSecond,
+                differsFromUpstreamValue: shippedFirst !== first,
+                how: 'main/updater.js pins UPDATE_REQUEST_HEADERS, and computeFinalHeaders '
+                    + 'merges requestHeaders last, so the generated UUID never leaves the '
+                    + 'machine. The local .updaterId file is still written; it is simply '
+                    + 'not sent.',
+            },
+        },
+        requests: captured,
+    }, null, 2)}\n`);
+    process.stderr.write(`capture-update-check: wrote ${out} (${captured.length} requests)\n`);
+    process.stderr.write(`  x-user-staging-id, check 1: ${first}\n`);
+    process.stderr.write(`  x-user-staging-id, check 2 (same install): ${second}\n`);
+    process.stderr.write(`  x-user-staging-id, check 3 (fresh install): ${other}\n`);
+}
+
 function driveLibrary(out) {
     // The real function. Resolved from the installed tree rather than
     // copied, so a dependency bump changes the capture instead of
@@ -181,6 +330,8 @@ if (invokedDirectly) {
     const out = at('--out') || 'update-check-capture.json';
     if (argv.includes('--listen')) {
         await listen(out, Number(at('--port') || 0));
+    } else if (argv.includes('--drive')) {
+        await drive(out);
     } else {
         driveLibrary(out);
     }

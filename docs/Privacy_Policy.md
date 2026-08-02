@@ -151,7 +151,7 @@ Updates are handled by the browser's extension store, not by us.
 
 ## The desktop app
 
-**Update checks.** The desktop app asks `downloads.xchain.io` whether a newer version exists. This tells us your IP address and which version you are running. Nothing is downloaded or installed without you choosing to, and an update is only installed if its signature verifies.
+**Update checks.** The desktop app asks `downloads.xchain.io` whether a newer version exists. This tells us your IP address. It does **not** tell us which version you are running, and it does not tell us anything that identifies your install: the wallet fetches the description of the latest release and compares it against itself on your device, and the one identifier the update library would have sent (a random value it stores and reuses) is replaced with a fixed placeholder before the request leaves. Measured, not assumed: the request is captured and archived in the repository (`docs/update-check-capture.json`). Nothing is downloaded or installed without you choosing to, and an update is only installed if its signature verifies.
 
 **Routing through Tor.** The desktop app can send all of its network traffic through a local Tor proxy, so the servers above see Tor rather than your address. It is off unless you turn it on, in Settings under Privacy, and you need Tor already running on your machine.
 

@@ -78,6 +78,45 @@ import {
 export const UPDATE_FEED_BASE_URL = 'https://downloads.xchain.io/wallet/';
 
 /**
+ * Headers pinned on every update request, and the reason is one header.
+ *
+ * WHAT THIS SUPPRESSES ( §7.6, measured 2026-08-02).
+ * `AppUpdater.getUpdateInfoAndProvider` sends `x-user-staging-id` with
+ * every check. The value is a UUID electron-updater generates on the first
+ * check from 4096 random bytes, writes to `<userData>/.updaterId`, and
+ * reuses forever. Captured against the real updater: two checks by one
+ * install send the same UUID, a fresh install sends a different one. That
+ * is, exactly, an identifier that persists between checks and distinguishes
+ * one install from another - so our feed's access log would carry a stable
+ * pseudonymous ID next to every IP, and could count installs and follow one
+ * across IP changes. The download page said in as many words that no such
+ * identifier is sent, and the archived capture could not contradict it
+ * because it was taken from the HTTP library rather than from the updater.
+ *
+ * `computeFinalHeaders` merges `requestHeaders` LAST, so setting the header
+ * here replaces upstream's value with a constant. Every install sends the
+ * same all-zero UUID, which carries no information, rather than sending
+ * nothing (an absent header is easy to reintroduce by accident; a wrong
+ * constant is not, and the tests below check the value).
+ *
+ * WHAT THIS COSTS: nothing today, and one thing later. The staging id is
+ * upstream's hook for server-side sticky bucketing of a staged rollout.
+ * `stagingPercentage` is decided CLIENT-side from the yml
+ * (`isUserWithinRollout` reads the local id, not the header), so §7.3's
+ * rollout mechanism is unaffected; only a future server-side variant would
+ * need this revisited, and §7.3 already requires that to be specced before
+ * first use.
+ *
+ * Do not add an `authorization` or `private-token` key here: upstream reads
+ * those two names to decide whether to append the `?noCache=` query, and
+ * losing that query means an intermediate cache can pin the fleet to a
+ * stale pointer.
+ */
+export const UPDATE_REQUEST_HEADERS = Object.freeze({
+    'x-user-staging-id': '00000000-0000-0000-0000-000000000000',
+});
+
+/**
  * Turn an electron-updater feed URL into the base the signed manifests
  * live under.
  *
@@ -371,6 +410,9 @@ export async function attachUpdater({
     // Pinned here so the property is a decision rather than a default, and
     // so re-enabling it has to be written down.
     autoUpdater.allowDowngrade = false;
+
+    // No per-install identifier leaves the machine. See the constant.
+    autoUpdater.requestHeaders = { ...UPDATE_REQUEST_HEADERS };
 
     // The most recent `update-downloaded` payload. electron-updater
     // reports the file it wrote here and nowhere else, and the install
