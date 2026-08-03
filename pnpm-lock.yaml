@@ -175,8 +175,8 @@ importers:
         specifier: ^8.9.0
         version: 8.9.0
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@2.0.0
-        version: '@dankest-llc/xchain-sdk@2.0.0'
+        specifier: npm:@dankest-llc/xchain-sdk@2.0.2
+        version: '@dankest-llc/xchain-sdk@2.0.2'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -218,8 +218,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@2.0.0
-        version: '@dankest-llc/xchain-sdk@2.0.0'
+        specifier: npm:@dankest-llc/xchain-sdk@2.0.2
+        version: '@dankest-llc/xchain-sdk@2.0.2'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -294,8 +294,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@2.0.0
-        version: '@dankest-llc/xchain-sdk@2.0.0'
+        specifier: npm:@dankest-llc/xchain-sdk@2.0.2
+        version: '@dankest-llc/xchain-sdk@2.0.2'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -602,8 +602,8 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@2.0.0':
-    resolution: {integrity: sha512-hjQJmW+DhEYK48v6F8mqfsRK2oUn+QGKlGBdHI+FhS9XDnd9rUKXv8sGHBXA510XNz/bSykVU/graIxuK7M9bw==}
+  '@dankest-llc/xchain-sdk@2.0.2':
+    resolution: {integrity: sha512-lvHGYCiCFFSGjNDe0td69RoUnuzpvhigVhR6EB29smkDxV5GMHnImRLQrBvs3mPb6Xv7I03gGicrmb7LHPtoUg==}
     engines: {node: '>=22.0.0'}
 
   '@electron-internal/extract-zip@1.0.5':
@@ -4585,7 +4585,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@2.0.0':
+  '@dankest-llc/xchain-sdk@2.0.2':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
