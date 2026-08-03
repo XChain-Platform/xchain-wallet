@@ -36,7 +36,7 @@
 // declaration of record (privacy/trader-identity.md) or from the code.
 
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -197,8 +197,62 @@ assert.ok(citations > 0,
     + 'without checking anything. The ceremony tells an operator to run commands out of this repo; if '
     + 'it stopped doing that, this gate needs rewriting rather than deleting.');
 
+// --- 5. The private pointers the public page is forbidden to carry ------
+//
+// S23's finding. The docs standard bars claude/ paths, XC ids and store
+// identities from published pages and names the  spec as their home
+// instead. The migration stripped them out of the ceremony page correctly and
+// nothing picked them up, so for a day the page told an operator to "log it in
+// the correspondence log, in full, before responding" and no document anywhere
+// said where that log was. A rejection clock can be seven days.
+//
+// Scoped hard to the spec's §4a block, and that scoping is the point: this
+// spec is a history-bearing document that deliberately names files deleted
+// long ago in its superseded rows, so a blanket every-path-resolves rule would
+// fire on correct writing, and a check that fires on correct writing gets
+// deleted (the S14 lesson). Only the block that claims to be a live map is
+// held to being one.
+
+const specPath = join(walletRoot, '..', 'claude', 'specs', 'wallet-publishing-chrome-extension.md');
+let pointers = 0;
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const start = spec.indexOf('## 4a. The private pointers');
+    assert.ok(start !== -1,
+        'the  spec no longer has a "## 4a. The private pointers" block. That block is where the '
+        + 'docs standard puts the operator map the published ceremony page is forbidden to carry: the '
+        + 'correspondence log, the incident runbook, the K7 custody row. If it moved, repoint this '
+        + 'gate in the same change; if it was deleted, the operator has no map on a rejection clock.');
+
+    const end = spec.indexOf('\n## ', start + 1);
+    const block = spec.slice(start, end === -1 ? undefined : end);
+    const missing = [];
+
+    for (const m of block.matchAll(/`(claude\/[A-Za-z0-9_./-]+)`/g)) {
+        pointers += 1;
+        if (!existsSync(join(walletRoot, '..', m[1]))) missing.push(m[1]);
+    }
+
+    assert.equal(missing.length, 0,
+        `the  spec's §4a private-pointer map names paths that do not exist:\n  `
+        + `${missing.join('\n  ')}\n`
+        + 'This block exists because the published ceremony page cannot name these, so it is the only '
+        + 'place an operator can find them. It named a correspondence log deleted three days earlier '
+        + 'until 2026-08-03.');
+
+    assert.ok(pointers >= 3,
+        `§4a lists ${pointers} private pointers, fewer than the three it was written with (the `
+        + 'correspondence log, the incident runbook, the K7 custody row). A map that loses an entry '
+        + 'is how the migration lost them all in the first place.');
+}
+
+const pointerNote = existsSync(specPath)
+    ? `${pointers} §4a private pointers resolved`
+    : 'the §4a private-pointer map SKIPPED (platform checkout absent)';
+
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
     + `privacy/trader-identity.md, ${extensionHosts.length} egress hosts from wireAudit.js, `
-    + `${citations} cited wallet-repo paths resolved across the repo boundary)`);
+    + `${citations} cited wallet-repo paths resolved across the repo boundary, ${pointerNote})`);
