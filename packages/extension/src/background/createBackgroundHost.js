@@ -2415,8 +2415,15 @@ export function createBackgroundHost(deps) {
         if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
         const entry = q[idx];
         const sdk = sdkRegistry.get(entry.chainId);
-        if (typeof sdk?.wallet?.broadcastTx !== 'function') {
-            throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks wallet.broadcastTx`);
+        // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
+        // encoder as a second argument and refuses without it ("Encoder client
+        // is required for broadcasting"), so calling it one-argument here meant
+        // every "Broadcast now" failed with an SDK developer message and the
+        // signed transaction stayed queued forever. Measured on an Android
+        // emulator against the LTC regtest venue,  SSC-6. Same call the
+        // core queue drain and `broadcast.signedTx` below already make.
+        if (typeof sdk?.encoder?.broadcastTx !== 'function') {
+            throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks encoder.broadcastTx`);
         }
         // Panic-mode freeze. Broadcasting an already-signed tx invokes no signer,
         // so without this it sails straight through an active freeze - the exact
@@ -2426,7 +2433,7 @@ export function createBackgroundHost(deps) {
         flows.assertSigningAllowed();
         let result;
         try {
-            result = await sdk.wallet.broadcastTx(entry.signedTxHex);
+            result = await sdk.encoder.broadcastTx(entry.signedTxHex);
         } catch (err) {
             //  §5.3: the same permanence split the core queue applies,
             // applied here too - this queue retries on demand and had no way to
@@ -2444,7 +2451,10 @@ export function createBackgroundHost(deps) {
         }
         q.splice(idx, 1);
         await persistQueue();
-        return result;
+        // Encoder result shape varies by chain, same as `broadcast.signedTx`
+        // below: normalize so the caller always sees { txid }.
+        const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
+        return { ...(result && typeof result === 'object' ? result : {}), txid };
     });
     host.register('broadcast.queue.discard', async (req) => {
         await ensureQueueLoaded();

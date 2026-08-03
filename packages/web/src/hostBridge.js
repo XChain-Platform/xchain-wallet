@@ -92,6 +92,7 @@ import {
 } from './storage/backends.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
+import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -723,6 +724,12 @@ export async function getSessionStatus() {
         // resolves answers "no lockout, no duress, no freeze" - the
         // permissive answer to all three.
         await installNativeGuardPersistence();
+        //  §6 / D4. Asks the native shell which lane installed this
+        // build and installs the update-notice provider ONLY for a direct
+        // APK. A browser, the extension, the desktop app, an iOS build and a
+        // Play install all answer "not this lane" and get no provider, which
+        // is what keeps an in-app update prompt out of every store build.
+        await installDirectUpdateProvider();
     } catch (_err) {
         // A provider that cannot install must not stop the wallet from
         // opening: the password form is the path that always works.

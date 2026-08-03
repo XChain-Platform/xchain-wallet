@@ -200,11 +200,30 @@ async function defaultEncoderProbe(sdk) {
     throw new Error('encoder ping not available on SDK');
 }
 
-/** @type {ServiceProbe} */
+/**
+ * The hub is the one service whose ping REPORTS failure instead of throwing
+ * it: `hub.ping()` walks its endpoint list and returns `false` when every one
+ * of them fails. `runProbe` treats any resolved value as reachable, so an
+ * un-checked `false` made the hub eternally reachable - which meant no chain
+ * could ever reach `offline` (that needs all three services down) and neither
+ * could `overall`. Measured on an Android emulator with every mapping to the
+ * venue removed: encoder and explorer reported Network Error, the hub reported
+ * "reachable", and a device with no connectivity at all told the user "partly
+ * unavailable; some features may not work" instead of "can't reach the
+ * network" ( SSC-6 session,).
+ *
+ * @type {ServiceProbe}
+ */
 async function defaultHubProbe(sdk) {
-    if (typeof sdk.pingHub === 'function') return sdk.pingHub();
-    if (sdk.hub && typeof sdk.hub.ping === 'function') return sdk.hub.ping();
+    if (typeof sdk.pingHub === 'function') return assertPinged(await sdk.pingHub());
+    if (sdk.hub && typeof sdk.hub.ping === 'function') return assertPinged(await sdk.hub.ping());
     throw new Error('hub ping not available on SDK');
+}
+
+/** A probe that RESOLVES falsy is a failed probe, not a reachable service. */
+function assertPinged(result) {
+    if (result === false || result == null) throw new Error('hub ping reported unreachable');
+    return result;
 }
 
 /** @type {ServiceProbe} */
