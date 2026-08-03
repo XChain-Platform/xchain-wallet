@@ -268,6 +268,15 @@ export function decodeXcwChunks(frames) {
 
 function normalizePsbtInput(psbt) {
     if (psbt instanceof Uint8Array) return psbt;
+    // `instanceof` is false for bytes minted in ANOTHER realm - a jsdom
+    // TextEncoder, an Electron preload boundary, an iframe - even though the
+    // value is a Uint8Array in every way that matters here. Accepting it by
+    // SHAPE rather than by identity keeps a caller from being told its bytes
+    // are not bytes. Byte-wide views only: an Int32Array would silently
+    // reinterpret its contents.
+    if (ArrayBuffer.isView(psbt) && psbt.BYTES_PER_ELEMENT === 1) {
+        return new Uint8Array(psbt.buffer, psbt.byteOffset, psbt.byteLength);
+    }
     if (typeof psbt !== 'string') {
         throw new XcwChunkError('psbt must be a hex string or Uint8Array');
     }

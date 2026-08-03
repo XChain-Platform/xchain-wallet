@@ -62,7 +62,11 @@ import {
     expect, test, dismissIntroCarousel,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
+import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
+import {
+    encodeXcwChunks, createXcwCollector, addChunkToCollector,
+} from '../../../../packages/core/src/uri/psbtQr.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -76,6 +80,9 @@ const FOREIGN_MNEMONIC =
 
 /** The wire prefix from `flows/pairPartner.js`. */
 const PAIR_PREFIX = 'XCW-PAIR:';
+
+/** A camera-equipped browser is launched outside the project, so it needs the absolute URL. */
+const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
 
 /**
  * Every field a pairing key entry is allowed to carry (`validatePairingPayload`
@@ -111,10 +118,12 @@ async function newDevice(browser) {
  * lane, and returns its own pairing code plus the fingerprint it displays.
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ role: 'watcher' | 'signer', mnemonic: string, name: string }} opts
+ * @param {{ role: 'watcher' | 'signer', mnemonic: string, name: string, url?: string }} opts
  */
-async function pairLaneToExchange(page, { role, mnemonic, name }) {
-    await page.goto('/');
+async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
+    // A browser launched by `launchWithQrCamera` is not the config's project, so
+    // it has no baseURL and needs the absolute one.
+    await page.goto(url);
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Pair a watcher or signer' }).click();
 
@@ -237,78 +246,97 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                     .toBe(true);
             });
 
-            await test.step(': the QR hand-off this lane exists for does not render', async () => {
+            await test.step(': the QR hand-off this lane exists for renders, and reassembles', async () => {
                 // Everything else in this spec moves the pairing code as TEXT,
                 // which is the one thing a real air-gapped pair cannot do: the
                 // offline half shares no clipboard with the online one. The
-                // screen's answer to that is a QR. It is not drawn.
+                // screen's answer to that is a QR, and until  it was
+                // never drawn - a default wallet has three mainnet chains and a
+                // ~1900-character payload against MAX_QR_CHARS of 1200, so the
+                // screen said "too many chains switched on for a single QR
+                // code. Copy the text below instead" and offered no mechanism.
                 //
-                // MEASURED, not reasoned: a DEFAULT wallet has three mainnet
-                // chains active, and its payload is ~1900 characters against the
-                // route's own MAX_QR_CHARS of 1200 - so `qrTooBig` is true and
-                // the exchange screen renders "too many chains switched on for a
-                // single QR code. Copy the text below instead" with no QR at all.
-                // Three chains is not an exotic configuration; it is what every
-                // wallet ships with, so the QR branch is unreachable in practice.
-                //
-                // The wallet already owns the fix: `AnimatedQrFrames` takes an
-                // ARRAY of frames and §20.3 chunks PSBTs across them with
-                // `encodeXcwChunks`, and `detectQrContent` already classifies an
-                // `xcw-chunk`. This lane passes `frames={[localCode]}` - one
-                // frame - and neither side wires the collector.
-                //
-                // Pinned as the CURRENT behaviour on purpose. The moment the
-                // payload is chunked (or shrunk past the cap) the else-branch
-                // below runs instead and actually decodes the QR, so this step
-                // keeps doing real work rather than needing a rewrite.
+                // NOW the long code goes out as an ANIMATED set of §20.3 XCW
+                // chunks. So the assertion is no longer "one symbol decodes to
+                // the code" - it is the thing a partner device actually does:
+                // watch the display over time, decode each frame it catches,
+                // and reassemble. Read off the LOADED <img> rather than by
+                // re-fetching a data URL (the wallet ships a strict CSP, and
+                // the painted pixels are what a camera sees).
                 const code = watcherCode.code;
                 const qrWrap = watcher.page.getByTestId('animated-qr-frames');
-                const tooBig = watcher.page.getByText(/too many chains switched on for a single QR/i);
+                await expect(qrWrap,
+                    'the exchange screen drew no QR at all, so an air-gapped partner is left with '
+                    + '"copy the text" across a gap that has no clipboard ')
+                    .toBeVisible({ timeout: 30_000 });
 
-                if (await qrWrap.count() === 0) {
-                    await expect(tooBig,
-                        'the exchange screen shows neither a QR nor the "too many chains" notice, so '
-                        + 'the partner is given no hand-off mechanism and no explanation either')
-                        .toBeVisible({ timeout: 30_000 });
-                    expect(code.length > 1200,
-                        `no QR was drawn, but the payload is only ${code.length} characters, which is `
-                        + 'INSIDE the 1200-character cap - so something other than size is suppressing '
-                        + 'it and this is a different defect from ')
-                        .toBe(true);
-                    return;
+                // A control on the fixture itself: the payload really is past
+                // the single-frame threshold, so this step is exercising the
+                // chunked path rather than passing on a small wallet.
+                expect(code.length > 1200,
+                    `this wallet's payload is only ${code.length} characters, inside the 1200 that fit `
+                    + 'in one frame, so the multi-frame path was never entered and this step proves '
+                    + 'nothing about ')
+                    .toBe(true);
+                await expect(watcher.page.getByText(/cycles through \d+ frames/),
+                    'the code is too long for one frame but the screen never says it is animated, so '
+                    + 'a user has no reason to hold the camera still')
+                    .toBeVisible({ timeout: 30_000 });
+
+                // Collect over time, exactly as a camera does. Each poll grabs
+                // whatever frame is currently painted; duplicates are ignored
+                // by the collector, and the loop ends when the set completes.
+                const seen = new Map();
+                const deadline = Date.now() + 60_000;
+                while (Date.now() < deadline) {
+                    const value = await watcher.page.evaluate(async () => {
+                        if (typeof window.BarcodeDetector !== 'function') return { skipped: true };
+                        const el = document.querySelector('[data-testid="animated-qr-frames"] img');
+                        if (!el) return { missing: true };
+                        if (!el.complete) await new Promise((r) => { el.onload = r; el.onerror = r; });
+                        const bitmap = await createImageBitmap(el);
+                        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+                        const codes = await detector.detect(bitmap);
+                        return { value: codes.length ? codes[0].rawValue : null };
+                    });
+                    expect(value.skipped, 'this browser has no BarcodeDetector, so no frame was read')
+                        .toBeUndefined();
+                    expect(value.missing, 'the QR image vanished between the wait and the read')
+                        .toBeUndefined();
+                    if (value.value) {
+                        const m = /^XCW:(\d+)\/(\d+):/.exec(value.value);
+                        // A single-frame code would arrive whole; either way,
+                        // key by what identifies the frame.
+                        seen.set(m ? m[1] : 'whole', value.value);
+                        if (m && seen.size === Number(m[2])) break;
+                    }
+                    await watcher.page.waitForTimeout(120);
                 }
 
-                // The fixed world: a QR exists, so it has to be readable by the
-                // same decoder a partner device would point at the screen, and
-                // it has to carry the code printed beside it. Decoded from the
-                // LOADED <img> rather than by re-fetching its data URL: the
-                // wallet ships a strict CSP, and reading the pixels the browser
-                // already painted is closer to what a camera sees.
-                const img = qrWrap.locator('img');
-                await expect(img, 'the QR wrapper mounted but never drew a frame')
-                    .toBeVisible({ timeout: 30_000 });
-                const decoded = await watcher.page.evaluate(async () => {
-                    if (typeof window.BarcodeDetector !== 'function') return { skipped: true };
-                    const el = document.querySelector('[data-testid="animated-qr-frames"] img');
-                    if (!el) return { missing: true };
-                    if (!el.complete) await new Promise((r) => { el.onload = r; el.onerror = r; });
-                    const bitmap = await createImageBitmap(el);
-                    const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-                    const codes = await detector.detect(bitmap);
-                    return { value: codes.length ? codes[0].rawValue : null, w: bitmap.width, h: bitmap.height };
-                });
-                expect(decoded.skipped, 'this browser has no BarcodeDetector, so the QR was not read')
-                    .toBeUndefined();
-                expect(decoded.missing, 'the QR image vanished between the wait and the read')
-                    .toBeUndefined();
-                expect(decoded.value !== null,
-                    `the QR the wallet shows its partner could NOT be decoded at the size it is drawn `
-                    + `(${decoded.w}x${decoded.h} for a ${code.length}-character payload). A partner `
-                    + 'pointing a camera at this screen gets nothing')
+                const frames = [...seen.entries()]
+                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                    .map(([, v]) => v);
+                expect(frames.length > 1,
+                    `only ${frames.length} distinct frame(s) came off the screen in 60s for a `
+                    + `${code.length}-character payload, so the display is not cycling and a partner `
+                    + 'camera would wait forever')
                     .toBe(true);
-                expect(decoded.value === code,
-                    'the QR decodes, but to something other than the pairing code printed beside it, '
-                    + 'so the two halves of the screen disagree about what is being handed over')
+
+                // Reassembled with the wallet's OWN collector, so this measures
+                // the wire format rather than the spec's idea of it. Compared as
+                // a boolean over the whole value: a dropped or re-ordered chunk
+                // would still produce a plausible-looking string.
+                let state = createXcwCollector();
+                for (const frame of frames) state = addChunkToCollector(state, frame);
+                expect(state.error, 'a frame read off the screen was rejected by the wallet\'s own collector')
+                    .toBe(null);
+                expect(state.complete,
+                    `the frames on screen never completed a set (${state.receivedCount} of ${state.total}), `
+                    + 'so a partner camera collects forever and the hand-off never finishes')
+                    .toBe(true);
+                expect(new TextDecoder().decode(state.psbt) === code,
+                    'the frames reassemble, but to something other than the pairing code printed beside '
+                    + 'them, so the two halves of the screen disagree about what is being handed over')
                     .toBe(true);
             });
 
@@ -431,6 +459,85 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
             await Promise.all([
                 watcher.context.close(), signer.context.close(), foreign.context.close(),
             ].map((p) => p.catch(() => {})));
+        }
+    });
+
+    test(': the partner collects the animated code off a CAMERA and pairs', async ({ browser }) => {
+        // The test above proves the frames on the watcher's screen reassemble to
+        // its code. This one closes the loop the lane exists for: the code moves
+        // from one device to the other by CAMERA ONLY - no clipboard, no paste,
+        // no file - and the receiving device ends up paired.
+        //
+        // The frames come from the wallet's own `encodeXcwChunks` over the code
+        // the watcher really emitted, so the video the signer's camera plays is
+        // the same sequence the watcher's display cycles through.
+        const watcher = await newDevice(browser);
+        /** @type {import('@playwright/test').Browser | null} */
+        let cameraBrowser = null;
+        try {
+            const watcherCode = await pairLaneToExchange(watcher.page, {
+                role: 'watcher', mnemonic: SHARED_MNEMONIC, name: 'Online Watcher',
+            });
+
+            const frames = encodeXcwChunks(new TextEncoder().encode(watcherCode.code));
+            expect(frames.length > 1,
+                'this wallet\'s pairing code fits in one frame, so the camera hand-off under test '
+                + 'is not the multi-frame one  is about')
+                .toBe(true);
+
+            cameraBrowser = await launchWithQrCamera(frames);
+            const context = await cameraBrowser.newContext({ permissions: ['camera'] });
+            await context.addInitScript(
+                ([atKey, versionKey, version]) => {
+                    try {
+                        window.localStorage.setItem(atKey, new Date().toISOString());
+                        window.localStorage.setItem(versionKey, version);
+                    } catch { /* the gate renders and the spec fails loudly */ }
+                },
+                [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION],
+            );
+            const page = await context.newPage();
+            await pairLaneToExchange(page, {
+                role: 'signer', mnemonic: SHARED_MNEMONIC, name: 'Cold Signer', url: BASE_URL,
+            });
+
+            await page.getByRole('button', { name: 'Scan the other wallet\'s QR' }).click();
+
+            // The progress line is the only feedback that a capture is running
+            // rather than stalled, and it is also the proof that more than one
+            // frame was collected: a single-frame path fills the box without
+            // ever showing it.
+            await expect(page.getByText(/Pairing frames received: \d+ of \d+/),
+                'the screen never reported multi-frame progress, so either the camera saw nothing or '
+                + 'the collector was bypassed')
+                .toBeVisible({ timeout: 60_000 });
+
+            const box = page.getByLabel('Paste the other wallet\'s code');
+            await expect.poll(async () => (await box.inputValue()).length, {
+                timeout: 180_000,
+                message: 'the capture never completed: the partner-code box stayed empty while the '
+                    + 'camera played every frame',
+            }).toBeGreaterThan(0);
+
+            // Boolean, on the whole value, and never interpolated: a reassembly
+            // that dropped or re-ordered a chunk would still look plausible.
+            expect((await box.inputValue()).trim() === watcherCode.code,
+                'the frames were collected but what landed in the box is not the code they encoded, '
+                + 'so the reassembly dropped, duplicated or re-ordered a chunk')
+                .toBe(true);
+
+            // And the point of all of it: a device that has only ever SEEN the
+            // other one pairs with it.
+            const res = await submitPartnerCode(page, {
+                partnerCode: (await box.inputValue()).trim(), cta: 'Pair a watcher',
+            });
+            expect(res.ok,
+                'the code arrived intact over the camera and the pairing was still refused, so the '
+                + 'transport is sound but the lane cannot finish on it')
+                .toBe(true);
+        } finally {
+            await watcher.context.close().catch(() => {});
+            if (cameraBrowser) await cameraBrowser.close().catch(() => {});
         }
     });
 });

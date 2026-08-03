@@ -8,21 +8,32 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Screen, PageHeader, Button, Input, Textarea, Icon, StatusMessage,
     QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
+import {
+    encodeXcwChunks,
+    createXcwCollector,
+    addChunkToCollector,
+    XCW_PREFIX,
+} from '../../uri/psbtQr.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 
 // A single QR frame stops being scannable somewhere past ~1200 bytes in
-// byte mode. Past that we still show the text (copy / paste always works,
-// including across an air gap via a USB stick or a typed transfer) and
-// say why the QR is missing rather than rendering an unreadable block.
+// byte mode: at 1907 characters the symbol is version 40 (177x177 modules)
+// and even the browser's own BarcodeDetector cannot read it off a clean
+// 240px bitmap, never mind a camera. Past this threshold the code goes out
+// as an ANIMATED sequence of §20.3 XCW chunks instead of one dense frame.
+// It is a switch-over point, not a cap: nothing is suppressed above it.
+//  - a default wallet has three mainnet chains and lands at ~1907
+// characters, so the chunked path is the ORDINARY one, not the exception,
+// and the QR is the only mechanism an air-gapped pair has.
 const MAX_QR_CHARS = 1200;
 
 /**
@@ -76,6 +87,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [localKeySetId, setLocalKeySetId] = useState(/** @type {string | null} */ (null));
     const [partnerCode, setPartnerCode] = useState('');
     const [scanning, setScanning] = useState(false);
+    const [partnerCollector, setPartnerCollector] = useState(() => createXcwCollector());
     const [verification, setVerification] = useState(/** @type {any} */ (null));
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -117,6 +129,60 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         })();
         return () => { cancelled = true; };
     }, [stage, walletId, localCode, messaging, password, name]);
+
+    // The frames this device shows. A short code is one still frame, exactly
+    // as before. A long one (the normal case: three chains ≈ 1907 characters)
+    // is chunked with the §20.3 transport the wallet already ships, so the
+    // partner's camera collects it frame by frame instead of being handed a
+    // symbol nothing can decode. The codec takes bytes, and a pairing code is
+    // base64url text rather than hex, so it is encoded rather than passed raw.
+    const localFrames = useMemo(() => {
+        if (!localCode) return null;
+        if (localCode.length <= MAX_QR_CHARS) return [localCode];
+        try {
+            return encodeXcwChunks(new TextEncoder().encode(localCode));
+        } catch {
+            // Falling through to null keeps the text box + Copy button as the
+            // remaining path rather than rendering a broken <img>.
+            return null;
+        }
+    }, [localCode]);
+
+    // Every decoded frame from the partner's display. A single-frame code is
+    // taken as-is (unchanged behaviour); an XCW chunk accrues in the collector
+    // until the set completes and its SHA256 verifies, at which point the
+    // reassembled bytes are the partner's code. An incomplete set never
+    // produces one, which is the property that matters: half a pairing code
+    // must not reach `pairPartner`.
+    //
+    // MUST be stable across renders. `QrScanner` lists `onFrame` in its effect
+    // deps, so a handler re-created on every render tears the camera down and
+    // re-acquires it after each collected frame - which for a multi-frame code
+    // means the capture loses more frames than it keeps and never completes.
+    // Only the setters are used, and those are stable, so the dep list is empty.
+    const handleScanFrame = useCallback((text) => {
+        if (typeof text !== 'string' || text.length === 0) return;
+        if (text.startsWith(XCW_PREFIX)) {
+            setPartnerCollector((prev) => {
+                const next = addChunkToCollector({ ...prev }, text);
+                if (next.error) {
+                    setError(`QR scan: ${next.error}`);
+                    return createXcwCollector();
+                }
+                if (next.complete && next.psbt) {
+                    setPartnerCode(new TextDecoder().decode(next.psbt).trim());
+                    setScanning(false);
+                    setError(null);
+                    return createXcwCollector();
+                }
+                return next;
+            });
+            return;
+        }
+        setPartnerCode(text.trim());
+        setScanning(false);
+        setError(null);
+    }, []);
 
     function pickRole(mode) {
         setWalletMode(mode);
@@ -288,7 +354,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     }
 
     if (stage === 'exchange') {
-        const qrTooBig = !!localCode && localCode.length > MAX_QR_CHARS;
+        const frameCount = localFrames ? localFrames.length : 0;
         return (
             <Screen variant={variant} header={header}>
                 <form onSubmit={handlePairSubmit} noValidate>
@@ -301,17 +367,28 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     <h2 style={SECTION_TITLE}>This wallet&rsquo;s code</h2>
                     {localCode ? (
                         <>
-                            {qrTooBig ? (
-                                <StatusMessage>
-                                    This wallet has too many chains switched on for a single QR
-                                    code. Copy the text below instead.
-                                </StatusMessage>
+                            {localFrames ? (
+                                <>
+                                    <AnimatedQrFrames
+                                        frames={localFrames}
+                                        fps={frameCount > 1 ? 3 : 1}
+                                        alt="Pairing code for the partner wallet to scan"
+                                    />
+                                    {frameCount > 1 ? (
+                                        // One text node on purpose: a sentence split across JSX
+                                        // children renders as several text nodes, and both this
+                                        // spec's unit matcher and a screen reader see it in pieces.
+                                        <StatusMessage>
+                                            {`This code is too long for one QR, so it cycles through ${frameCount} frames. `
+                                                + 'Point the other wallet’s camera at it and hold still until it has them all.'}
+                                        </StatusMessage>
+                                    ) : null}
+                                </>
                             ) : (
-                                <AnimatedQrFrames
-                                    frames={[localCode]}
-                                    fps={1}
-                                    alt="Pairing code for the partner wallet to scan"
-                                />
+                                <StatusMessage variant="error">
+                                    This wallet&rsquo;s pairing code could not be drawn as a QR.
+                                    Copy the text below instead.
+                                </StatusMessage>
                             )}
                             <div style={CODE_BOX}>{localCode}</div>
                             <CopyButton value={localCode} label="Copy pairing code" />
@@ -329,14 +406,15 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         {lane.partnerMode === 'signer' ? 'Signer wallet\'s code' : 'Watcher wallet\'s code'}
                     </h2>
                     {scanning ? (
-                        <QrScanner
-                            onFrame={(text) => {
-                                if (typeof text !== 'string' || text.length === 0) return;
-                                setPartnerCode(text.trim());
-                                setScanning(false);
-                                setError(null);
-                            }}
-                        />
+                        <>
+                            <QrScanner onFrame={handleScanFrame} />
+                            {partnerCollector.total ? (
+                                <StatusMessage>
+                                    Pairing frames received: {partnerCollector.receivedCount} of
+                                    {' '}{partnerCollector.total}
+                                </StatusMessage>
+                            ) : null}
+                        </>
                     ) : null}
                     <Textarea
                         label="Paste the other wallet's code"
@@ -352,7 +430,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         <Button
                             variant="ghost"
                             block
-                            onClick={() => setScanning((s) => !s)}
+                            onClick={() => {
+                                // A re-opened scanner starts from nothing: half a
+                                // set left over from a previous attempt would
+                                // otherwise mix with frames from a different code.
+                                setPartnerCollector(createXcwCollector());
+                                setScanning((s) => !s);
+                            }}
                             disabled={busy}
                             icon={<Icon.ScanIcon />}
                         >

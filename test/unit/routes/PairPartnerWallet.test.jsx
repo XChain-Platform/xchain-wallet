@@ -160,6 +160,31 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(screen.getByText('XCW-PAIR:ZmFrZQ')).toBeInTheDocument();
     });
 
+    // : a default wallet has three mainnet chains and a ~1900-character
+    // pairing code, which is past what one QR frame can carry. The lane used to
+    // answer that by drawing NO QR and telling the user to copy text - across an
+    // air gap, which is the one thing that has no clipboard. It now chunks.
+    it('chunks a long code across frames instead of dropping the QR', async () => {
+        const long = `XCW-PAIR:${'A'.repeat(1900)}`;
+        await reachExchange(mkMessaging({
+            pairingPayloadRequest: vi.fn(async () => ({
+                encoded: long,
+                payload: { keys: [{ chainId: 'bitcoin-mainnet', keyId: 'ab'.repeat(32) }] },
+            })),
+        }));
+        expect(screen.queryByText(/too many chains switched on/i)).not.toBeInTheDocument();
+        // The count is stated because a user has to know to hold still; the
+        // regex also proves more than one frame was produced.
+        const note = screen.getByText(/cycles through \d+ frames/i);
+        expect(note).toBeInTheDocument();
+        expect(Number(/cycles through (\d+) frames/i.exec(note.textContent)[1])).toBeGreaterThan(1);
+    });
+
+    it('leaves a short code as a single still frame', async () => {
+        await reachExchange(mkMessaging());
+        expect(screen.queryByText(/cycles through/i)).not.toBeInTheDocument();
+    });
+
     it('requires a partner code before calling the host', async () => {
         const messaging = mkMessaging();
         await reachExchange(messaging);
