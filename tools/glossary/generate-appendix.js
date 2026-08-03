@@ -11,9 +11,14 @@
 
 // Glossary auto-appendix: Cluster T FOLLOWUP 3.
 //
-// Writes a "machine-derived" appendix into docs/GLOSSARY.md between
+// Writes a "machine-derived" appendix into the wallet glossary between
 // fenced markers, populated from canonical sources in the codebase
 // that the human-written prose section depends on:
+//
+//  moved the glossary itself into the sibling xchain-documentation
+// repo (components/wallet/glossary.md), published at
+// https://docs.xchain.io/components/wallet/glossary. The canonical sources
+// stay here, so this generator reaches across the two checkouts.
 //
 //   - BridgeErrorCode union   ← packages/bridge-spec/src/index.ts
 //   - ConnectedSite permission keys ← packages/core/src/schemas/connectedSite.js
@@ -30,7 +35,12 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..');
-const GLOSSARY_PATH = join(wsRoot, 'docs', 'GLOSSARY.md');
+// Resolved from this script's own location, not cwd. Override with
+// GLOSSARY_PATH when the sibling checkout lives somewhere else.
+const DEFAULT_GLOSSARY_PATH = join(
+    wsRoot, '..', 'xchain-documentation', 'components', 'wallet', 'glossary.md',
+);
+const GLOSSARY_PATH = process.env.GLOSSARY_PATH || DEFAULT_GLOSSARY_PATH;
 const BRIDGE_SPEC_PATH = join(
     wsRoot, 'packages', 'bridge-spec', 'src', 'index.ts',
 );
@@ -131,11 +141,11 @@ function rewriteGlossary(currentSrc, appendix) {
     }
     if (beginIdx === -1 || endIdx === -1) {
         throw new Error(
-            'GLOSSARY.md has only one of the auto-generated markers; please restore the pair manually before running the generator.',
+            'The glossary has only one of the auto-generated markers; please restore the pair manually before running the generator.',
         );
     }
     if (beginIdx >= endIdx) {
-        throw new Error('GLOSSARY.md has the auto-generated markers in the wrong order.');
+        throw new Error('The glossary has the auto-generated markers in the wrong order.');
     }
     const before = currentSrc.slice(0, beginIdx);
     const after = currentSrc.slice(endIdx + END_MARKER.length);
@@ -145,21 +155,32 @@ function rewriteGlossary(currentSrc, appendix) {
 function main() {
     const dryRun = process.argv.includes('--check');
     const appendix = buildAppendix();
-    const current = readFileSync(GLOSSARY_PATH, 'utf8');
+    let current;
+    try {
+        current = readFileSync(GLOSSARY_PATH, 'utf8');
+    } catch (err) {
+        console.error(
+            `cannot read the glossary at ${GLOSSARY_PATH}: ${err.message}\n`
+            + 'The wallet glossary lives in the sibling xchain-documentation checkout\n'
+            + '(components/wallet/glossary.md). Clone it beside this repo, or set\n'
+            + 'GLOSSARY_PATH to your copy. Nothing was checked or written this run.',
+        );
+        return 2;
+    }
     const next = rewriteGlossary(current, appendix);
     if (current === next) {
-        console.log('GLOSSARY.md already in sync.');
+        console.log(`${GLOSSARY_PATH} already in sync.`);
         return 0;
     }
     if (dryRun) {
         console.error(
-            'GLOSSARY.md is out of sync with source. Run '
+            `${GLOSSARY_PATH} is out of sync with source. Run `
                 + '`node tools/glossary/generate-appendix.js` to refresh.',
         );
         return 1;
     }
     writeFileSync(GLOSSARY_PATH, next);
-    console.log('GLOSSARY.md updated.');
+    console.log(`${GLOSSARY_PATH} updated.`);
     return 0;
 }
 

@@ -662,7 +662,8 @@ function AppInner() {
 
     // No auto-unlock: the password is never persisted to Web API
     // storage, so a page reload always re-locks the wallet and the
-    // user re-enters their password (docs/Threat_Model.md §1, §2.1).
+    // user re-enters their password (threat model §1, §2.1:
+    // https://docs.xchain.io/components/wallet/threat-model).
 
     useEffect(() => {
         if (status.state !== 'unlocked') {

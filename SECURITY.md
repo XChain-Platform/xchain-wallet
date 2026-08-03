@@ -28,7 +28,9 @@ Email **security@dankest.llc** with:
 For sensitive reports, please encrypt the email body to our PGP key.
 
 > **PGP fingerprint: not yet published (G180).**  
-> The release key ceremony is documented at `claude/reports/launch/GPG-KEY-CEREMONY-RUNBOOK.md` and has not been run yet. Once it has, the fingerprint will be published through **two independent channels**, this file and a page on xchain.io, so that a compromise of either one alone cannot silently rewrite the trust root you're checking a signature against. If the two ever disagree, trust neither and email us to ask which is current.
+> The release key ceremony is documented at `claude/reports/launch/GPG-KEY-CEREMONY-RUNBOOK.md` and has not been run yet. Once it has, the fingerprint will be published through **two independent channels**: this file, and <https://xchain.io/security>. A compromise of either one alone therefore cannot silently rewrite the trust root you're checking a signature against, which only works if you can actually find the other one, so each channel names the other by URL. If the two ever disagree, trust neither and email us to ask which is current.
+>
+> **No XChain Wallet release has been signed or published yet.** Any file offered to you today as a signed XChain Wallet release is not one.
 >
 > Until both are live: the email channel above is acceptable for first contact. We will coordinate an encrypted exchange with you (a session key over a second channel, or a short-lived one-time key) before you share proof-of-concept details or anything else sensitive.
 
@@ -62,10 +64,10 @@ If we cannot meet a timeline, we will tell you why and propose a new one. We wil
 
 ### Out of scope
 
-These are documented in `docs/Threat_Model.md` §3 and are not bugs we can fix in this codebase:
+These are documented in the [threat model](https://docs.xchain.io/components/wallet/threat-model) §3 and are not bugs we can fix in this codebase:
 
 - Zero-day browser sandbox escapes.
-- Compromise of upstream dependencies (we mitigate via `pnpm audit` + `docs/DEPENDENCIES.md` review, but a backdoor in a dep is the dep author's incident).
+- Compromise of upstream dependencies (we mitigate via `pnpm audit` + the [dependency review](https://docs.xchain.io/components/wallet/dependencies), but a backdoor in a dep is the dep author's incident).
 - Physical access to an unlocked device.
 - Social engineering, phishing of the user's recovery phrase outside the wallet UI.
 - Side-channel timing attacks on `@noble/hashes` constructions beyond what the JS engine permits.
@@ -98,7 +100,7 @@ If you are unsure, send the report anyway and we will tell you whether it falls 
 
 The architectural threat model (assets we protect, threats explicitly in scope, threats explicitly out of scope, attacker scenarios, and known open items) lives at:
 
-- `docs/Threat_Model.md`
+- [https://docs.xchain.io/components/wallet/threat-model](https://docs.xchain.io/components/wallet/threat-model)
 
 Read that document before reporting. It tells you what we already know, what we have already mitigated, and what we have already declared out of scope. A report citing the threat-model section it relates to gets triaged faster.
 
@@ -106,7 +108,7 @@ Read that document before reporting. It tells you what we already know, what we 
 
 ## Verifying releases
 
-When release-signing infrastructure ships (tracked as G158 / G159 / G180), the procedure for verifying a release artifact will be documented at `docs/Verify_Release.md`. Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and `packages/desktop/Reproducible_Builds.md` document the procedure.
+When release-signing infrastructure ships (tracked as G158 / G159 / G180), the procedure for verifying a release artifact will be documented at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and the desktop section of [https://docs.xchain.io/components/wallet/reproducible-builds](https://docs.xchain.io/components/wallet/reproducible-builds) document the procedure.
 
 ### Android APK signing certificate
 

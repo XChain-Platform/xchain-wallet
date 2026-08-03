@@ -9,7 +9,7 @@ If you're reporting a security issue, **stop here** and read `SECURITY.md` inste
 ## Quick links
 
 - Project README: `README.md` (architecture overview, shell matrix, scripts)
-- Threat model: `docs/Threat_Model.md` (assets, in-scope vs out-of-scope, attacker scenarios)
+- Threat model: [https://docs.xchain.io/components/wallet/threat-model](https://docs.xchain.io/components/wallet/threat-model) (assets, in-scope vs out-of-scope, attacker scenarios)
 - Disclosure policy: `SECURITY.md` (private vulnerability reporting)
 - License: `LICENSE.md` + `NOTICE.md` (GNU Affero General Public License v3.0 (AGPL-3.0))
 
@@ -85,9 +85,9 @@ pnpm --filter @xchain-wallet/web reproduce          # browser SPA
 pnpm --filter @xchain-wallet/extension reproduce    # unpacked MV3 bundle (pre-store)
 ```
 
-See each package's `REPRODUCIBLE_BUILDS.md` for scope caveats (the web
-deploy pipeline and the Chrome Web Store `.crx` re-sign are outside the
-reproducible boundary).
+See the per-shell sections of [https://docs.xchain.io/components/wallet/reproducible-builds](https://docs.xchain.io/components/wallet/reproducible-builds)
+for scope caveats (the web deploy pipeline and the Chrome Web Store `.crx`
+re-sign are outside the reproducible boundary).
 
 ### Signing a release
 

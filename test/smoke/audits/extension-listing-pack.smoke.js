@@ -13,11 +13,16 @@
 // THREE documents describe the extension's permissions and its
 // content-script reach, and only one of them is executable:
 //
-//   packages/extension/manifest.json                  <- the truth
-//   docs/Privacy_Policy.md, "The browser extension"   <- published to
-//                                                        xchain.io
-//   packages/extension/docs/STORE_LISTING_PACK.md     <- pasted into the
-//                                                        CWS console
+//   packages/extension/manifest.json                 <- the truth
+//   privacy/privacy-policy.md, "The browser           <- published to
+//     extension"                                         xchain.io
+//   release/extension/chrome-web-store.md,            <- pasted into the
+//     "Listing collateral"                               CWS console
+//
+//  moved the latter two into the sibling xchain-documentation
+// checkout (the old uppercase listing-pack file is now the "Listing
+// collateral" half of chrome-web-store.md), so this whole gate skips,
+// loudly, when that checkout is absent.
 //
 // The pack is paste-ready text: a justification paragraph per permission,
 // the content-script/provider justification, the listing copy. A reviewer
@@ -39,25 +44,28 @@
 // less than nothing, because it would look like coverage.
 
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { docsPath, skipUnlessDocs } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const PACK_PATH = 'packages/extension/docs/STORE_LISTING_PACK.md';
-const POLICY_PATH = 'docs/Privacy_Policy.md';
-const MANIFEST_PATH = 'packages/extension/manifest.json';
+skipUnlessDocs('extension listing-pack smoke');
 
-for (const p of [PACK_PATH, POLICY_PATH, MANIFEST_PATH]) {
-    assert.ok(existsSync(join(root, p)), `${p} exists`);
-}
+const PACK_PATH = 'components/wallet/release/extension/chrome-web-store.md';
+const POLICY_PATH = 'components/wallet/privacy/privacy-policy.md';
+const MANIFEST_PATH = 'packages/extension/manifest.json';
+const ASSET_DIR = 'packages/extension/docs/listing-assets';
+
+assert.ok(existsSync(join(root, MANIFEST_PATH)), `${MANIFEST_PATH} exists`);
 
 const manifest = JSON.parse(read(MANIFEST_PATH));
-const packRaw = read(PACK_PATH);
-const policyRaw = read(POLICY_PATH);
+const packRaw = readFileSync(docsPath('release', 'extension', 'chrome-web-store.md'), 'utf8');
+const policyRaw = readFileSync(docsPath('privacy', 'privacy-policy.md'), 'utf8');
 
 // HTML comments are maintainer notes in both files, and in the policy's
 // case they are stripped before publication. A decision recorded in a
@@ -67,10 +75,12 @@ const stripComments = (s) => s.replace(/<!--[\s\S]*?-->/g, ' ');
 const pack = stripComments(packRaw);
 const policy = stripComments(policyRaw);
 
-// Split a markdown document into `## ` sections, keyed by heading text.
-function sections(text) {
+// Split a markdown document into sections, keyed by heading text. The
+// policy's sections are `## `; the pack's collateral headings sit one level
+// deeper, under a single `## Listing collateral`.
+function sections(text, depth = 2) {
     const out = new Map();
-    const parts = text.split(/^## +/m);
+    const parts = text.split(new RegExp(`^#{${depth}} +`, 'm'));
     for (const part of parts.slice(1)) {
         const nl = part.indexOf('\n');
         out.set(part.slice(0, nl < 0 ? undefined : nl).trim(), part.slice(nl + 1));
@@ -78,8 +88,8 @@ function sections(text) {
     return out;
 }
 
-const packSections = sections(pack);
-const policySections = sections(policy);
+const packSections = sections(pack, 3);
+const policySections = sections(policy, 2);
 
 const findSection = (map, needle) => {
     for (const [title, body] of map) if (title.toLowerCase().includes(needle)) return body;
@@ -94,12 +104,12 @@ const purposeSection = findSection(packSections, 'single-purpose statement');
 const extensionSection = findSection(policySections, 'browser extension');
 
 for (const [name, body] of Object.entries({
-    'STORE_LISTING_PACK.md "Permission justifications"': permsSection,
-    'STORE_LISTING_PACK.md "Content script and injected-provider justification"': scriptSection,
-    'STORE_LISTING_PACK.md "Listing copy"': copySection,
-    'STORE_LISTING_PACK.md "Listing assets"': assetsSection,
-    'STORE_LISTING_PACK.md "Single-purpose statement"': purposeSection,
-    'Privacy_Policy.md "The browser extension"': extensionSection,
+    'chrome-web-store.md "Permission justifications"': permsSection,
+    'chrome-web-store.md "Content script and injected-provider justification"': scriptSection,
+    'chrome-web-store.md "Listing copy"': copySection,
+    'chrome-web-store.md "Listing assets"': assetsSection,
+    'chrome-web-store.md "Single-purpose statement"': purposeSection,
+    'privacy-policy.md "The browser extension"': extensionSection,
 })) {
     assert.ok(body, `${name} section is present (a rename here makes every check below vacuous)`);
 }
@@ -197,14 +207,13 @@ for (const m of manifestMatches) {
         + 'this one. Widen MATCH_PATTERN before shipping that match.');
 }
 
-// The pack quotes the list in the §2 heading for the content script and
-// again in the §3 blockquote a reviewer actually receives. Both count.
-const csHeading = permsSection.match(/^\*\*Content script \(([^)]*)\)\*\*/m);
-assert.ok(csHeading, `${PACK_PATH} §2 has no "**Content script (...)**" heading quoting the match list`);
-
+// The pack quoted the list twice before the port: once in the permission
+// heading for the content script, once in the justification blockquote a
+// reviewer actually receives. The port reduced the heading to a pointer
+// ("**Content script** (see the content-script justification below)"), so
+// only the two places that a human actually reads are checked here.
 const quoted = {
-    [`${PACK_PATH} §2 content-script heading`]: matchesIn(csHeading[1]),
-    [`${PACK_PATH} §3 justification`]: matchesIn(scriptSection),
+    [`${PACK_PATH} content-script justification`]: matchesIn(scriptSection),
     [`${POLICY_PATH} "The browser extension"`]: matchesIn(extensionSection),
 };
 
@@ -223,30 +232,31 @@ for (const [label, found] of Object.entries(quoted)) {
 // being true when someone edits the sentence, so it is re-measured here
 // rather than trusted.
 
-const summaryHeading = copySection.match(/\*\*132-character summary \((\d+) characters?, limit (\d+)\)/);
-assert.ok(summaryHeading, `${PACK_PATH} §4 has no "**132-character summary (N characters, limit M):**" heading`);
+// The port dropped the pre-measured character count from the heading, so
+// the "claimed count matches" half has no subject any more. The limit
+// itself is still stated, and the summary is still measured against it,
+// which is the half that stops a truncated listing.
+const summaryHeading = copySection.match(/\*\*Summary \((\d+)-character limit\):\*\*/);
+assert.ok(summaryHeading, `${PACK_PATH} has no "**Summary (N-character limit):**" heading`);
 
 const summaryBody = copySection.slice(copySection.indexOf(summaryHeading[0]));
 const summaryQuote = summaryBody.match(/^> (.+)$/m);
-assert.ok(summaryQuote, `${PACK_PATH} §4 states a summary length but has no blockquote holding the summary`);
+assert.ok(summaryQuote, `${PACK_PATH} states a summary limit but has no blockquote holding the summary`);
 
 const summary = summaryQuote[1].trim();
-const limit = Number(summaryHeading[2]);
+const limit = Number(summaryHeading[1]);
 assert.equal(limit, 132, 'the CWS summary limit is 132 characters');
 assert.ok(summary.length <= limit,
     `the listing summary is ${summary.length} characters, over the ${limit}-character CWS limit. `
     + 'The store truncates it mid-sentence rather than rejecting it, so nothing else would notice.');
-assert.equal(summary.length, Number(summaryHeading[1]),
-    `${PACK_PATH} §4 claims the summary is ${summaryHeading[1]} characters; it measures ${summary.length}. `
-    + 'Re-count it in the heading, or the next person trusts a stale number at the console.');
 
 // The listing name is the manifest's `name`: CWS takes the title from the
 // package, so a pack that names something else describes a listing that
 // cannot exist.
 const nameLine = copySection.match(/^\*\*Name:\*\* *([^(\n]+)/m);
-assert.ok(nameLine, `${PACK_PATH} §4 has no "**Name:**" row`);
+assert.ok(nameLine, `${PACK_PATH} has no "**Name:**" row`);
 assert.equal(nameLine[1].trim(), manifest.name,
-    `${PACK_PATH} §4 names the listing "${nameLine[1].trim()}" but manifest.json ships name `
+    `${PACK_PATH} names the listing "${nameLine[1].trim()}" but manifest.json ships name `
     + `"${manifest.name}". The store takes the listing title from the package, so these cannot differ.`);
 
 // --- 5. The single purpose is one statement, not two -------------------
@@ -260,7 +270,7 @@ assert.equal(nameLine[1].trim(), manifest.name,
 const policyPurpose = policy.match(/\*\*Single purpose\.\*\*([^\n]+)/);
 assert.ok(policyPurpose, `${POLICY_PATH} carries no "**Single purpose.**" statement`);
 const packPurpose = purposeSection.match(/^> (.+)$/m);
-assert.ok(packPurpose, `${PACK_PATH} §1 has no blockquote holding the single-purpose statement`);
+assert.ok(packPurpose, `${PACK_PATH} has no blockquote holding the single-purpose statement`);
 
 for (const claim of ['bitcoin', 'dogecoin', 'litecoin', 'self-custodial', 'sign']) {
     assert.ok(packPurpose[1].toLowerCase().includes(claim),
@@ -277,6 +287,14 @@ for (const claim of ['bitcoin', 'dogecoin', 'litecoin', 'self-custodial', 'sign'
 // A regenerated screenshot at the wrong viewport is rejected by the store
 // upload form, days into a review clock. Dimensions are read here from
 // the PNG header directly, which works anywhere Node runs.
+//
+// The port dropped the per-row file paths from the prose (the assets stayed
+// in this repo, the prose went to the docs repo), so the row and the file
+// are no longer joined by a path. They are joined by SIZE instead: the
+// multiset of sizes the pack states must equal the multiset of sizes on
+// disk. That still catches the failure this check exists for, a screenshot
+// regenerated at a changed viewport, and it still fails if an asset is
+// added or dropped on either side.
 
 function pngSize(absPath) {
     const fd = openSync(absPath, 'r');
@@ -294,35 +312,23 @@ function pngSize(absPath) {
     }
 }
 
-const assetLines = assetsSection.split('\n').filter((l) => /listing-assets\/[^\s`]+\.png/.test(l));
-assert.ok(assetLines.length >= 4,
-    `expected at least 4 listing assets in ${PACK_PATH} §5 (3 screenshots + promo tile), found `
-    + `${assetLines.length}: if this dropped, the extraction stopped matching and the checks below are vacuous`);
+const statedSizes = [...assetsSection.matchAll(/\b(\d{3,4})x(\d{3,4})\b/g)]
+    .map((m) => `${m[1]}x${m[2]}`).sort();
+assert.ok(statedSizes.length >= 4,
+    `expected at least 4 listing assets with stated sizes in ${PACK_PATH} "Listing assets" `
+    + `(3 screenshots + promo tile), found ${statedSizes.length}: if this dropped, the extraction stopped `
+    + 'matching and the check below is vacuous');
 
-let dimensionsChecked = 0;
-for (const line of assetLines) {
-    const rel = line.match(/(packages\/extension\/docs\/listing-assets\/[^\s`,]+\.png)/)[1];
-    assert.ok(existsSync(join(root, rel)),
-        `${PACK_PATH} §5 references ${rel}, which does not exist. The listing pack is the upload manifest; `
-        + 'a missing asset is found at the console, not here, unless this check finds it first.');
+const assetFiles = readdirSync(join(root, ASSET_DIR)).filter((n) => n.endsWith('.png')).sort();
+const actualSizes = assetFiles
+    .map((n) => pngSize(join(root, ASSET_DIR, n)))
+    .map(({ width, height }) => `${width}x${height}`).sort();
 
-    // Read the claim from the PROSE, with the path cut out first. One
-    // asset is named `promo-tile-440x280.png`, so matching the whole line
-    // finds a size in the filename and reports a row as checked even when
-    // the sentence states nothing (caught by mutation: deleting the stated
-    // size from that row left this green).
-    const stated = line.replace(rel, '').match(/\b(\d{3,4})x(\d{3,4})\b/);
-    if (!stated) continue;
-    const { width, height } = pngSize(join(root, rel));
-    assert.equal(`${width}x${height}`, `${stated[1]}x${stated[2]}`,
-        `${rel} is ${width}x${height} but ${PACK_PATH} §5 states ${stated[1]}x${stated[2]}. The CWS upload `
-        + 'form rejects a wrongly-sized asset, so a regenerated screenshot at a changed viewport blocks a '
-        + 'submission that is otherwise ready.');
-    dimensionsChecked += 1;
-}
-assert.ok(dimensionsChecked >= 4,
-    `only ${dimensionsChecked} listing assets state their dimensions; expected at least 4. An asset row `
-    + 'without a stated size is unchecked, which defeats the point of stating them.');
+assert.deepEqual(actualSizes, statedSizes,
+    `${ASSET_DIR} holds assets at [${actualSizes.join(', ')}] but ${PACK_PATH} "Listing assets" states `
+    + `[${statedSizes.join(', ')}]. The CWS upload form rejects a wrongly-sized asset, so a regenerated `
+    + 'screenshot at a changed viewport blocks a submission that is otherwise ready.');
+const dimensionsChecked = actualSizes.length;
 
 console.log(`OK: extension listing-pack smoke ( §3.4/§5: ${declared.length} permissions justified in both `
     + `documents, ${manifestMatches.size} content-script matches agreeing across three files, summary `

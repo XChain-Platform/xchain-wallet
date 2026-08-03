@@ -29,7 +29,9 @@
 #   5. Prints the resulting SHA256 manifest for diffing against the
 #      published RELEASE_HASHES.md
 #
-# See REPRODUCIBLE_BUILDS.md for the full verification protocol.
+# See the desktop section of
+# https://docs.xchain.io/components/wallet/reproducible-builds
+# for the full verification protocol.
 
 set -euo pipefail
 
@@ -63,7 +65,7 @@ OUT_DIR_ABS="$(cd "${OUT_DIR}" && pwd)"
 # THIS USED TO BE FATAL, AND THE FATAL IS GONE ( D8 / ).
 # packages/desktop depended on `xchain-sdk` as `link:../../../xchain-sdk`,
 # a filesystem link to a SIBLING REPOSITORY three levels above the wallet
-# root, which is why the protocol in REPRODUCIBLE_BUILDS.md was never
+# root, which is why the published reproduce protocol was never
 # executable as written: it says to clone xchain-wallet and run this
 # script, a clone has no such directory, and the renderer build died at
 # `Rollup failed to resolve import "xchain-sdk/src/wallet.js"`.

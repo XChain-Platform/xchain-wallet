@@ -10,8 +10,9 @@
 
 // Smoke test for Batch 4 piece 12 (web onboarding).
 //
-// Closes the loop the TEST_DAPP_RUNBOOK currently calls out as the
-// bootstrap gap. Exercises both create + import against a real Vault
+// Closes the loop the test-dApp runbook currently calls out as the
+// bootstrap gap
+// (https://docs.xchain.io/components/wallet/release/extension/test-dapp-runbook). Exercises both create + import against a real Vault
 // with a real BIP39 mnemonic, then verifies the post-state:
 //
 //   1. Static wiring: routes exist, messaging helpers exported, App

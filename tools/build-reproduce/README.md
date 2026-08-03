@@ -44,4 +44,4 @@ Before cutting a mainnet release candidate, the release manager:
 2. Records the per-artifact SHA-256 in `RELEASE_MANIFEST.txt`.
 3. Runs `verify.sh` on a second machine (different OS, different CPU) to flush out non-determinism.
 4. Publishes `RELEASE_MANIFEST.txt` alongside the signed artifacts + source tarball.
-5. Updates `docs/Threat_Model.md` §5 if any supply-chain mitigation changes.
+5. Updates the [threat model](https://docs.xchain.io/components/wallet/threat-model) §5 if any supply-chain mitigation changes.

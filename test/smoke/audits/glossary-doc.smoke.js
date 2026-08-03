@@ -8,7 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §55 / G179: `docs/GLOSSARY.md`.
+// Smoke for §55 / G179: the wallet glossary.
+//
+//  moved it to the sibling xchain-documentation checkout
+// (components/wallet/glossary.md), published at
+// https://docs.xchain.io/components/wallet/glossary. The vocabulary it
+// pins is this codebase's, so the assertions followed it across rather
+// than being dropped; the gate skips, loudly, without that checkout.
 //
 // Pins the canonical wallet vocabulary so the doc cannot drift far
 // from the codebase. Every term checked here is one a contributor
@@ -20,14 +26,17 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsPath, skipUnlessDocs } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const docPath = 'docs/GLOSSARY.md';
-assert.ok(existsSync(join(root, docPath)), `${docPath} exists`);
+skipUnlessDocs('glossary-doc smoke');
 
-const docSrc = read(docPath);
+const docPath = docsPath('glossary.md');
+assert.ok(existsSync(docPath), `${docPath} exists`);
+
+const docSrc = readFileSync(docPath, 'utf8');
 
 // Required structural sections (keep the partition stable).
 const requiredSections = [
@@ -46,8 +55,10 @@ for (const heading of requiredSections) {
 // Required terms: anything below is a term the codebase actively
 // uses. Each must have a bold-prefixed definition line.
 const requiredTerms = [
-    // Architecture
-    'core', 'shell', 'three-shell model', 'vault', 'flow',
+    // Architecture. 'three-shell model' was dropped when the glossary became
+    // a public page: it is a repo-internal way of describing the layout, and
+    // the terms it is built from ('core', 'shell') are still defined.
+    'core', 'shell', 'vault', 'flow',
     'MessageHost', 'messaging shim',
     // Signing
     'HD wallet', 'imported WIF', 'BIP39 passphrase',
@@ -61,9 +72,11 @@ const requiredTerms = [
     // Onboarding
     'onboarding', 'dry-run restore', 'word-quiz',
     'backup reminder', 'demo mode',
-    // Build
+    // Build. 'spec gap ledger' and 'cluster' were dropped for the same
+    // reason: they name this repo's own planning artifacts, not anything a
+    // contributor or integrator meets in the product or the bridge.
     'reproducible build', 'synchronized versioning',
-    'RELEASE_HASHES.txt', 'smoke', 'spec gap ledger', 'cluster',
+    'RELEASE_HASHES.txt', 'smoke',
 ];
 // Separator: a hyphen, a colon, or (legacy) the long dash. The glossary used the
 // long dash until the repo-wide de-em-dash pass rewrote every entry to a hyphen;
@@ -76,27 +89,28 @@ for (const term of requiredTerms) {
         `glossary defines: **${term}** (followed by definition separator)`);
 }
 
-// Cross-link to upstream protocol glossary so the wallet doc does not
-// duplicate ACTION / encoding-type / etc.
-assert.ok(/xchain-documentation/.test(docSrc) && /Key_Terms\.md/.test(docSrc),
-    'glossary cross-links upstream xchain-documentation/Key_Terms.md');
+// Cross-link to the platform's protocol glossary so the wallet doc does not
+// duplicate ACTION / encoding-type / etc. Now a relative link inside the
+// docs repo rather than a repo name in prose.
+assert.ok(/key-terms\.md/.test(docSrc),
+    'glossary cross-links the platform key-terms glossary');
 
-// Cross-links to companion wallet docs that the glossary references
-// must exist (REPRODUCIBLE_BUILDS, BRIDGE).
+// Cross-links to companion wallet docs that the glossary references must
+// resolve. They are siblings inside the docs repo now, so the link and the
+// file are checked in the same place.
 const companions = [
-    'docs/Reproducible_Builds.md',
-    'docs/BRIDGE.md',
+    'reproducible-builds.md',
+    'bridge.md',
 ];
 for (const linkPath of companions) {
-    assert.ok(docSrc.includes(linkPath),
+    assert.ok(docSrc.includes(`(${linkPath})`),
         `glossary references ${linkPath}`);
-    assert.ok(existsSync(join(root, linkPath)),
+    assert.ok(existsSync(docsPath(linkPath)),
         `companion exists: ${linkPath}`);
 }
 
-// Honest framing about staleness: glossaries that fall behind the
-// codebase are worse than no glossary, so the doc itself flags this.
-assert.ok(/PR adding it/i.test(docSrc),
-    'glossary invites PRs for missing terms (anti-staleness)');
+// The doc used to close with an invitation to open a PR for a missing term.
+// That line was a contributor-repo convention and did not survive the move to
+// a published documentation site, so there is nothing left to assert here.
 
-console.log('OK: GLOSSARY.md doc smoke');
+console.log('OK: wallet glossary doc smoke');

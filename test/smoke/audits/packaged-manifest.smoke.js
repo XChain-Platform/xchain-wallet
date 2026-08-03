@@ -12,7 +12,8 @@
 //
 // WHAT CHANGED AND WHY. `reproduce.sh` used to run electron-builder in
 // `--dir` mode and hash the unpacked directory trees, while both
-// REPRODUCIBLE_BUILDS.md and docs/Verify_Release.md ended the recipe by
+// the reproducible-builds doc (https://docs.xchain.io/components/wallet/reproducible-builds)
+// and the verify-release doc (https://docs.xchain.io/components/wallet/release/verify-release) ended the recipe by
 // telling the verifier to diff that output against the release's published
 // RELEASE_HASHES manifest. That comparison can never succeed: the
 // published manifest covers packaged artifacts and the two sets share no

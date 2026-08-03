@@ -30,7 +30,8 @@
 // ONE KEY, ONE SIGNATURE. This verifies K1's own detached GPG signature
 // over `RELEASE_HASHES.txt`, the same file and the same signature that
 // `tools/release/verify.sh` checks and that a user checks by hand
-// following docs/Verify_Release.md. There is no second signing key and
+// following https://docs.xchain.io/components/wallet/release/verify-release.
+// There is no second signing key and
 // no second ceremony to forget. The cost is bundling openpgp.js into
 // the desktop app, which is a real dependency in a wallet and was an
 // explicit operator decision, not an incidental one.

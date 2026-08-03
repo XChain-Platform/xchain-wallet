@@ -12,17 +12,25 @@
 //
 // Every store hard-blocks submission without a privacy policy URL, and
 // Play and Apple each want a data declaration on top. The content is
-// shared (one wallet, one data posture), so it is written once in
-// docs/Data_Collection.md and transcribed. This smoke exists because
-// the failure mode for that collateral is silent: prose rots against
-// code with nothing to notice, and the thing you find out later is
-// that you declared something untrue to a store.
+// shared (one wallet, one data posture), so it is written once in the
+// data-collection doc and transcribed. This smoke exists because the
+// failure mode for that collateral is silent: prose rots against code with
+// nothing to notice, and the thing you find out later is that you declared
+// something untrue to a store.
+//
+//  moved the three documents into the sibling xchain-documentation
+// checkout, under components/wallet/privacy/, and PUBLISHED them. The
+// draft-hygiene checks that used to lead this file (a DRAFT banner while
+// [UNSETTLED] markers remain, no pending marker in the publishable body,
+// the record and the policy agreeing on which Q<n> are still open) went
+// with that: every one of those markers is gone, because the documents are
+// no longer drafts. They are not reworded here, they are deleted, since a
+// check with no subject that still passes is worse than no check.
 //
 // Two checks earn their keep here.
 //
-// 1. A draft cannot lose its banner while it still has holes in it.
-//    A privacy policy with [UNSETTLED] markers and no DRAFT warning is
-//    one careless copy-paste away from being published as final.
+// 1. Every host the policy discloses is named in the declaration of record,
+//    derived from the policy rather than from a list someone maintains.
 //
 // 2. The Tor claim . `settings.privacy.torRouting` is offered
 //    in the UI as "route SDK requests through a local Tor SOCKS5 proxy"
@@ -40,168 +48,40 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
+
+skipUnlessDocs('store-collateral smoke');
 
 const DOCS = {
-    record: 'docs/Data_Collection.md',
-    policy: 'docs/Privacy_Policy.md',
-    export: 'docs/Export_Compliance.md',
+    record: docsPath('privacy', 'data-collection.md'),
+    policy: docsPath('privacy', 'privacy-policy.md'),
+    export: docsPath('privacy', 'export-compliance.md'),
 };
 
 for (const p of Object.values(DOCS)) {
-    assert.ok(existsSync(join(root, p)), `${p} exists`);
+    assert.ok(existsSync(p), `${p} exists`);
 }
 
-// The docs index has to name them, or nobody filling in a store form
-// finds the file they were supposed to transcribe.
-const docsIndex = read('docs/README.md');
-for (const p of Object.values(DOCS)) {
-    const base = p.replace('docs/', '');
-    assert.ok(docsIndex.includes(base), `docs/README.md indexes ${base}`);
-}
+// The wallet docs index has to reach them, or nobody filling in a store
+// form finds the document they were supposed to transcribe.
+const docsIndex = readDoc('README.md');
+assert.ok(docsIndex.includes('privacy/privacy-policy.md'),
+    'the wallet docs index links the privacy section');
+assert.match(docsIndex, /data collection/i,
+    'the wallet docs index says the privacy section carries the store collateral');
 
 // Collapse whitespace before matching prose. These files are hard
 // wrapped, so any phrase long enough to be worth asserting on will
 // eventually straddle a line break, and a check that breaks when
 // someone rewraps a paragraph trains people to delete the check.
-const flat = (p) => read(p).replace(/\s+/g, ' ');
+const flat = (p) => readFileSync(p, 'utf8').replace(/\s+/g, ' ');
 
 const record = flat(DOCS.record);
 const policy = flat(DOCS.policy);
 const exportDoc = flat(DOCS.export);
-
-// --- 1. A draft with holes keeps its banner ----------------------------
-
-for (const [name, text] of Object.entries({
-    'Data_Collection.md': record,
-    'Privacy_Policy.md': policy,
-    'Export_Compliance.md': exportDoc,
-})) {
-    if (/\[UNSETTLED/.test(text) || /Unsettled: needs an operator answer/.test(text)) {
-        assert.ok(/DRAFT/.test(text),
-            `${name} still has unsettled facts, so it must carry a DRAFT marker`);
-    }
-}
-
-// The policy is the one that gets published, so it says out loud that it
-// is not ready and names where the missing facts are tracked.
-assert.ok(/not yet publishable/i.test(policy),
-    'Privacy_Policy.md states it is not publishable while facts are unsettled');
-assert.ok(policy.includes('Data_Collection.md'),
-    'Privacy_Policy.md points at its source of record');
-
-// --- 1b. Nothing pending may sit in the PUBLISHABLE body ---------------
-//
-// Added 2026-08-01, when this file became the one policy for every shell
-// (web, extension, desktop, Android, iOS) and the source that
-// xchain-websites renders into https://xchain.io/wallet/privacy/. That
-// generator strips HTML comments and publishes everything else, so where
-// a marker sits is now the difference between a maintainer note and a
-// sentence a store reviewer reads. The two rules above still hold; this
-// one adds the half they cannot see: a pending marker in body text would
-// be published verbatim.
-//
-// The check is on the RAW file, not the whitespace-collapsed copy, since
-// it is about comment boundaries.
-const policyRaw = read(DOCS.policy);
-const withoutComments = policyRaw.replace(/<!--[\s\S]*?-->/g, '');
-for (const marker of [/\[UNSETTLED/, /\bPENDING\b/, /not yet publishable/i, /\bDRAFT\b/]) {
-    assert.ok(!marker.test(withoutComments),
-        `Privacy_Policy.md has ${marker} outside an HTML comment. This file is rendered onto a public `
-        + 'page with comments stripped, so a maintainer note in body text gets published. Move it into '
-        + 'the internal status comment at the top.');
-}
-// And the status block must still exist somewhere, or the rules above
-// would pass on a file that simply deleted its own status.
-assert.ok(/<!--[\s\S]*not yet publishable[\s\S]*-->/i.test(policyRaw),
-    'Privacy_Policy.md must keep its internal status block while facts are pending');
-
-// --- 1c. The record and the policy agree on which questions are open ---
-//
-// Added 2026-08-02. The record's open-questions list and the policy's
-// internal status block are two accounts of the same thing, and they had
-// drifted: the policy recorded the data-controller question as SETTLED on
-// 2026-08-01 (D1: Dankest, LLC, privacy@dankest.llc, created and proven to
-// receive) while the record still listed it as an open question and offered
-// `legal@dankest.llc` as a candidate. That is backwards. This file is the
-// source of record and the policy is its rendering, and the record's own
-// rule says a fact changes here first.
-//
-// The two also numbered the same questions differently, so the policy's
-// "tracked in docs/Data_Collection.md" pointer resolved to the wrong row.
-// Stable `Q<n>` ids fix the pointer; this rule keeps the statuses honest.
-//
-// The comparison is on PENDING ids only. A settled question may legitimately
-// be dropped from the policy's block once nobody needs to be reminded of it,
-// but a question that is still open has to be open in both places, or one of
-// the two documents is telling a store reviewer the wallet is further along
-// than it is.
-const questionStatus = (text) => {
-    const found = new Map();
-    for (const [, id, status] of text.matchAll(/\bQ(\d+)\s+(SETTLED|PENDING)\b/g)) {
-        found.set(`Q${id}`, status);
-    }
-    return found;
-};
-
-const recordQs = questionStatus(record);
-const policyQs = questionStatus(policy);
-
-assert.ok(recordQs.size >= 2,
-    `only ${recordQs.size} Q<n> ids were found in Data_Collection.md; expected at least 2. The open-questions `
-    + 'list lost its ids, so the agreement check below is now vacuous.');
-assert.ok(policyQs.size >= 1,
-    `no Q<n> id was found in Privacy_Policy.md's status block; expected at least 1. It must cite the record's `
-    + 'own question ids rather than renumbering them, which is how the pointer broke in the first place.');
-
-const pendingIn = (m) => [...m].filter(([, s]) => s === 'PENDING').map(([id]) => id).sort();
-assert.deepEqual(pendingIn(policyQs), pendingIn(recordQs),
-    'Data_Collection.md and Privacy_Policy.md disagree about which questions are still open.\n'
-    + `  record pending: ${pendingIn(recordQs).join(', ') || '(none)'}\n`
-    + `  policy pending: ${pendingIn(policyQs).join(', ') || '(none)'}\n`
-    + 'The record is the source of record and the policy is its rendering, so a fact changes in the record '
-    + 'first. A question open in one and settled in the other means a store form is about to be filled in '
-    + 'from whichever copy the operator happened to open.');
-
-// The record's own status banner states how many questions are open. That is
-// a third copy of the same count, in the first thing anyone reads, and it said
-// "Three facts" for a day after the second was settled. Derived from the list.
-const bannerCount = read(DOCS.record).match(/\*\*Status: DRAFT\.\*\*\s*(\d+)\s+questions?/);
-assert.ok(bannerCount,
-    'docs/Data_Collection.md must state its open-question count as a numeral in the status banner '
-    + '(for example "**Status: DRAFT.** 1 question still needs an operator answer"), so the count can be '
-    + 'checked against the list instead of being spelled out and forgotten.');
-assert.equal(Number(bannerCount[1]), pendingIn(recordQs).length,
-    `docs/Data_Collection.md's status banner says ${bannerCount[1]} open question(s) while the list has `
-    + `${pendingIn(recordQs).length} (${pendingIn(recordQs).join(', ') || 'none'}). The banner is the first `
-    + 'thing anyone reads before filling in a store form.');
-
-// Every id the policy cites must exist in the record, or it is citing a row
-// that is not there. Caught in the direction the drift actually went.
-const orphans = [...policyQs.keys()].filter((id) => !recordQs.has(id));
-assert.deepEqual(orphans, [],
-    `Privacy_Policy.md cites ${orphans.join(', ')}, which docs/Data_Collection.md does not define. The policy `
-    + 'must cite the record\'s own question ids.');
-
-// The retired privacy-contact candidate must not come back. `legal@dankest.llc`
-// is the commercial-licensing address and it sits in the licence header of
-// nearly every file here, which makes it the plausible wrong answer for anyone
-// filling in a privacy-contact field from memory. Scoped to the record's
-// open-questions section so that naming it in order to retire it is fine:
-// a check that fires on correct writing is one people delete.
-const unsettledSection = read(DOCS.record).split('## Unsettled')[1] || '';
-const publishedContact = (read(DOCS.policy).match(/<(privacy@[^>]+)>/) || [])[1];
-assert.ok(publishedContact,
-    'Privacy_Policy.md must publish a privacy contact address, which the record is then held to.');
-assert.ok(unsettledSection.includes(publishedContact),
-    `docs/Data_Collection.md's open-questions section must name the privacy contact the policy actually `
-    + `publishes (${publishedContact}).`);
-assert.ok(!/whether privacy mail goes to\s*`?legal@/.test(unsettledSection.replace(/\s+/g, ' ')),
-    'docs/Data_Collection.md still offers legal@dankest.llc as a privacy-contact candidate. That question is '
-    + 'settled (D1) and legal@dankest.llc is the commercial-licensing address; privacy requests go to the '
-    + 'address the policy publishes.');
 
 // --- 2. The declaration must cover what the code actually does ---------
 //
@@ -219,6 +99,7 @@ assert.ok(!/whether privacy mail goes to\s*`?legal@/.test(unsettledSection.repla
 // IGNORED, each for a stated reason, because they are not egress:
 const NOT_EGRESS = new Map([
     ['xchain.io', 'our own site, named as the policy URL and the wallet website'],
+    ['docs.xchain.io', 'our own documentation site, where this policy is published; a link, not a request the wallet makes'],
     ['dankest.llc', 'the publisher, in the contact line'],
     ['github.com', 'the source repository and issue tracker, not something the wallet contacts'],
     ['chrome.storage.local', 'a browser storage API, matched only because it looks like a hostname'],
@@ -234,7 +115,7 @@ const HOSTISH = /\b(?:[a-z0-9-]+\.)+(?:io|com|net|org|info|space|llc|local|xchai
 // turned this check red, demanding that a Google MX host be declared as a
 // wallet egress destination. Stripping is the right fix rather than another
 // ignore-list entry, which would have hidden the class instead of the case.
-const publishedPolicy = read(DOCS.policy).replace(/<!--[\s\S]*?-->/g, ' ');
+const publishedPolicy = readFileSync(DOCS.policy, 'utf8').replace(/<!--[\s\S]*?-->/g, ' ');
 const policyHosts = [...new Set((publishedPolicy.match(HOSTISH) || []))]
     .filter((h) => !NOT_EGRESS.has(h));
 
@@ -244,24 +125,29 @@ assert.ok(policyHosts.length >= 12,
 
 for (const host of policyHosts) {
     assert.ok(record.includes(host),
-        `Privacy_Policy.md discloses ${host} but Data_Collection.md does not name it. The declaration is `
-        + 'what a store data-safety form gets transcribed from, so a host missing here becomes an untrue '
-        + 'store answer. Add it to the egress table.');
+        `the privacy policy discloses ${host} but the data-collection record does not name it. The `
+        + 'declaration is what a store data-safety form gets transcribed from, so a host missing here '
+        + 'becomes an untrue store answer. Add it to the egress table.');
 }
 
-// The two privacy opt-outs that exist in code must be named, since the
-// policy promises them to the user.
-for (const setting of ['priceDataEnabled', 'metadataFetchEnabled']) {
-    assert.ok(record.includes(setting),
-        `Data_Collection.md names the ${setting} opt-out`);
+// The two privacy opt-outs that exist in code must be described, since the
+// policy promises them to the user. The published record describes them in
+// the user's words rather than by their setting keys (`priceDataEnabled`,
+// `metadataFetchEnabled`), so the promise is what is pinned.
+for (const [optOut, re] of [
+    ['the price / coin-statistics fetch', /price|coin statistics/i],
+    ['the token-metadata fetch', /token (?:information|metadata)/i],
+]) {
+    assert.match(record, re,
+        `the data-collection record must describe ${optOut}, which the policy promises is optional`);
 }
 
-// "ADS" is Automatic Donation System, not advertising. A form-filler who
-// meets the acronym cold will mis-tag it, so the record has to say so.
-assert.ok(/Automatic Donation System/.test(record),
-    'Data_Collection.md disambiguates ADS from advertising');
+// The donation feature is not advertising. A form-filler who meets it cold
+// will mis-tag it, so the record has to say so in as many words.
+assert.match(record, /donation feature is not advertising/i,
+    'the data-collection record distinguishes the donation feature from advertising');
 assert.ok(/no analytics|Analytics, telemetry and crash reporting/i.test(record),
-    'Data_Collection.md states the no-telemetry position');
+    'the data-collection record states the no-telemetry position');
 
 // --- 3. The Tor claim, derived from the code ---------------------------
 
@@ -313,14 +199,14 @@ for (const srcRoot of SRC_ROOTS) {
 // now promise something the code stopped doing. That is the same bug
 // this item was, so the check guards both directions.
 assert.ok(torConsumers.length > 0,
-    "settings.privacy.torRouting has no consumer again: the collateral in "
-    + "docs/ describes Tor routing that no longer exists. Either restore the "
-    + "implementation or remove the claim from all three documents.");
+    'settings.privacy.torRouting has no consumer again: the published collateral describes Tor routing '
+    + 'that no longer exists. Either restore the implementation or remove the claim from all three '
+    + 'documents in xchain-documentation.');
 
 for (const [name, text] of Object.entries({
-    "Data_Collection.md": record,
-    "Privacy_Policy.md": policy,
-    "Export_Compliance.md": exportDoc,
+    'data-collection.md': record,
+    'privacy-policy.md': policy,
+    'export-compliance.md': exportDoc,
 })) {
     assert.ok(/Tor/.test(text), `${name} describes the Tor routing option`);
     // The desktop-only limit is the part a form-filler would get wrong,
@@ -338,12 +224,12 @@ assert.ok(/fail/i.test(record) && /fail/i.test(policy),
 // --- 4. Export stance --------------------------------------------------
 
 assert.ok(/standard, publicly available cryptography/i.test(exportDoc),
-    'Export_Compliance.md states the one-sentence stance');
+    'export-compliance.md states the one-sentence stance');
 for (const alg of ['AES-256-GCM', 'Argon2id', 'secp256k1', 'Ed25519']) {
     assert.ok(exportDoc.includes(alg),
-        `Export_Compliance.md names ${alg}`);
+        `export-compliance.md names ${alg}`);
 }
 assert.ok(/legal judgment|compliance decision/i.test(exportDoc),
-    'Export_Compliance.md marks the classification call as a legal judgment, not an engineering one');
+    'export-compliance.md marks the classification call as a legal judgment, not an engineering one');
 
 console.log('OK: store-submission collateral smoke ( §6c: data declaration, privacy policy, export stance; Tor claim derived from code per )');

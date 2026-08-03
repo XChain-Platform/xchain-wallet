@@ -17,8 +17,10 @@
 // two different public trader contacts is what a reviewer or a regulator
 // notices.
 //
-// `docs/Trader_Identity.md` is the single set of values. This checks that
-// the store documents agree with it.
+// The trader-identity doc is the single set of values. This checks that the
+// store documents agree with it.  moved all of them into the sibling
+// xchain-documentation checkout, under components/wallet/, so the scan
+// crosses the repo boundary and skips loudly when that checkout is absent.
 //
 // Not hypothetical. On 2026-08-01 two Play documents still named
 // `support@xchain.io` for this declaration, months after `info@dankest.llc`
@@ -40,21 +42,28 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsPath, readDoc, skipUnlessDocs, WALLET_DOCS } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
+const read = (p) => readFileSync(join(WALLET_DOCS, p), 'utf8');
 
-const RECORD_PATH = 'docs/Trader_Identity.md';
-assert.ok(existsSync(join(root, RECORD_PATH)), `${RECORD_PATH} exists`);
+skipUnlessDocs('store trader-identity smoke');
+
+const RECORD_PATH = 'privacy/trader-identity.md';
+assert.ok(existsSync(docsPath('privacy', 'trader-identity.md')), `${RECORD_PATH} exists`);
 
 // --- 1. The record itself ----------------------------------------------
 
 const recordRaw = read(RECORD_PATH);
 
-// Field table: | Field | `value` |
+// Field table: | Field | value |, with or without backticks around the
+// value. The port dropped the backticks; the values are the point.
 const record = {};
-for (const m of recordRaw.matchAll(/^\|\s*([A-Za-z ]+?)\s*\|\s*`([^`]+)`\s*\|\s*$/gm)) {
-    record[m[1].trim().toLowerCase()] = m[2].trim();
+for (const m of recordRaw.matchAll(/^\|\s*([A-Za-z ]+?)\s*\|\s*`?([^|`]+?)`?\s*\|\s*$/gm)) {
+    const field = m[1].trim().toLowerCase();
+    if (field === 'field') continue;
+    record[field] = m[2].trim();
 }
 
 const REQUIRED = ['entity', 'street', 'city', 'state', 'postal code', 'email', 'phone', 'country'];
@@ -73,31 +82,30 @@ assert.match(record['postal code'], /^\d{5}(-\d{4})?$/, 'the record postal code 
 
 // --- 2. Which documents make trader claims -----------------------------
 
-const DOC_ROOTS = ['docs', 'packages/extension/docs', 'packages/mobile/docs', 'packages/desktop/docs'];
-
+// The whole wallet documentation tree, walked recursively: the per-store
+// runbooks that carry trader claims now sit two directories deep
+// (release/extension/, release/mobile/), so a flat scan would miss them.
 function* walkMd(dir) {
     let entries;
     try { entries = readdirSync(dir); } catch { return; }
     for (const name of entries.sort()) {
         const full = join(dir, name);
-        if (statSync(full).isDirectory()) continue;
+        if (statSync(full).isDirectory()) { yield* walkMd(full); continue; }
         if (name.endsWith('.md')) yield full;
     }
 }
 
 const traderDocs = [];
-for (const r of DOC_ROOTS) {
-    for (const full of walkMd(join(root, r))) {
-        const rel = relative(root, full);
-        if (rel === RECORD_PATH) continue;
-        if (/trader/i.test(readFileSync(full, 'utf8'))) traderDocs.push(rel);
-    }
+for (const full of walkMd(WALLET_DOCS)) {
+    const rel = relative(WALLET_DOCS, full);
+    if (rel === RECORD_PATH) continue;
+    if (/trader/i.test(readFileSync(full, 'utf8'))) traderDocs.push(rel);
 }
 
 assert.ok(traderDocs.length >= 3,
     `expected at least 3 store documents to make trader claims, found ${traderDocs.length}. Either the `
-    + 'document set moved out from under DOC_ROOTS or the scan stopped matching, and every check below is '
-    + 'then vacuous.');
+    + 'document set moved out from under the wallet docs tree or the scan stopped matching, and every '
+    + 'check below is then vacuous.');
 
 // --- 3. Transcribable surfaces must match the record -------------------
 
@@ -164,18 +172,28 @@ for (const doc of traderDocs) {
     }
 }
 
-assert.ok(surfacesChecked >= 3,
-    `only ${surfacesChecked} transcribable trader surfaces were found across ${traderDocs.length} `
-    + 'documents; expected at least 3. The block/row extraction stopped matching, so the checks above '
-    + 'passed on nothing.');
+// No floor on surfacesChecked any more, and that is the point rather than a
+// weakening. 's port stopped duplicating the trader VALUES into the
+// per-store runbooks: they now say "use the same contact details across
+// every listing" and link the record. There is nothing left to drift, which
+// is the state this check was trying to enforce. The loop above still runs,
+// so a re-introduced copy is compared the moment it appears.
+//
+// The document-wide scans below are what carry the check now, and they have
+// a real subject: no store document may name a phone number or a trader
+// email that is not the declared one, in a block, a row, or plain prose.
+assert.ok(traderDocs.length >= 3,
+    `only ${traderDocs.length} documents making trader claims were scanned; expected at least 3`);
 
-// A wider net for the phone specifically. It has no legitimate reason to
+// A wide net for the phone specifically. It has no legitimate reason to
 // appear anywhere in these documents except as THE published number, so
 // unlike the email it does not need surface-scoping, and catching it in
 // prose is a feature: a stale number quoted in a sentence is still a stale
 // number someone will act on.
+let scanned = 0;
 for (const doc of traderDocs) {
     for (const phone of read(doc).match(PHONE_SHAPE) || []) {
+        scanned += 1;
         assert.equal(norm(phone), norm(record.phone),
             `${doc} names the phone number "${phone.trim()}", which is not the declared trader phone `
             + `"${record.phone}" in ${RECORD_PATH}. If the published number changed, it changes in the `
@@ -183,11 +201,29 @@ for (const doc of traderDocs) {
     }
 }
 
+// The retired trader email must not come back anywhere in these documents,
+// not even in prose. This is the 2026-08-01 regression exactly: two Play
+// documents still named support@xchain.io months after info@dankest.llc
+// replaced it, sitting under a paragraph warning against that very thing.
+const RETIRED_TRADER_EMAILS = ['support@xchain.io'];
+for (const doc of traderDocs) {
+    const text = read(doc);
+    for (const retired of RETIRED_TRADER_EMAILS) {
+        assert.ok(!text.includes(retired),
+            `${doc} still names ${retired}. The declared trader email is "${record.email}" `
+            + `(${RECORD_PATH}); one legal entity showing two public contacts is what a reviewer notices.`);
+    }
+    scanned += 1;
+}
+
 // --- 4. The record has to be findable ----------------------------------
 
-assert.ok(read('docs/README.md').includes('Trader_Identity.md'),
-    'docs/README.md does not index Trader_Identity.md. Nobody filling in a store form finds a declaration '
-    + 'of record that the docs index does not mention, which is how the duplicate copies started.');
+const walletIndex = readDoc('README.md');
+assert.ok(/trader identity/i.test(walletIndex),
+    'the wallet docs index does not mention the trader-identity declaration. Nobody filling in a store '
+    + 'form finds a declaration of record the index does not name, which is how the duplicate copies '
+    + 'started.');
 
 console.log(`OK: store trader-identity smoke ( D1: ${traderDocs.length} store documents, `
-    + `${surfacesChecked} transcribable surfaces, all agreeing with ${RECORD_PATH})`);
+    + `${surfacesChecked} transcribable surfaces, ${scanned} document-wide scans, all agreeing with `
+    + `${RECORD_PATH})`);

@@ -75,7 +75,8 @@ function loadLinuxToolsets() {
             fail(
                 'cannot resolve app-builder-lib/out/toolsets/linux. electron-builder '
                     + 'moved or renamed it; the AppImage cannot be built reproducibly '
-                    + 'until this shim is re-pointed. See REPRODUCIBLE_BUILDS.md.',
+                    + 'until this shim is re-pointed. See '
+                    + 'https://docs.xchain.io/components/wallet/reproducible-builds.',
             );
         }
     }

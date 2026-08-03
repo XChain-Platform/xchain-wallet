@@ -116,8 +116,9 @@ describe('wire audit: the egress modules name no unregistered host', () => {
                 unregistered,
                 `${relPath} contacts ${unregistered.join(', ')}, which is not in `
                 + 'packages/core/src/privacy/wireAudit.js. Register it there and update '
-                + 'the store forms (packages/mobile/docs/PRIVACY_NUTRITION_LABELS.md, '
-                + 'DATA_SAFETY.md) and docs/PRIVACY_POLICY.md before widening this test.',
+                + 'the store forms and the privacy policy in the sibling xchain-documentation '
+                + 'checkout (components/wallet/privacy/: privacy-nutrition-labels.md, '
+                + 'data-safety.md, privacy-policy.md) before widening this test.',
             ).toEqual([]);
         });
     }

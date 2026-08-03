@@ -51,6 +51,8 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+
 import {
     checkPrivacyUrl, normalizeText, policyTextFromMarkdown, pageTextFromHtml,
     pageCarriesPolicy, contactAddressesFrom, gatedContacts,
@@ -353,7 +355,7 @@ if (existsSync(HOSTED_PAGE)) {
 // (everything above) says nothing about whether the URL anyone will
 // actually type is that URL.
 //
-// This is not hypothetical. On 2026-08-02 `PLAY_LISTING.md` still named
+// This is not hypothetical. On 2026-08-02 the Play listing document still named
 // `https://dankest.llc/privacy.html` and explained that its DNS had not
 // moved yet. The DNS had since moved: that page answered 200 and served
 // the SUPERSEDED 1 August policy, the one claiming the first-party hosts
@@ -367,35 +369,49 @@ if (existsSync(HOSTED_PAGE)) {
 //
 // A dead wrong URL is the safe failure here. A LIVE wrong URL serving
 // superseded text is the one nobody catches.
+//  MOVED THE STORE DOCUMENTS OUT OF THIS REPO and, in the same
+// pass, stopped them restating the URL at all: each one now links the
+// policy and tells the operator to take the URL from the policy itself.
+// That removes the drift class this check existed for, by construction
+// rather than by vigilance, so the "every listing row names the canonical
+// URL" comparison has no subject any more.
+//
+// What replaces it is the rule that keeps it that way: a store document may
+// not hard-code a privacy-policy URL. The moment one does, there are two
+// copies again, and the 2026-08-02 failure above is back.
 const LISTING_DOCS = [
-    'packages/mobile/docs/PLAY_LISTING.md',
-    'packages/mobile/docs/APP_STORE_LISTING.md',
-    'packages/extension/docs/DATA_DISCLOSURE.md',
+    ['release', 'mobile', 'android-play.md'],
+    ['release', 'mobile', 'ios-app-store.md'],
+    ['release', 'extension', 'chrome-web-store.md'],
+    ['privacy', 'data-disclosure.md'],
 ];
-for (const rel of LISTING_DOCS) {
-    const path = join(root, rel);
-    if (!existsSync(path)) continue;
-    const text = readFileSync(path, 'utf8');
-    // The row a human copies: the line that both names a privacy policy
-    // and carries a URL. Prose elsewhere in the file may legitimately
-    // discuss a rejected candidate, so this looks at the field, not the
-    // document.
-    const rows = text.split('\n').filter((l) => /privacy/i.test(l) && /https?:\/\//.test(l));
-    const field = rows.find((l) => /^\|\s*Privacy policy/i.test(l.trim()));
-    assert.ok(field, `${rel} has a "Privacy policy" field row naming a URL`);
-    assert.ok(field.includes(DEFAULT_URL),
-        `${rel}'s privacy-policy field must name ${DEFAULT_URL}, the URL this tool verifies `
-        + `and the one every other store form publishes. Got: ${field.trim().slice(0, 160)}`);
-    // Naming the right one is not enough while a wrong one is live and
-    // plausible. A field may still DISCUSS the rejected dankest.llc
-    // candidate, which these rows do and should, but the canonical URL
-    // has to come first, because the first URL in the row is the one that
-    // gets copied.
-    const wrong = field.indexOf('dankest.llc/privacy');
-    assert.ok(wrong === -1 || field.indexOf(DEFAULT_URL) < wrong,
-        `${rel}'s privacy-policy field names a dankest.llc URL before the canonical one. `
-        + 'That host answers 200 while serving the superseded 1 August policy (measured '
-        + '2026-08-02), so getting this order wrong fails silently, in front of a reviewer');
+
+if (!docsAvailable()) {
+    console.log('SKIP (partial): privacy-url-check smoke - the tool half passed, but the '
+        + `store-document half needs the sibling xchain-documentation checkout (${WALLET_DOCS}).`);
+} else {
+    let docsChecked = 0;
+    for (const parts of LISTING_DOCS) {
+        const rel = parts.join('/');
+        const text = readDoc(...parts);
+        docsChecked += 1;
+
+        // Any line that presents a privacy policy AND an absolute URL is a
+        // restated copy. Links into the documentation site are not: they point
+        // at the policy, they do not transcribe its published address.
+        const restated = text.split('\n')
+            .filter((l) => /privacy/i.test(l) && /https?:\/\//.test(l))
+            .filter((l) => !/docs\.xchain\.io/.test(l));
+
+        assert.deepEqual(restated, [],
+            `${rel} hard-codes a privacy-policy URL:\n  ${restated.join('\n  ')}\n`
+            + `Store documents link the policy instead, so ${DEFAULT_URL} lives in exactly one place. `
+            + 'A second copy is how a superseded URL gets pasted into a console: on 2026-08-02 the Play '
+            + 'listing still named https://dankest.llc/privacy.html, which answered 200 and served the '
+            + 'superseded policy, and it would have looked fine from inside the console.');
+    }
+    assert.ok(docsChecked === LISTING_DOCS.length,
+        `only ${docsChecked} of ${LISTING_DOCS.length} store documents were read`);
 }
 
 console.log('privacy-url-check.smoke.js OK');

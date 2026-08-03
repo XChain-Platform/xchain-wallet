@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// REPRODUCIBLE_BUILDS.md promises that an independent verifier can rebuild
+// The reproducible-builds doc (https://docs.xchain.io/components/wallet/reproducible-builds)
+// promises that an independent verifier can rebuild
 // a tag and get the maintainer's pre-signing bytes, and it says why that
 // works: "the toolchain version is part of the output". The promise is
 // therefore only as good as the weakest pin behind it, and the pins live

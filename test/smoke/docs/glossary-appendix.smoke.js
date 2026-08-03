@@ -9,10 +9,14 @@
 // contact legal@dankest.llc.
 
 // Smoke for §55 / Cluster T FOLLOWUP 3: Glossary auto-appendix.
-// Pins the generator's existence + the in-sync state of docs/GLOSSARY.md
+// Pins the generator's existence + the in-sync state of the wallet glossary
 // against canonical sources, so a maintainer who renames a BridgeErrorCode
 // or adds a SitePermissions key without re-running the generator gets a
 // red smoke.
+//
+//  moved the glossary to the sibling xchain-documentation checkout
+// (components/wallet/glossary.md). The generator crosses that boundary, so
+// this gate skips loudly when the sibling is absent.
 
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
@@ -20,15 +24,19 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsPath, skipUnlessDocs } from '../_docs-repo.js';
+
+skipUnlessDocs('glossary-appendix smoke');
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const generatorPath = join(wsRoot, 'tools', 'glossary', 'generate-appendix.js');
-const glossaryPath = join(wsRoot, 'docs', 'GLOSSARY.md');
+const glossaryPath = docsPath('glossary.md');
 
 assert.ok(existsSync(generatorPath),
     'tools/glossary/generate-appendix.js exists');
 assert.ok(existsSync(glossaryPath),
-    'docs/GLOSSARY.md exists');
+    'the ported glossary exists in the sibling docs checkout');
 
 // --- 1. --check returns exit 0 when in sync ---------------------------
 
@@ -41,7 +49,7 @@ if (r.status !== 0) {
     console.error('Generator stderr:', r.stderr);
 }
 assert.equal(r.status, 0,
-    'GLOSSARY.md appendix is in sync with bridge-spec / connectedSite sources. '
+    'the glossary appendix is in sync with bridge-spec / connectedSite sources. '
     + 'If this fails, run `node tools/glossary/generate-appendix.js` and commit.');
 
 // --- 2. Markers + key codes / keys are present in the doc -------------
@@ -49,9 +57,9 @@ assert.equal(r.status, 0,
 const { readFileSync } = await import('node:fs');
 const glossary = readFileSync(glossaryPath, 'utf8');
 assert.ok(/<!-- BEGIN auto-generated glossary appendix -->/.test(glossary),
-    'GLOSSARY.md carries the begin marker');
+    'the glossary carries the begin marker');
 assert.ok(/<!-- END auto-generated glossary appendix -->/.test(glossary),
-    'GLOSSARY.md carries the end marker');
+    'the glossary carries the end marker');
 // Sanity: a couple of well-known codes are listed in the appendix.
 for (const code of ['USER_REJECTED', 'WALLET_LOCKED', 'BRIDGE_VERSION_MISMATCH']) {
     assert.ok(new RegExp(`\\b${code}\\b`).test(glossary),

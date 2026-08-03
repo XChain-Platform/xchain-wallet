@@ -15,8 +15,9 @@
 // is hard-blocked on a privacy-policy URL, and the Chrome Web Store form
 // validates that the URL resolves before it will accept the upload. The
 // repo already protects the CONTENT of that page: stage S6 generates
-// xchain.io/wallet/privacy/index.html from this repo's own
-// docs/Privacy_Policy.md, and a sync test in xchain-websites
+// xchain.io/wallet/privacy/index.html from the canonical policy in the
+// sibling xchain-documentation repo
+// (components/wallet/privacy/privacy-policy.md), and a sync test in xchain-websites
 // fails the moment the two disagree. Nothing protected the URL itself.
 //
 // It was written because that URL was a 404. Measured in a browser on
@@ -61,8 +62,10 @@
 // CONFIGURATION
 //
 //   --url <url>       or PRIVACY_POLICY_URL   defaults to the D5 URL below
-//   --source <path>   or PRIVACY_POLICY_PATH  defaults to this repo's
-//                                             docs/Privacy_Policy.md
+//   --source <path>   or PRIVACY_POLICY_PATH  defaults to the sibling
+//                                             xchain-documentation checkout,
+//                                             components/wallet/privacy/
+//                                             privacy-policy.md
 //   --timeout <ms>                            defaults to 15000
 //   --html <path>                             check bytes you supply instead
 //                                             of fetching (see below)
@@ -138,7 +141,15 @@ const here = dirname(fileURLToPath(import.meta.url));  // tools/release
 
 // D5, decided 2026-07-31. Trailing slash is the canonical form; see header.
 export const DEFAULT_URL = 'https://xchain.io/wallet/privacy/';
-export const DEFAULT_SOURCE_PATH = join(here, '..', '..', 'docs', 'Privacy_Policy.md');
+//  moved the wallet's prose docs into the sibling
+// xchain-documentation repo, which is checked out beside this one. Resolved
+// from this script's own location rather than cwd, so it holds wherever the
+// script is invoked from. Override with --source / PRIVACY_POLICY_PATH when
+// the sibling lives elsewhere.
+export const DEFAULT_SOURCE_PATH = join(
+    here, '..', '..', '..', 'xchain-documentation',
+    'components', 'wallet', 'privacy', 'privacy-policy.md',
+);
 export const DEFAULT_TIMEOUT_MS = 15000;
 
 export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3, CONTACT_GATED: 4 };
@@ -424,6 +435,9 @@ export async function checkPrivacyUrl({
         policyText = policyTextFromMarkdown(readFileSync(sourcePath, 'utf8'));
     } catch (err) {
         return fail(EXIT.CONFIG, `cannot read the source policy at ${sourcePath}: ${err.message}`,
+            'The policy now lives in the sibling xchain-documentation checkout',
+            '(components/wallet/privacy/privacy-policy.md). Clone it beside this repo,',
+            'or point --source / PRIVACY_POLICY_PATH at your copy.',
             'nothing was checked this run.');
     }
     try {
@@ -460,7 +474,8 @@ export async function checkPrivacyUrl({
         if (!supplied.ok) {
             return fail(EXIT.FAILURE,
                 `the supplied page is not the current policy: ${supplied.reason}`,
-                'Rebuild and redeploy the hosted page from this repo\'s docs/Privacy_Policy.md.');
+                'Rebuild and redeploy the hosted page from the canonical policy in',
+                'xchain-documentation (components/wallet/privacy/privacy-policy.md).');
         }
         lines.push('CARRIES THE CURRENT POLICY. Not a liveness check: these bytes were handed to');
         lines.push('this script, not fetched from the URL. Confirm the URL itself resolves separately.');
@@ -496,7 +511,8 @@ export async function checkPrivacyUrl({
     if (!carries.ok) {
         return fail(EXIT.FAILURE,
             `${url} resolves, but it is not serving the current policy: ${carries.reason}`,
-            'Rebuild and redeploy the hosted page from this repo\'s docs/Privacy_Policy.md.');
+            'Rebuild and redeploy the hosted page from the canonical policy in',
+            'xchain-documentation (components/wallet/privacy/privacy-policy.md).');
     }
 
     lines.push('LIVE: the URL resolves directly and carries the current policy verbatim.');
@@ -555,8 +571,10 @@ the plain live run. Get supplied bytes from the origin, bypassing the edge:
 or save the page from a browser. It proves the bytes are the current
 policy, not that the URL is reachable; check that separately.
 
-Defaults to ${DEFAULT_URL} ( D5) and this repo's
-docs/Privacy_Policy.md, the one policy covering every wallet shell.
+Defaults to ${DEFAULT_URL} ( D5) and the sibling xchain-documentation
+checkout's components/wallet/privacy/privacy-policy.md, the one policy
+covering every wallet shell. Without that checkout the run exits 2 (config
+error); --source / PRIVACY_POLICY_PATH points it elsewhere.
 
 Exit codes: 0 live, 1 not live / not current / redirects, 2 config error,
 3 inconclusive (403, timeout, network - NOT an all-clear), 4 live and

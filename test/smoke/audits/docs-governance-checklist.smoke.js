@@ -16,21 +16,26 @@
 //   - CONTRIBUTING.md has a Governance section that links to
 //     MAINTAINERS.md.
 //   - The MAINTAINERS.md file actually exists (the link can't dangle).
-//   - QA-CHECKLIST.md has a "Documentation parity check" section
-//     covering the major docs (ARCHITECTURE, BRIDGE, REPRODUCIBLE_BUILDS,
-//     VERIFY-RELEASE, GLOSSARY, THREAT_MODEL, MAINTAINERS, SECURITY,
-//     CONTRIBUTING, CODE_OF_CONDUCT).
+//   - The manual QA checklist has a "Documentation parity check" section
+//     covering the major docs (architecture, bridge, reproducible builds,
+//     verify-release, glossary, threat model, maintainers, security,
+//     contributor process, code of conduct).
+//
+//  moved the checklist, and the docs it covers, into the sibling
+// xchain-documentation checkout, so the parity half skips when that checkout
+// is absent. The CONTRIBUTING.md half is in this repo and always runs.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsAvailable, docsPath, WALLET_DOCS } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
 const contributing = readFileSync(join(wsRoot, 'CONTRIBUTING.md'), 'utf8');
-const qaChecklist = readFileSync(join(wsRoot, 'docs', 'QA_Checklist.md'), 'utf8');
 
 // --- 1. CONTRIBUTING.md governance ----------------------------------------
 
@@ -50,41 +55,50 @@ assert.match(
 assert.ok(existsSync(join(wsRoot, 'MAINTAINERS.md')),
     'the MAINTAINERS.md the governance section links to actually exists');
 
-// --- 2. QA-CHECKLIST.md per-section docs check ----------------------------
+// --- 2. Manual QA checklist, per-section docs check ----------------------
 
-assert.match(qaChecklist, /^## Documentation parity check$/m,
-    'QA-CHECKLIST has a Documentation parity check section');
-
-// Each canonical doc should appear in the parity check.
-const docsToCover = [
-    'ARCHITECTURE.md',
-    'BRIDGE.md',
-    'Reproducible_Builds.md',
-    'Verify_Release.md',
-    'GLOSSARY.md',
-    'Threat_Model.md',
-    'MAINTAINERS.md',
-    'SECURITY.md',
-    'CONTRIBUTING.md',
-    'CODE_OF_CONDUCT.md',
-];
-for (const doc of docsToCover) {
-    assert.match(
-        qaChecklist,
-        new RegExp(doc.replace(/\./g, '\\.')),
-        `parity check mentions ${doc}`,
-    );
+if (!docsAvailable()) {
+    console.log('SKIP (partial): docs-governance-checklist smoke - the CONTRIBUTING.md '
+        + 'half passed, but the documentation-parity half needs the sibling '
+        + `xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
+    process.exit(0);
 }
 
-// And each doc should actually exist on disk so the checklist isn't
-// asking the user to verify a phantom file.
+const qaChecklist = readFileSync(docsPath('release', 'qa-checklist.md'), 'utf8');
+
+assert.match(qaChecklist, /^## Documentation parity check$/m,
+    'the QA checklist has a Documentation parity check section');
+
+// The checklist names each doc in prose rather than by filename, so this
+// pins the SUBJECT of each row, not a path. A row that stops covering one
+// of these is the drift worth catching.
+const subjectsToCover = [
+    /Architecture documentation/i,
+    /Bridge documentation/i,
+    /Reproducible-builds documentation/i,
+    /Verify a release/i,
+    /Glossary/i,
+    /Threat model/i,
+    /Maintainer and escalation contacts/i,
+    /Security disclosure contact/i,
+    /Contributor-facing process documentation/i,
+    /Code of conduct/i,
+];
+for (const subject of subjectsToCover) {
+    assert.match(qaChecklist, subject,
+        `parity check covers ${subject}`);
+}
+
+// And each doc should actually exist so the checklist isn't asking the user
+// to verify a phantom. The prose docs are in the sibling checkout; the
+// governance and disclosure files stayed in this repo.
 const docPaths = {
-    'ARCHITECTURE.md': join(wsRoot, 'docs', 'ARCHITECTURE.md'),
-    'BRIDGE.md': join(wsRoot, 'docs', 'BRIDGE.md'),
-    'Reproducible_Builds.md': join(wsRoot, 'docs', 'Reproducible_Builds.md'),
-    'Verify_Release.md': join(wsRoot, 'docs', 'Verify_Release.md'),
-    'GLOSSARY.md': join(wsRoot, 'docs', 'GLOSSARY.md'),
-    'Threat_Model.md': join(wsRoot, 'docs', 'Threat_Model.md'),
+    'architecture.md': docsPath('architecture.md'),
+    'bridge.md': docsPath('bridge.md'),
+    'reproducible-builds.md': docsPath('reproducible-builds.md'),
+    'release/verify-release.md': docsPath('release', 'verify-release.md'),
+    'glossary.md': docsPath('glossary.md'),
+    'threat-model.md': docsPath('threat-model.md'),
     'MAINTAINERS.md': join(wsRoot, 'MAINTAINERS.md'),
     'SECURITY.md': join(wsRoot, 'SECURITY.md'),
     'CONTRIBUTING.md': join(wsRoot, 'CONTRIBUTING.md'),

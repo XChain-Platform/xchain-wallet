@@ -658,7 +658,12 @@ for (const shell of ['web', 'extension']) {
     const repro = `packages/${shell}/scripts/reproduce.sh`;
     const buildSh = `packages/${shell}/scripts/build.sh`;
     const dockerfile = `packages/${shell}/Dockerfile`;
-    for (const p of [repro, buildSh, dockerfile, `packages/${shell}/REPRODUCIBLE_BUILDS.md`]) {
+    // The per-shell REPRODUCIBLE_BUILDS.md is no longer a file here: 
+    // merged all four repro docs into one page in xchain-documentation, with a
+    // section per shell. That page is gated by repro-build-root-doc.smoke.js,
+    // which checks the section AND the anchor the About panel links to; this
+    // loop keeps the scripts, which are what actually reproduce a build.
+    for (const p of [repro, buildSh, dockerfile]) {
         assert.ok(existsSync(join(root, p)), `${p} exists`);
     }
     for (const p of [repro, buildSh]) {

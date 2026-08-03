@@ -550,7 +550,7 @@ const check = (over) => assertRecord({
     assert.equal(
         swapRequirement({
             repo: '.', tag: TAG, previousTag: 'v0.333.0',
-            run: fakeRun(['packages/web/src/App.jsx', 'docs/QA_Checklist.md']),
+            run: fakeRun(['packages/web/src/App.jsx', 'CONTRIBUTING.md']),
         }).requirement,
         'one-os',
     );

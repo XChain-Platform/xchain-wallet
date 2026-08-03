@@ -28,13 +28,15 @@
 //      `blockOrigin` / `unblockOrigin`.
 //   8. ConnectedSitesSection renders a Block button per row, a
 //      "Blocked origins" subsection, and an inline manual-block form.
-//   9. bridge-spec union + docs/BRIDGE.md table both list
+//   9. bridge-spec union + the bridge doc's error table both list
 //      `BLOCKED_BY_USER`.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -162,10 +164,17 @@ const specSrc = read('packages/bridge-spec/src/index.ts');
 assert.ok(/\|\s*'BLOCKED_BY_USER'/.test(specSrc),
     'BridgeErrorCode union includes BLOCKED_BY_USER');
 
-const bridgeDocSrc = read('docs/BRIDGE.md');
-assert.ok(/`BLOCKED_BY_USER`/.test(bridgeDocSrc),
-    'docs/BRIDGE.md error table mentions BLOCKED_BY_USER');
-assert.ok(/explicitly blocked this origin/.test(bridgeDocSrc),
-    'docs/BRIDGE.md describes the user-initiated block path');
+// The bridge doc left this repo in ; the assertion follows it into
+// the sibling checkout rather than being dropped, and skips when absent.
+if (docsAvailable()) {
+    const bridgeDocSrc = readDoc('bridge.md');
+    assert.ok(/`BLOCKED_BY_USER`/.test(bridgeDocSrc),
+        'the bridge doc error table mentions BLOCKED_BY_USER');
+    assert.ok(/explicitly blocked this origin/.test(bridgeDocSrc),
+        'the bridge doc describes the user-initiated block path');
+} else {
+    console.log('SKIP (partial): the bridge-doc half needs the sibling '
+        + `xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
+}
 
 console.log('OK: origin blocklist flow + bridge wiring + host + shims + UI + spec + docs smoke');

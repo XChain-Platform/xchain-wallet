@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Security: the web shell must NEVER write the user's plaintext wallet
-// password to any Web API storage. The threat model (docs/Threat_Model.md
-// §1, §2.1) states the password is held in JavaScript memory only for the
+// password to any Web API storage. The threat model (§1, §2.1:
+// https://docs.xchain.io/components/wallet/threat-model) states the password is held in JavaScript memory only for the
 // duration of a single operation and a page reload re-locks the wallet.
 // A regression here would hand any same-origin script (XSS sink,
 // compromised dependency) a reusable credential that decrypts the vault.

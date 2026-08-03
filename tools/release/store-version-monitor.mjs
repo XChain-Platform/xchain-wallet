@@ -274,7 +274,8 @@ Exit codes: 0 clean, 1 ALERT (rogue-publish signal), 2 config error
 3 inconclusive (could not determine a live version this run - NOT the
 same as clean).
 
-Intended install, origin-host cron (see docs/QA_Checklist.md for the
+Intended install, origin-host cron (see the manual QA checklist at
+https://docs.xchain.io/components/wallet/release/qa-checklist for the
 one-time setup steps; not yet installed):
 
   0 */6 * * * CWS_MAIN_ITEM_ID=<id> CWS_BETA_ITEM_ID=<id> \\

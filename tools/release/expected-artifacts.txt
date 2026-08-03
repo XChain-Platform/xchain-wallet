@@ -81,7 +81,8 @@ required  xchain-wallet-web-v*.tar.gz       default  -
 # --- Chrome extension ---------------------------------------------------
 # The store zip. What the Chrome Web Store returns to users is a
 # store-signed CRX repacked from this, so the manifest proves what was
-# submitted, not what was delivered (§3, docs/Verify_Release.md).
+# submitted, not what was delivered (§3,
+# https://docs.xchain.io/components/wallet/release/verify-release).
 required  xchain-wallet-extension-v*.zip    default  -
 # --- Desktop (electron-builder) -----------------------------------------
 # Extension globs rather than exact names. They used to be necessary

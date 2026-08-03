@@ -306,12 +306,32 @@ function Row({ label, children }) {
 }
 
 function DocLink({ path, label }) {
-    // Repo-relative path shown literally. These documents ship inside
-    // the wallet bundle (LICENSE.md / NOTICE.md) or in-repo only. A
-    // future pass replaces these with anchored links to a hosted docs
-    // site once §55.6 governance + §51.5 release website land.
+    // Two kinds of target land here. Documents that ship inside the wallet
+    // bundle (LICENSE.md / NOTICE.md / SECURITY.md) are repo-relative and
+    // are still shown literally, since there is nothing to open. The
+    // verification docs now live on the hosted documentation site
+    // , so an absolute URL is rendered as a real link the user
+    // can follow instead of a path they would have to go hunting for.
+    const isUrl = typeof path === 'string' && /^https?:\/\//.test(path);
+    const style = {
+        color: 'var(--xc-text)',
+        fontFamily: 'var(--xc-font-mono, monospace)',
+        fontSize: 'var(--xc-text-xs)',
+    };
+    if (isUrl) {
+        return (
+            <a
+                href={path}
+                target="_blank"
+                rel="noreferrer noopener"
+                style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
+            >
+                {label}
+            </a>
+        );
+    }
     return (
-        <span style={{ color: 'var(--xc-text)', fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
+        <span style={style}>
             {label}
             <span style={{ color: 'var(--xc-text-muted)', marginLeft: 6 }}>({path})</span>
         </span>

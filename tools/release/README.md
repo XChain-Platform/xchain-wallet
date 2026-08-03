@@ -11,7 +11,7 @@ blocked on the maintainer's release key being generated and published
 (G180 in `claude/reports/xchain-wallet/SPEC_GAPS.md`), so `sign.sh`
 exits with a clear error pointing at `SECURITY.md` until then.
 
-The companion verification side lives at `docs/Verify_Release.md` -
+The companion verification side lives at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release) -
 end users follow that recipe to verify what this pipeline produces.
 
 ---
@@ -54,7 +54,7 @@ installer on the feed.
   `manifest.json` permissions, `host_permissions`, and content-script
   matches are frozen against `packages/extension/docs/manifest-freeze.json`
   and gated in `pnpm test:smoke`; see that file and
-  `docs/QA_Checklist.md` "Chrome Web Store release provenance" for the
+  the [manual QA checklist](https://docs.xchain.io/components/wallet/release/qa-checklist) "Chrome Web Store release provenance" for the
   human diff step the freeze gate cannot replace)
 - `xchain-wallet-web-vX.Y.Z.tar.gz`     - static web SPA bundle
 - `xchain-wallet-android-vX.Y.Z.aab`    - Play upload bundle (K9-signed)
@@ -89,7 +89,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 |---|---|---|
 | `lib.sh` | Shared manifest routines: which files a manifest covers, in what order, and what its header says. Sourced by the other scripts so they cannot drift apart. | Live |
 | `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. | Gates live; signing blocked on G180 |
-| `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors `docs/Verify_Release.md`. | Live |
+| `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). | Live |
 | `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live (host pending) |
 | `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
 | `rehearse.mjs` |  §7.5: probes every shipped update lane against the staging feed (pointer, per-arch selection, download, sha512, signed manifest), records human-attested swaps, and gates the production publish on the result. | Live (host pending) |
@@ -99,9 +99,9 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `verify-store.sh` |  §4 post-publish verification: verifies the CI-built extension zip via `verify.sh`, then diffs it file-by-file against the store-served item (`--unpacked-dir` or `--crx`), skipping `_metadata/` and structurally diffing `manifest.json`. | Live |
 | `manifest-diff.mjs` | Structural JSON diff helper for `verify-store.sh`: deep-equal ignoring named top-level keys (default `update_url`, `key`). | Live |
 | `rollback-rerelease.sh` |  §4 rollback-as-re-release recipe: validates preconditions and prints the manual re-release sequence. There is no rollback lever; see the script's own header. The new version must beat BOTH floors: the highest version in the repo's  version-bearing set (which includes `packages/extension/manifest.json`, the only one the store reads) and the highest row in `publish-log.md`, read through the rogue-publish monitor's own `parsePublishLog`. The second floor is not redundant: the recipe tells the operator to work from a clone checked out at the good tag, where the repo is behind the store by construction. Exits 0 preconditions ok / 1 refused (no such tag, version not above the floor) / 2 caller error (no `--good-tag`, no `--new-version`, not a git checkout). A publish log that cannot be parsed is reported as could-not-tell and never as "nothing published". | Live, and driven end to end 2026-08-02 (S19); gated by `test/smoke/audits/rollback-rerelease.smoke.js` |
-| `verify-privacy-url.mjs` |  §5/D5 pre-submission check: is the public privacy-policy URL live, answering directly (no redirect hop), and serving this repo's current `docs/Privacy_Policy.md` word for word. Compares prose, not bytes, since the hosted page is rendered Markdown. Exits 0 live / 1 not live, redirecting, or stale / 2 config error / 3 inconclusive (403, timeout, network - never folded into live) / 4 live and current but a contact address the policy publishes is JavaScript-gated at the edge (submittable; the store validates that the URL resolves and serves the policy, and it does). **Do not use `curl` for this instead: Cloudflare answers plain tooling with 403 on every path of this domain, live page or not.** (Correction 2026-08-02: that stopped being true when turned Super Bot Fight Mode off; plain clients now get 200 zone-wide. The inconclusive-on-403 treatment stays, because the block can come back and this script must not report a false outage when it does. `verify-demo-endpoints.mjs` below deliberately takes the opposite view of a 403 on the API hosts, for a reason stated there.) Exit 4 exists because the script DECODES the edge's email obfuscation for its text comparison, which is right (the deployed bytes are innocent) but silent, and silence left the property unmeasured: the addresses are derived from the policy itself, and every run says whether each one is readable without JavaScript rather than only complaining when it is not. | Live, and green as of 2026-08-01: the apex flip landed and the URL serves the merged all-shells policy, confirmed through the edge in a browser and against the origin via `--html`. Takes operator-supplied bytes with `--html <file>` when Cloudflare 403s the host, the same way `verify-store.sh` takes a real store unpack rather than scraping |
+| `verify-privacy-url.mjs` |  §5/D5 pre-submission check: is the public privacy-policy URL live, answering directly (no redirect hop), and serving the current [privacy policy](https://docs.xchain.io/components/wallet/privacy/privacy-policy) word for word. Compares prose, not bytes, since the hosted page is rendered Markdown. Exits 0 live / 1 not live, redirecting, or stale / 2 config error / 3 inconclusive (403, timeout, network - never folded into live) / 4 live and current but a contact address the policy publishes is JavaScript-gated at the edge (submittable; the store validates that the URL resolves and serves the policy, and it does). **Do not use `curl` for this instead: Cloudflare answers plain tooling with 403 on every path of this domain, live page or not.** (Correction 2026-08-02: that stopped being true when turned Super Bot Fight Mode off; plain clients now get 200 zone-wide. The inconclusive-on-403 treatment stays, because the block can come back and this script must not report a false outage when it does. `verify-demo-endpoints.mjs` below deliberately takes the opposite view of a 403 on the API hosts, for a reason stated there.) Exit 4 exists because the script DECODES the edge's email obfuscation for its text comparison, which is right (the deployed bytes are innocent) but silent, and silence left the property unmeasured: the addresses are derived from the policy itself, and every run says whether each one is readable without JavaScript rather than only complaining when it is not. | Live, and green as of 2026-08-01: the apex flip landed and the URL serves the merged all-shells policy, confirmed through the edge in a browser and against the origin via `--html`. Takes operator-supplied bytes with `--html <file>` when Cloudflare 403s the host, the same way `verify-store.sh` takes a real store unpack rather than scraping |
 | `verify-demo-endpoints.mjs` |  §2.1 pre-submission gate: can a store REVIEWER reach the endpoints the scripted demo sends them to, from a plain client on no allowlist? Probe list is derived from `packages/core/src/registry/descriptors/`, never restated, and deduplicated by URL. A 200 is not a pass on its own: the hub's chain-registry Ed25519 signature is verified against the pinned federation key, the explorer must name the demo's coin in its `available` map, and the encoder's UTXO tracker must be reachable AND synced. Exits 0 live / 1 failure / 2 config error / 3 inconclusive (timeout, network - never folded into live). **403 is a FAILURE here, not inconclusive**: on these hosts it means the edge block is back, which is the regression this gate exists to catch. `--network mainnet`, `--json`, and `--burst N` for the bounded rate-limit probe (; one request per host cannot see a 0.5 req/sec limit). No custom User-Agent, ever: looking like a browser defeats the point. | Live, and green as of 2026-08-02 on testnet and mainnet: all seven probes OK, encoder trackers synced at lag 0, and a burst of 8 unthrottled |
-| `store-version-monitor.mjs` |  §2 publish monitor: compares each configured item's live Chrome Web Store version against `packages/extension/docs/publish-log.md`; a live version with no matching log row is the rogue-publish (compromised-publisher) signal. Exits 0 clean / 1 alert / 2 config error (item id unset or log unreadable) / 3 inconclusive (fetch failure or unrecognized page shape - never folded into clean). Run `node tools/release/store-version-monitor.mjs --help` for flags and the origin-host cron line. | Script built; NOT installed anywhere yet (see `docs/QA_Checklist.md` "Chrome Web Store release provenance") |
+| `store-version-monitor.mjs` |  §2 publish monitor: compares each configured item's live Chrome Web Store version against `packages/extension/docs/publish-log.md`; a live version with no matching log row is the rogue-publish (compromised-publisher) signal. Exits 0 clean / 1 alert / 2 config error (item id unset or log unreadable) / 3 inconclusive (fetch failure or unrecognized page shape - never folded into clean). Run `node tools/release/store-version-monitor.mjs --help` for flags and the origin-host cron line. | Script built; NOT installed anywhere yet (see the [manual QA checklist](https://docs.xchain.io/components/wallet/release/qa-checklist) "Chrome Web Store release provenance") |
 | `electron-cadence.mjs` |  §9 CVE clock: is the Chromium we ship still getting security fixes? Reads the version out of `pnpm-lock.yaml` (the caret in `package.json` is not the pin - every release lane installs `--frozen-lockfile`), then compares it against the registry's dist-tags: newer patches on our own major, newer majors past §9's 28-day rule, and upstream's three-major support window. Exits 0 current / 1 behind / 2 unreadable pin / 3 inconclusive - a registry that cannot be reached is never folded into "current". `--json` for a cron, `--offline <packument>` for tests. | Built 2026-08-02, and it went red on its first run: shipped 41.3.0 while 41.10.3 existed, with 42 and 43 both past the rule. Not yet installed anywhere |
 
 ### Installing the store-version monitor on origin-host (DEPLOYED 2026-08-01, DISARMED)
@@ -109,7 +109,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 **Status: the script is on the host and the crontab entry is staged and
 commented out.** Arming it needs one thing that cannot exist yet, the
 store-assigned extension ID, so the last step waits for the first upload
-(§4 exit criteria; also a row in `docs/QA_Checklist.md` "Chrome Web Store
+(§4 exit criteria; also a row in the [manual QA checklist](https://docs.xchain.io/components/wallet/release/qa-checklist) "Chrome Web Store
 release provenance"). It is disarmed rather than absent on purpose: with
 `CWS_MAIN_ITEM_ID` unset the script exits 2 and writes to stderr, so an
 armed cron would mail a config error every six hours and train everyone
@@ -195,7 +195,7 @@ bash tools/release/verify.sh --input ~/Downloads \
 
 The manifest is signed once, by K1, with GPG. That single signature is
 checked by `verify.sh`, by a user following
-`docs/Verify_Release.md`, and at runtime by the desktop updater
+[https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release), and at runtime by the desktop updater
 before it installs anything
 (`packages/desktop/main/updateVerify.js`, which bundles openpgp.js
 and checks against a key pinned in the app).
@@ -292,16 +292,17 @@ its own third-party reproduce script + digest-pinned Dockerfile:
 - `pnpm --filter @xchain-wallet/web reproduce`
 - `pnpm --filter @xchain-wallet/extension reproduce`
 
-See [`tools/build-reproduce/`](../build-reproduce/) and each package's
-`REPRODUCIBLE_BUILDS.md` for the per-shell verification protocol.
+See [`tools/build-reproduce/`](../build-reproduce/) and the
+[reproducible-builds doc](https://docs.xchain.io/components/wallet/reproducible-builds),
+which carries a section per shell, for the per-shell verification protocol.
 
 ## Status today
 
 - ✅ Scripts, gates, manifest header and the artifact-set list are live and covered by `test/smoke/audits/release-tools.smoke.js`.
 - ✅ Dev-mock gate scans every shipped shell bundle, including the desktop renderer.
 - ⏸ Actual GPG signing pending G180 (release key generation + publication; ceremony runbook is  S3).
-- ✅ CI release lanes exist (`.github/workflows/release.yml`); the repository-settings half is a checklist in `docs/Release_CI_Setup.md` and is NOT yet configured, so the workflow must not run with real secrets until it is.
-- ⏸ `downloads.xchain.io` not yet stood up ( S6); the upload tooling (`publish.sh`), the monitoring (`feed-sweep.mjs`) and the host runbook exist, the host does not. `docs/Verify_Release.md` still points at GitHub release assets.
+- ✅ CI release lanes exist (`.github/workflows/release.yml`); the repository-settings half is a checklist at [https://docs.xchain.io/components/wallet/release/ci-setup](https://docs.xchain.io/components/wallet/release/ci-setup) and is NOT yet configured, so the workflow must not run with real secrets until it is.
+- ⏸ `downloads.xchain.io` not yet stood up ( S6); the upload tooling (`publish.sh`), the monitoring (`feed-sweep.mjs`) and the host runbook exist, the host does not. The [verify-release page](https://docs.xchain.io/components/wallet/release/verify-release) still points at GitHub release assets.
 - ✅ `publish.sh` and `feed-sweep.mjs` are driven for real, against a signed fixture and a live local HTTP origin, by `test/smoke/audits/publish-feed.smoke.js` and `feed-sweep.smoke.js`. The older coverage of `publish.sh` was greps over its own source, which is how the  stage-1 defect survived: the comments and the code disagreed and both read as correct.
 - ✅ The §7.5 rehearsal is enforced, not merely written down: `publish.sh` refuses a production publish without a rehearsal record bound to the signed manifest in hand, so a re-cut release cannot inherit the previous cut's green. Driven end to end, with every refusal path, by `test/smoke/audits/rehearsal.smoke.js`.
 - ⏸ The swap half of the rehearsal is blocked on DD4 for seven of eight lanes (the two Linux deb lanes were added 2026-08-02,  §5): `rehearse.mjs coverage` reports which, and refuses to call a lane launch-ready with no named device. `mac-arm64` is the only lane with hardware today.

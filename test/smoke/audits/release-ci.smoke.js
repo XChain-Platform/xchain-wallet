@@ -17,7 +17,7 @@
 // binary that a direct downloader never runs past a store at all.
 //
 // Half the protection lives in repository settings, which no test can
-// reach (docs/Release_CI_Setup.md tracks those). The half that lives in
+// reach (the release CI-setup doc tracks those). The half that lives in
 // the workflow file is pinned here, because each of these is one
 // plausible edit away from being undone by someone fixing something
 // else, and none of them fails visibly when it breaks. A workflow that
@@ -25,9 +25,11 @@
 // green.
 
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -182,23 +184,37 @@ for (const [name, block] of jobs) {
 
 // --- 8. The settings half is written down ------------------------------
 
-const SETUP_DOC = 'docs/Release_CI_Setup.md';
-assert.ok(existsSync(join(root, SETUP_DOC)), `${SETUP_DOC} exists`);
-// Whitespace-flattened: the doc is hard wrapped, so any phrase worth
-// asserting on will eventually straddle a line break.
-const setup = read(SETUP_DOC).replace(/\s+/g, ' ');
-for (const required of [
-    'release-signing',
-    'Required reviewers',
-    'tag protection',
-]) {
-    assert.ok(setup.toLowerCase().includes(required.toLowerCase()),
-        `${SETUP_DOC} covers ${required}`);
-}
-assert.ok(/K1 is not in this table and must never be/.test(setup),
-    `${SETUP_DOC} states that K1 never becomes a CI secret`);
-assert.ok(wf.includes('docs/Release_CI_Setup.md'),
+//  moved the settings half to the sibling xchain-documentation
+// checkout and rewrote it for a reader verifying a release rather than for
+// the maintainer configuring one, so the exact console labels ("Required
+// reviewers", "tag protection") are gone. The three controls they named are
+// what this pins now; each is the reason the workflow file alone is not
+// enough.
+const SETUP_DOC = 'components/wallet/release/ci-setup.md';
+assert.ok(wf.includes('https://docs.xchain.io/components/wallet/release/ci-setup'),
     'release.yml points at the settings the file itself cannot enforce');
+
+if (docsAvailable()) {
+    // Whitespace-flattened: the doc is hard wrapped, so any phrase worth
+    // asserting on will eventually straddle a line break.
+    const setup = readDoc('release', 'ci-setup.md').replace(/\s+/g, ' ');
+    for (const [control, re] of [
+        ['a protected signing environment gated on human approval',
+            /protected deployment environment that requires a human reviewer to approve/i],
+        ['signing credentials scoped to that environment, never repository-wide',
+            /scoped to the protected environment, never stored as a repository-wide secret/i],
+        ['release-tag creation restricted to the maintainer',
+            /restricted to the release maintainer through a repository tag ruleset/i],
+    ]) {
+        assert.match(setup, re, `${SETUP_DOC} covers ${control}`);
+    }
+    assert.match(setup,
+        /manifest-signing key never appears here, and must never be added/i,
+        `${SETUP_DOC} states that the manifest-signing key never becomes a CI secret`);
+} else {
+    console.log('SKIP (partial): release-ci smoke - the settings-doc half needs the sibling '
+        + `xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
+}
 
 // --- 8b. The iOS lane ( §5, S4b) --------------------------------
 
@@ -268,15 +284,50 @@ assert.ok(!SIGNING_SECRET.test(ci),
 // never executed there at all.
 //
 // Any future shell that builds the SPA on a runner inherits the same wall.
-for (const wf of ['.github/workflows/release.yml', '.github/workflows/mobile.yml']) {
-    const text = read(wf);
-    // Only the workflows that actually build it are in scope; a workflow
-    // that merely runs tests is not carrying this graph.
-    if (!/pnpm\s+(-C\s+packages\/web|--filter\s+"?@xchain-wallet\/(web|mobile))/.test(text)) continue;
-    assert.match(text, /NODE_OPTIONS:\s*--max-old-space-size=\d{4,}/,
-        `${wf} builds the web SPA on a runner and must raise Node's old-space ceiling. `
-        + 'Without it the step dies at ~2.0 GB, and in mobile.yml that happens BEFORE '
-        + 'Gradle runs, so every artifact-level gate after it silently never executes');
+//
+// This check itself then proved the point, twice over (2026-08-03). It named
+// its two workflows in a literal list while its own comment promised "any
+// future shell", so ci.yml was never looked at; and its scope test knew only
+// the two spellings those two files happened to use, so it could not have
+// seen ci.yml's `pnpm -r --if-present build` even if it had. ci.yml's build
+// job duly aborted at 2042 MB on master (run 30787587046), taking with it the
+// three artifact gates that run after it - no-dev-mock, no-@trezor, and SRI -
+// none of which had executed since. So: enumerate the directory, never a
+// list, and match on BUILDING rather than on a known incantation.
+const WORKFLOW_DIR = '.github/workflows';
+const workflows = readdirSync(join(root, WORKFLOW_DIR)).filter((f) => /\.ya?ml$/.test(f));
+assert.ok(workflows.length >= 3, `found the workflow directory (${workflows.length} files)`);
+
+// `-r`/`--recursive` sweeps every package and therefore includes web. The
+// other two forms name it directly.
+const BUILDS_SPA = /pnpm\s+(?:[^\n]*\s)?(?:-r|--recursive)\s[^\n]*\bbuild\b|pnpm\s+-C\s+packages\/web[^\n]*\bbuild\b|pnpm\s+--filter\s+"?@xchain-wallet\/(?:web|mobile)/;
+
+const spaBuildingJobs = [];
+for (const file of workflows) {
+    const path = `${WORKFLOW_DIR}/${file}`;
+    const text = read(path);
+    // Scoped to the JOB, not the file: a ceiling set on some other job in the
+    // same workflow is not protecting this one, and a file-wide grep would
+    // read as though it were.
+    for (const [name, block] of jobBlocks(text)) {
+        if (!BUILDS_SPA.test(block)) continue;
+        spaBuildingJobs.push(`${file}:${name}`);
+        assert.match(block, /NODE_OPTIONS:\s*--max-old-space-size=\d{4,}/,
+            `${path} job "${name}" builds the web SPA on a runner and must raise Node's `
+            + 'old-space ceiling. Without it the step dies at ~2.0 GB, and every gate '
+            + 'after it in that job silently never executes');
+    }
+}
+// A detector that stops matching would otherwise turn this whole section into
+// a no-op that passes, which is the failure it exists to prevent. Asserted per
+// WORKFLOW rather than as a count, because the way this actually broke was a
+// detector that knew two spellings and not a third: losing exactly one file
+// still clears any count threshold low enough to be safe to write.
+for (const file of ['ci.yml', 'mobile.yml', 'release.yml']) {
+    assert.ok(spaBuildingJobs.some((j) => j.startsWith(`${file}:`)),
+        `the SPA-build detector no longer sees any job in ${file}. Either that `
+        + 'workflow genuinely stopped building the SPA, or the detector went stale '
+        + `and this section is now silently checking nothing. Found: ${spaBuildingJobs.join(', ') || '(none)'}`);
 }
 
 // . §6 step 1 says a release tag is pinned to a commit that green

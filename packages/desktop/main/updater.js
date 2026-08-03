@@ -50,7 +50,8 @@
 // is served by the same host as the binary, so it is a checksum, not a
 // signature.  S5 (decision D5) closes that with a signed release
 // manifest checked against a key pinned in the app; see
-// `updateVerify.js` for the full argument, and REPRODUCIBLE_BUILDS.md
+// `updateVerify.js` for the full argument, and the reproducible-builds doc
+// (https://docs.xchain.io/components/wallet/reproducible-builds)
 // "Update trust chain" for the surrounding model.
 //
 // `downloadAndInstall()` is the ONLY path to an install, and it runs

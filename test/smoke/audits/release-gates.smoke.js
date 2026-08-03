@@ -19,49 +19,77 @@ import { strict as assert } from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
 import { spawnSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
 // --- 1. Threat model doc --------------------------------------------
+//
+//  moved this out of the repo and split it in two: security.md now
+// carries the posture (protected assets, in scope, out of scope) and
+// threat-model.md carries the scenarios and the open items. The assertions
+// followed the content into whichever file now owns it, and skip loudly
+// when the sibling checkout is absent.
 
-const threatModel = readFileSync(join(wsRoot, 'docs', 'Threat_Model.md'), 'utf8');
-for (const section of [
-    'Protected assets',
-    'Explicitly in scope',
-    'Explicitly out of scope',
-    'Attacker scenarios',
-    'Known open items',
-    'Change review cadence',
-    'Verification',
-]) {
-    assert.ok(
-        threatModel.includes(section),
-        `THREAT_MODEL.md covers "${section}"`,
-    );
-}
-for (const pointer of [
-    'bridge-e2e.smoke.js',
-    'unlock-flow.smoke.js',
-    'action-decoder.smoke.js',
-    'web-onboarding.smoke.js',
-]) {
-    assert.ok(
-        threatModel.includes(pointer),
-        `THREAT_MODEL.md cites ${pointer}`,
-    );
-}
-for (const scenario of [
-    'Malicious dApp requesting every permission',
-    'Password-guessing offline attacker',
-    'Malicious approval-window spoof',
-    'Dev-SDK-mock addresses reach mainnet',
-]) {
-    assert.ok(
-        threatModel.includes(scenario),
-        `THREAT_MODEL.md details "${scenario}"`,
-    );
+if (docsAvailable()) {
+    const security = readDoc('security.md');
+    for (const section of [
+        'Protected assets',
+        'In scope',
+        'Out of scope',
+        'Audit posture',
+    ]) {
+        assert.ok(
+            security.includes(section),
+            `security.md covers "${section}"`,
+        );
+    }
+
+    const threatModel = readDoc('threat-model.md');
+    for (const section of [
+        'Attacker scenarios',
+        'Known open items',
+        'Change review cadence',
+        'Verification',
+    ]) {
+        assert.ok(
+            threatModel.includes(section),
+            `threat-model.md covers "${section}"`,
+        );
+    }
+
+    // The port rewrote the smoke-file citations into prose naming the same
+    // suites, since a published page should not send a reader hunting for a
+    // filename in a repo. The suites are what the claim rests on either way.
+    for (const suite of [
+        /bridge end-to-end test/i,
+        /unlock-flow test/i,
+        /action-decoder test/i,
+        /onboarding.{0,40}test/i,
+    ]) {
+        assert.match(
+            threatModel, suite,
+            'threat-model.md Verification section must name the suite each claim is checkable against',
+        );
+    }
+
+    for (const scenario of [
+        /malicious dApp requesting every permission/i,
+        /password-guessing offline attacker/i,
+        /spoofed approval-window overlay/i,
+        /[Dd]evelopment-mode addresses reaching mainnet/,
+    ]) {
+        assert.match(
+            threatModel, scenario,
+            'threat-model.md must still walk this attacker scenario',
+        );
+    }
+} else {
+    console.log('SKIP (partial): release-gates smoke - the threat-model half needs the sibling '
+        + `xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
 }
 
 // --- 2. Reproducible-build scaffold ---------------------------------

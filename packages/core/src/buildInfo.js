@@ -43,19 +43,20 @@ export const LICENSE_VERSION = '2';
 export const SECURITY_FILE = 'SECURITY.md';
 export const SECURITY_PUBLISHED = true;
 
-// Reproducible-build verification + release-signing artifacts. Pages
-// not yet hosted; current paths point at in-repo docs that document
-// the procedure. The root reproducible-build doc orients across every
-// shell; the desktop-specific recipe lives under `packages/desktop/`.
-export const REPRODUCIBLE_BUILD_DOC = 'docs/REPRODUCIBLE_BUILDS.md';
-export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'packages/desktop/REPRODUCIBLE_BUILDS.md';
+// Reproducible-build verification + release-signing artifacts. These are
+// live pages on the hosted documentation site ( moved the wallet
+// docs out of this repo), so the About panel renders them as links the
+// user can open. The root reproducible-build page orients across every
+// shell; the desktop-specific recipe is a section of that same page.
+export const REPRODUCIBLE_BUILD_DOC = 'https://docs.xchain.io/components/wallet/reproducible-builds';
+export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'https://docs.xchain.io/components/wallet/reproducible-builds#desktop-xchain-walletdesktop';
 export const RELEASE_SIGNATURES_DOC = 'packages/extension/RELEASE_SIGNATURES.md';
 export const RELEASE_SIGNATURES_PUBLISHED = false;
 // Cluster T FOLLOWUP 2: verification recipe for end users (key import
 // -> manifest download -> GPG verify -> artifact hash check -> optional
 // reproduce). Surfaced in the About panel next to the reproducible-
 // build doc so users land on the right doc with one click.
-export const VERIFY_RELEASE_DOC = 'docs/Verify_Release.md';
+export const VERIFY_RELEASE_DOC = 'https://docs.xchain.io/components/wallet/release/verify-release';
 
 // Update channel: currently only "development". Production / beta
 // channels land at v1.0 GA per spec §51.

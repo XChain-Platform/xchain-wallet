@@ -30,7 +30,8 @@ export async function unlockWallet(password) {
     // unlock operation and never written to any Web API storage
     // (sessionStorage / localStorage). A page reload re-locks the
     // wallet and the user re-enters their password; that re-prompt is
-    // the intended posture (see docs/Threat_Model.md §1, §2.1).
+    // the intended posture (see the threat model, §1 and §2.1:
+    // https://docs.xchain.io/components/wallet/threat-model).
     return unlockWalletLocal({ password });
 }
 

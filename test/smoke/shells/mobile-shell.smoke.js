@@ -41,6 +41,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const mobile = join(wsRoot, 'packages', 'mobile');
@@ -834,30 +836,28 @@ assert.ok(
     'the floor is checked BEFORE React mounts, not from inside a component',
 );
 
-// Listing pack: in-repo so a resubmission never improvises (§8).
-for (const doc of ['docs/PLAY_LISTING.md', 'docs/DATA_SAFETY.md', 'docs/PLAY_SUBMISSION_RUNBOOK.md']) {
-    assert.ok(existsSync(join(mobile, doc)), `listing pack has ${doc}`);
-}
-
-// The submission runbook is the one document an operator follows with the
-// console open, so the facts it hands them have to be the repo's facts. Three
-// of them drift independently of it, and each would fail in a way the operator
-// could not diagnose from inside the console.
-const runbook = readFileSync(join(mobile, 'docs', 'PLAY_SUBMISSION_RUNBOOK.md'), 'utf8');
+// The Play submission runbook and listing collateral moved to the sibling
+// xchain-documentation checkout in  (release/mobile/android-play.md),
+// and were rewritten for a reader rather than for a maintainer: they no
+// longer restate this repo's artifact names, script paths or lane files. The
+// repo-side halves of those pairs stayed here and are still checked. The
+// document-side halves that survived, which are the ordering facts an
+// operator gets wrong at the console, are checked against the ported doc.
 const declaredArtifacts = readFileSync(
     join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',
 );
 for (const pattern of ['xchain-wallet-android-v*.aab', 'xchain-wallet-v*.apk']) {
     assert.ok(declaredArtifacts.includes(pattern), `expected-artifacts declares ${pattern}`);
-    // The runbook writes them with a concrete version; compare the stems.
-    const stem = pattern.replace('*', 'X.Y.Z');
-    assert.ok(runbook.includes(stem), `the runbook names the artifact as ${stem}`);
 }
-assert.ok(
-    existsSync(join(wsRoot, 'tools', 'release', 'android-ceremony.sh'))
-    && runbook.includes('tools/release/android-ceremony.sh'),
-    'the runbook points at a ceremony script that exists',
-);
+assert.ok(existsSync(join(wsRoot, 'tools', 'release', 'android-ceremony.sh')),
+    'the signing-ceremony script the runbook sends an operator to exists');
+
+if (!docsAvailable()) {
+    console.log('SKIP (partial): mobile-shell smoke - the shell half passed, but the Play '
+        + `submission-doc half needs the sibling xchain-documentation checkout (${WALLET_DOCS}).`);
+    process.exit(0);
+}
+const runbook = readDoc('release', 'mobile', 'android-play.md');
 // Ordering, which is the whole reason Phase 6 is where it is: Google's app
 // signing certificate does not exist until the first AAB is uploaded, so an
 // assetlinks.json published before that carries a placeholder and App Link
@@ -868,7 +868,7 @@ assert.ok(
 );
 assert.match(
     runbook,
-    /Never hosted publicly/,
+    /never hosted publicly/i,
     'the AAB is store-bound; only the K10-signed APK is ever downloaded',
 );
 // Release parity ( §6). The first upload gives Android users, and
@@ -885,16 +885,16 @@ assert.match(
     /^android\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\.apk\s*$/m,
     'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
 );
-assert.ok(
-    runbook.includes('tools/release/shipped-lanes.txt'),
-    'the runbook names the file whose one-word flip arms release parity',
-);
-assert.ok(
-    runbook.indexOf('downloads.xchain.io')
-        < runbook.lastIndexOf('tools/release/shipped-lanes.txt'),
-    'the parity flip comes AFTER the direct lane is published, not before it',
-);
-const dataSafety = readFileSync(join(mobile, 'docs', 'DATA_SAFETY.md'), 'utf8');
+// The two assertions that used to sit here pinned the runbook's own mention
+// of tools/release/shipped-lanes.txt, and the order it mentioned it in. The
+// published doc names no repo file, so both lost their subject; the lane
+// file's own shape is still pinned above, which is the half that can break a
+// release. The runbook still has to publish the direct channel, so that is
+// what is checked instead.
+assert.match(runbook, /direct-download channel/i,
+    'the runbook still covers the direct-download channel the release-parity flip depends on');
+
+const dataSafety = readDoc('privacy', 'data-safety.md');
 // The form is derived from an audit of the wire, not from intent: every
 // first-party endpoint the app can call has to appear in it.
 for (const host of [
@@ -905,21 +905,25 @@ for (const host of [
 ]) {
     assert.ok(dataSafety.includes(host), `the wire audit lists ${host}`);
 }
-const listing = readFileSync(join(mobile, 'docs', 'PLAY_LISTING.md'), 'utf8');
-assert.match(listing, /D8/, 'country availability is still an open operator decision');
+// The listing collateral is now a section of the same document.
+const listing = runbook;
+assert.match(listing, /^### Country availability$/m,
+    'the listing collateral records the country-availability decision');
+assert.match(listing, /United Kingdom is excluded/,
+    'the country-availability decision still names the UK exclusion it existed to record');
 // The short description is a hard 80-character cap in the console, and this
 // file is what an operator pastes from. It recommended an 85-character string
 // while describing it as 84, so the value it told someone to paste would have
 // been refused with no hint which of its two candidates to trim. Counted here
 // rather than estimated in prose, because prose is what got it wrong.
 {
-    const block = listing.split(/^## Short description[^\n]*$/m)[1] ?? '';
-    // The recommended value is the first indented code line under the heading.
-    const rec = (block.split('\n').find((l) => /^ {4}\S/.test(l)) ?? '').trim();
-    assert.ok(rec, 'PLAY_LISTING.md offers a short description to paste');
+    const block = listing.split(/^### Short description[^\n]*$/m)[1] ?? '';
+    // The recommended value is the first blockquote line under the heading.
+    const rec = (block.split('\n').find((l) => /^> \S/.test(l)) ?? '').replace(/^> /, '').trim();
+    assert.ok(rec, 'the listing collateral offers a short description to paste');
     assert.ok(rec.length <= 80,
         `the recommended short description is ${rec.length} characters and Play caps it at 80. `
-        + `Refused at the console, from the one file that exists so nobody improvises: "${rec}"`);
+        + `Refused at the console, from the one document that exists so nobody improvises: "${rec}"`);
 }
 // K10 was generated 2026-08-01, so the slot now holds a real fingerprint and
 // the honesty requirement moves: it must be a well-formed SHA-256 (never an
@@ -940,9 +944,9 @@ assert.match(
     'SECURITY.md says a Play install cannot be checked against this fingerprint',
 );
 assert.match(
-    readFileSync(join(wsRoot, 'docs', 'Privacy_Policy.md'), 'utf8'),
+    readDoc('privacy', 'privacy-policy.md'),
     /## The Android app/,
-    'the hosted policy has the mobile section the data-safety answers derive from',
+    'the published policy has the mobile section the data-safety answers derive from',
 );
 
 console.log(

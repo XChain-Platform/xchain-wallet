@@ -162,13 +162,14 @@ xchain-wallet/
 ├── tools/
 │   └── build-reproduce/         reproducible-build helper scripts
 ├── e2e/                         Playwright E2E suite (web shell)
-├── docs/                        in-repo architecture + threat-model + dependency notes
 ├── CHANGELOG.md                 Keep a Changelog format; root is authoritative
 ├── LICENSE.md / NOTICE.md       GNU Affero General Public License v3.0 (AGPL-3.0)
 └── README.md                    this file
 ```
 
 All packages ship at the **same version**. Every shell's About screen surfaces its own `package.json.version` so users can confirm the extension, web, and desktop builds came from the same codebase.
+
+The wallet's prose documentation (architecture, dApp bridge, glossary, threat model, dependency review, reproducible builds, privacy, and the per-store release runbooks) is not in this repo. It lives in the [xchain-documentation](https://github.com/XChain-Platform/xchain-documentation) repo under `components/wallet/` and is published at [https://docs.xchain.io/components/wallet/](https://docs.xchain.io/components/wallet/). Tooling and tests here that read those documents resolve them from a sibling `xchain-documentation` checkout and skip when it is absent.
 
 ## Scripts
 
@@ -244,7 +245,7 @@ XChain Wallet is the reference client for the [XChain Platform](https://github.c
 
 ## Contributing
 
-Contribution guide, code of conduct, and security-disclosure policy land alongside the v1.0.0 GA cut. Until then, the existing in-repo notes at [`docs/`](./docs/) capture the current architecture, threat model, and dependency review.
+Contribution guide, code of conduct, and security-disclosure policy land alongside the v1.0.0 GA cut. Until then, the wallet documentation at [https://docs.xchain.io/components/wallet/](https://docs.xchain.io/components/wallet/) captures the current architecture, threat model, and dependency review.
 
 ## Legal
 

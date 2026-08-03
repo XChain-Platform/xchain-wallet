@@ -26,7 +26,13 @@
 //   9. electron-builder.config.cjs sets `asar: true` (deterministic packing).
 //  10. electron-builder.config.cjs documents SOURCE_DATE_EPOCH usage.
 //  11. electron-builder.config.cjs pins AppImage compression + reproducible flags.
-//  12. REPRODUCIBLE_BUILDS.md documents the verification protocol.
+//  12. The reproducible-builds doc documents the verification protocol.
+//      That doc left this repo in  and now lives in the sibling
+//      xchain-documentation checkout, published at
+//      https://docs.xchain.io/components/wallet/reproducible-builds. When the
+//      sibling is absent (an isolated single-repo CI checkout) the three doc
+//      rules are OMITTED rather than failed: they guard documentation parity,
+//      not shipped build behavior.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -36,6 +42,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const corePkg = join(here, '..');
 const wsRoot = join(corePkg, '..', '..');
 const desktop = join(wsRoot, 'packages', 'desktop');
+// Overridable so a checkout with the sibling somewhere else can still gate.
+const docsRoot = process.env.XCHAIN_DOCS_ROOT || join(wsRoot, '..', 'xchain-documentation');
+const reproDocPath = join(docsRoot, 'components', 'wallet', 'reproducible-builds.md');
 
 /**
  * @typedef {Object} ReproRuleResult
@@ -52,7 +61,7 @@ export function runReproBuildAudit() {
     const buildSh = readIfExists(join(desktop, 'scripts', 'build.sh'));
     const reproSh = readIfExists(join(desktop, 'scripts', 'reproduce.sh'));
     const ebCfg = readIfExists(join(desktop, 'electron-builder.config.cjs'));
-    const docs = readIfExists(join(desktop, 'REPRODUCIBLE_BUILDS.md'));
+    const docs = readIfExists(reproDocPath);
 
     /** @type {ReproRuleResult[]} */
     const out = [];
@@ -117,15 +126,14 @@ export function runReproBuildAudit() {
         ebCfg !== null && /compression:\s*['"]xz['"]/.test(ebCfg),
         'electron-builder config must pin AppImage compression to a deterministic algorithm'));
 
-    out.push(rule('docs-exist',
-        docs !== null,
-        'packages/desktop/REPRODUCIBLE_BUILDS.md must exist'));
-    out.push(rule('docs-mentions-level-2',
-        docs !== null && /Level-2/i.test(docs),
-        'REPRODUCIBLE_BUILDS.md must reference Level-2 reproducibility (the protocol level we target)'));
-    out.push(rule('docs-mentions-release-hashes',
-        docs !== null && /RELEASE_HASHES/.test(docs),
-        'REPRODUCIBLE_BUILDS.md must reference the RELEASE_HASHES manifest (the verification anchor)'));
+    if (docs !== null) {
+        out.push(rule('docs-mentions-level-2',
+            /Level-2/i.test(docs),
+            'the reproducible-builds doc must reference Level-2 reproducibility (the protocol level we target)'));
+        out.push(rule('docs-mentions-release-hashes',
+            /RELEASE_HASHES/.test(docs),
+            'the reproducible-builds doc must reference the RELEASE_HASHES manifest (the verification anchor)'));
+    }
 
     return out;
 }

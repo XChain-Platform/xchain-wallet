@@ -29,7 +29,9 @@
 #   5. Prints the resulting SHA256 manifest for diffing against the
 #      published RELEASE_HASHES.txt
 #
-# See REPRODUCIBLE_BUILDS.md for the full verification protocol.
+# See the web section of
+# https://docs.xchain.io/components/wallet/reproducible-builds
+# for the full verification protocol.
 
 set -euo pipefail
 

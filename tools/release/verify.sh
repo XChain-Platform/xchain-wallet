@@ -18,7 +18,8 @@
 # Re-computes SHA-256 hashes over every artifact in the input
 # directory, checks the manifest's signed header against the release it
 # claims to describe, and verifies the GPG signature. Mirrors the recipe
-# in docs/Verify_Release.md so a release engineer can do a round-trip
+# at https://docs.xchain.io/components/wallet/release/verify-release so a
+# release engineer can do a round-trip
 # check before publishing.
 #
 # Usage:

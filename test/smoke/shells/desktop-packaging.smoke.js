@@ -16,7 +16,7 @@
 //
 //   1. File layout: electron-builder.config.cjs + Dockerfile +
 //      scripts/{build,reproduce}.sh + build/entitlements.mac.plist +
-//      vite.config.js + main/{protocol,updater}.js + REPRODUCIBLE_BUILDS.md
+//      vite.config.js + main/{protocol,updater}.js
 //      all exist.
 //
 //   2. electron-builder config:
@@ -60,13 +60,15 @@
 //      of bundling T-RSL @trezor/connect-web) + frame-src (its signing
 //      iframe); connect-src stays 'self'.
 //
-//   8. REPRODUCIBLE_BUILDS.md exists with key sections.
+//   8. The hosted desktop reproducible-build recipe has its key sections.
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
 
 import {
     TIER_1_SCHEME,
@@ -97,7 +99,6 @@ for (const rel of [
     'build/README.md',
     'main/protocol.js',
     'main/updater.js',
-    'REPRODUCIBLE_BUILDS.md',
 ]) {
     assert.ok(existsSync(join(desktop, rel)), `packaging scaffold has ${rel}`);
 }
@@ -508,19 +509,39 @@ assert.ok(
     "connect-src stays 'self': the wallet's own code never fetches from connect.trezor.io",
 );
 
-// --- 8. REPRODUCIBLE_BUILDS.md sections -------------------------------
+// --- 8. The desktop reproducible-build recipe -------------------------
+//
+//  moved it out of this package and into the sibling
+// xchain-documentation checkout, where it is the "Desktop" section of
+// components/wallet/reproducible-builds.md. The recipe is still what the
+// scripts in this package are checked against, so the assertion followed it
+// across; it skips loudly when that checkout is absent.
 
-const rb = readFileSync(join(desktop, 'REPRODUCIBLE_BUILDS.md'), 'utf8');
-for (const heading of [
-    "What's reproducible",
-    "What's NOT reproducible",
-    'Verification protocol',
-    'Non-determinism sources we\'ve addressed',
-    'Update trust chain',
-    'Trezor Connect trust boundary',
-    'Per-release checklist',
-]) {
-    assert.ok(rb.includes(heading), `REPRODUCIBLE_BUILDS.md has section: ${heading}`);
+if (docsAvailable()) {
+    const reproDoc = readDoc('reproducible-builds.md');
+    const at = reproDoc.indexOf('## Desktop (`@xchain-wallet/desktop`)');
+    assert.notEqual(at, -1, 'the reproducible-builds doc has a Desktop section');
+    const rest = reproDoc.slice(at);
+    const end = rest.slice(1).search(/\n## /);
+    const rb = end === -1 ? rest : rest.slice(0, end + 1);
+    for (const heading of [
+        "What's reproducible",
+        "What's not reproducible",
+        'Verification protocol',
+        'Update trust chain',
+        'Trezor Connect trust boundary',
+        'Per-release checklist',
+    ]) {
+        assert.ok(rb.includes(heading), `the Desktop repro section has heading: ${heading}`);
+    }
+    // The shared non-determinism floor moved up to a document-level section
+    // when the four per-shell docs merged, so it is checked on the page
+    // rather than inside the Desktop section.
+    assert.ok(reproDoc.includes('Non-determinism sources addressed across every shell'),
+        'the reproducible-builds doc keeps its shared non-determinism section');
+} else {
+    console.log('SKIP (partial): desktop-packaging smoke - the reproducible-build recipe half needs the '
+        + `sibling xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
 }
 
 // --- Helpers ----------------------------------------------------------
@@ -547,5 +568,5 @@ function makeFakeApp() {
 }
 
 console.log(
-    'OK: desktop packaging smoke (Step 19 §40.12 / §51: electron-builder config (appId, protocols, asar, reproducibility flags, mac/win/linux targets, env-driven signing, electron-updater generic provider at downloads.xchain.io); Tier-1/Tier-2 URI scheme registration (xchain always, bitcoin/litecoin/dogecoin opt-in); BIP21 classification of coin URIs, xchain: pass-through, malformed URI handling; electron-updater wiring (dev-mode short-circuit, event forwarding, error handling); main/index.js delegates to protocol.js + updater.js; Dockerfile with digest-pinned base + SHA256-pinned Node + UID-mapped user; build.sh + reproduce.sh with SOURCE_DATE_EPOCH derivation + frozen lockfile + SHA256 manifest; CSP frame-src allowlists connect.trezor.io; REPRODUCIBLE_BUILDS.md documents the verification protocol)',
+    'OK: desktop packaging smoke (Step 19 §40.12 / §51: electron-builder config (appId, protocols, asar, reproducibility flags, mac/win/linux targets, env-driven signing, electron-updater generic provider at downloads.xchain.io); Tier-1/Tier-2 URI scheme registration (xchain always, bitcoin/litecoin/dogecoin opt-in); BIP21 classification of coin URIs, xchain: pass-through, malformed URI handling; electron-updater wiring (dev-mode short-circuit, event forwarding, error handling); main/index.js delegates to protocol.js + updater.js; Dockerfile with digest-pinned base + SHA256-pinned Node + UID-mapped user; build.sh + reproduce.sh with SOURCE_DATE_EPOCH derivation + frozen lockfile + SHA256 manifest; CSP frame-src allowlists connect.trezor.io; the hosted desktop repro recipe documents the verification protocol)',
 );

@@ -261,7 +261,7 @@ echo "  manifest:  $MANIFEST" >&2
 echo "  signature: $SIG" >&2
 echo >&2
 echo "  This one signature is checked three ways: by verify.sh, by a user" >&2
-echo "  following docs/Verify_Release.md, and by the desktop updater" >&2
+echo "  following https://docs.xchain.io/components/wallet/release/verify-release, and by the desktop updater" >&2
 echo "  against the key pinned in the app ( S5)." >&2
 echo >&2
 echo "  Publish the manifest under its VERSIONED name so verify.sh can" >&2

@@ -64,7 +64,10 @@ pnpm --filter @xchain-wallet/desktop run build:renderer
 #
 # It used to run `dist:unpacked` (electron-builder's `--dir` mode), which
 # emits `linux-unpacked/` and `linux-arm64-unpacked/` directory trees and
-# no installers. Both REPRODUCIBLE_BUILDS.md and docs/Verify_Release.md
+# no installers. Both the reproducible-builds doc
+# (https://docs.xchain.io/components/wallet/reproducible-builds) and the
+# verify-release doc
+# (https://docs.xchain.io/components/wallet/release/verify-release)
 # then ended the recipe by telling the verifier to diff that output
 # against the release's published RELEASE_HASHES manifest and call zero
 # bytes the proof - a comparison that can NEVER succeed, because the
@@ -173,6 +176,24 @@ cd /workspace/packages/desktop/dist
 # packaging leaves behind as an intermediate. When the packaged hashes
 # above disagree, this is what says WHICH file inside the bundle moved,
 # and without it a mismatch is a 130MB binary diff.
+#
+# IT COVERS node_modules PATHS, AND THAT IS THE POINT ( /build-spec
+# 2026-08-02). This find used to carry `-not -path '*/node_modules/*'`,
+# borrowed from the recipes that hash a SOURCE tree, where skipping
+# node_modules is obviously right. Here it runs inside `dist/`, which holds
+# packaging output and no build-time dependencies at all, so the only thing
+# that pattern could ever match is `resources/app.asar.unpacked/
+# node_modules/**` - the files electron-builder deliberately leaves OUTSIDE
+# the asar because they must exist on disk to be loaded.
+#
+# Measured against the real v0.334.0 release deb: the tree ships 188 files,
+# the old pattern hashed 76 of them, and among the 112 it dropped was
+# `tiny-secp256k1/build/Release/secp256k1.node` - a compiled native binary,
+# in a wallet, doing elliptic-curve maths. So the manifest whose whole job
+# is answering "which file inside the bundle moved" was blind to the files
+# most likely to move between environments (anything compiled) and worst to
+# have moved silently. A diagnostic with a hole exactly where the danger is
+# does not read as incomplete; it reads as clean.
 {
     echo "# xchain-wallet reproducible-build manifest (UNPACKED trees, diagnostic)"
     echo "#"
@@ -180,12 +201,35 @@ cd /workspace/packages/desktop/dist
     echo "# exist only inside the build. Use it to localise a mismatch that"
     echo "# RELEASE_HASHES.txt has already found."
     echo "#"
+    echo "# Covers the asar-unpacked native payload too: those files ship"
+    echo "# inside the artifact and are compiled, so they are the first"
+    echo "# place to look when a packaged hash disagrees."
+    echo "#"
     echo "# wallet-commit: ${XCHAIN_WALLET_COMMIT:-unknown}"
     echo "# source-date-epoch: ${SOURCE_DATE_EPOCH}"
-    find . -mindepth 2 -type f -not -path '*/node_modules/*' -print0 \
+    find . -mindepth 2 -type f -print0 \
         | sort -z \
         | xargs -0 sha256sum
 } > /out/UNPACKED_HASHES.txt
+
+# The hole above was invisible because nothing asserted the manifest's
+# SHAPE, only that it covered each arch. A tree that ships an asar-unpacked
+# payload must have it represented here, or the diagnostic is lying by
+# omission again, in whatever new way a future filter invents.
+for arch_dir in $(node -e "
+    const tc = require('/workspace/tools/release/toolchain.json');
+    process.stdout.write(tc.linuxArches
+        .map((a) => (a === 'x64' ? 'linux-unpacked' : 'linux-' + a + '-unpacked'))
+        .join(' '));
+"); do
+    if [ -d "./${arch_dir}/resources/app.asar.unpacked" ] \
+        && ! grep -q " \./${arch_dir}/resources/app.asar.unpacked/" /out/UNPACKED_HASHES.txt; then
+        echo "[xchain-wallet] FATAL: ${arch_dir} ships an asar-unpacked payload that the" >&2
+        echo "[xchain-wallet]        diagnostic manifest does not cover. Something is" >&2
+        echo "[xchain-wallet]        filtering it out; a mismatch in it would be unlocalisable." >&2
+        exit 1
+    fi
+done
 
 # A manifest that covers only one arch is the exact failure the arch-flag
 # fix addressed, and it would otherwise reappear silently as a short file.

@@ -28,7 +28,8 @@ export default defineConfig({
     build: {
         outDir: resolve(here, 'renderer', 'dist'),
         emptyOutDir: true,
-        // Source maps off; see the module docstring + REPRODUCIBLE_BUILDS.md
+        // Source maps off; see the module docstring + the reproducible-builds doc
+        // (https://docs.xchain.io/components/wallet/reproducible-builds)
         // "non-determinism sources". Re-enable in a local dev config if
         // you need to debug a shipped bundle.
         sourcemap: false,

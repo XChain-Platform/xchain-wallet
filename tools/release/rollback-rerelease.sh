@@ -390,7 +390,8 @@ release - claim the release in the ledger before touching anything):
      pnpm test:smoke, so the suite cannot pass until that is resolved
      ('s ground, not this script's). Add a CHANGELOG.md entry that
      says plainly this is a rollback re-release of $GOOD_TAG, not new work.
-  4. Run docs/QA_Checklist.md in full against the bumped build, including
+  4. Run the manual QA checklist in full against the bumped build
+     (https://docs.xchain.io/components/wallet/release/qa-checklist), including
      the "Chrome Web Store release provenance" section.
   5. Commit, tag v$NEW_VERSION (GPG-signed, per the tag-signing gate in
      .github/workflows/release.yml), and push the tag. This is a normal
@@ -403,7 +404,8 @@ release - claim the release in the ledger before touching anything):
      through the SAME review queue as any other release. Record the
      submission in packages/extension/docs/publish-log.md (this step's
      sha256 check is in the QA checklist section above) and any reviewer
-     exchange in packages/extension/docs/store-correspondence.md.
+     exchange in the operator's store-correspondence log, which is kept
+     outside this repo.
   7. Once live, run tools/release/verify-store.sh against the
      store-served item.
 

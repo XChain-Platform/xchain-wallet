@@ -168,7 +168,7 @@ bundler improves is not a venue.
 
 Hardware-signer flows (Trezor / Ledger): need a paired device. Test
 in person; doc the path in the runbook at
-`packages/extension/docs/TEST_DAPP_RUNBOOK.md`.
+https://docs.xchain.io/components/wallet/release/extension/test-dapp-runbook.
 
 Shell-specific surfaces (extension service worker, Electron IPC, web IndexedDB):
 G164.

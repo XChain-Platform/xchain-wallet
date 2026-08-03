@@ -19,7 +19,8 @@
 #
 # NOTE: the published `.crx` is re-packaged + re-signed by the Chrome
 # Web Store and will NOT be byte-identical. What this reproduces is the
-# pre-store unpacked `dist/` bundle. See REPRODUCIBLE_BUILDS.md.
+# pre-store unpacked `dist/` bundle. See the extension section of
+# https://docs.xchain.io/components/wallet/reproducible-builds.
 #
 # Usage:
 #   scripts/reproduce.sh                       # build current HEAD

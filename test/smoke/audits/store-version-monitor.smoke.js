@@ -250,7 +250,8 @@ writeFileSync(logPath, LOG);
 // and a parser written together always agree; the file the monitor actually
 // reads is `packages/extension/docs/publish-log.md`, and the operator
 // appends rows to it BY HAND, mid-ceremony, in the same step as an upload
-// (SUBMISSION-RUNBOOK.md Phase 6).
+// (the Chrome Web Store submission runbook, Phase 6:
+// https://docs.xchain.io/components/wallet/release/extension/chrome-web-store).
 //
 // So the shape of that real table is load-bearing and was unverified. If it
 // drifts from what the parser expects, the parser does not throw: it

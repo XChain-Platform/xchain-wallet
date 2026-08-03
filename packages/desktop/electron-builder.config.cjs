@@ -15,7 +15,8 @@
 //     Windows, Linux) from a single config.
 //   - Level-2 reproducibility for the pre-signing artifact: a Docker
 //     image + build script can produce a byte-identical zip/tar of the
-//     app contents across independent builders. See REPRODUCIBLE_BUILDS.md.
+//     app contents across independent builders. See the desktop section
+//     of https://docs.xchain.io/components/wallet/reproducible-builds.
 //   - Code-signing structured but env-var-driven; no certs in repo.
 //     `pnpm run dist` works without any cert config (produces unsigned
 //     dev artifacts). Signed releases happen when CSC_LINK +

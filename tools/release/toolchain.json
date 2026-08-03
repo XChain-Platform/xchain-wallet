@@ -2,7 +2,8 @@
     "_comment": [
         "Single source of truth for the toolchain that produces a release ( §51).",
         "",
-        "REPRODUCIBLE_BUILDS.md's central claim is that 'the toolchain version is part",
+        "The reproducible-builds doc (https://docs.xchain.io/components/wallet/reproducible-builds)",
+        "makes the central claim that 'the toolchain version is part",
         "of the output': a verifier who builds with a different Node than the release",
         "lane used gets different bytes and cannot tell that apart from tampering. That",
         "claim only holds if one version is pinned for BOTH, which is what this file is.",

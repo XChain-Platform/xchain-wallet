@@ -31,7 +31,8 @@ name: Release
 #
 # The protections that make this safe are NOT all in this file. They are
 # repository settings, and they must exist before this workflow is ever
-# run with real secrets. See docs/Release_CI_Setup.md. In short:
+# run with real secrets. See https://docs.xchain.io/components/wallet/release/ci-setup.
+# In short:
 #
 #   1. Signing lanes run in the `release-signing` GitHub Environment,
 #      which has a required-reviewer approval gate.
@@ -96,7 +97,8 @@ jobs:
       #  §8, tag control. The remotes are shared with a second coder,
       # so "can push a tag" must not equal "can start the signing machinery".
       # The repository ruleset restricting `v*` creation is the first half
-      # and lives in repo settings (docs/Release_CI_Setup.md); this is the
+      # and lives in repo settings
+      # (https://docs.xchain.io/components/wallet/release/ci-setup); this is the
       # half that lives in the repo, and it is the ONLY release control
       # independent of the maintainer's GitHub account. Under D6 (single
       # maintainer) the environment approval comes from the same account
@@ -214,7 +216,8 @@ jobs:
       # which actions/setup-node resolves to whatever 22.x is newest on
       # the day the lane runs - so two releases a month apart shipped
       # bytes built by different toolchains, and neither matched the
-      # container a third party verifies with. REPRODUCIBLE_BUILDS.md
+      # container a third party verifies with. The reproducible-builds doc
+      # (https://docs.xchain.io/components/wallet/reproducible-builds)
       # rests on "the toolchain version is part of the output", which was
       # true and was precisely the problem.
       #
@@ -641,9 +644,15 @@ jobs:
       # surfaces, and expected-artifacts.txt declares the ipa as `store`,
       # so signing would reject it later anyway. Better to be wrong here,
       # loudly, than at the release machine.
+      # Same ceiling as build-unsigned, and for the same bundle. This job has
+      # never run (it postdates the last release), and macos-latest carries
+      # 7 GB against ubuntu's 16, so the default old-space here is no larger.
+      # A first run that OOMs would die before Xcode is ever reached, which is
+      # exactly how mobile.yml spent three runs never reaching Gradle.
       - name: Build the web shell at the `store` profile
         env:
           XCHAIN_BUILD_PROFILE: store
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm --filter @xchain-wallet/web build
       - name: Dev-mock gate
         run: bash tools/build-reproduce/check-no-dev-mock.sh

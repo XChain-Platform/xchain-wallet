@@ -8,7 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §13 / G016: `docs/VERIFY-RELEASE.md`.
+// Smoke for §13 / G016: the release-verification recipe.
+//
+//  moved it to the sibling xchain-documentation checkout
+// (components/wallet/release/verify-release.md), published at
+// https://docs.xchain.io/components/wallet/release/verify-release. It
+// documents commands run against THIS repo, so the assertions followed
+// it across; the gate skips, loudly, without that checkout.
 //
 // Pins the doc's required structure: imports the maintainer's release
 // key, downloads + signature-verifies the hash manifest, hash-checks
@@ -20,14 +26,17 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsPath, skipUnlessDocs } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const docPath = 'docs/Verify_Release.md';
-assert.ok(existsSync(join(root, docPath)), `${docPath} exists`);
+skipUnlessDocs('verify-release-doc smoke');
 
-const docSrc = read(docPath);
+const docPath = docsPath('release', 'verify-release.md');
+assert.ok(existsSync(docPath), `${docPath} exists`);
+
+const docSrc = readFileSync(docPath, 'utf8');
 
 // Required headings (the procedure has to be skimmable).
 const requiredHeadings = [
@@ -66,25 +75,27 @@ for (const cmd of commands) {
         `verify-release doc includes shell command: ${cmd}`);
 }
 
-// Required cross-link targets exist OR are explicitly tracked gaps.
+// Required cross-links resolve. They are relative links inside the docs
+// repo now, so the link and its target are checked in the same place. The
+// per-shell desktop recipe is a section of reproducible-builds.md rather
+// than its own file, and the security policy is the docs repo's security.md
+// rather than this repo's SECURITY.md.
 const crossLinks = [
-    'docs/Reproducible_Builds.md',
-    'SECURITY.md',
-    'docs/QA_Checklist.md',
-    // All-caps to match the actual file; a case-sensitive host (or linux CI)
-    // 404s the mixed-case form, which the case-insensitive Mac FS hid.
-    'packages/desktop/REPRODUCIBLE_BUILDS.md',
+    ['../reproducible-builds.md', docsPath('reproducible-builds.md')],
+    ['../security.md', docsPath('security.md')],
+    ['qa-checklist.md', docsPath('release', 'qa-checklist.md')],
+    ['desktop/linux.md', docsPath('release', 'desktop', 'linux.md')],
 ];
-for (const linkPath of crossLinks) {
-    assert.ok(docSrc.includes(linkPath),
-        `verify-release doc references ${linkPath}`);
-    assert.ok(existsSync(join(root, linkPath)),
-        `cross-link target exists: ${linkPath}`);
+for (const [link, target] of crossLinks) {
+    assert.ok(docSrc.includes(`(${link})`),
+        `verify-release doc references ${link}`);
+    assert.ok(existsSync(target),
+        `cross-link target exists: ${link}`);
 }
 
-// Spec citation present.
-assert.ok(/§51/.test(docSrc) && /XCHAIN_WALLET_SPEC\.md/.test(docSrc),
-    'verify-release doc cites §51 of XCHAIN_WALLET_SPEC.md');
+// The spec citation was a pointer into the platform's private planning
+// tree, which a published page cannot send a reader to. Dropped rather than
+// reworded: there is no public §51 to cite.
 
 // Failure-mode guidance: if a signature or hash check fails the user
 // should know to STOP and not run the artifact.
@@ -101,4 +112,4 @@ for (const limit of [
         `doc honestly bounds verification scope: ${limit}`);
 }
 
-console.log('OK: VERIFY-RELEASE.md doc smoke');
+console.log('OK: verify-release doc smoke');

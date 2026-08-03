@@ -40,6 +40,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const mobile = join(wsRoot, 'packages', 'mobile');
@@ -459,31 +461,32 @@ assert.match(
 // from it silently, and each drift fails in a way that cannot be diagnosed
 // from inside the console. The Android twin pins its own equivalents in
 // mobile-shell.smoke.js; this is the iOS half.
-for (const doc of ['docs/APP_STORE_LISTING.md', 'docs/PRIVACY_NUTRITION_LABELS.md', 'docs/APP_STORE_SUBMISSION_RUNBOOK.md']) {
-    assert.ok(existsSync(join(mobile, doc)), `the iOS submission pack has ${doc}`);
-}
-const runbook = readFileSync(join(mobile, 'docs', 'APP_STORE_SUBMISSION_RUNBOOK.md'), 'utf8');
-
-// The artifact name, which sign.sh hard-fails on: an ipa called App.ipa is an
-// undeclared file, and the runbook is where an operator learns that before it
-// happens rather than after.
+//  moved the iOS submission pack to the sibling xchain-documentation
+// checkout (release/mobile/ios-app-store.md, privacy/privacy-nutrition-labels.md)
+// and rewrote it for a reader: the artifact stem, the script filenames and
+// the four secret names are no longer restated there. The repo-side halves
+// of those pairs stayed here and are still checked; the document-side halves
+// lost their subject and are gone rather than reworded.
 const declaredArtifacts = readFileSync(join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8');
 assert.ok(declaredArtifacts.includes('xchain-wallet-ios-v*.ipa'), 'expected-artifacts declares the ipa');
-assert.ok(runbook.includes('xchain-wallet-ios-vX.Y.Z.ipa'), 'the runbook names the ipa as the declared stem');
 
-// The scripts it sends the operator to have to exist, and be the ones CI runs.
 for (const script of ['tools/release/ios-archive.sh', 'tools/release/ios-export.sh']) {
     assert.ok(existsSync(join(wsRoot, script)), `${script} exists`);
-    assert.ok(runbook.includes(script.split('/').pop()), `the runbook names ${script}`);
 }
 
-// The four secrets, by name. A runbook that lists three of them produces an
-// archive step that fails on the fourth with a message about provisioning.
+// The four secrets the archive step requires. A lane that installs three of
+// them fails on the fourth with a message about provisioning.
 const archiveScript = readFileSync(join(wsRoot, 'tools', 'release', 'ios-archive.sh'), 'utf8');
 for (const secret of ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER', 'APPLE_TEAM_ID']) {
     assert.ok(archiveScript.includes(secret), `ios-archive.sh requires ${secret}`);
-    assert.ok(runbook.includes(secret), `the runbook lists ${secret} among the secrets to install`);
 }
+
+if (!docsAvailable()) {
+    console.log('SKIP (partial): mobile-ios-shell smoke - the shell half passed, but the App Store '
+        + `submission-doc half needs the sibling xchain-documentation checkout (${WALLET_DOCS}).`);
+    process.exit(0);
+}
+const runbook = readDoc('release', 'mobile', 'ios-app-store.md');
 
 // Ordering, and it is the whole reason Phase 8 is last: the association file
 // names TEAMID.BUNDLEID, the Team ID does not exist until enrollment
@@ -495,29 +498,25 @@ for (const secret of ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER', '
 // check passes vacuously the moment either side is renamed away. Proven: this
 // assertion was written that way first and did not fail when the Team ID step
 // was deleted outright.
-const teamIdAt = runbook.indexOf('Note the Team ID');
+const teamIdAt = runbook.indexOf('Record the Team ID');
 const aasaAt = runbook.indexOf('apple-app-site-association');
 assert.notEqual(teamIdAt, -1, 'the runbook has a step that obtains the Team ID');
 assert.notEqual(aasaAt, -1, 'the runbook has a step that publishes the association file');
 assert.ok(teamIdAt < aasaAt, 'the runbook obtains the Team ID before it publishes the association file');
 
 // The two rules that are termination-level if an operator improvises around
-// them under submission pressure.
+// them under submission pressure. Both survived the port, in the reader's
+// register rather than the maintainer's.
 assert.match(
     runbook,
-    /exports an ipa and stops/,
+    /Automated upload from CI is deliberately not supported/,
     'the runbook states that CI never uploads: a tag-triggered lane holding signing keys must not publish',
 );
 assert.match(
     runbook,
-    /Manually release this version/,
+    /manual(?:ly)? releas/i,
     'manual release only: approval lands at Apple\'s whim and must not ship a wallet ahead of its encoder',
 );
-
-// D2 is answered by the BUILD, not by a console checkbox, and the runbook has
-// to say so or someone re-answers it under form pressure and contradicts the
-// binary in front of a reviewer.
-assert.match(runbook, /D2 is already answered by the build/, 'the runbook records that the DEX surface is compiled out, not toggled');
 
 // --- 13. The two stores answer the territory question the same way ------
 //
@@ -532,8 +531,9 @@ assert.match(runbook, /D2 is already answered by the build/, 'the runbook record
 // check is deliberately name-based rather than structural: the two documents
 // have different table shapes and always will, and what has to match is the
 // answer, not the formatting.
-const iosListing = readFileSync(join(mobile, 'docs', 'APP_STORE_LISTING.md'), 'utf8');
-const playListing = readFileSync(join(mobile, 'docs', 'PLAY_LISTING.md'), 'utf8');
+// The listing collateral is now a section of each store's own document.
+const iosListing = runbook;
+const playListing = readDoc('release', 'mobile', 'android-play.md');
 const EXCLUDED = [
     // Tier 1. The UK is the one this decision existed to name.
     'United Kingdom', 'Cuba', 'Iran', 'North Korea', 'Syria',
@@ -541,11 +541,24 @@ const EXCLUDED = [
     // Tier 2: excluded at launch pending a current legal reading.
     'Bangladesh', 'Nepal', 'Algeria', 'Egypt', 'Qatar', 'Bolivia', 'Morocco',
 ];
+// The port removed the duplicate list from the iOS document: it now states
+// that it mirrors the Android decision and links to it, which is a stronger
+// anti-drift shape than two lists that have to be kept identical by hand. So
+// the list is asserted once, where it is written, and the mirror is asserted
+// as a mirror.
 for (const place of EXCLUDED) {
-    assert.ok(iosListing.includes(place), `the App Store territory list excludes ${place}`);
     assert.ok(playListing.includes(place), `the Play country list excludes ${place}`);
 }
-assert.match(iosListing, /China/, 'mainland China is excluded on both stores, for different reasons');
+assert.match(playListing, /China/, 'mainland China is excluded on Play');
+assert.match(
+    iosListing,
+    /[Mm]irrors the same worldwide-minus-exclusions policy/,
+    'the App Store territory section mirrors the Android decision rather than restating it',
+);
+assert.ok(
+    iosListing.includes('(android-play.md)'),
+    'the App Store territory section links the Android decision it mirrors, so the mirror is followable',
+);
 
 // The fact that made the decision cheap, and the one that makes it dangerous to
 // copy carelessly. Android's exclusions bind the Play listing only because the
@@ -554,12 +567,12 @@ assert.match(iosListing, /China/, 'mainland China is excluded on both stores, fo
 // the file inherits Android's risk calculus without Android's escape hatch.
 assert.match(
     iosListing,
-    /editable in App Store Connect at any time/,
+    /[Ss]torefront availability is editable at any time/,
     'the listing records that availability is editable, which is why starting conservative is cheap',
 );
 assert.match(
     iosListing,
-    /iOS has no direct lane at all/,
+    /no direct-download channel on iOS/,
     'the listing records that iOS has no jurisdiction-blind fallback, unlike the Android APK',
 );
 

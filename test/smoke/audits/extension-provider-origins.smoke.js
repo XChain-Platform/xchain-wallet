@@ -37,7 +37,7 @@
 // Two rules:
 //   A. Code. Every dApp origin an extension harness navigates to or
 //      intercepts must be matched by the manifest's content-script patterns.
-//   B. Docs. TEST_DAPP_RUNBOOK.md must quote the manifest's match list rather
+//   B. Docs. The test-dApp runbook must quote the manifest's match list rather
 //      than describe it. It said "any page served over http/https" for two
 //      days after D6, and the staleness was invisible because its own worked
 //      example uses loopback, which is still exempt.
@@ -47,12 +47,16 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const MANIFEST = 'packages/extension/manifest.json';
-const RUNBOOK = 'packages/extension/docs/TEST_DAPP_RUNBOOK.md';
+// The runbook moved to the sibling xchain-documentation checkout ;
+// rule B is skipped, loudly, when that checkout is absent.
+const RUNBOOK = 'xchain-documentation components/wallet/release/extension/test-dapp-runbook.md';
 const E2E_DIR = 'test/e2e/tests';
 const EXTRA_HARNESSES = ['packages/extension/scripts/capture-listing-screenshots.mjs'];
 
@@ -195,7 +199,14 @@ assert.deepEqual(uncovered, [],
 // Rule B: the test-dApp runbook quotes the manifest instead of describing it
 // ---------------------------------------------------------------------------
 
-const runbook = read(RUNBOOK);
+if (!docsAvailable()) {
+    console.log('SKIP (partial): extension-provider-origins smoke - rule A (harness '
+        + 'origins vs manifest patterns) passed, but rule B needs the sibling '
+        + `xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
+    process.exit(0);
+}
+
+const runbook = readDoc('release', 'extension', 'test-dapp-runbook.md');
 const fence = runbook.match(/```\n((?:https?:\/\/[^\n]*\n)+)```/);
 assert.ok(fence,
     `${RUNBOOK} must quote the content-script match patterns in a fenced block, so the "where does the `

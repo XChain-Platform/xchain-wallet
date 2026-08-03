@@ -38,6 +38,8 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+
+import { readDoc, skipUnlessDocs } from '../_docs-repo.js';
 import { dirname, join } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
@@ -59,16 +61,18 @@ const wsRoot = join(here, '..', '..', '..');
 
 // --- 1. Runbook exists ------------------------------------------------
 
-const runbook = readFileSync(
-    join(wsRoot, 'packages', 'extension', 'docs', 'TEST_DAPP_RUNBOOK.md'),
-    'utf8',
-);
+//  moved the runbook to the sibling xchain-documentation checkout.
+skipUnlessDocs('bridge-e2e smoke');
+const runbook = readDoc('release', 'extension', 'test-dapp-runbook.md');
+// Phrases, not filenames: the port reworded the runbook's worked example
+// (the old `runExample` / `ISSUE` literals are gone), so these pin the
+// stages an operator has to actually click through.
 for (const section of [
     'test-dapp',
-    'runExample',
+    'example flow',
     'connect',
     'signMessage',
-    'ISSUE',
+    'signAction',
 ]) {
     assert.ok(
         runbook.toLowerCase().includes(section.toLowerCase()),
