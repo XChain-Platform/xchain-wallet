@@ -20,13 +20,26 @@
 // so a descriptor edit, SDK bump, or copied-in coin fails CI instead
 // of silently WIF-encoding keys the backend decodes differently.
 //
-// The SDK is loaded from the sibling checkout (the same link: target the
-// extension/web packages consume). A `describe.skipIf` gate here used to
-// let this guard vanish silently whenever the sibling wasn't checked out,
-// which is exactly the failure mode the guard exists to catch (uuid
-// 9737f60d): a routine xchain-sdk wif bump would pass CI unnoticed in any
-// job that doesn't happen to check out siblings. The guard must fail loud
-// instead: this suite requires the xchain-sdk sibling to be present.
+// WHERE THE SDK COMES FROM, and it changed under this test ( DD6).
+// It used to be loaded from a sibling checkout, matching the `link:` target
+// the shells consumed. DD6 moved all three shells to the published
+// `@dankest-llc/xchain-sdk`, and the sibling half of this guard then failed
+// on every push: the CI step checking out the private sibling repo errored
+// `Not Found`, because the deploy-key secret it names has never existed on
+// this repo (measured 2026-08-02: the repo has no Actions secrets at all).
+//
+// So the SDK is now resolved through the same `xchain-sdk` alias the shells
+// import, from `packages/core`, which reads the SDK the wallet actually
+// SHIPS rather than whatever sibling master happens to be checked out. That
+// is the stronger comparison of the two: a published SDK the lockfile pins
+// is what users get, and it is what a release signs.
+//
+// A sibling checkout is still honoured when one is present, so working
+// across both repos locally keeps behaving as before. What is NOT tolerated
+// is finding neither: a `describe.skipIf` here used to let the guard vanish
+// silently whenever the SDK was absent, which is exactly the failure mode
+// the guard exists to catch (uuid 9737f60d) - a routine xchain-sdk wif bump
+// passing CI unnoticed. It fails loud instead.
 //
 // Note: xchain-sdk's coin data (src/coins/*.js) carries no SLIP-44 /
 // coin-type field, but src/derivation.js exposes FAMILY_SLIP44 as the
@@ -44,8 +57,23 @@ import { BUNDLED_DESCRIPTORS, FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../../pac
 import { ADDRESS_PARAMS } from '../../../packages/core/src/shared/utils/addressValidation.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sdkNetworksPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'networks.js');
-const haveSdk = existsSync(sdkNetworksPath);
+
+// Resolve through the `xchain-sdk` alias as packages/core sees it (the
+// published package), falling back to a sibling checkout. Returns null when
+// neither exists, which the gate below turns into a loud failure.
+const requireFromCore = createRequire(join(here, '..', '..', '..', 'packages', 'core', 'package.json'));
+const sdkFile = (...parts) => {
+    const spec = `xchain-sdk/${parts.join('/')}`;
+    try {
+        return requireFromCore.resolve(spec);
+    } catch {
+        const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
+        return existsSync(sibling) ? sibling : null;
+    }
+};
+
+const sdkNetworksPath = sdkFile('src', 'networks.js');
+const haveSdk = sdkNetworksPath !== null;
 
 // Mainnet SLIP-44 slot per chain family: the parity anchor the descriptors,
 // signers, and backend all agree on, on EVERY network of the family. Sourced
@@ -60,13 +88,14 @@ describe('wallet descriptors vs xchain-sdk network params', () => {
         // unless XCHAIN_REQUIRE_SIBLINGS=1, which only the drift-guards CI job
         // (which actually checks out the sibling) sets. That job fails loud;
         // ordinary single-repo checkouts skip instead of reddening every push.
-        it('parity guard requires the xchain-sdk sibling checkout', (ctx) => {
+        it('parity guard requires the xchain-sdk package', (ctx) => {
             if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {
                 throw new Error(
-                    `xchain-sdk sibling not found at ${sdkNetworksPath}. This suite guards ` +
-                    'wallet descriptor wifVersionByte/coin-type parity against xchain-sdk and ' +
-                    'must run with the sibling checked out; XCHAIN_REQUIRE_SIBLINGS=1 was set ' +
-                    'but the SDK is absent.'
+                    'xchain-sdk could not be resolved, either as the published package via the ' +
+                    '`xchain-sdk` alias in packages/core or as a sibling checkout. This suite ' +
+                    'guards wallet descriptor wifVersionByte/coin-type parity against xchain-sdk ' +
+                    'and must run with the SDK present; XCHAIN_REQUIRE_SIBLINGS=1 was set but ' +
+                    'the SDK is absent.'
                 );
             }
             ctx.skip();
@@ -80,8 +109,8 @@ describe('wallet descriptors vs xchain-sdk network params', () => {
     // a numeric value ({ BTC: 0 }); COIN_FULL_NAME bridges ticker -> full coin
     // name so it compares to the wallet's FAMILY_MAINNET_COIN_TYPE_SLOT (keyed
     // by full name with a quoted-string value { bitcoin: "0'" }).
-    const sdkDerivationPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'derivation.js');
-    const sdkCoinsPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'coins', 'index.js');
+    const sdkDerivationPath = sdkFile('src', 'derivation.js');
+    const sdkCoinsPath = sdkFile('src', 'coins', 'index.js');
     const { FAMILY_SLIP44 } = require(sdkDerivationPath);
     const { COIN_FULL_NAME } = require(sdkCoinsPath);
 

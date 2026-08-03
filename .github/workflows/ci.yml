@@ -31,25 +31,28 @@ jobs:
 
   # Cross-repo derivation-parity drift guard. The wallet's HD descriptors pin
   # their wifVersionByte / ADDRESS_PARAMS / coin-type slot against xchain-sdk,
-  # but per-repo CI cannot see sibling repos, so the parity suite skips (see the
-  # XCHAIN_REQUIRE_SIBLINGS gate in test/integration/hd/wallet-sdk-derivation-
-  # parity.test.js) in the single-repo `test` job. This job recreates the
-  # sibling layout (self + xchain-sdk side by side) and runs the suite for real
-  # with XCHAIN_REQUIRE_SIBLINGS=1, so a descriptor<->SDK drift fails CI.
-  # xchain-sdk is private pre-launch, so its checkout uses a read-only deploy
-  # key; drop the ssh-key line when the repos flip public at launch.
+  # and the parity suite skips by default (see the XCHAIN_REQUIRE_SIBLINGS gate
+  # in test/integration/hd/wallet-sdk-derivation-parity.test.js) so an ordinary
+  # run cannot go quietly green on a guard that did not execute. This job runs
+  # it for real with XCHAIN_REQUIRE_SIBLINGS=1, so a descriptor<->SDK drift
+  # fails CI.
+  #
+  # It no longer recreates a sibling layout. Since  DD6 the SDK is the
+  # published @dankest-llc/xchain-sdk, which `pnpm install --frozen-lockfile`
+  # brings in at the version a release would sign, so the guard compares the
+  # wallet against the SDK it actually ships.
   drift-guards:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           path: xchain-wallet
-      - name: Check out xchain-sdk sibling
-        uses: actions/checkout@v4
-        with:
-          repository: XChain-Platform/xchain-sdk
-          ssh-key: ${{ secrets.XCHAIN_SDK_DEPLOY_KEY }}
-          path: xchain-sdk
+      # No sibling checkout: since  DD6 the shells consume the PUBLISHED
+      # @dankest-llc/xchain-sdk, so `pnpm install --frozen-lockfile` below
+      # installs the exact SDK a release would ship and the parity guard reads
+      # that. The step this replaces checked out the private sibling repo with
+      # `secrets.XCHAIN_SDK_DEPLOY_KEY`, a secret that has never existed on this
+      # repo, so it failed `Not Found` on every push and took the whole job red.
       - name: Enable pnpm (corepack)
         run: corepack enable
       - name: Use Node.js 22

@@ -84,9 +84,13 @@ Rotate only on suspicion of leak, and treat that as a planned migration.
 Leave it unset and every rehearsal step is skipped; production builds
 are unaffected either way.
 
-⬜ Confirm the existing repository secret `XCHAIN_SDK_DEPLOY_KEY` (used
-by `ci.yml`) stays a repository secret. It is read-only and unrelated;
-moving it would break CI.
+✅ `XCHAIN_SDK_DEPLOY_KEY` is gone, and it never existed. This line used to
+say "confirm the existing repository secret", which was wrong in both
+halves: measured 2026-08-02, the repo carries no Actions secrets at all,
+so `ci.yml`'s sibling checkout of the private `xchain-sdk` failed
+`Not Found` on every push and took the whole `drift-guards` job red. The
+job no longer checks out a sibling: since DD6 the parity guard reads the
+published `@dankest-llc/xchain-sdk` that `--frozen-lockfile` installs.
 
 **These CI copies are caches, not the store of record.** The
 maintainer's 0600 copy plus the recovery copy is authoritative (§4). If
