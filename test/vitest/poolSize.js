@@ -32,3 +32,26 @@
 import { availableParallelism } from 'node:os';
 
 export const maxForks = Math.max(1, Math.min(8, availableParallelism() - 1));
+
+/**
+ * The same pool, halved, for a run carrying coverage instrumentation.
+ *
+ * Sizing the pool from the machine got `test` green and left `coverage`
+ * failing on something that is not a test failure at all: all 393 files and
+ * 5645 tests PASSED, and the run still exited 1 on two unhandled
+ * `[vitest-worker]: Timeout calling "onTaskUpdate"` errors (run 30839130702).
+ *
+ * That is a starvation symptom with a specific mechanism. Argon2id is
+ * SYNCHRONOUS - it blocks the worker's event loop for its whole duration - so
+ * while a derivation runs, that worker cannot answer the RPC vitest requires
+ * of it. Instrumentation multiplies the derivation cost, several forks
+ * multiply it again by contending for the same cores, and past some point the
+ * blocking window is longer than birpc's own timeout. birpc's timeout is not
+ * exposed through vitest config, so the only lever is the blocking window
+ * itself, and fork count is what sets it.
+ *
+ * Halved rather than pinned to 1: the goal is to keep the window under the
+ * RPC timeout, not to serialise a suite of 393 files. On a big box this is 4,
+ * where an instrumented derivation already measures ~5s.
+ */
+export const instrumentedMaxForks = Math.max(1, Math.floor(maxForks / 2));
