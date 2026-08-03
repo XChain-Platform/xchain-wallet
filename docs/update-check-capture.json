@@ -1,8 +1,8 @@
 {
   "mode": "drive",
   "note": "The REAL electron-updater, driven against a local origin with a stub app adapter. Transport is Node rather than Chromium, so a packaged app may add headers of its own on top of these - but every header the UPDATER sets is here, which the library mode could not show.",
-  "electron-updater": "6.8.3",
-  "capturedAt": "2026-08-02T22:22:48.302Z",
+  "electron-updater": "6.8.9",
+  "capturedAt": "2026-08-03T02:57:56.452Z",
   "persistentIdentifier": {
     "header": "x-user-staging-id",
     "upstreamDefault": {
@@ -21,12 +21,12 @@
   "requests": [
     {
       "method": "GET",
-      "url": "/stable-mac.yml?noCache=1jv2954us",
+      "url": "/stable-mac.yml?noCache=1jv2osu6g",
       "httpVersion": "1.1",
       "headers": [
         [
           "x-user-staging-id",
-          "6e99d81f-d0b5-5950-9071-eab6fb1fe613"
+          "ac3616de-5bb6-5563-9054-b0e4e3c002d9"
         ],
         [
           "User-Agent",
@@ -38,7 +38,7 @@
         ],
         [
           "Host",
-          "127.0.0.1:51920"
+          "127.0.0.1:53882"
         ],
         [
           "Connection",
@@ -49,12 +49,12 @@
     },
     {
       "method": "GET",
-      "url": "/stable-mac.yml?noCache=1jv2954v5",
+      "url": "/stable-mac.yml?noCache=1jv2osu6q",
       "httpVersion": "1.1",
       "headers": [
         [
           "x-user-staging-id",
-          "6e99d81f-d0b5-5950-9071-eab6fb1fe613"
+          "ac3616de-5bb6-5563-9054-b0e4e3c002d9"
         ],
         [
           "User-Agent",
@@ -66,7 +66,7 @@
         ],
         [
           "Host",
-          "127.0.0.1:51920"
+          "127.0.0.1:53882"
         ],
         [
           "Connection",
@@ -77,12 +77,12 @@
     },
     {
       "method": "GET",
-      "url": "/stable-mac.yml?noCache=1jv2954v7",
+      "url": "/stable-mac.yml?noCache=1jv2osu6s",
       "httpVersion": "1.1",
       "headers": [
         [
           "x-user-staging-id",
-          "04d68596-96f2-5b31-a34b-d6de700ed436"
+          "b2116512-1e26-5211-870d-93f0b6d10160"
         ],
         [
           "User-Agent",
@@ -94,7 +94,7 @@
         ],
         [
           "Host",
-          "127.0.0.1:51920"
+          "127.0.0.1:53882"
         ],
         [
           "Connection",
@@ -105,7 +105,7 @@
     },
     {
       "method": "GET",
-      "url": "/stable-mac.yml?noCache=1jv2954v8",
+      "url": "/stable-mac.yml?noCache=1jv2osu6t",
       "httpVersion": "1.1",
       "headers": [
         [
@@ -122,7 +122,7 @@
         ],
         [
           "Host",
-          "127.0.0.1:51920"
+          "127.0.0.1:53882"
         ],
         [
           "Connection",
@@ -133,7 +133,7 @@
     },
     {
       "method": "GET",
-      "url": "/stable-mac.yml?noCache=1jv2954va",
+      "url": "/stable-mac.yml?noCache=1jv2osu70",
       "httpVersion": "1.1",
       "headers": [
         [
@@ -150,7 +150,7 @@
         ],
         [
           "Host",
-          "127.0.0.1:51920"
+          "127.0.0.1:53882"
         ],
         [
           "Connection",

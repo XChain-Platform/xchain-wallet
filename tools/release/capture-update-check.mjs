@@ -87,7 +87,7 @@ import { createServer } from 'node:http';
 import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { realpathSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 
@@ -327,7 +327,13 @@ const invokedDirectly = (() => {
 if (invokedDirectly) {
     const argv = process.argv.slice(2);
     const at = (n) => (argv.indexOf(n) === -1 ? undefined : argv[argv.indexOf(n) + 1]);
-    const out = at('--out') || 'update-check-capture.json';
+    // Resolved from this file, not from the CWD. A bare relative default wrote
+    // the capture wherever it was invoked from, so a refresh run at the repo
+    // root left `docs/update-check-capture.json` - the one the download page's
+    // privacy copy is checked against - untouched and stale, while reporting
+    // that it had written a capture.
+    const out = at('--out')
+        || fileURLToPath(new URL('../../docs/update-check-capture.json', import.meta.url));
     if (argv.includes('--listen')) {
         await listen(out, Number(at('--port') || 0));
     } else if (argv.includes('--drive')) {
