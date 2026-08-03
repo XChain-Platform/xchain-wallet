@@ -90,8 +90,16 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # `-r` sweeps every package, so this builds the web SPA: one large
+      # synchronous graph carrying every chain. Node sizes its default
+      # old-space from the machine it starts on, so a dev box builds it and a
+      # hosted runner aborts at ~2.0 GB. release.yml and mobile.yml each hit
+      # this wall and were fixed one at a time; this job then hit it too and
+      # took the three gates below down with it, none of which had run since.
       - name: Build all packages
         run: pnpm -r --if-present build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
       # A shipped bundle must not be able to reach the dev-mock SDK: it serves
       # fabricated addresses and balances that a user cannot tell from real ones.
       # The sdkFactories refuse it under import.meta.env.PROD, so Vite eliminates
