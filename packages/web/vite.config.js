@@ -338,7 +338,20 @@ export default defineConfig({
         outDir: 'dist',
         emptyOutDir: true,
         target: 'es2022',
-        sourcemap: true,
+        // Sourcemaps are for the HOSTED web shell, where they cost a lazy
+        // fetch nobody makes unless DevTools is open. A store build pays for
+        // them differently: `cap sync` copies all of `dist/` into the app
+        // bundle, so they are not fetched-on-demand, they are SHIPPED. Measured
+        // on the iOS store build (2026-08-02): 22 MB of .map in a 27 MB
+        // payload, every one carrying `sourcesContent`, so the ipa was ~5x its
+        // necessary size to deliver a debugging aid no store build can use -
+        // Web Inspector is off in Release (, §4).
+        //
+        // The other two shells already answered this, and answered it the same
+        // way: packages/desktop and packages/extension both set sourcemap
+        // false. The web shell is the outlier, and the mobile shells inherited
+        // the outlier by bundling its output rather than by deciding anything.
+        sourcemap: BUILD_PROFILE !== 'store',
         //  (prod half of G163): Rollup's commonjs pass defaults to
         // /node_modules/ only, and the `link:`-resolved xchain-sdk lives
         // outside every node_modules dir, so without this include the

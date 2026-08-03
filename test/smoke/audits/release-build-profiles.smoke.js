@@ -296,6 +296,58 @@ assert.match(
 
 rmSync(work, { recursive: true, force: true });
 
+// ---- A store build does not ship its own sourcemaps ( §5) ---------
+//
+// The web shell is HOSTED, so a sourcemap costs a fetch nobody makes unless
+// DevTools is open. A mobile store build is not hosted: `cap sync` copies all
+// of dist/ into the app bundle, so the maps are shipped, not offered.
+// Measured on the iOS store build before this guard existed: 22 MB of .map in
+// a 27 MB payload, each carrying `sourcesContent`, to serve a debugger that
+// Release configurations disable outright ( pins isInspectable off).
+//
+// Both other shells had already decided this the other way, which is what
+// makes it an inherited default rather than a posture: desktop and extension
+// set sourcemap false. The mobile shells never decided anything - they bundle
+// the web shell's output.
+//
+// Checked by RESOLVING each config rather than grepping it, because the value
+// that matters is the one vite receives. The cache-buster is load-bearing: an
+// ES module is evaluated once per specifier, and BUILD_PROFILE is read at
+// module scope, so a second plain import would hand back the first profile's
+// answer and the assertion would pass for the wrong reason.
+const viteConfigFor = async (pkg, profile) => {
+    const before = process.env.XCHAIN_BUILD_PROFILE;
+    if (profile === undefined) delete process.env.XCHAIN_BUILD_PROFILE;
+    else process.env.XCHAIN_BUILD_PROFILE = profile;
+    const url = `${pathToFileURL(join(repo, 'packages', pkg, 'vite.config.js')).href}?profile=${profile ?? 'default'}`;
+    try {
+        return (await import(url)).default;
+    } finally {
+        if (before === undefined) delete process.env.XCHAIN_BUILD_PROFILE;
+        else process.env.XCHAIN_BUILD_PROFILE = before;
+    }
+};
+
+assert.equal(
+    (await viteConfigFor('web', 'store')).build.sourcemap,
+    false,
+    'a `store` web bundle carries no sourcemaps: cap sync copies dist/ INTO the ipa and aab, '
+    + 'so a map is shipped weight rather than an on-demand fetch, and no store build can use one',
+);
+assert.equal(
+    (await viteConfigFor('web', undefined)).build.sourcemap,
+    true,
+    'the hosted web shell keeps its sourcemaps: this guard must pin the store profile alone, '
+    + 'or the next person debugging production loses them and reverts the whole thing',
+);
+for (const pkg of ['desktop', 'extension']) {
+    assert.equal(
+        (await viteConfigFor(pkg, undefined)).build.sourcemap,
+        false,
+        `the ${pkg} shell ships no sourcemaps, which is the posture the store profile now matches`,
+    );
+}
+
 console.log(
     'OK: release build-profile smoke (: manifest-version 2 carries one'
     + ' `# profile <name>: <artifact>` line per artifact, written from the committed'
@@ -306,5 +358,7 @@ console.log(
     + ' and sign.sh refuses to record a `store` label while the store build profile is'
     + ' unimplemented, without gating the desktop-only releases that are cuttable today.'
     + ' : lib.sh and csp.js agree on the profile names, and a release build refuses'
-    + ' to stage a web bundle that is not the store profile)',
+    + ' to stage a web bundle that is not the store profile.  §5: a `store` web'
+    + ' bundle emits no sourcemaps, resolved from the config rather than grepped, while the'
+    + ' hosted shell keeps them and desktop/extension stay as they were)',
 );
