@@ -31,8 +31,64 @@ import { contentSecurityPolicyFor } from './src/csp.js';
 // Which feature set this build carries . Resolved once,
 // here, so the CSP and the stamp written into the dist cannot disagree.
 import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buildProfile.js';
+// Which SURFACES this profile carries . The registry is data; the two
+// pieces below are the mechanism that acts on it.
+import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 
 const BUILD_PROFILE = resolveBuildProfile();
+const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
+
+// Swap each hidden surface's module for its inert twin, so the surface's route
+// components are never imported and never reach the bundle ( §2.3: the
+// store-hidden surfaces are COMPILED OUT, not switched off - a surface that can
+// be switched back on is a guideline 2.3.1 hidden feature). The regex covers the
+// whole specifier so the replacement is the absolute path, not a suffix graft,
+// and it matches from any importer's relative depth.
+const surfaceAliases = HIDDEN_SURFACES.map((surface) => ({
+    find: new RegExp(`^(?:.*/)?surfaces/${surface}\\.jsx$`),
+    replacement: fileURLToPath(
+        new URL(`./src/surfaces/${surface}.hidden.jsx`, import.meta.url),
+    ),
+}));
+
+// FAIL SHUT if a hidden surface's code gets into the graph anyway.
+//
+// The alias only helps as long as the surface module is the ONLY importer of
+// those route components. A second import added anywhere (a shared index, a
+// lazy route, a helper reaching for one component) would put the whole surface
+// back into a `store` bundle while every label still said it was absent - a
+// false claim inside a signed manifest, which  exists to prevent. So the
+// build refuses rather than shipping it, and says which module and which
+// importer did it.
+const surfaceGuardPlugin = {
+    name: 'xchain-hidden-surface-guard',
+    // MUST be 'pre'. A 'post' plugin's resolveId never runs: Vite's own
+    // resolver answers first and the first non-null answer wins, so the guard
+    // silently passed everything (measured - it let a deliberate second import
+    // of MarketsList straight through). 'pre' runs first, and `this.resolve`
+    // with skipSelf hands the work to the normal chain and inspects the answer.
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+        if (HIDDEN_SURFACES.length === 0) return null;
+        const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+        if (!resolved || resolved.external) return null;
+        const id = resolved.id.split('?')[0].replace(/\\/g, '/');
+        for (const surface of HIDDEN_SURFACES) {
+            for (const mod of SURFACE_MODULES[surface] ?? []) {
+                if (id.endsWith(`/${mod}`)) {
+                    this.error(
+                        `build profile ${JSON.stringify(BUILD_PROFILE)} hides the`
+                        + ` ${JSON.stringify(surface)} surface, but ${mod} was imported`
+                        + ` by ${importer ?? '<entry>'}. Only src/surfaces/${surface}.jsx`
+                        + ' may import it, and that module is aliased away in this'
+                        + ' profile. See src/surfaces/registry.js .',
+                    );
+                }
+            }
+        }
+        return null;
+    },
+};
 // Subresource Integrity . The CSP says WHERE scripts may come from; SRI
 // pins WHAT they contain, so a tampered bundle on the asset host cannot execute
 // in a page that holds the user's decrypted seed. Build-only, like the CSP.
@@ -183,8 +239,7 @@ const polyfillShimResolver = {
 // Node resolves that subpath to lib/base_crypto.js, but esbuild's dep
 // scanner rejects the package's exports map and aborts `vite optimize`,
 // which would 504 the SDK in the browser. Resolve the real file from the
-// SDK's own context (works on Mac and the VM share alike) and alias the
-// bare subpath to it below.
+// SDK's own context and alias the bare subpath to it below.
 //
 // RESOLVED THROUGH node_modules, NOT through a sibling directory .
 // This read `../../../xchain-sdk/package.json`, a path three levels above
@@ -207,12 +262,17 @@ export default defineConfig({
     // polyfills add ~20-30 KB to the SPA bundle; acceptable for a
     // wallet that needs to sign PSBTs + talk to the explorer.
     resolve: {
-        alias: {
-            ws: wsBrowserShim,
+        // Array form (not the object form it used to be): the surface swaps are
+        // regex finds, which the object form cannot express. Rollup checks the
+        // entries in order, so the exact-string shims below keep behaving as
+        // they did; the surface entries are empty in a `default` build.
+        alias: [
+            ...surfaceAliases,
+            { find: 'ws', replacement: wsBrowserShim },
             // xchain-sdk's encoder.js + explorer.js use `new http.Agent`
             // for connection pooling; browser manages its own pool, so
             // our tiny no-op shim avoids pulling in stream-http (~30 KB).
-            http: httpBrowserShim,
+            { find: 'http', replacement: httpBrowserShim },
             // : the same client constructors pick
             // `require('https').Agent` whenever the endpoint URL is
             // https (every mainnet default). Without this alias the
@@ -220,14 +280,14 @@ export default defineConfig({
             // the real SDK threw "Agent is not a constructor" and
             // wallet creation never completed. Same no-op shim: the
             // browser owns the connection pool either way.
-            https: httpBrowserShim,
+            { find: 'https', replacement: httpBrowserShim },
             // repl is loaded transitively via xchain-sdk/index.js →
             // src/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
-            repl: replBrowserShim,
+            { find: 'repl', replacement: replBrowserShim },
             // Point the bare musig subpath at its real file (see note above).
-            '@brandonblack/musig/base_crypto': musigBaseCrypto,
-        },
+            { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
+        ],
     },
     // xchain-sdk is a `link:` dependency, so it resolves OUTSIDE this project
     // root and Vite does not treat it like a normal CJS package under
@@ -317,6 +377,7 @@ export default defineConfig({
             protocolImports: true,
         }),
         styleGuidePlugin,
+        surfaceGuardPlugin,
         cspPlugin,
         // Last: must see the final tag set + final bundle bytes.
         sriPlugin(),

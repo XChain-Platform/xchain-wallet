@@ -97,12 +97,21 @@ assert.ok(
 
 // --- 3. Three-shell App.jsx routes MarketView ------------------
 
+// The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
+// rather than inline in App.jsx : a store-profile build swaps that
+// module for a twin that imports nothing, which is how the surface is
+// compiled out. The two files together are that shell's wiring, so read them
+// as one - asserting on App.jsx alone would go green on a shell that has no
+// DEX at all.
+const WEB_DEX_SURFACE = join(web, 'src', 'surfaces', 'dex.jsx');
+
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
     ['web', join(web, 'src', 'App.jsx')],
     ['desktop', join(desk, 'renderer', 'App.jsx')],
 ]) {
-    const app = readFileSync(appPath, 'utf8');
+    const app = readFileSync(appPath, 'utf8')
+        + (shell === 'web' ? readFileSync(WEB_DEX_SURFACE, 'utf8') : '');
     assert.ok(
         /import \{ MarketView \}/.test(app),
         `${shell} App imports MarketView`,

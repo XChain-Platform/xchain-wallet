@@ -1,25 +1,37 @@
-UNIMPLEMENTED
+IMPLEMENTED 
 
 # Whether the `store` build profile EXISTS as a build mechanism .
 #
-# The manifest can now record which profile an artifact was cut from
-# (rails §3), but recording is not producing. The compile-time flags that
-# make a `store` build actually differ from a `default` one - the ones
-#  §2.3 requires and  names the first of - are not written
-# yet. Until they are, labelling a staged ipa or aab `store` in a signed,
-# append-only record would be a FALSE claim, which is worse than no claim:
-# a verifier reading it would conclude the review-hidden surfaces are
-# absent from a build that still contains them.
+# It does, as of 2026-08-01, so a `store` artifact may now be signed.
 #
-# So sign.sh refuses to sign any release containing a `store`-profile
-# artifact while this file reads UNIMPLEMENTED. It costs nothing today (no
-# mobile artifact can be built: neither store account exists) and it stops
-# the first mobile release from quietly inheriting a label nothing earned.
+# What earns the label, in the order it was built:
 #
-# TO LIFT IT: implement the §2.3 build-time flags, prove a `store` build
-# differs from a `default` one, then replace the first line with
+#    built the profile itself: `XCHAIN_BUILD_PROFILE` resolution (a
+#   typo throws rather than quietly building `default`), a profile-aware and
+#   strictly SUBTRACTIVE CSP, a `build-profile.txt` stamp plus a meta tag
+#   emitted into the dist, and a mobile staging step that refuses anything but
+#   a `store` bundle. That made the two profiles differ - by a CSP origin.
 #
-#     IMPLEMENTED <XC-item that built it>
+#    built the substantive half this line was waiting for: the
+#   review-hidden surfaces of  §2.3, the DEX lane first, are compiled
+#   OUT of a store build. `packages/web/src/surfaces/registry.js` holds the
+#   surface list as data; vite swaps `surfaces/dex.jsx` for a twin that imports
+#   nothing, so MarketsList, MarketView, MarketActivity, CreateOrderForm,
+#   MyOrdersView, MySwapsView, SwapForm and CrossChainSwapForm are not in the
+#   bundle at all, and every entry point that pointed at them (both navs, the
+#   menu, the actions catalogue, the command palette, Home, TokenDetail) is
+#   unwired with them. The build FAILS SHUT if any of those modules is imported
+#   from anywhere else, which is the one way an alias swap quietly stops
+#   working.
 #
-# in the SAME commit as the flags. Anything else on that line keeps the
-# gate closed, deliberately: a typo must fail shut.
+# Measured 2026-08-01, both directions, on one tree: the store bundle's
+# sourcemaps carry none of those eight modules and the default bundle's carry
+# all eight; shared modules (ReceivePicker, ManageToken) are in both, which is
+# the control; the store index.html has no connect.trezor.io and the default
+# one does; main chunk 3,585 kB store vs 3,716 kB default.
+#
+# The gate above stays live and still fails shut on anything but a line
+# beginning IMPLEMENTED. It now means something narrower but just as real: if
+# the surface mechanism is ever removed or bypassed, put this line back to
+# UNIMPLEMENTED in the same commit, because a verifier reading `store` in a
+# signed, append-only manifest concludes those surfaces are absent.

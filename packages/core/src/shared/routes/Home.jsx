@@ -857,15 +857,22 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                     <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                                     <span>Receive</span>
                                 </button>
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
-                                    onClick={onExchange}
-                                    disabled={!onExchange}
-                                >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                                    <span>Exchange</span>
-                                </button>
+                                {/* Not rendered at all when the shell wires no
+                                    handler: a build can have compiled the DEX
+                                    surface out , and a greyed-out
+                                    Exchange button still advertises an
+                                    exchange. Locked-wallet states pass a
+                                    handler and disable elsewhere. */}
+                                {onExchange ? (
+                                    <button
+                                        type="button"
+                                        className={styles.quickAction}
+                                        onClick={onExchange}
+                                    >
+                                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                                        <span>Exchange</span>
+                                    </button>
+                                ) : null}
                                 <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                                     <button
                                         type="button"
@@ -958,15 +965,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     >
                         Create token
                     </Button>
-                    <Button
-                        variant="secondary"
-                        block={!isFull}
-                        onClick={onMarkets}
-                        disabled={!onMarkets}
-                        icon={<Icon.MarketIcon />}
-                    >
-                        Markets
-                    </Button>
+                    {/* Same rule as Exchange above: absent, not greyed, when
+                        this build has no markets to open . */}
+                    {onMarkets ? (
+                        <Button
+                            variant="secondary"
+                            block={!isFull}
+                            onClick={onMarkets}
+                            icon={<Icon.MarketIcon />}
+                        >
+                            Markets
+                        </Button>
+                    ) : null}
                     <Button
                         variant="secondary"
                         block={!isFull}

@@ -123,6 +123,7 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {() => void} [switchWallet]         open the wallet picker
  * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (VM / multisig)
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
+ * @property {boolean} [hasDexSurface]           false only when the build compiled the DEX surface out ; its commands then point at views that do not exist
  */
 
 /**
@@ -137,6 +138,10 @@ export function buildCommands(ctx) {
         throw new TypeError('buildCommands: ctx.navigate is required');
     }
     const go = (view) => () => navigate(view);
+    // Defaults to true: every shell but a surface-stripped store build has it,
+    // and a shell that forgets to pass the flag should keep its DEX rather than
+    // silently lose them.
+    const hasDex = ctx.hasDexSurface !== false;
     const list = [];
 
     // ---- Navigate: primary surfaces (mirror LeftNav) --------------------
@@ -145,9 +150,16 @@ export function buildCommands(ctx) {
         { id: 'nav-history', category: 'Navigate', title: 'History', subtitle: 'Transaction timeline', keywords: ['transactions', 'activity', 'timeline'], Icon: Icon.HistoryIcon, run: go('history') },
         { id: 'nav-send', category: 'Navigate', title: 'Send', subtitle: 'Send a coin or token', keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
         { id: 'nav-receive', category: 'Navigate', title: 'Receive', subtitle: 'Show a receive address', keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
-        { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
-        { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
-        { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open atomic swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
+        // The DEX rows are gated on the surface EXISTING in this build ,
+        // not on anything about the wallet: a store build compiles those routes
+        // out, so the command would land the user on Home with no explanation.
+        // Spread in place rather than pushed later, so the display order every
+        // other build has stays exactly as it was.
+        ...(hasDex ? [
+            { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
+            { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
+            { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open atomic swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
+        ] : []),
         { id: 'nav-dispensers', category: 'Navigate', title: 'Dispensers', subtitle: 'Your dispensers', keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
         { id: 'nav-my-tokens', category: 'Navigate', title: 'My Tokens', subtitle: 'Tokens you own', keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
         { id: 'nav-messaging', category: 'Navigate', title: 'Messaging', subtitle: 'Encrypted inbox', keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
@@ -200,11 +212,19 @@ export function buildCommands(ctx) {
     );
 
     // ---- Trade: DEX / cross-chain flows ---------------------------------
+    // Ungated here: 'trade-coinpay' SETTLES an order that already matched, which
+    // is a payment the user owes - one seed spans shells, so a match made on web
+    // can come due on a phone whose build has no DEX. Templates only prefill the
+    // parallel composer, which every build has.
     list.push(
-        { id: 'trade-swap', category: 'Trade', title: 'Swap', subtitle: 'Place a DEX order', keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
-        { id: 'trade-order', category: 'Trade', title: 'Create order', subtitle: 'Place a DEX limit order', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'], Icon: Icon.MarketIcon, run: go('create-order') },
+        ...(hasDex ? [
+            { id: 'trade-swap', category: 'Trade', title: 'Swap', subtitle: 'Place a DEX order', keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
+            { id: 'trade-order', category: 'Trade', title: 'Create order', subtitle: 'Place a DEX limit order', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'], Icon: Icon.MarketIcon, run: go('create-order') },
+        ] : []),
         { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
-        { id: 'trade-xchain-swap', category: 'Trade', title: 'Cross-chain swap', subtitle: 'Swap across chains', keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
+        ...(hasDex ? [
+            { id: 'trade-xchain-swap', category: 'Trade', title: 'Cross-chain swap', subtitle: 'Swap across chains', keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
+        ] : []),
         { id: 'trade-xchain-templates', category: 'Trade', title: 'Cross-chain templates', subtitle: 'Prebuilt cross-chain flows', keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
     );
 

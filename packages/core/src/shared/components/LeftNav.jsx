@@ -78,6 +78,7 @@ export function formatBadgeCount(n) {
  * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
  * @param {string} [props.walletName]
  * @param {boolean} [props.hasBtcAddress]
+ * @param {boolean} [props.hasDexSurface]   false only in a build that compiled the DEX surface out ; the tab is then absent, not disabled
  * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
  */
 export function LeftNav({
@@ -89,6 +90,7 @@ export function LeftNav({
     onCommandPalette,
     walletName,
     hasBtcAddress = false,
+    hasDexSurface = true,
     badges = {},
 }) {
     const primary = [
@@ -97,7 +99,13 @@ export function LeftNav({
         { id: 'send', label: 'Send', Icon: Icon.SendIcon },
         { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
         { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-        { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
+        // Absent, not greyed, when the build has no DEX surface: the store
+        // build compiles those routes out , so the destination does
+        // not exist, and a visibly disabled exchange tab asks an app reviewer
+        // the same question a working one does.
+        ...(hasDexSurface
+            ? [{ id: 'markets', label: 'DEX', Icon: Icon.MarketIcon }]
+            : []),
         { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
         ...(hasBtcAddress
             ? [{ id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon }]

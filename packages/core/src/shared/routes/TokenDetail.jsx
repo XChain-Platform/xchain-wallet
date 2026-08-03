@@ -442,10 +442,15 @@ export function TokenDetail({
                         <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                         <span>Receive</span>
                     </button>
-                    <button type="button" className={styles.quickAction} onClick={onBuy} disabled={!onBuy}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                        <span>Markets</span>
-                    </button>
+                    {/* Absent, not greyed, when the shell wires no handler: a
+                        build can have compiled the DEX surface out ,
+                        and there is then no market for this token to open. */}
+                    {onBuy ? (
+                        <button type="button" className={styles.quickAction} onClick={onBuy}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                            <span>Markets</span>
+                        </button>
+                    ) : null}
                     <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
                         <button
                             type="button"

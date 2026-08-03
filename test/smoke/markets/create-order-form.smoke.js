@@ -62,15 +62,27 @@ for (const shell of [
 }
 
 // ---- 3-shell App + ActionsMenu wiring ----
+// The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
+// rather than inline in App.jsx : a store-profile build swaps that
+// module for a twin that imports nothing, which is how the surface is
+// compiled out. The two files together are that shell's wiring, so read them
+// as one - asserting on App.jsx alone would go green on a shell that has no
+// DEX at all.
+const WEB_DEX_SURFACE = ['packages', 'web', 'src', 'surfaces', 'dex.jsx'];
+
 for (const shell of [
     ['packages', 'web', 'src', 'App.jsx'],
     ['packages', 'desktop', 'renderer', 'App.jsx'],
     ['packages', 'extension', 'src', 'popup', 'App.jsx'],
 ]) {
-    const src = read(...shell);
+    const src = read(...shell)
+        + (shell[1] === 'web' ? read(...WEB_DEX_SURFACE) : '');
     assert.ok(src.includes('CreateOrderForm'), `${shell.join('/')} imports CreateOrderForm`);
     assert.ok(src.includes("unlockedView === 'create-order'"), `${shell.join('/')} routes create-order`);
-    assert.ok(src.includes("onCreateOrder: () => setUnlockedView('create-order')"), `${shell.join('/')} wires the ActionsMenu entry`);
+    assert.ok(
+        /onCreateOrder: (?:DEX_SURFACE_ENABLED \? )?\(\) => setUnlockedView\('create-order'\)/.test(src),
+        `${shell.join('/')} wires the ActionsMenu entry`,
+    );
     assert.ok(src.includes("id: 'create-order'"), `${shell.join('/')} lists a Create order action`);
 }
 

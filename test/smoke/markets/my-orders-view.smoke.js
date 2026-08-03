@@ -46,12 +46,21 @@ assert.match(view, /setAutopayEnabled/, 'per-order autopay toggle');
 assert.match(view, /isNativeGive\(it\.row\)/, 'autopay toggle only on native-coin GIVE rows');
 
 // ---- 3-shell App wiring ----
+// The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
+// rather than inline in App.jsx : a store-profile build swaps that
+// module for a twin that imports nothing, which is how the surface is
+// compiled out. The two files together are that shell's wiring, so read them
+// as one - asserting on App.jsx alone would go green on a shell that has no
+// DEX at all.
+const WEB_DEX_SURFACE = ['packages', 'web', 'src', 'surfaces', 'dex.jsx'];
+
 for (const shell of [
     ['packages', 'web', 'src', 'App.jsx'],
     ['packages', 'desktop', 'renderer', 'App.jsx'],
     ['packages', 'extension', 'src', 'popup', 'App.jsx'],
 ]) {
-    const src = read(...shell);
+    const src = read(...shell)
+        + (shell[1] === 'web' ? read(...WEB_DEX_SURFACE) : '');
     assert.ok(src.includes('MyOrdersView'), `${shell.join('/')} imports MyOrdersView`);
     assert.ok(src.includes("unlockedView === 'my-orders'"), `${shell.join('/')} routes my-orders`);
     assert.ok(src.includes("id: 'my-orders'"), `${shell.join('/')} lists a My orders action`);

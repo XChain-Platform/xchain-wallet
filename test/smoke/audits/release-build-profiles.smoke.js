@@ -22,7 +22,7 @@
 // bug that reading the code would not have shown: the first version of the
 // header put a space-separated artifact list on one line per profile, which
 // is unparseable the moment electron-builder names half the release
-// "XChain Wallet-0.333.1-x64.dmg".
+// "xchain-wallet-0.333.1-x64.dmg".
 //
 // The failure cases matter more than the happy path. A profile claim that
 // silently disagrees with the artifact list is worse than no claim at all,
@@ -54,16 +54,16 @@ const verify = join(repo, 'tools', 'release', 'verify.sh');
 const ARTIFACTS = [
     ['xchain-wallet-web-v0.333.1.tar.gz', 'default'],
     ['xchain-wallet-extension-v0.333.1.zip', 'default'],
-    ['XChain Wallet-0.333.1-x64.dmg', 'default'],
-    ['XChain Wallet-0.333.1-arm64.dmg', 'default'],
-    ['XChain Wallet-0.333.1-x64-mac.zip', 'default'],
-    ['XChain Wallet-0.333.1-arm64-mac.zip', 'default'],
-    ['XChain Wallet Setup 0.333.1-x64.exe', 'default'],
-    ['XChain Wallet Setup 0.333.1-arm64.exe', 'default'],
-    ['XChain Wallet-0.333.1-x64-win.zip', 'default'],
-    ['XChain Wallet-0.333.1-arm64-win.zip', 'default'],
-    ['XChain Wallet-0.333.1.AppImage', 'default'],
-    ['XChain Wallet-0.333.1-arm64.AppImage', 'default'],
+    ['xchain-wallet-0.333.1-x64.dmg', 'default'],
+    ['xchain-wallet-0.333.1-arm64.dmg', 'default'],
+    ['xchain-wallet-0.333.1-x64-mac.zip', 'default'],
+    ['xchain-wallet-0.333.1-arm64-mac.zip', 'default'],
+    ['xchain-wallet-setup-0.333.1-x64.exe', 'default'],
+    ['xchain-wallet-setup-0.333.1-arm64.exe', 'default'],
+    ['xchain-wallet-0.333.1-x64-win.zip', 'default'],
+    ['xchain-wallet-0.333.1-arm64-win.zip', 'default'],
+    ['xchain-wallet-0.333.1-x86_64.AppImage', 'default'],
+    ['xchain-wallet-0.333.1-arm64.AppImage', 'default'],
     ['xchain-wallet_0.333.1_amd64.deb', 'default'],
     ['xchain-wallet_0.333.1_arm64.deb', 'default'],
     ['xchain-wallet-android-v0.333.1.aab', 'store'],
@@ -136,7 +136,7 @@ const verifyCmd = (extra = '') => `bash ${JSON.stringify(verify)} --input ${JSON
 
 res = bashResult(verifyCmd());
 assert.ok(res.ok, `verify.sh must accept a well-formed profiled manifest:\n${res.out}`);
-res = bashResult(verifyCmd('--artifact "XChain Wallet-0.333.1-x64.dmg"'));
+res = bashResult(verifyCmd('--artifact "xchain-wallet-0.333.1-x64.dmg"'));
 assert.ok(res.ok, `single-artifact mode must still parse profile lines:\n${res.out}`);
 
 // --- 4. Every way of breaking the claim is caught ----------------------

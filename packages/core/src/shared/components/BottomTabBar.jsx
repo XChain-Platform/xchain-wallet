@@ -44,6 +44,7 @@ import styles from './BottomTabBar.module.css';
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {boolean} [props.hasBtcAddress]
+ * @param {boolean} [props.hasDexSurface]   false only in a build that compiled the DEX surface out ; the row is then absent, not disabled
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
@@ -56,7 +57,7 @@ const PRIMARY_TABS = [
 
 const SHEET_PRIMARY = [
     { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'] },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'] },
+    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'], requiresDex: true },
     { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon, group: ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'] },
     { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresBtc: true },
     { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon, group: ['messaging', 'compose-message'] },
@@ -77,6 +78,7 @@ export function BottomTabBar({
     onOpenSettings,
     onOpenWalletPicker,
     hasBtcAddress = false,
+    hasDexSurface = true,
     badges = {},
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
@@ -99,8 +101,11 @@ export function BottomTabBar({
         return () => document.removeEventListener('keydown', onKey);
     }, [sheetOpen]);
 
+    // `requiresDex` is a BUILD fact, not a wallet one: the store profile
+    // compiles the DEX routes out , so the row would point at a view
+    // that does not exist in this bundle.
     const sheetRows = SHEET_PRIMARY.filter(
-        (row) => !row.requiresBtc || hasBtcAddress,
+        (row) => (!row.requiresBtc || hasBtcAddress) && (!row.requiresDex || hasDexSurface),
     );
     // Messaging lives behind "More", so any unread inside the sheet also needs a
     // dot on the More tab itself or the user would never see it while collapsed.
