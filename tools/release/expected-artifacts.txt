@@ -171,3 +171,15 @@ optional  *-mas.pkg                         store    -
 # Windows fleet. Declared x64,arm64 - if the Store lane ever produces a
 # single bundle instead, this column is where that gets written down.
 optional  *-appx.appx                       default  x64,arm64
+#
+# The Snap Store package ( §16, ). Optional for the same
+# reason as the two rows above: the channel is a goal, the Snapcraft store
+# account does not exist yet, and the lane is opt-in behind
+# XCHAIN_BUILD_SNAP=1. Hashed into the manifest like the .aab: the store
+# serves it under its own assertions, but the manifest records what was
+# uploaded.
+#
+# Arch-partitioned like appx: the store serves a per-arch snap, and the
+# pinned artifactName carries `${arch}` in snapcraft's Debian-style
+# spelling (`_amd64`/`_arm64`), which lib.sh already attributes.
+optional  *.snap                            default  x64,arm64

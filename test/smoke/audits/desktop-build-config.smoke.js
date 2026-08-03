@@ -47,7 +47,10 @@ const AZURE_VARS = {
     AZURE_CERT_PROFILE_NAME: 'xchain-profile',
 };
 const OWNED_VARS = [...Object.keys(AZURE_VARS), 'APPLE_API_KEY_ID', 'APPLE_TEAM_ID',
-    'XCHAIN_STAGING_FEED_URL'];
+    'XCHAIN_STAGING_FEED_URL',
+    // The three store-lane flags: ambient values would make the pinned
+    // target-list assertions below test the caller's shell, not the config.
+    'XCHAIN_BUILD_MAS', 'XCHAIN_BUILD_APPX', 'XCHAIN_BUILD_SNAP'];
 
 const STAGING_URL = 'https://downloads.xchain.io/wallet/_rehearsal-7f3a91c2/desktop/';
 

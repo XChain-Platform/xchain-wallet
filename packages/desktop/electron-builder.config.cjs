@@ -99,6 +99,14 @@ const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 // that channel and there is nothing to rehearse.
 const buildAppx = process.env.XCHAIN_BUILD_APPX === '1' && !isStaging;
 
+// The Snap Store lane ( §16, ), opt-in for the same reasons
+// as MAS and AppX. Building a snap runs the real snapcraft CLI (this
+// app-builder-lib's core24 strategy shells out to it), which no dev box
+// or default runner is guaranteed to have; and a rehearsal build must
+// never carry it, because snapd owns updates for that channel and there
+// is nothing to rehearse against our staging feed.
+const buildSnap = process.env.XCHAIN_BUILD_SNAP === '1' && !isStaging;
+
 // §7.5: a rehearsal variant is built ONLY for the formats electron-updater
 // can actually swap in place on that OS. A staging dmg or win-zip
 // exercises nothing, because neither has an auto-update path.
@@ -626,9 +634,20 @@ const config = {
         // takes the PNG master and electron-builder derives the sizes the
         // .desktop entry and the AppImage need.
         icon: 'build/icon.png',
-        target: isStaging ? UPDATE_CAPABLE_TARGET.linux : [
-            { target: 'AppImage', arch: ARCHES },
-            { target: 'deb', arch: ARCHES },
+        // The store target is appended OUTSIDE the staging ternary, same
+        // reasoning as win/appx: inside the production branch, buildSnap's
+        // own `&& !isStaging` would be unreachable and would read as
+        // protection while doing nothing. Out here, that flag is the only
+        // thing keeping the snap out of a staging build, which is what the
+        // smoke can then actually check.
+        target: [
+            ...(isStaging ? UPDATE_CAPABLE_TARGET.linux : [
+                { target: 'AppImage', arch: ARCHES },
+                { target: 'deb', arch: ARCHES },
+            ]),
+            // The Snap Store channel, added only when a build is actually
+            // aimed at it (see buildSnap).
+            ...(buildSnap ? [{ target: 'snap', arch: ARCHES }] : []),
         ],
         category: 'Finance',
         maintainer: 'Dankest, LLC <support@xchain.io>',
@@ -692,6 +711,76 @@ const config = {
         // fpm (which electron-builder invokes) respects SOURCE_DATE_EPOCH
         // for ar-archive mtimes.
         compression: 'xz',
+    },
+
+    // --- Snap Store ( §16, ) ------------------------------
+    //
+    // A THIRD Linux channel, not a variant of the other two. The AppImage
+    // and .deb are hosted by us and updated through our own feed; the
+    // .snap is signed by store assertions, served by the Snap Store
+    // (Ubuntu's default App Center), and updated by snapd's auto-refresh.
+    // The app must not self-update in this channel: main/updater.js
+    // short-circuits on the SNAP env vars snapd sets, because unlike MAS
+    // and MSIX, Electron has no process flag for a snap build.
+    //
+    // SnapTarget computes its options as
+    // `deepAssign({}, linux, snapcraft ?? snap)` (verified against this
+    // app-builder-lib 26.15.7) - the same inheritance shape as mas/appx.
+    //
+    // `artifactName` IS PINNED FOR THE SAME REASON AS THE DEB'S: the
+    // default is `${name}_${version}_${arch}.${ext}` and `${name}` is the
+    // scoped package.json name `@xchain-wallet/desktop`, so the default
+    // contains a SLASH and writes the artifact into a subdirectory nothing
+    // looks in. Snap arch names follow Debian's (`amd64`/`arm64`,
+    // getArtifactArchName in builder-util), so both files carry an arch
+    // token §8's gate can attribute.
+    //
+    // `base: 'core24'` selects the maintained strategy in this fork (the
+    // flat legacy `snap` key is deprecated and its prebuilt-template fast
+    // path covers x64 only, which cannot serve a two-arch matrix).
+    //
+    // STRICT CONFINEMENT IS A DECISION WITH A SHIP-RISK ATTACHED (§16):
+    // it is what passes automated store review, and it is a real sandbox,
+    // so whether Ledger/Trezor remain reachable over WebHID inside it is
+    // unproven until tested on real hardware. `raw-usb` and `u2f-devices`
+    // are declared for exactly that test - declaring a plug is free and
+    // passes automated review; what needs Store approval is AUTO-connect,
+    // and until granted a user can `snap connect` manually. `classic`
+    // confinement is the escape hatch and a last resort: it forfeits
+    // automated review and the isolation story both.
+    //
+    // No store credential appears here. Publishing auth is SNAP_CSC_LINK /
+    // SNAPCRAFT_STORE_CREDENTIALS in the environment (release.yml), never
+    // config, where it would land in builder-effective-config.yaml.
+    snapcraft: {
+        base: 'core24',
+        artifactName: 'xchain-wallet_${version}_${arch}.${ext}',
+        core24: {
+            confinement: 'strict',
+            grade: 'stable',
+            // Max 78 chars; defaults to productName, which is a name, not
+            // a summary. Matches linux.synopsis.
+            summary: 'Self-custodial multi-chain XChain Platform wallet',
+            // The standard Electron plug set, plus the two interfaces the
+            // hardware-signer test needs (see the block comment above).
+            //
+            // `browser-support` MUST BE RESTATED HERE, WITH allow-sandbox.
+            // Supplying ANY explicit plugs list turns off app-builder-lib's
+            // automatic injection of it ("they are responsible for
+            // including browser-support in that case", core24.js), and
+            // `'default'` expands to a set that does NOT contain it. The
+            // failure is not a crash: without allow-sandbox the generated
+            // launcher appends `--no-sandbox`, so the wallet would ship
+            // with Chromium's own sandbox OFF - a silent security
+            // downgrade, found by reading isBrowserSandboxAllowed() rather
+            // than by any build error.
+            plugs: [
+                'default',
+                { 'browser-support': { interface: 'browser-support', 'allow-sandbox': true } },
+                'raw-usb',
+                'u2f-devices',
+            ],
+        },
     },
 
     // --- electron-updater --------------------------------------------

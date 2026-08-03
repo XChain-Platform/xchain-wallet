@@ -260,6 +260,25 @@ export function selectUpdater(mod, {
 
     if (platform !== 'linux') return takeDefault();
 
+    // A snap is updated by snapd, and electron-updater has no snap class
+    // at all - so the only right updater here is NONE, whatever the bundle
+    // claims ( §16). This is the same defect family as the APPIMAGE
+    // check below, one packaging over: snapcraft stages the SAME
+    // `linux-unpacked` tree the deb target writes `package-type` into, and
+    // the mksquashfs wrapper that strips that file protects only the
+    // AppImage's own image. A snap carrying a stray `package-type: deb`
+    // would be handed `DebUpdater`, download the `.deb` its pointer
+    // legitimately lists, pass every hash and signature check, and run
+    // `dpkg -i` under `pkexec` - a root install of a system package on a
+    // user who installed a snap, from inside strict confinement.
+    //
+    // `SNAP` + `SNAP_NAME` are set by snapd for every process it launches;
+    // requiring both keeps a stray single variable in someone's shell from
+    // disabling updates on a non-snap install.
+    if (env.SNAP && env.SNAP_NAME) {
+        return { updater: null, mislabelledAs: null, snapManaged: true };
+    }
+
     // Not an AppImage: electron-updater's own reading of `package-type` is
     // the right answer (deb -> DebUpdater, absent -> AppImageUpdater, which
     // then reports itself inactive because APPIMAGE is unset).
@@ -325,7 +344,18 @@ export async function attachUpdater({
     //
     // Short-circuit BEFORE loading electron-updater, so a store build
     // never registers the listeners or reaches the network.
-    if (process.mas || process.windowsStore) {
+    //
+    // The SNAP env check is the Linux member of this family ( §16):
+    // snapd owns updates for a Snap Store install exactly as the two app
+    // stores own theirs, and Electron has NO process flag for it - there
+    // is no `process.snap` the way there is `process.mas` and
+    // `process.windowsStore` - so the detection is the environment snapd
+    // itself sets. Both variables together, so one stray `SNAP` in a
+    // developer's shell cannot silently disable updates on a non-snap
+    // build. selectUpdater() carries the same answer for callers that
+    // reach it directly.
+    if (process.mas || process.windowsStore
+        || (process.env.SNAP && process.env.SNAP_NAME)) {
         return {
             isActive: false,
             async checkForUpdates() { /* the store owns updates */ },
@@ -334,7 +364,17 @@ export async function attachUpdater({
     }
 
     const mod = await loader();
-    const { updater: autoUpdater, mislabelledAs } = selectUpdater(mod, select);
+    const { updater: autoUpdater, mislabelledAs, snapManaged } = selectUpdater(mod, select);
+    if (snapManaged) {
+        // Reachable only through a `select` env override (tests) or if the
+        // process env changed between the check above and here; either
+        // way the answer is the same inert surface as the store builds.
+        return {
+            isActive: false,
+            async checkForUpdates() { /* snapd owns updates */ },
+            async downloadAndInstall() { /* snapd owns updates */ },
+        };
+    }
     if (mislabelledAs) {
         // Loud, and not a user-facing toast: this is a build defect, not
         // something the user can act on. It means an AppImage shipped

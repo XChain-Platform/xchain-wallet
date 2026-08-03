@@ -124,15 +124,18 @@ function gate(dir, lanesPath = lanesFile, expectedPath = expected) {
     }
 }
 
-// The four lanes as committed, so a variant can change one word without
+// The committed lanes, so a variant can change one word without
 // restating the file. Comments are dropped deliberately: this is testing
 // the parser, and a lane list that only works with its prose attached
-// would be a parser that reads prose.
+// would be a parser that reads prose. Every optional row in
+// expected-artifacts.txt must be claimed here too, or the fixture fails
+// the same claimed-by-no-lane check the real file would.
 const BASE = [
     'android   NOT-SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*.apk',
     'ios       NOT-SHIPPED   xchain-wallet-ios-v*.ipa',
     'mas       NOT-SHIPPED   *-mas.pkg',
     'msstore   NOT-SHIPPED   *-appx.appx',
+    'snap      NOT-SHIPPED   *.snap',
 ];
 const withAndroid = (status) => lanes(
     [BASE[0].replace('NOT-SHIPPED', status), ...BASE.slice(1)].join('\n') + '\n',

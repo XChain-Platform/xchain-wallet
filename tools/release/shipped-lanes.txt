@@ -75,3 +75,9 @@ mas       NOT-SHIPPED   *-mas.pkg
 # Microsoft Store ( /  §15). Opt-in behind
 # XCHAIN_BUILD_APPX=1 and the Partner Center identity does not exist yet.
 msstore   NOT-SHIPPED   *-appx.appx
+
+# Snap Store ( /  §16). Opt-in behind XCHAIN_BUILD_SNAP=1 and
+# the Snapcraft store account does not exist yet (ceremony: account +
+# reserved name + exported login). Flip to SHIPPED in the commit that
+# records the first store upload.
+snap      NOT-SHIPPED   *.snap

@@ -295,6 +295,11 @@ jobs:
       # rehearsal needs that build to find the new staging pointer. Rotating
       # it per release would orphan the chain.
       STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+      # Presence of the Snapcraft store credential IS the "is the Snap
+      # Store channel set up yet" switch ( §16), read at job level so
+      # the steps below have one condition - the same shape as MAS_CSC_LINK
+      # on the mac job. Generate: `snapcraft export-login - | base64 -w0`.
+      SNAP_CSC_LINK: ${{ secrets.SNAP_CSC_LINK }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -307,6 +312,29 @@ jobs:
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
       - name: Build desktop (linux x64 + arm64)
+        run: pnpm -C packages/desktop dist --linux --x64 --arm64
+      # The Snap Store package (§16), the THIRD Linux channel and a
+      # committed goal since 2026-08-03 . Same gap this workflow
+      # closed for MAS and AppX: the target exists behind XCHAIN_BUILD_SNAP=1
+      # and nothing would ever set it. Gated on the store credential, which
+      # does not exist yet (ceremony: Snapcraft account + reserved name), so
+      # this stays inert until the channel is real. The snap would build
+      # WITHOUT the credential - unlike appx, no identity is baked in - but
+      # snapcraft is not on the runner image and an artifact nothing can
+      # upload would ride every release, so the credential is the switch.
+      # UNEXERCISED until the credential exists; first run must verify the
+      # snapcraft/LXD build environment and whether the arm64 half can be
+      # produced on an amd64 runner at all (remote-build is the documented
+      # fallback in this app-builder-lib).
+      - name: Install snapcraft (Snap Store lane, §16)
+        if: env.SNAP_CSC_LINK != ''
+        run: |
+          sudo snap install snapcraft --classic
+          sudo lxd init --auto
+      - name: Build the Snap Store package (opt-in, §16)
+        if: env.SNAP_CSC_LINK != ''
+        env:
+          XCHAIN_BUILD_SNAP: '1'
         run: pnpm -C packages/desktop dist --linux --x64 --arm64
       - name: Dev-mock gate
         run: bash tools/build-reproduce/check-no-dev-mock.sh
@@ -334,6 +362,7 @@ jobs:
           path: |
             packages/desktop/dist/*.AppImage
             packages/desktop/dist/*.deb
+            packages/desktop/dist/*.snap
             packages/desktop/dist/*.yml
           if-no-files-found: error
 
