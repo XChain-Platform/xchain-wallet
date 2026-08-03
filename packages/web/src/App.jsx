@@ -58,6 +58,9 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
+//  §6 / D4. Renders nothing unless a shell installed a direct-update
+// provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
+import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
@@ -81,12 +84,16 @@ import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.jsx';
+// The DEX surface, as one module rather than nine route blocks . A
+// build whose profile hides `dex` gets the inert twin instead (vite.config.js),
+// so those route components are not in the bundle at all and every entry point
+// below goes with them: each one is wired only when DEX_SURFACE_ENABLED.
+import { DEX_SURFACE_ENABLED, renderDexRoute } from './surfaces/dex.jsx';
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
-import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
@@ -108,14 +115,8 @@ import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx
 import { AirdropForm } from '@xchain-wallet/core/shared/routes/AirdropForm.jsx';
 import { AdvancedActionsForm } from '@xchain-wallet/core/shared/routes/AdvancedActionsForm.jsx';
 import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39.jsx';
-import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
-import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
-import { CreateOrderForm } from '@xchain-wallet/core/shared/routes/CreateOrderForm.jsx';
-import { MyOrdersView } from '@xchain-wallet/core/shared/routes/MyOrdersView.jsx';
-import { MySwapsView } from '@xchain-wallet/core/shared/routes/MySwapsView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
 import { ObligationsView } from '@xchain-wallet/core/shared/routes/ObligationsView.jsx';
-import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { SellOwnershipForm } from '@xchain-wallet/core/shared/routes/SellOwnershipForm.jsx';
 import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
@@ -159,7 +160,6 @@ import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey
 import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { BatchComposerForm } from '@xchain-wallet/core/shared/routes/BatchComposerForm.jsx';
-import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
 import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate.jsx';
 import { MultisigSigningSession } from '@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx';
@@ -886,8 +886,8 @@ function AppInner() {
                     <MenuRoute
                         onBack={() => setUnlockedView(menuBackTo)}
                         onAlerts={() => setUnlockedView('alerts')}
-                        onMarkets={() => setUnlockedView('markets')}
-                        onMarketActivity={() => setUnlockedView('market-activity')}
+                        onMarkets={DEX_SURFACE_ENABLED ? () => setUnlockedView('markets') : undefined}
+                        onMarketActivity={DEX_SURFACE_ENABLED ? () => setUnlockedView('market-activity') : undefined}
                         onDispensers={() => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); }}
                         onTokens={() => setUnlockedView('my-tokens')}
                         onMoreActions={() => setUnlockedView('actions')}
@@ -1360,59 +1360,24 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'markets' && activeWalletId) {
-                return (
-                    <MarketsList
-                        walletId={activeWalletId}
-                        selectedAsset={marketsAsset}
-                        onChangeAsset={() => setUnlockedView('markets-picker')}
-                        onOpenMarket={(chainId, tick1, tick2) => {
-                            setActiveMarket({ chainId, tick1, tick2 });
-                            setUnlockedView('market');
-                        }}
-                        onBack={() => setUnlockedView('home')}
-                    />
-                );
-            }
-            if (unlockedView === 'markets-picker' && activeWalletId) {
-                return (
-                    <ReceivePicker
-                        walletId={activeWalletId}
-                        accountId={activeAccountId || undefined}
-                        title="Select coin or token"
-                        backLabel="Back to markets"
-                        hideOwnFilter
-                        onBack={() => setUnlockedView('markets')}
-                        onSelect={(sel) => {
-                            setMarketsAsset({
-                                chainId: sel.chainId,
-                                tick: sel.tick,
-                                displayName: sel.displayName,
-                                kind: sel.kind,
-                            });
-                            setUnlockedView('markets');
-                        }}
-                    />
-                );
-            }
-            if (unlockedView === 'market' && activeMarket && activeWalletId) {
-                return (
-                    <MarketView
-                        walletId={activeWalletId}
-                        chainId={activeMarket.chainId}
-                        tick1={activeMarket.tick1}
-                        tick2={activeMarket.tick2}
-                        onBack={() => {
-                            setActiveMarket(null);
-                            setUnlockedView('markets');
-                        }}
-                        onSwap={() => setActiveMarket({
-                            chainId: activeMarket.chainId,
-                            tick1: activeMarket.tick2,
-                            tick2: activeMarket.tick1,
-                        })}
-                    />
-                );
+            // The DEX surface : markets, the pair views, orders and
+            // swaps. One call instead of nine route blocks, because in a
+            // profile that hides `dex` this module is the inert twin and none
+            // of those components exist in the bundle. Returns null for any
+            // other view, and an unmatched view falls through to Home below.
+            {
+                const dexRoute = renderDexRoute(unlockedView, {
+                    activeWalletId,
+                    activeAccountId,
+                    marketsAsset,
+                    setMarketsAsset,
+                    activeMarket,
+                    setActiveMarket,
+                    setUnlockedView,
+                    setDispenserRef,
+                    formBack,
+                });
+                if (dexRoute) return dexRoute;
             }
             if (unlockedView === 'obligations' && activeWalletId) {
                 return (
@@ -1442,43 +1407,6 @@ function AppInner() {
                                 ? 'obligations'
                                 : (cameFromResume ? 'home' : 'actions'));
                         }}
-                    />
-                );
-            }
-            if (unlockedView === 'swap' && activeWalletId) {
-                return (
-                    <SwapForm
-                        walletId={activeWalletId}
-                        onBack={formBack}
-                    />
-                );
-            }
-            if (unlockedView === 'create-order' && activeWalletId) {
-                return (
-                    <CreateOrderForm
-                        walletId={activeWalletId}
-                        onBack={formBack}
-                        onManageOrders={() => setUnlockedView('my-orders')}
-                    />
-                );
-            }
-            if (unlockedView === 'my-orders' && activeWalletId) {
-                return (
-                    <MyOrdersView
-                        walletId={activeWalletId}
-                        accountId={activeAccountId}
-                        onBack={() => setUnlockedView('home')}
-                        onCreateOrder={() => setUnlockedView('create-order')}
-                    />
-                );
-            }
-            if (unlockedView === 'my-swaps' && activeWalletId) {
-                return (
-                    <MySwapsView
-                        walletId={activeWalletId}
-                        accountId={activeAccountId}
-                        onBack={() => setUnlockedView('home')}
-                        onCreateSwap={() => setUnlockedView('swap')}
                     />
                 );
             }
@@ -1583,14 +1511,6 @@ function AppInner() {
                             setParallelPrefill(null);
                             setUnlockedView('actions');
                         }}
-                    />
-                );
-            }
-            if (unlockedView === 'cross-chain-swap' && activeWalletId) {
-                return (
-                    <CrossChainSwapForm
-                        walletId={activeWalletId}
-                        onBack={formBack}
                     />
                 );
             }
@@ -2178,7 +2098,7 @@ function AppInner() {
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
-                        onBuy={() => {
+                        onBuy={DEX_SURFACE_ENABLED ? () => {
                             setMarketsAsset({
                                 chainId: tokenDetailRef.chainId,
                                 tick: tokenDetailRef.tick,
@@ -2186,19 +2106,7 @@ function AppInner() {
                                 displayName: tokenDetailRef.displayName,
                             });
                             setUnlockedView('markets');
-                        }}
-                    />
-                );
-            }
-            if (unlockedView === 'market-activity') {
-                return (
-                    <MarketActivity
-                        walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
-                        onOpenDispenser={(chainId, actionIndex) => {
-                            setDispenserRef({ chainId, actionIndex, origin: 'explorer' });
-                            setUnlockedView('dispenser-detail');
-                        }}
+                        } : undefined}
                     />
                 );
             }
@@ -2298,15 +2206,19 @@ function AppInner() {
                                 setResumeCoinpay(null);
                                 setUnlockedView('coinpay');
                             },
-                            onSwap: () => setUnlockedView('swap'),
-                            onCreateOrder: () => setUnlockedView('create-order'),
-                            onMyOrders: () => setUnlockedView('my-orders'),
-                            onMySwaps: () => setUnlockedView('my-swaps'),
+                            // DEX entries : unwired in a profile that
+                            // hides the surface, and buildActionEntries drops
+                            // an entry with no handler, so they do not render
+                            // at all rather than rendering dead.
+                            onSwap: DEX_SURFACE_ENABLED ? () => setUnlockedView('swap') : undefined,
+                            onCreateOrder: DEX_SURFACE_ENABLED ? () => setUnlockedView('create-order') : undefined,
+                            onMyOrders: DEX_SURFACE_ENABLED ? () => setUnlockedView('my-orders') : undefined,
+                            onMySwaps: DEX_SURFACE_ENABLED ? () => setUnlockedView('my-swaps') : undefined,
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
                             onBatch: () => setUnlockedView('batch-compose'),
-                            onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
+                            onCrossChainSwap: DEX_SURFACE_ENABLED ? () => setUnlockedView('cross-chain-swap') : undefined,
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
@@ -2501,14 +2413,14 @@ function AppInner() {
                             setUnlockedView('send');
                         } : undefined}
                         onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
-                        onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
-                        onExchange={activeWalletId ? () => {
+                        onSwap={DEX_SURFACE_ENABLED && activeWalletId ? () => setUnlockedView('swap') : undefined}
+                        onExchange={DEX_SURFACE_ENABLED && activeWalletId ? () => {
                             setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
                             setUnlockedView('markets');
                         } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
-                        onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
+                        onMarkets={DEX_SURFACE_ENABLED && activeWalletId ? () => setUnlockedView('markets') : undefined}
                         onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
                         onContracts={activeWalletId && hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
@@ -2586,6 +2498,11 @@ function AppInner() {
                 openHelp: () => setShortcutHelpOpen(true),
                 hasBtcAddress,
                 hasGovernanceAddress,
+                // Compile-time, not a preference: false only in a build that
+                // dropped the DEX surface entirely , where a palette
+                // command pointing at `markets` would navigate to a view that
+                // no longer exists.
+                hasDexSurface: DEX_SURFACE_ENABLED,
             };
             //  entity handlers: tokens open TokenDetail with the full
             // ref the row already carries; sites land on the Connected Sites
@@ -2644,6 +2561,7 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             walletName={activeWalletName}
                             hasBtcAddress={hasBtcAddress}
+                            hasDexSurface={DEX_SURFACE_ENABLED}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
                     }
@@ -2655,6 +2573,7 @@ function AppInner() {
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
+                            hasDexSurface={DEX_SURFACE_ENABLED}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
                     }
@@ -2702,6 +2621,7 @@ function AppInner() {
                                 <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                                <UpdateNoticeBanner />
                             </>
                         ) : null
                     }
@@ -3034,5 +2954,10 @@ function buildActionEntries({
             description: 'Add a Trezor or Ledger to this wallet.',
             onSelect: onPairSigner,
         },
-    ];
+    // An entry with no handler is an entry this build does not have: a surface
+    // compiled out  or a capability this wallet lacks (the Bitcoin-only
+    // multisig rows). Drop it rather than rendering a button that does nothing
+    // when tapped - and, for a store build, rather than showing a reviewer a
+    // greyed-out DEX, which raises the same question a working one would.
+    ].filter((e) => typeof e.onSelect === 'function');
 }

@@ -312,6 +312,7 @@ const jsSources = [
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'CapacitorStorageBackend.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'backends.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'nativeBiometricProvider.js'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'installOrigin.js'), 'utf8'),
 ].join('\n');
 const calledFromJs = new Set(
     [...jsSources.matchAll(/callNativeVault\(\s*'(\w+)'/g)].map((m) => m[1]),
@@ -770,6 +771,35 @@ for (const route of ['Receive.jsx', 'Settings.jsx']) {
         `${route} stays screenshottable: sharing your own receive QR is normal use`,
     );
 }
+
+// The update-notice LANE gate (§6, D4, wired 2026-08-02). The client below is
+// hardened; this is the half that decides it is never called from a store
+// build, and it is native because nothing at build time can tell the lanes
+// apart - §6 derives the universal APK from the same bundle as the AAB.
+assert.match(
+    pluginJava,
+    /@PluginMethod\s+public void getInstallOrigin\(PluginCall call\)/,
+    'the lane question is answered natively, not guessed in JS',
+);
+assert.match(
+    pluginJava,
+    /case "com\.android\.vending":/,
+    'Play is recognised as a store that keeps the install current',
+);
+assert.match(
+    pluginJava,
+    /isStoreInstaller\(installer\) \? "store" : "direct"/,
+    'fail-closed is "direct": an installer we do not recognise is nobody updating this build',
+);
+// The API 26-29 path is not optional: the floor is 26 (D2) and
+// InstallSourceInfo does not exist below API 30, so a build that only used the
+// modern call would answer null - which is "direct" - on every Play install
+// running Android 8 or 9.
+assert.match(pluginJava, /getInstallSourceInfo\(/);
+assert.match(pluginJava, /getInstallerPackageName\(/);
+// And the banner has to be mounted somewhere, or the whole lane is inert.
+const webApp = readFileSync(join(wsRoot, 'packages', 'web', 'src', 'App.jsx'), 'utf8');
+assert.match(webApp, /<UpdateNoticeBanner \/>/, 'the notice is mounted in the shared shell');
 
 // The update feed: one field, and the client renders none of it.
 const updateClient = readFileSync(

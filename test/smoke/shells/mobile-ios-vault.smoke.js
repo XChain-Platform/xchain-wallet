@@ -108,7 +108,13 @@ for (const method of declared) {
 // The detection function the SPA uses to decide "is there a native vault"
 // probes exactly one method, so that method must exist or every device reads
 // as a browser.
-const probe = /typeof plugin\.([A-Za-z0-9_]+) === 'function'/.exec(nativeVaultJs)?.[1];
+// Either spelling: the inline duck-type it used to do, or the `method:` argument
+// it now passes to core's shared probe ( collapsed the two copies of that
+// probe into one).
+const probe = (
+    /typeof plugin\.([A-Za-z0-9_]+) === 'function'/.exec(nativeVaultJs)
+    || /getNativePlugin\(PLUGIN_NAME,\s*\{\s*method:\s*'([A-Za-z0-9_]+)'/.exec(nativeVaultJs)
+)?.[1];
 assert.ok(probe && declared.has(probe), `nativeVault.js probes ${probe}, which the plugin must declare`);
 
 // --- 3. Registration, without which none of the above runs -----------------

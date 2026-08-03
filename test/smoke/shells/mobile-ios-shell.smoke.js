@@ -36,7 +36,7 @@
 // `xchain:` scheme registered as inbound compatibility only.
 
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -575,6 +575,149 @@ for (const img of iconJson.images) {
     assert.ok(
         existsSync(join(iconSet, img.filename)),
         `AppIcon file ${img.filename} exists`,
+    );
+}
+
+// --- 14. The project is INTERNALLY consistent with the tree it ships in --
+//
+// Every other assertion in this file reads a value and checks it. None of them
+// asks the question that actually broke the lane twice: does the committed tree
+// hold the files the committed project says it builds?
+//
+// was the first instance. `tools/release/ios-archive.sh` and
+// `ios-export.sh` were written, asserted by §12, and never committed, so the
+// smoke was RED against HEAD while green in the shared worktree. The fix
+// committed the two scripts and the smoke went green - but §12 only ever
+// asserted the two files EXIST, so it went green while nothing in any workflow
+// invoked them. Measured 2026-08-02 at HEAD 34639117: no committed workflow
+// contains the string `ios-archive`. Two orphan scripts, a green guard.
+//
+// The second instance is worse, because it is the shipping target rather than
+// the lane. The committed pbxproj declares `clipboard/XChainClipboardPlugin.swift`
+// as a build input of the App target (SSC-4,) and
+// MainViewController registers the class - and the .swift file was never
+// committed. A detached worktree at HEAD builds to:
+//
+//   error: Build input file cannot be found: .../App/clipboard/XChainClipboardPlugin.swift
+//   ** BUILD FAILED **
+//
+// So both halves of this section check a RELATIONSHIP rather than a value,
+// which is the only shape of check that can catch a file that is missing
+// together with the guard that would have noticed.
+
+// --- 14a. Every compiled source the project declares exists on disk ------
+//
+// Sources phases only, deliberately. A compiled source in this project is
+// always a committed file, while a RESOURCE legitimately may not be: `public/`
+// is the web bundle that `cap sync` stages and .gitignore excludes, and
+// Version.xcconfig is generated per tag (§10 S4a) and referenced as a build
+// configuration rather than as a build file. Checking every PBXFileReference
+// would therefore fail on a clean checkout for two correct reasons, and a
+// guard that has to be muted is a guard that gets deleted.
+// Entries come in two shapes in the same file: PBXFileReference and
+// PBXBuildFile are written on one line, PBXGroup and the build phases are
+// pretty-printed across many. `\s*` after the brace covers both, and the
+// non-greedy body stops at the entry's own closing `};` because nothing
+// nested inside these four isa types contains one.
+const pbxEntry = (isa) => [
+    ...pbxproj.matchAll(new RegExp(`\\s([0-9A-Z]{24}) (?:\\/\\* .*? \\*\\/ )?= \\{\\s*isa = ${isa};([\\s\\S]*?)\\};`, 'g')),
+].map((m) => ({ id: m[1], body: m[2] }));
+
+// Ids inside a children/files list, tolerant of whether Xcode wrote the
+// trailing `/* comment */` or not. A pattern requiring the comment's leading
+// space silently returns fewer ids rather than failing, which is why the
+// counts below are asserted rather than trusted.
+const idsIn = (block) => [...(block ?? '').matchAll(/([0-9A-Z]{24})/g)].map((m) => m[1]);
+
+// Xcode writes an id-valued field as `fileRef = <id> /* human name */;`, so the
+// trailing comment has to come off or every id lookup misses. Values are also
+// quoted or not depending on whether they contain a special character.
+const field = (body, key) => {
+    const m = new RegExp(`${key} = "?([^";\\n]+?)"?;`).exec(body);
+    return m ? m[1].replace(/\s*\/\*[\s\S]*?\*\/\s*$/, '').trim() : undefined;
+};
+
+const fileRefs = new Map(pbxEntry('PBXFileReference').map(({ id, body }) => [id, {
+    path: field(body, 'path'),
+    sourceTree: field(body, 'sourceTree'),
+}]));
+const buildFiles = new Map(pbxEntry('PBXBuildFile').map(({ id, body }) => [id, field(body, 'fileRef')]));
+
+// Resolve each file reference's directory by walking the group tree from the
+// project's mainGroup, since a `path` in a PBXFileReference is relative to the
+// group that contains it and says nothing on its own.
+const groups = pbxEntry('PBXGroup').map(({ id, body }) => ({
+    id,
+    path: field(body, 'path'),
+    children: idsIn(/children = \(([\s\S]*?)\);/.exec(body)?.[1]),
+}));
+const groupById = new Map(groups.map((g) => [g.id, g]));
+const mainGroupId = field(pbxproj, 'mainGroup');
+assert.ok(groupById.has(mainGroupId), 'the project has a mainGroup this parser can walk');
+
+// The directory holding App.xcodeproj is the project's SOURCE_ROOT.
+const projectRoot = join(ios, 'App');
+const refDir = new Map();
+(function walk(groupId, dir) {
+    const group = groupById.get(groupId);
+    if (!group) return;
+    const here_ = group.path ? join(dir, group.path) : dir;
+    for (const child of group.children) {
+        if (groupById.has(child)) walk(child, here_);
+        else refDir.set(child, here_);
+    }
+}(mainGroupId, projectRoot));
+
+const sourcePhases = pbxEntry('PBXSourcesBuildPhase');
+assert.ok(sourcePhases.length >= 1, 'the project has at least one Sources build phase to check');
+
+let compiledSources = 0;
+for (const phase of sourcePhases) {
+    const ids = idsIn(/files = \(([\s\S]*?)\);/.exec(phase.body)?.[1]);
+    for (const buildFileId of ids) {
+        const refId = buildFiles.get(buildFileId);
+        assert.ok(refId, `build file ${buildFileId} in a Sources phase resolves to a file reference`);
+        const ref = fileRefs.get(refId);
+        assert.ok(ref, `file reference ${refId} exists in the PBXFileReference section`);
+        // Anything not rooted in the source tree is produced by the build
+        // (BUILT_PRODUCTS_DIR) or ships with Xcode (DEVELOPER_DIR/SDKROOT).
+        if (ref.sourceTree !== '<group>' && ref.sourceTree !== 'SOURCE_ROOT') continue;
+        const dir = ref.sourceTree === 'SOURCE_ROOT' ? projectRoot : refDir.get(refId);
+        assert.ok(dir, `file reference ${refId} (${ref.path}) is reachable from the mainGroup`);
+        const abs = join(dir, ref.path);
+        assert.ok(
+            existsSync(abs),
+            `the Xcode project compiles ${ref.path}, and it is not in the tree. `
+            + 'A source declared in a Sources phase and absent from the repo fails the build outright '
+            + '("Build input file cannot be found"), and it fails ONLY where the file is missing - which is '
+            + 'CI and a fresh clone, never the worktree it was written in. This is the class.',
+        );
+        compiledSources += 1;
+    }
+}
+assert.ok(
+    compiledSources >= 7,
+    `expected the App target's Swift sources to be checked, saw ${compiledSources}: `
+    + 'if this count collapses the parser stopped resolving and every assertion above went vacuous',
+);
+
+// --- 14b. The release scripts the runbook sends an operator to have a caller --
+//
+// §12 asserts the two scripts exist and that the runbook names them. Neither
+// fact makes them run. The lane §5 describes - simulator build on every tag,
+// archive/export gated on `env.ASC_KEY_ID != ''` - lives in a workflow, and a
+// workflow that does not mention the script is a lane that does not exist.
+const workflowDir = join(wsRoot, '.github', 'workflows');
+const workflows = readdirSync(workflowDir)
+    .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+    .map((f) => readFileSync(join(workflowDir, f), 'utf8'))
+    .join('\n');
+for (const script of ['ios-archive.sh', 'ios-export.sh']) {
+    assert.ok(
+        workflows.includes(script),
+        `no workflow invokes ${script}, so the iOS release lane is a pair of orphan scripts. `
+        + 'Committing a script that the runbook names is not the same as wiring it up, and §12 cannot tell '
+        + 'the difference because it only asserts the files are present.',
     );
 }
 

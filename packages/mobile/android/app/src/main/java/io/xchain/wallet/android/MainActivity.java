@@ -5,6 +5,7 @@ import android.os.Bundle;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
+import io.xchain.wallet.android.clipboard.XChainClipboardPlugin;
 import io.xchain.wallet.android.links.XChainLinksPlugin;
 import io.xchain.wallet.android.security.NoNativeHttpProxyWebViewClient;
 import io.xchain.wallet.android.vault.XChainVaultPlugin;
@@ -24,6 +25,10 @@ public class MainActivity extends BridgeActivity {
         // app whose backup posture assumes the vault is in native storage.
         registerPlugin(XChainVaultPlugin.class);
         registerPlugin(XChainLinksPlugin.class);
+        // SSC-4 : without this the SPA finds no clipboard plugin and
+        // refuses sensitive copies, rather than writing a seed phrase to an
+        // unmarked clip any foreground app can read.
+        registerPlugin(XChainClipboardPlugin.class);
         super.onCreate(savedInstanceState);
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();

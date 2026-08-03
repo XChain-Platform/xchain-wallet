@@ -34,6 +34,14 @@
 // create-a-new-wallet screen (see core's VaultUnavailableError family).
 
 import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';
+// The shell/plugin probe lives in core so the vault bridge and the clipboard
+// bridge  ask the question the same way. Two hand-rolled copies of a
+// duck-type probe is the drift was filed about, and it would show up
+// only on the native shells, which are the ones nobody smoke-runs locally.
+import {
+    getNativePlugin,
+    isNativeShell as coreIsNativeShell,
+} from '@xchain-wallet/core/shared/nativeShell.js';
 
 const { VaultLockedError, VaultCorruptError, VaultUnavailableError } = coreStorage;
 const { bytesToBase64, base64ToBytes } = coreCrypto;
@@ -59,14 +67,11 @@ export const VaultStatus = Object.freeze({
  */
 export function getNativeVault() {
     if (injectedForTests !== undefined) return injectedForTests;
-    const cap = /** @type {any} */ (globalThis).Capacitor;
-    if (!cap) return null;
-    // `isNativePlatform` is a function on the real Capacitor global. A browser
-    // page that merely defines `window.Capacitor` (some dApp libraries do)
-    // must not be mistaken for a native shell.
-    if (typeof cap.isNativePlatform === 'function' && !cap.isNativePlatform()) return null;
-    const plugin = cap.Plugins?.[PLUGIN_NAME];
-    return plugin && typeof plugin.loadVault === 'function' ? plugin : null;
+    // `loadVault` rather than mere presence: a half-registered plugin, or a JS
+    // proxy with no native class behind it, must answer null rather than
+    // pretending. A browser page that merely defines `window.Capacitor` (some
+    // dApp libraries do) is rejected by the same probe.
+    return getNativePlugin(PLUGIN_NAME, { method: 'loadVault' });
 }
 
 /** @returns {boolean} true when a native vault plugin is present. */
@@ -96,9 +101,7 @@ export function hasNativeVault() {
  */
 export function isNativeShell(env = globalThis) {
     if (injectedShellForTests !== undefined) return injectedShellForTests;
-    const cap = /** @type {any} */ (env)?.Capacitor;
-    if (!cap || typeof cap.isNativePlatform !== 'function') return false;
-    return cap.isNativePlatform() === true;
+    return coreIsNativeShell(env);
 }
 
 /**
