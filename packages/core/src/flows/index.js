@@ -517,6 +517,14 @@ export {
     BiometricPrfUnavailableError,
 } from './biometricUnlock.js';
 export {
+    setDirectUpdateProvider,
+    hasDirectUpdateLane,
+    checkForUpdateNotice,
+    isUpdateNoticeEnabled,
+    setUpdateNoticeEnabled,
+    directUpdateFeedUrl,
+} from './directUpdate.js';
+export {
     emptyPanicModeState,
     getPanicModeState,
     getPanicRemainingMs,

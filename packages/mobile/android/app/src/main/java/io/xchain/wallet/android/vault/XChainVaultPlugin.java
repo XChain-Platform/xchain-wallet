@@ -241,6 +241,83 @@ public class XChainVaultPlugin extends Plugin {
     }
 
     // -----------------------------------------------------------------
+    // Install origin (§6 direct-APK update notice, D4)
+    // -----------------------------------------------------------------
+
+    /**
+     * Which lane installed this copy: {@code "store"} or {@code "direct"}.
+     *
+     * WHAT THIS IS FOR, because it decides one thing only. §6 gives the direct
+     * APK no update path at all: no store watches it, and Android forbids a
+     * versionCode regression, so a user who sideloaded deliberately learns
+     * about a security fix only if they happen to visit the website. D4
+     * decided to build the notice; this method is the gate that keeps it off
+     * every other lane. A Play install updates itself and must never be told
+     * to go and download something, and the iOS twin does not implement this
+     * method AT ALL, so its shell can never turn the notice on.
+     *
+     * The gate is the installer package, not the build profile, and that is
+     * deliberate: §6 derives the universal APK from the same bundle the AAB
+     * comes from, so the two lanes are the same bytes with different
+     * signatures. Only a runtime question can tell them apart.
+     *
+     * FAIL-CLOSED IS "direct", NOT A DEFAULT TO SILENCE. An installer name we
+     * do not recognise means no store we know of is updating this install,
+     * which is exactly the condition the notice exists for. Being wrong in
+     * that direction shows a sideloader's notice to somebody who did not need
+     * it; being wrong the other way leaves them on a vulnerable build.
+     * `null` - what `adb install` and most sideloads report - is the same
+     * answer for the same reason.
+     */
+    @PluginMethod
+    public void getInstallOrigin(PluginCall call) {
+        String installer = installerPackageName();
+        JSObject reply = new JSObject();
+        reply.put("status", "OK");
+        reply.put("installer", installer);
+        reply.put("channel", isStoreInstaller(installer) ? "store" : "direct");
+        call.resolve(reply);
+    }
+
+    /**
+     * Package names that keep an install up to date on their own.
+     *
+     * `com.google.android.feedback` is the legacy name Play used to record for
+     * some installs and still appears on older devices; the floor here is API
+     * 26, so it is not hypothetical.
+     */
+    private static boolean isStoreInstaller(String installer) {
+        if (installer == null) return false;
+        switch (installer) {
+            case "com.android.vending":
+            case "com.google.android.feedback":
+            case "com.amazon.venezia":
+            case "com.sec.android.app.samsungapps":
+            case "com.huawei.appmarket":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private String installerPackageName() {
+        final android.content.pm.PackageManager pm = getContext().getPackageManager();
+        final String self = getContext().getPackageName();
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                return pm.getInstallSourceInfo(self).getInstallingPackageName();
+            }
+            // API 26-29 have no InstallSourceInfo. The deprecated call is the
+            // only one that exists there, and the floor is 26 (D2).
+            return pm.getInstallerPackageName(self);
+        } catch (Exception e) {
+            // Our own package cannot be missing, but a manufacturer PM that
+            // throws must not take the wallet down over an update notice.
+            return null;
+        }
+    }
+
+    // -----------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------
 

@@ -31,6 +31,12 @@ import {
     WALLET_VERSION,
 } from '../../../buildInfo.js';
 import { LICENSE_TEXT, LICENSE_SUMMARY } from '../../../license.js';
+import {
+    hasDirectUpdateLane,
+    isUpdateNoticeEnabled,
+    setUpdateNoticeEnabled,
+} from '../../../flows/directUpdate.js';
+import { ToggleRow } from './_settingsPrimitives.jsx';
 
 const ROW = {
     display: 'flex',
@@ -61,6 +67,10 @@ export function AboutSection() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
+    // Read once at mount: the provider is installed at shell boot, before any
+    // settings route can render, so this cannot go stale within a session.
+    const [updateLane] = useState(() => hasDirectUpdateLane());
+    const [updateCheck, setUpdateCheck] = useState(() => isUpdateNoticeEnabled());
     // : both diagnostic paths (copy + preview) are retryable by
     // re-running the same fetch, so the error surface offers a one-click
     // "Try again" against whichever action last failed.
@@ -125,6 +135,28 @@ export function AboutSection() {
             <Row label="Update channel">
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
             </Row>
+            {/*  §6 / D4: only a directly-installed build has to look
+                after its own updates, and only there is there a switch to
+                show. Every other shell is updated by a store, the browser or
+                electron-updater, and `hasDirectUpdateLane()` is false, so
+                this row does not exist rather than existing greyed out. */}
+            {updateLane ? (
+                <ToggleRow
+                    label="Check for new versions"
+                    hint={
+                        'You installed this app directly, so nothing updates it for you.'
+                        + ' Once a day the wallet asks our download site whether a newer'
+                        + ' version exists, and tells you if there is one. It never'
+                        + ' downloads or installs anything, and the request says nothing'
+                        + ' about you or your wallet.'
+                    }
+                    checked={updateCheck}
+                    onChange={(next) => {
+                        setUpdateNoticeEnabled(next);
+                        setUpdateCheck(isUpdateNoticeEnabled());
+                    }}
+                />
+            ) : null}
             <Row label="License">
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
