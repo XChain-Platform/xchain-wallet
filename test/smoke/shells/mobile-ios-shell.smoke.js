@@ -264,10 +264,18 @@ assert.match(
     ' §4: the vault must not travel in a device backup (the Android twin is allowBackup="false")',
 );
 
-// SSC-5 is enforced structurally rather than by a code path: with img-src
-// limited to self/data/blob, a remote NFT media URL cannot beacon the holder's
-// IP on render even if some future view forgets to gate it. Widening this is
-// the change that must not happen quietly.
+// SSC-5's FIRST control, and it is only the first (corrected 2026-08-02,
+//  §1.1). With img-src limited to self/data/blob, a remote NFT media URL
+// cannot beacon the holder's IP on render even if some future view forgets to
+// gate it. Widening this is the change that must not happen quietly.
+//
+// What this check does NOT cover, so nobody reads a green run as SSC-5 being
+// satisfied: flows/tokenInfo.js fetches a token-information DOCUMENT from a
+// host named in the token's own on-chain description. A fetch() answers to
+// connect-src, which is https:-broad by design, so img-src never touches it
+// and tightening img-src never will. That path's only control is
+// settings.privacy.metadataFetchEnabled, which defaults to TRUE, and it is
+// pinned separately in test/unit/flows/tokenInfoMetadataGate.test.js.
 const csp = readFileSync(join(wsRoot, 'packages', 'web', 'src', 'csp.js'), 'utf8');
 const imgSrc = /'img-src':\s*\[([^\]]*)\]/.exec(csp)?.[1] ?? '';
 assert.ok(imgSrc.length > 0, 'could not read img-src out of csp.js');
