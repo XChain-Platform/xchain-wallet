@@ -1,0 +1,42 @@
+# The Electron CVE clock, actually running ( §9, ).
+#
+# WHY THIS FILE EXISTS. §9 owns the security-patch cadence for a wallet that
+# ships a browser engine, and `tools/release/electron-cadence.mjs` turned that
+# prose into a check. But the only thing that ever invoked it was its own smoke
+# test, which drives it against FIXED registry documents - so the tool was
+# proven correct and never once asked the real question. That is the same
+# defect §9 was written to fix, one level up: the cadence had no mechanism,
+# then it had a mechanism nothing ran.
+#
+# A schedule is the mechanism. The check is deliberately NOT a release gate:
+# it is red today (Electron 42 and 43 are both past the 28-day rule), and a
+# gate that blocks every release until an engine upgrade lands would be
+# switched off within a day. Failing weekly and visibly is the behaviour that
+# matches what §9 asks for, which is an owner who is told.
+#
+# An unreachable registry exits 3 and this job goes red on it, on purpose:
+# §9's rule is that a CVE clock reading clean because a network call failed is
+# worse than no clock.
+
+name: Electron cadence
+
+on:
+  schedule:
+    # Mondays, 09:00 UTC. Weekly is the right resolution for a 28-day rule.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  cadence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No `pnpm install`: the tool reads the version out of pnpm-lock.yaml
+      # (the real pin, since every release lane installs --frozen-lockfile) and
+      # queries the npm registry over plain https. Installing would make this
+      # job depend on the very dependency graph it is auditing.
+      - name: Check the Electron patch/major cadence
+        run: node tools/release/electron-cadence.mjs
