@@ -12,11 +12,16 @@
 // password-derived master key. End-to-end of the
 // password → KDF → AES-256-GCM chain.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import {
     encryptWalletSeed,
     decryptWalletSeed,
 } from '../../../packages/core/src/crypto/walletBlob.js';
+
+// password -> KDF -> AES-256-GCM: every case pays a real Argon2id derivation.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const SEED = new Uint8Array(64);
 for (let i = 0; i < 64; i += 1) SEED[i] = i & 0xff;

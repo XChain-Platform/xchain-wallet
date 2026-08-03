@@ -14,13 +14,18 @@
 // in-memory vault. The resolver stands in for the shell's https / on-chain
 // fetch so the flow stays network-free.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import {
     exportBackupFile,
     restoreFromBackupPointer,
     BackupPointerUnresolvedError,
 } from '../../../packages/core/src/flows/backupFile.js';
 import { buildBackupPointer } from '../../../packages/core/src/uri/backupPointer.js';
+
+// Every case here pays a real Argon2id derivation at the production floor.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const KDF_PARAMS = {
     algorithm: 'argon2id',

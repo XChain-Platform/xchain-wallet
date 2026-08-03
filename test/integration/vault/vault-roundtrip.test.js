@@ -17,10 +17,15 @@
 // required field, this test fails on the factory call rather than on
 // validateWallet at save time, which is easier to debug.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
+
+// Every case here pays a real Argon2id derivation at the production floor.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const MASTER_KEY = new Uint8Array(32).fill(11);
 

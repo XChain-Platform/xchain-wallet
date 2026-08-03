@@ -11,7 +11,9 @@
 // Unit: encrypted backup envelope. Round-trips a payload through the
 // password-encrypted file format the wallet exports for backups.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import {
     BACKUP_MAGIC,
     BACKUP_FORMAT_VERSION,
@@ -22,6 +24,9 @@ import {
     stringifyBackupEnvelope,
     parseBackupEnvelope,
 } from '../../../packages/core/src/crypto/backup.js';
+
+// Every round-trip here pays a real Argon2id derivation at the production floor.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const KDF_PARAMS = {
     algorithm: 'argon2id',

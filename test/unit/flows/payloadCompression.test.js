@@ -19,6 +19,7 @@
 
 import { describe, it, expect } from 'vitest';
 import zlib from 'node:zlib';
+import { createRequire } from 'node:module';
 import {
     compressionFieldOf,
     declaresDeflateRaw,
@@ -210,12 +211,42 @@ describe('payloadCompression ( Part B)', () => {
             // cross-service check never ran in CI while the suite reported
             // green. The relative path stays as the `pnpm run sdk:link`
             // fallback.
-            const GatedFileUtils = await import('xchain-sdk/src/gatedFile.js')
-                .then((m) => m.default)
-                .catch(() => import('../../../../xchain-sdk/src/gatedFile.js')
-                    .then((m) => m.default)
-                    .catch(() => null));
-            if (!GatedFileUtils) return; // no SDK resolvable at all
+            //
+            // RESOLVED AT RUNTIME, NOT THROUGH A LITERAL SPECIFIER
+            // . The fallback used to be a literal
+            // `import('../../../../xchain-sdk/...')`, and a literal
+            // specifier is exactly what Vite STATICALLY ANALYSES at
+            // transform time. So on the machines the fallback exists for
+            // the sake of not being on - CI, a clean clone, a release
+            // runner - the whole test FILE failed to transform and never
+            // reached the `.catch` meant to absorb it. It is the reverse of
+            // the bug described above: that one skipped silently, this one
+            // took the suite down with it. Measured red in CI, "Failed to
+            // resolve import "../../../../xchain-sdk/src/gatedFile.js"".
+            // `require` resolves through Node rather than through Vite,
+            // which is how sendLegs.test.js already reaches the same SDK.
+            const require_ = createRequire(import.meta.url);
+            let GatedFileUtils = null;
+            for (const specifier of [
+                'xchain-sdk/src/gatedFile.js',
+                '../../../../xchain-sdk/src/gatedFile.js',
+            ]) {
+                try {
+                    GatedFileUtils = require_(specifier);
+                    break;
+                } catch {
+                    // try the next specifier
+                }
+            }
+            // AND IT NO LONGER SKIPS. The `return` that used to stand here
+            // was written when the SDK was a sibling checkout that might
+            // genuinely be absent. It is a registry dependency now, present
+            // in every `pnpm install`, so an unresolvable SDK is a broken
+            // install rather than a machine without one - and a silent
+            // `return` would report green for the exact cross-service check
+            // this test exists to make, which is the failure the comment
+            // above already names.
+            expect(GatedFileUtils, 'the SDK must resolve from node_modules').toBeTruthy();
 
             const gatedFile = new GatedFileUtils();
             const plaintext = Buffer.from('cross-service gated payload. '.repeat(300), 'utf8');

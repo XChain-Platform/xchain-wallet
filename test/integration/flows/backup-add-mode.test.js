@@ -13,7 +13,12 @@
 // against an in-memory vault, asserts the wallet lands as a new
 // record alongside an existing wallet without colliding on ids.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
+
+// Every case here pays a real Argon2id derivation at the production floor.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 import {
     exportBackupFile,
     importBackupFile,

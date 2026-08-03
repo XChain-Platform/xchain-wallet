@@ -27,6 +27,25 @@ test.use({ acceptLicense: false });
 
 const ACCEPT = /Accept and continue/i;
 
+// The gate does not enable the acknowledgement until the terms have actually
+// been read to the end (`disabled={!scrolledToEnd}` in Onboarding.jsx), and a
+// panel short enough to need no scrolling counts as read. This spec used to
+// click the checkbox straight away, which only ever worked on a machine where
+// the terms happened to fit the viewport. They do not fit on a CI runner, so
+// the box stayed disabled and Playwright retried it for the whole 240s budget
+// (488 attempts, three specs, every push). Scrolling first is both what a user
+// does and what the gate asks for, and it makes the spec independent of
+// viewport size and font metrics.
+async function acknowledgeTerms(page) {
+    const terms = page.getByLabel('License terms');
+    await expect(terms).toBeVisible();
+    await terms.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+
+    const ack = page.getByRole('checkbox');
+    await expect(ack).toBeEnabled();
+    await ack.check();
+}
+
 test.describe('license gate', () => {
     test('blocks onboarding until the terms are acknowledged', async ({ page }) => {
         await page.goto('/');
@@ -35,7 +54,7 @@ test.describe('license gate', () => {
         await expect(page.getByRole('button', { name: ACCEPT })).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toHaveCount(0);
 
-        await page.getByRole('checkbox').check();
+        await acknowledgeTerms(page);
         await expect(page.getByRole('button', { name: ACCEPT })).toBeEnabled();
         await page.getByRole('button', { name: ACCEPT }).click();
         await dismissIntroCarousel(page);
@@ -45,7 +64,7 @@ test.describe('license gate', () => {
 
     test('acceptance persists across a reload', async ({ page }) => {
         await page.goto('/');
-        await page.getByRole('checkbox').check();
+        await acknowledgeTerms(page);
         // Wait for the button the acknowledgement ENABLES, not just for the
         // checkbox click to return. The gate derives its enabled state from a
         // state write, so a click fired in that window lands on a disabled
@@ -66,7 +85,7 @@ test.describe('license gate', () => {
 
     test('acceptance records the current license version', async ({ page }) => {
         await page.goto('/');
-        await page.getByRole('checkbox').check();
+        await acknowledgeTerms(page);
         // Wait for the button the acknowledgement ENABLES, not just for the
         // checkbox click to return. The gate derives its enabled state from a
         // state write, so a click fired in that window lands on a disabled
@@ -88,6 +107,32 @@ test.describe('license gate', () => {
 
         expect(stored.version).toBe(LICENSE_VERSION);
         expect(stored.at).toBeTruthy();
+    });
+
+    // The regression guard for the bug above. Every other test in this file
+    // passes at the default 1280x720 viewport whether or not the scroll
+    // happens, because the terms fit there and a panel that fits counts as
+    // read. That is exactly why the break reached CI unseen. This case forces a
+    // viewport short enough that the terms MUST be scrolled, so the
+    // acknowledgement path is proved on every machine instead of only on tall
+    // ones. Reverting acknowledgeTerms to a bare checkbox.check() reddens this
+    // test while the rest stay green.
+    test.describe('with terms too long for the viewport', () => {
+        test.use({ viewport: { width: 1280, height: 500 } });
+
+        test('the gate opens, and only once the terms are scrolled', async ({ page }) => {
+            await page.goto('/');
+
+            // Not merely unchecked: the box cannot be ticked at all yet.
+            await expect(page.getByRole('checkbox')).toBeDisabled();
+
+            await acknowledgeTerms(page);
+
+            await expect(page.getByRole('button', { name: ACCEPT })).toBeEnabled();
+            await page.getByRole('button', { name: ACCEPT }).click();
+            await dismissIntroCarousel(page);
+            await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
+        });
     });
 
     test('a stale acceptance version re-fires the gate', async ({ page }) => {

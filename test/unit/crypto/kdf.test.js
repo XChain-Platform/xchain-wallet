@@ -12,7 +12,9 @@
 // Argon2id is intentionally slow. These tests use the floor parameters
 // to keep total test time reasonable.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import {
     deriveMasterKey,
     validateKdfParams,
@@ -26,6 +28,9 @@ import {
     KDF_MIN_ITERATIONS,
     KDF_DEFAULT_PARALLELISM,
 } from '../../../packages/core/src/crypto/kdf.js';
+
+// Every derivation here is a real Argon2id call at the production floor.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const PARAMS = {
     algorithm: 'argon2id',

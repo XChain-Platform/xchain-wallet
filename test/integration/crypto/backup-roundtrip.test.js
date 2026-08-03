@@ -11,7 +11,12 @@
 // Integration: encode → stringify → parse → decode of a non-trivial
 // backup payload (multi-wallet, contacts, signers).
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
+
+// Every case here pays a real Argon2id derivation at the production floor.
+vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 import {
     encodeBackupEnvelope,
     decodeBackupEnvelope,

@@ -44,15 +44,23 @@ jobs:
   drift-guards:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: xchain-wallet
       # No sibling checkout: since  DD6 the shells consume the PUBLISHED
       # @dankest-llc/xchain-sdk, so `pnpm install --frozen-lockfile` below
       # installs the exact SDK a release would ship and the parity guard reads
       # that. The step this replaces checked out the private sibling repo with
       # `secrets.XCHAIN_SDK_DEPLOY_KEY`, a secret that has never existed on this
       # repo, so it failed `Not Found` on every push and took the whole job red.
+      #
+      # AND THE SUBDIRECTORY WENT WITH IT . This job used to check out
+      # into `path: xchain-wallet` so a sibling could sit beside it. With the
+      # sibling gone the subdirectory bought nothing and cost the job: with no
+      # pnpm project at the runner's root, setup-node's pnpm cache had no store
+      # path to save and its POST step failed, so `drift-guards` stayed red on
+      # every push while the guard inside it passed. Measured on run
+      # 30786270270: every step `success`, `Post Use Node.js 22` `failure`,
+      # "Path(s) specified in the action for caching do(es) not exist". The
+      # repo is checked out at the root here like every other job now.
+      - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
         run: corepack enable
       - name: Use Node.js 22
@@ -60,12 +68,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: xchain-wallet/pnpm-lock.yaml
       - name: Install dependencies
-        working-directory: xchain-wallet
         run: pnpm install --frozen-lockfile
       - name: Wallet<->SDK derivation-parity guard
-        working-directory: xchain-wallet
         env:
           XCHAIN_REQUIRE_SIBLINGS: "1"
         run: pnpm exec vitest run --config test/vitest/integration.config.js test/integration/hd/wallet-sdk-derivation-parity.test.js
