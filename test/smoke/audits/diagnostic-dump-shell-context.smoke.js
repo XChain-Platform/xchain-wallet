@@ -82,9 +82,16 @@ assert.ok(
     /webDiagnosticContext\s*=\s*async\s*\(\)\s*=>\s*\(\{[\s\S]*?shell:\s*'web'/.test(webHost),
     'web hostBridge declares webDiagnosticContext with shell:web',
 );
+// Counted against the call sites themselves rather than a hardcoded number.
+// The invariant is "every host the web shell builds carries the diagnostic
+// context", and a literal count goes stale the moment a lane is added: 
+// added a fourth (the fresh-install backup restore) and this read as a
+// regression in a file it never touched.
+const webHostBuilds = (webHost.match(/createBackgroundHost\(\{/g) || []).length;
 const webContextWires = (webHost.match(/getDiagnosticContext:\s*webDiagnosticContext/g) || []).length;
-assert.equal(webContextWires, 3,
-    'all three createBackgroundHost call sites in web hostBridge thread the callback');
+assert.ok(webHostBuilds > 0, 'web hostBridge builds no host at all - the anchor moved');
+assert.equal(webContextWires, webHostBuilds,
+    `all ${webHostBuilds} createBackgroundHost call sites in web hostBridge thread the callback`);
 
 const dskIndex = readFileSync(
     join(wsRoot, 'packages', 'desktop', 'main', 'index.js'),

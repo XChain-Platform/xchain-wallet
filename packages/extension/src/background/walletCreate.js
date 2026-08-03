@@ -21,6 +21,7 @@
 
 import { crypto as cryptoLib, flows, storage as storageLib } from '@xchain-wallet/core';
 import { saveSigningSecret } from './signingSecretSession.js';
+import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
 export const DEFAULT_ACTIVE_CHAIN_IDS = [
     'bitcoin-mainnet',
@@ -201,6 +202,98 @@ export async function handleWalletImport(request, deps) {
     // pairing payload, addressed BY id; without it the lane dead-ended after
     // the wallet already existed.
     return { format, walletName: name, walletId };
+}
+
+/**
+ * : restore an encrypted §19.4 backup onto a FRESH install.
+ *
+ * The shipping `wallet.importBackup` is host-registered, and the host is only
+ * built once a vault exists - so on a device with no wallet the restore lane
+ * had nothing to talk to. This is its pre-host twin: it creates the vault
+ * under the new device password first, then runs the same core merge.
+ *
+ * Three secrets arrive, and they are three different things :
+ *
+ *   password         the password THIS device will unlock with from now on
+ *   backupPassword   opens the backup file's envelope
+ *   walletPassword   opens the backed-up wallet's own seed / imported keys
+ *
+ * The user may choose a genuinely new `password` precisely because
+ * `importBackupFile` re-keys the restored seal onto it. Before that re-key
+ * existed, a free choice here produced a wallet that unlocked and then could
+ * not sign.
+ *
+ * `mode` is fixed to 'fresh': the vault was empty a line ago, so there is
+ * nothing to re-mint ids against, and the backup's own settings are adopted
+ * (the restoring user's network / fee choices ARE the ones being restored).
+ */
+export async function handleWalletImportBackup(request, deps) {
+    const req = /** @type {any} */ (request) ?? {};
+    const password = req.password;
+    const backupPassword = req.backupPassword;
+    const walletPassword = req.walletPassword;
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('wallet.importBackup.fresh: password is required (the password this device will unlock with)');
+    }
+    if (typeof backupPassword !== 'string' || backupPassword.length === 0) {
+        throw new Error('wallet.importBackup.fresh: backupPassword is required (it opens the backup file)');
+    }
+    if (typeof walletPassword !== 'string' || walletPassword.length === 0) {
+        throw new Error("wallet.importBackup.fresh: walletPassword is required (it opens the backed-up wallet's seed)");
+    }
+    const hasContent = typeof req.fileContent === 'string' && req.fileContent.trim().length > 0;
+    const hasPointer = req.pointer != null;
+    if (!hasContent && !hasPointer) {
+        throw new Error('wallet.importBackup.fresh: fileContent or pointer is required');
+    }
+    await assertFreshVault(deps);
+
+    const kdfParams = cryptoLib.makeFreshKdfParams();
+    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    let result;
+    try {
+        const vault = new storageLib.Vault({
+            backend: deps.storageBackend,
+            masterKey,
+        });
+        await vault.open();
+        const common = {
+            vault,
+            password: backupPassword,
+            walletPassword,
+            devicePassword: password,
+            mode: 'fresh',
+        };
+        // A failed restore must leave NOTHING behind: the vault is only saved
+        // and the session only opened once the merge has actually succeeded,
+        // so a wrong wallet password throws with the install still fresh and
+        // the user able to try again rather than half-onboarded.
+        result = hasPointer
+            ? await flows.restoreFromBackupPointer({
+                ...common,
+                pointer: req.pointer,
+                resolveBackupContent: deps.resolveBackupContent ?? resolveBackupPointerContent,
+            })
+            : await flows.importBackupFile({ ...common, fileContent: req.fileContent });
+        await vault.save();
+        vault.close();
+
+        await deps.metaBackend.save({ kdfParams });
+        await deps.sessionBackend.save(masterKey);
+        await saveSigningSecret(deps.signingSecretBackend, password);
+    } finally {
+        masterKey.fill(0);
+    }
+    if (typeof deps.onUnlocked === 'function') {
+        await deps.onUnlocked();
+    }
+    return {
+        walletId: result.walletId,
+        walletName: result.payload?.wallet?.name,
+        writes: result.writes,
+        skipped: result.skipped,
+        rekeyed: result.rekeyed,
+    };
 }
 
 async function assertFreshVault(deps) {

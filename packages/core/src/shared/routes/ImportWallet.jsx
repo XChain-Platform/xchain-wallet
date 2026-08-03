@@ -61,6 +61,14 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [confirm, setConfirm] = useState('');
     const [backupContent, setBackupContent] = useState('');
     const [backupPassword, setBackupPassword] = useState('');
+    // : three different secrets reach the restore, and conflating any
+    // two of them produces a wallet that restores looking complete and then
+    // cannot sign. `backupPassword` opens the FILE. `backupWalletPassword`
+    // opens the WALLET's own seal, which travelled inside the file sealed
+    // under whatever password it had on its old device. `backupDevicePassword`
+    // is what this device unlocks with, and the seal is moved onto it.
+    const [backupWalletPassword, setBackupWalletPassword] = useState('');
+    const [backupDevicePassword, setBackupDevicePassword] = useState('');
     const [backupOverwrite, setBackupOverwrite] = useState(false);
     const [backupFileName, setBackupFileName] = useState(/** @type {string | null} */ (null));
     // §15.4 QR-from-backup-pointer restore. When a scanned QR classifies
@@ -161,10 +169,42 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             setError('Backup password is required.');
             return;
         }
+        // . Both are checked here rather than only in core so the user
+        // is told which field is empty instead of reading a flow-level throw.
+        if (backupWalletPassword.length === 0) {
+            setError("The backed-up wallet's own password is required.");
+            return;
+        }
+        if (backupDevicePassword.length === 0) {
+            setError(mode === 'add'
+                ? 'Your wallet-unlock password for this device is required.'
+                : 'Choose the password this device will unlock with.');
+            return;
+        }
         const conflictArg = backupOverwrite ? 'overwrite' : 'error';
         setError(null);
         setBusy(true);
         try {
+            // : a fresh install has no vault, so it has no host, so the
+            // host-registered restore has nothing to answer it. `fresh` goes to
+            // the pre-host lane, which creates the vault under the new device
+            // password and then merges. Same core flow underneath either way;
+            // the mnemonic lane above splits on exactly the same seam.
+            if (mode === 'fresh') {
+                if (typeof messaging.importBackupFresh !== 'function') {
+                    setError('Restoring a backup onto a fresh install is not available in this shell.');
+                    setBusy(false);
+                    return;
+                }
+                await messaging.importBackupFresh({
+                    password: backupDevicePassword,
+                    backupPassword,
+                    walletPassword: backupWalletPassword,
+                    ...(usingPointer ? { pointer: backupPointer } : { fileContent: backupContent }),
+                });
+                onImported();
+                return;
+            }
             if (usingPointer) {
                 if (typeof messaging.importBackupPointerRequest !== 'function') {
                     setError('Backup-pointer restore is not available in this shell.');
@@ -174,6 +214,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 await messaging.importBackupPointerRequest({
                     pointer: backupPointer,
                     password: backupPassword,
+                    walletPassword: backupWalletPassword,
+                    devicePassword: backupDevicePassword,
                     onConflict: conflictArg,
                     mode,
                 });
@@ -186,6 +228,11 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 await messaging.importBackupRequest({
                     fileContent: backupContent,
                     password: backupPassword,
+                    // : the seal travels with the record, so it has to
+                    // be opened with the wallet's old password and moved onto
+                    // this device's before anything is written.
+                    walletPassword: backupWalletPassword,
+                    devicePassword: backupDevicePassword,
                     onConflict: conflictArg,
                     // §19.4 / Cluster H FOLLOWUP 3: 'add' mode tells the
                     // host to re-mint wallet / account / address ids so
@@ -470,6 +517,36 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         autoComplete="off"
                         disabled={busy}
                     />
+                    {/* . The copy has to earn each of these: three
+                        password fields on one screen is exactly where users
+                        give up, and the reason they are all here is that the
+                        backup carries a sealed wallet, not a plain one. */}
+                    <Input
+                        type="password"
+                        label="Password of the wallet in this backup"
+                        hint="What you unlocked this wallet with on the device you backed it up from. The backup file holds the wallet still locked, and this is the only thing that opens it."
+                        value={backupWalletPassword}
+                        onChange={(e) => {
+                            setBackupWalletPassword(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="off"
+                        disabled={busy}
+                    />
+                    <Input
+                        type="password"
+                        label={mode === 'add' ? 'Your password on this device' : 'Password for this device'}
+                        hint={mode === 'add'
+                            ? 'The password you already unlock this app with. The restored wallet is re-locked with it, so one password opens everything here.'
+                            : 'Pick the password this app will unlock with from now on. The restored wallet is re-locked with it.'}
+                        value={backupDevicePassword}
+                        onChange={(e) => {
+                            setBackupDevicePassword(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="off"
+                        disabled={busy}
+                    />
                     <label className={styles.advancedToggle}>
                         <input
                             type="checkbox"
@@ -488,7 +565,9 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             icon={<Icon.KeyIcon />}
                             disabled={
                                 (backupPointer === null && backupContent.trim().length === 0) ||
-                                backupPassword.length === 0
+                                backupPassword.length === 0 ||
+                                backupWalletPassword.length === 0 ||
+                                backupDevicePassword.length === 0
                             }
                         >
                             Restore

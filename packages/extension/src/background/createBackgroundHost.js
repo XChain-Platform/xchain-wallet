@@ -37,6 +37,9 @@ import {
     reservationStoreFrom,
 } from './confirmActionSessionStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
+// Shared with the PRE-HOST fresh-install restore lane, which never reaches this
+// host: one resolver so the two lanes cannot drift on what they will fetch.
+import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
 const {
     createWallet,
@@ -1429,6 +1432,11 @@ export function createBackgroundHost(deps) {
             vault,
             fileContent: req?.fileContent,
             password: req?.password,
+            // : `password` opens the FILE. These two move the
+            // wallet's own seal onto this device, and without them a
+            // restored wallet lands unsignable and says nothing.
+            walletPassword: req?.walletPassword,
+            devicePassword: req?.devicePassword,
             onConflict: req?.onConflict,
             mode: req?.mode,
         });
@@ -1436,6 +1444,7 @@ export function createBackgroundHost(deps) {
             walletId: r.walletId,
             writes: r.writes,
             skipped: r.skipped,
+            rekeyed: r.rekeyed,
             walletName: r.payload?.wallet?.name,
         };
     });
@@ -1453,6 +1462,8 @@ export function createBackgroundHost(deps) {
             vault,
             pointer: req?.pointer,
             password: req?.password,
+            walletPassword: req?.walletPassword,     // , as wallet.importBackup above
+            devicePassword: req?.devicePassword,
             onConflict: req?.onConflict,
             mode: req?.mode,
             resolveBackupContent: resolveBackupPointerContent,
@@ -1461,6 +1472,7 @@ export function createBackgroundHost(deps) {
             walletId: r.walletId,
             writes: r.writes,
             skipped: r.skipped,
+            rekeyed: r.rekeyed,
             walletName: r.payload?.wallet?.name,
             pointer: r.pointer,
         };
@@ -4028,33 +4040,3 @@ export function createBackgroundHost(deps) {
     return host;
 }
 
-// §15.4 backup-pointer resolver. Turns a pointer's `location` into the
-// raw encrypted §19.4 envelope text. Only https locations are fetched:
-// a wallet must not silently reach out to an arbitrary http origin, and
-// on-chain FILE references need SDK wiring that is deliberately left as a
-// follow-up rather than half-implemented here. The envelope is still
-// password-encrypted, so fetching it does not by itself expose funds.
-async function resolveBackupPointerContent(pointer) {
-    const location = pointer?.location;
-    if (typeof location !== 'string' || location.trim().length === 0) {
-        throw new Error('backup pointer has no location to resolve');
-    }
-    const loc = location.trim();
-    let url;
-    try {
-        url = new URL(loc);
-    } catch {
-        throw new Error(`backup pointer location is not a URL: "${loc}". On-chain pointers are not supported yet.`);
-    }
-    if (url.protocol !== 'https:') {
-        throw new Error(`unsupported backup-pointer location scheme "${url.protocol}" (only https is fetched).`);
-    }
-    if (typeof fetch !== 'function') {
-        throw new Error('this shell cannot fetch a backup pointer (no fetch available).');
-    }
-    const resp = await fetch(url.toString(), { redirect: 'follow' });
-    if (!resp.ok) {
-        throw new Error(`backup pointer fetch failed: HTTP ${resp.status}`);
-    }
-    return await resp.text();
-}

@@ -20,6 +20,7 @@ import {
     lockWalletLocal,
     createWalletLocal,
     importMnemonicLocal,
+    importBackupLocal,
 } from './hostBridge.js';
 
 export { sendMessage, getSessionStatus };
@@ -66,6 +67,17 @@ export async function createWallet(opts) {
  */
 export async function importMnemonic(opts) {
     return importMnemonicLocal(opts);
+}
+
+/**
+ * : restore an encrypted backup onto a FRESH install (no vault yet).
+ * Distinct from `importBackupRequest`, which adds a wallet to an OPEN vault
+ * through the host - a host that does not exist on a fresh install.
+ *
+ * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} opts
+ */
+export async function importBackupFresh(opts) {
+    return importBackupLocal(opts);
 }
 
 export function listWallets() {

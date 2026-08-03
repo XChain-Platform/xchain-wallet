@@ -45,6 +45,18 @@ export function importMnemonic(opts) {
     return /** @type {any} */ (sendMessage('wallet.import', opts));
 }
 
+/**
+ * : restore an encrypted backup onto a FRESH install (no vault yet).
+ * Pre-host, and named apart from `importBackupRequest` because that one adds
+ * a wallet to an OPEN vault through the host - a host a fresh install has not
+ * built yet.
+ *
+ * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} opts
+ */
+export function importBackupFresh(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackup.fresh', opts));
+}
+
 export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
 }

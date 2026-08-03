@@ -49,6 +49,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -459,9 +460,20 @@ function AppInner() {
                 // walletId that's actually in the vault, prefer it over
                 // the first-wallet default. Otherwise fall through to
                 // the first wallet as before.
+                //
+                // D-34(c): and below that, the last wallet the user actually
+                // chose. A deep link still wins - it names a wallet
+                // explicitly - but a plain app restart no longer snaps a
+                // multi-wallet user back to their first wallet, which is how
+                // a send, a receive address or a mint ended up signed by the
+                // wrong one. The stored id is validated against the live list
+                // so a removed wallet falls back to the default.
                 const ctxWalletId = initialRoute?.initialContext?.walletId;
+                const persisted = readActiveWallet();
                 if (ctxWalletId && arr.some((w) => w.id === ctxWalletId)) {
                     setActiveWalletId(ctxWalletId);
+                } else if (persisted && arr.some((w) => w.id === persisted)) {
+                    setActiveWalletId(persisted);
                 } else {
                     setActiveWalletId(arr[0].id);
                 }
@@ -528,6 +540,14 @@ function AppInner() {
     const handleSwitchAccount = (id) => {
         setActiveAccountId(id);
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
+    };
+
+    // D-34(c): switch the active WALLET and remember it, so a restart returns
+    // to it instead of snapping back to the first wallet. Twin of the account
+    // handler above, one level up.
+    const handleSwitchWallet = (id) => {
+        setActiveWalletId(id);
+        if (id) writeActiveWallet(id);
     };
 
     // Two gates, because the lanes stopped agreeing . Staking,
@@ -1927,7 +1947,7 @@ function AppInner() {
                 return (
                     <WalletPicker
                         activeWalletId={activeWalletId}
-                        onSwitch={setActiveWalletId}
+                        onSwitch={handleSwitchWallet}
                         onAddWallet={() => {
                             setOnboardingStep('welcome');
                             setUnlockedView('add-wallet');

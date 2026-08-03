@@ -50,12 +50,41 @@ function clickFakeScan() {
     fireEvent.click(stub);
 }
 
-function renderImport(messaging) {
+// : the lane now collects three distinct secrets, and the Restore
+// button stays disabled until all three are present. Every case that submits
+// has to fill all three, so it lives in one helper - and the labels are
+// asserted by using them, since `getByLabelText` throws when one is renamed.
+function fillBackupPasswords({
+    file = 'pw12345678',
+    wallet = 'the-old-devices-password',
+    device = 'this-devices-password',
+    mode = 'add',
+} = {}) {
+    fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: file } });
+    fireEvent.change(screen.getByLabelText('Password of the wallet in this backup'), { target: { value: wallet } });
+    // The device field's label differs by mode on purpose: on a fresh install
+    // the user is CHOOSING this password, on an open vault they are confirming
+    // one they already have.
+    fireEvent.change(
+        screen.getByLabelText(mode === 'add' ? 'Your password on this device' : 'Password for this device'),
+        { target: { value: device } },
+    );
+}
+
+function renderImport(messaging, mode = 'add') {
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <ImportWallet onBack={() => {}} onImported={() => {}} />
+            <ImportWallet onBack={() => {}} onImported={() => {}} mode={mode} />
         </MessagingProvider>,
     );
+}
+
+/** Scan a pointer QR in the backup lane and wait for the pointer card. */
+async function scanPointerInBackupLane() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
+    clickFakeScan();
+    await waitFor(() => expect(screen.getByText(/Backup pointer loaded/)).toBeTruthy());
 }
 
 describe('ImportWallet backup-pointer restore', () => {
@@ -67,22 +96,15 @@ describe('ImportWallet backup-pointer restore', () => {
 
         render(
             <MessagingProvider shell="web" messaging={{ importBackupPointerRequest }}>
-                <ImportWallet onBack={() => {}} onImported={onImported} />
+                <ImportWallet onBack={() => {}} onImported={onImported} mode="add" />
             </MessagingProvider>,
         );
 
-        // Switch to the Encrypted-backup lane.
-        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
-        // Open the pointer scanner, then fire a scan frame.
-        fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
-        clickFakeScan();
-
-        // Pointer card appears.
-        await waitFor(() => expect(screen.getByText(/Backup pointer loaded/)).toBeTruthy());
+        await scanPointerInBackupLane();
         expect(screen.getByText(/backups\.example\/a\.json/)).toBeTruthy();
 
-        // Enter the backup password and submit.
-        fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'pw12345678' } });
+        // Enter all three passwords and submit.
+        fillBackupPasswords();
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
         await waitFor(() => expect(importBackupPointerRequest).toHaveBeenCalledTimes(1));
@@ -90,7 +112,86 @@ describe('ImportWallet backup-pointer restore', () => {
         expect(arg.pointer.location).toBe('https://backups.example/a.json');
         expect(arg.password).toBe('pw12345678');
         expect(arg.onConflict).toBe('error');
+        // : the two re-key passwords reach the host, and each carries
+        // the value from its OWN field. Crossing them here is invisible in the
+        // UI and produces a wallet that restores and then cannot sign.
+        expect(arg.walletPassword).toBe('the-old-devices-password');
+        expect(arg.devicePassword).toBe('this-devices-password');
         await waitFor(() => expect(onImported).toHaveBeenCalled());
+    });
+
+    it('will not submit until all three passwords are present ', async () => {
+        const importBackupPointerRequest = vi.fn().mockResolvedValue({ walletId: 'w1' });
+        globalThis.__XC_SCAN_FRAME__ = buildBackupPointer({ location: 'https://backups.example/c.json' });
+
+        renderImport({ importBackupPointerRequest });
+        await scanPointerInBackupLane();
+
+        // Only the file password: the old lane would have restored right here,
+        // sealed under a password this device does not use.
+        fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'pw12345678' } });
+        const restore = screen.getByRole('button', { name: 'Restore' });
+        expect(restore.disabled,
+            'Restore is enabled with only the backup-file password, so a restore can still be '
+            + 'submitted with nothing to re-key the wallet onto').toBe(true);
+
+        fillBackupPasswords();
+        expect(screen.getByRole('button', { name: 'Restore' }).disabled).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+        await waitFor(() => expect(importBackupPointerRequest).toHaveBeenCalledTimes(1));
+    });
+
+    it('a FRESH install goes to the pre-host lane, not the host one ', async () => {
+        // The whole point of : on a device with no wallet there is no
+        // host, so `importBackupPointerRequest` has nothing to answer it. The
+        // lane has to split here or the restore silently never happens.
+        const importBackupFresh = vi.fn().mockResolvedValue({ walletId: 'w1' });
+        const importBackupPointerRequest = vi.fn();
+        const onImported = vi.fn();
+        globalThis.__XC_SCAN_FRAME__ = buildBackupPointer({ location: 'https://backups.example/d.json' });
+
+        render(
+            <MessagingProvider shell="web" messaging={{ importBackupFresh, importBackupPointerRequest }}>
+                <ImportWallet onBack={() => {}} onImported={onImported} mode="fresh" />
+            </MessagingProvider>,
+        );
+
+        await scanPointerInBackupLane();
+        fillBackupPasswords({ mode: 'fresh' });
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+        await waitFor(() => expect(importBackupFresh).toHaveBeenCalledTimes(1));
+        expect(importBackupPointerRequest,
+            'the fresh lane went through the HOST-registered restore, which a fresh install has no '
+            + 'host to answer').not.toHaveBeenCalled();
+
+        const arg = importBackupFresh.mock.calls[0][0];
+        // `password` here is the DEVICE password being set, not the file's.
+        expect(arg.password).toBe('this-devices-password');
+        expect(arg.backupPassword).toBe('pw12345678');
+        expect(arg.walletPassword).toBe('the-old-devices-password');
+        expect(arg.pointer.location).toBe('https://backups.example/d.json');
+        await waitFor(() => expect(onImported).toHaveBeenCalled());
+    });
+
+    it('a FRESH install with a pasted FILE takes the same pre-host lane', async () => {
+        const importBackupFresh = vi.fn().mockResolvedValue({ walletId: 'w1' });
+        const importBackupRequest = vi.fn();
+
+        render(
+            <MessagingProvider shell="web" messaging={{ importBackupFresh, importBackupRequest }}>
+                <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+        fireEvent.change(screen.getByPlaceholderText(/argon2id/), { target: { value: '{"v":1}' } });
+        fillBackupPasswords({ mode: 'fresh' });
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+        await waitFor(() => expect(importBackupFresh).toHaveBeenCalledTimes(1));
+        expect(importBackupRequest).not.toHaveBeenCalled();
+        expect(importBackupFresh.mock.calls[0][0].fileContent).toBe('{"v":1}');
     });
 
     it('rejects a non-pointer QR in the backup lane', async () => {
@@ -114,7 +215,7 @@ describe('ImportWallet backup-pointer restore', () => {
         clickFakeScan();
         await waitFor(() => expect(screen.getByText(/Backup pointer loaded/)).toBeTruthy());
 
-        fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'pw12345678' } });
+        fillBackupPasswords();
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
         await waitFor(() => expect(screen.getByText(/not available in this shell/i)).toBeTruthy());

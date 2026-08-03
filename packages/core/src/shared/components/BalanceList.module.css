@@ -139,6 +139,14 @@
     font-family: var(--xc-font-mono);
 }
 
+/* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
+   real figure so it never reads as a quantity, and not an error red either -
+   nothing is broken, the number is just not known right now. */
+.unavailable {
+    font-weight: 600;
+    color: var(--xc-text-muted);
+}
+
 .empty {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);

@@ -17,8 +17,9 @@ import {
     ChainBadge,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,7 +53,23 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const chains = useMemo(() => chainRegistry.supportedChains().map((d) => d.id), []);
+    const { settings } = useSettings();
+
+    // D-34(b): scope BOTH the dropdown and the "All chains" fan-out to the
+    // user's active network. `supportedChains()` is every chain the registry
+    // knows, so a wallet sitting on Regtest was querying mainnet and testnet
+    // explorers on every search - requests it has no business making, against
+    // hosts it is not configured for, whose failures it then showed the user.
+    // `filterChainIdsByActiveNetwork` is the same helper Home, History and
+    // every balance fan-out already use, so this screen stops being the
+    // exception. While settings are still loading the list is empty rather
+    // than everything: a search a few hundred ms early must not escape the
+    // filter.
+    const chains = useMemo(() => {
+        const all = chainRegistry.supportedChains().map((d) => d.id);
+        if (!settings) return [];
+        return flowsLib.filterChainIdsByActiveNetwork(all, settings, chainRegistry);
+    }, [settings]);
 
     const [searchMode, setSearchMode] = useState(/** @type {'token' | 'address'} */ ('token'));
     const [query, setQuery] = useState('');
@@ -84,7 +101,19 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         Promise.all(targetChains.map((cid) =>
             fetchOne(cid)
                 .then((resp) => ({ cid, rows: extractRows(resp) }))
-                .catch((err) => ({ cid, error: err?.message || String(err) }))
+                .catch((err) => {
+                    const message = err?.message || String(err);
+                    // D-34(b): the explorer answers 404 for "this token has no
+                    // dispensers", which is an ordinary empty result and not a
+                    // failure. Showing it raw put
+                    // "Couldn't search: Explorer returned HTTP 404 for
+                    // /BTC/api/dispensers/XCHAIN/token" in front of a user who
+                    // had simply searched for a ticker nobody dispenses. Every
+                    // other status still surfaces: a 500 or a dead host is a
+                    // real failure and hiding it would be worse than the noise.
+                    if (/\b404\b/.test(message)) return { cid, rows: [] };
+                    return { cid, error: message };
+                })
         )).then((results) => {
             /** @type {Record<string, { rows: any[], error: string | null }>} */
             const next = {};
@@ -208,8 +237,18 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
         return <p role="alert" className={styles.entryDescription}>{overall.error}</p>;
     }
     let anyRow = false;
-    for (const [, v] of entries) if (v.rows.length > 0) { anyRow = true; break; }
-    if (!anyRow) {
+    let anyError = false;
+    for (const [, v] of entries) {
+        if (v.rows.length > 0) anyRow = true;
+        if (v.error) anyError = true;
+    }
+    // "No open dispensers matched" is only true when nothing FAILED. Found
+    // while fixing D-34(b): this early return fired on rows alone, so a search
+    // where every chain errored - the whole explorer down, the wrong endpoint
+    // configured - reported an empty result and swallowed every error message.
+    // The raw-404 complaint only ever became visible because ONE chain
+    // happened to return rows; the total-failure case was silently worse.
+    if (!anyRow && !anyError) {
         return <p className={styles.entryDescription}>No open dispensers matched.</p>;
     }
     return (

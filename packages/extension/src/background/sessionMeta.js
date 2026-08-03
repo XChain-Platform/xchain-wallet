@@ -38,6 +38,7 @@ import { handleWalletLock } from './walletLock.js';
 import {
     handleWalletCreateWithMnemonic,
     handleWalletImport,
+    handleWalletImportBackup,
 } from './walletCreate.js';
 import { SIGNING_SECRET_SESSION_KEY } from './signingSecretSession.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
@@ -71,6 +72,11 @@ export const PRE_HOST_MESSAGE_TYPES = new Set([
     'wallet.lock',
     'wallet.create',
     'wallet.import',
+    // : the FRESH-INSTALL backup restore. Named apart from the
+    // host-registered 'wallet.importBackup' on purpose - that one adds a wallet
+    // to an open vault, and putting the same string in this set would take it
+    // away from the host and break the shipping add lane.
+    'wallet.importBackup.fresh',
 ]);
 
 /**
@@ -194,6 +200,17 @@ export async function dispatchPreHost(type, request, deps) {
                 metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
+                onUnlocked: deps.onUnlocked,
+            });
+        case 'wallet.importBackup.fresh':
+            return handleWalletImportBackup(request, {
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
+                metaBackend: deps.metaBackend,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                resolveBackupContent: deps.resolveBackupContent,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.import':

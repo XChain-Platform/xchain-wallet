@@ -69,6 +69,18 @@ export function importMnemonic(opts) {
 }
 
 /**
+ * : restore an encrypted backup onto a FRESH install (no vault yet).
+ * Pre-host, and named apart from `importBackupRequest` because that one adds
+ * a wallet to an OPEN vault through the host - a host a fresh install has not
+ * built yet.
+ *
+ * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} opts
+ */
+export function importBackupFresh(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackup.fresh', opts));
+}
+
+/**
  * Clear the session master key and tear down the background host. Next
  * query of `session.status` returns `locked`.
  *

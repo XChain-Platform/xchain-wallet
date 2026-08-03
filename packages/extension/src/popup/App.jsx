@@ -58,6 +58,7 @@ import { ConnectedSites } from '@xchain-wallet/core/shared/routes/ConnectedSites
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
@@ -488,7 +489,20 @@ function AppInner() {
                 if (cancelled) return;
                 if (Array.isArray(list) && list.length > 0) {
                     setWallets(list);
-                    setActiveWalletId(list[0].id);
+                    // D-34(c): restore the last selected WALLET if it still
+                    // exists, the way the account effect below restores the
+                    // last account inside it. Snapping to list[0] every time
+                    // silently moved a multi-wallet user back to their first
+                    // wallet, and on the POPUP that is not an occasional
+                    // reload: every close-and-reopen re-locks and re-runs this.
+                    // Anything composed afterwards - a send, a receive address,
+                    // a mint - was then signed by the wrong wallet. The stored
+                    // id is validated against the live list so a removed wallet
+                    // or another device falls back to the default.
+                    const persisted = readActiveWallet();
+                    setActiveWalletId(
+                        (persisted && list.some((w) => w.id === persisted)) ? persisted : list[0].id,
+                    );
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
@@ -496,11 +510,19 @@ function AppInner() {
     }, [status.state]);
 
     // Resolved from the loaded list rather than tracked as its own state, so
-    // the wallet picker's `setActiveWalletId` stays the single writer.
+    // `handleSwitchWallet` stays the single writer.
     const activeWallet = useMemo(
         () => wallets.find((w) => w.id === activeWalletId) || null,
         [wallets, activeWalletId],
     );
+
+    // D-34(c): switch the active wallet AND remember it, so the next popup
+    // open returns to it instead of snapping back to the first wallet. Twin of
+    // `handleSwitchAccount` one level down.
+    const handleSwitchWallet = (id) => {
+        setActiveWalletId(id);
+        if (id) writeActiveWallet(id);
+    };
 
     // Load BIP44 accounts for the active wallet and pick the first
     // (lowest-index) one as active. The popover's account picker calls
@@ -2036,7 +2058,7 @@ function AppInner() {
                 return (
                     <WalletPicker
                         activeWalletId={activeWalletId}
-                        onSwitch={setActiveWalletId}
+                        onSwitch={handleSwitchWallet}
                         onAddWallet={() => {
                             setOnboardingStep('welcome');
                             setUnlockedView('add-wallet');

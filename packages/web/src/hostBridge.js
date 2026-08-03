@@ -49,6 +49,9 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // at build time. Candidate for a lower-level package extraction once a
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+// Same reason as the line above: one resolver across shells, so the fresh and
+// add restore lanes cannot drift on which pointer schemes they will fetch.
+import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
     fakeBalanceFor,
@@ -917,6 +920,103 @@ export async function importMnemonicLocal(req) {
         // lane imported the phrase and then dead-ended on "the shell returned
         // no wallet id" - a hard stop after the wallet already existed.
         return { format: result.format, walletName: result.wallet.name, walletId: result.wallet.id };
+    } finally {
+        masterKey.fill(0);
+    }
+}
+
+/**
+ * : restore an encrypted §19.4 backup onto a FRESH install.
+ *
+ * Web twin of the extension/desktop pre-host `wallet.importBackup.fresh`.
+ * `importBackupRequest` goes through the in-page host, and on a device with no
+ * wallet there is no host yet - so the restore lane had nothing to talk to.
+ * This creates the vault under the new device password first, then runs the
+ * same core merge.
+ *
+ * Three secrets, three different things : `password` is what this
+ * browser will unlock with from now on, `backupPassword` opens the file, and
+ * `walletPassword` opens the backed-up wallet's own seal. The user may pick a
+ * genuinely new `password` because `importBackupFile` re-keys the restored
+ * seal onto it.
+ *
+ * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} req
+ * @returns {Promise<{ walletId: string, walletName?: string, rekeyed: boolean }>}
+ */
+export async function importBackupLocal(req) {
+    const password = req?.password;
+    const backupPassword = req?.backupPassword;
+    const walletPassword = req?.walletPassword;
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('wallet.importBackup: password is required (the password this device will unlock with)');
+    }
+    if (typeof backupPassword !== 'string' || backupPassword.length === 0) {
+        throw new Error('wallet.importBackup: backupPassword is required (it opens the backup file)');
+    }
+    if (typeof walletPassword !== 'string' || walletPassword.length === 0) {
+        throw new Error("wallet.importBackup: walletPassword is required (it opens the backed-up wallet's seed)");
+    }
+    const hasContent = typeof req.fileContent === 'string' && req.fileContent.trim().length > 0;
+    const hasPointer = req.pointer != null;
+    if (!hasContent && !hasPointer) {
+        throw new Error('wallet.importBackup: fileContent or pointer is required');
+    }
+
+    const meta = createMetaBackend();
+    if (await meta.load()) {
+        throw new Error('wallet.importBackup: a wallet already exists; unlock or reset first');
+    }
+
+    const flowsNs = await getFlows();
+    const kdfParams = cryptoLib.makeFreshKdfParams();
+    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    try {
+        const storage = createStorageBackend();
+        const v = new storageLib.Vault({ backend: storage, masterKey });
+        await v.open();
+        const common = {
+            vault: v,
+            password: backupPassword,
+            walletPassword,
+            devicePassword: password,
+            mode: 'fresh',
+        };
+        // Nothing is persisted or unlocked until the merge has actually
+        // succeeded: a wrong wallet password leaves the install fresh and
+        // retryable rather than half-onboarded.
+        const result = hasPointer
+            ? await flowsNs.restoreFromBackupPointer({
+                ...common,
+                pointer: req.pointer,
+                resolveBackupContent: resolveBackupPointerContent,
+            })
+            : await flowsNs.importBackupFile({ ...common, fileContent: req.fileContent });
+        await v.save();
+        vault = v;
+        signerPool = new signersLib.SignerPool();
+        // The restored seal now opens under `password`, which is exactly why
+        // the re-key had to happen first: populate would otherwise skip the
+        // wallet silently and the user would meet it at their first spend.
+        await signerPool.populate({
+            vault,
+            password,
+            chainRegistry,
+            sdkRegistry,
+        });
+        host = createBackgroundHost({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            signerPool,
+            getDiagnosticContext: webDiagnosticContext,
+        });
+        startNotifications();
+        await meta.save({ kdfParams });
+        return {
+            walletId: result.walletId,
+            walletName: result.payload?.wallet?.name,
+            rekeyed: result.rekeyed,
+        };
     } finally {
         masterKey.fill(0);
     }

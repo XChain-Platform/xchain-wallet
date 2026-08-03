@@ -16,8 +16,18 @@
 // pendingTxs) and wraps it in the §19.4 envelope under a user-chosen
 // password. The password is independent of the wallet-unlock password.
 //
-// `importBackupFile` decrypts an envelope, validates the shape, and
-// merges the contents back into the live vault. Conflict policy:
+// `importBackupFile` decrypts an envelope, RE-KEYS the wallet's sealed
+// key material under this device's password ( - see
+// `rekeyWalletRecord`; without it a restored wallet still opens only
+// under the password it had on the device it left, and fails silently at
+// the first signature), then merges the contents into the live vault.
+// Three passwords are in play and they are all different things:
+//
+//   password         opens the backup FILE's envelope
+//   walletPassword   opens the backed-up WALLET's seed / imported keys
+//   devicePassword   what the restored wallet is re-sealed under here
+//
+// Conflict policy:
 //
 //   onConflict = 'overwrite'   existing records replaced by incoming
 //   onConflict = 'preserve'    existing records kept; incoming skipped if id matches
@@ -38,6 +48,12 @@ import {
     encodeBackupEnvelope,
     parseBackupEnvelope,
     stringifyBackupEnvelope,
+    deriveMasterKey,
+    makeFreshKdfParams,
+    encrypt,
+    decrypt,
+    bytesToBase64,
+    base64ToBytes,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
@@ -51,6 +67,28 @@ export class BackupConflictError extends Error {
         super(`importBackupFile: refusing to overwrite ${conflicts.length} existing record(s): ${conflicts.slice(0, 5).join(', ')}`);
         this.name = 'BackupConflictError';
         this.conflicts = conflicts;
+    }
+}
+
+/**
+ * : the re-key could not open the backed-up wallet's own seal.
+ *
+ * Distinct from a bad envelope password on purpose. If the envelope had
+ * not already opened we would never reach here, so "wrong password" on
+ * its own is the wrong thing to tell the user: it is the OTHER password
+ * - the one the wallet itself used on the device it came from - that is
+ * wrong, and the message has to say which.
+ */
+export class BackupSeedPasswordError extends Error {
+    /** @param {string} what   'seed' | 'imported key' */
+    constructor(what) {
+        super(
+            `importBackupFile: the backup file opened, but the backed-up wallet's password did not `
+            + `open its ${what}. That is the password the wallet used on the device it was backed `
+            + `up from, not the password you set on this file.`,
+        );
+        this.name = 'BackupSeedPasswordError';
+        this.what = what;
     }
 }
 
@@ -158,7 +196,11 @@ export async function exportBackupFile({
  * @typedef {Object} ImportBackupFileOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string | object} fileContent                 raw JSON string or parsed envelope
- * @property {string} password
+ * @property {string} password                             opens the ENVELOPE (the backup file's own password)
+ * @property {string} [walletPassword]                     opens the backed-up WALLET's seal; required
+ *                                                          whenever the payload carries key material 
+ * @property {string} [devicePassword]                     what the restored wallet is re-sealed under, i.e.
+ *                                                          the password this device unlocks with
  * @property {'overwrite' | 'preserve' | 'error'} [onConflict]  default 'error'
  * @property {'fresh' | 'add'} [mode]                       'fresh' (default) imports the
  *                                                          wallet under its original ids;
@@ -174,6 +216,9 @@ export async function exportBackupFile({
  * @property {string} walletId                             imported wallet id
  * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }} writes
  * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }} skipped
+ * @property {boolean} rekeyed                             : the wallet's seal was moved to this
+ *                                                          device's password (false only when the record
+ *                                                          carried no sealed key material at all)
  */
 
 /**
@@ -184,6 +229,8 @@ export async function importBackupFile({
     vault,
     fileContent,
     password,
+    walletPassword,
+    devicePassword,
     onConflict = 'error',
     mode = 'fresh',
 }) {
@@ -216,6 +263,14 @@ export async function importBackupFile({
     if (!decoded.wallet || typeof decoded.wallet.id !== 'string') {
         throw new Error('importBackupFile: payload missing wallet record');
     }
+
+    // : re-seal the wallet's key material under this device's
+    // password BEFORE anything is written. Doing it here rather than at
+    // the shell means a seal we cannot open fails at RESTORE time, with
+    // a message naming which password is wrong, instead of at the user's
+    // first signature with no message at all. Nothing has touched the
+    // vault yet at this point, so the throw leaves it untouched.
+    const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword });
 
     // §19.4 / Cluster H FOLLOWUP 3: 'add' mode re-mints wallet /
     // account / address ids so the restored wallet coexists with what
@@ -294,6 +349,7 @@ export async function importBackupFile({
         walletId: decoded.wallet.id,
         writes,
         skipped,
+        rekeyed,
     };
 }
 
@@ -313,6 +369,8 @@ export class BackupPointerUnresolvedError extends Error {
  *          backup-pointer URI string (parsed here) or an already-parsed
  *          `BackupPointer` from `detectQrContent` / `parseBackupPointer`.
  * @property {string} password                             backup password (NOT the wallet-unlock password)
+ * @property {string} [walletPassword]                     : opens the backed-up wallet's own seal
+ * @property {string} [devicePassword]                     : what it is re-sealed under here
  * @property {(pointer: import('../uri/backupPointer.js').BackupPointer) => Promise<string | object> | string | object} resolveBackupContent
  *          shell-injected resolver that turns the pointer's `location`
  *          into the raw §19.4 envelope (a JSON string or parsed object).
@@ -343,6 +401,8 @@ export async function restoreFromBackupPointer({
     vault,
     pointer,
     password,
+    walletPassword,
+    devicePassword,
     resolveBackupContent,
     onConflict = 'error',
     mode = 'fresh',
@@ -369,6 +429,8 @@ export async function restoreFromBackupPointer({
         vault,
         fileContent,
         password,
+        walletPassword,
+        devicePassword,
         onConflict,
         mode,
     });
@@ -479,6 +541,115 @@ export function remintIdentifiers(decoded) {
             ptx.id = randomUUID();
         }
     }
+}
+
+/**
+ * : re-seal a restored wallet's key material under THIS device's
+ * password.
+ *
+ * The §19.4 envelope carries the wallet record verbatim - `encryptedSeed`,
+ * `importedKeys[].encryptedWif` and the wallet's OWN `kdfParams` - so
+ * without this step a restored wallet is still sealed under whatever
+ * password it had on the device it left. The vault opens, the wallet
+ * looks complete, and `SignerPool.populate` then skips it silently
+ * because the one password it was handed does not derive that wallet's
+ * master key. The user meets the defect at their first spend.
+ *
+ * `importedKeys` are re-keyed alongside the seed because `importWif`
+ * seals them with the SAME master key (see importWif.js): re-keying only
+ * the seed would move the failure rather than fix it, and a wif-only
+ * wallet (empty `encryptedSeed`, key material entirely in `importedKeys`)
+ * would not be repaired at all.
+ *
+ * The new params copy the source's argon2 COST (a device that calibrated
+ * upward keeps its calibration) but always take a fresh salt: reusing a
+ * salt under the same password would derive the same master key for two
+ * wallets.
+ *
+ * A record with no sealed material - a watch-only shape, or a test
+ * fixture whose `encryptedSeed` was never real ciphertext - has nothing
+ * to move, and is returned untouched with `false`.
+ *
+ * Mutates `wallet` in place.
+ *
+ * @param {import('../schemas/wallet.js').Wallet} wallet
+ * @param {Object} opts
+ * @param {string} opts.walletPassword    what the backed-up wallet was sealed under
+ * @param {string} opts.devicePassword    what it must open under from now on
+ * @param {import('../crypto/kdf.js').KdfParams} [opts.kdfParams]  override for the new seal
+ * @returns {Promise<boolean>}            true if anything was re-sealed
+ */
+export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword, kdfParams }) {
+    const hasSeed = typeof wallet?.encryptedSeed === 'string' && wallet.encryptedSeed.length > 0;
+    const allKeys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
+    const sealedKeys = allKeys.filter(
+        (k) => k && typeof k.encryptedWif === 'string' && k.encryptedWif.length > 0,
+    );
+    if (!hasSeed && sealedKeys.length === 0) return false;
+
+    if (typeof walletPassword !== 'string' || walletPassword.length === 0) {
+        throw new Error(
+            'importBackupFile: walletPassword is required - the backed-up wallet carries sealed key '
+            + 'material and nothing can be restored without the password it was sealed under',
+        );
+    }
+    if (typeof devicePassword !== 'string' || devicePassword.length === 0) {
+        throw new Error(
+            'importBackupFile: devicePassword is required - the restored wallet has to be re-sealed '
+            + 'under the password this device unlocks with, or it will restore unsignable',
+        );
+    }
+    if (!wallet.kdfParams || typeof wallet.kdfParams !== 'object') {
+        throw new Error(
+            'importBackupFile: the backed-up wallet record has no kdfParams, so its seal cannot be '
+            + 'opened at all',
+        );
+    }
+
+    const oldKey = deriveMasterKey(walletPassword, wallet.kdfParams);
+    let seed = null;
+    /** @type {Uint8Array[]} */
+    let wifs = [];
+    try {
+        if (hasSeed) {
+            try {
+                seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
+            } catch {
+                throw new BackupSeedPasswordError('seed');
+            }
+        }
+        for (const k of sealedKeys) {
+            try {
+                wifs.push(await decrypt(oldKey, base64ToBytes(k.encryptedWif)));
+            } catch {
+                throw new BackupSeedPasswordError('imported key');
+            }
+        }
+    } finally {
+        oldKey.fill(0);
+    }
+
+    // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
+    const nextParams = kdfParams ?? makeFreshKdfParams({
+        iterations: wallet.kdfParams.iterations,
+        memory: wallet.kdfParams.memory,
+        parallelism: wallet.kdfParams.parallelism,
+    });
+    const newKey = deriveMasterKey(devicePassword, nextParams);
+    try {
+        if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
+        for (let i = 0; i < sealedKeys.length; i += 1) {
+            sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
+        }
+        wallet.kdfParams = nextParams;
+    } finally {
+        newKey.fill(0);
+        if (seed) seed.fill(0);
+        for (const w of wifs) w.fill(0);
+        seed = null;
+        wifs = [];
+    }
+    return true;
 }
 
 async function applyCollection(collection, records, onConflict, writes, skipped, name) {

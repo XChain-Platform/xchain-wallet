@@ -466,8 +466,10 @@ export {
     exportBackupFile,
     importBackupFile,
     restoreFromBackupPointer,
+    rekeyWalletRecord,
     BackupConflictError,
     BackupPointerUnresolvedError,
+    BackupSeedPasswordError,
     BACKUP_PAYLOAD_VERSION,
 } from './backupFile.js';
 export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';

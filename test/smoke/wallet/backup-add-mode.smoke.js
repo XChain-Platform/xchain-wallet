@@ -118,9 +118,27 @@ assert.equal(payload.pendingTxs[0].fromAddress, 'bc1qb',
 // --- 3. Host registration forwards req.mode -----------------------------
 
 const bg = readFileSync(bgPath, 'utf8');
+// The window is generous because this is a source-text assertion inside a
+// handler that grows:  added walletPassword / devicePassword forwarding
+// between the two anchors and pushed `mode` past a 400-char bound, which reads
+// as "mode is no longer forwarded" when nothing about mode changed.
 assert.ok(
-    /wallet\.importBackup'[\s\S]{0,400}mode:\s*req\?\.\s*mode/m.test(bg),
+    /wallet\.importBackup'[\s\S]{0,900}mode:\s*req\?\.\s*mode/m.test(bg),
     'createBackgroundHost forwards req.mode into importBackupFile',
+);
+// : and the two re-key passwords ride the same handler. Without them a
+// restored wallet is sealed under the password it left its old device with.
+assert.ok(
+    /wallet\.importBackup'[\s\S]{0,900}walletPassword:\s*req\?\.\s*walletPassword/m.test(bg),
+    'createBackgroundHost forwards req.walletPassword into importBackupFile',
+);
+assert.ok(
+    /wallet\.importBackup'[\s\S]{0,900}devicePassword:\s*req\?\.\s*devicePassword/m.test(bg),
+    'createBackgroundHost forwards req.devicePassword into importBackupFile',
+);
+assert.ok(
+    /wallet\.importBackupPointer'[\s\S]{0,900}devicePassword:\s*req\?\.\s*devicePassword/m.test(bg),
+    'createBackgroundHost forwards req.devicePassword into restoreFromBackupPointer',
 );
 
 // --- 4. ImportWallet wires mode into backup lane -----------------------

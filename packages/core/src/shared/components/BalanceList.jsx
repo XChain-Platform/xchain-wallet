@@ -201,9 +201,20 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
     // litecoin-regtest and dogecoin-regtest, and picking one silently
     // re-targets the calling form's network. So callers that show a
     // cross-chain list opt into naming the chain.
-    const subtitle = showChain && row.chainDisplayName
+    //
+    // D-60: that reasoning holds only on MAINNET. Off it, the user may not
+    // have chosen the network at all - demo mode is started with
+    // `activeNetwork: 'regtest'` by `Onboarding.jsx` and never says so - and
+    // the row then reads "Bitcoin / BTC" priced at $7,000,000 for coins that
+    // are worth nothing. The first time the word regtest reached the user was
+    // an error message from the Send form. So a non-mainnet row names its
+    // network, always: this is the one case where repeating it is not noise.
+    const networkSuffix = row.networkKind && row.networkKind !== 'mainnet'
+        ? ` · ${row.networkKind}`
+        : '';
+    const subtitle = (showChain && row.chainDisplayName
         ? `${row.tick} · ${row.chainDisplayName}`
-        : row.tick;
+        : row.tick) + networkSuffix;
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
@@ -290,10 +301,26 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             </div>
             <div className={styles.amounts}>
                 <div className={styles.qty}>
-                    {balancesHidden ? '•••••' : formatAmount(row.quantity, row.divisibility)}
+                    {/* Q-1 residual: an unread balance is not a zero, and a
+                        fiat figure derived from one is not a value. When
+                        nothing answered, say so instead of printing 0; when
+                        only part answered, show the figure but mark it as less
+                        than the whole. The privacy toggle still wins, since it
+                        exists to keep numbers off the screen entirely. */}
+                    {balancesHidden
+                        ? '•••••'
+                        : row.unavailable === 'all'
+                            ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
+                            : formatAmount(row.quantity, row.divisibility)}
                 </div>
                 <div className={styles.fiat}>
-                    {balancesHidden ? '•••' : formatFiat(fiat)}
+                    {balancesHidden
+                        ? '•••'
+                        : row.unavailable === 'all'
+                            ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
+                            : row.unavailable === 'partial'
+                                ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat)}</span>
+                                : formatFiat(fiat)}
                 </div>
             </div>
             {showPin ? (
@@ -445,6 +472,16 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
 
         let nativeAcc = null;
         const tokenAcc = new Map();
+        // Q-1 residual: `flows/balances.js` already reports WHICH side of a
+        // per-address read failed (`unavailable: ['native'|'tokens']`), and
+        // nothing on Home ever looked. So a chain whose `/address/` endpoint
+        // was momentarily down produced no native row at all: the coin simply
+        // vanished from the list, or - where another address on the same chain
+        // did answer - the row showed a silently understated total. Both read
+        // as fact. Track it here and let the row say "unavailable" instead of
+        // stating a number it does not have.
+        let nativeUnavailable = false;
+        let nativeUnavailableReason = null;
         // D-67: sum each distinct ADDRESS once, not each Address RECORD. Two
         // records can name one address - importing a WIF twice makes a second
         // record, and importing a key the wallet already derives collides with
@@ -462,6 +499,13 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
             const b = entry.balances;
             if (!b || typeof b !== 'object') continue;
             seenAddresses.add(entry.address);
+
+            if (Array.isArray(b.unavailable) && b.unavailable.includes('native')) {
+                nativeUnavailable = true;
+                if (!nativeUnavailableReason && b.unavailableReason) {
+                    nativeUnavailableReason = String(b.unavailableReason);
+                }
+            }
 
             if (b.native && b.native.quantity != null) {
                 if (!nativeAcc) {
@@ -500,6 +544,31 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                     acc.quantity += safeBigInt(a.quantity);
                 }
             }
+        }
+
+        // Q-1 residual. Two distinct cases, and neither is a zero:
+        //
+        //   nativeAcc === null   nothing answered. The row is emitted anyway
+        //                        (a coin that vanishes from the list is worse
+        //                        than one that says why) and marked whole.
+        //   nativeAcc !== null   some addresses answered and some did not, so
+        //                        the sum is real but INCOMPLETE. Marked
+        //                        partial: the number is shown, flagged as less
+        //                        than the whole, because a silently understated
+        //                        balance is the same lie told quietly.
+        if (nativeUnavailable) {
+            const row = nativeAcc ?? mkRow({
+                kind: 'native',
+                chainId,
+                descriptor,
+                tick: descriptor.coin.toUpperCase(),
+                displayName: descriptor.displayName,
+                divisibility: 8,
+                fiatRate: null,
+            });
+            row.unavailable = nativeAcc ? 'partial' : 'all';
+            row.unavailableReason = nativeUnavailableReason;
+            if (!nativeAcc) nativeAcc = row;
         }
 
         if (nativeAcc) out.push(nativeAcc);
