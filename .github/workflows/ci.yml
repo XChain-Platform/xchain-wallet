@@ -6,7 +6,16 @@ on:
     branches: [master]
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on pull requests and feature branches, where only the
+  # latest push matters and runner minutes are the only cost. NEVER cancel on
+  # master: the release gate (tools/release/verify-validated-commit.mjs) requires
+  # a COMPLETED, SUCCESSFUL run on the exact tag commit, so a cancelled master run
+  # leaves that commit permanently unreleasable. With several sessions pushing to
+  # this repo, blanket cancellation made that the normal case rather than the
+  # exception: measured 2026-08-03, 40 consecutive master runs produced 30
+  # cancellations and exactly one success, so a green commit to tag was a matter
+  # of luck. Cancellation was masking the record, not saving it.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   # Unit + security + smoke. `pnpm run ci` is the same gate bin/ci-all.sh and the

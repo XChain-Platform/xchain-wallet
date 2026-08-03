@@ -247,9 +247,177 @@ if (existsSync(specPath)) {
         + 'is how the migration lost them all in the first place.');
 }
 
+// --- 6. The frontier's LIVE rows have to name artifacts that exist ------
+//
+// S24's finding, and it is section 5's defect one level up. §4a is now held
+// to being a live map; the frontier table above it is not, and it is the
+// table an operator actually reads to learn what is left. It has rotted
+// twice in two stages: S23 found row 3 naming docs/BRIDGE.md, deleted by
+// , and S24 found ROW 1 - the row that IS the goal - still telling an
+// operator to execute SUBMISSION-RUNBOOK.md, which the operator's own
+// one-home ruling deleted at S22, out of this very gate's subject line.
+//
+// The scoping repeats section 5's lesson because this document earns it
+// twice over: the spec deliberately names long-dead files in its superseded
+// rows, so only rows that are still LIVE are held to naming live things. A
+// row is live when its Item cell is neither struck through (~~...~~, this
+// spec's mark for a closed row) nor a parenthesised superseded copy.
+
+const frontierRows = [];
+let goalRow = null;
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const fStart = spec.indexOf('<!-- BUILD-SPEC:FRONTIER');
+    const fEnd = spec.indexOf('<!-- /BUILD-SPEC:FRONTIER', fStart + 1);
+    assert.ok(fStart !== -1 && fEnd > fStart,
+        'the  spec has no BUILD-SPEC:FRONTIER block. That block is the spec\'s own record of '
+        + 'what is left and who owns each row; without it the goal state lives nowhere.');
+
+    for (const line of spec.slice(fStart, fEnd).split('\n')) {
+        if (!line.startsWith('|')) continue;
+        const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+        if (cells.length < 5) continue;
+        const [id, item, , state] = cells;
+        if (!/^\d/.test(id)) continue;                       // header and separator
+        if (item.startsWith('~~') || item.startsWith('(')) continue;   // closed / superseded copy
+        if (/^(DONE|note)/i.test(state)) continue;
+        // The Item cell is what the row is ABOUT - the thing it tells somebody
+        // to go and do. The Evidence cell is where this spec keeps its record,
+        // and that record legitimately names dead files in order to say they
+        // died ("this row named SUBMISSION-RUNBOOK.md until S24"). Holding the
+        // narrative to the subject's rule would fire on correct writing, which
+        // is the S14 lesson and is exactly what the first cut of this check did.
+        frontierRows.push({ id, line, item });
+        if (id === '1') goalRow = item;
+    }
+
+    // 6a. The goal row names the ceremony that exists, not one of the four
+    // wallet-repo documents the one-home ruling deleted. Derived from this
+    // gate's own CEREMONY constant, so a future move repoints both together.
+    assert.ok(goalRow,
+        'the  frontier has no live row 1. Row 1 is the console ceremony, which IS the goal of '
+        + 'this spec; if it closed, the goal is reached and the spec should say so.');
+
+    const ceremonyDoc = CEREMONY[CEREMONY.length - 1];
+    assert.ok(goalRow.includes(ceremonyDoc),
+        `the  frontier's goal row does not name ${ceremonyDoc}, the document that actually `
+        + 'carries the ceremony. This row is the one an operator reads to find out what to execute, '
+        + 'and it pointed at the deleted wallet-repo runbook for two stages after the one-home ruling.');
+
+    const DELETED_BY_RULING = ['SUBMISSION-RUNBOOK.md', 'STORE_LISTING_PACK.md',
+        'DATA_DISCLOSURE.md', 'TEST_DAPP_RUNBOOK.md'];
+    const revenants = frontierRows
+        .filter(({ item }) => DELETED_BY_RULING.some((d) => item.includes(d)))
+        .map(({ id }) => id);
+
+    assert.equal(revenants.length, 0,
+        `live frontier rows ${revenants.join(', ')} name wallet-repo ceremony documents that the `
+        + 'operator\'s one-home ruling deleted on 2026-08-03. A superseded row may name them (that is '
+        + 'the record); a row still telling somebody to go and do something may not.');
+
+    // 6b. The phase range is READ from the ceremony page's own headings. A
+    // phase added or retired there and not here under-executes the ceremony.
+    const phases = [...ceremony.matchAll(/^#{2,4}\s+Phase\s+(\d+)/gm)].map((m) => Number(m[1]));
+    assert.ok(phases.length > 0,
+        'no "Phase N" headings were found on the ceremony page, so the phase-range check below passed '
+        + 'without checking anything. The ceremony is phased on purpose: the ordering-sensitive and '
+        + 'irreversible steps are what the phases separate.');
+
+    const range = `Phases ${Math.min(...phases)}-${Math.max(...phases)}`;
+    assert.ok(goalRow.includes(range),
+        `the  frontier's goal row does not say "${range}", which is the phase range the ceremony `
+        + `page actually carries (${phases.length} phase headings). It said "Phases 1-8" while the `
+        + 'page began at Phase 0: Preconditions, so the row understated the ceremony by a whole phase.');
+
+    // 6c. Anything a live row cites has to resolve, in whichever tree owns it.
+    //
+    // A packages//tools//test/ path is NOT necessarily this repo's: the release
+    // story spans sibling checkouts, and test/wallet-privacy-policy-sync.test.js
+    // lives in xchain-websites. Resolving against the wallet tree alone reports
+    // a live file as dead, which is a check firing on correct writing, and this
+    // was not a hypothetical - the S24 sweep that found this defect in the
+    // sibling specs made exactly that mistake on three of its five hits.
+    const SIBLINGS = [walletRoot, join(walletRoot, '..', 'xchain-websites')];
+    const resolvesSomewhere = (p) => SIBLINGS.some((root) => existsSync(join(root, p)));
+
+    const dead = [];
+    for (const { id, line } of frontierRows) {
+        for (const m of line.matchAll(CITED)) {
+            if (/vX\.Y\.Z|<|\*/.test(m[1])) continue;
+            if (!resolvesSomewhere(m[1])) dead.push(`row ${id} cites ${m[1]}`);
+        }
+        for (const m of line.matchAll(/`(claude\/[A-Za-z0-9_./-]+)`/g)) {
+            if (!existsSync(join(walletRoot, '..', m[1]))) dead.push(`row ${id} cites ${m[1]}`);
+        }
+    }
+
+    assert.equal(dead.length, 0,
+        `live rows of the  frontier cite paths that do not exist:\n  ${dead.join('\n  ')}\n`
+        + 'The frontier is what a later stage, or the operator, reads to find out what is left. A live '
+        + 'row pointing at a deleted file is how two stages in a row lost the thing they were about.');
+}
+
+// --- 7. The pre-migration translation map has to translate --------------
+//
+//  moved this spec's documents out from under it, and rather than
+// rewrite every citation in a history-bearing spec, §32 answers with a rule:
+// "where a step still cites a pre-migration path, read it as the new home",
+// followed by the map. That is a sound choice, and it makes the map the ONLY
+// route a reader has to a live deliverable - which means the map going stale
+// silently breaks every old citation at once.
+//
+// It had already lost two entries when this check was written, and they were
+// the two it could least afford: docs/Data_Collection.md and
+// docs/Trader_Identity.md, the declarations of record, cited ten times in
+// this spec's live text with no map entry to resolve either.
+//
+// New homes are told from old names by the docs repo's own naming standard
+// rather than by a hand-listed set: published pages are lowercase-kebab-case,
+// and every pre-migration name carries an uppercase letter or an underscore
+// (SUBMISSION-RUNBOOK.md, DATA_SAFETY.md, docs/Verify_Release.md). So the
+// left-hand sides are deliberately NOT resolved - they are supposed to be
+// dead - and only the right-hand sides are held to existing.
+
+let mapEntries = 0;
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const start = spec.indexOf('**Reading older text in this spec**');
+    assert.ok(start !== -1,
+        'the  spec no longer has its "Reading older text in this spec" block. That block is the '
+        + 'rule that lets the spec keep citing pre-migration paths without rewriting its own history; '
+        + 'without it, every older citation in the file resolves to nothing.');
+
+    const end = spec.indexOf('\n\n', start + 1);
+    const block = spec.slice(start, end === -1 ? undefined : end);
+    const unresolved = [];
+
+    for (const m of block.matchAll(/`([a-z0-9][a-z0-9/-]*\.md)`/g)) {
+        mapEntries += 1;
+        if (!existsSync(docsPath(...m[1].split('/')))) unresolved.push(m[1]);
+    }
+
+    assert.equal(unresolved.length, 0,
+        `the  spec's pre-migration translation map points at docs-repo pages that do not `
+        + `exist:\n  ${unresolved.join('\n  ')}\n`
+        + 'Every older citation in this spec resolves through this map and nowhere else, so a stale '
+        + 'right-hand side breaks all of them at once and silently.');
+
+    // The floor is 10, the count AFTER S24 restored the two declarations of
+    // record. Setting it at the pre-S24 count of 8 would have left the exact
+    // regression this section was written for able to walk straight back in.
+    assert.ok(mapEntries >= 10,
+        `the translation map lists ${mapEntries} new-home pages, fewer than the ten it carries. It had `
+        + 'already lost the two declarations of record before anyone checked; a map that loses an '
+        + 'entry is how the migration lost them all in the first place. If a page was genuinely '
+        + 'retired, lower this floor deliberately in the same change and say why.');
+}
+
 const pointerNote = existsSync(specPath)
-    ? `${pointers} §4a private pointers resolved`
-    : 'the §4a private-pointer map SKIPPED (platform checkout absent)';
+    ? `${pointers} §4a private pointers resolved, ${frontierRows.length} live frontier rows verified, `
+        + `${mapEntries} translation-map pages resolved`
+    : 'the §4a map, the frontier rows and the translation map SKIPPED (platform checkout absent)';
 
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
