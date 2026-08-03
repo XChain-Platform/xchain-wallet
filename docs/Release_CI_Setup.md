@@ -57,10 +57,10 @@ including one added in a pull request from a branch.
 |---|---|---|
 | `MACOS_CSC_LINK` | K3 Developer ID Application cert (base64 .p12) | `desktop-macos` |
 | `MACOS_CSC_KEY_PASSWORD` | K3 cert passphrase | `desktop-macos` |
-| `APPLE_API_KEY` | K4 App Store Connect API key (.p8) | notarization |
-| `APPLE_API_KEY_ID` | K4 key id | notarization |
-| `APPLE_API_ISSUER` | K4 issuer id | notarization |
-| `APPLE_TEAM_ID` | K2 team id | notarization |
+| `APPLE_API_KEY` | K4 App Store Connect API key (.p8) | notarization, `mobile-ios` |
+| `APPLE_API_KEY_ID` | K4 key id | notarization, `mobile-ios`. **Its presence is the switch** that arms the iOS archive/export steps |
+| `APPLE_API_ISSUER` | K4 issuer id | notarization, `mobile-ios` |
+| `APPLE_TEAM_ID` | K2 team id | notarization, `mobile-ios` |
 | `AZURE_TENANT_ID` | K6 Azure Trusted Signing (D3) | `desktop-windows` |
 | `AZURE_CLIENT_ID` | K6 | `desktop-windows` |
 | `AZURE_CLIENT_SECRET` | K6 | `desktop-windows` |

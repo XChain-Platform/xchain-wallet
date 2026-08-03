@@ -343,6 +343,75 @@ assert.equal(
 );
 
 
+// --- 11. The native diagnostic channel is debug-only, in both directions ---
+//
+// Capacitor ships PREBUILT as an SPM xcframework, so the `#if DEBUG` inside it
+// was compiled in Release and is false however WE build. Its fallback is an
+// Info.plist string, `CAPACITOR_DEBUG`, and that one flag decides two things at
+// once: whether `CAPLog` prints anything at all, and whether the WebView sets
+// `isInspectable` (i.e. whether Safari's Web Inspector can attach to a wallet).
+//
+// So it has to be true in Debug and absent everywhere else, and both halves are
+// worth a guard for opposite reasons. Lose it in Debug and the shell goes
+// silent on launch, which is not a visible failure - it reads as "the app
+// prints nothing", and  lost two sessions to exactly that reading. Gain
+// it in Release and a shipped store build lets anyone with a cable attach a
+// debugger to the wallet.
+const debugXcconfig = readFileSync(join(ios, 'debug.xcconfig'), 'utf8');
+assert.match(
+    debugXcconfig,
+    /^CAPACITOR_DEBUG = true$/m,
+    'debug.xcconfig must set CAPACITOR_DEBUG=true, or the shell logs nothing in a debug build either',
+);
+assert.ok(
+    !/CAPACITOR_DEBUG/.test(pbxproj),
+    'CAPACITOR_DEBUG must live only in debug.xcconfig: a copy in the project can reach a Release build',
+);
+assert.match(
+    infoPlist,
+    /<key>CAPACITOR_DEBUG<\/key>\s*<string>\$\(CAPACITOR_DEBUG\)<\/string>/,
+    'Info.plist must forward $(CAPACITOR_DEBUG); the prebuilt xcframework reads it from there and nowhere else',
+);
+
+// Which configurations that xcconfig is actually wired into. The flag being
+// right in a file nothing includes is the same as not having it.
+const buildConfigs = pbxproj.split('isa = XCBuildConfiguration;').slice(1).map((block) => ({
+    name: block.match(/name = (\w+);/)?.[1],
+    base: block.match(/baseConfigurationReference = \w+ \/\* ([\w.]+) \*\/;/)?.[1],
+}));
+assert.ok(
+    buildConfigs.some((c) => c.name === 'Debug' && c.base === 'debug.xcconfig'),
+    'a Debug configuration must take debug.xcconfig as its base, or CAPACITOR_DEBUG reaches nothing',
+);
+for (const config of buildConfigs) {
+    assert.notEqual(
+        config.name === 'Release' ? config.base : null,
+        'debug.xcconfig',
+        'no Release configuration may inherit debug.xcconfig: it would ship an inspectable WebView',
+    );
+}
+
+// The other way isInspectable can be forced on, and this one would apply to
+// EVERY configuration at once. Absent is the correct value; false would also be
+// safe but says the question was asked and answered on iOS, which it was not.
+assert.equal(
+    capConfig.ios?.webContentsDebuggingEnabled,
+    undefined,
+    'capacitor.config.json must not set ios.webContentsDebuggingEnabled: it overrides the debug-only flag'
+    + ' in every configuration, Release included',
+);
+
+// The recipe for reading that channel, which is not obvious and was lost once.
+// `simctl launch --console` hands the app a PIPE, stdio block-buffers a pipe at
+// 4 KB, and a wallet at rest never fills one - so the launch sequence sits in
+// the buffer and the channel looks dead. NSUnbufferedIO is the whole fix.
+const consoleScript = readFileSync(join(mobile, 'scripts', 'ios-console.sh'), 'utf8');
+assert.match(
+    consoleScript,
+    /SIMCTL_CHILD_NSUnbufferedIO=YES/,
+    'ios-console.sh must launch with SIMCTL_CHILD_NSUnbufferedIO=YES, or it captures nothing ',
+);
+
 // ---- Safe area: the app must not draw under the Dynamic Island ----------
 //
 // Measured on an iPhone 17 Pro Max simulator: the island sat on top of the
@@ -372,6 +441,118 @@ assert.match(
     readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'tokens.css'), 'utf8'),
     /padding-top: env\(safe-area-inset-top/,
     'the shared stylesheet insets the top safe area',
+);
+
+// --- 12. The submission runbook agrees with the repo it describes -------
+//
+// The runbook is the one document an operator reads with App Store Connect
+// open, on the day the account lands, having not touched this lane in weeks.
+// Everything in it that ALSO lives somewhere else in the repo can drift away
+// from it silently, and each drift fails in a way that cannot be diagnosed
+// from inside the console. The Android twin pins its own equivalents in
+// mobile-shell.smoke.js; this is the iOS half.
+for (const doc of ['docs/APP_STORE_LISTING.md', 'docs/PRIVACY_NUTRITION_LABELS.md', 'docs/APP_STORE_SUBMISSION_RUNBOOK.md']) {
+    assert.ok(existsSync(join(mobile, doc)), `the iOS submission pack has ${doc}`);
+}
+const runbook = readFileSync(join(mobile, 'docs', 'APP_STORE_SUBMISSION_RUNBOOK.md'), 'utf8');
+
+// The artifact name, which sign.sh hard-fails on: an ipa called App.ipa is an
+// undeclared file, and the runbook is where an operator learns that before it
+// happens rather than after.
+const declaredArtifacts = readFileSync(join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8');
+assert.ok(declaredArtifacts.includes('xchain-wallet-ios-v*.ipa'), 'expected-artifacts declares the ipa');
+assert.ok(runbook.includes('xchain-wallet-ios-vX.Y.Z.ipa'), 'the runbook names the ipa as the declared stem');
+
+// The scripts it sends the operator to have to exist, and be the ones CI runs.
+for (const script of ['tools/release/ios-archive.sh', 'tools/release/ios-export.sh']) {
+    assert.ok(existsSync(join(wsRoot, script)), `${script} exists`);
+    assert.ok(runbook.includes(script.split('/').pop()), `the runbook names ${script}`);
+}
+
+// The four secrets, by name. A runbook that lists three of them produces an
+// archive step that fails on the fourth with a message about provisioning.
+const archiveScript = readFileSync(join(wsRoot, 'tools', 'release', 'ios-archive.sh'), 'utf8');
+for (const secret of ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER', 'APPLE_TEAM_ID']) {
+    assert.ok(archiveScript.includes(secret), `ios-archive.sh requires ${secret}`);
+    assert.ok(runbook.includes(secret), `the runbook lists ${secret} among the secrets to install`);
+}
+
+// Ordering, and it is the whole reason Phase 8 is last: the association file
+// names TEAMID.BUNDLEID, the Team ID does not exist until enrollment
+// completes, and an AASA published with a placeholder fails Universal Link
+// verification SILENTLY - links just open in Safari.
+//
+// Both indices are asserted PRESENT before they are compared. `indexOf` returns
+// -1 for a missing string, and -1 is less than everything, so the bare ordering
+// check passes vacuously the moment either side is renamed away. Proven: this
+// assertion was written that way first and did not fail when the Team ID step
+// was deleted outright.
+const teamIdAt = runbook.indexOf('Note the Team ID');
+const aasaAt = runbook.indexOf('apple-app-site-association');
+assert.notEqual(teamIdAt, -1, 'the runbook has a step that obtains the Team ID');
+assert.notEqual(aasaAt, -1, 'the runbook has a step that publishes the association file');
+assert.ok(teamIdAt < aasaAt, 'the runbook obtains the Team ID before it publishes the association file');
+
+// The two rules that are termination-level if an operator improvises around
+// them under submission pressure.
+assert.match(
+    runbook,
+    /exports an ipa and stops/,
+    'the runbook states that CI never uploads: a tag-triggered lane holding signing keys must not publish',
+);
+assert.match(
+    runbook,
+    /Manually release this version/,
+    'manual release only: approval lands at Apple\'s whim and must not ship a wallet ahead of its encoder',
+);
+
+// D2 is answered by the BUILD, not by a console checkbox, and the runbook has
+// to say so or someone re-answers it under form pressure and contradicts the
+// binary in front of a reviewer.
+assert.match(runbook, /D2 is already answered by the build/, 'the runbook records that the DEX surface is compiled out, not toggled');
+
+// --- 13. The two stores answer the territory question the same way ------
+//
+// D7 was decided 2026-08-02 as "mirror Android D8 exactly", and a mirror is
+// exactly the kind of decision that stops being true quietly: someone opens one
+// market on one store, six months later nobody remembers the two lists were
+// meant to agree, and the company is making two different legal claims about
+// one binary. Guideline 3.1.5 compliance is judged PER TERRITORY, so this is a
+// legal position, not a reach setting.
+//
+// Every excluded jurisdiction is asserted present in BOTH listing files. The
+// check is deliberately name-based rather than structural: the two documents
+// have different table shapes and always will, and what has to match is the
+// answer, not the formatting.
+const iosListing = readFileSync(join(mobile, 'docs', 'APP_STORE_LISTING.md'), 'utf8');
+const playListing = readFileSync(join(mobile, 'docs', 'PLAY_LISTING.md'), 'utf8');
+const EXCLUDED = [
+    // Tier 1. The UK is the one this decision existed to name.
+    'United Kingdom', 'Cuba', 'Iran', 'North Korea', 'Syria',
+    'Crimea', 'Donetsk', 'Luhansk', 'Russia', 'Belarus',
+    // Tier 2: excluded at launch pending a current legal reading.
+    'Bangladesh', 'Nepal', 'Algeria', 'Egypt', 'Qatar', 'Bolivia', 'Morocco',
+];
+for (const place of EXCLUDED) {
+    assert.ok(iosListing.includes(place), `the App Store territory list excludes ${place}`);
+    assert.ok(playListing.includes(place), `the Play country list excludes ${place}`);
+}
+assert.match(iosListing, /China/, 'mainland China is excluded on both stores, for different reasons');
+
+// The fact that made the decision cheap, and the one that makes it dangerous to
+// copy carelessly. Android's exclusions bind the Play listing only because the
+// direct APK is jurisdiction-blind; iOS has no direct lane, so on this platform
+// the list IS the availability. If that sentence goes, the next person to read
+// the file inherits Android's risk calculus without Android's escape hatch.
+assert.match(
+    iosListing,
+    /editable in App Store Connect at any time/,
+    'the listing records that availability is editable, which is why starting conservative is cheap',
+);
+assert.match(
+    iosListing,
+    /iOS has no direct lane at all/,
+    'the listing records that iOS has no jurisdiction-blind fallback, unlike the Android APK',
 );
 
 // ---- App icon: not the Capacitor template ------------------------------
@@ -405,5 +586,7 @@ console.log(
     + ' do; one custom scheme, xchain:, as inbound compatibility; export-compliance flag set; armv7 leftover'
     + ' removed; generated web copy and config git-ignored. S4: no literal version anywhere in the project,'
     + ' both keys read from the git-ignored Version.xcconfig via $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION),'
-    + ' and the rails §2 store integer is the same one Android gets)',
+    + ' and the rails §2 store integer is the same one Android gets. : CAPACITOR_DEBUG lives only in'
+    + ' debug.xcconfig and reaches no Release configuration, so native logging and isInspectable are both'
+    + ' debug-only, and ios-console.sh keeps the NSUnbufferedIO recipe that makes the channel readable at all)',
 );
