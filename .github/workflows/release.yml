@@ -322,10 +322,24 @@ jobs:
       # WITHOUT the credential - unlike appx, no identity is baked in - but
       # snapcraft is not on the runner image and an artifact nothing can
       # upload would ride every release, so the credential is the switch.
-      # UNEXERCISED until the credential exists; first run must verify the
-      # snapcraft/LXD build environment and whether the arm64 half can be
-      # produced on an amd64 runner at all (remote-build is the documented
-      # fallback in this app-builder-lib).
+      # THE arm64 HALF CANNOT BE PRODUCED HERE, and that is now read out of
+      # app-builder-lib 26.15.7 rather than left as a question for the first
+      # run . `--build-for` is passed in exactly one place,
+      # generateRemoteBuildArgs(), which is the Launchpad remote-build path;
+      # the local branch runs `snapcraft pack [--use-lxd]` with no arch
+      # argument at all, so a local build is HOST-ARCHITECTURE ONLY. On this
+      # amd64 runner the line below can only ever yield the amd64 snap, and
+      # expected-artifacts.txt's `optional *.snap default x64,arm64` row then
+      # REFUSES the release: an optional row producing nothing passes, one
+      # producing a single arch does not. That is the arch gate working, and
+      # it means this step is blocked on an arm64 strategy (native arm64
+      # runner, Launchpad remote-build, or shipping amd64-only), not on the
+      # store credential. See  §16.
+      #
+      # Also unverified: nothing here sets useLXD/useMultipass/
+      # useDestructiveMode, so electron-builder never passes `--use-lxd` and
+      # the build relies on snapcraft's own default environment selection.
+      # The `lxd init --auto` below prepares LXD; it does not select it.
       - name: Install snapcraft (Snap Store lane, §16)
         if: env.SNAP_CSC_LINK != ''
         run: |
