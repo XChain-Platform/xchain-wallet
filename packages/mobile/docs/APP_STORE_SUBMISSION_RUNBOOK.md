@@ -56,7 +56,7 @@ Do not open a console form until every row is green. State as of 2026-08-02.
 | 0a | Apple Developer Program, ORGANIZATION enrollment (K2) | ⬜ **SUBMITTED 2026-08-01, Apple verifying the entity** (). Blocks 0b, 0c and every phase below |
 | 0b | Account Holder named, and hardware-key 2FA on that Apple ID | ⬜ needs 0a. One named human accepts program agreements; pending agreements silently block uploads |
 | 0c | K4 (ASC API key) and K5 (Apple Distribution cert + provisioning profile) exist, and the four secrets are installed | ⬜ needs 0a. Phase 1 and Phase 2 |
-| 0d | Privacy policy URL resolves **and serves the current text** | ✅ ** RESOLVED 2026-08-02**, measured not assumed: `node tools/release/verify-privacy-url.mjs` exits 0 ("resolves directly and carries the current policy verbatim"), and the live page says "we do not keep your IP address" with the 844-of-846 measurement, dated 2 August 2026, with the old 14-day claim absent entirely. **Re-run it before each submission**, since it checks the deployed TEXT and not just the URL |
+| 0d | Privacy policy URL resolves **and serves the current text** | ✅ ** RESOLVED 2026-08-02**, measured not assumed: `node tools/release/verify-privacy-url.mjs` exits 0 ("resolves directly and carries the current policy verbatim"), and the live page says "we do not keep your IP address" with the 844-of-846 measurement, dated 2 August 2026, with the old 14-day claim absent entirely. **Re-run it before each submission**, since it checks the deployed TEXT and not just the URL. **Exit 4 is not a failure and does not block a submission:** live and current, but a contact address the policy publishes is JavaScript-gated at the edge ( S20, which also proved that a plain run no longer needs the `--html` escape hatch now that is resolved) |
 | 0e | Privacy answers settled, and both stores answer alike | ✅ ** settled 2026-08-02**: `PRIVACY_NUTRITION_LABELS.md` is "Data Not Collected", derived from a measurement, and `DATA_SAFETY.md` agrees |
 | 0f | Territories decided (D7) | ✅ **DECIDED 2026-08-02 (operator): mirror Android D8 exactly.** The list is in `APP_STORE_LISTING.md` under Territories, cross-checked against `PLAY_LISTING.md` by smoke so the two stores cannot drift into two answers. Note the one iOS difference recorded there: Android's exclusions bind the Play listing only because the direct APK is jurisdiction-blind, whereas **iOS has no direct lane**, so here the list is the whole story |
 | 0g | Demo-path endpoints reachable from a plain client | ✅ automated: `node tools/release/verify-demo-endpoints.mjs`, green testnet and mainnet 2026-08-02. **Re-run immediately before every submission**, it is the gate that caught |
@@ -270,6 +270,28 @@ broken Universal Link without it.
 Scheme-delivered payloads (`xchain:`) stay untrusted input either way: any app
 may claim a custom scheme and iOS resolution between claimants is undefined.
 Every link WE publish is an https Universal Link, which is domain-attested.
+
+## Phase 9: arm release parity, in this release's commit
+
+Once Phase 4 uploads, iOS has users. Nothing about that upload changes what the
+release gate demands: `xchain-wallet-ios-v*.ipa` is `optional` in
+`expected-artifacts.txt` and stays optional forever unless someone says
+otherwise. So the release AFTER the first iOS release could omit the `.ipa`
+entirely and still sign a manifest that is internally perfect.
+
+Flip one word in `tools/release/shipped-lanes.txt`:
+
+```
+ios       SHIPPED   xchain-wallet-ios-v*.ipa
+```
+
+and note which tag shipped first. `sign.sh` then refuses any release staging no
+`.ipa`, by name.
+
+This is the same step as the Android runbook's Phase 8 and the same file; the
+lanes are independent rows, so flipping one says nothing about the other. Doing
+it in the release commit is what keeps it from becoming something to remember.
+Driven by `test/smoke/audits/release-shipped-lanes.smoke.js`.
 
 ---
 

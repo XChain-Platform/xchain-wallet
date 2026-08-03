@@ -154,6 +154,50 @@ permissions.
 
 ## Phase 2: the console forms
 
+### 2a: create the app record, and two of its answers are permanent
+
+**Added 2026-08-02 because this runbook did not have it.** It went from the
+ceremony straight to filling forms, as though the app record already existed.
+It does not: nothing has ever been created in the console, and the record is
+what every later phase writes into. The gap was found by walking an operator
+through the steps out loud, which is a different exercise from writing them
+down.
+
+`https://play.google.com/console` → All apps → **Create app**.
+
+| Field | Value | Reversible? |
+|---|---|---|
+| App name | `XChain Wallet` | yes, editable later |
+| Default language | English (United States) | yes |
+| App or game | App | yes |
+| Free or paid | **Free** | **NO.** A free app can never be switched to paid |
+| Package name, if the console asks for it here | **`io.xchain.wallet.android`** | **NO.** Immutable once published |
+
+**The package name is not something to compose at the keyboard.** It is D1
+(operator, revised 2026-07-31: the bare `io.xchain.wallet` became a namespace
+parent no shell claims once the desktop shell took `.desktop`, so each shell
+reads its own suffix). It is already compiled into the artifact you are about
+to upload, in six places that a smoke holds to each other: `capacitor.config.json`,
+the Gradle `applicationId` and `namespace`, `strings.xml`'s `package_name` and
+`custom_url_scheme`, the `MainActivity` package and its directory, and
+`assetlinks.template.json`. Confirm it against the artifact rather than against
+this sentence:
+
+```bash
+bundletool dump manifest --bundle xchain-wallet-android-vX.Y.Z.aab | grep -o 'package="[^"]*"'
+```
+
+If what you type differs from what the bundle carries, Play rejects the upload.
+If it differs from `assetlinks.json`, App Links fail silently instead, which is
+the worse of the two.
+
+Historically the console derived the package name from the first uploaded
+bundle rather than asking at creation time. If your console asks for it up
+front, the value above is the answer either way; if it does not ask, the first
+upload in Phase 3 sets it, and it is equally permanent then.
+
+### 2b: the listing and policy forms
+
 Every answer is in this repo. Copy, do not compose.
 
 | Console field | Source |
