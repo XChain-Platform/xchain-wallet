@@ -18,8 +18,6 @@ import {
     Icon,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useSettings } from '../hooks/useSettings.js';
-import { CLIPBOARD_AUTO_CLEAR_DEFAULT } from '../../schemas/settings.js';
 import styles from './ViewPrivateKey.module.css';
 
 /**
@@ -28,8 +26,12 @@ import styles from './ViewPrivateKey.module.css';
  * already being unlocked: the WIF is exported straight from the unlocked
  * session signer, so no password is re-entered (the §17.7.3
  * password-every-time ceremony was retired by product decision). The
- * other guardrails stay: tap-to-reveal, auto-hide on window blur, and a
- * Copy button that auto-clears the clipboard.
+ * other guardrails stay: tap-to-reveal and auto-hide on window blur.
+ *
+ * There is no Copy button, and no clipboard auto-clear behind it, since
+ * (2026-08-01) made key material uncopyable on every shell. The QR
+ * is the transfer path. NOTE: that leaves the Settings → Privacy
+ * "clipboard auto-clear" control with no consumer; see the item filed for it.
  *
  * HW-wallet + watch-only addresses route to an informational panel
  * per §17.7.2: no reveal path. Protocol-level refusal is the
@@ -53,27 +55,14 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     useProtectedScreen();
 
     const { messaging, shell } = useMessaging();
-    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // §17.7.1 / G028: clipboard auto-clear timeout, configurable from
-    // Settings → Privacy. 0 disables the auto-clear. Records without
-    // the field (older v2 settings) fall back to the spec default.
-    const clipboardAutoClearSeconds = (() => {
-        const raw = settings?.privacy?.clipboardAutoClearSeconds;
-        if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
-        return CLIPBOARD_AUTO_CLEAR_DEFAULT;
-    })();
-
     const [stage, setStage] = useState(
         /** @type {'warning' | 'submitting' | 'revealed'} */ ('warning'),
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [revealed, setRevealed] = useState(false);
     const [wif, setWif] = useState(/** @type {string | null} */ (null));
-    const [clipboardStatus, setClipboardStatus] = useState(
-        /** @type {'idle' | 'copied' | 'cleared'} */ ('idle'),
-    );
 
     const sourceInfo = useMemo(() => classifySource(address), [address]);
 
@@ -86,17 +75,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         return () => window.removeEventListener('blur', handler);
     }, []);
 
-    // §17.7.1 / G028: clipboard auto-clear. Timeout sourced from
-    // settings.privacy.clipboardAutoClearSeconds (0–600, 0 disables).
-    useEffect(() => {
-        if (clipboardStatus !== 'copied') return undefined;
-        if (clipboardAutoClearSeconds <= 0) return undefined;
-        const id = setTimeout(() => {
-            navigator.clipboard?.writeText('').catch(() => {});
-            setClipboardStatus('cleared');
-        }, clipboardAutoClearSeconds * 1000);
-        return () => clearTimeout(id);
-    }, [clipboardStatus, clipboardAutoClearSeconds]);
 
     // Export the WIF from the already-unlocked session signer (no
     // password). The shared host injects the pool signer into the
@@ -124,15 +102,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         }
     }
 
-    async function handleCopy() {
-        if (!wif) return;
-        try {
-            await navigator.clipboard?.writeText(wif);
-            setClipboardStatus('copied');
-        } catch {
-            setClipboardStatus('idle');
-        }
-    }
 
     const header = (
         <PageHeader
@@ -275,22 +244,19 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     {renderQR({ value: wif })}
                 </div>
             ) : null}
+            {/*, decided 2026-08-01: a private key is not copyable,
+                on any shell, for the same reasons the recovery phrase is not -
+                a clipboard is readable by other apps, kept by clipboard
+                managers, and synced across devices by default on iOS. The QR
+                above is the transfer path, and it is the better one anyway:
+                it moves the key to one scanning device rather than into a
+                buffer every app on this one can read. */}
             <div className={styles.copyRow}>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleCopy}
-                    disabled={!revealed}
-                >
-                    {clipboardStatus === 'copied'
-                        ? (clipboardAutoClearSeconds > 0
-                            ? `Copied (auto-clears in ${clipboardAutoClearSeconds}s)`
-                            : 'Copied')
-                        : 'Copy'}
-                </Button>
-                {clipboardStatus === 'cleared' ? (
-                    <span className={styles.clipboardNote}>Clipboard cleared.</span>
-                ) : null}
+                <span className={styles.clipboardNote}>
+                    {renderQR
+                        ? 'Scan the code to move this key. It cannot be copied to the clipboard.'
+                        : 'Write this key down. It cannot be copied to the clipboard.'}
+                </span>
             </div>
             <div className={styles.actions}>
                 <Button variant="primary" onClick={onBack}>Done</Button>

@@ -59,21 +59,22 @@ assert.ok(/Math\.max\(\s*CLIPBOARD_AUTO_CLEAR_MIN/.test(ps),
 assert.ok(/Math\.min\(\s*CLIPBOARD_AUTO_CLEAR_MAX/.test(ps),
     'PrivacySection clamps user input up to the MAX bound');
 
-// --- 3. ViewPrivateKey reads the setting and uses it for the timer -------
-
+// --- 3. The consumer, which no longer exists ---------------------------
+//
+// ViewPrivateKey used to read this setting and clear the clipboard on its
+// timer. (operator decision, 2026-08-01) made key material
+// uncopyable on every shell, so the Copy button that timer served is gone and
+// with it the only reader of this value.
+//
+// The setting is therefore ORPHANED: the control below still writes
+// `settings.privacy.clipboardAutoClearSeconds` and nothing reads it. That is
+// tracked as, and it is deliberately asserted here rather than left
+// implicit - a smoke that still demanded a consumer would be a reason not to
+// fix the gap, and one that said nothing would let the gap go quiet.
 const vpk = readFileSync(join(routes, 'ViewPrivateKey.jsx'), 'utf8');
-assert.ok(/useSettings/.test(vpk),
-    'ViewPrivateKey calls useSettings');
-assert.ok(/clipboardAutoClearSeconds/.test(vpk),
-    'ViewPrivateKey reads clipboardAutoClearSeconds from settings');
-// 0 disables; the timer effect must short-circuit when value is <= 0.
-assert.ok(/clipboardAutoClearSeconds\s*<=\s*0/.test(vpk),
-    'ViewPrivateKey skips the timer when the setting is 0 (disabled)');
-// Timer multiplies seconds by 1000 to ms.
-assert.ok(/clipboardAutoClearSeconds\s*\*\s*1000/.test(vpk),
-    'ViewPrivateKey multiplies seconds-by-1000 to feed setTimeout');
-// Hard-coded 60_000 must be gone; otherwise the setting is a no-op.
-assert.ok(!/60_000/.test(vpk),
-    'ViewPrivateKey no longer hard-codes the 60s timeout');
+assert.ok(!/clipboardAutoClearSeconds/.test(vpk),
+    'ViewPrivateKey no longer reads the setting ( removed its Copy button)');
+assert.ok(!/navigator\.clipboard/.test(vpk),
+    'ViewPrivateKey writes no clipboard at all');
 
-console.log('clipboard-auto-clear-setting smoke OK');
+console.log('clipboard-auto-clear-setting smoke OK (schema + control guarded; the consumer is gone by  and the orphaned setting is )');

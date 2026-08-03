@@ -16,6 +16,12 @@ import styles from './MnemonicGrid.module.css';
  * copy-to-clipboard is deliberately NOT provided. The spec wants users
  * to write seeds down rather than park them in clipboard history.
  *
+ * That was true of this component and false of the wallet until 2026-08-01:
+ * CreateWallet rendered a "Copy recovery phrase" button one screen away.
+ * settled it the way this comment always assumed - key material is
+ * not copyable on any shell (wallet spec §12.2.1) - so the rule now holds
+ * everywhere, not just here.
+ *
  * `variant="small"` renders a compact 3-column grid for the narrow
  * (popup / mobile) viewport; `variant="full"` renders a responsive
  * 3/4-column grid sized for the full web layout.

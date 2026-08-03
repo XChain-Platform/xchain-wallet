@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Screen, Button, Input, CopyButton, Icon, InfoTip } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, Icon, InfoTip } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -81,30 +81,11 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [persistError, setPersistError] = useState(
         /** @type {string | null} */ (null),
     );
-    const [clipboardCopied, setClipboardCopied] = useState(false);
-    const clipboardClearRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    useEffect(() => () => {
-        // Cleanup on unmount: if the user navigated away while the
-        // 60-second clipboard auto-clear was pending, fire it now so
-        // the seed doesn't outlive the screen in their clipboard.
-        if (clipboardClearRef.current) {
-            clearTimeout(clipboardClearRef.current);
-            clipboardClearRef.current = null;
-            navigator.clipboard?.writeText?.(' ').catch(() => {});
-        }
-    }, []);
-
-    function handleMnemonicCopied() {
-        setClipboardCopied(true);
-        if (clipboardClearRef.current) clearTimeout(clipboardClearRef.current);
-        clipboardClearRef.current = setTimeout(() => {
-            navigator.clipboard?.writeText?.(' ').catch(() => {});
-            setClipboardCopied(false);
-            clipboardClearRef.current = null;
-        }, 60_000);
-    }
+    // The clipboard auto-clear that used to live here is gone with the copy
+    // button it existed for (, decided 2026-08-01): the phrase cannot
+    // be copied, so there is nothing to clear.
 
     useEffect(() => {
         if (stage === 'password') {
@@ -386,19 +367,19 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
-                <div className={styles.copyRow}>
-                    <CopyButton
-                        value={mnemonic || ''}
-                        label="Copy recovery phrase"
-                        ariaLabel="Copy recovery phrase to clipboard"
-                        onCopied={handleMnemonicCopied}
-                    />
-                    <span className={styles.copyHint} aria-live="polite">
-                        {clipboardCopied
-                            ? 'Copied. Clipboard auto-clears in 60 s. Paste it into a password manager, then write it on paper.'
-                            : 'Paper is safest. If you copy, paste into a password manager; clipboard auto-clears after 60 s.'}
-                    </span>
-                </div>
+                {/* SSC-4 /, decided 2026-08-01: the recovery phrase
+                    is NOT copyable, on any shell. A clipboard is readable by
+                    any foreground app, kept in history by clipboard managers,
+                    and on iOS synced to every nearby signed-in device by
+                    default; hygiene can narrow each of those but not remove
+                    the class. The phrase is on screen to be written down,
+                    which is what the wallet has always told users to do, and
+                    what MnemonicGrid already said this UI did. */}
+                <p className={styles.copyHint}>
+                    Write these words on paper. They cannot be copied: a
+                    clipboard is readable by other apps and, on a phone, is
+                    often synced to your other devices.
+                </p>
                 <label className={styles.confirmRow}>
                     <input
                         type="checkbox"
