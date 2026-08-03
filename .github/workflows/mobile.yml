@@ -16,6 +16,15 @@
 # this package. Android is the slowest lane in the repo (SDK download, Gradle,
 # bundletool), and making every core-only PR pay for it buys nothing that the
 # tag-time run does not already catch.
+#
+# workflow_dispatch is the third trigger and it is not a convenience. With only
+# the two above, this lane's first successful run would have to be the release
+# tag itself - and a tag is the one irreversible step here, because Play accepts
+# a versionCode exactly once and a replaced upload costs a new tag (§7). This
+# workflow had by then failed all three of its runs and its fix was unproven, so
+# the plan was to discover whether the fix worked at the single moment where
+# being wrong is most expensive. Dispatch makes the lane provable on any branch,
+# beforehand, for free.
 name: Mobile
 
 on:
@@ -25,6 +34,7 @@ on:
     paths:
       - 'packages/mobile/**'
       - '.github/workflows/mobile.yml'
+  workflow_dispatch:
 
 concurrency:
   group: mobile-${{ github.ref }}
@@ -171,7 +181,43 @@ jobs:
           set -euo pipefail
           grep -q 'allowBackup="false"' merged-manifest.xml
           grep -q 'usesCleartextTraffic="false"' merged-manifest.xml
-          test "$(grep -c 'android:name="android.permission' merged-manifest.xml)" -le 4
+
+      # §5 states the permission rule as a SET - "camera (QR) and biometrics
+      # only; no location, no contacts, no background anything" - and every
+      # added permission is Play review surface. This used to be
+      # `grep -c android.permission <= 4`, which is a count, and a count cannot
+      # express that rule. Driven against a real signed AAB (2026-08-03), the
+      # count passed three mutations it should have refused: CAMERA swapped for
+      # ACCESS_FINE_LOCATION (same count, entirely different review surface),
+      # USE_FINGERPRINT silently dropped (the API 26-27 unlock path disappears
+      # and the count only goes DOWN), and a vendor permission added, which it
+      # could not see at all because it matched only `android.permission`.
+      # That last one is the one that matters most here: FCM and Play Services
+      # announce themselves through exactly such permissions, and §1 defers push
+      # notifications specifically to keep them out of a self-custody wallet.
+      #
+      # So: the exact set, including the non-android entry, which is AndroidX's
+      # own signature-level permission for RECEIVER_NOT_EXPORTED registration
+      # and is listed because it is REAL and merged-in, not because it is
+      # wanted. Anything added, removed or swapped fails and prints the diff.
+      - name: The merged manifest carries exactly the intended permissions
+        run: |
+          set -euo pipefail
+          grep -o '<uses-permission[^>]*android:name="[^"]*"' merged-manifest.xml \
+            | sed -E 's/.*android:name="([^"]*)".*/\1/' | sort -u > perm-actual.txt
+          printf '%s\n' \
+            'android.permission.CAMERA' \
+            'android.permission.INTERNET' \
+            'android.permission.USE_BIOMETRIC' \
+            'android.permission.USE_FINGERPRINT' \
+            'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION' \
+            | sort -u > perm-expected.txt
+          if ! diff -u perm-expected.txt perm-actual.txt; then
+            echo "::error::The merged manifest's permission set changed (-expected +actual)." \
+                 "A permission is Play review surface and §5 pins the set, not the count." >&2
+            exit 1
+          fi
+          echo "permission set matches exactly"
 
       # The capability floor that refuses an engine too old to PARSE the app
       # (public/boot-check.js) is only worth anything if it shipped, as a
