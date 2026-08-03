@@ -18,7 +18,10 @@
         "./flows": "./src/flows/index.js",
         "./flows/*": "./src/flows/*",
         "./shims/*": "./src/shims/*",
-        "./signerFactories": "./src/signerFactories/index.js"
+        "./signerFactories": "./src/signerFactories/index.js",
+        "./signers": "./src/signers/index.js",
+        "./uri/*": "./src/uri/*",
+        "./storage/*": "./src/storage/*"
     },
     "scripts": {},
     "dependencies": {

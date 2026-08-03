@@ -24,45 +24,22 @@
 // Semver for the bridge protocol itself, independent of wallet version.
 // Minor bumps are additive (new methods); major bumps are breaking.
 // Kept in sync with this package's package.json version.
-export const BRIDGE_SPEC_VERSION = '0.1.0';
-
-// Cluster F FOLLOWUP 3 - version negotiation. Versions a wallet
-// claiming to implement BRIDGE_SPEC_VERSION can speak. dApps requesting
-// a version outside this list get a clean BRIDGE_VERSION_MISMATCH from
-// `connect`, instead of a generic error when they later call a method
-// the wallet doesn't recognize.
-//
-// Today we ship one supported version (0.1.0). When 0.2.0 lands and the
-// wallet supports both, this becomes ['0.1.0', '0.2.0']. When 0.1.0 is
-// retired, drop it.
-export const BRIDGE_SUPPORTED_VERSIONS: readonly string[] = ['0.1.0'];
-
-/**
- * @returns true when the requested bridge version is one this wallet
- * supports. Empty / non-string requests pass through (the connect
- * handler will fall back to BRIDGE_SPEC_VERSION as the assumed version).
- */
-export function isBridgeVersionSupported(requested: unknown): boolean {
-    if (typeof requested !== 'string' || requested.length === 0) return true;
-    return BRIDGE_SUPPORTED_VERSIONS.includes(requested);
-}
-
-// Version of the Sign-in with XChain challenge format (§43.6).
-//
-// v2 (breaking): the wallet-stamped page origin is embedded in the
-// signed bytes between appId and address. appId is supplied by the
-// requesting page, so by itself it proves nothing about *where* the
-// sign-in happened; origin is recorded by the wallet from the page
-// that made the request and cannot be chosen by the dApp. Relying
-// backends MUST verify the origin field - it is what lets them reject
-// a challenge signed on a look-alike site that passed a legitimate
-// app's appId. v1 challenges (no origin field) fail to parse and
-// should be rejected.
-export const SIGN_IN_CHALLENGE_VERSION = 2;
-
-// Default expiry window for a Sign-in challenge. Wallets refuse to sign a
-// challenge whose expiresAt is in the past.
-export const SIGN_IN_DEFAULT_EXPIRY_MS = 5 * 60 * 1000;
+// The RUNTIME values of this spec live in ./runtime.js and are re-exported
+// here, so this stays the single public entry point. They are plain JS
+// because the desktop MAIN process loads this package out of app.asar with
+// no bundler, and Node refuses to strip types from anything under
+// node_modules . See the header of runtime.js.
+export {
+    BRIDGE_SPEC_VERSION,
+    BRIDGE_SUPPORTED_VERSIONS,
+    isBridgeVersionSupported,
+    SIGN_IN_CHALLENGE_VERSION,
+    SIGN_IN_DEFAULT_EXPIRY_MS,
+    SIGN_IN_CHALLENGE_PREFIX,
+    SIGN_IN_CHALLENGE_SEPARATOR,
+    formatSignInChallenge,
+    parseSignInChallenge,
+} from './runtime.js';
 
 // ---------------------------------------------------------------------------
 // Core shared types
@@ -424,61 +401,6 @@ export type SignInResult = SignInSuccess | BridgeErrorResult;
 // that do not contain the separator. The versioned prefix lets validators
 // detect the format on the wire; v1 challenges ("XChain Sign-In", no
 // origin field) fail parseSignInChallenge and must be rejected.
-export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
-export const SIGN_IN_CHALLENGE_SEPARATOR = ' | ';
-
-export function formatSignInChallenge(parts: SignInChallengeV2): string {
-    if (parts.version !== SIGN_IN_CHALLENGE_VERSION) {
-        throw new Error(
-            `Unsupported sign-in challenge version: ${parts.version}`,
-        );
-    }
-    const fields = [
-        parts.appId,
-        parts.origin,
-        parts.address,
-        parts.nonce,
-        String(parts.timestamp),
-        String(parts.expiresAt),
-    ];
-    for (const f of fields) {
-        if (typeof f !== 'string' && typeof f !== 'number') {
-            throw new Error('Sign-in challenge field has invalid type');
-        }
-        if (String(f).includes(SIGN_IN_CHALLENGE_SEPARATOR)) {
-            throw new Error(
-                `Sign-in challenge field contains reserved separator: ${String(f)}`,
-            );
-        }
-    }
-    return [SIGN_IN_CHALLENGE_PREFIX, ...fields].join(
-        SIGN_IN_CHALLENGE_SEPARATOR,
-    );
-}
-
-export function parseSignInChallenge(
-    challenge: string,
-): SignInChallengeV2 | null {
-    const segments = challenge.split(SIGN_IN_CHALLENGE_SEPARATOR);
-    if (segments.length !== 7) return null;
-    const [prefix, appId, origin, address, nonce, timestampStr, expiresAtStr] =
-        segments;
-    if (prefix !== SIGN_IN_CHALLENGE_PREFIX) return null;
-    const timestamp = Number(timestampStr);
-    const expiresAt = Number(expiresAtStr);
-    if (!Number.isFinite(timestamp) || !Number.isFinite(expiresAt))
-        return null;
-    return {
-        version: 2,
-        appId,
-        origin,
-        address,
-        nonce,
-        timestamp,
-        expiresAt,
-    };
-}
-
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------

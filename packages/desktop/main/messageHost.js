@@ -22,7 +22,7 @@
 // envelope, matching the extension shell's wire format so shared
 // `core/shared/routes/*` components work unchanged.
 
-import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+import { createBackgroundHost } from '@xchain-wallet/extension/src/background/createBackgroundHost.js';
 
 /**
  * @typedef {Object} DesktopHostDeps

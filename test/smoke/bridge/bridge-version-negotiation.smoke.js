@@ -32,10 +32,20 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-const specSrc = readFileSync(
-    join(wsRoot, 'packages', 'bridge-spec', 'src', 'index.ts'),
-    'utf8',
-);
+// The RUNTIME values moved to runtime.js : the desktop MAIN process
+// loads this package out of app.asar unbundled, and Node refuses to strip
+// types from anything under node_modules, so a .ts-only entry point crashed
+// the packaged app at startup. index.ts re-exports them and remains the
+// public entry point; these assertions follow the definitions, and the
+// type annotations they used to pin went with them.
+// Both halves, because the package is split across them: runtime.js holds the
+// values and index.ts holds the types. Reading the pair keeps every assertion
+// below true of "the bridge spec source" without caring which file a given
+// declaration ended up in.
+const specSrc = [
+    readFileSync(join(wsRoot, 'packages', 'bridge-spec', 'src', 'runtime.js'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'bridge-spec', 'src', 'index.ts'), 'utf8'),
+].join('\n');
 const handlersSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'bridge', 'handlers.js'),
     'utf8',
@@ -45,12 +55,12 @@ const handlersSrc = readFileSync(
 
 assert.match(
     specSrc,
-    /export const BRIDGE_SUPPORTED_VERSIONS: readonly string\[\] = \['0\.1\.0'\]/,
+    /export const BRIDGE_SUPPORTED_VERSIONS = \['0\.1\.0'\]/,
     'BRIDGE_SUPPORTED_VERSIONS exported with current spec version',
 );
 assert.match(
     specSrc,
-    /export function isBridgeVersionSupported\(requested: unknown\): boolean/,
+    /export function isBridgeVersionSupported\(requested\)/,
     'isBridgeVersionSupported helper exported',
 );
 assert.match(

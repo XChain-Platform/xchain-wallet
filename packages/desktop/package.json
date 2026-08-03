@@ -19,8 +19,11 @@
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^10.21.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
+        "@xchain-wallet/bridge-spec": "workspace:*",
         "@xchain-wallet/core": "workspace:*",
         "@xchain-wallet/extension": "workspace:*",
+        "@xchain-wallet/signers-ledger": "workspace:*",
+        "@xchain-wallet/signers-trezor": "workspace:*",
         "electron-updater": "^6.8.9",
         "lightweight-charts": "^4.2.0",
         "openpgp": "^6.3.1",
@@ -31,7 +34,7 @@
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
-        "electron": "^41.10.3",
+        "electron": "^43.2.0",
         "electron-builder": "^26.15.7",
         "electron-builder-squirrel-windows": "^26.15.7",
         "vite": "^6.4.3"

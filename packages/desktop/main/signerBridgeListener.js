@@ -43,12 +43,12 @@
 //   3. A per-message signerIds cap bounds registry growth from a
 //      misbehaving/compromised renderer.
 
-import { createBackgroundTransport } from '../../core/src/signers/index.js';
+import { createBackgroundTransport } from '@xchain-wallet/core/signers';
 // The extension package owns the process-wide signer-bridge registry;
 // `createBackgroundHost` (which desktop's MessageHost reuses) imports
 // from the same module, so registering here reaches the
 // `action.*.hw` dispatch path.
-import * as signerBridge from '../../extension/src/background/signerBridge.js';
+import * as signerBridge from '@xchain-wallet/extension/src/background/signerBridge.js';
 
 export const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 

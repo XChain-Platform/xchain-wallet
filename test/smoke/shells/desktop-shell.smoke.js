@@ -123,9 +123,21 @@ assert.ok(
     /createBackgroundHost/.test(msgHost),
     'messageHost.js reuses createBackgroundHost from extension: §9.3.2 "core runs unmodified across shells"',
 );
+// THIS ASSERTION USED TO REQUIRE THE OPPOSITE, AND THE OPPOSITE WAS THE BUG
+// . It read: "messageHost.js imports from the extension package via
+// cross-package relative path". That convention resolves under Node in the
+// source tree, which is all a smoke sees - but `main/` is packed at the ROOT
+// of app.asar, so `../../extension/...` resolves at runtime to
+// `resources/extension/...`, a directory that does not exist in a packaged
+// build. The packaged app died at startup on exactly this import, and this
+// assertion was pinning it in place. Package-name resolution is correct in
+// both layouts; test/smoke/audits/desktop-packed-workspace-deps.smoke.js
+// enforces the general rule.
 assert.ok(
-    /\.\.\/\.\.\/extension\/src\/background\/createBackgroundHost\.js/.test(msgHost),
-    'messageHost.js imports from the extension package via cross-package relative path (matches hostBridge.js convention: smoke-resolvable under Node)',
+    /@xchain-wallet\/extension\/src\/background\/createBackgroundHost\.js/.test(msgHost),
+    'messageHost.js must import createBackgroundHost by PACKAGE NAME, not by a relative path '
+    + 'that escapes packages/desktop: main/ sits at the root of app.asar, so a relative escape '
+    + 'leaves the archive and the packaged app dies at startup',
 );
 assert.ok(
     /ipcMain\.handle\(IPC_CHANNEL/.test(mainIndex),

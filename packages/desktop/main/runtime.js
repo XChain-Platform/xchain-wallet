@@ -55,11 +55,11 @@ import {
     flows as flowsLib,
     notifications as notificationsLib,
     signers as signersLib,
-} from '../../core/src/index.js';
+} from '@xchain-wallet/core';
 import {
     dispatchPreHost,
     PRE_HOST_MESSAGE_TYPES,
-} from '../../extension/src/background/sessionMeta.js';
+} from '@xchain-wallet/extension/src/background/sessionMeta.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
 

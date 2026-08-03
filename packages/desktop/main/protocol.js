@@ -40,8 +40,8 @@
 // where renderer-side code routes to the appropriate view (Send form
 // for payment URIs, action preview for xchain: URIs).
 
-import { parseBip21Uri, InvalidBip21Error } from '../../core/src/uri/bip21.js';
-import { parseXchainUri, hardenUriIntentText } from '../../core/src/uri/xchainUri.js';
+import { parseBip21Uri, InvalidBip21Error } from '@xchain-wallet/core/uri/bip21.js';
+import { parseXchainUri, hardenUriIntentText } from '@xchain-wallet/core/uri/xchainUri.js';
 
 /** URI schemes the app is allowed to claim. */
 export const TIER_1_SCHEME = 'xchain';
@@ -105,7 +105,7 @@ export function updateCoinSchemeOptIn(app, optedInSchemes) {
  * @typedef {Object} DeepLinkEvent
  * @property {string} scheme                  lowercased; one of ALL_SCHEMES
  * @property {string} raw                     the URI as received
- * @property {import('../../../core/src/uri/bip21.js').Bip21Uri | null} parsed   non-null for bitcoin/litecoin/dogecoin
+ * @property {import('@xchain-wallet/core/uri/bip21.js').Bip21Uri | null} parsed   non-null for bitcoin/litecoin/dogecoin
  */
 export function attachDeepLinkHandlers(app, { onDeepLink }) {
     if (typeof onDeepLink !== 'function') {

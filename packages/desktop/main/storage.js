@@ -24,7 +24,7 @@
 
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { StorageBackend } from '../../core/src/storage/backend.js';
+import { StorageBackend } from '@xchain-wallet/core/storage/backend.js';
 
 export class FileStorageBackend extends StorageBackend {
     /**
