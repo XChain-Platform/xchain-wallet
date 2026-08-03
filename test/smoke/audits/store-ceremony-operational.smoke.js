@@ -56,6 +56,16 @@ const FLOORS = {
             + 'permission set, the asset-links build, the App Links check, the publisher, the '
             + 'signature one-liner, the shipped-lanes flip and the character count',
     },
+    'release/desktop/snap-store.md': {
+        steps: 26,
+        blocks: 7,
+        note: 'written 2026-08-03 with the lane, rather than after it: the blocks are the name '
+            + 'registration, the credential export, the opt-in build, the sandbox-declaration check, '
+            + 'the test-channel upload, the interface connect and the stable promotion. The floor is '
+            + 'high on purpose because three of its steps are permanent (a first-come name, a stable '
+            + 'revision that auto-refreshes to every install, and a confinement choice that decides '
+            + 'whether review stays automatic)',
+    },
     // ---- KNOWN GAPS, DECLARED RATHER THAN HIDDEN -----------------------
     //
     // Everything below is at 0 and should not be. Enumerating the whole
@@ -76,14 +86,21 @@ const FLOORS = {
         note: 'KNOWN GAP: store ceremony, never restored after the docs port; owned by the iOS lane',
     },
     'release/desktop/mac-app-store.md': {
-        steps: 0,
-        blocks: 0,
-        note: 'KNOWN GAP: store ceremony with its own launch-gating enrollment; owned by the desktop lane',
+        steps: 26,
+        blocks: 1,
+        note: 'GAP CLOSED 2026-08-03 by the lane that owned it. The one block is the opt-in build; '
+            + 'the rest of this ceremony is console work and physical hardware, which is exactly why '
+            + 'its step count is high and its command count is not. Phase 1 is first on purpose: '
+            + 'whether a sandboxed build reaches a hardware wallet decides whether the channel ships '
+            + 'at all, and it is answerable from a development certificate, before the full set exists',
     },
     'release/desktop/microsoft-store.md': {
-        steps: 0,
-        blocks: 0,
-        note: 'KNOWN GAP: store ceremony; owned by the desktop lane',
+        steps: 23,
+        blocks: 1,
+        note: 'GAP CLOSED 2026-08-03 by the lane that owned it. The one block is the opt-in build with '
+            + 'its two account-assigned identity values; Phase 2 is a whole phase because all three of '
+            + 'its settings build successfully and fail at ingestion instead, and the publisher string '
+            + 'fails that way even when it is simply left unset',
     },
     'release/desktop/windows.md': { steps: 0, blocks: 0, note: 'distribution lane, not a store ceremony' },
     'release/desktop/macos.md': { steps: 0, blocks: 0, note: 'distribution lane, not a store ceremony' },
