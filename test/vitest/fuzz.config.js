@@ -11,6 +11,7 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { maxForks } from './poolSize.js';
 
 export default defineConfig({
     root: fileURLToPath(new URL('../..', import.meta.url)),
@@ -25,7 +26,7 @@ export default defineConfig({
         // if suite wall-time regresses.
         pool: 'forks',
         poolOptions: {
-            forks: { maxForks: 8 },
+            forks: { maxForks },
         },
         environment: 'jsdom',
         include: ['test/fuzz/harness/**/*.fuzz.js'],

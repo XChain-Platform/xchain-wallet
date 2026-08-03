@@ -26,12 +26,27 @@
 
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { webcrypto } from 'node:crypto';
+
+import { slowTimeout } from './helpers/testEnvSpeed.js';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
 }
+
+// How long `findBy*` / `waitFor` wait before giving up.
+//
+// The library default is 1000ms, which is a statement about how fast the
+// machine is, not about what the component does. On the `coverage` job it
+// expired while a mocked balance lookup was still resolving, and the failure
+// reads as a product bug - "Unable to find an element with the text: /250
+// MEMEVALID available/" - rather than as the machine being busy. A component
+// that legitimately needs longer than this base has a defect worth failing
+// on; an instrumented run just needs more wall-clock to prove the same thing.
+// Only failing assertions pay the ceiling, so raising it costs a green run
+// nothing. See test/helpers/testEnvSpeed.js.
+configure({ asyncUtilTimeout: slowTimeout(5000) });
 
 afterEach(() => {
     cleanup();

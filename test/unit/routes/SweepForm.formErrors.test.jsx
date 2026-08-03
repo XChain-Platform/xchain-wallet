@@ -91,7 +91,27 @@ async function mountSweep() {
     };
     // Wait for the loaded form: the source resolves and the destination
     // field exists (before that the route renders "Loading…").
-    await waitFor(() => expect(q.destination()).toBeTruthy());
+    //
+    // AND for the submit button to be live, which is a SEPARATE condition and
+    // is the one every test below actually depends on. The button is disabled
+    // by `!fromAddress || confirmAction.composing`; the destination field
+    // appears as soon as `fromAddress` resolves, but a compose kicked off by
+    // the same mount can still be in flight after that. A gate that waits only
+    // for the field therefore returns while the button is still disabled, and
+    // the very next line - `expect(q.submit().disabled).toBe(false)` - is a
+    // race against an effect rather than an assertion about behaviour. It won
+    // that race on every dev box and lost it on the `coverage` job, where it
+    // read as the  fix having regressed.
+    //
+    // Nothing in this file wants a disabled button: both cases assert `false`,
+    // because the whole point of  / D-58 is that an empty destination
+    // errors with a reason instead of presenting a dead control. So "loaded"
+    // for this file means the form is ready to be submitted.
+    await waitFor(() => {
+        expect(q.destination()).toBeTruthy();
+        expect(q.submit()).toBeTruthy();
+        expect(q.submit().disabled).toBe(false);
+    });
     return q;
 }
 

@@ -146,9 +146,16 @@ export const DEFAULT_URL = 'https://xchain.io/wallet/privacy/';
 // from this script's own location rather than cwd, so it holds wherever the
 // script is invoked from. Override with --source / PRIVACY_POLICY_PATH when
 // the sibling lives elsewhere.
+//
+// XCHAIN_DOCS_ROOT is honoured because test/smoke/_docs-repo.js already
+// honours it, and the two disagreeing is worse than neither doing so: the
+// smoke's availability check said the docs were present at the override
+// while this path still pointed beside the repo, so the guard passed and the
+// tool then died on a raw ENOENT. One variable, one answer.
+const DOCS_ROOT = process.env.XCHAIN_DOCS_ROOT
+    || join(here, '..', '..', '..', 'xchain-documentation');
 export const DEFAULT_SOURCE_PATH = join(
-    here, '..', '..', '..', 'xchain-documentation',
-    'components', 'wallet', 'privacy', 'privacy-policy.md',
+    DOCS_ROOT, 'components', 'wallet', 'privacy', 'privacy-policy.md',
 );
 export const DEFAULT_TIMEOUT_MS = 15000;
 

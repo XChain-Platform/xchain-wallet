@@ -35,8 +35,23 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { workspaceAlias } from './workspaceAlias.js';
+import { maxForks } from './poolSize.js';
+import { slowTimeout } from '../helpers/testEnvSpeed.js';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+// Is this run instrumented? Only the config sees the invocation - a test file
+// sees nothing but its environment - so detect it here and export it there
+// via `test.env` below. Matches `--coverage`, `--coverage=true` and the
+// `--coverage.thresholds.x=0` forms.
+const INSTRUMENTED = process.argv.some((a) => a === '--coverage'
+    || a.startsWith('--coverage=') || a.startsWith('--coverage.'));
+
+// The config is evaluated before the `test.env` it sets can apply, so it
+// passes its own detection into slowTimeout rather than letting the helper
+// read an environment variable that does not exist yet. The multiplier
+// itself still lives in exactly one place.
+const scale = (baseMs) => slowTimeout(baseMs, { instrumented: INSTRUMENTED });
 
 export default defineConfig({
     root: repoRoot,
@@ -52,12 +67,16 @@ export default defineConfig({
         // sessions shared it. An abruptly killed run also leaves its pool
         // orphaned, and orphaned workers busy-spin at roughly a full core each
         // until something reaps them, so a smaller pool caps both the
-        // steady-state cost and the blast radius. Raise on a dedicated runner
-        // if suite wall-time regresses.
+        // steady-state cost and the blast radius. See `maxForks` above for why
+        // the ceiling is now computed rather than fixed at 8.
         pool: 'forks',
         poolOptions: {
-            forks: { maxForks: 8 },
+            forks: { maxForks },
         },
+        // Carries the instrumentation flag into the test processes, where
+        // test/helpers/testEnvSpeed.js turns it into a multiplier for the
+        // ceilings that bound real CPU work.
+        env: { XCHAIN_TEST_INSTRUMENTED: INSTRUMENTED ? '1' : '0' },
         environment: 'jsdom',
         include: ['test/unit/**/*.test.{js,jsx}'],
         exclude: ['test/**/*.smoke.js', 'node_modules/**'],
@@ -70,7 +89,12 @@ export default defineConfig({
         // well under this ceiling locally, but the Parallels share adds
         // variance; a generous timeout keeps them from flaking the suite
         // while still catching a genuine hang.
-        testTimeout: 20000,
+        //
+        // Scaled on an instrumented run: at a flat 20s the `coverage` job
+        // failed PairPartnerWallet's QR-chunking case (a 1900-character code
+        // encoded into frames) on work that is correct and merely slower with
+        // V8 precise coverage on. See test/helpers/testEnvSpeed.js.
+        testTimeout: scale(20000),
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],

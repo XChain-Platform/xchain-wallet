@@ -37,4 +37,15 @@
 //
 // 120s is roughly 12x the slowest measured case, so a genuine hang is still
 // caught: no honest derivation at these parameters takes two minutes.
-export const ARGON2ID_TEST_TIMEOUT_MS = 120_000;
+//
+// CORRECTED 2026-08-03, and the correction is the useful part. A flat 120s
+// closed the `test` job and left `coverage` red, because both the 3.3s and
+// the 10.2s above were measured HERE. On ubuntu-latest under coverage a
+// single derivation took 104s and the two-derivation determinism test took
+// 204s, so a ceiling that reads as 12x headroom on this box was 0.6x on the
+// machine that decides whether a release can be cut. The base below is still
+// the dev-box number; `slowTimeout` is what carries it to a machine nobody
+// measured. See test/helpers/testEnvSpeed.js.
+import { slowTimeout } from './testEnvSpeed.js';
+
+export const ARGON2ID_TEST_TIMEOUT_MS = slowTimeout(120_000);

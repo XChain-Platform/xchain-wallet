@@ -48,6 +48,8 @@ import { resolve, dirname } from 'node:path';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 
+import { slowTimeout } from '../helpers/testEnvSpeed.js';
+
 const traverse = _traverse.default || _traverse;
 
 const PARSER_PLUGINS = [
@@ -114,7 +116,12 @@ describe('every named/default import resolves to a real export', () => {
     // which reads in CI as "the import graph is broken" and sends whoever sees
     // it hunting a defect that is not there. The budget is generous on purpose:
     // a walk that genuinely got slow enough to hit 60s is worth investigating.
-    it('relative + workspace-alias imports all resolve (no rot)', { timeout: 60_000 }, () => {
+    //
+    // It then overran the 60s too, on the `coverage` job, in exactly the way
+    // the sentence above predicts: a timeout that reads as a broken import
+    // graph. 60s is still the dev-box budget; `slowTimeout` is what carries
+    // it to an instrumented run. See test/helpers/testEnvSpeed.js.
+    it('relative + workspace-alias imports all resolve (no rot)', { timeout: slowTimeout(60_000) }, () => {
         const root = findRoot();
         const pkgsDir = resolve(root, 'packages');
         const files = walkJs(pkgsDir);
