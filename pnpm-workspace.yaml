@@ -33,6 +33,11 @@ overrides:
   form-data: ^4.0.6
   '@tootallnate/once': ^2.0.1
   axios: ^1.16.1
+  # electron-updater parses the channel pointer it fetches from the feed with
+  # js-yaml, so GHSA-52cp-r559-cp3m (quadratic CPU on merge-key chains) is
+  # reachable from a file the update path downloads. Major-scoped because the
+  # tree also holds a 3.x line that this pin must not drag forward.
+  js-yaml@4: ^4.3.1
 
 #  §8: "lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall

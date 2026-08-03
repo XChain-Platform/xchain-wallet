@@ -40,7 +40,7 @@
 // THE SELECTION CHECK IS NOT DECORATION. Windows puts both arches in one
 // `stable.yml` and upstream chooses between them by substring-matching
 // `process.arch` against the filename, falling back to whichever file is
-// listed FIRST when nothing matches (`findFile`, electron-updater 6.8.3).
+// listed FIRST when nothing matches (`findFile`, electron-updater 6.8.9).
 // electron-builder omits the arch from x64 names by default, so under
 // those defaults every x64 machine matches nothing and takes the first
 // entry - correct only for as long as x64 happens to be built first.
@@ -168,7 +168,7 @@ function assign(entry, key, value) {
  * Which file an OS/arch resolves out of a pointer.
  *
  * A faithful re-implementation of `findFile` from electron-updater
- * 6.8.3 `out/providers/Provider.js`, including the part that matters:
+ * 6.8.9 `out/providers/Provider.js`, including the part that matters:
  *
  *     filtered.find(f => f.url.includes(process.arch)) ?? filtered.shift()
  *

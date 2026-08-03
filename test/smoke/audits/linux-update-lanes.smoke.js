@@ -20,7 +20,7 @@
 // being patched automatically.
 //
 // It is false, and it is checkable from the installed package. At the
-// pinned electron-updater 6.8.3 `DebUpdater` is a complete updater: it
+// pinned electron-updater 6.8.9 `DebUpdater` is a complete updater: it
 // picks the `.deb` out of the channel pointer, downloads it, and installs
 // it with `dpkg -i` under `pkexec`. The escalation is not a missing
 // feature, it IS the install step. Verified against a real two-arch

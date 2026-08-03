@@ -21,7 +21,7 @@
 // selection is broken it is broken on every machine, so finding it here is
 // strictly better than finding it on a device we do not yet own.
 //
-// The algorithm, from electron-updater 6.8.3 `out/providers/Provider.js`:
+// The algorithm, from electron-updater 6.8.9 `out/providers/Provider.js`:
 //
 //     files.find(f => f.url.includes(process.arch)) ?? files.shift()
 //

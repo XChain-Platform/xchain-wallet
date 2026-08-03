@@ -13,7 +13,7 @@
 // WHY THIS EXISTS. The `.deb` was recorded as notify-only for months, on
 // the belief that electron-updater's deb path "needs privilege escalation
 // at install time" and therefore does not install anything. Reading the
-// installed 6.8.3 says otherwise - `DebUpdater` downloads the .deb and runs
+// installed 6.8.9 says otherwise - `DebUpdater` downloads the .deb and runs
 // `dpkg -i` under `pkexec` - and the built artifacts agree (our .deb ships
 // `resources/package-type: deb`, and both Linux pointers list it). But
 // reading is how the wrong claim got written in the first place. This

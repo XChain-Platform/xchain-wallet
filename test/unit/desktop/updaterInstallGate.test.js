@@ -104,7 +104,7 @@ describe('the install gate', () => {
 
     it('does not assign autoUpdater.channel anywhere in the main process', async () => {
         // The `channel` setter's side effect is `allowDowngrade = true`
-        // (electron-updater 6.8.3, AppUpdater.js). §7.6 plans a beta
+        // (electron-updater 6.8.9, AppUpdater.js). §7.6 plans a beta
         // channel, and the obvious implementation is this assignment - at
         // which point every restored rollback yml becomes installable as a
         // downgrade on a fleet whose incident plan says that cannot happen.

@@ -22,7 +22,7 @@
 // "electron-updater's deb path needs privilege escalation at install time",
 // so deb users get a notification and a manual link and nothing swaps. That
 // is not what the pinned electron-updater does. Measured against the
-// installed 6.8.3 and a real two-arch packaged build:
+// installed 6.8.9 and a real two-arch packaged build:
 //
 //   - `DebUpdater` exists and is a complete updater: it selects the `.deb`
 //     out of the pointer, downloads it, and on install runs `dpkg -i`

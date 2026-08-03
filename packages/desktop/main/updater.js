@@ -394,7 +394,7 @@ export async function attachUpdater({
     // The rollback doctrine rests on one property of electron-updater:
     // it never installs a version at or below the running one, so restoring
     // a previous release's yml is a safe first move during an incident -
-    // clients on either version simply see "no update". Verified at 6.8.3:
+    // clients on either version simply see "no update". Verified at 6.8.9:
     // `isUpdateAvailable` returns `allowDowngrade && isLatestVersionOlder`,
     // and `allowDowngrade` defaults to false.
     //
