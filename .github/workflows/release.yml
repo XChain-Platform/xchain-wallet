@@ -351,6 +351,10 @@ jobs:
     environment: release-signing
     env:
       STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+      # Presence of the Apple Distribution cert IS the "is the App Store
+      # channel set up yet" switch, read at job level so the step below has
+      # one condition (§13; same shape as the iOS lane's ASC_KEY_ID).
+      MAS_CSC_LINK: ${{ secrets.MAS_CSC_LINK }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -372,6 +376,21 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm -C packages/desktop dist --mac --x64 --arm64
+      # The Mac App Store package (§13), the SECOND macOS channel and a
+      # committed goal since 2026-08-01. Same gap as the Store lane on the
+      # windows job: the target exists in the builder config behind
+      # XCHAIN_BUILD_MAS=1 and nothing here set it, so a release could never
+      # produce the `.pkg` the channel ships. Gated on the Apple Distribution
+      # cert, which is a DIFFERENT certificate from the Developer ID one
+      # above and does not exist yet, so this stays inert until it does.
+      - name: Build the Mac App Store package (opt-in, §13)
+        if: env.MAS_CSC_LINK != ''
+        env:
+          XCHAIN_BUILD_MAS: '1'
+          CSC_LINK: ${{ secrets.MAS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAS_CSC_KEY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm -C packages/desktop dist --mac --x64 --arm64
       - name: Drop delta metadata and build byproducts
@@ -431,6 +450,12 @@ jobs:
     environment: release-signing
     env:
       STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+      # Presence of the Partner Center identity IS the "is the Store channel
+      # set up yet" switch, read at job level so the step below has one
+      # condition rather than a per-step guess (§15; same shape as the iOS
+      # lane's ASC_KEY_ID). Both are account-specific and neither exists yet.
+      APPX_IDENTITY_NAME: ${{ secrets.APPX_IDENTITY_NAME }}
+      APPX_PUBLISHER: ${{ secrets.APPX_PUBLISHER }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -466,6 +491,20 @@ jobs:
           AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+        run: pnpm -C packages/desktop dist --win --x64 --arm64
+      # The Microsoft Store package (§15), the SECOND Windows channel and a
+      # committed goal since 2026-08-01. The lane exists in the builder config
+      # behind XCHAIN_BUILD_APPX=1, and nothing in this workflow set it, so a
+      # release could never produce the artifact the channel ships. It runs
+      # only when the Partner Center identity exists, on the same
+      # presence-of-the-secret pattern the iOS lane uses: `AppxTarget` accepts
+      # a missing `publisher` and emits a package that BUILDS and is then
+      # rejected at ingestion for an identity mismatch, so a lane that ran
+      # without these would produce exactly the artifact §15 warns about.
+      - name: Build the Microsoft Store package (opt-in, §15)
+        if: env.APPX_IDENTITY_NAME != '' && env.APPX_PUBLISHER != ''
+        env:
+          XCHAIN_BUILD_APPX: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Drop delta metadata and build byproducts
         shell: bash

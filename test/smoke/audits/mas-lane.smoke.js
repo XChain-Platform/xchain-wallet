@@ -216,6 +216,21 @@ try {
     else process.mas = savedMas;
 }
 
+// A release can actually PRODUCE it. The lane was opt-in behind
+// XCHAIN_BUILD_MAS=1 and no workflow ever set it, so every gate above passed
+// while a release could not emit the `.pkg` the channel ships.
+{
+    const wf = readFileSync(join(here, '..', '..', '..', '.github', 'workflows',
+        'release.yml'), 'utf8');
+    assert.ok(/XCHAIN_BUILD_MAS:\s*'1'/.test(wf),
+        'release.yml must have a step that sets XCHAIN_BUILD_MAS=1, or the App '
+        + 'Store channel is a goal no release can ship');
+    assert.ok(/if:\s*env\.MAS_CSC_LINK\s*!=\s*''/.test(wf),
+        'and it must be gated on the Apple Distribution cert being present: it '
+        + 'is a different certificate from the Developer ID one, so the lane '
+        + 'must not ride the direct-download credentials');
+}
+
 console.log(
     'OK: MAS lane smoke ( §13: build/entitlements.mas{,.inherit}.plist exist and are well-formed; the '
         + 'store build declares com.apple.security.app-sandbox plus exactly network.client, device.usb (Ledger/'

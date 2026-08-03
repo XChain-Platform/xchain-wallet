@@ -231,6 +231,23 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
         'and require both architectures: the Store serves a per-arch package');
 }
 
+// --- 9. A release can actually PRODUCE it -----------------------------
+// The lane was opt-in behind XCHAIN_BUILD_APPX=1 and no workflow ever set
+// it, so every gate above passed while a release could not emit the artifact
+// at all. That is the same shape as the `optional` row above: a gate cannot
+// fail on an artifact nothing builds.
+{
+    const wf = readFileSync(join(here, '..', '..', '..', '.github', 'workflows',
+        'release.yml'), 'utf8');
+    assert.ok(/XCHAIN_BUILD_APPX:\s*'1'/.test(wf),
+        'release.yml must have a step that sets XCHAIN_BUILD_APPX=1, or the '
+        + 'Store channel is a goal no release can ship');
+    assert.ok(/if:\s*env\.APPX_IDENTITY_NAME\s*!=\s*''/.test(wf),
+        'and it must be gated on the Partner Center identity being present: '
+        + 'AppxTarget accepts a missing publisher and builds a package that is '
+        + 'rejected at ingestion, which is worse than not building one');
+}
+
 console.log(
     'OK: Microsoft Store lane smoke ( §15: the appx target is opt-in behind'
     + ' XCHAIN_BUILD_APPX=1 and never present on a staging build, without removing'
