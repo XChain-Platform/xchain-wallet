@@ -37,6 +37,8 @@
 
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
 import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
@@ -152,7 +154,51 @@ for (const host of extensionHosts) {
         + 'rejected.');
 }
 
+// --- 4. Every WALLET-REPO path the ceremony cites has to resolve -------
+//
+// S12's finding, and moving the ceremony to the docs repo inverted it rather
+// than retiring it: a rename in tools/release/ still sends the operator to a
+// dead command mid-ceremony, on a review clock, in a procedure with
+// irreversible steps. What changed is who can notice. The docs repo tests its
+// own internal links (internal-link-integrity.test.js) and cannot see this
+// tree at all; this gate is the only place that reads both, so the check
+// belongs here and nowhere else.
+//
+// Deliberately one-directional: the ceremony page may cite a file without
+// that file knowing about the ceremony, so a path with no citation is fine
+// and only a citation with no path is a failure.
+
+const CITED = /`((?:packages|tools|test|\.github)\/[A-Za-z0-9_./-]+)`/g;
+const here = dirname(fileURLToPath(import.meta.url));
+const walletRoot = join(here, '..', '..', '..');
+const missing = [];
+let citations = 0;
+
+for (const [label, text] of [
+    ['release/extension/chrome-web-store.md', ceremony],
+    ['privacy/data-disclosure.md', disclosure],
+]) {
+    for (const m of text.matchAll(CITED)) {
+        const cited = m[1];
+        if (/vX\.Y\.Z|<|\*/.test(cited)) continue;      // version placeholders are not paths
+        citations += 1;
+        if (!existsSync(join(walletRoot, cited))) missing.push(`${label} cites ${cited}`);
+    }
+}
+
+assert.equal(missing.length, 0,
+    `the Chrome ceremony cites wallet-repo paths that do not exist:\n  ${missing.join('\n  ')}\n`
+    + 'An operator following the published page mid-submission meets a dead command. These pages live '
+    + 'in xchain-documentation and the paths live here, so nothing on either side of that boundary '
+    + 'resolves them except this gate.');
+
+assert.ok(citations > 0,
+    'no wallet-repo paths were found cited in the ceremony pages, so the citation check above passed '
+    + 'without checking anything. The ceremony tells an operator to run commands out of this repo; if '
+    + 'it stopped doing that, this gate needs rewriting rather than deleting.');
+
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
-    + `privacy/trader-identity.md, ${extensionHosts.length} egress hosts from wireAudit.js)`);
+    + `privacy/trader-identity.md, ${extensionHosts.length} egress hosts from wireAudit.js, `
+    + `${citations} cited wallet-repo paths resolved across the repo boundary)`);

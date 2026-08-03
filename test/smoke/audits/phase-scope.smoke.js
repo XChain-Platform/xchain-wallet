@@ -20,22 +20,29 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// here = .../xchain-wallet/test → wsRoot is one up, platformRoot two up.
+// here = .../xchain-wallet/test/smoke/audits → wsRoot is three up, platformRoot four.
 const wsRoot = join(here, '..', '..', '..');
 const platformRoot = join(wsRoot, '..');
-const specPath = join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'XCHAIN_WALLET_SPEC.md');
+// The spec moved to claude/specs/living/ and this path was not moved with it,
+// so from then until 2026-08-03 this gate SKIPPED on every run, everywhere,
+// including the dev box it exists to guard. A loud skip is honest about not
+// running; it is not honest about never being able to run again. Whoever
+// moves either document repoints these two lines in the same step.
+const specPath = join(platformRoot, 'claude', 'specs', 'living', 'XCHAIN_WALLET_SPEC.md');
 const statusPath = join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'IMPLEMENTATION_STATUS.md');
 
 // These audit the platform SPEC + STATUS docs, which live in the parent
-// repo's gitignored `claude/reports/` tree - present in a full monorepo
-// working tree (dev + the old Mac gate) but ABSENT from an isolated single-
-// repo CI checkout. Skip LOUDLY rather than fail: this guards dev docs, not
-// shipped product, so its absence in isolated CI is not a regression (unlike
-// the sdk derivation-parity guard, which fails loud because it guards shipped
+// repo's gitignored `claude/` tree - present in a full monorepo working tree
+// (dev + the old Mac gate) but ABSENT from an isolated single-repo CI
+// checkout. Skip LOUDLY rather than fail: this guards dev docs, not shipped
+// product, so its absence in isolated CI is not a regression (unlike the sdk
+// derivation-parity guard, which fails loud because it guards shipped
 // behavior). Never silently pass.
 if (!existsSync(specPath) || !existsSync(statusPath)) {
     console.log('SKIP: phase-scope smoke - platform spec/status docs not in this checkout '
-        + '(claude/reports/ is a gitignored parent-repo dir, absent in an isolated CI checkout)');
+        + `(the parent repo's claude/ tree is gitignored here and absent in an isolated CI `
+        + `checkout). Looked for ${specPath} and ${statusPath}: a gate that skips because a `
+        + 'document MOVED looks identical to one skipping because the checkout is isolated.');
     process.exit(0);
 }
 
