@@ -55,14 +55,18 @@
 #   --good-tag <vX.Y.Z>    the last known-good published release tag to
 #                          re-release the CONTENT of (required)
 #   --new-version <X.Y.Z>  the version to cut the re-release as. Must be
-#                          strictly greater than every version currently
-#                          in the repo's version-bearing files (a store
+#                          strictly greater than BOTH the highest version
+#                          in the repo's version-bearing files AND the
+#                          highest version recorded in
+#                          packages/extension/docs/publish-log.md (a store
 #                          re-release with a version the store has
 #                          already served, or a lower one, is refused by
-#                          the store itself). If omitted, this script
-#                          SUGGESTS good-tag's patch+1 and exits 2 so the
-#                          operator picks deliberately rather than
-#                          accepting a guess under pressure.
+#                          the store itself, and during a rollback the
+#                          checkout is behind the store by construction).
+#                          If omitted, this script SUGGESTS that floor's
+#                          patch+1 and exits 2 so the operator picks
+#                          deliberately rather than accepting a guess
+#                          under pressure.
 #   --repo <path>          repo root to check (default: this script's repo)
 
 set -euo pipefail
@@ -123,7 +127,14 @@ echo "  good tag:    $GOOD_TAG ($GOOD_COMMIT)" >&2
 # fatal if missing (a tag can predate the record-keeping, or the record
 # lives somewhere this script was not told to look), but worth surfacing
 # rather than assuming silently.
-RELEASE_RECORD="$REPO_ROOT/../claude/reports/wallet-releases/${GOOD_TAG}.md"
+#
+# Anchored to THIS script's checkout, not to --repo. The records live in
+# the platform repo one level above the wallet repo, and --repo is
+# expected to point at a throwaway clone during a real rollback (step 2
+# of the recipe below says to make one), which has no platform repo above
+# it. Anchored to --repo, this check would report "NOT found" for every
+# tag in exactly the situation it exists to serve.
+RELEASE_RECORD="$HERE/../../../claude/reports/wallet-releases/${GOOD_TAG}.md"
 if [[ -f "$RELEASE_RECORD" ]]; then
     echo "  release record: found ($RELEASE_RECORD)" >&2
 else
@@ -134,25 +145,58 @@ fi
 
 # --- Precondition 2: derive the current version floor ---------------------
 #
-# Every version-bearing file, found by content rather than a hardcoded
-# list, so this stays accurate as packages are added or removed. The new
-# version must exceed the highest one found: the store refuses a version
-# it has already served or anything lower, and the synchronized-
-# versioning rule means every one of these should already agree, but a
-# rollback re-release is exactly the kind of change that must not
-# silently trust that they do.
+# The version-bearing set is the one  defines and
+# test/smoke/audits/version-lockstep.smoke.js enforces: the root
+# package.json, every package under packages/ (membership derived from
+# the filesystem, so a package added tomorrow is in scope the moment it
+# exists), packages/extension/manifest.json, and
+# packages/core/src/buildInfo.js's WALLET_VERSION. test/e2e is
+# DELIBERATELY absent: it is a private harness, never published, never
+# installed, exempt by 's own decision and documented as such in
+# README.md.
+#
+# This was a `find -maxdepth 3 -name package.json` sweep until
+# 2026-08-02, which is a second derivation of a rule the repo already
+# states, and it disagreed with that rule in both directions. It swept in
+# the exempt test/e2e harness, whose version step 3 of the recipe below
+# then instructed the operator to bump; and it MISSED
+# packages/extension/manifest.json, which for a Chrome Web Store
+# re-release is the only version the store ever reads. Bumping every
+# package.json and leaving the manifest behind produces a zip that
+# re-declares the version the store has already served, which the store
+# refuses - mid-incident, on the slow path, after a review clock.
 VERSION_FILES=()
 CURRENT_MAX="0.0.0"
-while IFS= read -r pkg; do
-    v="$(node -p "try{require('$pkg').version||''}catch(e){''}" 2>/dev/null || true)"
+
+# The path is passed as an argv entry rather than interpolated into the
+# source string: a repo path containing a quote would otherwise change
+# what node executes.
+read_json_version() {
+    node -p "try{require(process.argv[1]).version||''}catch(e){''}" "$1" 2>/dev/null || true
+}
+
+add_version_file() {
+    local rel="$1" abs="$REPO_ROOT/$1" v
+    [[ -f "$abs" ]] || return 0
+    v="$(read_json_version "$abs")"
     if [[ -z "$v" ]]; then
-        echo "  WARNING: could not read a version from $pkg (missing field or invalid JSON)." >&2
+        echo "  WARNING: could not read a version from $rel (missing field or invalid JSON)." >&2
         echo "    Fix it before trusting the 'highest version' figure below." >&2
-        continue
+        return 0
     fi
-    VERSION_FILES+=("$pkg=$v")
-done < <(find "$REPO_ROOT" -maxdepth 3 -name package.json \
-    -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.claude/*' | LC_ALL=C sort)
+    VERSION_FILES+=("$rel=$v")
+}
+
+add_version_file "package.json"
+if [[ -d "$REPO_ROOT/packages" ]]; then
+    while IFS= read -r pkgdir; do
+        add_version_file "packages/$(basename "$pkgdir")/package.json"
+    done < <(find "$REPO_ROOT/packages" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
+else
+    echo "  WARNING: $REPO_ROOT/packages does not exist; the version floor below covers" >&2
+    echo "    almost nothing. Confirm --repo points at a wallet checkout." >&2
+fi
+add_version_file "packages/extension/manifest.json"
 
 BUILDINFO="$REPO_ROOT/packages/core/src/buildInfo.js"
 if [[ -f "$BUILDINFO" ]]; then
@@ -181,26 +225,120 @@ for entry in "${VERSION_FILES[@]:-}"; do
 done
 echo "  highest version currently in the repo: $CURRENT_MAX" >&2
 
+# --- Precondition 3: the floor the STORE enforces -------------------------
+#
+# The repo's floor is not the store's floor, and this script's own recipe
+# is what drives them apart: step 2 below tells the operator to check out
+# $GOOD_TAG in a throwaway clone, and every version file in THAT clone
+# reads the good tag's version - by definition lower than the bad version
+# the store already served. A floor computed from the repo alone would
+# then approve precisely the version the store refuses.
+#
+# packages/extension/docs/publish-log.md is the record of what has
+# actually been published. It is read here through the same
+# parsePublishLog the rogue-publish monitor uses (stage S13 hardened that
+# parser against the real file and gated its shape) rather than through a
+# second regex that could disagree with it.
+PUBLISH_LOG="$REPO_ROOT/packages/extension/docs/publish-log.md"
+MONITOR="$HERE/store-version-monitor.mjs"
+STORE_MAX=""
+LOGGED_VERSIONS=""
+
+echo >&2
+if [[ ! -f "$MONITOR" ]]; then
+    echo "  published versions: COULD NOT TELL - $MONITOR is missing, so the" >&2
+    echo "    publish log could not be parsed. The floor below is the repo's only." >&2
+elif [[ ! -f "$PUBLISH_LOG" ]]; then
+    echo "  published versions: COULD NOT TELL - $PUBLISH_LOG is missing, so" >&2
+    echo "    there is no record of what the store has served. The floor below is" >&2
+    echo "    the repo's only." >&2
+else
+    # Both paths travel by environment rather than as arguments, for two
+    # reasons that are easy to undo by accident. The monitor decides
+    # whether it was invoked directly by comparing import.meta.url against
+    # realpath(process.argv[1]), so handing it its OWN path as an argument
+    # makes a plain import run the whole monitor and exit 2. And its first
+    # line is `if (!process.argv[1]) return false`, so an empty argv is
+    # unambiguously an import.
+    #
+    # The reply is prefixed with a sentinel because "the parse returned no
+    # rows" and "the parse did not happen" are different answers that look
+    # identical as an empty string, and the second one silently reporting
+    # as the first is the failure mode this whole file is being careful
+    # about.
+    PARSED="$(XC_MONITOR="$MONITOR" XC_PUBLISH_LOG="$PUBLISH_LOG" node --input-type=module -e '
+        import { readFileSync } from "node:fs";
+        import { pathToFileURL } from "node:url";
+        const { parsePublishLog } = await import(pathToFileURL(process.env.XC_MONITOR).href);
+        const rows = parsePublishLog(readFileSync(process.env.XC_PUBLISH_LOG, "utf8"));
+        process.stdout.write(`ROWS ${rows.map((r) => r.version).join(" ")}`);
+    ' 2>&1 || true)"
+
+    if [[ "$PARSED" != ROWS* ]]; then
+        echo "  published versions: COULD NOT TELL - parsing $PUBLISH_LOG failed." >&2
+        echo "    This is NOT an all-clear: the floor below is the repo's only, and" >&2
+        echo "    during a rollback the repo is behind the store by construction." >&2
+        echo "    Node said: ${PARSED:-(nothing)}" >&2
+        LOGGED_VERSIONS=""
+        PARSE_OK=0
+    else
+        LOGGED_VERSIONS="${PARSED#ROWS}"
+        LOGGED_VERSIONS="${LOGGED_VERSIONS# }"
+        PARSE_OK=1
+    fi
+
+    if [[ "$PARSE_OK" == "0" ]]; then
+        : # already reported above
+    elif [[ -z "$LOGGED_VERSIONS" ]]; then
+        # Legitimately true before the first publish. Said out loud rather
+        # than passed over, because "no rows" and "could not read the rows"
+        # look identical in silence, and after the first publish this state
+        # is itself the rogue-publish signal spec §2 describes.
+        echo "  published versions: NONE logged in packages/extension/docs/publish-log.md." >&2
+        echo "    Before the first publish that is correct. After it, an empty log" >&2
+        echo "    means either the log was not appended to (spec §6 requires it in the" >&2
+        echo "    same step as the upload) or something published without going through" >&2
+        echo "    the logged process at all. Confirm which before continuing." >&2
+    else
+        for v in $LOGGED_VERSIONS; do
+            if [[ -z "$STORE_MAX" ]] || semver_gt "$v" "$STORE_MAX"; then STORE_MAX="$v"; fi
+        done
+        echo "  published versions (publish-log.md): $LOGGED_VERSIONS" >&2
+        echo "  highest version the store has been given: $STORE_MAX" >&2
+    fi
+fi
+
+# The floor is whichever is higher. They are the same number on a healthy
+# repo and they are not during a rollback, which is the only time anybody
+# runs this script.
+FLOOR="$CURRENT_MAX"
+FLOOR_SOURCE="the repo"
+if [[ -n "$STORE_MAX" ]] && semver_gt "$STORE_MAX" "$FLOOR"; then
+    FLOOR="$STORE_MAX"
+    FLOOR_SOURCE="publish-log.md (the store is AHEAD of this checkout)"
+fi
+echo "  floor to beat: $FLOOR, from $FLOOR_SOURCE" >&2
+
 if [[ -z "$NEW_VERSION" ]]; then
-    IFS='.' read -r cm1 cm2 cm3 <<< "$CURRENT_MAX"
+    IFS='.' read -r cm1 cm2 cm3 <<< "$FLOOR"
     SUGGESTED="${cm1:-0}.${cm2:-0}.$(( ${cm3:-0} + 1 ))"
     echo >&2
     echo "rollback-rerelease.sh: --new-version was not given." >&2
-    echo "  Suggested (current max patch+1): $SUGGESTED" >&2
+    echo "  Suggested (floor patch+1): $SUGGESTED" >&2
     echo "  Pass --new-version explicitly and deliberately; this script" >&2
     echo "  will not pick one for you, even the suggestion above." >&2
     exit 2
 fi
 
-if ! semver_gt "$NEW_VERSION" "$CURRENT_MAX"; then
+if ! semver_gt "$NEW_VERSION" "$FLOOR"; then
     echo >&2
     echo "rollback-rerelease.sh: --new-version $NEW_VERSION is not greater" >&2
-    echo "  than the current max ($CURRENT_MAX)." >&2
+    echo "  than the floor ($FLOOR, from $FLOOR_SOURCE)." >&2
     echo "  The Chrome Web Store refuses a version it has already served," >&2
-    echo "  or anything lower. Pick a version strictly above $CURRENT_MAX." >&2
+    echo "  or anything lower. Pick a version strictly above $FLOOR." >&2
     exit 1
 fi
-echo "  new version:  $NEW_VERSION (> $CURRENT_MAX, ok)" >&2
+echo "  new version:  $NEW_VERSION (> $FLOOR, ok)" >&2
 
 # --- What a straight re-release of $GOOD_TAG would drop --------------------
 #
@@ -233,8 +371,25 @@ release - claim the release in the ledger before touching anything):
      $GOOD_TAG on a new branch.
   3. Bump every version-bearing file listed above to $NEW_VERSION,
      in the same commit, per the synchronized-versioning rule
-     (CONTRIBUTING.md). Add a CHANGELOG.md entry that says plainly this
-     is a rollback re-release of $GOOD_TAG, not new work.
+     (CONTRIBUTING.md). That list is exactly what  defines and
+     test/smoke/audits/version-lockstep.smoke.js enforces, so bump those
+     files and no others: test/e2e carries its own version by decision
+     and must NOT be dragged along. Note that
+     packages/extension/manifest.json is in the list and is the only one
+     of them the Chrome Web Store ever reads - leave it behind and step 6
+     uploads a zip re-declaring a version the store has already served,
+     which it refuses. Note that manifest.json's version is DERIVED from
+     the wallet version rather than copied
+     (packages/core/scripts/derive-extension-version.js: a stable M.m.p
+     maps to itself, but a prerelease M.m.p-rc.N maps to 0.M.m.N, because
+     Chrome forbids prerelease suffixes). Cut a rollback re-release as a
+     STABLE version and the two are the same string. If you ever need an
+     RC here, stop: measured 2026-08-02, the manifest audit's
+     version-matches-wallet rule and version-lockstep.smoke.js demand
+     DIFFERENT values for a prerelease root and both run in
+     pnpm test:smoke, so the suite cannot pass until that is resolved
+     ('s ground, not this script's). Add a CHANGELOG.md entry that
+     says plainly this is a rollback re-release of $GOOD_TAG, not new work.
   4. Run docs/QA_Checklist.md in full against the bumped build, including
      the "Chrome Web Store release provenance" section.
   5. Commit, tag v$NEW_VERSION (GPG-signed, per the tag-signing gate in
