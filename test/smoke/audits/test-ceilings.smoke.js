@@ -108,6 +108,47 @@ assert.match(
     + 'downstream reads "not instrumented".',
 );
 
+// The instrumented run skips exactly three files, and only these three.
+//
+// Argon2id is synchronous, so it blocks the worker's event loop and a blocked
+// worker cannot answer vitest's RPC; on a runner the block outlasts birpc's
+// timeout and the run dies with an unhandled "Timeout calling onTaskUpdate"
+// while every test PASSES. They still run on every push in the `test` job, and
+// the cost bought no coverage signal anyway, because the argon2id loop lives
+// in @noble/hashes and the lens is packages/*/src.
+//
+// This is the assertion most worth having: "skip under coverage" is a
+// mechanism that could quietly grow to cover an inconvenient failing test.
+assert.match(
+    unitConfig, /ARGON2ID_DERIVING_TESTS/,
+    'unit.config.js no longer names the Argon2id-deriving tests it excludes from an '
+    + 'instrumented run. Without that exclusion the coverage job dies on a worker RPC '
+    + 'timeout with every test passing.',
+);
+
+const derivingList = /const ARGON2ID_DERIVING_TESTS = \[([\s\S]*?)\];/.exec(unitConfig);
+assert.ok(derivingList, 'ARGON2ID_DERIVING_TESTS is no longer a literal list this check can read');
+const excluded = [...derivingList[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+assert.deepEqual(
+    excluded,
+    [
+        'test/unit/crypto/backup.test.js',
+        'test/unit/crypto/kdf.test.js',
+        'test/unit/crypto/walletBlob.test.js',
+    ],
+    'the set of tests skipped under coverage CHANGED. This list is allowed to grow only for a '
+    + 'file that genuinely pays an Argon2id derivation, and only with a note saying so - it is '
+    + 'not a place to park a failing test. Adding an entry here removes it from the coverage '
+    + `job entirely. Found: ${excluded.join(', ')}`,
+);
+
+assert.match(
+    unitConfig, /INSTRUMENTED \? ARGON2ID_DERIVING_TESTS : \[\]/,
+    'the exclusion is no longer conditional on the run being instrumented, so these three '
+    + 'files may now be skipped by the `test` job too - which is the job that actually proves '
+    + 'the wallet crypto works.',
+);
+
 assert.match(
     unitConfig, /testTimeout:\s*scale\(/,
     "the unit suite's default testTimeout is a bare number again. At a flat 20s the coverage "

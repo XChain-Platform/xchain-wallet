@@ -389,7 +389,20 @@ const config = {
     },
     dmg: {
         artifactName: DMG_ARTIFACT,
-        writeUpdateInfo: true,
+        // FALSE by operator decision, 2026-08-03 ().
+        //
+        // At `true` the .dmg was listed in `stable-mac.yml` beside the .zip,
+        // and electron-updater has no dmg install path at all: `MacUpdater`
+        // swaps from a zip. So the channel pointer advertised an artifact the
+        // updater could never use. Nothing broke, because MacUpdater picks the
+        // zip regardless - but a feed listing an install path that does not
+        // exist is one more thing every reader has to know is untrue, and
+        // pointer shape is release shape, so it is far cheaper to settle now
+        // than to change it under installed clients later.
+        //
+        // The .dmg still ships. It stays the file users download and click; it
+        // simply stops appearing in the update pointer.
+        writeUpdateInfo: false,
     },
 
     // --- Mac App Store ( §13) ------------------------------------

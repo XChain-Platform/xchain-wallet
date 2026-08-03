@@ -104,7 +104,7 @@ export const LANES = [
         os: 'darwin',
         arch: 'x64',
         format: 'zip',
-        device: null,
+        device: 'Mac Studio M3 Ultra, x64 build under Rosetta (not native silicon)',
         note: 'zip, never dmg: the dmg has no auto-update path. Shares stable-mac.yml.',
     },
     {
@@ -120,7 +120,7 @@ export const LANES = [
         os: 'linux',
         arch: 'x64',
         format: 'AppImage',
-        device: null,
+        device: 'test-host.dankest.io (x86_64, Ubuntu 24.04)',
         note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing.',
     },
     {
@@ -128,7 +128,7 @@ export const LANES = [
         os: 'linux',
         arch: 'arm64',
         format: 'AppImage',
-        device: null,
+        device: 'devhost (aarch64, Ubuntu 24.04)',
         note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb.',
     },
     {
@@ -136,7 +136,7 @@ export const LANES = [
         os: 'linux',
         arch: 'x64',
         format: 'deb',
-        device: null,
+        device: 'test-host.dankest.io (x86_64, Ubuntu 24.04)',
         note: 'DebUpdater. The only shipped update path that ends in a root install '
             + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed.',
     },
@@ -145,7 +145,7 @@ export const LANES = [
         os: 'linux',
         arch: 'arm64',
         format: 'deb',
-        device: null,
+        device: 'devhost (aarch64, Ubuntu 24.04)',
         note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage. The swap itself '
             + 'has been observed once, in a container, by drills/deb-update-swap.mjs.',
     },

@@ -47,6 +47,37 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const INSTRUMENTED = process.argv.some((a) => a === '--coverage'
     || a.startsWith('--coverage=') || a.startsWith('--coverage.'));
 
+// The three files that pay a real Argon2id derivation, and the ONLY ones the
+// instrumented run does not execute.
+//
+// WHY, because "we skip tests under coverage" deserves a hard justification.
+// Argon2id is SYNCHRONOUS: it blocks the worker's event loop for the whole
+// derivation, and a blocked worker cannot answer the RPC vitest requires of
+// it. Instrumentation multiplies the cost several-fold, so on a hosted runner
+// the block outlasts birpc's own timeout and the run dies with an unhandled
+// `[vitest-worker]: Timeout calling "onTaskUpdate"` - while every one of its
+// 5645 tests PASSES. That timeout is not exposed through vitest config, so the
+// only lever is the blocking window, and halving the fork pool narrowed it
+// from two such errors to one without closing it.
+//
+// What makes skipping them honest rather than convenient:
+//
+//   - they are NOT skipped anywhere it matters. `pnpm test:unit` runs them on
+//     every push, in the `test` job, which is required and now green;
+//   - the cost buys no coverage signal. The lens below is packages/*/src, and
+//     the argon2id loop lives in @noble/hashes, which the lens does not
+//     report on. We were paying a 100-second block to instrument a dependency
+//     we do not measure;
+//   - the effect on the numbers is measured, not assumed, and the thresholds
+//     below still hold with room to spare.
+//
+// If a fourth file starts deriving, it belongs here WITH a note, not silently.
+const ARGON2ID_DERIVING_TESTS = [
+    'test/unit/crypto/kdf.test.js',
+    'test/unit/crypto/backup.test.js',
+    'test/unit/crypto/walletBlob.test.js',
+];
+
 // The config is evaluated before the `test.env` it sets can apply, so it
 // passes its own detection into slowTimeout rather than letting the helper
 // read an environment variable that does not exist yet. The multiplier
@@ -79,7 +110,11 @@ export default defineConfig({
         env: { XCHAIN_TEST_INSTRUMENTED: INSTRUMENTED ? '1' : '0' },
         environment: 'jsdom',
         include: ['test/unit/**/*.test.{js,jsx}'],
-        exclude: ['test/**/*.smoke.js', 'node_modules/**'],
+        exclude: [
+            'test/**/*.smoke.js',
+            'node_modules/**',
+            ...(INSTRUMENTED ? ARGON2ID_DERIVING_TESTS : []),
+        ],
         setupFiles: ['./test/unit/setup.js'],
         globals: false,
         // Most unit tests finish in milliseconds, but three crash-class
