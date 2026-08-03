@@ -246,10 +246,15 @@ is a measurement rather than a memory.
 the form validates is live and serving the current policy. **Run it for
 real, over the network.** `pnpm test:smoke` exercises the checker against
 stubs, not against the live URL, which is exactly how a 404 survived every
-green suite on 2026-08-01. Known and harmless as of 2026-08-02: Cloudflare
-obfuscates the policy's contact address at the edge, the checker decodes
-that, and the open question of whether a legal document's contact should be
-JavaScript-gated is tracked in `STORE_LISTING_PACK.md` §5.  
+green suite on 2026-08-01. **Exit 4 is not a failure and does not block
+you:** it means the URL is live and current but a contact address the policy
+publishes is JavaScript-gated at the edge, which is submittable (the store
+validates that the URL resolves and serves the policy, and it does). The
+script prints both ways out when it fires. Cloudflare was obfuscating the
+contact address until 2026-08-02; it is not any more (measured: zero
+`__cf_email__` spans zone-wide), and exit 4 is what tells you if that comes
+back, rather than the silent decode that hid it. See `STORE_LISTING_PACK.md`
+§5.  
 ⬜ `pnpm test:smoke` is green, so §3's host table still matches
 `wireAudit.js` and §5's permission claims still match `manifest.json`.  
 ⬜ Any console label that differs from the categories named here has been

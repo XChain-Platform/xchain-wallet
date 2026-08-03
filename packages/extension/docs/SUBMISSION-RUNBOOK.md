@@ -106,9 +106,13 @@ This is the access you confirmed you had (or knew who to ask for) in Phase 0. If
 node tools/release/verify-privacy-url.mjs
 ```
 
-Exit 0 means live, direct, and carrying this repo's current policy word for word. The other three exit codes are deliberately disjoint: **1** the URL does not resolve, redirects, or serves a stale policy (submission is blocked, and the fix is a deploy); **2** config error, nothing was checked; **3** could not tell, which is never an all-clear.
+Exit 0 means live, direct, carrying this repo's current policy word for word, and with the policy's contact address readable without JavaScript. The other exit codes are deliberately disjoint: **1** the URL does not resolve, redirects, or serves a stale policy (submission is blocked, and the fix is a deploy); **2** config error, nothing was checked; **3** could not tell, which is never an all-clear; **4** live and current, but a contact address is JavaScript-gated at the edge, which is **submittable** (see below).
 
-**Expect exit 3 from a normal terminal, and do not read it as failure.** Cloudflare fronts this origin and answers non-browser clients with **403 on every path**, live page or not. Two ways to get past it, and the runbook wants both because they prove different things:
+**Exit 4 does not block you.** It means the URL resolves and serves the current policy, which is all the store's form validates, but Cloudflare's Email Address Obfuscation is rewriting the policy's `mailto:` links, so a reviewer or regulator reading the document without JavaScript sees `[email protected]` where the GDPR/DSA contact belongs. Submit, and fix the edge setting after: either turn Email Address Obfuscation off for `/wallet/privacy/*` in the Cloudflare dashboard, or publish the address as plain text as well, which the obfuscator does not rewrite. The script prints both ways out when it fires.
+
+**This step used to tell you to EXPECT exit 3 and not read it as failure, and that instruction is now withdrawn.** It was true when Cloudflare answered non-browser clients with 403 on every path of this domain; turned Super Bot Fight Mode off, and as measured on 2026-08-02 a plain `curl` and this script's own fetch both get 200 and the live run exits 0. **Treat exit 3 as what it says it is: could not tell.** The withdrawn instruction was worse than merely stale, which is why it is called out rather than quietly deleted: it pre-armed you to shrug at an inconclusive verdict at the exact moment a real 404 would be producing one, and a 404 that survived every green check is precisely what happened on 2026-08-01.
+
+Do both of the checks below anyway, because they prove different things:
 
 1. **Load the URL in a real browser.** That is the only check that exercises the same path the store's validator will: DNS, the edge, the cache, the redirect behaviour.
 2. **Check the bytes against this repo**, by fetching the origin directly and feeding the result back in:
@@ -118,7 +122,7 @@ curl -sS -o /tmp/policy.html --resolve xchain.io:443:<origin-ip> https://xchain.
 node tools/release/verify-privacy-url.mjs --html /tmp/policy.html
 ```
 
-That second one bypasses the edge on purpose, so it proves the deployed page is the current policy and says nothing about reachability or about a stale edge cache. Neither check subsumes the other. An earlier version of this phase told you to read `curl -sI | head -1` and expect `HTTP/2 200`, which on this domain is unreachable: you would have read a 403 as an outage, or gone hunting for the wrong problem entirely.
+That second one bypasses the edge on purpose, so it proves the deployed page is the current policy and says nothing about reachability, about a stale edge cache, or about the contact-address obfuscation above. The script declines to give a contact verdict on `--html` bytes for that reason, rather than answering confidently from evidence that cannot see the edge. Neither check subsumes the other.
 
 **Why the trailing slash matters:** the page is generated from the wallet-wide `docs/Privacy_Policy.md` by `xchain-websites/xchain.io/build/privacy.build.js` (stage S6). The site's canonical URL carries a trailing slash. Paste `https://xchain.io/wallet/privacy/`, not `https://xchain.io/wallet/privacy` (no slash), into the console field, to avoid a redirect hop under review. The script treats a redirect as a failure for the same reason, and names the destination so you can paste that instead.
 

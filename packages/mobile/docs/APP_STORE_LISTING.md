@@ -77,7 +77,7 @@ Open source, AGPL-3.0-or-later. Built by Dankest, LLC.
 | Primary category | Finance |
 | Secondary category | Utilities |
 | Bundle ID | `io.xchain.wallet.ios` (D1; immutable after first upload) |
-| Support URL | xchain.io support page, or `info@dankest.llc` until  makes `support@xchain.io` deliverable |
+| Support URL | xchain.io support page, or `info@dankest.llc`. **Corrected 2026-08-02 ( S20): `support@xchain.io` does NOT wait on.**  is the OUTBOUND relay on origin-host, so cron and alert mail can leave the box; it has nothing to do with receiving. `dig MX` puts both `xchain.io` and `dankest.llc` on Google Workspace (`aspmx.l.google.com`), re-measured 2026-08-02. What MX records do not prove is that a specific address has a mailbox, so drive any address end to end before publishing it, the way D1 drove `info@` and `privacy@`. `info@dankest.llc` is the one already proven to receive, and using it keeps one contact across all three stores |
 | Marketing URL | `https://xchain.io` once the  apex flip lands |
 | Privacy policy URL | **`https://xchain.io/wallet/privacy/`** (trailing slash; the un-slashed form 301s). Corrected 2026-08-02: this row used to name `dankest.llc/privacy.html` and blame a missing DNS A record. Both were wrong. The xchain.io URL returns 200 to a plain client, is what the Chrome listing already publishes, and all three store forms naming ONE url is the point. **✅ Ready as of 2026-08-02.** The blocker was never the URL but the deployed TEXT (), and it is cleared: the page now carries the corrected policy verbatim, confirmed by `node tools/release/verify-privacy-url.mjs` exiting 0 and by reading the live page, which says "we do not keep your IP address" with the 844-of-846 measurement and no trace of the old 14-day claim |
 | Trader status (EU DSA) | Trader: Dankest, LLC, `info@dankest.llc`. **Use the same address the Play and Chrome listings use**; one legal entity with two public trader contacts is what a regulator notices |
@@ -280,7 +280,10 @@ Every submission, in this order:
 ⬜ `node tools/release/verify-privacy-url.mjs` exits 0. It checks the deployed
    TEXT, not just that the URL resolves, which is the distinction was
    about. Green 2026-08-02; re-run it every submission, because the page can go
-   stale again the moment the policy is edited
+   stale again the moment the policy is edited. **Exit 4 is not a failure:** it
+   means live and current, but a contact address the policy publishes is
+   JavaScript-gated at the edge ( S20). Submit anyway and fix the edge
+   setting; the script prints both ways out
 ⬜ Demo seed funded, balance checked, and never used before
 ⬜ Demo rehearsed end to end on an iPhone **and** an iPad, including the
    airplane-mode step

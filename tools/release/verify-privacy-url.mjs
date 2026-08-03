@@ -67,11 +67,22 @@
 //   --html <path>                             check bytes you supply instead
 //                                             of fetching (see below)
 //
-// THE --html ESCAPE HATCH, AND WHAT IT DOES NOT PROVE. Cloudflare 403s this
-// host on every path of xchain.io, so from a script host the fetch verdict
-// is permanently exit 3 and the check can never go green on its own. Rather
-// than weaken the fetch into something that guesses, this takes real output
-// the same way verify-store.sh takes an operator's real store unpack:
+// THE --html ESCAPE HATCH, AND WHAT IT DOES NOT PROVE. This header used to
+// say Cloudflare 403s this host on every path, so the fetch verdict was
+// permanently exit 3 and the check could never go green on its own. That
+// STOPPED BEING TRUE when turned Super Bot Fight Mode off, and it
+// was measured on 2026-08-02 rather than assumed: a plain `curl` with no
+// User-Agent, and this script's own fetch, both get 200 from the release
+// operator's machine, and the live run exits 0. The correction matters more
+// than a stale sentence usually does, because the instruction it carried was
+// "expect exit 3 and do not read it as failure", which pre-arms an operator
+// to shrug at the inconclusive verdict at the exact moment a real 404 would
+// be producing one. Prefer the plain live run; reach for --html when a host
+// you are on IS blocked (the edge block can come back, which is why 403
+// still lands in inconclusive rather than in failure).
+//
+// Rather than weaken the fetch into something that guesses, this takes real
+// output the same way verify-store.sh takes an operator's real store unpack:
 //
 //   curl -sS -o /tmp/policy.html --resolve xchain.io:443:<origin-ip> \
 //        https://xchain.io/wallet/privacy/
@@ -91,6 +102,23 @@
 //                 nothing was checked this run
 //   3  INCONCLUSIVE - could not determine anything (403/429/5xx, timeout,
 //                 network error). NOT an all-clear and never reported as one.
+//   4  CONTACT_GATED - live and carrying the current policy, but at least one
+//                 contact address the policy publishes is not readable
+//                 without JavaScript. SUBMITTABLE: the store validates that
+//                 the URL resolves and serves the policy, and it does.
+//
+// Why 4 is its own code rather than a warning printed inside 0. The edge can
+// obfuscate the policy's mailto addresses (see decodeCloudflareEmails below),
+// and this script DECODES that, silently, so it does not cry outage over a
+// transformation the deployed bytes are innocent of. The cost of decoding
+// silently is that the property then goes unmeasured: turn Email Address
+// Obfuscation back on at the dashboard and the GDPR/DSA contact on a legal
+// document is JavaScript-gated again, with every check in this repo still
+// green. A line printed inside an exit 0 is a line that gets scrolled past;
+// this spec has already found that prose warning people to stay consistent
+// does not keep them consistent (S14). A disjoint code is the same shape S5
+// and S10 already use here, and for the same reason: silence must never be
+// indistinguishable from an all-clear.
 //
 // A redirect is a FAILURE rather than a pass, because the fix is free and
 // the cost is not: the store form should be given the URL that answers
@@ -99,7 +127,7 @@
 // /wallet/privacy/, which is what the D5 default below uses.)
 //
 // STDOUT carries the full report every run. STDERR carries content only on
-// exit 1, 2 and 3, so this can be run from cron the same way the
+// exit 1, 2, 3 and 4, so this can be run from cron the same way the
 // store-version monitor is.
 
 import { readFileSync } from 'node:fs';
@@ -113,7 +141,7 @@ export const DEFAULT_URL = 'https://xchain.io/wallet/privacy/';
 export const DEFAULT_SOURCE_PATH = join(here, '..', '..', 'docs', 'Privacy_Policy.md');
 export const DEFAULT_TIMEOUT_MS = 15000;
 
-export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3 };
+export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3, CONTACT_GATED: 4 };
 
 // Status codes that mean "definitely not there" as opposed to "I was not
 // allowed to look". Everything else non-200 lands in inconclusive.
@@ -238,14 +266,52 @@ export function decodeCloudflareEmails(html) {
             (whole, hex) => { const a = decode(hex); return a ? `mailto:${a}` : whole; });
 }
 
-/** The page's visible text: scripts, styles and tags out, entities folded. */
-export function pageTextFromHtml(html) {
-    const stripped = decodeCloudflareEmails(html)
+/** Tags, scripts, styles and comments out; entities folded. No CF decoding. */
+function visibleText(html) {
+    return normalizeText(String(html)
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<!--[\s\S]*?-->/g, ' ')
-        .replace(/<[^>]+>/g, ' ');
-    return normalizeText(stripped);
+        .replace(/<[^>]+>/g, ' '));
+}
+
+/** The page's visible text: scripts, styles and tags out, entities folded. */
+export function pageTextFromHtml(html) {
+    return visibleText(decodeCloudflareEmails(html));
+}
+
+/**
+ * What a reader WITHOUT JavaScript sees. Same strip as above, minus the
+ * Cloudflare decode, because the decode is precisely the thing a browser's
+ * bundled script does and a curl, a regulator's fetch, or a reviewer with
+ * scripting off does not.
+ */
+export function pageTextWithoutScripts(html) {
+    return visibleText(html);
+}
+
+/**
+ * The contact addresses the policy itself publishes. Derived from the policy
+ * text rather than hardcoded, so this cannot go stale the way a second copy
+ * of `privacy@dankest.llc` would: whatever the policy publishes is what the
+ * page has to show. Taking them from the already-normalized policy text (not
+ * the raw Markdown) also keeps anything in an HTML comment or an SPDX header
+ * out of the set, since the same text is what the page must carry anyway.
+ */
+export function contactAddressesFrom(policyText) {
+    return [...new Set(String(policyText).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [])];
+}
+
+/**
+ * Which of those addresses a non-JS reader cannot see. Compared against the
+ * page's visible TEXT rather than against the raw HTML on purpose: an address
+ * split across an anchor's href and its label, or carrying an entity, is
+ * still readable, and a check that fires on a correctly published address is
+ * one people delete.
+ */
+export function gatedContacts(html, addresses) {
+    const readable = pageTextWithoutScripts(html);
+    return addresses.filter((address) => !readable.includes(address));
 }
 
 /**
@@ -398,6 +464,13 @@ export async function checkPrivacyUrl({
         }
         lines.push('CARRIES THE CURRENT POLICY. Not a liveness check: these bytes were handed to');
         lines.push('this script, not fetched from the URL. Confirm the URL itself resolves separately.');
+        // Deliberately no contact-readability verdict here. These bytes come
+        // either from the origin (--resolve, bypassing the edge, so no
+        // obfuscation could have been applied) or from a browser save (after
+        // the bundled script already decoded it). Both would report "readable"
+        // no matter what the edge is doing, so answering at all would be a
+        // confident wrong answer about a legal document's contact address.
+        lines.push('contact: not judged on supplied bytes; edge obfuscation is only visible to a live fetch.');
         return { code: EXIT.LIVE, lines, errors };
     }
 
@@ -427,6 +500,25 @@ export async function checkPrivacyUrl({
     }
 
     lines.push('LIVE: the URL resolves directly and carries the current policy verbatim.');
+
+    const contacts = contactAddressesFrom(policyText);
+    const gated = gatedContacts(fetched.html, contacts);
+    if (gated.length) {
+        errors.push(
+            `${url} is live and current, but ${gated.join(', ')} `
+            + `${gated.length === 1 ? 'is' : 'are'} not readable without JavaScript.`,
+            'The edge is rewriting the policy\'s mailto links (Cloudflare Email Address Obfuscation),',
+            'so a reviewer, a regulator, or any non-JS fetch of this legal document sees',
+            '"[email protected]" where the GDPR/DSA contact belongs. The deployed bytes are correct.',
+            'NOT a submission blocker: the store validates that the URL resolves and serves the',
+            'policy, and it does. Two ways out: turn Email Address Obfuscation off for',
+            '/wallet/privacy/* in the Cloudflare dashboard, or additionally publish the address as',
+            'plain text, which the obfuscator does not rewrite (it targets mailto links).');
+        return { code: EXIT.CONTACT_GATED, lines, errors };
+    }
+    lines.push(contacts.length
+        ? `contact: ${contacts.join(', ')} readable without JavaScript.`
+        : 'contact: the policy publishes no email address to check.');
     return { code: EXIT.LIVE, lines, errors };
 }
 
@@ -454,8 +546,8 @@ const USAGE = `verify-privacy-url.mjs - is the public privacy-policy URL live an
   node tools/release/verify-privacy-url.mjs --html <saved-page.html>
 
 The second form skips the fetch and checks bytes you supply, for when
-Cloudflare 403s this host (it does, on every path of xchain.io). Get them
-from the origin, bypassing the edge:
+Cloudflare blocks the host you are on. It no longer blocks by default: turned Super Bot Fight Mode off, measured 2026-08-02, so prefer
+the plain live run. Get supplied bytes from the origin, bypassing the edge:
 
   curl -sS -o /tmp/policy.html --resolve xchain.io:443:<origin-ip> \
        https://xchain.io/wallet/privacy/
@@ -467,7 +559,9 @@ Defaults to ${DEFAULT_URL} ( D5) and this repo's
 docs/Privacy_Policy.md, the one policy covering every wallet shell.
 
 Exit codes: 0 live, 1 not live / not current / redirects, 2 config error,
-3 inconclusive (403, timeout, network - NOT an all-clear).
+3 inconclusive (403, timeout, network - NOT an all-clear), 4 live and
+current but a contact address is JavaScript-gated at the edge (submittable;
+fix the edge setting).
 
 Run it before any store submission, and after any deploy that touches the
 websites repo. See tools/release/README.md.`;
