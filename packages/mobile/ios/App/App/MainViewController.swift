@@ -41,6 +41,13 @@ class MainViewController: CAPBridgeViewController {
         // then REFUSES rather than leaking to Universal Clipboard - visible,
         // but only as a copy button that stops working.
         bridge?.registerPluginInstance(XChainClipboardPlugin())
+        // Deep links ( §3). Third instance of the same silent shape: with
+        // this line missing, `linksPlugin()` in nativeDeepLinks.js finds nothing
+        // and `subscribeToNativeDeepLinks` returns a no-op, so a tapped
+        // Universal Link opens the app on its default view and the payload is
+        // discarded. Nothing logs, nothing fails, and the §2.1 guideline-4.2
+        // defence demos as broken.
+        bridge?.registerPluginInstance(XChainLinksPlugin())
 
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()

@@ -47,6 +47,25 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+
+        // THE LAUNCHING TAP ARRIVES HERE AND NOWHERE ELSE. A link that starts
+        // the app delivers its activity and its URL contexts in
+        // `connectionOptions`; `scene(_:continue:)` and
+        // `scene(_:openURLContexts:)` below are never called for it. Handling
+        // only those two - which is what this file did until XChainLinks
+        // existed - drops exactly the tap that matters most.
+        //
+        // Order is deliberate: the proxy call above lets Capacitor build the
+        // bridge (and with it the plugin instance) before anything is offered,
+        // so the common case takes the queue path with a live plugin rather
+        // than a nil one. The inbox is a file-static and tolerates either.
+        for activity in connectionOptions.userActivities
+        where activity.activityType == NSUserActivityTypeBrowsingWeb {
+            XChainLinkInbox.shared.deliver(activity.webpageURL?.absoluteString)
+        }
+        for context in connectionOptions.urlContexts {
+            XChainLinkInbox.shared.deliver(context.url.absoluteString)
+        }
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -54,12 +73,23 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // validated in the SPA before anything acts on them ( §4); this
         // hands them over, it does not vouch for them.
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
+
+        for context in URLContexts {
+            XChainLinkInbox.shared.deliver(context.url.absoluteString)
+        }
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
         // Universal Links, domain-attested by the association file .
         // Still validated in the SPA, on exactly the same footing.
         SceneDelegateProxy.shared.scene(scene, continue: userActivity)
+
+        // The proxy's own delivery target is `@capacitor/app`'s `appUrlOpen`,
+        // which is not a dependency here (see XChainLinksPlugin.swift), so
+        // forwarding to it alone reached nothing. This is the line that makes
+        // the tap arrive somewhere.
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb else { return }
+        XChainLinkInbox.shared.deliver(userActivity.webpageURL?.absoluteString)
     }
 
     // MARK: - Snapshot cover

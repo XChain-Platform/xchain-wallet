@@ -24,6 +24,7 @@
 		XC1000B00000000000000003 /* VaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000003 /* VaultStore.swift */; };
 		XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000004 /* VaultBiometricSidecar.swift */; };
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
+		XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000006 /* XChainLinksPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +62,7 @@
 		XC1000A00000000000000004 /* VaultBiometricSidecar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultBiometricSidecar.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000005 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Version.xcconfig; path = Version.xcconfig; sourceTree = SOURCE_ROOT; };
 		XC1014A00000000000000001 /* XChainClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = clipboard/XChainClipboardPlugin.swift; sourceTree = "<group>"; };
+		XC1000A00000000000000006 /* XChainLinksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/XChainLinksPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -123,6 +125,7 @@
 				XC1000A00000000000000003 /* VaultStore.swift */,
 				XC1000A00000000000000004 /* VaultBiometricSidecar.swift */,
 				XC1014A00000000000000001 /* XChainClipboardPlugin.swift */,
+				XC1000A00000000000000006 /* XChainLinksPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -267,6 +270,7 @@
 				XC1000B00000000000000003 /* VaultStore.swift in Sources */,
 				XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */,
 				XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */,
+				XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

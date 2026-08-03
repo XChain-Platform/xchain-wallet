@@ -742,6 +742,137 @@ for (const script of ['ios-archive.sh', 'ios-export.sh']) {
     );
 }
 
+// --- 14c. The archive action runs on every tag, not only once Apple exists --
+//
+// §14b made the two lane scripts have a caller. It did not make either of them
+// RUN: both callers were gated on `env.ASC_KEY_ID != ''`, so `ios-archive.sh`
+// had never once executed anywhere, and the first execution of a release script
+// would have been on submission day with a store deadline attached. Same family
+// as the orphan scripts and the uncommitted pbxproj input - a thing believed to
+// work because nothing had disproved it.
+//
+// Archiving unsigned needs no credential and covers everything except signing,
+// so there is no reason for the archive ACTION to be untested until then. This
+// asserts the ungated caller exists and stays ungated; the gated one below it is
+// still the only path that produces something uploadable.
+const releaseYml = readFileSync(join(wsRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+const stepBlocks = releaseYml.split(/^ {6}- (?=name:|uses:|run:)/m);
+const archiveSteps = stepBlocks.filter((b) => /run: bash tools\/release\/ios-archive.sh/.test(b));
+assert.ok(archiveSteps.length >= 2, `expected a gated and an ungated ios-archive caller, found ${archiveSteps.length}`);
+// Checked first: without it, a signed step that lost its gate would be counted
+// as the ungated one and reported as the wrong defect entirely.
+assert.ok(
+    archiveSteps.some((b) => /^ {8}if: env\.ASC_KEY_ID/m.test(b)),
+    'the signed archive lost its `if: env.ASC_KEY_ID` gate; it must not run on a runner without the ASC key, where '
+    + 'it would fail every tag build on a credential that does not exist yet',
+);
+const ungated = archiveSteps.filter((b) => !/^ {8}if:/m.test(b));
+assert.equal(
+    ungated.length, 1,
+    'ios-archive.sh has no ungated caller, so the archive action is proven only on a runner that already has the '
+    + 'Apple credentials - which is to say, first proven on submission day.',
+);
+assert.match(
+    ungated[0],
+    /XCHAIN_IOS_ARCHIVE_UNSIGNED/,
+    'the ungated ios-archive caller does not ask for unsigned mode, so it will demand credentials it cannot have',
+);
+
+// --- 15. Universal Links reach the SPA, not just the app ----------------
+//
+// The defect this exists for was FOUR layers deep and three of them were right,
+// which is why nothing caught it for days. The association file claimed
+// `/wallet/link/*`; the entitlement named the domain; `SceneDelegate` forwarded
+// the `NSUserActivity` to Capacitor's proxy, so iOS really did open the app on a
+// tap. The proxy's delivery target is `@capacitor/app`'s `appUrlOpen`, that
+// package is not a dependency, and no JS listens for it - so the link was
+// claimed, forwarded, and dropped, and the app surfaced on its default view with
+// the payload discarded. A green build says nothing about any of it, and §2.1
+// counts Universal Links as one of the six native integrations answering
+// guideline 4.2: a reviewer tapping a link and watching nothing happen is
+// watching that defence fail.
+//
+// So this section asserts the RELATIONSHIPS between the four layers, in the same
+// spirit as §14, rather than each layer's existence. Every one of them was
+// individually present while the path was broken end to end.
+const linksSwiftPath = join(appDir, 'links', 'XChainLinksPlugin.swift');
+assert.ok(
+    existsSync(linksSwiftPath),
+    'no iOS XChainLinks plugin. Android has one (links/XChainLinksPlugin.java); without the iOS twin '
+    + '`linksPlugin()` in nativeDeepLinks.js returns null, `subscribeToNativeDeepLinks` is a no-op, and every '
+    + 'tapped Universal Link is silently discarded.',
+);
+const linksSwift = readFileSync(linksSwiftPath, 'utf8');
+
+// The SPA looks the plugin up by jsName and REFUSES it unless takePendingLink is
+// callable (nativeDeepLinks.js `linksPlugin()`), so a rename on either side is
+// the same silent nothing as no plugin at all.
+const deepLinkJsPath = join(wsRoot, 'packages', 'web', 'src', 'deeplinks', 'nativeDeepLinks.js');
+const deepLinkSource = readFileSync(deepLinkJsPath, 'utf8');
+const jsPluginName = /LINKS_PLUGIN\s*=\s*'([^']+)'/.exec(deepLinkSource)?.[1];
+const jsEventName = /addListener\?\.\('([^']+)'/.exec(deepLinkSource)?.[1];
+assert.ok(jsPluginName && jsEventName, 'nativeDeepLinks.js no longer states its plugin name and event name');
+assert.match(
+    linksSwift,
+    new RegExp(`jsName\\s*=\\s*"${jsPluginName}"`),
+    `the iOS plugin does not answer to "${jsPluginName}", which is the name the SPA looks up`,
+);
+assert.match(
+    linksSwift,
+    /CAPPluginMethod\(name: "takePendingLink"/,
+    'takePendingLink is not an exposed plugin method, and nativeDeepLinks.js treats a plugin without it as absent '
+    + '- so the cold-start link, the one that LAUNCHED the app, is dropped',
+);
+assert.ok(
+    linksSwift.includes(`static let event = "${jsEventName}"`),
+    `the iOS plugin does not emit "${jsEventName}", so warm taps reach native and stop there`,
+);
+
+// Registration. Same silent shape as the vault and the clipboard, and the one
+// line whose removal was measured to produce ZERO bridge traffic and a perfectly
+// healthy-looking app.
+const mainVC = readFileSync(join(appDir, 'MainViewController.swift'), 'utf8');
+assert.match(
+    mainVC,
+    /^\s*bridge\?\.registerPluginInstance\(XChainLinksPlugin\(\)\)/m,
+    'MainViewController does not register XChainLinksPlugin. Capacitor 8 does not discover app-local iOS plugins, '
+    + 'so an unregistered plugin does not exist at run time and the SPA falls back to its no-op silently.',
+);
+
+// Delivery. Registration alone is still nothing: the plugin has no way to learn
+// about a link unless the scene delegate hands it one, and iOS uses THREE doors
+// for the two link shapes. `connectionOptions` is the one that is easy to miss
+// and the one that matters most - a link that launches the app arrives there and
+// never calls the warm callbacks at all.
+const sceneDelegate = readFileSync(join(appDir, 'SceneDelegate.swift'), 'utf8');
+for (const [door, why] of [
+    ['connectionOptions.userActivities', 'a Universal Link that LAUNCHES the app is delivered here, once, and '
+        + 'never reaches scene(_:continue:)'],
+    ['connectionOptions.urlContexts', 'an `xchain:` link that launches the app is delivered here, once, and never '
+        + 'reaches scene(_:openURLContexts:)'],
+]) {
+    assert.ok(
+        sceneDelegate.includes(door),
+        `SceneDelegate never reads ${door}: ${why}. Handling only the warm callbacks drops exactly the tap that `
+        + 'matters most.',
+    );
+}
+const inboxCalls = (sceneDelegate.match(/XChainLinkInbox\.shared\.deliver\(/g) || []).length;
+assert.equal(
+    inboxCalls, 4,
+    `SceneDelegate hands ${inboxCalls} link sources to the inbox; expected 4 (cold web, cold scheme, warm scheme, `
+    + 'warm web). A door that forwards to SceneDelegateProxy and not to the inbox reaches @capacitor/app, which is '
+    + 'not a dependency, so it reaches nothing.',
+);
+
+// The paths the entitlement's domain is allowed to open are claimed in the
+// association file, cross-repo; what belongs here is that the JS gate and the
+// native gate agree on the origin, since each is the other's defence in depth.
+assert.ok(
+    linksSwift.includes('hostWeb = "xchain.io"') && deepLinkSource.includes("ALLOWED_HTTPS_ORIGIN = 'https://xchain.io'"),
+    'the native and JS link filters disagree on the origin they accept',
+);
+
 console.log(
     'OK: iOS shell smoke ( S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -752,5 +883,8 @@ console.log(
     + ' both keys read from the git-ignored Version.xcconfig via $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION),'
     + ' and the rails §2 store integer is the same one Android gets. : CAPACITOR_DEBUG lives only in'
     + ' debug.xcconfig and reaches no Release configuration, so native logging and isInspectable are both'
-    + ' debug-only, and ios-console.sh keeps the NSUnbufferedIO recipe that makes the channel readable at all)',
+    + ' debug-only, and ios-console.sh keeps the NSUnbufferedIO recipe that makes the channel readable at all.'
+    + ' §15: the XChainLinks plugin exists, answers to the name the SPA looks up, is registered, and SceneDelegate'
+    + ' feeds all FOUR link doors into it - including connectionOptions, where the launching tap arrives and'
+    + ' nowhere else)',
 );

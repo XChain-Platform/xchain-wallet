@@ -40,6 +40,61 @@ import { neutralizeControlText } from '../shared/utils/textHardening.js';
 const PATH_PREFIX = 'xchain://';
 const BIP21_PREFIX = 'xchain:';
 
+// Shape 4, the web link ( §3, ). `https://xchain.io/wallet/link/…?uri=<encoded xchain: URI>`
+// is what a mobile shell is actually handed when the user taps a link: iOS
+// Universal Links and Android App Links both deliver the ORIGINAL https URL,
+// not a scheme URI. Without this branch that URL reached the parser and came
+// back `{ kind: 'unknown' }`, so a tapped link brought the app to the
+// foreground on its default view with the payload silently discarded - the
+// association file, the entitlement, the scene delegate and the native plugin
+// all working correctly, and the link still going nowhere.
+//
+// WHY IT UNWRAPS RATHER THAN LEARNING A SECOND DIALECT. The alternative was
+// teaching this parser to read intents out of the https path and query
+// directly, which would create a second URI grammar to keep in step with the
+// first across three shells, two stores and every QR already printed. Instead
+// the web link is an ENVELOPE: it carries a canonical `xchain:` URI in `uri`,
+// exactly the way the hosted web shell's own `?uri=` intake already works, and
+// everything downstream - routing, text hardening, the unlock gate - sees the
+// one shape it always saw.
+//
+// It also degrades honestly. A device without the wallet installed loads the
+// URL in a browser and gets xchain.io/wallet/link/, which explains itself and
+// offers the download; the https form survives being printed on a poster,
+// where `xchain:` shows a camera app nothing at all.
+const WEB_LINK_ORIGIN = 'https://xchain.io';
+const WEB_LINK_PREFIX = '/wallet/link/';
+
+/**
+ * The canonical URI inside a web link, or undefined.
+ *
+ * The payload must itself be an `xchain:` URI. That is a real gate and not a
+ * formality: it stops an envelope carrying another envelope (so this function
+ * can never recurse), and it stops the `uri` parameter being used to smuggle
+ * some other scheme - `javascript:`, `file:`, a second https link - into a
+ * value that ends up in screen state.
+ *
+ * @param {string} raw
+ * @returns {string | undefined}
+ */
+function unwrapWebLink(raw) {
+    let parsed;
+    try {
+        parsed = new URL(raw);
+    } catch (_err) {
+        return undefined;
+    }
+    // Compare the parsed ORIGIN, never a prefix of the string: both
+    // `https://xchain.io.evil.com/wallet/link/` and `https://xchain.io@evil.com/`
+    // pass a naive startsWith and neither is our domain.
+    if (parsed.origin !== WEB_LINK_ORIGIN) return undefined;
+    if (!parsed.pathname.startsWith(WEB_LINK_PREFIX)) return undefined;
+
+    const carried = parsed.searchParams.get('uri');
+    if (typeof carried !== 'string') return undefined;
+    return carried.toLowerCase().startsWith(BIP21_PREFIX) ? carried : undefined;
+}
+
 // Actions that map to `kind: 'receive'` on the parsed intent. Everything
 // else is treated as kind:'send' by default, with the literal action
 // preserved in `intent.action` so new screens can route on it.
@@ -100,6 +155,15 @@ export function parseXchainUri(uri, deps) {
     const raw = uri.trim();
     if (raw.length === 0) return { kind: 'unknown' };
     const lower = raw.toLowerCase();
+
+    // Checked before the scheme branches because a web link IS an https URL and
+    // matches none of them. One level deep by construction: `unwrapWebLink`
+    // returns only an `xchain:` payload, so the value handed back below can
+    // never be another web link.
+    if (lower.startsWith('https://')) {
+        const carried = unwrapWebLink(raw);
+        return carried ? parseXchainUri(carried, deps) : { kind: 'unknown' };
+    }
 
     if (lower.startsWith(PATH_PREFIX)) {
         return parsePathStyle(raw);

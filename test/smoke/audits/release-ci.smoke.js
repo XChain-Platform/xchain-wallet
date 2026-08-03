@@ -240,15 +240,32 @@ assert.ok(/XCHAIN_BUILD_PROFILE:\s*store/.test(ios),
 assert.ok(/ASC_KEY_ID:\s*\$\{\{\s*secrets\.APPLE_API_KEY_ID/.test(ios),
     'the iOS lane reads the ASC key id into env, which is what its steps gate on');
 
+// The invariant is about CREDENTIALS, not about the script's name, and saying
+// it that way matters now that `ios-archive.sh` has two callers ( row
+// 22): a gated signed one, and an ungated one that passes
+// XCHAIN_IOS_ARCHIVE_UNSIGNED=1 and needs no Apple account at all. The original
+// check read back 600 characters from the FIRST occurrence of the script name,
+// which cannot tell two callers apart - it would have found whichever came
+// first and reported on the wrong one. Split into step blocks instead, and gate
+// on what the step actually asks for.
+const iosSteps = ios.split(/^ {6}- (?=name:|uses:|run:)/m);
 for (const step of ['ios-archive.sh', 'ios-export.sh']) {
-    const at = ios.indexOf(step);
-    assert.ok(at >= 0, `the iOS lane runs ${step}`);
-    // The `if:` sits above the `run:` in the same step block. Look back a
-    // short way rather than parsing YAML, matching this file's approach.
-    const preceding = ios.slice(Math.max(0, at - 600), at);
-    assert.ok(/if:\s*env\.ASC_KEY_ID\s*!=\s*''/.test(preceding),
-        `${step} must be gated on env.ASC_KEY_ID, so the lane degrades to `
-        + '"built, not archived" while Apple enrollment is pending');
+    const callers = iosSteps.filter((b) => new RegExp(`run: bash tools/release/${step}`).test(b));
+    assert.ok(callers.length > 0, `the iOS lane runs ${step}`);
+    for (const caller of callers) {
+        if (/XCHAIN_IOS_ARCHIVE_UNSIGNED/.test(caller)) continue; // needs no key
+        assert.ok(/if:\s*env\.ASC_KEY_ID\s*!=\s*''/.test(caller),
+            `${step} runs unconditionally while needing App Store Connect credentials, so it turns every release `
+            + 'tag red for a reason that has nothing to do with the release. Gate it on env.ASC_KEY_ID, or have it '
+            + 'ask for unsigned mode.');
+    }
+    // The signed path must still exist and still be gated: dropping it and
+    // keeping only the unsigned one would satisfy the loop above while quietly
+    // removing the only step that can produce something uploadable.
+    assert.ok(
+        callers.some((c) => /if:\s*env\.ASC_KEY_ID\s*!=\s*''/.test(c)),
+        `${step} has no credential-gated caller left, so the lane can never archive for distribution`,
+    );
 }
 
 // The half that needs no Apple account must actually be ungated, or

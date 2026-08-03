@@ -705,6 +705,23 @@ jobs:
              -destination 'generic/platform=iOS Simulator'
              CODE_SIGNING_ALLOWED=NO
              build
+      # The ARCHIVE action, on every tag, with or without Apple ( row 22).
+      #
+      # The simulator build above and the signed archive below cover different
+      # things, and the gap between them was where the archive script sat having
+      # never executed anywhere: the simulator step does not run the script and
+      # does not use the archive action at all, while the step below cannot run
+      # until an Apple account exists. So the first run of a release script
+      # would have been on submission day.
+      #
+      # Unsigned archiving needs no credential and exercises the script's
+      # preflight, the scheme's archive action, the Release configuration, the
+      # device destination and the Version.xcconfig wiring. It runs first so a
+      # break in any of those is attributed here rather than to signing.
+      - name: Archive unsigned (proves the lane, needs no Apple account)
+        env:
+          XCHAIN_IOS_ARCHIVE_UNSIGNED: '1'
+        run: bash tools/release/ios-archive.sh
       - name: Archive for distribution
         if: env.ASC_KEY_ID != ''
         env:
