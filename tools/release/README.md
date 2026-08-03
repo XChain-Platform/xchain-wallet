@@ -188,7 +188,7 @@ still checking the signature and the tag anchor in full:
 ```bash
 bash tools/release/verify.sh --input ~/Downloads \
   --manifest ~/Downloads/v0.333.1.txt \
-  --artifact 'XChain Wallet-0.333.1.AppImage'
+  --artifact 'xchain-wallet-0.333.1-x86_64.AppImage'
 ```
 
 ### One signature, checked three ways

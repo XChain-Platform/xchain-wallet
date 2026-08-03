@@ -151,16 +151,16 @@ const ARTIFACTS = [
     // un-suffixed `Setup 9.9.9.exe` and an arch-less `-win.zip`, and the
     // gate signed it without complaint - which is precisely the release
     // shape that would have stranded every arm64 install.
-    'XChain Wallet-9.9.9-x64.dmg',
-    'XChain Wallet-9.9.9-arm64.dmg',
-    'XChain Wallet-9.9.9-x64-mac.zip',
-    'XChain Wallet-9.9.9-arm64-mac.zip',
-    'XChain Wallet Setup 9.9.9-x64.exe',
-    'XChain Wallet Setup 9.9.9-arm64.exe',
-    'XChain Wallet-9.9.9-x64-win.zip',
-    'XChain Wallet-9.9.9-arm64-win.zip',
-    'XChain Wallet-9.9.9.AppImage',
-    'XChain Wallet-9.9.9-arm64.AppImage',
+    'xchain-wallet-9.9.9-x64.dmg',
+    'xchain-wallet-9.9.9-arm64.dmg',
+    'xchain-wallet-9.9.9-x64-mac.zip',
+    'xchain-wallet-9.9.9-arm64-mac.zip',
+    'xchain-wallet-setup-9.9.9-x64.exe',
+    'xchain-wallet-setup-9.9.9-arm64.exe',
+    'xchain-wallet-9.9.9-x64-win.zip',
+    'xchain-wallet-9.9.9-arm64-win.zip',
+    'xchain-wallet-9.9.9-x86_64.AppImage',
+    'xchain-wallet-9.9.9-arm64.AppImage',
     'xchain-wallet_9.9.9_amd64.deb',
     'xchain-wallet_9.9.9_arm64.deb',
 ];
@@ -232,9 +232,9 @@ try {
             writeFileSync(join(dir, name),
                 'version: 9.9.9\n'
                 + 'files:\n'
-                + '  - url: XChain Wallet-9.9.9.dmg\n'
+                + '  - url: xchain-wallet-9.9.9.dmg\n'
                 + '    sha512: ZmFrZQ==\n'
-                + 'path: XChain Wallet-9.9.9.dmg\n'
+                + 'path: xchain-wallet-9.9.9.dmg\n'
                 + 'sha512: ZmFrZQ==\n'
                 + "releaseDate: '2026-07-31T00:00:00.000Z'\n");
         }
@@ -318,8 +318,8 @@ try {
     //    is internally perfect and describes a release that never built.
     {
         const r = sh(signArgs(stage([], [
-            'XChain Wallet Setup 9.9.9-x64.exe',
-            'XChain Wallet Setup 9.9.9-arm64.exe',
+            'xchain-wallet-setup-9.9.9-x64.exe',
+            'xchain-wallet-setup-9.9.9-arm64.exe',
         ])), { env: gateEnv });
         check('sign.sh refuses a partial artifact set', r.status === 1, `exit ${r.status}`);
         check('sign.sh names the unmatched required pattern',
@@ -331,7 +331,7 @@ try {
     //    a non-goal (§7), so one appearing here means delta metadata
     //    would be served but never verified.
     {
-        const r = sh(signArgs(stage(['XChain Wallet-9.9.9-arm64.dmg.blockmap'])), { env: gateEnv });
+        const r = sh(signArgs(stage(['xchain-wallet-9.9.9-arm64.dmg.blockmap'])), { env: gateEnv });
         check('sign.sh refuses an undeclared artifact', r.status === 1, `exit ${r.status}`);
         check('sign.sh names the undeclared file',
             /UNDECLARED.*blockmap/.test(r.stderr), r.stderr);
@@ -503,7 +503,7 @@ try {
 
         // A tampered artifact, manifest untouched.
         writeFileSync(manifestPath, manifest);
-        writeFileSync(join(dir, 'XChain Wallet-9.9.9.AppImage'), 'malware\n');
+        writeFileSync(join(dir, 'xchain-wallet-9.9.9-x86_64.AppImage'), 'malware\n');
         const tampered = sh([VERIFY, '--input', dir, '--tag', TAG, '--no-sig'], { env });
         check('verify.sh catches a tampered artifact', tampered.status === 1,
             `${tampered.stdout}${tampered.stderr}`);

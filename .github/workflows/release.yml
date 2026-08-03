@@ -64,6 +64,12 @@ jobs:
   # Cheap, and it fails the run before any secret-bearing job starts.
   verify-tag:
     runs-on: ubuntu-latest
+    # `actions: read` is what lets the step-1 gate below list workflow runs
+    # for the tag commit. `contents: read` alone returns 404 there, which the
+    # gate reports as a refusal rather than a pass.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.check.outputs.version }}
       lockfile-sha256: ${{ steps.lockfile.outputs.sha256 }}
@@ -154,6 +160,30 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building ${VERSION} at $(git rev-parse HEAD)"
+
+      #  §6 STEP 1, AS A GATE. .
+      #
+      # Everything above this line checks the TAG: who signed it, what
+      # version it names. None of it checks whether anyone ever validated
+      # the commit the tag points at, and that gap is not hypothetical.
+      # v0.334.0 - the first release this project ever cut - was correctly
+      # signed by K14, matched its package.json version, and pointed at a
+      # commit whose CI run was CANCELLED with `build`, `test`, `audit` and
+      # `drift-guards` all red. The release ran green.
+      #
+      # `cancelled` is the dangerous conclusion precisely because it reads
+      # as "nothing went wrong": ci.yml's concurrency group cancels the
+      # previous push's run, so any commit superseded before its suite
+      # finished carries a cancelled run and was never actually tested.
+      #
+      # Placed here rather than in a job of its own so it runs BEFORE any
+      # secret-bearing lane, in the same job as the other cheap refusals,
+      # and costs one API call. `actions: read` is job-scoped rather than
+      # granted at the top of the file: no other job needs it.
+      - name: Tag commit must have a green CI run (§6 step 1)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/release/verify-validated-commit.mjs --sha "$(git rev-parse HEAD)"
 
       # §8: "whatever the runner resolves is what gets signed with K3/K6 and
       # shipped to the fleet", so the resolved dep tree is identified in the
@@ -557,6 +587,108 @@ jobs:
           path: |
             packages/desktop/dist-staging/*.exe
             packages/desktop/dist-staging/*.yml
+          if-no-files-found: error
+
+  # ---- Mobile: iOS ( §5, stage S4b) ----------------------------
+  #
+  # Split in two on purpose, because the two halves are blocked by
+  # different things:
+  #
+  #   Everything up to and including the SIMULATOR build needs no Apple
+  #   account at all. It runs on every tag from the day this lands, so
+  #   the iOS shell is proven to compile against the tag's own bundle
+  #   instead of being discovered broken on submission day.
+  #
+  #   Everything from `archive` onward needs a signing identity (K5) that
+  #   only exists once the K2 organization enrollment completes. Those
+  #   steps are gated on the App Store Connect key being present, so
+  #   while enrollment is pending this lane degrades to "built, not
+  #   archived" rather than failing every release. The gate is
+  #   `env.ASC_KEY_ID != ''`, the same shape the desktop lanes use for
+  #   the staging feed.
+  #
+  # This lane does NOT upload. The ipa is a workflow artifact the release
+  # machine collects; a human uploads it and a human presses submit
+  # (rails no-auto-publish, §5). test/smoke/audits/release-ci.smoke.js
+  # enforces that, and it is the reason no altool/fastlane step appears
+  # below however convenient one would be.
+  #
+  # Signing is cloud-managed: `-allowProvisioningUpdates` authenticated by
+  # the ASC API key, so K5 materializes on the runner transiently and is
+  # never stored as a repo secret (§5).
+  mobile-ios:
+    needs: verify-tag
+    runs-on: macos-latest
+    environment: release-signing
+    env:
+      # Presence of the key IS the "is Apple set up yet" switch. One
+      # secret, read in one place, so the lane has a single condition
+      # rather than a per-step guess at what is provisioned.
+      ASC_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Pin SOURCE_DATE_EPOCH to the tag commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
+      # The store profile is not a preference here: a mobile store
+      # artifact built at `default` carries the §2.3 review-hidden
+      # surfaces, and expected-artifacts.txt declares the ipa as `store`,
+      # so signing would reject it later anyway. Better to be wrong here,
+      # loudly, than at the release machine.
+      - name: Build the web shell at the `store` profile
+        env:
+          XCHAIN_BUILD_PROFILE: store
+        run: pnpm --filter @xchain-wallet/web build
+      - name: Dev-mock gate
+        run: bash tools/build-reproduce/check-no-dev-mock.sh
+      # sync:ios also writes ios/App/Version.xcconfig from the tag, which
+      # is the ONLY place the Xcode project reads a version from (S4a).
+      # Passing the tag here is what stops a runner from stamping the
+      # package.json version onto a build tagged something else.
+      - name: Stage the bundle into the iOS project
+        env:
+          XCHAIN_RELEASE_TAG: ${{ github.ref_name }}
+        run: pnpm --filter @xchain-wallet/mobile sync:ios
+      - name: Show the version the project will build
+        run: cat packages/mobile/ios/App/Version.xcconfig
+      # No signing identity required, so this runs whether or not Apple
+      # is set up. It is the step that makes this lane worth landing now.
+      - name: Build for the simulator (no signing identity required)
+        run: xcodebuild
+             -project packages/mobile/ios/App/App.xcodeproj
+             -scheme App
+             -configuration Release
+             -destination 'generic/platform=iOS Simulator'
+             CODE_SIGNING_ALLOWED=NO
+             build
+      - name: Archive for distribution
+        if: env.ASC_KEY_ID != ''
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash tools/release/ios-archive.sh
+      - name: Export the ipa
+        if: env.ASC_KEY_ID != ''
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          XCHAIN_RELEASE_TAG: ${{ github.ref_name }}
+        run: bash tools/release/ios-export.sh
+      - uses: actions/upload-artifact@v4
+        if: env.ASC_KEY_ID != ''
+        with:
+          name: mobile-ios
+          path: packages/mobile/ios/build/xchain-wallet-ios-*.ipa
           if-no-files-found: error
 
   # Tells the maintainer, in the run's own output, exactly what §6 asks

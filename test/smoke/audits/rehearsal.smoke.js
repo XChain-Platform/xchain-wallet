@@ -83,12 +83,12 @@ const pinned = { armoredKey, fingerprint };
 // than generated so that a change to those patterns shows up HERE, in a
 // test about update selection, which is what they exist for.
 const ARTIFACTS = {
-    [`XChain Wallet Setup ${VERSION}-x64.exe`]: 'win-x64-bytes',
-    [`XChain Wallet Setup ${VERSION}-arm64.exe`]: 'win-arm64-bytes',
-    [`XChain Wallet-${VERSION}-x64-mac.zip`]: 'mac-x64-bytes',
-    [`XChain Wallet-${VERSION}-arm64-mac.zip`]: 'mac-arm64-bytes',
-    [`XChain Wallet-${VERSION}.AppImage`]: 'linux-x64-bytes',
-    [`XChain Wallet-${VERSION}-arm64.AppImage`]: 'linux-arm64-bytes',
+    [`xchain-wallet-setup-${VERSION}-x64.exe`]: 'win-x64-bytes',
+    [`xchain-wallet-setup-${VERSION}-arm64.exe`]: 'win-arm64-bytes',
+    [`xchain-wallet-${VERSION}-x64-mac.zip`]: 'mac-x64-bytes',
+    [`xchain-wallet-${VERSION}-arm64-mac.zip`]: 'mac-arm64-bytes',
+    [`xchain-wallet-${VERSION}.AppImage`]: 'linux-x64-bytes',
+    [`xchain-wallet-${VERSION}-arm64.AppImage`]: 'linux-arm64-bytes',
     // The debs are lanes too ( §5, corrected 2026-08-02): DebUpdater
     // selects them out of these same two pointers and installs them with
     // `dpkg -i` under pkexec. The arch tokens are Debian's, not
@@ -148,23 +148,23 @@ function makeFeed(name, { mutate = () => {}, tamper = () => {} } = {}) {
     const files = { ...ARTIFACTS };
     const pointers = {
         [`${CHANNEL}.yml`]: pointerBody([
-            `XChain Wallet Setup ${VERSION}-x64.exe`,
-            `XChain Wallet Setup ${VERSION}-arm64.exe`,
+            `xchain-wallet-setup-${VERSION}-x64.exe`,
+            `xchain-wallet-setup-${VERSION}-arm64.exe`,
         ]),
         [`${CHANNEL}-mac.yml`]: pointerBody([
-            `XChain Wallet-${VERSION}-x64-mac.zip`,
-            `XChain Wallet-${VERSION}-arm64-mac.zip`,
+            `xchain-wallet-${VERSION}-x64-mac.zip`,
+            `xchain-wallet-${VERSION}-arm64-mac.zip`,
         ]),
         // Each Linux pointer carries BOTH formats, which is what a real
         // build emits (verified against a two-arch packaged build,
         // 2026-08-02): one pointer serves the AppImage lane and the deb
         // lane, and the two are told apart by extension, not by arch.
         [`${CHANNEL}-linux.yml`]: pointerBody([
-            `XChain Wallet-${VERSION}.AppImage`,
+            `xchain-wallet-${VERSION}.AppImage`,
             `xchain-wallet_${VERSION}_amd64.deb`,
         ]),
         [`${CHANNEL}-linux-arm64.yml`]: pointerBody([
-            `XChain Wallet-${VERSION}-arm64.AppImage`,
+            `xchain-wallet-${VERSION}-arm64.AppImage`,
             `xchain-wallet_${VERSION}_arm64.deb`,
         ]),
     };
@@ -309,10 +309,10 @@ const good = makeFeed('feed-good');
         // emits under its own defaults, which is exactly how the bug
         // would arrive.
         mutate: ({ files, pointers }) => {
-            const plain = `XChain Wallet Setup ${VERSION}.exe`;
-            const other = `XChain Wallet Setup ${VERSION}-other.exe`;
-            files[plain] = files[`XChain Wallet Setup ${VERSION}-x64.exe`];
-            files[other] = files[`XChain Wallet Setup ${VERSION}-arm64.exe`];
+            const plain = `xchain-wallet-setup-${VERSION}.exe`;
+            const other = `xchain-wallet-setup-${VERSION}-other.exe`;
+            files[plain] = files[`xchain-wallet-setup-${VERSION}-x64.exe`];
+            files[other] = files[`xchain-wallet-setup-${VERSION}-arm64.exe`];
             pointers[`${CHANNEL}.yml`] = pointerBody([plain, other], files);
         },
     });
@@ -348,12 +348,12 @@ const good = makeFeed('feed-good');
     // ever regresses to `first-listed`, this case fails.
     const feed = makeFeed('feed-stray-combined-installer', {
         mutate: ({ files, pointers }) => {
-            const combined = `XChain Wallet Setup ${VERSION}.exe`;
+            const combined = `xchain-wallet-setup-${VERSION}.exe`;
             files[combined] = 'win-combined-both-arches-bytes';
             pointers[`${CHANNEL}.yml`] = pointerBody([
                 combined,
-                `XChain Wallet Setup ${VERSION}-x64.exe`,
-                `XChain Wallet Setup ${VERSION}-arm64.exe`,
+                `xchain-wallet-setup-${VERSION}-x64.exe`,
+                `xchain-wallet-setup-${VERSION}-arm64.exe`,
             ], files);
         },
     });
@@ -374,7 +374,7 @@ const good = makeFeed('feed-good');
     // The feed serves different bytes than the pointer claims.
     const feed = makeFeed('feed-swapped-bytes', {
         tamper: ({ files }) => {
-            files[`XChain Wallet-${VERSION}-arm64-mac.zip`] = 'tampered';
+            files[`xchain-wallet-${VERSION}-arm64-mac.zip`] = 'tampered';
         },
     });
     const results = await probeAll(feed.dir);
@@ -388,7 +388,7 @@ const good = makeFeed('feed-good');
     // is the entire reason the S5 gate is in the loop.
     const feed = makeFeed('feed-consistent-lie', {
         tamper: ({ files, pointers }) => {
-            const name = `XChain Wallet-${VERSION}.AppImage`;
+            const name = `xchain-wallet-${VERSION}.AppImage`;
             files[name] = 'attacker-payload';
             // Rewritten to match, so the feed is internally consistent.
             // The deb entry is left honest, so this case also shows the
@@ -451,8 +451,8 @@ const good = makeFeed('feed-good');
     );
 
     const parsed = parseUpdateInfo(pointerBody([
-        `XChain Wallet Setup ${VERSION}-x64.exe`,
-        `XChain Wallet Setup ${VERSION}-arm64.exe`,
+        `xchain-wallet-setup-${VERSION}-x64.exe`,
+        `xchain-wallet-setup-${VERSION}-arm64.exe`,
     ]));
     assert.equal(parsed.version, VERSION);
     assert.equal(parsed.files.length, 2, 'both arches parsed out of one pointer');

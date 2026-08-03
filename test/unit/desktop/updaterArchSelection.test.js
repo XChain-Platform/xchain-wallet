@@ -61,21 +61,21 @@ const files = (...names) => names.map((name) => ({
 }));
 
 // What electron-builder emitted BEFORE this fix: no arch on the x64 name.
-const LEGACY_WIN = ['XChain Wallet Setup 0.333.1.exe', 'XChain Wallet Setup 0.333.1-arm64.exe'];
+const LEGACY_WIN = ['xchain-wallet-setup-0.333.1.exe', 'xchain-wallet-setup-0.333.1-arm64.exe'];
 // What it emits now that artifactName carries ${arch}.
-const FIXED_WIN = ['XChain Wallet Setup 0.333.1-x64.exe', 'XChain Wallet Setup 0.333.1-arm64.exe'];
+const FIXED_WIN = ['xchain-wallet-setup-0.333.1-x64.exe', 'xchain-wallet-setup-0.333.1-arm64.exe'];
 
 describe('the legacy naming, to document why it had to change', () => {
     it('arm64 was always fine: it matched by name', () => {
         asArch('arm64');
         expect(findFile(files(...LEGACY_WIN), 'exe').info.url)
-            .toBe('XChain Wallet Setup 0.333.1-arm64.exe');
+            .toBe('xchain-wallet-setup-0.333.1-arm64.exe');
     });
 
     it('x64 was right ONLY because x64 happened to be listed first', () => {
         asArch('x64');
         expect(findFile(files(...LEGACY_WIN), 'exe').info.url)
-            .toBe('XChain Wallet Setup 0.333.1.exe');
+            .toBe('xchain-wallet-setup-0.333.1.exe');
     });
 
     // The actual defect. Same files, order reversed, and an x64 machine is
@@ -83,7 +83,7 @@ describe('the legacy naming, to document why it had to change', () => {
     it('REVERSE the order and x64 silently gets the arm64 installer', () => {
         asArch('x64');
         expect(findFile(files(...[...LEGACY_WIN].reverse()), 'exe').info.url)
-            .toBe('XChain Wallet Setup 0.333.1-arm64.exe');
+            .toBe('xchain-wallet-setup-0.333.1-arm64.exe');
     });
 });
 
@@ -94,23 +94,23 @@ describe('arch-tagged naming makes selection order-independent', () => {
         it(`picks the x64 installer with ${label}`, () => {
             asArch('x64');
             expect(findFile(files(...order), 'exe').info.url)
-                .toBe('XChain Wallet Setup 0.333.1-x64.exe');
+                .toBe('xchain-wallet-setup-0.333.1-x64.exe');
         });
 
         it(`picks the arm64 installer with ${label}`, () => {
             asArch('arm64');
             expect(findFile(files(...order), 'exe').info.url)
-                .toBe('XChain Wallet Setup 0.333.1-arm64.exe');
+                .toBe('xchain-wallet-setup-0.333.1-arm64.exe');
         });
     }
 });
 
 describe('macOS routes through the same selector, so it has the same fix', () => {
-    const MAC = ['XChain Wallet-0.333.1-x64-mac.zip', 'XChain Wallet-0.333.1-arm64-mac.zip'];
+    const MAC = ['xchain-wallet-0.333.1-x64-mac.zip', 'xchain-wallet-0.333.1-arm64-mac.zip'];
 
     // MacUpdater calls findFile(files, "zip", ["pkg", "dmg"]), so the dmgs
     // in the same yml must not be candidates.
-    const withDmgs = [...MAC, 'XChain Wallet-0.333.1-x64.dmg', 'XChain Wallet-0.333.1-arm64.dmg'];
+    const withDmgs = [...MAC, 'xchain-wallet-0.333.1-x64.dmg', 'xchain-wallet-0.333.1-arm64.dmg'];
 
     for (const [arch, expected] of [['x64', MAC[0]], ['arm64', MAC[1]]]) {
         it(`${arch} picks its own zip and never a dmg, in either order`, () => {
@@ -129,8 +129,8 @@ describe('the substring match is not accidentally ambiguous', () => {
 
     it('a single-arch feed still resolves (linux ships one yml per arch)', () => {
         asArch('arm64');
-        const only = files('XChain Wallet-0.333.1-arm64.AppImage');
+        const only = files('xchain-wallet-0.333.1-arm64.AppImage');
         expect(findFile(only, 'AppImage', ['rpm', 'deb', 'pacman']).info.url)
-            .toBe('XChain Wallet-0.333.1-arm64.AppImage');
+            .toBe('xchain-wallet-0.333.1-arm64.AppImage');
     });
 });

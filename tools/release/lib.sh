@@ -242,7 +242,7 @@ xr_write_manifest() {
     #
     # ONE ARTIFACT PER LINE, not a space-separated list per profile.
     # electron-builder embeds productName in every desktop filename, so
-    # half this release is called "XChain Wallet-0.333.1-x64.dmg"; a list
+    # half this release is called "xchain-wallet-0.333.1-x64.dmg"; a list
     # would have to be escaped to survive being read back, and an
     # escaping bug in a signed record is worse than a longer header.
     # Everything after the first ": " is exactly one name.
@@ -452,13 +452,22 @@ xr_is_arch_token() {
 # Windows installer, which is the same shape as a naming bug and must not
 # be waved through as either.
 #
-# The one exception is the AppImage, and it is a property of the config
-# rather than a guess: `expandArtifactNamePattern` drops the arch token for
-# the DEFAULT arch unless the artifactName is user-forced, and ours is not
-# for that target (electron-builder.config.cjs sets deb.artifactName only).
-# So `XChain Wallet-<v>.AppImage` IS the x64 build, and pinning an
-# AppImage artifactName later would give it a `-x86_64` token that this
-# same function reads without the exception.
+# THE APPIMAGE EXCEPTION IS GONE, and that is the whole point of §7.1's
+# rename (2026-08-02). This function used to read a bare
+# `xchain-wallet-<v>.AppImage` as the x64 build, because
+# `expandArtifactNamePattern` drops the arch token for the DEFAULT arch
+# unless the artifactName is user-forced, and that target was the one left
+# unforced. It is forced now, so the x64 AppImage arrives as
+# `xchain-wallet-<v>-x86_64.AppImage` and is read by the `x86_64` rule
+# above like everything else.
+#
+# The exception was removed rather than left as a harmless backstop,
+# because it stopped being harmless the moment it stopped being true: an
+# un-suffixed AppImage now means the forced name was LOST, which is the
+# same class of event as the combined NSIS installer reappearing
+# (). Inferring x64 would wave that through; refusing to
+# attribute it fails the release loudly, which is what the paragraph above
+# says the empty answer is for.
 #
 # The arches we do NOT ship are recognised on purpose. An armv7l or
 # universal artifact must not fall through to the AppImage exception and
@@ -473,9 +482,6 @@ xr_artifact_arch() {
         *universal*) echo universal; return 0 ;;
         *i386*|*i686*|*ia32*) echo ia32; return 0 ;;
         *x86_64*|*amd64*|*-x64*|*_x64*) echo x64; return 0 ;;
-    esac
-    case "$name" in
-        *.AppImage) echo x64; return 0 ;;
     esac
     echo ""
 }

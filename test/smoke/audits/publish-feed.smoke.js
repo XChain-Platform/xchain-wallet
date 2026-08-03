@@ -55,8 +55,8 @@ execFileSync('gpg', ['--batch', '--quiet', '--passphrase', '', '--quick-generate
 
 const TAG = 'v0.333.1';
 const ARTIFACTS = {
-    'XChain Wallet-0.333.1.AppImage': 'appimage-bytes-x64',
-    'XChain Wallet-0.333.1-arm64.AppImage': 'appimage-bytes-arm64',
+    'xchain-wallet-0.333.1-x86_64.AppImage': 'appimage-bytes-x64',
+    'xchain-wallet-0.333.1-arm64.AppImage': 'appimage-bytes-arm64',
 };
 
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
@@ -361,7 +361,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
 
     assert.equal(r.status, 1, 'a 404 through the edge stops the publish');
     assert.match(r.out, /EDGE-FAIL.*arm64\.AppImage: HTTP 404/);
-    assert.ok(existsSync(join(target, 'desktop', 'XChain Wallet-0.333.1.AppImage')),
+    assert.ok(existsSync(join(target, 'desktop', 'xchain-wallet-0.333.1-x86_64.AppImage')),
         'the artifacts stay uploaded - phase 1 is idempotent and re-running is the fix');
     assert.equal(existsSync(join(target, 'desktop', 'stable-linux.yml')), false,
         'but NO pointer was written, so no client is looking for the missing file');

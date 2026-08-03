@@ -106,7 +106,7 @@ const buildAppx = process.env.XCHAIN_BUILD_APPX === '1' && !isStaging;
 // sat in the same sentence as the dmg on the strength of one belief: that
 // electron-updater's deb path "needs privilege escalation" and therefore
 // does not exist. It exists. `DebUpdater` in the pinned electron-updater
-// 6.8.3 selects the `.deb` from the pointer, downloads it and installs it
+// 6.8.9 selects the `.deb` from the pointer, downloads it and installs it
 // with `dpkg -i` under `pkexec`; the escalation IS the install step, and it
 // prompts. Our packaged `.deb` ships `resources/package-type` containing
 // `deb` (verified with `dpkg-deb -c` on a real build), which is exactly
@@ -140,7 +140,7 @@ const UPDATE_CAPABLE_TARGET = {
 //
 //     files.find(f => f.url.includes(process.arch)) ?? files.shift()
 //
-// (`findFile` in electron-updater 6.8.3 `out/providers/Provider.js`; the
+// (`findFile` in electron-updater 6.8.9 `out/providers/Provider.js`; the
 // Windows, macOS and AppImage updaters all route through it.) So selection
 // is a SUBSTRING MATCH of "x64" or "arm64" against the filename, with a
 // fall back to whichever file happens to be listed FIRST.
@@ -158,15 +158,41 @@ const UPDATE_CAPABLE_TARGET = {
 // it stripping `${arch}` from the x64 name (`expandArtifactNamePattern` in
 // app-builder-lib).
 //
-// Linux is deliberately left at its defaults: it gets one update-info file
-// PER ARCH (`stable-linux.yml` vs `stable-linux-arm64.yml`), so each yml
-// only ever lists its own arch and there is no selection to get wrong. The
-// deb target also has its own Debian arch naming (amd64), which this
-// pattern would fight.
-const MAC_ARTIFACT = '${productName}-${version}-${arch}-mac.${ext}';
-const DMG_ARTIFACT = '${productName}-${version}-${arch}.${ext}';
-const WIN_ARTIFACT = '${productName}-${version}-${arch}-win.${ext}';
-const NSIS_ARTIFACT = '${productName} Setup ${version}-${arch}.${ext}';
+// EVERY ARTIFACT IS NAMED `xchain-wallet-...`, NOT `${productName}-...`
+// (operator decision 2026-08-02,  §7.1: lowercase-with-dashes).
+//
+// `productName` is "XChain Wallet", with a SPACE, and app-builder-lib's
+// space-to-dash `safeArtifactName` substitution is gated on
+// `provider === "github"`, which the generic provider is not. So the space
+// reached the published filename, the channel pointer carried it raw, and
+// every client requested `%20`. Any tooling that pasted an artifact name
+// into a URL without encoding it - the edge check, a monitoring probe, a
+// cache-purge call - then asked for a malformed URL and failed a release
+// that was fine. Encoding it correctly everywhere is a rule someone has to
+// keep remembering; not having a space in the name is a property.
+//
+// The literal is spelled out rather than derived from `name`, because
+// package.json's is the scoped `@xchain-wallet/desktop`: the same value
+// that broke `executableName` and the AppImage build outright (§5) and
+// that AppX rejects as an identity (§15). It matches `executableName` and
+// the deb's `xchain-wallet_<version>_<arch>.deb`, both of which already
+// followed this convention.
+//
+// Linux gets a forced name too now, and that has one deliberate
+// consequence beyond the space. Supplying any artifactName sets
+// electron-builder's `isUserForced`, which stops it stripping `${arch}`
+// from the DEFAULT arch (`expandArtifactNamePattern` in app-builder-lib
+// 26.15.7: the arch is nulled only when `!isUserForced`). The x64 AppImage
+// therefore stops being un-suffixed and gains its `x86_64` token, so every
+// shipped artifact now carries an arch token and §8's coverage gate can
+// attribute all of them by name, with no default-arch exception to trust.
+// The deb keeps its own Debian naming (`amd64`) below; that is fpm's
+// convention, not ours to fight.
+const MAC_ARTIFACT = 'xchain-wallet-${version}-${arch}-mac.${ext}';
+const DMG_ARTIFACT = 'xchain-wallet-${version}-${arch}.${ext}';
+const WIN_ARTIFACT = 'xchain-wallet-${version}-${arch}-win.${ext}';
+const NSIS_ARTIFACT = 'xchain-wallet-setup-${version}-${arch}.${ext}';
+const APPIMAGE_ARTIFACT = 'xchain-wallet-${version}-${arch}.${ext}';
 
 // --- Windows signing identity ( §4, DD2) ---------------------------
 //
@@ -388,7 +414,7 @@ const config = {
         // the cost of identically-shaped, differently-destined files; do
         // not reintroduce it on a channel whose whole point is that it
         // goes somewhere else.
-        artifactName: '${productName}-${version}-${arch}-mas.${ext}',
+        artifactName: 'xchain-wallet-${version}-${arch}-mas.${ext}',
         entitlements: 'build/entitlements.mas.plist',
         entitlementsInherit: 'build/entitlements.mas.inherit.plist',
         hardenedRuntime: false,
@@ -523,10 +549,10 @@ const config = {
     // SAME INHERITANCE TRAP AS `mas`, and it bites here too: AppxTarget
     // computes its options as `deepAssign({}, win, config.appx)`, so
     // `win.artifactName` would name a store package
-    // `XChain Wallet-<v>-x64-win.appx` - our direct-download convention,
+    // `xchain-wallet-<v>-x64-win.appx` - our direct-download convention,
     // on the one artifact that must never be mistaken for a hosted file.
     appx: {
-        artifactName: '${productName}-${version}-${arch}-appx.${ext}',
+        artifactName: 'xchain-wallet-${version}-${arch}-appx.${ext}',
 
         // IDENTITY IS ASSIGNED BY PARTNER CENTER, AND EVERY DEFAULT HERE
         // IS WRONG IN A DIFFERENT WAY.
@@ -612,6 +638,15 @@ const config = {
                 + 'Trezor via WebHID), and the full XChain action surface.',
     },
     appImage: {
+        // Named like every other artifact (§7.1). Forcing it here is also
+        // what gives the x64 AppImage its `x86_64` token: until now this
+        // was the ONE target left at the default pattern, so its x64 build
+        // was un-suffixed and §8's arch gate had to carry a special case
+        // reading a bare `.AppImage` as x64. With the name forced, that
+        // exception is gone and an un-suffixed AppImage is what it should
+        // be, an artifact the gate refuses to attribute - the same posture
+        // as the combined NSIS installer ().
+        artifactName: APPIMAGE_ARTIFACT,
         // SOURCE_DATE_EPOCH ALONE IS NOT ENOUGH HERE, and this comment
         // once claimed it was. Measured 2026-08-01: two packaged builds of
         // one commit, one epoch, one container produced byte-DIFFERENT
@@ -646,11 +681,11 @@ const config = {
         // package name, so the default was invalid twice over.
         //
         // Pinned to the Debian convention: <name>_<version>_<arch>.deb.
-        // NOTE this does NOT settle §7.1's open artifactName question for
-        // the other targets: the AppImage, dmg, exe and zips still carry
-        // `${productName}` and therefore a SPACE, and that remains the
-        // operator's call. This is only the target whose default name was
-        // structurally broken.
+        // This was once the ONLY target with a pinned name, because its
+        // default was structurally broken. Since §7.1's rename every target
+        // is pinned and none carries a space; the deb keeps fpm's own
+        // `_<version>_<arch>` shape rather than our `-` convention, because
+        // that shape is Debian's and not ours to choose.
         artifactName: 'xchain-wallet_${version}_${arch}.${ext}',
         // Pin compression + omit non-deterministic build fields.
         // fpm (which electron-builder invokes) respects SOURCE_DATE_EPOCH

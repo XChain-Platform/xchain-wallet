@@ -20,9 +20,9 @@
 // The check itself is where the subtlety is, and a grep gets it wrong.
 // electron-builder omits the arch token from the DEFAULT arch when the
 // artifactName is not user-forced, which for the AppImage target it is
-// not - so the x64 build is `XChain Wallet-<v>.AppImage`, with nothing in
+// not - so the x64 build is `xchain-wallet-<v>.AppImage`, with nothing in
 // the name to match on. A pattern loose enough to match it also matches
-// `XChain Wallet-<v>-arm64.AppImage`, so a build that produced only the
+// `xchain-wallet-<v>-arm64.AppImage`, so a build that produced only the
 // arm64 artifact would satisfy an "is there an x64 AppImage?" grep. That
 // is the same defect class the release gate hit from the other side
 // (tools/release/lib.sh: xr_artifact_arch), so it is answered the same

@@ -84,11 +84,11 @@ function updateInfo(version, entries) {
 }
 
 const V1 = {
-    'XChain Wallet-0.333.1.AppImage': 'appimage-one',
-    'XChain Wallet-0.333.1-arm64.AppImage': 'appimage-one-arm',
+    'xchain-wallet-0.333.1-x86_64.AppImage': 'appimage-one',
+    'xchain-wallet-0.333.1-arm64.AppImage': 'appimage-one-arm',
 };
 const V2 = {
-    'XChain Wallet-0.333.2.AppImage': 'appimage-two',
+    'xchain-wallet-0.333.2-x86_64.AppImage': 'appimage-two',
 };
 
 // ----------------------------------------------------- the parsers first
@@ -98,7 +98,7 @@ const V2 = {
     const info = parseUpdateInfo(text);
     assert.equal(info.version, '0.333.1', 'version is read');
     assert.equal(info.files.length, 2, 'both arch entries are read from one mac/linux yml');
-    assert.equal(info.files[0].url, 'XChain Wallet-0.333.1.AppImage',
+    assert.equal(info.files[0].url, 'xchain-wallet-0.333.1-x86_64.AppImage',
         'a url containing spaces survives (productName is "XChain Wallet")');
     assert.equal(info.files[0].sha512, sha512b64('appimage-one'), 'nested sha512 binds to its url');
     assert.equal(info.files[1].sha512, sha512b64('appimage-one-arm'),
@@ -139,11 +139,11 @@ const V2 = {
     // pointer to name it with a matching sha512. Every internal check of
     // that yml passes. What the attacker cannot forge is the manifest.
     buildFeed(root, {
-        artifacts: { ...V1, 'XChain Wallet-0.333.1-evil.AppImage': 'malware' },
+        artifacts: { ...V1, 'xchain-wallet-0.333.1-evil.AppImage': 'malware' },
         manifests: { 'v0.333.1': Object.keys(V1) },
         pointers: {
             'stable-linux.yml': updateInfo('0.333.1',
-                [['XChain Wallet-0.333.1-evil.AppImage', 'malware']]),
+                [['xchain-wallet-0.333.1-evil.AppImage', 'malware']]),
         },
     });
     const result = sweep(root);
@@ -160,7 +160,7 @@ const V2 = {
         manifests: { 'v0.333.1': Object.keys(V1) },
         pointers: {},
     });
-    writeFileSync(join(root, 'desktop', 'XChain Wallet-0.333.1.AppImage'), 'swapped');
+    writeFileSync(join(root, 'desktop', 'xchain-wallet-0.333.1-x86_64.AppImage'), 'swapped');
     const result = sweep(root);
     assert.deepEqual(codes(result), ['MISMATCH'], 'swapped bytes under a known name');
 }
@@ -234,8 +234,8 @@ const V2 = {
     const runAttacker = () => ({ stdout: '[GNUPG:] VALIDSIG 9999888877776666 2026\n', status: 0 });
 
     buildFeed(root, {
-        artifacts: { ...V1, 'XChain Wallet-0.333.1-evil.AppImage': 'malware' },
-        manifests: { 'v0.333.1': [...Object.keys(V1), 'XChain Wallet-0.333.1-evil.AppImage'] },
+        artifacts: { ...V1, 'xchain-wallet-0.333.1-evil.AppImage': 'malware' },
+        manifests: { 'v0.333.1': [...Object.keys(V1), 'xchain-wallet-0.333.1-evil.AppImage'] },
     });
 
     const trusting = sweep(root, { gpgKey: K1, run: runGood });
@@ -268,7 +268,7 @@ const V2 = {
     const parsed = parseManifest(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'));
     assert.equal(parsed.tag, 'v0.333.1', 'the tag comes from the signed header');
     assert.equal(parsed.entries.size, 2);
-    assert.ok(parsed.entries.has('XChain Wallet-0.333.1.AppImage'),
+    assert.ok(parsed.entries.has('xchain-wallet-0.333.1-x86_64.AppImage'),
         'entries are keyed on basename: the manifest says ./name, the feed says desktop/name');
 }
 

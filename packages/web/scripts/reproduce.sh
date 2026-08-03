@@ -62,21 +62,37 @@ trap 'git worktree remove --force "${WORKTREE_DIR}" 2>/dev/null || rm -rf "${WOR
 git worktree add --detach "${WORKTREE_DIR}" "${COMMIT_SHA}"
 echo "[reproduce] worktree at ${WORKTREE_DIR}"
 
-# --- 3. Pull pnpm version from root package.json -----------------------
-PNPM_VERSION="$(node -e "
-    const pkg = require('${WORKTREE_DIR}/package.json');
-    const pm = pkg.packageManager || '';
-    const m = pm.match(/^pnpm@(.+)$/);
+# --- 3. Pull the pinned toolchain from the ref being reproduced --------
+#
+# Read out of the WORKTREE, never out of the checkout this script happens
+# to be running from: the pins are part of what a tag reproduces, so an
+# older tag must build with the Node IT pinned, not with today's.
+read -r PNPM_VERSION NODE_VERSION NODE_SHA256_X64 BUILD_PLATFORM <<EOF
+$(node -e "
+    const fs = require('fs');
+    const root = '${WORKTREE_DIR}';
+    const pkg = JSON.parse(fs.readFileSync(root + '/package.json', 'utf8'));
+    const m = /^pnpm@(.+)\$/.exec(pkg.packageManager || '');
     if (!m) { console.error('no pnpm@... in packageManager'); process.exit(1); }
-    process.stdout.write(m[1]);
-")"
-echo "[reproduce] pnpm version=${PNPM_VERSION}"
+    const tc = JSON.parse(fs.readFileSync(root + '/tools/release/toolchain.json', 'utf8'));
+    process.stdout.write([
+        m[1],
+        tc.node.version,
+        tc.node.sha256.x64,
+        tc.baseImage.platform,
+    ].join(' '));
+")
+EOF
+echo "[reproduce] pnpm=${PNPM_VERSION} node=${NODE_VERSION} platform=${BUILD_PLATFORM}"
 
 # --- 4. Build the image ------------------------------------------------
 IMAGE_TAG="xchain-wallet-web:reproduce-${COMMIT_SHA:0:12}"
 echo "[reproduce] building image ${IMAGE_TAG}"
 docker build \
+    --platform "${BUILD_PLATFORM}" \
     --build-arg "PNPM_VERSION=${PNPM_VERSION}" \
+    --build-arg "NODE_VERSION=${NODE_VERSION}" \
+    --build-arg "NODE_SHA256_X64=${NODE_SHA256_X64}" \
     -f "${WORKTREE_DIR}/packages/web/Dockerfile" \
     -t "${IMAGE_TAG}" \
     "${WORKTREE_DIR}"
@@ -84,15 +100,28 @@ docker build \
 # --- 5. Run the build --------------------------------------------------
 echo "[reproduce] running build"
 docker run --rm \
+    --platform "${BUILD_PLATFORM}" \
     --user "$(id -u):$(id -g)" \
     -e "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" \
     -e "LC_ALL=C.UTF-8" \
     -e "TZ=UTC" \
-    `# WRITABLE. Under `:ro` this could never complete: build.sh runs
-     # pnpm install (writes node_modules) and a build (writes dist/),
-     # both inside /workspace, so the run died on EROFS at the first
-     # step. Isolation from the local checkout comes from the detached
-     # worktree above, not from the flag.` \
+    `# --user overrides the image's builder account, so /home/builder is
+     # not ours to write, and corepack's first act is to mkdir under HOME.
+     # Unset, HOME resolves to / and the run dies with EACCES on
+     # /.cache/node/corepack. Point it inside the worktree, which is
+     # deleted along with it - nothing under it is hashed.` \
+    -e "HOME=/workspace/.reproduce-home" \
+    `# WRITABLE. Under a read-only mount this could never complete:
+     # build.sh runs pnpm install (writes node_modules) and a build
+     # (writes dist/), both inside /workspace, so the run died on EROFS
+     # at the first step. Isolation from the local checkout comes from
+     # the detached worktree above, not from the flag.
+     #
+     # Do not quote anything in here with backticks. This whole block is
+     # a backtick command substitution used as a comment, so a nested
+     # pair CLOSES it: the words after it ran as a command, every
+     # remaining flag was swallowed, and docker exited "invalid reference
+     # format". That is what was here until 2026-08-02.` \
     -v "${WORKTREE_DIR}:/workspace" \
     -v "${OUT_DIR_ABS}:/out" \
     "${IMAGE_TAG}"

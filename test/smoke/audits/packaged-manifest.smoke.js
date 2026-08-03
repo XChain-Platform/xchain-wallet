@@ -25,7 +25,7 @@
 // the release. Coverage therefore has to be asserted by the build, and the
 // assertion has one trap in it: electron-builder omits the arch token from
 // the DEFAULT arch when artifactName is not user-forced, so the x64
-// AppImage is `XChain Wallet-<v>.AppImage` with nothing to match on, and
+// AppImage is `xchain-wallet-<v>.AppImage` with nothing to match on, and
 // any pattern loose enough to find it also matches the arm64 file. The
 // checker attributes each artifact to exactly one arch instead - the same
 // answer tools/release/lib.sh gives on the release side.
@@ -55,8 +55,8 @@ const H = (n) => String(n).repeat(64).slice(0, 64);
 // deb is pinned to the Debian convention, and the x64 AppImage carries no
 // arch token because that target's artifactName is not user-forced.
 const FULL = [
-    `${H(1)}  ./XChain Wallet-${V}.AppImage`,
-    `${H(2)}  ./XChain Wallet-${V}-arm64.AppImage`,
+    `${H(1)}  ./xchain-wallet-${V}-x86_64.AppImage`,
+    `${H(2)}  ./xchain-wallet-${V}-arm64.AppImage`,
     `${H(3)}  ./xchain-wallet_${V}_amd64.deb`,
     `${H(4)}  ./xchain-wallet_${V}_arm64.deb`,
 ].join('\n');
@@ -106,7 +106,7 @@ try {
     // lines present except the untokened one, which is x64.
     {
         const r = run([
-            `${H(2)}  ./XChain Wallet-${V}-arm64.AppImage`,
+            `${H(2)}  ./xchain-wallet-${V}-arm64.AppImage`,
             `${H(3)}  ./xchain-wallet_${V}_amd64.deb`,
             `${H(4)}  ./xchain-wallet_${V}_arm64.deb`,
         ].join('\n'));
@@ -130,7 +130,7 @@ try {
 
     // --- 5. Foreign and duplicate arches --------------------------------
     {
-        const r = run([...lines, `${H(7)}  ./XChain Wallet-${V}-armv7l.AppImage`].join('\n'));
+        const r = run([...lines, `${H(7)}  ./xchain-wallet-${V}-armv7l.AppImage`].join('\n'));
         check('an arch we do not ship is refused', !r.ok, r.out);
         check('and is named', /armv7l/.test(r.out), r.out);
     }
@@ -143,13 +143,13 @@ try {
 
     // --- 6. The classifier's table --------------------------------------
     for (const [name, want] of [
-        [`XChain Wallet-${V}.AppImage`, 'x64'],
-        [`XChain Wallet-${V}-x86_64.AppImage`, 'x64'],
-        [`XChain Wallet-${V}-arm64.AppImage`, 'arm64'],
+        [`xchain-wallet-${V}-x86_64.AppImage`, 'x64'],
+        [`xchain-wallet-${V}-x86_64.AppImage`, 'x64'],
+        [`xchain-wallet-${V}-arm64.AppImage`, 'arm64'],
         [`xchain-wallet_${V}_amd64.deb`, 'x64'],
         [`xchain-wallet_${V}_arm64.deb`, 'arm64'],
         [`xchain-wallet_${V}_armhf.deb`, 'armv7l'],
-        [`XChain Wallet Setup ${V}.exe`, null],
+        [`xchain-wallet-setup-${V}.exe`, null],
     ]) {
         check(`classifier: ${name} -> ${want}`, archOf(name) === want, `got ${archOf(name)}`);
     }
@@ -159,7 +159,7 @@ try {
         const parsed = parseManifest(`# a comment\n\n${FULL}\n`);
         check('comments and blanks are skipped', parsed.length === 4, `got ${parsed.length}`);
         check('and the leading ./ is stripped',
-            parsed[0].name.startsWith('XChain'), parsed[0].name);
+            parsed[0].name.startsWith('xchain-wallet-'), parsed[0].name);
         let threw = false;
         try { parseManifest('not a manifest line\n'); } catch { threw = true; }
         check('a malformed line is refused rather than silently skipped', threw);

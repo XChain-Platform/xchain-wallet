@@ -243,4 +243,85 @@ const pkg = JSON.parse(read('package.json'));
         + 'its only other symptom is a hash diff that reads as tampering.');
 }
 
+// ------------------------------------ home 4: the EXTENSION reproduce pair
+//
+// This block exists because everything above it was true and the release
+// still could not be reproduced. §6 step 3 reproduces three things -
+// Linux desktop, extension, web tarball - and only the desktop pair was
+// ever held to toolchain.json. The extension's Dockerfile carried a
+// hardcoded `ENV NODE_VERSION=20.18.0` against a release lane building
+// the same bundle with 22.23.2, and its reproduce.sh passed no
+// --platform against an amd64-only base digest. So on amd64 the
+// reproduction built the wrong bytes, and on arm64 it did not build at
+// all (`exit code: 133`, an exec-format error inside a RUN layer, naming
+// nothing). Both were measured 2026-08-02, not reasoned about.
+//
+// The lesson generalises past this file: a guard that names its
+// consumers by hand is only as good as that list, and the list omitted a
+// consumer that existed when it was written.
+
+// Both non-desktop lanes, not just the extension. Checking one of them
+// would repeat the mistake being fixed: the web lane carried the SAME
+// four defects, byte for byte, down to the identical stale Node sha256
+// and the identical nested-backtick bug, and was found only because this
+// block was generalised rather than written for the lane that happened
+// to be under investigation.
+for (const pkg of ['extension', 'web']) {
+    const extDockerfile = read(`packages/${pkg}/Dockerfile`);
+    const extReproduceSh = read(`packages/${pkg}/scripts/reproduce.sh`);
+
+    const version = /^ARG NODE_VERSION=(.+)$/m.exec(extDockerfile);
+    assert.ok(version, `packages/${pkg}/Dockerfile must declare ARG NODE_VERSION, not a `
+        + 'hardcoded ENV. The release lane builds this bundle from toolchain.json, so a '
+        + 'private pin here reproduces bytes the release never produced.');
+    assert.equal(version[1].trim(), toolchain.node.version,
+        `${pkg} Dockerfile pins node ${version[1].trim()} but toolchain.json pins `
+        + `${toolchain.node.version}.`);
+
+    const sha = /^ARG NODE_SHA256_X64=(.+)$/m.exec(extDockerfile);
+    assert.ok(sha, `packages/${pkg}/Dockerfile must declare ARG NODE_SHA256_X64`);
+    assert.equal(sha[1].trim(), toolchain.node.sha256.x64,
+        'extension Dockerfile\'s node tarball sha256 disagrees with toolchain.json.');
+
+    assert.ok(!/^ENV NODE_SHA256=/m.test(extDockerfile),
+        '${pkg} Dockerfile still carries the old unparameterised ENV NODE_SHA256.');
+
+    // Comment-blind on purpose: the header explains the old hardcoded pin
+    // by quoting it, and a naive substring search reads its own
+    // documentation as the defect.
+    const extDirectives = extDockerfile
+        .split('\n')
+        .filter((l) => !/^\s*#/.test(l));
+    const literalNodePins = extDirectives
+        .filter((l) => /^\s*(ENV|ARG)\s+NODE_VERSION=/.test(l))
+        .filter((l) => !/^\s*ENV\s+NODE_VERSION=\$\{NODE_VERSION\}\s*$/.test(l));
+    assert.equal(literalNodePins.length, 1,
+        '${pkg} Dockerfile must declare exactly one literal NODE_VERSION pin (the ARG), '
+        + `found ${literalNodePins.length}: ${JSON.stringify(literalNodePins)}. Two `
+        + 'declarations means one of them is not the one being used.');
+
+    assert.ok(extDockerfile.includes(toolchain.baseImage.digest),
+        'extension Dockerfile\'s FROM digest disagrees with toolchain.json\'s baseImage.digest.');
+
+    // The arm64 half. Both docker invocations need it: pinning the build
+    // and letting the run pick the host arch produces "image platform does
+    // not match" at best and a silently different container at worst.
+    const platformFlags = extReproduceSh.match(/--platform "\$\{BUILD_PLATFORM\}"/g) || [];
+    assert.equal(platformFlags.length, 2,
+        `packages/${pkg}/scripts/reproduce.sh must pass --platform on BOTH \`docker build\` `
+        + `and \`docker run\` (found ${platformFlags.length}). The pinned base digest is `
+        + 'amd64-only, so without it an arm64 verifier builds an arm64 image, the x64 Node '
+        + 'tarball cannot exec, and the build dies at `exit code: 133` naming no cause.');
+
+    assert.ok(/tools\/release\/toolchain\.json/.test(extReproduceSh),
+        '${pkg} reproduce.sh must read the pins from tools/release/toolchain.json so an '
+        + 'older tag reproduces with the Node IT pinned, not with today\'s.');
+
+    for (const arg of ['NODE_VERSION', 'NODE_SHA256_X64']) {
+        assert.ok(new RegExp(`--build-arg "${arg}=`).test(extReproduceSh),
+            `${pkg} reproduce.sh must feed --build-arg ${arg} from toolchain.json; `
+            + 'otherwise the Dockerfile default is what builds, and a default is not a pin.');
+    }
+}
+
 console.log('reproducible-toolchain smoke: ok');

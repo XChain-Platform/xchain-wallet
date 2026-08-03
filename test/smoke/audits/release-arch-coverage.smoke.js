@@ -49,23 +49,25 @@ const expected = join(repo, 'tools', 'release', 'expected-artifacts.txt');
 const V = '0.333.1';
 
 // The real names, as electron-builder emits them from the pinned config:
-// MAC/DMG/WIN/NSIS artifactNames are user-forced and therefore carry the
-// arch on BOTH arches, the deb is pinned to the Debian convention
-// (`_amd64` / `_arm64`), and the AppImage is NOT user-forced, which is why
-// its x64 build has no arch token at all.
+// EVERY artifactName is user-forced since §7.1's rename, so every artifact
+// carries its arch on BOTH arches and is lowercase-with-dashes. The deb keeps
+// fpm's Debian convention (`_amd64` / `_arm64`) and the AppImage keeps
+// electron-builder's Linux arch spelling (`x86_64`); both are that tooling's
+// names, not ours. There is no longer an un-suffixed artifact anywhere, which
+// is why lib.sh no longer has a default-arch exception to apply.
 const FULL = [
     `xchain-wallet-web-v${V}.tar.gz`,
     `xchain-wallet-extension-v${V}.zip`,
-    `XChain Wallet-${V}-x64.dmg`,
-    `XChain Wallet-${V}-arm64.dmg`,
-    `XChain Wallet-${V}-x64-mac.zip`,
-    `XChain Wallet-${V}-arm64-mac.zip`,
-    `XChain Wallet Setup ${V}-x64.exe`,
-    `XChain Wallet Setup ${V}-arm64.exe`,
-    `XChain Wallet-${V}-x64-win.zip`,
-    `XChain Wallet-${V}-arm64-win.zip`,
-    `XChain Wallet-${V}.AppImage`,
-    `XChain Wallet-${V}-arm64.AppImage`,
+    `xchain-wallet-${V}-x64.dmg`,
+    `xchain-wallet-${V}-arm64.dmg`,
+    `xchain-wallet-${V}-x64-mac.zip`,
+    `xchain-wallet-${V}-arm64-mac.zip`,
+    `xchain-wallet-setup-${V}-x64.exe`,
+    `xchain-wallet-setup-${V}-arm64.exe`,
+    `xchain-wallet-${V}-x64-win.zip`,
+    `xchain-wallet-${V}-arm64-win.zip`,
+    `xchain-wallet-${V}-x86_64.AppImage`,
+    `xchain-wallet-${V}-arm64.AppImage`,
     `xchain-wallet_${V}_amd64.deb`,
     `xchain-wallet_${V}_arm64.deb`,
 ];
@@ -134,16 +136,16 @@ try {
     // "drop everything arm64" case, because the whole failure mode was a
     // single row satisfying itself with the wrong arch.
     const DROPS = [
-        ['*.dmg', 'x64', `XChain Wallet-${V}-x64.dmg`],
-        ['*.dmg', 'arm64', `XChain Wallet-${V}-arm64.dmg`],
-        ['*mac*.zip', 'x64', `XChain Wallet-${V}-x64-mac.zip`],
-        ['*mac*.zip', 'arm64', `XChain Wallet-${V}-arm64-mac.zip`],
-        ['*.exe', 'x64', `XChain Wallet Setup ${V}-x64.exe`],
-        ['*.exe', 'arm64', `XChain Wallet Setup ${V}-arm64.exe`],
-        ['*win*.zip', 'x64', `XChain Wallet-${V}-x64-win.zip`],
-        ['*win*.zip', 'arm64', `XChain Wallet-${V}-arm64-win.zip`],
-        ['*.AppImage', 'x64', `XChain Wallet-${V}.AppImage`],
-        ['*.AppImage', 'arm64', `XChain Wallet-${V}-arm64.AppImage`],
+        ['*.dmg', 'x64', `xchain-wallet-${V}-x64.dmg`],
+        ['*.dmg', 'arm64', `xchain-wallet-${V}-arm64.dmg`],
+        ['*mac*.zip', 'x64', `xchain-wallet-${V}-x64-mac.zip`],
+        ['*mac*.zip', 'arm64', `xchain-wallet-${V}-arm64-mac.zip`],
+        ['*.exe', 'x64', `xchain-wallet-setup-${V}-x64.exe`],
+        ['*.exe', 'arm64', `xchain-wallet-setup-${V}-arm64.exe`],
+        ['*win*.zip', 'x64', `xchain-wallet-${V}-x64-win.zip`],
+        ['*win*.zip', 'arm64', `xchain-wallet-${V}-arm64-win.zip`],
+        ['*.AppImage', 'x64', `xchain-wallet-${V}-x86_64.AppImage`],
+        ['*.AppImage', 'arm64', `xchain-wallet-${V}-arm64.AppImage`],
         ['*.deb', 'x64', `xchain-wallet_${V}_amd64.deb`],
         ['*.deb', 'arm64', `xchain-wallet_${V}_arm64.deb`],
     ];
@@ -167,10 +169,10 @@ try {
     // appears anyway, the suppression flag has been lost and the release
     // must fail rather than put a third file on the feed.
     {
-        const r = gate(stage([], [`XChain Wallet Setup ${V}.exe`]));
+        const r = gate(stage([], [`xchain-wallet-setup-${V}.exe`]));
         check('the combined NSIS installer fails the gate', !r.ok, r.out);
         check('and is reported as unattributable, not as a missing arch',
-            /UNATTRIBUTED.*Setup 0\.333\.1\.exe/s.test(r.out), r.out);
+            /UNATTRIBUTED.*setup-0\.333\.1\.exe/s.test(r.out), r.out);
         check('and the message names  and both ways out',
             //.test(r.out) && /multi/.test(r.out), r.out);
     }
@@ -195,11 +197,11 @@ try {
             '',
         ].join('\n'));
 
-        let r = gate(stage([], [`XChain Wallet Setup ${V}.exe`]), list);
+        let r = gate(stage([], [`xchain-wallet-setup-${V}.exe`]), list);
         check('a declared `multi` allowance accepts the combined installer', r.ok, r.out);
 
-        r = gate(stage([`XChain Wallet Setup ${V}-arm64.exe`],
-            [`XChain Wallet Setup ${V}.exe`]), list);
+        r = gate(stage([`xchain-wallet-setup-${V}-arm64.exe`],
+            [`xchain-wallet-setup-${V}.exe`]), list);
         check('but `multi` never substitutes for a real arch', !r.ok, r.out);
         check('and says so as a missing arch', /MISSING-ARCH.*arm64/s.test(r.out), r.out);
     }
@@ -215,7 +217,7 @@ try {
     // successful build removes it (measured on a real Windows build), so
     // this guards the case we would have had no way to see.
     {
-        const r = gate(stage([], [`XChain Wallet Setup ${V}-x64.__uninstaller.exe`]));
+        const r = gate(stage([], [`xchain-wallet-setup-${V}-x64.__uninstaller.exe`]));
         check('a second x64 .exe fails the gate', !r.ok, r.out);
         check('and is named as a duplicate, not a missing arch',
             /DUPLICATE-ARCH.*claim x64/s.test(r.out), r.out);
@@ -239,16 +241,32 @@ try {
     // as the x64 lane would put a binary no x64 machine can run behind
     // the x64 pointer.
     {
-        const r = gate(stage([`XChain Wallet-${V}.AppImage`],
-            [`XChain Wallet-${V}-armv7l.AppImage`]));
+        const r = gate(stage([`xchain-wallet-${V}-x86_64.AppImage`],
+            [`xchain-wallet-${V}-armv7l.AppImage`]));
         check('an armv7l AppImage does not satisfy the x64 lane', !r.ok, r.out);
         check('and is named as an arch the row does not declare',
             /UNEXPECTED-ARCH.*armv7l/s.test(r.out), r.out);
     }
+    // --- 4b. An un-suffixed AppImage is a LOST NAME, not the x64 build ---
+    //
+    // This is the case §7.1's rename inverted. While the AppImage was the
+    // one target left at electron-builder's default pattern, its x64 build
+    // genuinely had no arch token and the gate had to read a bare
+    // `.AppImage` as x64. Every target is user-forced now, so the same file
+    // means the opposite thing: the forced name was lost, exactly as a
+    // returning combined NSIS installer would mean the suppression flag was
+    // lost. It must fail rather than be inferred.
+    {
+        const r = gate(stage([`xchain-wallet-${V}-x86_64.AppImage`],
+            [`xchain-wallet-${V}.AppImage`]));
+        check('an un-suffixed AppImage no longer passes as the x64 build', !r.ok, r.out);
+        check('and is reported as unattributable rather than guessed at',
+            /UNATTRIBUTED.*\.AppImage.*carries no architecture token/s.test(r.out), r.out);
+    }
     {
         // Same shape, the other declined arch: win-ia32 is refused by
         // policy (§2, EOL OS), so `ia32` is not even a declarable token.
-        const r = gate(stage([], [`XChain Wallet Setup ${V}-ia32.exe`]));
+        const r = gate(stage([], [`xchain-wallet-setup-${V}-ia32.exe`]));
         check('an ia32 installer cannot be declared into the matrix', !r.ok, r.out);
         check('and reports as ia32 rather than as unattributable',
             /UNEXPECTED-ARCH.*ia32/s.test(r.out), r.out);
@@ -261,16 +279,16 @@ try {
     // upgrade changes one, this is where it surfaces, rather than in a
     // release that is missing an arch nobody can find.
     const CLASSIFY = [
-        [`XChain Wallet-${V}-x64.dmg`, 'x64'],
-        [`XChain Wallet-${V}-arm64.dmg`, 'arm64'],
+        [`xchain-wallet-${V}-x64.dmg`, 'x64'],
+        [`xchain-wallet-${V}-arm64.dmg`, 'arm64'],
         [`xchain-wallet_${V}_amd64.deb`, 'x64'],
         [`xchain-wallet_${V}_arm64.deb`, 'arm64'],
-        [`XChain Wallet-${V}.AppImage`, 'x64'],
-        [`XChain Wallet-${V}-x86_64.AppImage`, 'x64'],
-        [`XChain Wallet-${V}-arm64.AppImage`, 'arm64'],
-        [`XChain Wallet Setup ${V}.exe`, ''],
-        [`XChain Wallet-${V}-universal.dmg`, 'universal'],
-        [`XChain Wallet-${V}-armv7l.AppImage`, 'armv7l'],
+        [`xchain-wallet-${V}-x86_64.AppImage`, 'x64'],
+        [`xchain-wallet-${V}-x86_64.AppImage`, 'x64'],
+        [`xchain-wallet-${V}-arm64.AppImage`, 'arm64'],
+        [`xchain-wallet-setup-${V}.exe`, ''],
+        [`xchain-wallet-${V}-universal.dmg`, 'universal'],
+        [`xchain-wallet-${V}-armv7l.AppImage`, 'armv7l'],
     ];
     for (const [name, want] of CLASSIFY) {
         const got = archOf(name);
@@ -364,7 +382,8 @@ console.log(
     + ' tolerate such a file without excusing a missing arch; two artifacts'
     + ' claiming one architecture are refused rather than picked between, which'
     + " is what a build intermediate left in the staging directory looks like; an"
-    + ' armv7l or ia32 artifact cannot be laundered into the x64 lane through'
-    + ' the AppImage default-arch rule; and a row with a missing or unknown'
-    + ' arch column fails at parse time)',
+    + ' armv7l or ia32 artifact cannot be laundered into the x64 lane, and since'
+    + " §7.1's rename every artifactName is user-forced, so an un-suffixed"
+    + ' AppImage is refused as unattributable rather than read as the x64 build;'
+    + ' and a row with a missing or unknown arch column fails at parse time)',
 );

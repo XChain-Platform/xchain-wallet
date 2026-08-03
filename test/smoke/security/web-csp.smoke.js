@@ -82,6 +82,6 @@ assert.match(viteSrc, /transformIndexHtml\(\)/, 'csp plugin injects via transfor
 assert.match(viteSrc, /'http-equiv': 'Content-Security-Policy'/, 'injects the CSP meta tag');
 
 // The plugin must actually be registered in the plugins array.
-assert.match(viteSrc, /styleGuidePlugin,\s*\n\s*cspPlugin,/, 'cspPlugin is registered in plugins');
+assert.match(viteSrc, /plugins:\s*\[[\s\S]*?\n\s*cspPlugin,/, 'cspPlugin is registered in plugins');
 
 console.log('web-csp smoke OK');

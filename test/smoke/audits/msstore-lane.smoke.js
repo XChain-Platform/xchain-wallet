@@ -18,7 +18,7 @@
 //
 //   1. AppxTarget computes its options as `deepAssign({}, win, appx)`, so
 //      `win.artifactName` would name the store package
-//      `XChain Wallet-<v>-x64-win.appx` - our direct-download convention,
+//      `xchain-wallet-<v>-x64-win.appx` - our direct-download convention,
 //      on the one artifact that must never be mistaken for a hosted file.
 //   2. `appx.publisher` left unset does not error. With no code-signing
 //      certificate `computePublisherName` returns the literal `CN=ms`;

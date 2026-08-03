@@ -13,13 +13,35 @@
 #
 # Pinning rules mirror packages/desktop/Dockerfile:
 #   - Base image pinned to a specific digest (not a tag) - tags move.
-#   - Node pinned + SHA256-verified; changing Node means changing this
-#     file (and bumping the minor version in REPRODUCIBLE_BUILDS.md).
+#   - Node pinned + SHA256-verified, from tools/release/toolchain.json;
+#     changing Node means changing THAT file (and bumping the minor
+#     version in REPRODUCIBLE_BUILDS.md), never this one alone.
 #   - pnpm pinned via corepack - version comes from root package.json
 #     `packageManager` (passed in as a build-arg by reproduce.sh).
+#
+# THE NODE PIN WAS A HARDCODED `ENV NODE_VERSION=20.18.0` HERE, AND THE
+# RELEASE LANE BUILDS THIS BUNDLE WITH 22.23.2. Both facts were true from
+# the day toolchain.json landed: it lists its consumers and this file is
+# not among them, because the pin was fixed for the desktop twin and the
+# extension was missed. So the two halves of §6 step 3 disagreed by a Node
+# major, the reproduction could not have matched the release on any host,
+# and the mismatch would have read to a verifier following the published
+# protocol as supply-chain tampering - which is the exact failure
+# toolchain.json's own header describes and was written to end. The pins
+# are ARGs now and reproduce.sh feeds them from toolchain.json, so this
+# file cannot drift from the release lane again without the smoke saying
+# so (test/smoke/audits/reproducible-toolchain.smoke.js).
 
 # Debian bookworm slim, digest-pinned (same digest as the desktop + web
 # images so a verifier who already pulled one base gets a cache hit).
+#
+# The digest's index carries exactly one real manifest, linux/amd64, so
+# reproduce.sh passes --platform explicitly: an arm64 verifier emulates on
+# purpose rather than discovering it by accident. Without that flag the
+# build died at the Node install with a bare `exit code: 133`, because the
+# x64 tarball below cannot execute on an arm64 image - measured on an
+# arm64 host 2026-08-02, and the reason it names no cause is that the
+# failure is an exec-format error inside a RUN layer.
 FROM debian:bookworm-slim@sha256:40b107342c492725bc7aacbe93a49945445191ae364184a6d24fedb28172f6f7
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -28,7 +50,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     # SOURCE_DATE_EPOCH is set at BUILD time by reproduce.sh (from the
     # tag's commit date), not baked into the image.
-    NODE_VERSION=20.18.0 \
     PNPM_HOME=/usr/local/pnpm
 
 # System deps:
@@ -50,10 +71,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node at the pinned version. Official tarballs, SHA256-verified.
-# (Upgrading Node → bump NODE_VERSION + NODE_SHA256 together.)
-ENV NODE_SHA256=4543670b589593f8fa5f106111fd5139081da42bb165a9239f05195e405f240a
+# Both values come from tools/release/toolchain.json by way of
+# reproduce.sh; the defaults here only keep a bare `docker build` honest
+# and are held to that file by the toolchain smoke. Upgrading Node is an
+# edit to toolchain.json, never to these two lines.
+ARG NODE_VERSION=22.23.2
+ARG NODE_SHA256_X64=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
+ENV NODE_VERSION=${NODE_VERSION}
 RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-    && echo "${NODE_SHA256}  node-v${NODE_VERSION}-linux-x64.tar.xz" | sha256sum -c - \
+    && echo "${NODE_SHA256_X64}  node-v${NODE_VERSION}-linux-x64.tar.xz" | sha256sum -c - \
     && tar -xJf "node-v${NODE_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
     && rm "node-v${NODE_VERSION}-linux-x64.tar.xz" \
     && corepack enable \

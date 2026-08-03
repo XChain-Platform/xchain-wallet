@@ -55,7 +55,7 @@ import {
 
 // --- fixtures ----------------------------------------------------------
 
-const ARTIFACT = 'XChain Wallet-9.9.9.AppImage';
+const ARTIFACT = 'xchain-wallet-9.9.9-x86_64.AppImage';
 const ARTIFACT_BYTES = Buffer.from('the real release\n');
 const ARTIFACT_SHA = createHash('sha256').update(ARTIFACT_BYTES).digest('hex');
 

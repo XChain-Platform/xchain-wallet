@@ -29,7 +29,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     # SOURCE_DATE_EPOCH is set at BUILD time by reproduce.sh (from the
     # tag's commit date), not baked into the image.
-    NODE_VERSION=20.18.0 \
     PNPM_HOME=/usr/local/pnpm
 
 # System deps:
@@ -50,10 +49,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node at the pinned version. Official tarballs, SHA256-verified.
-# (Upgrading Node → bump NODE_VERSION + NODE_SHA256 together.)
-ENV NODE_SHA256=4543670b589593f8fa5f106111fd5139081da42bb165a9239f05195e405f240a
+# Both values come from tools/release/toolchain.json by way of
+# reproduce.sh. This file pinned 20.18.0 by hand while the release lane
+# built the same bundle with 22.23.2, so the reproduction could not have
+# matched on any host - the same defect the extension twin carried
+# , for the same reason: toolchain.json names its consumers by
+# hand and neither of these two was on the list.
+ARG NODE_VERSION=22.23.2
+ARG NODE_SHA256_X64=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
+ENV NODE_VERSION=${NODE_VERSION}
 RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-    && echo "${NODE_SHA256}  node-v${NODE_VERSION}-linux-x64.tar.xz" | sha256sum -c - \
+    && echo "${NODE_SHA256_X64}  node-v${NODE_VERSION}-linux-x64.tar.xz" | sha256sum -c - \
     && tar -xJf "node-v${NODE_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
     && rm "node-v${NODE_VERSION}-linux-x64.tar.xz" \
     && corepack enable \

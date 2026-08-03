@@ -200,6 +200,46 @@ assert.ok(/K1 is not in this table and must never be/.test(setup),
 assert.ok(wf.includes('docs/Release_CI_Setup.md'),
     'release.yml points at the settings the file itself cannot enforce');
 
+// --- 8b. The iOS lane ( §5, S4b) --------------------------------
+
+// Two properties, and neither fails visibly when it breaks.
+//
+// The profile: a mobile store artifact built at `default` carries the
+// §2.3 review-hidden surfaces. Dropping the env var produces a perfectly
+// good ipa of the wrong app, and the only later signal is
+// expected-artifacts.txt refusing it at the release machine, long after
+// the build looked green.
+//
+// The gate: the archive/export steps must stay conditional on the App
+// Store Connect key being present. Until K2 enrollment completes there is
+// no key, and an ungated archive step turns every release tag red for a
+// reason that has nothing to do with the release.
+assert.ok(jobs.has('mobile-ios'), 'workflow has an iOS lane');
+const ios = jobs.get('mobile-ios');
+
+assert.ok(/XCHAIN_BUILD_PROFILE:\s*store/.test(ios),
+    'the iOS lane must build the web shell at the `store` profile, or the ipa '
+    + 'carries the surfaces  §2.3 compiles out');
+
+assert.ok(/ASC_KEY_ID:\s*\$\{\{\s*secrets\.APPLE_API_KEY_ID/.test(ios),
+    'the iOS lane reads the ASC key id into env, which is what its steps gate on');
+
+for (const step of ['ios-archive.sh', 'ios-export.sh']) {
+    const at = ios.indexOf(step);
+    assert.ok(at >= 0, `the iOS lane runs ${step}`);
+    // The `if:` sits above the `run:` in the same step block. Look back a
+    // short way rather than parsing YAML, matching this file's approach.
+    const preceding = ios.slice(Math.max(0, at - 600), at);
+    assert.ok(/if:\s*env\.ASC_KEY_ID\s*!=\s*''/.test(preceding),
+        `${step} must be gated on env.ASC_KEY_ID, so the lane degrades to `
+        + '"built, not archived" while Apple enrollment is pending');
+}
+
+// The half that needs no Apple account must actually be ungated, or
+// landing this lane early bought nothing.
+const simBuild = /-destination 'generic\/platform=iOS Simulator'/.test(ios);
+assert.ok(simBuild, 'the iOS lane builds for the simulator with no signing identity');
+
 // --- 9. The PR-triggered workflow holds no signing secrets -------------
 
 // ci.yml runs on pull_request. If a signing secret ever appears there,
@@ -239,5 +279,46 @@ for (const wf of ['.github/workflows/release.yml', '.github/workflows/mobile.yml
         + 'Gradle runs, so every artifact-level gate after it silently never executes');
 }
 
+// . §6 step 1 says a release tag is pinned to a commit that green
+// CI already validated. That was procedure and nothing else, so v0.334.0
+// was cut on a commit whose CI run was cancelled with four jobs red, and
+// the release lane ran green over the top of it. The gate now exists; this
+// holds it in place, because a gate that can be deleted without a test
+// going red is a comment.
+{
+    const verifyTag = jobs.get('verify-tag');
+    assert.ok(verifyTag, 'release.yml must keep a verify-tag job');
+
+    assert.ok(verifyTag.includes('tools/release/verify-validated-commit.mjs'),
+        'release.yml`s verify-tag job must run tools/release/verify-validated-commit.mjs. '
+        + 'Without it the workflow checks WHO SIGNED the tag and never whether anyone '
+        + 'validated the commit it points at, which is exactly how v0.334.0 was cut from '
+        + 'a commit whose CI was cancelled with build/test/audit/drift-guards all red.');
+
+    assert.ok(existsSync(join(root, 'tools/release/verify-validated-commit.mjs')),
+        'the step-1 gate script is referenced by release.yml but does not exist, so every '
+        + 'release would fail at that step rather than be gated by it.');
+
+    // The gate reads workflow runs. Without `actions: read` the API answers
+    // 404, which the gate treats as a refusal - so a missing permission
+    // turns it from a gate into an outage. Assert it here rather than
+    // discover it on a release night.
+    assert.ok(/^\s{4}permissions:\s*$/m.test(verifyTag)
+        && /^\s{6}actions:\s*read\s*$/m.test(verifyTag),
+        'the verify-tag job must request `actions: read`; `contents: read` alone cannot '
+        + 'list workflow runs and the gate fails closed on the resulting 404.');
+
+    // It has to run BEFORE anything holding a signing secret, which is the
+    // whole reason it lives in this job rather than its own. Every other
+    // job depending on verify-tag is what proves that ordering.
+    for (const [name, block] of jobs) {
+        if (name === 'verify-tag') continue;
+        assert.ok(/^\s{4}needs:.*\bverify-tag\b/m.test(block),
+            `job \`${name}\` does not need verify-tag, so it can start on a tag whose `
+            + 'commit was never validated and whose signature was never checked.');
+    }
+}
+
 console.log('OK: release CI smoke ( S4: trigger surface, environment gate, no K1 on runners, no auto-publish, '
-    + 'and every SPA-building workflow raises the Node heap ceiling that killed all three mobile.yml runs)');
+    + 'the §6 step-1 validated-commit gate, and every SPA-building workflow raises the Node heap '
+    + 'ceiling that killed all three mobile.yml runs)');

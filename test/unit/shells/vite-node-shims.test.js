@@ -27,13 +27,32 @@ const CONFIGS = [
     ['extension', '../../../packages/extension/vite.config.js'],
 ];
 
+/**
+ * The replacement for an exact-string alias, from either shape Vite accepts.
+ *
+ * The web config moved to the array form when the build-profile surface swaps
+ * arrived : those are regex finds, which the object form cannot hold.
+ * The two forms mean the same thing to Rollup, so this asserts the guarantee
+ * rather than the notation - the previous version read `alias.http` and went
+ * green-to-undefined the moment the shape changed, which is the failure mode
+ * this whole file exists to prevent.
+ */
+function aliasFor(alias, name) {
+    if (Array.isArray(alias)) {
+        return alias.find((entry) => entry.find === name)?.replacement;
+    }
+    return alias?.[name];
+}
+
 describe.each(CONFIGS)('%s shell vite config', (_name, path) => {
     it('aliases http and https to the browser Agent shim', async () => {
         const mod = await import(path);
         const config = mod.default;
         const alias = config?.resolve?.alias;
         expect(alias, 'resolve.alias missing from config').toBeTruthy();
-        expect(alias.http, 'http alias missing').toMatch(/http-browser\.js$/);
-        expect(alias.https, 'https alias missing ').toBe(alias.http);
+        const http = aliasFor(alias, 'http');
+        const https = aliasFor(alias, 'https');
+        expect(http, 'http alias missing').toMatch(/http-browser\.js$/);
+        expect(https, 'https alias missing ').toBe(http);
     });
 });

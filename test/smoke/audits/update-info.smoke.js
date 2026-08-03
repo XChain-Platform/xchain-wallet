@@ -129,7 +129,7 @@ assert.ok(!isUpdateInfoContent('files:\n  version: 1\n  path: a\n  sha512: b\n')
         const pointer = 'version: 1.0.0\npath: a.dmg\nsha512: x\n';
         for (const n of EXPECTED_POINTERS) writeFileSync(join(dir, n), pointer);
         writeFileSync(join(dir, 'builder-debug.yml'), 'x64:\n  a: b\n');
-        writeFileSync(join(dir, 'XChain Wallet-1.0.0.dmg'), 'bytes');
+        writeFileSync(join(dir, 'xchain-wallet-1.0.0.dmg'), 'bytes');
         writeFileSync(join(dir, 'RELEASE_HASHES.txt'), '# manifest\n');
         writeFileSync(join(dir, 'RELEASE_HASHES.txt.asc'), 'sig\n');
         mkdirSync(join(dir, 'mac-arm64'));
@@ -137,7 +137,7 @@ assert.ok(!isUpdateInfoContent('files:\n  version: 1\n  path: a\n  sha512: b\n')
         const c = classify(dir);
         assert.deepEqual(c.pointers.slice().sort(), EXPECTED_POINTERS.slice().sort(),
             'every arch-suffixed pointer is found, including stable-linux-arm64.yml');
-        assert.deepEqual(c.artifacts, ['XChain Wallet-1.0.0.dmg'],
+        assert.deepEqual(c.artifacts, ['xchain-wallet-1.0.0.dmg'],
             'artifacts exclude pointers, manifest files and byproducts');
         assert.deepEqual(c.byproducts, ['builder-debug.yml'],
             'builder-debug.yml is a byproduct, never published');
@@ -242,9 +242,15 @@ assert.deepEqual(
     // Every lane, including Windows, must pin the clock. This was missing
     // on the Windows lane, which made its artifacts unreproducible while
     // the other two looked fine.
+    //
+    // The count is exact rather than a floor, so ADDING a lane fails here
+    // until someone confirms the new one pins the clock too. That is the
+    // point: a lane added without the pin is unreproducible, and nothing
+    // else about it looks wrong. Bumped 4 -> 5 for the iOS lane
+    // ( §5, S4b), which pins it.
     const laneCount = (wf.match(/Pin SOURCE_DATE_EPOCH to the tag commit/g) || []).length;
-    assert.equal(laneCount, 4,
-        'all four build lanes pin SOURCE_DATE_EPOCH (unsigned, linux, macos, windows)');
+    assert.equal(laneCount, 5,
+        'all five build lanes pin SOURCE_DATE_EPOCH (unsigned, linux, macos, windows, ios)');
 
     assert.ok(/pnpm-lock\.yaml sha256/.test(wf),
         'the resolved dep tree is identified in the run record (§8)');

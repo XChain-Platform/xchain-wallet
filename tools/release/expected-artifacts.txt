@@ -56,8 +56,10 @@
 # pointer, and the manifest covering that release would have been
 # internally perfect. Each required arch must now be present, matched
 # against the artifact NAME using electron-builder's own arch tokens
-# (`-x64`, `-arm64`, `_amd64`, `x86_64`; the un-suffixed `.AppImage` is
-# x64 by that tool's default-arch rule, and lib.sh says why).
+# (`-x64`, `-arm64`, `_amd64`, `x86_64`). Since §7.1's rename EVERY
+# artifactName is user-forced, so there is no un-suffixed artifact left to
+# make an exception for: an AppImage without a token means the forced name
+# was lost, and lib.sh refuses it rather than guessing x64.
 #
 #   -            not arch-partitioned: one artifact serves everyone.
 #   x64,arm64    both must be present, or the release fails here.
@@ -82,8 +84,10 @@ required  xchain-wallet-web-v*.tar.gz       default  -
 # submitted, not what was delivered (§3, docs/Verify_Release.md).
 required  xchain-wallet-extension-v*.zip    default  -
 # --- Desktop (electron-builder) -----------------------------------------
-# Extension globs rather than exact names: electron-builder embeds
-# productName ("XChain Wallet", with a space) in every one.
+# Extension globs rather than exact names. They used to be necessary
+# because electron-builder embedded productName ("XChain Wallet", with a
+# SPACE) in every artifact; since §7.1's rename every name is pinned to
+# `xchain-wallet-...` and no published file has a space in it.
 #
 # The per-arch naming convention this used to defer to  for is now
 # SET: every macOS and Windows artifact carries its architecture
