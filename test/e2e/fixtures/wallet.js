@@ -29,6 +29,14 @@
 
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { kdfStepTimeout } from '../timeout-budget.js';
+
+// Every wait below that pays a real Argon2id derivation shares ONE budget,
+// scaled for the machine the run landed on. These were two hand-written
+// 90_000s, and on a hosted runner - which the load-average model scores as
+// idle, because it is small rather than contended - 90s was not enough.
+// See test/e2e/timeout-budget.js.
+const KDF_STEP_MS = kdfStepTimeout();
 
 export const LICENSE_ACCEPTED_AT_KEY = 'xc:licenseAcceptedAt';
 export const LICENSE_ACCEPTED_VERSION_KEY = 'xc:licenseAcceptedVersion';
@@ -292,7 +300,7 @@ export async function createWallet(page, options = {}) {
     await acknowledgeDonationConsent(page, ads);
 
     // Argon2id runs on the CI runner's CPU; this is the slow step.
-    await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
+    await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
     return words;
 }
 
@@ -366,7 +374,8 @@ export async function lockWallet(page) {
 export async function unlockWallet(page, password = DEFAULT_PASSWORD) {
     await page.getByLabel('Password').fill(password);
     await unlockButton(page).click();
-    await expect(lockButton(page)).toBeVisible({ timeout: 90_000 });
+    // Argon2id again: unlocking derives the master key. Same budget.
+    await expect(lockButton(page)).toBeVisible({ timeout: KDF_STEP_MS });
 }
 
 /**

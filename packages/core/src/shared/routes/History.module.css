@@ -306,6 +306,22 @@
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
+    /*
+     * : the 24px pointer-target floor (WCAG 2.2 AA 2.5.8), stated
+     * rather than arrived at. Height here used to be 4px + 4px of padding
+     * plus whatever line box the platform font produced for 13px text: 24px
+     * on macOS with -apple-system, 23px on the CI runner's fallback font.
+     * So these two buttons met an accessibility floor on one operating
+     * system and missed it by a pixel on another, and the e2e walk caught it
+     * only once it ran somewhere other than a Mac.
+     *
+     * min-height makes the floor a property instead of a coincidence, and
+     * the flex centring keeps the label centred when it applies.
+     */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .segBtn:not(:first-child) {

@@ -67,6 +67,42 @@ export const SATURATION_LOAD_PER_CPU = 0.35;
 export const MAX_LOAD_SCALE = 2;
 
 /**
+ * Floor on the stretch when the run is on CI, needed because everything above
+ * measures the WRONG THING for a hosted runner.
+ *
+ * The model above is contention: a big box gets slow when its neighbours are
+ * busy, and load average per core is exactly the right signal for that. A
+ * hosted runner is not contended - one Playwright worker on an otherwise idle
+ * machine reports a per-core load well under SATURATION_LOAD_PER_CPU, so it
+ * scores about 1.0x. It is simply SMALL AND SLOW, which load average cannot
+ * see. So the suite handed its TIGHTEST budget to its SLOWEST machine, and
+ * `ci.yml`'s `e2e` job came back 2 failed / 8 flaky, with both hard failures
+ * and five of the eight flaky ones waiting on a wallet create or unlock (run
+ * 30827175941, 2026-08-03).
+ *
+ * The same defect as the unit suite's ceilings in , one venue over,
+ * on a job the release gate requires to be green. The floor reuses the
+ * existing ceiling rather than inventing a number: a runner is at least as
+ * disadvantaged as a fully contended dev box.
+ */
+export const CI_MIN_SCALE = MAX_LOAD_SCALE;
+
+/**
+ * Budget for a step that pays a real Argon2id derivation: creating or
+ * unlocking a wallet.
+ *
+ * This existed as a bare `90_000` inside the wallet fixture, with a comment
+ * saying "Argon2id runs on the CI runner's CPU; this is the slow step" - the
+ * one assertion in the suite that KNEW it was the slow step was also the one
+ * that opted out of the budget built for exactly that problem.
+ *
+ * Deliberately below BASE_TEST_TIMEOUT_MS so a genuinely wedged unlock still
+ * fails on ITS OWN assertion, naming the step, rather than on the test
+ * ceiling one line further up the stack.
+ */
+export const BASE_KDF_STEP_TIMEOUT_MS = 90_000;
+
+/**
  * How far to stretch the budget, as a multiplier in [1, MAX_LOAD_SCALE].
  *
  * Linear in the 1-minute load average per core, clamped at both ends. An
@@ -77,7 +113,7 @@ export const MAX_LOAD_SCALE = 2;
  * else falls through to the measurement rather than silently zeroing the
  * budget.
  */
-export function loadScale({ load, cpuCount, override } = {}) {
+export function loadScale({ load, cpuCount, override, ci = false } = {}) {
     const pinned = Number(override);
     if (override !== undefined && override !== null && override !== ''
         && Number.isFinite(pinned) && pinned > 0) {
@@ -88,7 +124,11 @@ export function loadScale({ load, cpuCount, override } = {}) {
     const oneMinute = Number.isFinite(load) && load > 0 ? load : 0;
     const perCpu = oneMinute / cores;
     const contention = Math.min(1, perCpu / SATURATION_LOAD_PER_CPU);
-    return 1 + contention * (MAX_LOAD_SCALE - 1);
+    const measured = 1 + contention * (MAX_LOAD_SCALE - 1);
+    // The explicit override above still wins outright, including on CI:
+    // pinning 1x to reproduce a CI timing failure has to keep working, and it
+    // is the documented way to do that.
+    return ci ? Math.max(measured, CI_MIN_SCALE) : measured;
 }
 
 /**
@@ -103,6 +143,7 @@ export function timeoutBudget({ env = process.env, load, cpuCount } = {}) {
         load: load ?? os.loadavg()[0],
         cpuCount: cpuCount ?? os.cpus().length,
         override: env.PW_TIMEOUT_SCALE,
+        ci: !!env.CI,
     });
 
     const round = (ms) => Math.round((ms * scale) / 1000) * 1000;
@@ -110,7 +151,18 @@ export function timeoutBudget({ env = process.env, load, cpuCount } = {}) {
         scale,
         timeout: round(BASE_TEST_TIMEOUT_MS),
         expectTimeout: round(BASE_EXPECT_TIMEOUT_MS),
+        kdfStepTimeout: round(BASE_KDF_STEP_TIMEOUT_MS),
     };
+}
+
+/**
+ * The KDF-step budget for the current run, for fixtures that cannot reach
+ * Playwright's config. Same scale as everything else by construction, which
+ * is the whole point: the step that pays the derivation should not be the one
+ * assertion sized by hand.
+ */
+export function kdfStepTimeout(opts) {
+    return timeoutBudget(opts).kdfStepTimeout;
 }
 
 /** One line naming the budget, for the top of a run's output. */
