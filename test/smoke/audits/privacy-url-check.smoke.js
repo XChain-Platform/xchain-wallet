@@ -51,7 +51,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+import { readDoc, skipUnlessDocs } from '../_docs-repo.js';
 
 import {
     checkPrivacyUrl, normalizeText, policyTextFromMarkdown, pageTextFromHtml,
@@ -62,6 +62,16 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');                       // xchain-wallet
 const HOSTED_PAGE = join(root, '..', 'xchain-websites', 'xchain.io', 'wallet', 'privacy', 'index.html');
+
+// This must precede the read below, and getting the order wrong is what it is
+// here to prevent.  moved the policy into the sibling docs repo, so
+// DEFAULT_SOURCE_PATH now points ACROSS the repo boundary and the tool half
+// became docs-dependent along with the store-document half at the bottom. Until
+// this line existed the file read the policy at import time and died with a raw
+// ENOENT in any checkout without the sibling, while every other docs-dependent
+// smoke in the same run skipped loudly - so a missing sibling was indistinguish-
+// able from a real privacy failure, on the one gate that guards the store forms.
+skipUnlessDocs('privacy-url-check smoke');
 
 const POLICY = readFileSync(DEFAULT_SOURCE_PATH, 'utf8');
 const POLICY_TEXT = policyTextFromMarkdown(POLICY);
@@ -386,10 +396,12 @@ const LISTING_DOCS = [
     ['privacy', 'data-disclosure.md'],
 ];
 
-if (!docsAvailable()) {
-    console.log('SKIP (partial): privacy-url-check smoke - the tool half passed, but the '
-        + `store-document half needs the sibling xchain-documentation checkout (${WALLET_DOCS}).`);
-} else {
+// No partial-skip branch here any more, deliberately. It used to say "the tool
+// half passed, but the store-document half needs the sibling checkout", and that
+// sentence could never be printed truthfully: once the policy itself moved to
+// the docs repo, a run that got this far had already read it, and a run that had
+// not got this far had already crashed. The whole file skips at the top instead.
+{
     let docsChecked = 0;
     for (const parts of LISTING_DOCS) {
         const rel = parts.join('/');
