@@ -232,6 +232,13 @@ fi
 EXPECTED="$REPO_ROOT/tools/release/expected-artifacts.txt"
 xr_check_expected "$INPUT_DIR" "$EXPECTED"
 
+# A lane that already has users must not vanish from a release. The gate
+# above cannot ask this: every store lane is `optional` there until it has
+# shipped once, and nothing about a first upload edits that file
+# ( §6 release parity,  §2).
+LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
+xr_check_shipped_lanes "$INPUT_DIR" "$LANES" "$EXPECTED"
+
 # A profile the build cannot actually produce must not be signed into the
 # record as though it had .
 xr_assert_store_profile_buildable "$INPUT_DIR" "$EXPECTED"

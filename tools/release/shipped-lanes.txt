@@ -1,0 +1,77 @@
+# tools/release/shipped-lanes.txt - which distribution lanes have shipped,
+# and therefore may never silently drop out of a release again.
+#
+#  §6 ("never let the direct lane lag the Play lane in RELEASE
+# PARITY"),  §2 ("one release = all shipped shells"). Read by
+# tools/release/lib.sh (xr_check_shipped_lanes), enforced by sign.sh
+# alongside the expected-artifacts gate.
+#
+# WHY THIS FILE EXISTS, and it is a different question from the one
+# expected-artifacts.txt answers.
+#
+# That file has exactly two strengths per row: `required` (every release
+# must contain it) and `optional` (a release may contain it, and is
+# covered by the manifest when it does). Every store lane starts optional
+# and has to, because a lane that has never shipped cannot be demanded of
+# a release built before it existed.
+#
+# The trap is what happens on the day it DOES ship. Nothing about the
+# first upload edits expected-artifacts.txt. So the release after the
+# first Android release could omit the Android pair entirely and produce
+# a manifest that is internally perfect - every hash correct, signature
+# good, verify.sh green - describing a release that left every direct
+# APK install without the fix it was told to expect. That is the same
+# shape of defect as  §8's missing architecture, one level up: the
+# gate cannot fail on an artifact it was never told to want.
+#
+# So the lane's shipping state is DECLARED here, once, and the gate reads
+# it. Flipping one word is what arms the parity requirement, and the
+# store submission runbooks name that flip as a step of the first release
+# rather than leaving it to be remembered.
+#
+# FAIL-SHUT, in both directions:
+#
+#   * A lane row with any status other than SHIPPED or NOT-SHIPPED is a
+#     hard failure at parse time, not a default to the permissive one.
+#   * A glob here that appears in no expected-artifacts.txt row is a hard
+#     failure: the two files would be describing different releases.
+#   * An `optional` row in expected-artifacts.txt claimed by NO lane here
+#     is a hard failure. That is what stops a future optional artifact
+#     from being added with no shipping state at all, which would put it
+#     straight back in the hole this file was dug to fill.
+#
+# Nothing here demands anything of a NOT-SHIPPED lane. Staging its
+# artifacts early is still allowed and still covered by the manifest;
+# expected-artifacts.txt is what permits that, and this file does not
+# take it away.
+#
+# WHEN A LANE SHIPS: flip its word to SHIPPED in the SAME commit that
+# records the release, and say in the comment which tag it first shipped
+# in. From then on a release that omits it fails here, by name.
+#
+# Format:  <lane>  <SHIPPED|NOT-SHIPPED>  <glob> [<glob> ...]
+#          globs are matched against artifact basenames, exactly as in
+#          expected-artifacts.txt, and must be declared there too.
+
+# Android . The pair is ONE build: the ceremony signs the AAB with
+# K9 and derives the universal APK from that same bundle with K10, so a
+# release carrying one and not the other means the ceremony was
+# interrupted, never that only one lane was intended. They flip together.
+#
+# NOT-SHIPPED because nothing has been uploaded to Play and nothing is
+# published on downloads.xchain.io: measured 2026-08-02, the feed path
+# `downloads.xchain.io/wallet/android/latest.json` is 404 and no signed
+# artifact exists on the release machine.
+android   NOT-SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*.apk
+
+# iOS . Store-bound only; there is no direct-install lane on that
+# platform, so this row is one glob and always will be.
+ios       NOT-SHIPPED   xchain-wallet-ios-v*.ipa
+
+# Mac App Store . Blocked on Apple Developer Program enrollment
+# and the distribution certificates that follow it.
+mas       NOT-SHIPPED   *-mas.pkg
+
+# Microsoft Store ( /  §15). Opt-in behind
+# XCHAIN_BUILD_APPX=1 and the Partner Center identity does not exist yet.
+msstore   NOT-SHIPPED   *-appx.appx

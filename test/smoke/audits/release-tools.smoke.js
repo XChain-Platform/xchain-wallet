@@ -39,6 +39,7 @@ const files = [
     'tools/release/sign.sh',
     'tools/release/verify.sh',
     'tools/release/expected-artifacts.txt',
+    'tools/release/shipped-lanes.txt',
     'tools/release/publish.sh',
     'tools/release/deploy-web.sh',
 ];
@@ -181,8 +182,13 @@ try {
     // what is an artifact and what is a channel pointer. Leave it out and
     // sign.sh reports a completely empty artifact set, which reads as a
     // staging problem rather than a missing file.
+    // shipped-lanes.txt rides along because sign.sh reads it
+    // unconditionally and fails shut when it is absent ( §6). That
+    // is deliberate - a release must never be signed without knowing
+    // which lanes already have users - and it means the pristine-clone
+    // fixture has to carry it like any other gate input.
     for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt',
-        'update-info.mjs']) {
+        'shipped-lanes.txt', 'update-info.mjs']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     cpSync(join(root, 'tools/build-reproduce/check-no-dev-mock.sh'),

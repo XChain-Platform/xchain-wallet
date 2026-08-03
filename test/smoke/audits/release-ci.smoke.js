@@ -209,4 +209,35 @@ assert.ok(/pull_request/.test(ci), 'ci.yml runs on pull_request (as expected)');
 assert.ok(!SIGNING_SECRET.test(ci),
     'ci.yml runs on pull_request and must never read a signing secret');
 
-console.log('OK: release CI smoke ( S4: trigger surface, environment gate, no K1 on runners, no auto-publish)');
+// --- 10. Every workflow that builds the web SPA raises Node's heap ------
+//
+// The web bundle is one large synchronous graph carrying every chain, and
+// Node sizes its default old-space from the machine it starts on. A
+// developer box builds it happily; a GitHub-hosted runner dies at ~2.0 GB
+// with `FATAL ERROR: ... JavaScript heap out of memory`.
+//
+// This is pinned rather than remembered because it has already been
+// forgotten once, in the way that matters most. release.yml hit the wall
+// on 2026-08-01 and was fixed the same day (d3f8a4ec). mobile.yml builds
+// the SAME bundle in the SAME way and did not get the fix, so it failed on
+// all three of its runs (the v0.334.0 tag pushes, 2026-08-02) at that one
+// line. The cost was not one red workflow: that step is upstream of
+// `bundleRelease`, so no Gradle build has ever run in CI, and every
+// artifact-level gate below it in mobile.yml - the ones written precisely
+// because a source-level assertion cannot see what packaging did - has
+// never executed there at all.
+//
+// Any future shell that builds the SPA on a runner inherits the same wall.
+for (const wf of ['.github/workflows/release.yml', '.github/workflows/mobile.yml']) {
+    const text = read(wf);
+    // Only the workflows that actually build it are in scope; a workflow
+    // that merely runs tests is not carrying this graph.
+    if (!/pnpm\s+(-C\s+packages\/web|--filter\s+"?@xchain-wallet\/(web|mobile))/.test(text)) continue;
+    assert.match(text, /NODE_OPTIONS:\s*--max-old-space-size=\d{4,}/,
+        `${wf} builds the web SPA on a runner and must raise Node's old-space ceiling. `
+        + 'Without it the step dies at ~2.0 GB, and in mobile.yml that happens BEFORE '
+        + 'Gradle runs, so every artifact-level gate after it silently never executes');
+}
+
+console.log('OK: release CI smoke ( S4: trigger surface, environment gate, no K1 on runners, no auto-publish, '
+    + 'and every SPA-building workflow raises the Node heap ceiling that killed all three mobile.yml runs)');

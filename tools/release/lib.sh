@@ -748,3 +748,136 @@ xr_check_expected() {
 
     echo "release/lib.sh: artifact-set gate ok (${#artifacts[@]} artifact(s))." >&2
 }
+
+# Gate a release against the lanes that have already shipped.
+#
+# xr_check_expected above answers "does this release contain everything
+# the list demands", and every store lane is declared `optional` there
+# because a lane that has never shipped cannot be demanded of a release
+# built before it existed. This function answers the question that
+# becomes live the day one of them DOES ship: has a lane that already has
+# users silently dropped out of this release?
+#
+# The gap is real and it is the  §8 shape one level up. Nothing
+# about a first upload edits expected-artifacts.txt, so the release AFTER
+# the first Android release could omit the Android pair and produce a
+# manifest that is internally perfect while leaving every direct-APK
+# install without the fix it was told to expect.  §6 states the
+# invariant ("never let the direct lane lag"); this is the mechanism.
+#
+# Fail-shut in both directions, because a gate that reads a stale or
+# unclaimed declaration and shrugs is the gate that was already missing:
+# an unknown status, a glob that no expected-artifacts row declares, and
+# an `optional` row that no lane claims are all hard failures.
+#
+# Args: dir lanes_file expected_file
+xr_check_shipped_lanes() {
+    local dir="$1" lanes="$2" expected="$3"
+
+    if [[ ! -f "$lanes" ]]; then
+        echo "release/lib.sh: shipped-lane list not found: $lanes" >&2
+        echo "  This list is what stops a lane that already has users from" >&2
+        echo "  dropping out of a release unnoticed. It is not optional." >&2
+        return 1
+    fi
+
+    # Every glob expected-artifacts.txt declares, and separately the
+    # `optional` subset, so both drift directions can be checked.
+    local -a all_pats=() opt_pats=()
+    local status pattern
+    while read -r status pattern _rest || [[ -n "$status" ]]; do
+        case "$status" in
+            ''|'#'*) continue ;;
+            required) all_pats+=("$pattern") ;;
+            optional) all_pats+=("$pattern"); opt_pats+=("$pattern") ;;
+        esac
+    done < "$expected"
+
+    local -a artifacts=()
+    local line
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && artifacts+=("${line#./}")
+    done < <(xr_list_artifacts "$dir")
+
+    local failures=0 lane lstatus rest pat p name matched claimed
+    local -a claimed_pats=()
+
+    while read -r lane lstatus rest || [[ -n "$lane" ]]; do
+        case "$lane" in ''|'#'*) continue ;; esac
+
+        if [[ "$lstatus" != "SHIPPED" && "$lstatus" != "NOT-SHIPPED" ]]; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares status" \
+                 "'${lstatus:-<missing>}'; expected SHIPPED or NOT-SHIPPED." >&2
+            echo "  Not defaulted to the permissive one on purpose: a typo must" >&2
+            echo "  not quietly disarm the parity requirement it was editing." >&2
+            return 1
+        fi
+        if [[ -z "$rest" ]]; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares no artifact glob." >&2
+            return 1
+        fi
+
+        for pat in $rest; do
+            # Drift direction 1: this file must not describe artifacts the
+            # release list has never heard of.
+            matched=0
+            for p in "${all_pats[@]:-}"; do
+                [[ "$pat" == "$p" ]] && matched=1
+            done
+            if [[ "$matched" -eq 0 ]]; then
+                echo "release/lib.sh: $lanes: lane '$lane' claims glob '$pat'," \
+                     "which no row of $expected declares." >&2
+                echo "  The two files would be describing different releases." >&2
+                return 1
+            fi
+            claimed_pats+=("$pat")
+
+            [[ "$lstatus" == "SHIPPED" ]] || continue
+
+            matched=0
+            for name in "${artifacts[@]:-}"; do
+                # shellcheck disable=SC2254  # $pat is a glob by design.
+                case "$name" in $pat) matched=1; break ;; esac
+            done
+            if [[ "$matched" -eq 0 ]]; then
+                echo "LANE-REGRESSION  lane '$lane' has shipped, but this release" \
+                     "stages no artifact matching '$pat'." >&2
+                echo "                 Users of that lane are already installed and" >&2
+                echo "                 expect this version. Shipping without it is not" >&2
+                echo "                 a smaller release, it is a lane left behind on a" >&2
+                echo "                 version nothing will ever update ( §6)." >&2
+                echo "                 If the lane is genuinely being retired, say so in" >&2
+                echo "                 $lanes rather than here." >&2
+                failures=$((failures + 1))
+            fi
+        done
+    done < "$lanes"
+
+    # Drift direction 2, and it is the one that keeps this file honest as
+    # new lanes appear: an optional artifact belonging to no declared lane
+    # has no shipping state at all, which is exactly the hole this gate
+    # was added to close.
+    for p in "${opt_pats[@]:-}"; do
+        claimed=0
+        for pat in "${claimed_pats[@]:-}"; do
+            [[ "$p" == "$pat" ]] && claimed=1
+        done
+        if [[ "$claimed" -eq 0 ]]; then
+            echo "release/lib.sh: $expected declares '$p' optional, but no lane in" \
+                 "$lanes claims it." >&2
+            echo "  An optional artifact with no shipping state can never become" >&2
+            echo "  required, so the release after its first one could drop it" >&2
+            echo "  silently. Add it to a lane." >&2
+            return 1
+        fi
+    done
+
+    if [[ "$failures" -gt 0 ]]; then
+        echo >&2
+        echo "release/lib.sh: shipped-lane gate FAILED ($failures problem(s))." >&2
+        echo "  Checked against: $lanes" >&2
+        return 1
+    fi
+
+    echo "release/lib.sh: shipped-lane gate ok." >&2
+}

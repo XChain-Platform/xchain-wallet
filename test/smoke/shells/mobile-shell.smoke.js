@@ -841,6 +841,29 @@ assert.match(
     /Never hosted publicly/,
     'the AAB is store-bound; only the K10-signed APK is ever downloaded',
 );
+// Release parity ( §6). The first upload gives Android users, and
+// nothing about it changes what the release gate demands: every mobile row in
+// expected-artifacts.txt is `optional` and stays so. The flip that arms the
+// requirement lives in shipped-lanes.txt, and the only place an operator will
+// ever be standing when it becomes true is this runbook - so it has to be a
+// step here, after the lane actually ships, rather than a note somewhere.
+const shippedLanes = readFileSync(
+    join(wsRoot, 'tools', 'release', 'shipped-lanes.txt'), 'utf8',
+);
+assert.match(
+    shippedLanes,
+    /^android\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\.apk\s*$/m,
+    'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
+);
+assert.ok(
+    runbook.includes('tools/release/shipped-lanes.txt'),
+    'the runbook names the file whose one-word flip arms release parity',
+);
+assert.ok(
+    runbook.indexOf('downloads.xchain.io')
+        < runbook.lastIndexOf('tools/release/shipped-lanes.txt'),
+    'the parity flip comes AFTER the direct lane is published, not before it',
+);
 const dataSafety = readFileSync(join(mobile, 'docs', 'DATA_SAFETY.md'), 'utf8');
 // The form is derived from an audit of the wire, not from intent: every
 // first-party endpoint the app can call has to appear in it.

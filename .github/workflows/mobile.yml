@@ -72,12 +72,33 @@ jobs:
       # Builds the web SPA and then stages it into the Capacitor webDir. The
       # `...` suffix pulls in this package's workspace dependencies, so web (and
       # core beneath it) build first and in order.
+      #
+      # NODE_OPTIONS is not optional here, and this workflow proved it the
+      # hard way: it has run three times (all three v0.334.0 tag pushes,
+      # 2026-08-02) and failed all three in THIS step with
+      # `FATAL ERROR: Ineffective mark-compacts near heap limit - JavaScript
+      # heap out of memory`, aborting at ~2.0 GB. Node sizes its default
+      # old-space from the machine it starts on, so the release Mac builds
+      # this happily and a GitHub-hosted runner does not.
+      #
+      # release.yml hit the identical wall on 2026-08-01 and was fixed the
+      # same day (d3f8a4ec); the fix was never carried across to this file,
+      # so the Android lane kept dying at the same line for another day. The
+      # consequence is larger than one red run: because this step is upstream
+      # of `bundleRelease`, NO Gradle build has ever run in CI, which means
+      # every artifact-level gate BELOW - the exported-component count against
+      # the merged manifest, the backup/cleartext posture, the boot-check
+      # ordering, the webdir stamp, the versionCode assertion - has never
+      # executed anywhere except by hand on the release machine. They were
+      # written to catch what packaging does, and packaging has not happened
+      # here.
       - name: Build the web SPA and stage it into the shell
         env:
           # Empty on a PR, which makes the build number itself from
           # package.json. On a tag this is the tag, and the assertion below
           # proves the AAB carries exactly the number that tag derives.
           XCHAIN_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm --filter "@xchain-wallet/mobile..." build
 
       - name: Sync the native project

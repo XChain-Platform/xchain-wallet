@@ -62,9 +62,10 @@ Open source, AGPL-3.0-or-later. Built by Dankest, LLC.
 | Field | Value |
 |---|---|
 | Category | Finance |
+| Form factors | **Phone only. Do not tick tablet, Wear, TV, Auto or ChromeOS.** Tablet-optimized layouts are an explicit §9 non-goal, and ticking the box obliges the listing to carry 7-inch and 10-inch screenshots we have deliberately not produced. The responsive UI will still run on a tablet; claiming the form factor is a different promise from tolerating the screen |
 | Contact email (app listing) | `info@dankest.llc`. **Settled 2026-08-01 ( D1)**, and no longer conditional: this row used to say "support@xchain.io if/when  makes it deliverable", which left a retired address sitting in a field a human transcribes. `info@dankest.llc` is the one proven to receive mail and the one every other store publishes. If it is ever moved to `support@xchain.io`, that moves in `docs/Trader_Identity.md` and on every listing in the same pass |
 | Website (app listing) | `https://xchain.io`. The  apex flip LANDED 2026-08-01 (it is what made the wallet privacy URL resolve at the apex instead of only at newsite.xchain.io), so this is no longer pending. The ACCOUNT-level website stays `https://dankest.llc` |
-| Privacy policy | `https://dankest.llc/privacy.html` **WRITTEN AND DEPLOYED to origin-host 2026-08-01, but not yet reachable: the dankest.llc DNS still points at the old host.** One A-record change makes it live. See PLAY_ENROLLMENT.md. |
+| Privacy policy | **`https://xchain.io/wallet/privacy/`** (trailing slash; the un-slashed form 301s). **Corrected 2026-08-02, and this row was actively dangerous until then.** It named `https://dankest.llc/privacy.html` and blamed a missing DNS A record. The DNS has since moved, so that URL now returns **200 and serves the SUPERSEDED 1 August policy**, still claiming the first-party hosts log "your IP address … kept for 14 days" (measured 2026-08-02). An operator transcribing this row into the console would have pointed a reviewer at the exact text identified as a rejection class, while the data-safety answers in `DATA_SAFETY.md` come from the corrected measurement. The xchain.io URL returns 200 to a plain client, carries the corrected 2 August text ("we do not keep your IP address", "kept for one day"), is the default in `tools/release/verify-privacy-url.mjs`, and is what the Chrome and App Store listings already publish. **All three store forms naming ONE url is the point.** The App Store doc was corrected on 2026-08-02 with this same reasoning and this one was left behind, which is why a smoke now compares all three against the canonical URL |
 
 ## Trader declaration (EU DSA)
 
@@ -187,13 +188,29 @@ Rotate it after each review cycle; it is written down in a store console.
 
 ## Graphics checklist
 
-⬜ App icon 512×512 PNG (32-bit, alpha)
-⬜ Feature graphic 1024×500
-⬜ Phone screenshots, at least 2 (the responsive UI makes these cheap):
-   balances, receive with QR, send confirmation, settings showing biometric
-   unlock
-⬜ 7-inch and 10-inch tablet screenshots if the listing claims tablet support
-⬜ No screenshot may show a real mainnet address holding real funds
+Delivered 2026-08-01 under `packages/mobile/store-assets/play/`; dimensions
+re-measured 2026-08-02 with `sips` rather than trusted from the filenames.
+
+✅ App icon 512×512 PNG (32-bit, alpha). `store-assets/play/icon-512.png`,
+   measured 512×512 with an alpha channel. Cropped to the shipped launcher
+   icon's own composition, not to a fresh judgement: a store icon that does not
+   match the launcher icon reads as a different app
+✅ Feature graphic 1024×500. `store-assets/play/feature-graphic-1024x500.png`,
+   measured 1024×500. Colours sampled from the mark itself (`#017BB5`,
+   `#6E377C`) with the brand-kit white lockup
+✅ Phone screenshots, at least 2. Four at 1080×1920 under
+   `store-assets/play/screenshots/`: `01-balances`, `02-receive`, `03-confirm`,
+   `04-biometric`, which is exactly the set this line asked for
+⬜ 7-inch and 10-inch tablet screenshots if the listing claims tablet support.
+   **Not delivered, and not needed unless the listing claims tablets.** Tablet
+   layouts are a §9 non-goal, so the listing should not claim them; if that
+   changes, this box comes back
+✅ No screenshot may show a real mainnet address holding real funds. They are
+   from a **`store`-profile build on a regtest wallet**: no mainnet address, no
+   real funds, and no Exchange tile, because the store build compiles that
+   surface out. The fiat total reads $0.00 because regtest coins have no price
+   feed; `store-assets/play/README.md` records that as a choice rather than
+   leaving it to be discovered by whoever uploads them
 
 ## Data safety form
 

@@ -44,7 +44,18 @@ machine on 2026-08-02 with cache-busting query strings and an empty user agent.
 | 0e | Privacy policy at a fetchable public URL | ✅ **`https://xchain.io/wallet/privacy/` → 200, and the corrected text is live** (re-measured 2026-08-02 after the deploy); see below |
 | 0f | Country availability decided (D8) | ✅ **decided 2026-08-02: worldwide minus named exclusions**, list in `PLAY_LISTING.md` |
 | 0g | Data safety answers settled | ✅ settled 2026-08-02 |
-| 0h | `verification-metadata.xml` committed | ⬜, reviewed, awaiting the commit |
+| 0h | `verification-metadata.xml` committed | ✅ **landed 2026-08-02 (`31add203`)**, 391 components; `packages/mobile/android/gradle/verification-metadata.xml` is tracked, so the §7 supply-chain control now protects a fresh clone rather than one machine |
+| 0i | Demo-path endpoints reachable from a plain client | ✅ automated: `node tools/release/verify-demo-endpoints.mjs`, green on testnet 2026-08-02 (hub registry signature verified, TBTC/TDOGE/TLTC explorers serving, all three encoders healthy with tracker lag 0). **Re-run immediately before every submission** |
+
+**0i is not an iOS-only gate, and it was one until 2026-08-02.** A Play reviewer
+walks the same scripted demo (`PLAY_LISTING.md` § Review notes) against the same
+public testnet endpoints, from a network we have never seen, with a plain client.
+That is the exact shape took: every host in the `xchain.io` zone answered
+403 to anything that did not fingerprint as a browser, so a reviewer following the
+notes would have opened a wallet that could not load a balance - a functionality
+rejection, on infrastructure no suite in this repo can test (every suite either
+stubs the network or runs on regtest, and CI runs from allowlisted hosts). The
+script exists because the only way to ask the question is to ask it from outside.
 
 ### 0e: the URL, and the thing that is actually wrong with it
 
@@ -263,6 +274,34 @@ is placed there.
 versionCode regression without an uninstall, and an uninstall wipes the vault. The
 remedy for a bad direct release is a signed advisory plus a fixed higher-versionCode
 build plus the feed notice. Nothing else exists.
+
+## Phase 8: arm release parity, and do it in this release's commit
+
+The moment Phase 3 uploads and Phase 7 publishes, Android has users. Nothing about
+either action changes what the release gate demands, so **the very next release
+could omit the Android pair entirely and still sign a manifest that is internally
+perfect** - every hash correct, signature good, `verify.sh` green - while every
+direct-APK install sits on a version nothing will ever update. That is the  §8
+missing-architecture defect one level up: the gate cannot fail on an artifact it was
+never told to want.
+
+Flip one word in `tools/release/shipped-lanes.txt`:
+
+```
+android   SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*.apk
+```
+
+and record in its comment which tag shipped first. From then on `sign.sh` refuses
+any release staging neither artifact, by name, and refuses one staging the AAB
+without the APK - which is the asymmetry §6 actually warns about, since the direct
+lane is both the contingency channel and the one whose users opted out of Google.
+
+Do this in the same commit that records the release. It is one word and it is the
+only step in this runbook whose omission is invisible until the release AFTER the
+one that omitted it.
+
+Driven both directions by `test/smoke/audits/release-shipped-lanes.smoke.js`, which
+also refuses to let the two lists drift apart.
 
 ---
 
