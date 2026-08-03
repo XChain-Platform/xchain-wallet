@@ -877,6 +877,20 @@ for (const host of [
 }
 const listing = readFileSync(join(mobile, 'docs', 'PLAY_LISTING.md'), 'utf8');
 assert.match(listing, /D8/, 'country availability is still an open operator decision');
+// The short description is a hard 80-character cap in the console, and this
+// file is what an operator pastes from. It recommended an 85-character string
+// while describing it as 84, so the value it told someone to paste would have
+// been refused with no hint which of its two candidates to trim. Counted here
+// rather than estimated in prose, because prose is what got it wrong.
+{
+    const block = listing.split(/^## Short description[^\n]*$/m)[1] ?? '';
+    // The recommended value is the first indented code line under the heading.
+    const rec = (block.split('\n').find((l) => /^ {4}\S/.test(l)) ?? '').trim();
+    assert.ok(rec, 'PLAY_LISTING.md offers a short description to paste');
+    assert.ok(rec.length <= 80,
+        `the recommended short description is ${rec.length} characters and Play caps it at 80. `
+        + `Refused at the console, from the one file that exists so nobody improvises: "${rec}"`);
+}
 // K10 was generated 2026-08-01, so the slot now holds a real fingerprint and
 // the honesty requirement moves: it must be a well-formed SHA-256 (never an
 // invented or truncated one), and the file must still say plainly that a Play

@@ -14,13 +14,24 @@ console second; a console-only edit is how two versions of the truth start.
 
 ## Short description (80 characters max)
 
-    Self-custody wallet for Bitcoin, Litecoin and Dogecoin. Your keys stay on your phone.
+    Self-custody wallet for Bitcoin, Litecoin and Dogecoin. Keys stay on your phone.
 
-(84 characters with the trailing period; the submitted form is the sentence
-without it, at 83. Trim to fit whatever the console counts. Shorter
-alternative, 62 characters:)
+**Exactly 80 characters, which is the cap.** Paste it as-is; do not add a
+trailing period, which would make it 81 and rejected.
 
-    Self-custody Bitcoin, Litecoin and Dogecoin wallet. Your keys.
+**Corrected 2026-08-02, and the old text could not have been submitted.** This
+field used to recommend "… Your keys stay on your phone." and describe it as
+"84 characters with the trailing period; the submitted form is the sentence
+without it, at 83". Both numbers were wrong (it is 85 and 84) and, more to the
+point, **both are over the 80-character limit**, so the string this file told an
+operator to paste would have been refused by the console with no explanation of
+which of the two to trim. Counted rather than estimated this time.
+
+If a future edit needs headroom, these also fit and say the same thing:
+
+    Self-custody wallet for Bitcoin, Litecoin and Dogecoin. Your keys stay yours.   (77)
+    Self-custody Bitcoin, Litecoin and Dogecoin wallet. Your keys never leave.      (74)
+    Self-custody Bitcoin, Litecoin and Dogecoin wallet. Your keys.                  (62)
 
 ## Full description
 
