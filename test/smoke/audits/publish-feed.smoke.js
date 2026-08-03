@@ -62,11 +62,15 @@ const ARTIFACTS = {
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
 
 /** A signed release directory whose pointers belong to `channel`. */
-function makeRelease(name, channel) {
+function makeRelease(name, channel, extra = {}) {
     const dir = join(work, name);
     mkdirSync(dir, { recursive: true });
-    for (const [file, body] of Object.entries(ARTIFACTS)) writeFileSync(join(dir, file), body);
+    const all = { ...ARTIFACTS, ...extra };
+    for (const [file, body] of Object.entries(all)) writeFileSync(join(dir, file), body);
 
+    // The channel pointer stays a DESKTOP concern: `extra` exists for artifacts
+    // that ship beside the desktop ones without an electron-updater feed, which
+    // is exactly what the Android pair is.
     const entries = Object.entries(ARTIFACTS);
     const yml = [
         'version: 0.333.1',
@@ -381,6 +385,54 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     assert.match(r.out, /EDGE-FAIL.*edge serves \d+ bytes, we uploaded \d+/);
     assert.equal(existsSync(join(target, 'desktop', 'stable-linux.yml')), false,
         'again, no pointer');
+}
+
+// ------------------------------------------- the Android pair ( §6/§7)
+//
+// Two artifacts, two different rules, and the routing used to get both wrong
+// because it ended in a catch-all that meant "desktop".
+//
+// The APK belongs under wallet/android/: that is what §6 step 6 says, what the
+// download page links, and what the published K10 fingerprint is meant to
+// verify. Filed under desktop/ it would still have "published" cleanly, and the
+// edge check would have agreed, because the check derives its URL exactly the
+// way the upload did. Self-consistent and wrong.
+//
+// The AAB must not be published AT ALL. It is signed, it is hashed into
+// RELEASE_HASHES, expected-artifacts.txt says "NEVER hosted" in as many words,
+// and it is the bundle Play re-signs before serving, so a public copy is a file
+// nobody can install and nobody can check against anything Google handed them.
+{
+    const androidRelease = makeRelease('release-android', 'stable', {
+        'xchain-wallet-v0.333.1.apk': 'apk-bytes',
+        'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
+    });
+    writeRehearsalRecord(androidRelease, { manifestFrom: androidRelease });
+    const target = makeTarget('feed-android');
+    const r = await run(['--input', androidRelease, '--tag', TAG, '--target', target,
+        '--no-edge-verify']);
+
+    assert.equal(r.status, 0, `the Android pair publishes cleanly:\n${r.out}`);
+    assert.ok(existsSync(join(target, 'android', 'xchain-wallet-v0.333.1.apk')),
+        'the APK lands in android/, which is where §6 and the download page both point');
+    assert.equal(existsSync(join(target, 'desktop', 'xchain-wallet-v0.333.1.apk')), false,
+        'and NOT in desktop/, where the old catch-all put it');
+
+    for (const sub of ['android', 'desktop', 'extension', 'web']) {
+        assert.equal(existsSync(join(target, sub, 'xchain-wallet-android-v0.333.1.aab')), false,
+            `the store-bound .aab must not be published, and it is not in ${sub}/`);
+    }
+    assert.match(r.out, /NOT uploading xchain-wallet-android-v0\.333\.1\.aab/,
+        'and it says so by name: a silent skip creates the "where did my artifact go" question');
+
+    // The desktop lane is untouched by the new cases.
+    assert.ok(existsSync(join(target, 'desktop', 'xchain-wallet-0.333.1-x86_64.AppImage')),
+        'desktop artifacts still route to desktop/');
+
+    // The rehearsal record lives at ONE path shared by every block in this
+    // file, so pointing it at the Android release leaves it pointing at the
+    // wrong manifest for everything below. Put it back.
+    writeRehearsalRecord(prodRelease);
 }
 
 // -------------------------------------------------------- the purge step

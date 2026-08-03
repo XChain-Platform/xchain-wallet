@@ -401,13 +401,30 @@ copy_to() {
 
 # --- Phase 1: artifacts -------------------------------------------------
 if ! is_remote; then
-    mkdir -p "$BASE/desktop" "$BASE/extension" "$BASE/web" "$BASE/RELEASE_HASHES"
+    mkdir -p "$BASE/desktop" "$BASE/extension" "$BASE/web" "$BASE/android" "$BASE/RELEASE_HASHES"
 fi
 for rel in "${BINARIES[@]}"; do
     name="${rel#./}"
+    # The .aab is signed, hashed into RELEASE_HASHES and listed in
+    # expected-artifacts.txt, and it must still never reach the CDN: it is the
+    # bundle Play re-signs and serves, so a public copy is an artifact users
+    # cannot install and cannot verify against anything Google served
+    # ( §7, and expected-artifacts.txt says NEVER hosted in as many
+    # words). Refused BY NAME rather than skipped silently, because "where did
+    # my artifact go" is the question a silent skip creates.
+    if [[ "$name" == *.aab ]]; then
+        echo "publish.sh: NOT uploading $name (store-bound; the .aab goes to Play, never to the CDN)" >&2
+        continue
+    fi
     case "$name" in
         *.tar.gz) sub="web" ;;
         xchain-wallet-extension-*.zip) sub="extension" ;;
+        # Before this line the catch-all filed the Android APK under desktop/,
+        # and the edge check below then verified that same wrong path and
+        # passed, because it derives the URL the same way it derived the
+        # upload. Self-consistent and wrong is the failure mode a catch-all
+        # produces: §6 and the download page both say wallet/android/.
+        *.apk) sub="android" ;;
         *) sub="desktop" ;;
     esac
     echo "publish.sh: uploading $name -> $sub/" >&2
@@ -433,9 +450,13 @@ if [[ "$EDGE_VERIFY" -eq 1 && -n "$PUBLIC_BASE" ]]; then
     edge_failures=0
     for rel in "${BINARIES[@]}"; do
         name="${rel#./}"
+        # Nothing serves the .aab, so asking the edge for it would fail the
+        # release for doing exactly what §7 requires.
+        [[ "$name" == *.aab ]] && continue
         case "$name" in
             *.tar.gz) sub="web" ;;
             xchain-wallet-extension-*.zip) sub="extension" ;;
+            *.apk) sub="android" ;;
             *) sub="desktop" ;;
         esac
 
