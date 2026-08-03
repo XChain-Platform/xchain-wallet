@@ -54,6 +54,23 @@
     transition: background-color 120ms ease, color 120ms ease;
     font-family: inherit;
     text-align: center;
+    /*
+     * , and this is the SECOND instance of the defect History's
+     * .segBtn had: 4px of vertical padding plus a 13px line box measures 24px
+     * on macOS and 23px on the CI runner, so these three DEX filter buttons
+     * cleared the WCAG 2.2 AA 2.5.8 pointer-target floor on one operating
+     * system and missed it by a pixel on another.
+     *
+     * It surfaced only on this run because fixing .segBtn let the responsive
+     * walk get PAST History and reach DEX for the first time - the walk finds
+     * these one route at a time, so expect more until the sweep lands.
+     * Height has to be stated, not inherited from whichever font the platform
+     * happens to ship.
+     */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .kindSegment:hover {
