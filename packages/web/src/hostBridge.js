@@ -91,6 +91,7 @@ import {
     installNativeScreenGuard,
 } from './storage/backends.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
+import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { resolveSdkFactory } from './sdkFactory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -716,6 +717,12 @@ export async function getSessionStatus() {
         installNativeWipeHook();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
+        // SSC-7, and the await is load-bearing rather than tidy: the lockout
+        // ladder, the duress passphrase and the panic freeze are all read
+        // SYNCHRONOUSLY by the Locked screen, so mounting before this
+        // resolves answers "no lockout, no duress, no freeze" - the
+        // permissive answer to all three.
+        await installNativeGuardPersistence();
     } catch (_err) {
         // A provider that cannot install must not stop the wallet from
         // opening: the password form is the path that always works.

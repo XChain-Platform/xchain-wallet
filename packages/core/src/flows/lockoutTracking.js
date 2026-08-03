@@ -35,6 +35,9 @@
 
 const STORAGE_KEY = 'xchain-wallet:lockout';
 
+/** The localStorage key, exported so the native shells can migrate off it. */
+export const LOCKOUT_STORAGE_KEY = STORAGE_KEY;
+
 const SCHEDULE_SECONDS = /** @type {const} */ ([
     0,    // N=0
     0,    // N=1
@@ -59,6 +62,13 @@ export function emptyLockoutState() {
     return { failedAttempts: 0, lockedUntilMs: 0 };
 }
 
+// Injected async persistence (native shells: the Keychain/Keystore-backed
+// guard slot). When set it is authoritative and localStorage is bypassed, so
+// there is one source of truth rather than two that can disagree. Same shape
+// and same reasoning as `configurePanicModePersistence`; see SSC-7.
+/** @type {{ load: () => Promise<unknown>, save: (s: LockoutState) => Promise<void>, clear: () => Promise<void> } | null} */
+let persistentStore = null;
+
 function getStorage() {
     try {
         if (typeof globalThis.localStorage !== 'undefined' && globalThis.localStorage) {
@@ -70,8 +80,67 @@ function getStorage() {
     return null;
 }
 
+/**
+ * Coerce an untrusted persisted record into a valid LockoutState.
+ * @param {unknown} parsed
+ * @returns {LockoutState}
+ */
+function coerceLockoutState(parsed) {
+    const p = /** @type {any} */ (parsed);
+    if (
+        !p
+        || typeof p.failedAttempts !== 'number'
+        || typeof p.lockedUntilMs !== 'number'
+        || p.failedAttempts < 0
+        || p.lockedUntilMs < 0
+    ) {
+        return emptyLockoutState();
+    }
+    return {
+        failedAttempts: Math.floor(p.failedAttempts),
+        lockedUntilMs: Math.floor(p.lockedUntilMs),
+    };
+}
+
+/**
+ * Wire an async persistence backend and hydrate the synchronous cache from
+ * it. Call once per context at boot, and AWAIT it before anything can mount
+ * the Locked screen: every read below is synchronous, so an unhydrated cache
+ * reports "no failed attempts" and hands an attacker the delay ladder reset
+ * to zero. On the native shells `hostBridge.getSessionStatus()` awaits it
+ * before React mounts, which is what closes that window.
+ *
+ * @param {{ load: () => Promise<unknown>, save: (s: LockoutState) => Promise<void>, clear: () => Promise<void> } | null} store
+ * @returns {Promise<void>}
+ */
+export async function configureLockoutPersistence(store) {
+    persistentStore = store || null;
+    if (!persistentStore) return;
+    try {
+        applyExternalLockoutState(await persistentStore.load());
+    } catch (_err) {
+        // Load failed: leave the cache empty rather than trapping the user
+        // out of a wallet. The next failure re-arms the ladder from zero.
+    }
+}
+
+/**
+ * Apply a state snapshot observed from the persistent store into the
+ * synchronous cache.
+ * @param {unknown} raw
+ */
+export function applyExternalLockoutState(raw) {
+    const state = coerceLockoutState(raw);
+    memoryFallback = (state.failedAttempts === 0 && state.lockedUntilMs === 0) ? null : state;
+}
+
 /** @returns {LockoutState} */
 function readState() {
+    // Injected persistence is authoritative: serve from the cache hydration
+    // keeps current, and never consult localStorage alongside it.
+    if (persistentStore) {
+        return memoryFallback ? { ...memoryFallback } : emptyLockoutState();
+    }
     const store = getStorage();
     if (!store) return memoryFallback ? { ...memoryFallback } : emptyLockoutState();
     try {
@@ -98,6 +167,17 @@ function readState() {
 
 /** @param {LockoutState} state */
 function writeState(state) {
+    const empty = state.failedAttempts === 0 && state.lockedUntilMs === 0;
+    if (persistentStore) {
+        // Cache first so the synchronous reads above reflect the write
+        // immediately, then mirror to the async store.
+        memoryFallback = empty ? null : { ...state };
+        try {
+            if (empty) void persistentStore.clear();
+            else void persistentStore.save({ ...state });
+        } catch (_err) { /* best-effort; the cache holds it this session */ }
+        return;
+    }
     const store = getStorage();
     if (!store) {
         memoryFallback = { ...state };
@@ -164,8 +244,18 @@ export function recordSuccess() {
 /** Reset for tests / panic-mode resets. */
 export function clearLockoutState() {
     memoryFallback = null;
+    if (persistentStore) {
+        try { void persistentStore.clear(); } catch (_err) { /* best-effort */ }
+        return;
+    }
     const store = getStorage();
     if (store) {
         try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
     }
+}
+
+/** Test seam: forget any injected persistence. */
+export function __resetLockoutPersistenceForTests() {
+    persistentStore = null;
+    memoryFallback = null;
 }

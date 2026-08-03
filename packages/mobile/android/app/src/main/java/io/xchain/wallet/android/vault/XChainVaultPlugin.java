@@ -58,6 +58,7 @@ public class XChainVaultPlugin extends Plugin {
 
     private VaultStore vaultStore;
     private VaultStore metaStore;
+    private VaultStore guardStore;
     private VaultBiometricSidecar sidecar;
 
     @Override
@@ -65,6 +66,7 @@ public class XChainVaultPlugin extends Plugin {
         File dir = new File(getContext().getFilesDir(), "xchain-vault");
         vaultStore = new VaultStore(dir, "vault.bin", "xchain.wallet.vault.v1");
         metaStore = new VaultStore(dir, "meta.json.bin", "xchain.wallet.meta.v1");
+        guardStore = new VaultStore(dir, "guards.json.bin", "xchain.wallet.guards.v1");
         sidecar = new VaultBiometricSidecar(getContext(), dir);
     }
 
@@ -105,6 +107,32 @@ public class XChainVaultPlugin extends Plugin {
     @PluginMethod
     public void clearMeta(PluginCall call) {
         metaStore.clear();
+        call.resolve(ok());
+    }
+
+    // -----------------------------------------------------------------
+    // Guards (SSC-7: lockout ladder, duress hash, panic freeze)
+    //
+    // Read on the Locked screen, before the vault password exists, so they
+    // cannot live in the vault; and not in WebView storage either, because
+    // every one of them fails SILENTLY when that store is cleared or evicted
+    // ( §3). Their own slot rather than a corner of the meta record,
+    // so a guard write can never corrupt the kdfParams a wallet needs to open.
+    // -----------------------------------------------------------------
+
+    @PluginMethod
+    public void loadGuards(PluginCall call) {
+        respondRead(call, guardStore.read());
+    }
+
+    @PluginMethod
+    public void saveGuards(PluginCall call) {
+        respondWrite(call, guardStore);
+    }
+
+    @PluginMethod
+    public void clearGuards(PluginCall call) {
+        guardStore.clear();
         call.resolve(ok());
     }
 

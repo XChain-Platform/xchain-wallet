@@ -11,7 +11,7 @@
 // `XChainVault`, the iOS twin of Android's XChainVaultPlugin.kt ( S2).
 //
 // The contract is not defined here. It is defined once, in the SPA, at
-// packages/web/src/storage/nativeVault.js: the plugin name, the ten methods,
+// packages/web/src/storage/nativeVault.js: the plugin name, the methods,
 // and the reply shape `{ status, blob | secret, detail }` where status is one
 // of OK / ABSENT / LOCKED / CORRUPT. Both native shells implement THAT, which
 // is why the mobile package ships no JavaScript of its own. Any change here
@@ -38,6 +38,9 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "loadMeta", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveMeta", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearMeta", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "loadGuards", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveGuards", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearGuards", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricEnroll", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricUnlock", returnType: CAPPluginReturnPromise),
@@ -46,6 +49,7 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var vaultStore: VaultStore?
     private var metaStore: VaultStore?
+    private var guardStore: VaultStore?
     private let sidecar = VaultBiometricSidecar()
 
     /// Store construction can fail (no Application Support directory), and a
@@ -58,6 +62,9 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
             case "vault":
                 if vaultStore == nil { vaultStore = try VaultStore(name: "vault") }
                 return vaultStore
+            case "guards":
+                if guardStore == nil { guardStore = try VaultStore(name: "guards") }
+                return guardStore
             default:
                 if metaStore == nil { metaStore = try VaultStore(name: "meta") }
                 return metaStore
@@ -107,6 +114,30 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func clearMeta(_ call: CAPPluginCall) {
         guard let store = store("meta", call) else { return }
+        store.clear()
+        call.resolve(["status": "OK"])
+    }
+
+    // MARK: - Guards (SSC-7: lockout ladder, duress hash, panic freeze)
+
+    // Read on the Locked screen, before the vault password exists, so they
+    // cannot live in the vault; and not in WebView storage either, because
+    // every one of them fails SILENTLY when that store is evicted (
+    // §3). Their own slot rather than a corner of the meta record, so a
+    // guard write can never corrupt the kdfParams a wallet needs to open.
+
+    @objc func loadGuards(_ call: CAPPluginCall) {
+        guard let store = store("guards", call) else { return }
+        respondRead(call, store.read())
+    }
+
+    @objc func saveGuards(_ call: CAPPluginCall) {
+        guard let store = store("guards", call) else { return }
+        respondWrite(call, store)
+    }
+
+    @objc func clearGuards(_ call: CAPPluginCall) {
+        guard let store = store("guards", call) else { return }
         store.clear()
         call.resolve(["status": "OK"])
     }

@@ -52,7 +52,21 @@ import { activatePanicMode, PANIC_ARMED_DURESS } from './panicMode.js';
 
 const STORAGE_KEY = 'xchain-wallet:duress';
 
+/** The localStorage key, exported so the native shells can migrate off it. */
+export const DURESS_STORAGE_KEY = STORAGE_KEY;
+
 let memoryFallback = null;
+
+// Injected async persistence (native shells: the Keychain/Keystore-backed
+// guard slot). When set it is authoritative and localStorage is bypassed.
+//
+// This is the record whose loss is worst, and it is worst because it is
+// SILENT: a user who armed a duress passphrase and then lost the record has a
+// wallet that no longer has the feature they armed, with nothing on screen to
+// say so - they find out by typing it in front of the person they armed it
+// for. WebView storage is not a safe home for that on a native shell (SSC-7).
+/** @type {{ load: () => Promise<unknown>, save: (r: any) => Promise<void>, clear: () => Promise<void> } | null} */
+let persistentStore = null;
 
 export class DuressNotConfiguredError extends Error {
     constructor() {
@@ -70,7 +84,55 @@ function getStorage() {
     return null;
 }
 
+/**
+ * Coerce an untrusted persisted record into a duress record or null.
+ * @param {unknown} parsed
+ */
+function coerceRecord(parsed) {
+    const p = /** @type {any} */ (parsed);
+    if (!p || typeof p.salt !== 'string' || typeof p.hash !== 'string') return null;
+    return p;
+}
+
+/**
+ * Wire an async persistence backend and hydrate the synchronous cache. Call
+ * once per context at boot and AWAIT it before the Locked screen can accept a
+ * passphrase: `isDuressMatch` is synchronous, so an unhydrated cache answers
+ * "not configured" and the duress passphrase silently does nothing, which is
+ * the exact failure this store exists to prevent.
+ *
+ * @param {{ load: () => Promise<unknown>, save: (r: any) => Promise<void>, clear: () => Promise<void> } | null} store
+ * @returns {Promise<void>}
+ */
+export async function configureDuressPersistence(store) {
+    persistentStore = store || null;
+    if (!persistentStore) return;
+    try {
+        applyExternalDuressRecord(await persistentStore.load());
+    } catch (_err) {
+        // Leave the cache empty. Failing closed here is not an option: there
+        // is nothing to fail closed TO, and a wallet that refuses to unlock
+        // because a guard store was unreadable is worse than one whose duress
+        // passphrase is inert for a session.
+    }
+}
+
+/**
+ * Apply a record observed from the persistent store into the sync cache.
+ * @param {unknown} raw
+ */
+export function applyExternalDuressRecord(raw) {
+    memoryFallback = coerceRecord(raw);
+}
+
+/** Test seam: forget any injected persistence. */
+export function __resetDuressPersistenceForTests() {
+    persistentStore = null;
+    memoryFallback = null;
+}
+
 function readRecord() {
+    if (persistentStore) return memoryFallback ? { ...memoryFallback } : null;
     const store = getStorage();
     if (!store) return memoryFallback ? { ...memoryFallback } : null;
     try {
@@ -91,6 +153,14 @@ function readRecord() {
 }
 
 function writeRecord(record) {
+    if (persistentStore) {
+        memoryFallback = record ? { ...record } : null;
+        try {
+            if (record === null) void persistentStore.clear();
+            else void persistentStore.save({ ...record });
+        } catch (_err) { /* best-effort; the cache holds it this session */ }
+        return;
+    }
     const store = getStorage();
     if (!store) {
         memoryFallback = record ? { ...record } : null;

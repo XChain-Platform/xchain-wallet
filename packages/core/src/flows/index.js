@@ -496,6 +496,9 @@ export {
     recordFailure as recordLockoutFailure,
     recordSuccess as recordLockoutSuccess,
     clearLockoutState,
+    configureLockoutPersistence,
+    applyExternalLockoutState,
+    LOCKOUT_STORAGE_KEY,
 } from './lockoutTracking.js';
 export {
     isBiometricSupported,
@@ -524,6 +527,7 @@ export {
     assertSigningAllowed,
     configurePanicModePersistence,
     applyExternalPanicModeState,
+    PANIC_STORAGE_KEY,
     getPanicArmedBy,
     PANIC_ARMED_SELF,
     PANIC_ARMED_DURESS,
@@ -539,6 +543,9 @@ export {
     isDuressMatch,
     tripDuressIfMatch,
     DuressNotConfiguredError,
+    configureDuressPersistence,
+    applyExternalDuressRecord,
+    DURESS_STORAGE_KEY,
 } from './duressPassphrase.js';
 export {
     revealMnemonic,

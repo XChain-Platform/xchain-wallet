@@ -140,6 +140,14 @@ export function installNativeWipeHook() {
                 await callNativeVault('clearVault');
                 await callNativeVault('clearMeta');
                 await callNativeVault('biometricClear');
+                // SSC-7, and LAST on purpose. A wipe that left these behind
+                // would carry the old wallet's duress passphrase and
+                // failed-attempt ladder into the next one, so a fresh wallet
+                // would arrive already part-way up the delay ladder. But the
+                // sequence aborts at the first refusal, so this goes after
+                // the biometric wrap: a guard slot that would not clear must
+                // not leave a wrap holding the old password behind it.
+                await callNativeVault('clearGuards');
                 return { ok: true };
             } catch (err) {
                 return { ok: false, error: err?.message || String(err) };

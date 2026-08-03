@@ -48,7 +48,7 @@ import { IndexedDBStorageBackend } from '../../../packages/web/src/storage/Index
 
 /** Minimal in-memory stand-in for the Java plugin. */
 function fakePlugin(overrides = {}) {
-    const state = { vault: null, meta: null };
+    const state = { vault: null, meta: null, guards: null };
     return {
         state,
         loadVault: vi.fn(async () => (state.vault === null
@@ -62,6 +62,9 @@ function fakePlugin(overrides = {}) {
         saveMeta: vi.fn(async ({ blob }) => { state.meta = blob; return { status: VaultStatus.OK }; }),
         clearMeta: vi.fn(async () => { state.meta = null; return { status: VaultStatus.OK }; }),
         biometricClear: vi.fn(async () => ({ status: VaultStatus.OK })),
+        // SSC-7: the guard slot is part of a wipe, so a fake that omits it
+        // reports a failed wipe rather than a passing test.
+        clearGuards: vi.fn(async () => { state.guards = null; return { status: VaultStatus.OK }; }),
         ...overrides,
     };
 }
@@ -267,10 +270,12 @@ describe('wipe hook', () => {
         expect(globalThis.xchainWalletBridge).toBeUndefined();
     });
 
-    it('clears vault, meta and the biometric wrap together', async () => {
+    it('clears vault, meta, the biometric wrap and the guards together', async () => {
         // "Forgot password" clears IndexedDB + localStorage itself and then
-        // calls this hook. Miss any of the three and the reload lands back on
-        // an unlock screen for the vault the user was just told was erased.
+        // calls this hook. Miss any of them and the reload lands back on an
+        // unlock screen for the vault the user was just told was erased - or,
+        // for the guards, a fresh wallet inherits the old one's duress
+        // passphrase and arrives part-way up the failed-attempt ladder.
         const plugin = fakePlugin();
         __setNativeVaultForTests(plugin);
         expect(installNativeWipeHook()).toBe(true);
@@ -279,6 +284,12 @@ describe('wipe hook', () => {
         expect(plugin.clearVault).toHaveBeenCalled();
         expect(plugin.clearMeta).toHaveBeenCalled();
         expect(plugin.biometricClear).toHaveBeenCalled();
+        expect(plugin.clearGuards).toHaveBeenCalled();
+        // Order, not just presence: the sequence aborts at the first refusal,
+        // so a guard slot that will not clear must not leave a biometric wrap
+        // holding the old password behind it.
+        expect(plugin.clearGuards.mock.invocationCallOrder[0])
+            .toBeGreaterThan(plugin.biometricClear.mock.invocationCallOrder[0]);
     });
 
     it('reports a failed wipe instead of claiming success', async () => {

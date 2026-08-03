@@ -107,6 +107,52 @@ export class CapacitorMetaBackend {
 }
 
 /**
+ * The pre-unlock guard record (SSC-7): lockout ladder, duress passphrase hash,
+ * panic-mode freeze. One JSON blob in its own native slot, for two reasons.
+ *
+ * It cannot live in the VAULT, because every one of these is read on the
+ * Locked screen, before the password that decrypts the vault has been typed -
+ * that is the same constraint that put them in localStorage in the first
+ * place. And it must not stay in localStorage on a native shell, because
+ * WebView storage is the one store on this platform the wallet does not
+ * control the lifetime of ( §3): losing it resets the brute-force
+ * delay ladder to zero and silently disarms a duress passphrase the user
+ * believes is armed.
+ *
+ * Its own slot rather than a corner of the meta record, so a guard write can
+ * never corrupt the kdfParams a wallet needs to open at all.
+ */
+export class CapacitorGuardBackend {
+    /** @returns {Promise<unknown | null>} */
+    async load() {
+        const reply = await callNativeVault('loadGuards');
+        if (reply?.status === VaultStatus.ABSENT) return null;
+        const bytes = decodeReadReply(reply, 'guards');
+        if (bytes === null) return null;
+        try {
+            return JSON.parse(new TextDecoder().decode(bytes));
+        } catch (_err) {
+            // Deliberately NOT a throw, and the asymmetry with meta above is
+            // the point: unreadable kdfParams mean the wallet cannot open and
+            // must say so, while unreadable guards mean the guards are gone.
+            // Trapping the user out of their wallet over a corrupt lockout
+            // counter would be a worse failure than the one being guarded.
+            return null;
+        }
+    }
+
+    /** @param {unknown} obj */
+    async save(obj) {
+        const bytes = new TextEncoder().encode(JSON.stringify(obj));
+        assertWriteAccepted(await callNativeVault('saveGuards', { blob: encodePayload(bytes) }), 'saveGuards');
+    }
+
+    async clear() {
+        assertWriteAccepted(await callNativeVault('clearGuards'), 'clearGuards');
+    }
+}
+
+/**
  * A write either succeeded or it did not happen. Silence is not success:
  * without this check a plugin that returned LOCKED from a save would leave
  * the caller believing the vault had been persisted, and the next lock would
