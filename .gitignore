@@ -12,6 +12,14 @@
 # packages/mobile/scripts/build.js. Generated, and committing it would create a
 # second copy of the SPA that could drift from the one the web shell ships.
 /packages/mobile/www
+
+# Generated App Store listing screenshots . Regenerate with
+# packages/mobile/scripts/screenshots.sh; they are build output, not source,
+# and they carry a per-run simulator clock so committing them is pure churn.
+/packages/mobile/screenshots
+# Playwright output dirs carry a per-run suffix (test-results-s40d and
+# friends), so match the prefix rather than listing each one as it appears.
+/test/e2e/test-results*/
 /test/e2e/node_modules
 
 # electron-builder buildResources dir - tracked (entitlements + icon
