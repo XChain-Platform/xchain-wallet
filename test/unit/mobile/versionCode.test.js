@@ -31,6 +31,11 @@
 // accepts loosely is a chance to produce a number that a DIFFERENT tag also
 // produces, and the first symptom of that is a release you cannot upload.
 
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+
 import { describe, it, expect } from 'vitest';
 import {
     MAX_MAJOR,
@@ -252,5 +257,49 @@ describe('generated build files', () => {
     it('refuses to write build files for an unusable tag', () => {
         expect(() => versionPropertiesFor('v0.333')).toThrow();
         expect(() => versionXcconfigFor('v0.333')).toThrow();
+    });
+
+    // The CLI is what the ceremony and the CI workflow actually consume, and it
+    // is reached by a path the module tests never touch: `node <abs path>
+    // version.js <tag>`, read with a bare shell `read`. It stopped working
+    // during the first real release ceremony and the failure had the worst
+    // possible shape - exit 0, nothing on stdout - so the ceremony blamed the
+    // TAG ("could not derive a versionCode from v0.335.0") for a path problem.
+    //
+    // Cause: the entry-point test compared `import.meta.url`, which is always
+    // the REAL path, against `process.argv[1]`, which is whatever the caller
+    // typed. Under any symlink they differ and `main` never runs. macOS makes
+    // that the default rather than the exotic case, because `/tmp` is a symlink
+    // to `/private/tmp` and a release worktree in the obvious place is
+    // therefore symlinked.
+    describe('the CLI the ceremony actually calls', () => {
+        // Resolved from cwd rather than from `import.meta.url`: under vitest's
+        // transform that is not a file: URL, and the point of these three cases
+        // is to run the REAL file the way a shell does.
+        const script = join(process.cwd(), 'packages/mobile/scripts/version.js');
+        const run = (path, ...args) => execFileSync(process.execPath, [path, ...args], { encoding: 'utf8' }).trim();
+
+        it('prints exactly two fields by absolute path, which is how the ceremony calls it', () => {
+            expect(run(script, 'v0.333.1').split(/\s+/)).toEqual(['3330150', '0.333.1']);
+        });
+
+        it('prints the same thing THROUGH A SYMLINK, which is where it silently failed', () => {
+            const link = join(mkdtempSync(join(tmpdir(), 'xc-version-cli-')), 'link');
+            symlinkSync(dirname(script), link, 'dir');
+            try {
+                // The assertion that matters is not equality but non-emptiness:
+                // the bug printed NOTHING and exited 0, so a test that only
+                // compared parsed output would have passed on undefined.
+                const out = run(join(link, 'version.js'), 'v0.333.1');
+                expect(out).not.toBe('');
+                expect(out.split(/\s+/)).toEqual(['3330150', '0.333.1']);
+            } finally {
+                rmSync(dirname(link), { recursive: true, force: true });
+            }
+        });
+
+        it('--artifact still prints ONE field, since a bare read would glue a third on', () => {
+            expect(run(script, 'v0.333.1', '--artifact').split(/\s+/)).toHaveLength(1);
+        });
     });
 });

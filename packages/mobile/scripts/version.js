@@ -66,7 +66,8 @@
 // representable release (209.999.99-respin.49 → 2,099,999,999) under it.
 // MINOR ≤ 999 and PATCH ≤ 99 are the field widths.
 
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const TAG_RE = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(beta|respin)\.(0|[1-9]\d*))?$/;
 
@@ -235,7 +236,27 @@ export function versionXcconfigFor(tag) {
 // version alone rather than adding a third field that a two-variable `read`
 // would silently glue onto the second. Kept here rather than in its own file so
 // the printed numbers cannot drift from the exported ones.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Both sides are resolved through realpath before comparing, and that is not
+// defensive tidying: `import.meta.url` is ALWAYS the real path, while
+// `process.argv[1]` is whatever the caller typed. Anywhere the repo sits under
+// a symlink they disagree and this test is false, so `main` never runs, the
+// process exits 0, and NOTHING is printed. The ceremony invokes this by
+// absolute path and reads it with a bare `read`, so the whole release stops
+// with "could not derive a versionCode from <tag>", which blames the tag for a
+// path problem. macOS makes that the default case rather than an exotic one:
+// `/tmp` is a symlink to `/private/tmp`, so a release worktree created in the
+// obvious place breaks the ceremony and says nothing useful about why.
+const invokedPath = process.argv[1];
+let isEntryPoint = false;
+if (invokedPath) {
+    const real = (p) => { try { return realpathSync(p); } catch { return p; } };
+    isEntryPoint = real(fileURLToPath(import.meta.url)) === real(invokedPath)
+        // Kept as a fallback so a platform where realpath is unavailable or
+        // refuses degrades to the previous behaviour rather than to "never
+        // the entry point", which would silently disable the CLI everywhere.
+        || import.meta.url === pathToFileURL(invokedPath).href;
+}
+if (isEntryPoint) {
     const args = process.argv.slice(2);
     const artifactOnly = args.includes('--artifact');
     const tag = args.find((a) => !a.startsWith('--'));
