@@ -137,6 +137,41 @@ command -v java >/dev/null 2>&1 || die "java not found; the release machine need
 command -v jarsigner >/dev/null 2>&1 || die "jarsigner not found (ships with the JDK)"
 command -v apksigner >/dev/null 2>&1 || die "apksigner not found; add \$ANDROID_HOME/build-tools/<ver> to PATH"
 
+# The workspace has to be installed before anything is built, and this check
+# exists because the failure without it names the wrong thing. The build dies
+# minutes in, inside pnpm, with `vite: command not found` plus a warning about
+# one package's node_modules - which reads as a broken dependency rather than as
+# "you have not run install", and sends the reader into the package instead of
+# into the venue. A fresh detached worktree is the venue this ceremony
+# PRESCRIBES (a shared checkout carries other people's edits, and a release
+# signs committed bytes only), and a fresh worktree never has node_modules, so
+# this is the normal path rather than an exotic one.
+#
+# Only packages that DECLARE dependencies are required to have node_modules,
+# because pnpm creates none for a package that needs none, and a check that
+# demanded one everywhere would fail on a correctly installed tree.
+MISSING_INSTALL="$(node -e '
+const fs = require("fs"), path = require("path");
+const root = process.argv[1];
+const dirs = [root];
+const pkgDir = path.join(root, "packages");
+if (fs.existsSync(pkgDir)) {
+    for (const name of fs.readdirSync(pkgDir).sort()) dirs.push(path.join(pkgDir, name));
+}
+const missing = [];
+for (const dir of dirs) {
+    const manifest = path.join(dir, "package.json");
+    if (!fs.existsSync(manifest)) continue;
+    let pkg;
+    try { pkg = JSON.parse(fs.readFileSync(manifest, "utf8")); } catch { continue; }
+    const declares = Object.keys(pkg.dependencies || {}).length + Object.keys(pkg.devDependencies || {}).length;
+    if (declares === 0) continue;
+    if (!fs.existsSync(path.join(dir, "node_modules"))) missing.push(path.relative(root, dir) || ".");
+}
+process.stdout.write(missing.join(" "));
+' "$REPO_ROOT")"
+[ -z "$MISSING_INSTALL" ] || die "the workspace is not installed (no node_modules in:$MISSING_INSTALL). Run \`pnpm install --frozen-lockfile\` in $REPO_ROOT first. A fresh release worktree always needs this."
+
 # Derive the version numbers from the tag alone, using the same module the
 # Gradle build reads. A mismatch here would mean the file names and the
 # manifest inside the artifact disagree about what release this is.

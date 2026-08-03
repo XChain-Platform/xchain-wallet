@@ -32,7 +32,7 @@
 // script) lowers its floor DELIBERATELY, in the same change, with a reason.
 
 import assert from 'node:assert/strict';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 
 import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
 
@@ -201,5 +201,123 @@ for (const [page, checks] of Object.entries(IRREVERSIBLE)) {
     }
 }
 
+// ----------------------------------------------------------------------
+// A ceremony page has to describe the MACHINE, not just the commands.
+//
+// Found by running the Android ceremony from the page rather than from
+// memory, in the fresh detached worktree the ceremony itself prescribes. It
+// stopped twice before producing anything: once on `apksigner not found`,
+// and once minutes later inside the package manager on a missing build tool,
+// because a fresh worktree has no installed dependencies. Neither was
+// discoverable from the page - it carried zero mentions of the JDK, the SDK,
+// build-tools or bundletool - and the frontier had recorded this wiring as
+// "now in the runbook" for a day while the runbook did not have it.
+//
+// The tools are DERIVED from the script's own preflight rather than listed
+// here, so adding a `command -v` requirement to a ceremony and forgetting the
+// page turns this red on its own. That is the whole point: every previous
+// version of this class of bug was a mechanism scoped narrower than its rule.
+const CEREMONY_TOOLCHAINS = {
+    'android-ceremony.sh': {
+        page: 'release/mobile/android-play.md',
+        enforce: true,
+        note: 'the Android submission ceremony; its operator page is restored and current',
+    },
+    // Declared and not enforced, each with a reason. A floor of "not
+    // enforced" asserts nothing about quality; it exists so the script is
+    // ENUMERATED and cannot be mistaken for covered.
+    'lib.sh': {
+        enforce: false,
+        note: 'a shared library, not an operator entry point: nobody runs it from a page',
+    },
+    'sign.sh': {
+        enforce: false,
+        note: 'KNOWN GAP: the signing step needs gpg and git and no operator page states that; '
+            + 'owned by the release-key lane, which has not run its key ceremony yet',
+    },
+    'verify.sh': {
+        enforce: false,
+        note: 'reader-facing verification, documented on release/verify-release.md as commands rather '
+            + 'than as a machine to set up',
+    },
+    'verify-release-key.sh': {
+        enforce: false,
+        note: 'maintainer key-ceremony verification. Its only requirement is gpg, which is the whole '
+            + 'subject of the ceremony runbook that invokes it, so an operator cannot reach this '
+            + 'script without already having gpg. Documented in the GPG key ceremony runbook '
+            + '(claude/reports/, private by design) rather than on a public docs page, because it '
+            + 'names key custody. Registered here rather than left undeclared: this gate refused it '
+            + 'on sight the moment it was added, which is the gate doing its job',
+    },
+    'verify-store.sh': {
+        enforce: false,
+        note: 'reader-facing verification, same as verify.sh',
+    },
+};
+
+const releaseScripts = readdirSync(new URL('../../../tools/release/', import.meta.url))
+    .filter((name) => name.endsWith('.sh'))
+    .sort();
+
+assert.ok(releaseScripts.length >= 5,
+    `found only ${releaseScripts.length} release scripts, which is fewer than exist. Either the `
+    + 'enumeration broke or the directory moved; both mean this gate is watching nothing.');
+
+for (const declared of Object.keys(CEREMONY_TOOLCHAINS)) {
+    assert.ok(releaseScripts.includes(declared),
+        `this gate declares a toolchain entry for ${declared}, but the enumeration never found that `
+        + 'script. A declaration that matches nothing protects nothing: point it at the new name, or '
+        + 'drop it if the script is genuinely gone.');
+}
+
+let enforced = 0;
+for (const script of releaseScripts) {
+    const source = readFileSync(new URL(`../../../tools/release/${script}`, import.meta.url), 'utf8');
+
+    // The requirements the script itself declares. `command -v X || die` is
+    // how every one of these is written, so this reads the real contract
+    // rather than a copy of it that can drift.
+    const tools = [...source.matchAll(/command -v ([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
+    const uniqueTools = [...new Set(tools)];
+    if (uniqueTools.length === 0) continue;
+
+    const entry = CEREMONY_TOOLCHAINS[script];
+
+    // The load-bearing half: an undeclared script is a FAILURE, not a skip.
+    assert.ok(entry,
+        `tools/release/${script} preflights for [${uniqueTools.join(', ')}] and this gate has no entry `
+        + 'for it, so nothing is checking that an operator can find out they need them. Add an entry '
+        + 'naming the page that documents its machine, or say why it needs none.');
+
+    if (!entry.enforce) continue;
+    enforced += 1;
+
+    const text = readDoc(...entry.page.split('/'));
+    for (const tool of uniqueTools) {
+        assert.ok(new RegExp(`\\b${tool}\\b`, 'i').test(text),
+            `tools/release/${script} refuses to run without \`${tool}\`, and ${entry.page} never `
+            + `mentions it (${entry.note}). An operator on a fresh release worktree finds this out `
+            + 'when the ceremony stops, which is the moment they can least afford to go hunting. '
+            + 'Name it in the phase that runs the script.');
+    }
+
+    // Two requirements the script cannot express as `command -v`, and both
+    // stopped a real run. bundletool is passed by path rather than found on
+    // the path; the workspace install is a state of the directory.
+    assert.ok(/bundletool/i.test(text),
+        `${entry.page} never mentions bundletool, and tools/release/${script} refuses without it. `
+        + 'It is passed by path, so it cannot be discovered the way a command on the path can be.');
+    assert.ok(/node_modules|pnpm install/i.test(text),
+        `${entry.page} never tells the operator to install the workspace. A release worktree is `
+        + 'normally a FRESH one - that is what the clean-tree rule pushes people to - and a fresh '
+        + 'worktree has no dependencies, so the build dies minutes in with an error naming a build '
+        + 'tool instead of the real cause.');
+}
+
+assert.ok(enforced >= 1,
+    'no ceremony toolchain was actually enforced, so this whole section proved nothing. At least one '
+    + 'entry must have enforce: true.');
+
 console.log(`store-ceremony-operational: ${storePages.length} release pages enumerated, all at or above `
-    + `their declared operational floor; ${Object.keys(FLOORS).length} declarations, all reachable`);
+    + `their declared operational floor; ${Object.keys(FLOORS).length} declarations, all reachable; `
+    + `${releaseScripts.length} release scripts enumerated, ${enforced} toolchain(s) enforced`);

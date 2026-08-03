@@ -735,7 +735,19 @@ assert.ok(existsSync(debugNet), 'debug builds carry the regtest exemption');
 assert.match(readFileSync(debugNet, 'utf8'), /cleartextTrafficPermitted="true"/);
 
 // R8: a decision, pinned, with the reasoning attached.
-assert.match(appGradle, /minifyEnabled false/, 'R8 off (pinned decision, §7)');
+//
+// This assertion is also the only thing coupling that decision to its
+// consequence at the store. Play warns at publish time that a bundle carries
+// no deobfuscation file; today that warning is correct and harmless, because
+// nothing is obfuscated and stack traces are already readable. The moment
+// minification is turned on that stops being true, and an unreadable crash
+// report is discovered at exactly the moment it matters. So whoever flips
+// this flag has to come through here, and gets told what else the flip owes.
+assert.match(appGradle, /minifyEnabled false/,
+    'R8 off (pinned decision, §7). Turning it on is not a one-line change: it owes keep rules for '
+    + 'the reflection Capacitor uses to find @PluginMethod (omitting them fails at runtime, in the '
+    + 'WebView, silently), and it owes the mapping file being uploaded with every release, or every '
+    + 'crash and ANR report from that build onward is unreadable.');
 assert.match(appGradle, /R8 DECISION, PINNED/, 'and the reasoning is written down');
 assert.equal(
     capConfig.android?.webContentsDebuggingEnabled,
