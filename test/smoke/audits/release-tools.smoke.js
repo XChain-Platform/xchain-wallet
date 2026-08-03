@@ -678,7 +678,15 @@ for (const shell of ['web', 'extension']) {
 
     const dockerSrc = read(dockerfile);
     assert.ok(/@sha256:/.test(dockerSrc), `${dockerfile} pins its base image by digest`);
-    assert.ok(/NODE_SHA256=/.test(dockerSrc), `${dockerfile} SHA256-verifies the Node tarball`);
+    // `NODE_SHA256=` OR `NODE_SHA256_X64=`. The parameterised form is the
+    // correct one and is what the desktop lane always used; the extension
+    // and web lanes were moved onto it in 2026-08  when it turned
+    // out their hardcoded `ENV NODE_SHA256=` pinned a Node MAJOR below the
+    // one the release lane builds with. This assertion is about the tarball
+    // being verified at all - reproducible-toolchain.smoke.js is what holds
+    // the value itself to tools/release/toolchain.json.
+    assert.ok(/NODE_SHA256(_X64)?=/.test(dockerSrc),
+        `${dockerfile} SHA256-verifies the Node tarball`);
 
     const shellPkg = JSON.parse(read(`packages/${shell}/package.json`));
     assert.ok(/scripts\/reproduce\.sh/.test(shellPkg.scripts.reproduce || ''),
