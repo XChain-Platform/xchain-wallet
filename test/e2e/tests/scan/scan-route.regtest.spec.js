@@ -51,6 +51,7 @@ import {
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import { encodeWif } from '../../../../packages/core/src/crypto/wif.js';
+import { encodeXcwChunks } from '../../../../packages/core/src/uri/psbtQr.js';
 
 const PASSWORD = 'regtestpassword123';
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
@@ -79,6 +80,13 @@ const AMOUNT_LABEL = /^Amount( \(.+\))?$/;
 /** Alphanumeric, 40 chars, no separators: the loose heuristic's territory. */
 const GARBAGE_BLOB = 'zzzz0000zzzz0000zzzz0000zzzz0000zzzz0000';
 
+/**
+ * A PSBT-shaped hex blob: the magic prefix plus filler. `detectQrContent`
+ * classifies on the prefix and evenness alone, which is what this exercises;
+ * nothing here has to be a spendable transaction.
+ */
+const PSBT_HEX = '70736274ff' + 'ab'.repeat(120);
+
 /** Has whitespace and punctuation, so nothing claims it. */
 const UNCLASSIFIABLE = 'not a thing at all !!';
 
@@ -98,11 +106,23 @@ async function classifyPaste(page, text) {
     await box.fill(text);
     await page.getByRole('button', { name: 'Classify pasted payload' }).click();
 
-    const routed = page.getByLabel('To', { exact: true });
-    const failed = page.getByRole('alert');
+    // 'Routed' = the scan route handed off and unmounted. Anchored on the route
+    // itself rather than on any one destination, so this works for send, receive
+    // and psbt alike - and the transient "Scanned, routing…" text is never
+    // observable, because the parent switches views in the same state update.
+    const routed = page.getByTestId('scan-route');
+    // THE CLASSIFICATION ERROR IS NOT THE ONLY ALERT ON THIS SCREEN. In a browser
+    // with no camera the QrScanner renders its own "Not supported" alert inside
+    // its subtree, and a bare getByRole('alert') picks whichever comes first in
+    // the DOM - which is the scanner's. That read as a classification result and
+    // made a chunk refusal look like the wrong message entirely. The status row
+    // this route sets is a DIRECT child of the route container, so scope to that.
+    // (Second time this screen has punished an any-alert assertion; see the Send
+    // refusal step further down.)
+    const failed = page.getByTestId('scan-route').locator(':scope > [role="alert"]');
     const deadline = Date.now() + 30_000;
     for (;;) {
-        if (await routed.count() > 0) return 'routed';
+        if (await routed.count() === 0) return 'routed';
         if (await failed.count() > 0) return (await failed.first().innerText()).trim();
         if (Date.now() > deadline) throw new Error('the scan route neither routed nor reported');
         await page.waitForTimeout(200);
@@ -248,4 +268,85 @@ test.describe('scan and classify (§24.3)', () => {
                 .toBeVisible({ timeout: 30_000 });
         });
     });
+    test('the URI intents route where they say, and a scanned PSBT arrives empty', async ({ page }) => {
+        // `xchain:` URIs, PSBT hex and the multi-frame `XCW:` chunk are the three
+        // classifications the first test did not reach. They matter for different
+        // reasons: the URI intents pick a SCREEN from untrusted input, and the two
+        // transaction shapes are the air-gap transport (§20.3) whose whole point is
+        // that data crosses on a camera rather than a wire.
+        await createWallet(page, { password: PASSWORD, name: 'URI Wallet' });
+
+        await test.step('a send intent reaches Send with what it carried', async () => {
+            await openScan(page);
+            expect(await classifyPaste(page, `xchain:BTC/send?to=${PAY_TO}&amount=${PAY_AMOUNT}`),
+                'an xchain: send intent was not routed').toBe('routed');
+            expect(await page.getByLabel('To', { exact: true }).inputValue(),
+                'the send intent opened Send with a different destination than the URI named')
+                .toBe(PAY_TO);
+            expect(await page.getByLabel(AMOUNT_LABEL).first().inputValue(),
+                'the send intent carried an amount and Send did not receive it')
+                .toBe(PAY_AMOUNT);
+        });
+
+        await test.step('a receive intent reaches Receive, not Send', async () => {
+            // The split matters: `RECEIVE_ACTIONS` is a one-element set, so every
+            // other action falls through to send. A receive URI that landed on Send
+            // would put a stranger's address in a spend form.
+            await openScan(page);
+            expect(await classifyPaste(page, 'xchain:BTC/receive'),
+                'an xchain: receive intent was not routed').toBe('routed');
+            // Anchored on a Receive-only control rather than the title: PageHeader
+            // renders its title as a <span>, so there is no heading role to match.
+            await expect(page.getByRole('button', { name: 'Copy QR' }),
+                'a receive intent did not open the Receive screen')
+                .toBeVisible({ timeout: 30_000 });
+            await expect(page.getByLabel('To', { exact: true }),
+                'a RECEIVE intent opened the SEND form, which is a spend surface pointed at an '
+                + 'address the user did not choose')
+                .toHaveCount(0);
+        });
+
+        await test.step('a multi-frame chunk is refused with its frame numbers', async () => {
+            // The scan route only does single-shot recognition and says so. What
+            // matters is that it says WHICH frame it saw, because the user's next
+            // move is to go somewhere that can collect the rest.
+            await openScan(page);
+            const frames = encodeXcwChunks(PSBT_HEX);
+            const result = await classifyPaste(page, frames[0]);
+            expect(result === 'routed', 'a single chunk of a multi-frame transaction was routed as '
+                + 'though it were a whole one').toBe(false);
+            expect(/chunk 1\/\d+/i.test(result),
+                'the chunk was refused without naming which frame it was, so the user cannot tell '
+                + 'how many more there are')
+                .toBe(true);
+            expect(/Sign panel/i.test(result),
+                'the chunk refusal does not point at the screen that can collect every frame')
+                .toBe(true);
+        });
+
+        await test.step(': a scanned PSBT opens the Sign panel EMPTY', async () => {
+            // The classification is right and the navigation is right; the payload
+            // is dropped. `ScanRoute` emits `{ kind: 'psbt', psbtHex }` and every
+            // shell's handler calls `setUnlockedView('sign-psbt')` and discards the
+            // hex - `PsbtSignForm` takes `walletId` and `onBack` and has no prefill
+            // prop at all. So the scan navigates and nothing else: the user still
+            // has to obtain the transaction by some other route, which on an
+            // air-gapped signer is the whole problem.
+            //
+            // Pinned as the CURRENT behaviour, so the day the hex is threaded
+            // through this goes red and asks to be rewritten into the real
+            // assertion.
+            await openScan(page);
+            expect(await classifyPaste(page, PSBT_HEX), 'a PSBT hex was not routed').toBe('routed');
+
+            const box = page.getByLabel('Unsigned transaction (hex or base64)');
+            await expect(box, 'a scanned PSBT did not open the Sign panel')
+                .toBeVisible({ timeout: 30_000 });
+            expect((await box.inputValue()).length,
+                'the scanned PSBT now reaches the Sign panel -  is fixed, and this test '
+                + 'should assert that the field holds the scanned transaction instead')
+                .toBe(0);
+        });
+    });
+
 });
