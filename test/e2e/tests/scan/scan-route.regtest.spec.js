@@ -268,7 +268,7 @@ test.describe('scan and classify (§24.3)', () => {
                 .toBeVisible({ timeout: 30_000 });
         });
     });
-    test('the URI intents route where they say, and a scanned PSBT arrives empty', async ({ page }) => {
+    test('the URI intents route where they say, and a scanned PSBT arrives with them', async ({ page }) => {
         // `xchain:` URIs, PSBT hex and the multi-frame `XCW:` chunk are the three
         // classifications the first test did not reach. They matter for different
         // reasons: the URI intents pick a SCREEN from untrusted input, and the two
@@ -324,28 +324,28 @@ test.describe('scan and classify (§24.3)', () => {
                 .toBe(true);
         });
 
-        await test.step(': a scanned PSBT opens the Sign panel EMPTY', async () => {
-            // The classification is right and the navigation is right; the payload
-            // is dropped. `ScanRoute` emits `{ kind: 'psbt', psbtHex }` and every
-            // shell's handler calls `setUnlockedView('sign-psbt')` and discards the
-            // hex - `PsbtSignForm` takes `walletId` and `onBack` and has no prefill
-            // prop at all. So the scan navigates and nothing else: the user still
-            // has to obtain the transaction by some other route, which on an
-            // air-gapped signer is the whole problem.
-            //
-            // Pinned as the CURRENT behaviour, so the day the hex is threaded
-            // through this goes red and asks to be rewritten into the real
-            // assertion.
+        await test.step(': a scanned PSBT arrives IN the Sign panel', async () => {
+            // This step was written as a pin on the broken behaviour and is now the
+            // real assertion. Before the fix, \`ScanRoute\` emitted
+            // \`{ kind: 'psbt', psbtHex }\`, every shell's handler called
+            // \`setUnlockedView('sign-psbt')\` and dropped the hex, and \`PsbtSignForm\`
+            // had no prefill prop - so the box measured 0 characters and the user
+            // had to fetch the transaction again through the channel the QR exists
+            // to replace. PSBT-over-QR is the air-gap transport; navigating to the
+            // right screen empty-handed is the whole failure, not a partial success.
             await openScan(page);
             expect(await classifyPaste(page, PSBT_HEX), 'a PSBT hex was not routed').toBe('routed');
 
             const box = page.getByLabel('Unsigned transaction (hex or base64)');
             await expect(box, 'a scanned PSBT did not open the Sign panel')
                 .toBeVisible({ timeout: 30_000 });
-            expect((await box.inputValue()).length,
-                'the scanned PSBT now reaches the Sign panel -  is fixed, and this test '
-                + 'should assert that the field holds the scanned transaction instead')
-                .toBe(0);
+            // Compared as a boolean so a failure cannot dump a transaction into the
+            // run log, and on the WHOLE value so a truncating prefill fails here.
+            expect((await box.inputValue()) === PSBT_HEX,
+                'the Sign panel did not receive the transaction that was just scanned into it, so '
+                + 'the scan delivered a destination and nothing else - which on an air-gapped '
+                + 'signer leaves the user with no way to get the transaction at all')
+                .toBe(true);
         });
     });
 

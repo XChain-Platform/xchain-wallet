@@ -160,8 +160,9 @@ export function normalizePsbtInput(raw) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {string} [props.initialPsbt]   : a transaction the shell already has, e.g. one just scanned off a QR. Seeds the paste box so the user does not have to fetch it again through the channel the scan replaced.
  */
-export function PsbtSignForm({ walletId, onBack }) {
+export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -174,7 +175,11 @@ export function PsbtSignForm({ walletId, onBack }) {
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [addressId, setAddressId] = useState(/** @type {string | null} */ (null));
-    const [pasted, setPasted] = useState('');
+    // : seeded from `initialPsbt` at mount. The user still reviews the
+    // decoded action and types their password, so a scanned transaction is a
+    // proposal in the box, never a signature - which is why prefilling it is
+    // consistent with this route refusing to auto-import secret material.
+    const [pasted, setPasted] = useState(typeof initialPsbt === 'string' ? initialPsbt : '');
     const [password, setPassword] = useState('');
 
     const [busy, setBusy] = useState(false);

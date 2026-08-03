@@ -506,6 +506,10 @@ function AppInner() {
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
+    // : the transaction a scan just produced, handed to the Sign panel so
+    // the scan delivers its payload rather than only its destination. Mirrors
+    // `sendPrefill` above, which is what the send outcome has always done.
+    const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
     // Which view Send should return to when the user hits Back. Defaults
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
     // out lands on the token list the user was just browsing.
@@ -1019,6 +1023,7 @@ function AppInner() {
                             } else if (outcome.kind === 'receive') {
                                 setUnlockedView('receive');
                             } else if (outcome.kind === 'psbt') {
+                                setScannedPsbt(outcome.psbtHex || null);
                                 setUnlockedView('sign-psbt');
                             }
                         }}
@@ -1556,6 +1561,7 @@ function AppInner() {
                 return (
                     <PsbtSignForm
                         walletId={activeWalletId}
+                        initialPsbt={scannedPsbt || undefined}
                         onBack={formBack}
                     />
                 );
@@ -2744,6 +2750,7 @@ function AppInner() {
                                     } else if (outcome.kind === 'receive') {
                                         setUnlockedView('receive');
                                     } else if (outcome.kind === 'psbt') {
+                                        setScannedPsbt(outcome.psbtHex || null);
                                         setUnlockedView('sign-psbt');
                                     }
                                 }}

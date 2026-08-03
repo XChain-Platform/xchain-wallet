@@ -297,6 +297,10 @@ function AppInner() {
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
+    // : the transaction a scan just produced, handed to the Sign panel so
+    // the scan delivers its payload rather than only its destination. Mirrors
+    // `sendPrefill` above, which is what the send outcome has always done.
+    const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
     // Deep-link prefill for contract EXECUTE (explorer Write-tab links,
     // xchain:{COIN}/execute?...). Mirrors `sendPrefill`; consumed by the
     // 'contract-execute' route and cleared when the user backs out.
@@ -838,6 +842,7 @@ function AppInner() {
                             } else if (outcome.kind === 'receive') {
                                 setUnlockedView('receive');
                             } else if (outcome.kind === 'psbt') {
+                                setScannedPsbt(outcome.psbtHex || null);
                                 setUnlockedView('sign-psbt');
                             }
                         }}
@@ -1286,6 +1291,7 @@ function AppInner() {
                 return (
                     <PsbtSignForm
                         walletId={activeWalletId}
+                        initialPsbt={scannedPsbt || undefined}
                         onBack={() => setUnlockedView('actions')}
                     />
                 );
