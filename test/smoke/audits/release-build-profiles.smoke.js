@@ -191,8 +191,14 @@ const rows = declared.split('\n')
     .map((l) => l.trim().split(/\s+/));
 assert.ok(rows.length > 0, 'expected-artifacts.txt declares nothing');
 for (const row of rows) {
-    assert.equal(row.length, 4,
-        `every declared artifact needs a profile AND an arch column: ${row.join(' ')}`);
+    // FIVE columns since 's signature class. Pinning the exact count
+    // rather than a minimum is deliberate and is why this assertion earns
+    // its keep: lib.sh parses the row as `status pattern profile arches
+    // _rest`, so any sixth column would be swallowed silently, and a fifth
+    // one was too until the signature gate started reading it.
+    assert.equal(row.length, 5,
+        'every declared artifact needs a profile, an arch column AND a signature '
+        + `class: ${row.join(' ')}`);
     assert.ok(['default', 'store'].includes(row[2]), `unknown profile in: ${row.join(' ')}`);
     // '-' is the way to say "not arch-partitioned" out loud; an empty
     // column would silently restore the pre-arch-gate behaviour.
@@ -205,7 +211,17 @@ for (const row of rows) {
 // release that discovers a missing profile should be the one being declared,
 // not the one already staged and waiting for a signature.
 const staleList = join(work, 'expected-stale.txt');
-writeFileSync(staleList, declared.replace(/^(required\s+xchain-wallet-web-v\*\.tar\.gz)\s+default\s+-$/m, '$1'));
+// The trailing columns are matched explicitly (profile, arch, signature
+// class) rather than with a lazy `.*`: this line is a MUTATION, and a
+// mutation regex that silently stops matching turns the assertion below
+// into one that always passes. That is exactly what happened when the
+// signature class was added - the row stopped ending in `-`, the
+// replacement became a no-op, and the gate was asserted to reject a file
+// nobody had actually broken.
+writeFileSync(staleList, declared.replace(
+    /^(required\s+xchain-wallet-web-v\*\.tar\.gz)\s+default\s+-\s+none$/m, '$1'));
+assert.notEqual(readFileSync(staleList, 'utf8'), declared,
+    'the stale-list mutation must actually change the file');
 res = bashResult(
     `source ${JSON.stringify(lib)}; xr_check_expected ${JSON.stringify(dir)} ${JSON.stringify(staleList)}`,
 );

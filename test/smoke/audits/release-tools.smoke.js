@@ -187,8 +187,12 @@ try {
     // is deliberate - a release must never be signed without knowing
     // which lanes already have users - and it means the pristine-clone
     // fixture has to carry it like any other gate input.
+    // verify-signatures.mjs rides along for the same reason, and it is the
+    // second instance of that shape: sign.sh invokes it unconditionally
+    // before writing the manifest, so a clone without it cannot sign at
+    // all. Being a gate input that fails shut is the point of both.
     for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt',
-        'shipped-lanes.txt', 'update-info.mjs']) {
+        'shipped-lanes.txt', 'update-info.mjs', 'verify-signatures.mjs']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     cpSync(join(root, 'tools/build-reproduce/check-no-dev-mock.sh'),
@@ -212,11 +216,43 @@ try {
     const SIGN = join(repo, 'tools/release/sign.sh');
     const VERIFY = join(repo, 'tools/release/verify.sh');
 
+    // A staged artifact has to LOOK SIGNED, because sign.sh now refuses a
+    // release whose artifacts are not ('s signature gate). These
+    // fixtures stand for a correctly-signed release, so the bytes carry
+    // the two markers that gate reads: a populated PE certificate table
+    // for a Windows installer, and a sealed _CodeSignature entry name for
+    // a macOS zip. Everything else is genuinely unsigned by design and
+    // stays plain.
+    //
+    // Writing plain bytes for all of them would have made every case in
+    // this file fail for one reason - "unsigned" - and hidden whatever it
+    // was actually testing.
+    const signedBytes = (name) => {
+        if (name.endsWith('.exe')) {
+            const b = Buffer.alloc(0x400);
+            b.writeUInt16LE(0x5a4d, 0);
+            b.writeUInt32LE(0x80, 0x3c);
+            b.writeUInt32LE(0x00004550, 0x80);
+            const opt = 0x80 + 24;
+            b.writeUInt16LE(0x20b, opt);
+            b.writeUInt32LE(16, opt + 108);
+            b.writeUInt32LE(0x9000, opt + 112 + 32);   // certificate table RVA
+            b.writeUInt32LE(2048, opt + 112 + 36);     // and its size
+            return b;
+        }
+        if (/mac.*\.zip$/.test(name)) {
+            return Buffer.from(
+                `PK bytes of ${name}\n`
+                + 'XChain Wallet.app/Contents/_CodeSignature/CodeResources');
+        }
+        return Buffer.from(`bytes of ${name}\n`);
+    };
+
     const stage = (extra = [], omit = []) => {
         const dir = mkdtempSync(join(work, 'stage-'));
         for (const name of ARTIFACTS) {
             if (omit.includes(name)) continue;
-            writeFileSync(join(dir, name), `bytes of ${name}\n`);
+            writeFileSync(join(dir, name), signedBytes(name));
         }
         for (const name of extra) writeFileSync(join(dir, name), 'extra\n');
         // Channel pointers: present in a real staging dir, never in the
