@@ -93,9 +93,9 @@ describe('scheduled behavior (test override map)', () => {
 // PC-42: the two VOTE flag-days. Unlike GATE_MIN_AMOUNT these carry REAL
 // scheduled values and are BLOCK TIMESTAMPS, not heights.
 describe('VOTE binding-poll flag-days (PC-42)', () => {
-    const MAINNET_FLAG_DAY = 1786924800; // 2026-08-17, per xchain-indexer protocol_changes.js
+    const MAINNET_FLAG_DAY = 1786060800; // 2026-08-07, per xchain-indexer protocol_changes.js
 
-    it('matches the indexer schedule: mainnet 2026-08-17, testnet and regtest from genesis', () => {
+    it('matches the indexer schedule: mainnet 2026-08-07, testnet and regtest from genesis', () => {
         expect(VOTE_CALLBACK_TIMELOCK_TIMES['bitcoin-mainnet']).toBe(MAINNET_FLAG_DAY);
         expect(VOTE_CALLBACK_TIMELOCK_TIMES['litecoin-mainnet']).toBe(MAINNET_FLAG_DAY);
         expect(VOTE_CALLBACK_TIMELOCK_TIMES['dogecoin-mainnet']).toBe(MAINNET_FLAG_DAY);

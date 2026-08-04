@@ -42,7 +42,7 @@
 // stops it is `ISSUE_MINT_SUPPLY_CUMULATIVE_CAP`, a gated protocol change whose
 // own comment says it closes inflation "past a locked NFT edition size".
 // `protocol_changes.js` activates it on testnet/regtest AT GENESIS - which is
-// why this spec can assert it - and on MAINNET at 1786924800, i.e. 2026-08-17.
+// why this spec can assert it - and on MAINNET at 1786060800, i.e. 2026-08-07.
 // So on regtest this refusal is real today, and the mainnet window is read off
 // the config rather than driven here (this venue cannot turn the gate off).
 // Filed as .
