@@ -337,6 +337,38 @@ export function run(dir, expectedPath) {
 
 const invokedDirectly = process.argv[1]
     && process.argv[1].endsWith('verify-signatures.mjs');
+
+const USAGE = `verify-signatures.mjs - does each staged artifact actually carry the OS
+code signature its row in expected-artifacts.txt declares? ( §12.)
+
+Usage:
+  node tools/release/verify-signatures.mjs <artifact-dir> <expected-artifacts.txt>
+
+Arguments:
+  <artifact-dir>            the staged release directory to inspect
+  <expected-artifacts.txt>  the declaration, whose fifth column is the
+                            signature class for each row
+  -h, --help                print this and exit 0
+
+Signature classes are STATED, never assumed: a class that cannot be verified
+from the bytes reports as recorded rather than ok, and the two are counted
+separately, so "recorded" can never be read as a pass.
+
+Exit codes:
+  0  every declared artifact carries the signature its row claims
+  1  an artifact is UNSIGNED, or a declared signature does not verify
+  2  the arguments are missing
+`;
+
+// The usage answer comes before the argument reads, not after them: the bare
+// arity check below exits 2 with its own vocabulary, which is precisely the
+// "a tool answers --help with its own failure" defect  exists to
+// remove. Guarded on invokedDirectly so an importer never sees either.
+if (invokedDirectly && process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+}
+
 if (invokedDirectly) {
     const [, , dir, expected] = process.argv;
     if (!dir || !expected) {
