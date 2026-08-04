@@ -530,10 +530,63 @@ assert.match(
     /android:autoVerify="true"/,
     'App Links are auto-verified against assetlinks.json',
 );
-assert.match(
-    manifest,
-    /<data android:scheme="https" android:host="xchain\.io" android:pathPrefix="\/wallet" \/>/,
-    'https App Link filter is scoped to xchain.io/wallet',
+// THE CLAIM IS A PREFIX, AND THE PREFIX IS THE WHOLE SCOPE.
+// assetlinks.json carries no paths, so nothing outside this one attribute
+// narrows what Android hands the app. It read `/wallet`, which also matches
+// `https://xchain.io/wallet/privacy/` and `/wallet/support/` - the privacy and
+// support URLs the Play and App Store listings publish - so a reviewer or a
+// user tapping either from the listing opened the wallet instead of the page,
+// and the parser (rightly) refused the path, leaving the app on its default
+// view and the document unread. The assertions below check the RELATIONSHIPS
+// rather than the literal string: what Android claims, what the shared parser
+// unwraps, and what the store listings publish are three files that have to
+// agree, and each was individually defensible while they disagreed.
+const httpsFilter = /<data android:scheme="https" android:host="xchain\.io" android:pathPrefix="([^"]+)" \/>/
+    .exec(manifest);
+assert.ok(httpsFilter, 'no https App Link data element with a pathPrefix on xchain.io');
+const [, claimedPrefix] = httpsFilter;
+
+// The parser is the other half: a path Android claims but `unwrapWebLink`
+// refuses is a link taken from the browser and then dropped, which is worse
+// than never claiming it. Read out of the source the way the iOS smoke reads
+// the plugin name, because the constant is module-private.
+const uriSource = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'uri', 'xchainUri.js'), 'utf8',
+);
+const parserPrefix = /WEB_LINK_PREFIX\s*=\s*'([^']+)'/.exec(uriSource)?.[1];
+assert.ok(parserPrefix, 'xchainUri.js no longer states its web-link prefix');
+assert.equal(
+    claimedPrefix, parserPrefix,
+    'the manifest claims a different path range than the parser accepts: every URL in the gap is'
+    + ' taken from the browser and then discarded on arrival',
+);
+
+// Android's own matching rule, applied to the URLs that actually matter. A
+// pathPrefix match is a literal startsWith on the path.
+const claims = (url) => new URL(url).pathname.startsWith(claimedPrefix);
+assert.ok(
+    claims('https://xchain.io/wallet/link/?uri=xchain%3ATBTC%2Freceive'),
+    'the canonical web link is not claimed at all, so App Links deliver nothing',
+);
+assert.ok(
+    claims('https://xchain.io/wallet/link/v1/invoice/9'),
+    'the claim is not a wildcard: the association file claims /wallet/link/* and deeper paths must reach the app',
+);
+for (const listingUrl of [
+    'https://xchain.io/wallet/privacy/',
+    'https://xchain.io/wallet/support/',
+]) {
+    assert.equal(
+        claims(listingUrl), false,
+        `${listingUrl} is claimed by the App Link filter. Both store listings publish it, so a reviewer`
+        + ' tapping it gets the wallet rather than the document they are reviewing',
+    );
+}
+// Not part of the store forms, but the same failure and the one users hit:
+// the page that tells someone how to install the app must not need the app.
+assert.equal(
+    claims('https://xchain.io/wallet/download/'), false,
+    'the download page is claimed by the App Link filter',
 );
 assert.match(
     manifest,
@@ -974,7 +1027,9 @@ console.log(
     + ' fallback; vault writes fsync before an atomic rename and refuse to overwrite an unreadable'
     + ' vault; ciphertext unreadable while the device is locked; permissions are exactly internet,'
     + ' camera and the two biometric spellings, the legacy one capped at API 27.'
-    + ' S3: auto-verified App Links scoped to xchain.io/wallet plus the inbound xchain: scheme and no'
+    + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
+    + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
+    + ' URLs to the browser, plus the inbound xchain: scheme and no'
     + ' http downgrade, all on the one exported activity; XChainLinks queues the cold-start link and'
     + ' clears it on read; the JS half agrees on the plugin name and refuses lookalike hosts;'
     + ' assetlinks ships as a two-fingerprint template rather than invented values; camera is optional'

@@ -50,12 +50,32 @@
 
               The template and the publishing owner:
               packages/mobile/assetlinks.template.json.
+
+              THE PREFIX IS `/wallet/link/`, NOT `/wallet`. assetlinks
+              .json carries no paths at all, so this attribute is the entire
+              Android-side scope of the claim, and the wider form claimed every
+              page under /wallet - including `https://xchain.io/wallet/privacy/`
+              and `/wallet/support/`, which are the privacy-policy and support
+              URLs the Play and App Store listings themselves publish. With the
+              wallet installed, a reviewer or a user tapping either from the
+              listing got the app instead of the document they were trying to
+              read; the parser refuses those paths (they are outside
+              WEB_LINK_PREFIX), so the app merely surfaced on its default view
+              and the page was never fetched by anyone. Narrow is also what iOS
+              claims (`/wallet/link/*` in the association file), and the two
+              shells sharing one claim is what keeps a link working the same on
+              both.
+
+              The trailing slash is part of the prefix, matching the iOS
+              wildcard: `/wallet/link` without it is a directory URL the site
+              redirects, not a form we publish, and leaving it out here would
+              re-claim `/wallet/linkanything`.
             -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="xchain.io" android:pathPrefix="/wallet" />
+                <data android:scheme="https" android:host="xchain.io" android:pathPrefix="/wallet/link/" />
             </intent-filter>
 
             <!--

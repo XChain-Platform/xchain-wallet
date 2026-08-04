@@ -47,10 +47,16 @@ Mac needs Xcode but no `pod`.
 meta, atomic writes, ABSENT/LOCKED/CORRUPT statuses) and biometric unlock
 (BiometricPrompt Class 3, auth-per-use, sidecar wrap)
 
-✅ **S3:** deep links (auto-verified App Links on `https://xchain.io/wallet`
+✅ **S3:** deep links (auto-verified App Links on `https://xchain.io/wallet/link/`
 plus inbound `xchain:`, delivered by the `XChainLinks` plugin with a
 cold-start queue), the camera permission for the shared QR scanner, UR input
 bounds, and `tools/release/android-ceremony.sh`
+
+> The App Link prefix is `/wallet/link/`, the same range the iOS association
+> file claims and the shared parser unwraps. The wider `/wallet` it used to
+> claim also caught `/wallet/privacy/` and `/wallet/support/` - the URLs both
+> store listings publish - so a reviewer tapping either got the app instead of
+> the page ().
 
 ✅ **S4:** shell hardening (no cloud backup or device transfer, cleartext refused,
 R8 pinned off, no WebView debugging), route-scoped FLAG_SECURE, the capability
