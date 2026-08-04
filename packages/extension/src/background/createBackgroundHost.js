@@ -42,6 +42,7 @@ import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
 const {
+    importedAddressIdsFor,
     createWallet,
     createAccount,
     activateChain,
@@ -320,15 +321,12 @@ async function addressesByChain(req, { vault, chainRegistry }) {
     // result even when one account was asked for - AddressList always
     // passes the active account id, and its "Imported" filter exists to
     // show exactly these.
-    /** @type {Set<string>} */
-    let importedAddressIds = new Set();
-    try {
-        const walletRecord = await vault.wallets.get(walletId);
-        const keys = Array.isArray(walletRecord?.importedKeys) ? walletRecord.importedKeys : [];
-        importedAddressIds = new Set(
-            keys.map((k) => k?.addressId).filter((id) => typeof id === 'string' && id.length > 0),
-        );
-    } catch { /* no wallet record readable: fall through with none */ }
+    //
+    // The rule lives in flows/_importedAddressIds.js and is read from
+    // there, never restated here : this is the query AddressList
+    // actually calls, so an inline copy is the one that would keep
+    // shipping the D-63 defect while the shared resolver looked correct.
+    const importedAddressIds = await importedAddressIdsFor(vault, walletId);
     if (accountIds.size === 0 && importedAddressIds.size === 0) return {};
     // Read activeNetwork once per call so every UI surface that consumes
     // this map (Home, History, AddressList, Send, every action form's
