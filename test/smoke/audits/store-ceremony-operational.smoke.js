@@ -49,12 +49,16 @@ const FLOORS = {
         note: 'restored 2026-08-03 after the docs port scrubbed it to 0/0',
     },
     'release/mobile/android-play.md': {
-        steps: 9,
-        blocks: 12,
+        steps: 10,
+        blocks: 13,
         note: 'restored 2026-08-03 after the same port scrubbed it to 0/0; the blocks are the '
             + 'ceremony invocation, two manifest dumps, the two Phase 0 preflight scripts, the '
             + 'permission set, the asset-links build, the App Links check, the publisher, the '
-            + 'signature one-liner, the shipped-lanes flip and the character count',
+            + 'signature one-liner, the shipped-lanes flip and the character count. Raised from '
+            + '9/12 by , which added the trader block an operator transcribes and the step '
+            + 'that ticks it off. The page carries more than this today; the floor moves only by '
+            + 'what a change actually put there, so it cannot be propped up by a neighbour\'s '
+            + 'uncommitted work',
     },
     'release/desktop/snap-store.md': {
         steps: 26,
@@ -81,9 +85,14 @@ const FLOORS = {
     // lane's ceremony from this side would be guessing at exactly the steps
     // whose whole value is being right.
     'release/mobile/ios-app-store.md': {
-        steps: 0,
-        blocks: 0,
-        note: 'KNOWN GAP: store ceremony, never restored after the docs port; owned by the iOS lane',
+        steps: 44,
+        blocks: 5,
+        note: 'GAP CLOSED 2026-08-03 . The port left this page at 0/0 and the pre-migration '
+            + 'runbook it came from had no checkable steps either, so this is the ceremony made '
+            + 'operational rather than restored: the phases were already right and were not '
+            + 'followable. The five blocks are the privacy-URL check, the archive and export '
+            + 'invocations, the native-console reader, the trader block an operator transcribes, and '
+            + 'the unauthenticated apple-app-site-association fetch',
     },
     'release/desktop/mac-app-store.md': {
         steps: 26,
@@ -193,6 +202,82 @@ for (const page of storePages) {
         + 'sentence into a terminal, and a value that is only described is a value they guess.');
 }
 
+// ---- THE PHASE SPINE ------------------------------------------------------
+//
+// Counting steps and blocks measures a page's CHARACTER, never its
+// COMPLETENESS, and a page can sit comfortably above both floors while a whole
+// phase is simply absent. That has now happened twice on the same page with
+// this gate green: the docs port dropped the Android page's Phase 2a and Phase
+// 8 whole (restored 2026-08-03), and on 2026-08-04 the console showed that the
+// page had never carried the review submission at all - a step nothing in the
+// console prompts for, so a lane driven from the page alone sits unreviewed
+// while every track promotion appears to succeed.
+//
+// So the phase spine is declared and checked. A page joins by EXISTING: any
+// page that numbers its phases at all must declare them here, which is the
+// same rule the floors use and for the same reason. `first`/`last` are the
+// page's own end phases and every integer between them must appear, so a gap
+// and a lost tail both go red; `sub` names the lettered sub-phases, which
+// numbering alone cannot see.
+//
+// Stated limit: this catches a missing PHASE, not a missing step inside one.
+// It is deliberately not a table of contents - the point is that dropping a
+// unit of the ceremony costs an edit here, in the same change, with a reason.
+const PHASES = {
+    'release/mobile/android-play.md': {
+        first: 0, last: 8, sub: ['2a', '2b', '3a', '3b'],
+        note: '3a/3b added 2026-08-04: managed publishing, then the review submission',
+    },
+    'release/extension/chrome-web-store.md': { first: 0, last: 8, sub: ['2a', '2b', '2c', '4a', '4b'] },
+    'release/mobile/ios-app-store.md': {
+        first: 1, last: 8, sub: [],
+        note: 'starts at 1 rather than 0, which is why the first phase is declared and not assumed',
+    },
+    'release/desktop/mac-app-store.md': { first: 0, last: 5, sub: [] },
+    'release/desktop/microsoft-store.md': { first: 0, last: 5, sub: [] },
+    'release/desktop/snap-store.md': { first: 0, last: 6, sub: [] },
+};
+
+for (const declared of Object.keys(PHASES)) {
+    assert.ok(storePages.includes(declared),
+        `this gate declares a phase spine for ${declared}, which the enumeration never found. A `
+        + 'declaration that matches nothing protects nothing.');
+}
+
+for (const page of storePages) {
+    const text = readDoc(...page.split('/'));
+    const numbered = [...text.matchAll(/^#{3,4} Phase (\d+)/gm)].map((m) => Number(m[1]));
+    const spine = PHASES[page];
+
+    if (!numbered.length) {
+        assert.ok(!spine,
+            `this gate declares a phase spine for ${page}, but the page numbers no phases at all. `
+            + 'Either the ceremony was rewritten without phases, or it was scrubbed.');
+        continue;
+    }
+
+    assert.ok(spine,
+        `${page} numbers its phases but declares no spine in this gate, so a phase can vanish from it `
+        + 'without anything going red. That is how the Android page lost two phases whole in the docs '
+        + 'port while its step count stayed above its floor. Add an entry to PHASES with the first and '
+        + 'last phase the page carries today, and any lettered sub-phases.');
+
+    for (let n = spine.first; n <= spine.last; n += 1) {
+        assert.ok(numbered.includes(n),
+            `${page} is missing Phase ${n}, which its declared spine (${spine.first}-${spine.last}) `
+            + 'requires. A ceremony phase does not go missing harmlessly: the steps it carried are '
+            + 'the ones nobody will improvise, because nothing downstream announces their absence. '
+            + 'If the phase was genuinely retired, move the spine in this same change and say why.');
+    }
+
+    for (const label of spine.sub) {
+        assert.match(text, new RegExp(`^#### ${label}[.:]`, 'm'),
+            `${page} is missing sub-phase ${label}, which its declared spine requires. A lettered `
+            + 'sub-phase is invisible to the phase numbering, so losing one leaves the spine intact '
+            + 'and the ceremony short.');
+    }
+}
+
 // The irreversible steps are the ones worth naming individually, because
 // their cost is not "a rerun" but "a permanent answer". Each of these was a
 // live trap on its own lane: a permanent free-or-paid choice, a version code
@@ -203,6 +288,14 @@ const IRREVERSIBLE = {
         [/io\.xchain\.wallet\.android/, 'the package name, which is immutable once published'],
         [/version ?code/i, 'the version code, which Play accepts exactly once'],
         [/never be rotated|can never be rotated/i, 'that the direct-distribution key cannot be rotated'],
+    ],
+    // Added 2026-08-03 with the iOS ceremony . Same rule as Android's,
+    // and the page could not be held to it while it had no steps to hold.
+    'release/mobile/ios-app-store.md': [
+        [/io\.xchain\.wallet\.ios/, 'the bundle identifier, pinned publicly the moment the app record exists'],
+        [/build number/i, 'the build number, which App Store Connect accepts exactly once'],
+        [/no rollback/i, 'that the App Store has no rollback, only another review cycle'],
+        [/permanently and publicly/i, 'that the trader declaration publishes permanently and publicly'],
     ],
 };
 
