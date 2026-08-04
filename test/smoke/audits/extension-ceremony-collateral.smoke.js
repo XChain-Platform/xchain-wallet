@@ -37,7 +37,7 @@
 
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
@@ -414,6 +414,150 @@ if (existsSync(specPath)) {
         + 'retired, lower this floor deliberately in the same change and say why.');
 }
 
+// --- 8. A step that says "go edit that page" has to find it there -------
+//
+// Sections 4 and 6 resolve PATHS: they prove a cited file exists. This one
+// is the layer they cannot see, and it was live when it was written.
+//
+// Phase 6 tells the operator to record the store-assigned extension ID into
+// the bridge documentation "wherever it documents chrome-extension://<id>/...
+// (currently a placeholder <id>)". Measured 2026-08-03: the page contained no
+// occurrence of chrome-extension:// at all. 's port had genericized the
+// sentence that carried it ("real windows owned by the wallet's own origin"),
+// which reads perfectly well and quietly deleted the only thing the ceremony
+// step was aiming at. Section 4 stayed green throughout, because the LINK was
+// always fine; it was the destination's contents that had moved on.
+//
+// This is the worst step in the ceremony to leave pointing at nothing. It runs
+// in the minutes after first upload, the ID is assigned exactly once and is
+// permanent, and every earlier phase in this file exists to protect it.
+//
+// Scoped to CHECKABLE STEPS that both link a page and name a placeholder in
+// backticks, on section 6's precedent: this ceremony narrates deleted things
+// on purpose (Phase 3 discusses an old "placeholder document root" that must
+// stay gone), and a check that fires on correct writing is one people delete.
+
+const placeholderSteps = [];
+
+for (const line of ceremony.split('\n')) {
+    if (!/^[⬜✅]/.test(line) || !line.includes('placeholder')) continue;
+    const link = line.match(/\]\(([^)#]+\.md)(?:#[^)]*)?\)/);
+    if (!link) continue;
+    // A trailing ellipsis is prose ("chrome-extension://<id>/..."), not part
+    // of the token the page is supposed to carry.
+    const tokens = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1].replace(/\.{3}$/, ''));
+    placeholderSteps.push({ target: link[1], tokens });
+}
+
+assert.ok(placeholderSteps.length >= 1,
+    'no checkable step on release/extension/chrome-web-store.md names a placeholder in another page any '
+    + 'more. Phase 6 had one, and it is how the permanent extension ID reaches the integrator '
+    + 'documentation. If that step was deliberately retired, delete this section in the same change; do '
+    + 'not let it pass silently on zero, which is how a gate stops being a gate.');
+
+for (const { target, tokens } of placeholderSteps) {
+    const targetPath = resolve(dirname(docsPath(...CEREMONY)), target);
+    const shown = `${target} (${tokens.map((t) => `\`${t}\``).join(', ') || 'no token named'})`;
+
+    assert.ok(existsSync(targetPath),
+        `a ceremony step tells the operator to edit ${shown}, and that page does not exist. The step `
+        + 'runs immediately after first upload, when the store has just assigned an identifier that is '
+        + 'permanent and cannot be re-derived.');
+
+    assert.ok(tokens.length > 0,
+        `a ceremony step tells the operator to edit a placeholder in ${target} without naming it in `
+        + 'backticks. Name the exact text to replace: "edit the placeholder" sends someone reading '
+        + 'under a clock to search a page for something they have to guess the shape of.');
+
+    const page = readFileSync(targetPath, 'utf8');
+    assert.ok(tokens.some((t) => page.includes(t)),
+        `a ceremony step tells the operator to replace a placeholder in ${shown}, and that page carries `
+        + 'none of those. This is exactly what the documentation migration did to bridge.md: it rewrote '
+        + 'the sentence holding `chrome-extension://<id>/approval.html` into a generic one, leaving the '
+        + 'step aiming at nothing while every path check stayed green. Either restore the placeholder '
+        + 'on that page or change the step to name what is really there.');
+}
+
+// --- 9. Every stage the frontier names has a row in the stage table -----
+//
+// Bookkeeping, and it is in a gate because doing it by hand has now failed
+// three times in four stages. S24 found §9 had no row for S23 and added it,
+// calling the omission "the same class" as the defect it was created to fix;
+// S25 then closed a row, landed two commits, and left no row of its own, and
+// nobody noticed until S26 went looking. The hand-fix does not generalize
+// because the person who forgets to write the row is the same person who
+// would have to remember to check for it.
+//
+// It matters more than tidiness. §9 is the model/effort plan the staged-build
+// protocol reads at a stage boundary, and it is the only place a reader who
+// has not read the frontier can see what a stage actually did. A frontier that
+// reasons from "S25 found X" against a table with no S25 in it is a document
+// arguing with itself, and this spec's whole method is that its claims are
+// derived rather than asserted.
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const open = spec.indexOf('<!-- BUILD-SPEC:FRONTIER');
+    const close = spec.indexOf('<!-- /BUILD-SPEC:FRONTIER');
+    assert.ok(open !== -1 && close > open,
+        'the  spec has no delimited BUILD-SPEC:FRONTIER block any more. That block is the one '
+        + 'place the goal\'s own state is tracked, deliberately in the spec rather than in a sidecar '
+        + 'so it cannot drift from it. If it was renamed, repoint this gate in the same change.');
+
+    const frontier = spec.slice(open, close);
+    const named = [...new Set([...frontier.matchAll(/\bS(\d{1,2})\b/g)].map((m) => Number(m[1])))];
+    const rows = new Set([...spec.matchAll(/^\| S(\d{1,2}) \|/gm)].map((m) => Number(m[1])));
+
+    assert.ok(named.length >= 1,
+        'no build stage is named anywhere in the  frontier block. Every stage since S19 has '
+        + 'reasoned from what an earlier one measured; a frontier that names none has lost the record '
+        + 'this spec argues from. This check must not pass vacuously on zero.');
+
+    const unlisted = named.filter((n) => !rows.has(n)).sort((a, b) => a - b);
+    assert.equal(unlisted.length, 0,
+        `the  frontier reasons from stages that §9's stage table has no row for: `
+        + `${unlisted.map((n) => `S${n}`).join(', ')}. §9 is the model/effort plan the staged-build `
+        + 'protocol reads at a stage boundary, and the only account of a stage a reader who skipped the '
+        + 'frontier will find. Add the row in the same change as the frontier edit, the way S24 had to '
+        + 'add S23\'s and S26 had to add S25\'s.');
+
+    // The same rot, one paragraph higher. S24 found the headline **Status:**
+    // paragraph labelled current while two stages old and fixed it by hand,
+    // and S25 immediately left it stale again. It is the first thing anyone
+    // reads, so a stale one mis-states the spec's own position to every reader
+    // who does not scroll as far as the frontier.
+    //
+    // The live paragraph is the FIRST `**Status:` in the file; the superseded
+    // ones below it are labelled `**Superseded status`, which is what makes
+    // this derivable at all.
+    const statusAt = spec.indexOf('**Status:');
+    assert.ok(statusAt !== -1,
+        'the  spec has no `**Status:` paragraph. It is the dated, stage-labelled headline a '
+        + 'reader meets before anything else; the convention exists because an undated one read as '
+        + 'current for two stages while being two stages wrong.');
+
+    const stageInStatus = spec.slice(statusAt, statusAt + 400).match(/after S(\d{1,2})\b/);
+    assert.ok(stageInStatus,
+        'the  spec\'s headline `**Status:` paragraph no longer says which stage it is current as '
+        + 'of. "after S<n>" is what makes it checkable; without it, staleness is invisible again.');
+
+    const latest = Math.max(...named);
+    assert.equal(Number(stageInStatus[1]), latest,
+        `the  spec's headline status paragraph says it is current after S${stageInStatus[1]}, but `
+        + `the frontier below it reasons as far as S${latest}. That paragraph is the first thing a `
+        + 'reader meets and the last thing a stage remembers to update: S24 fixed it by hand after it '
+        + 'had been two stages stale, and S25 left it stale again the same day.');
+
+    // The floor is the 26 rows standing after S26 added S25's and its own. It
+    // is a floor rather than an equality so the table may grow, and it exists
+    // so a scrub that empties the table cannot pass this section by leaving
+    // the frontier naming nothing.
+    assert.ok(rows.size >= 26,
+        `§9's stage table carries ${rows.size} stage rows, fewer than the 26 standing after S26. A `
+        + 'stage row is the record of what a stage did; deleting one loses that permanently, since the '
+        + 'reports directory holds a report for only some stages.');
+}
+
 const pointerNote = existsSync(specPath)
     ? `${pointers} §4a private pointers resolved, ${frontierRows.length} live frontier rows verified, `
         + `${mapEntries} translation-map pages resolved`
@@ -423,4 +567,5 @@ console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
     + `privacy/trader-identity.md, ${extensionHosts.length} egress hosts from wireAudit.js, `
-    + `${citations} cited wallet-repo paths resolved across the repo boundary, ${pointerNote})`);
+    + `${citations} cited wallet-repo paths resolved across the repo boundary, `
+    + `${placeholderSteps.length} cross-page placeholder step verified, ${pointerNote})`);
