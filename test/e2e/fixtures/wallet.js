@@ -344,17 +344,32 @@ export async function dismissIntroCarousel(page) {
  * has its OWN onboarding implementation that does not include it. Waiting
  * unconditionally would hang every extension spec on a screen that is never
  * coming. Returns false when there was nothing to answer.
+ *
+ * WHAT IT MUST NOT DO IS WAIT ON A CLOCK. This screen renders on the far
+ * side of the Argon2id derivation that "Create wallet" kicks off, so a fixed
+ * budget here is a bet on the KDF finishing inside it, not on a render. The
+ * bare `10_000` this replaced lost that bet on roughly a quarter of CI runs:
+ * the helper returned false, `createWallet` then waited its full KDF budget
+ * for a shell still sitting behind an unanswered consent screen, and the run
+ * reported a 180s timeout on `unlockedShell` - a signature that reads as a
+ * slow KDF and is nothing of the kind. Nine of nine failing and flaky tests
+ * in run 30930194072 died on this screen. Same defect as the bare 90_000
+ * that BASE_KDF_STEP_TIMEOUT_MS was extracted from, one function away.
+ *
+ * So race the two outcomes instead: either the consent screen arrives, or
+ * this shell has none and the wallet itself does. Whichever lands first ends
+ * the wait, which keeps the extension venue fast without pinning any number
+ * to the derivation.
  */
 export async function acknowledgeDonationConsent(page, choice = 'decline') {
     const button =
         choice === 'enable'
             ? page.getByRole('button', { name: /Enable and continue/i })
             : page.getByRole('button', { name: /Decline/i });
-    try {
-        await button.waitFor({ state: 'visible', timeout: 10_000 });
-    } catch {
-        return false;               // shell has no consent step
-    }
+    await button.or(unlockedShell(page)).first()
+        .waitFor({ state: 'visible', timeout: KDF_STEP_MS });
+    // The shell won the race, so there is no consent step here to answer.
+    if (!(await button.isVisible())) return false;
     await button.click();
     return true;
 }

@@ -16,7 +16,7 @@
 // about the new package.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -131,7 +131,90 @@ assert.ok(
     'ci.yml installs the browser binaries the suite needs',
 );
 
-// --- 8. Artifacts do not leak into the repo -------------------------
+// --- 8. Nothing waits on the far side of the KDF with a bare number -
+//
+// The donation-consent screen renders only AFTER the Argon2id derivation
+// that "Create wallet" starts, so any fixed budget in front of it is a bet
+// on how fast the runner derives, not on how fast a component paints. That
+// bet was lost on roughly a quarter of CI runs: `acknowledgeDonationConsent`
+// waited a bare 10s, gave up SILENTLY (it returns false to stay usable on
+// the extension popup, which has no consent step), and `createWallet` then
+// spent its whole 180s KDF budget waiting for a shell parked behind an
+// unanswered screen. The run blamed `unlockedShell` and read as a slow KDF.
+// All nine failing and flaky tests of run 30930194072 died on that screen.
+//
+// The fix is structural rather than a bigger number: race the consent
+// button against the unlocked shell, so whichever outcome this shell has
+// ends the wait. These assertions pin the two halves that make it work --
+// the race, and the absence of a literal - because a future edit that
+// reintroduces `timeout: 10_000` here would restore a failure whose symptom
+// points at an entirely different line.
+const consentFn = fixture.slice(fixture.indexOf('export async function acknowledgeDonationConsent'));
+const consentBody = consentFn.slice(0, consentFn.indexOf('\n}\n') + 2);
+assert.ok(consentBody.length > 100, 'located acknowledgeDonationConsent in the fixture');
+assert.ok(
+    /\.or\(unlockedShell\(page\)\)/.test(consentBody),
+    'donation-consent wait races the consent button against the unlocked shell',
+);
+assert.ok(
+    /timeout:\s*KDF_STEP_MS/.test(consentBody),
+    'donation-consent wait is bounded by the shared KDF budget',
+);
+assert.ok(
+    !/timeout:\s*[0-9]/.test(consentBody),
+    'donation-consent wait carries no literal timeout (it sits behind the KDF)',
+);
+
+// The a11y spec scans that same screen directly rather than through the
+// helper, so it waits on the identical post-derivation render and needs the
+// identical budget. It carried a bare 90_000, which is only bigger, not
+// correct: the CI budget is 180s.
+const a11ySrc = readFileSync(specs.a11y, 'utf8');
+assert.ok(
+    /kdfStepTimeout/.test(a11ySrc),
+    'a11y spec waits on the consent screen with the shared KDF budget',
+);
+assert.ok(
+    !/Support XChain development[\s\S]{0,200}?timeout:\s*[0-9]/.test(a11ySrc),
+    'a11y spec pins no literal timeout on the consent heading',
+);
+
+// And the invariant those two are instances OF, because pinning instances is
+// how this got here. `unlockedShell` is BY DEFINITION the far side of an
+// Argon2id derivation - it is what a create or an unlock resolves to - so no
+// wait on it may carry a hand-picked number. When was found, five
+// of the six call sites did anyway, all at a bare 90_000, which is HALF what
+// the budget computes on CI; one of the five (add-wallet-activation) was in
+// the flaky set of the same run that produced the hard failure. The budget
+// module was extracted for exactly this assertion and only one caller ever
+// used it.
+const shellWaits = [];
+for (const dir of ['fixtures', 'tests']) {
+    const stack = [join(e2e, dir)];
+    while (stack.length) {
+        const at = stack.pop();
+        for (const entry of readdirSync(at, { withFileTypes: true })) {
+            const full = join(at, entry.name);
+            if (entry.isDirectory()) stack.push(full);
+            else if (entry.name.endsWith('.js')) shellWaits.push(full);
+        }
+    }
+}
+const offenders = [];
+for (const file of shellWaits) {
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+        if (!/unlockedShell\(/.test(line)) continue;
+        // A named constant or a call is the budget; a digit is a guess.
+        if (/timeout:\s*[0-9]/.test(line)) offenders.push(`${file}: ${line.trim()}`);
+    }
+}
+assert.equal(
+    offenders.length, 0,
+    `no wait on unlockedShell may pin a literal timeout; use the shared KDF `
+    + `budget (kdfStepTimeout / KDF_STEP_MS):\n  ${offenders.join('\n  ')}`,
+);
+
+// --- 9. Artifacts do not leak into the repo -------------------------
 
 const gitignore = readFileSync(join(wsRoot, '.gitignore'), 'utf8');
 assert.ok(
@@ -145,5 +228,6 @@ assert.ok(/playwright/i.test(readme), 'README mentions playwright');
 
 console.log(
     'OK: e2e harness smoke (workspace + config wiring, 4 specs on the shared fixture, '
-    + 'license bypass tracks buildInfo, CI runs the suite, artifacts gitignored)',
+    + 'license bypass tracks buildInfo, no bare timeout behind the KDF, '
+    + 'CI runs the suite, artifacts gitignored)',
 );

@@ -22,6 +22,8 @@
 // fails with the list of elements that did, so a red run names the
 // offending node instead of just its screen.
 
+import { kdfStepTimeout } from '../timeout-budget.js';
+
 /**
  * Representative widths the wallet must render at, narrowest first.
  *
@@ -218,6 +220,9 @@ export async function enterDemoWallet(page, { dismissIntroCarousel, expect, unlo
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Try in demo mode' }).click();
     // Demo entry runs the real create-wallet path (Argon2id included), so
-    // it is as slow as onboarding and needs the same budget.
-    await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
+    // it is as slow as onboarding and needs the same budget. It said exactly
+    // this and then hardcoded 90_000, which is HALF the budget CI computes -
+    // the comment claimed the budget while the code opted out of it
+    // ().
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
