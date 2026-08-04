@@ -36,6 +36,7 @@
 // declaration of record (privacy/trader-identity.md) or from the code.
 
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -476,6 +477,139 @@ for (const { target, tokens } of placeholderSteps) {
         + 'the sentence holding `chrome-extension://<id>/approval.html` into a generic one, leaving the '
         + 'step aiming at nothing while every path check stayed green. Either restore the placeholder '
         + 'on that page or change the step to name what is really there.');
+}
+
+// --- 10. The value the store form validates has a real source ----------
+//
+// Section 8's defect, found again one field over, and this one sat on the only
+// field the Chrome Web Store form actually validates.
+//
+// Phase 3 said "the canonical URL is the one the wallet's privacy policy
+// publishes, take it from there rather than retyping it, so there is only ever
+// one copy of it", and Phase 5's table sourced the same field the same way.
+// Measured 2026-08-03: privacy/privacy-policy.md has never contained that URL.
+// It names three documentation pages and an issue tracker and never its own
+// hosted address, so the sentence guarding against a second copy of the value
+// was itself pointing at a page holding no copy at all. An operator reaching
+// that step has nothing to transcribe and retypes from memory, which is how
+// the slashless form gets pasted; Phase 3 warns two paragraphs earlier that a
+// redirect hop is a failure under review.
+//
+// The fix was to stop sourcing it from a document. The check the operator
+// already runs in that phase prints the URL as the first line of its output,
+// so the string that was verified live and the string pasted into the console
+// are the same one. This section holds that arrangement together from both
+// ends: the constant is imported from the tool rather than restated here, and
+// the tool is DRIVEN rather than read, because "it prints the URL" is exactly
+// the kind of claim this spec keeps finding to be false.
+
+const { DEFAULT_URL } = await import('../../../tools/release/verify-privacy-url.mjs');
+
+assert.ok(/^https:\/\/\S+\/$/.test(DEFAULT_URL),
+    `verify-privacy-url.mjs exports DEFAULT_URL as "${DEFAULT_URL}", which is not an https URL with a `
+    + 'trailing slash. The trailing slash is load-bearing: the ceremony tells the operator to paste the '
+    + 'canonical form because a redirect hop under review is a failure.');
+
+// The tool must actually hand the operator the value, with no network needed.
+const help = execFileSync('node', [join(walletRoot, 'tools/release/verify-privacy-url.mjs'), '--help'],
+    { encoding: 'utf8' });
+assert.ok(help.includes(DEFAULT_URL),
+    'verify-privacy-url.mjs --help no longer prints the canonical URL it defaults to. The ceremony '
+    + 'sends the operator to this tool for that value; a tool that will not say what it checks sends '
+    + 'them back to retyping it from memory, which is the defect this section exists for.');
+
+// Positively: the page has to tell the operator that the check's own output is
+// where the value comes from. Without this the section could be satisfied by a
+// ceremony that says nothing about the URL at all, and saying nothing is how
+// the operator ends up retyping it.
+const ceremonyLines = ceremony.split('\n');
+assert.ok(ceremonyLines.some((l) => /canonical URL/i.test(l) && l.includes('`url:')),
+    'no line of the ceremony points the operator at the `url:` line the Phase 3 check prints as the '
+    + 'source of the canonical policy URL. That arrangement is the whole fix: the string verified live '
+    + 'and the string pasted into the console are then the same one. If the source moved, move this '
+    + 'assertion with it, in the same change.');
+
+// Negatively: no line may go back to sourcing the value from a page that does
+// not carry it. Scoped to an explicit sourcing instruction aimed at a linked
+// page, NOT to any mention of the canonical URL beside a link. The first cut
+// was the looser rule and it fired on correct writing: "the hosted page is
+// generated from [the privacy policy] by the website build, and the site's
+// canonical URL carries a trailing slash" describes provenance and tells the
+// operator to source nothing. A check that fires on correct writing is one
+// people delete, which is this spec's own S14 lesson turned on this section.
+const SOURCING = /take it from|publishes|copy it (out )?of|transcribe it from/i;
+const urlSourceLines = ceremonyLines.filter((l) =>
+    /canonical (URL|hosted address)/i.test(l) && /\]\(\.\.[^)]*\.md\)/.test(l) && SOURCING.test(l));
+
+for (const line of urlSourceLines) {
+    const target = line.match(/\]\((\.\.[^)#]+\.md)(?:#[^)]*)?\)/)[1];
+    const page = readFileSync(resolve(dirname(docsPath(...CEREMONY)), target), 'utf8');
+    assert.ok(page.includes(DEFAULT_URL),
+        `the ceremony sources the canonical privacy-policy URL from ${target}, and that page does not `
+        + `contain ${DEFAULT_URL}. That is the 2026-08-03 defect exactly: the sentence forbidding a `
+        + 'second copy of this value pointed at a page holding no copy of it. Source it from the check '
+        + 'that prints it, or put the value on that page.');
+}
+
+// --- 11. A step's linked procedure must not contradict the step ---------
+//
+// The same class as sections 8 and 10, and the sharpest instance of it: here
+// the link resolved, the page existed, and its contents told the operator to
+// do the exact thing the step forbids.
+//
+// Phase 8's third exit criterion requires connect and sign driven "from the
+// store-installed build specifically, not a local development build", and
+// linked the test-dapp runbook as a whole. That runbook opens with `pnpm -C
+// packages/extension build` and "Load unpacked", which is a local development
+// build. An operator following the link did the forbidden thing and ticked a
+// public-flip exit criterion having proved nothing about the shipped artifact.
+//
+// So the rule is not "the link resolves" but "the linked SECTION covers what
+// the step asks for". Derived from the step's own words: the criterion says
+// store-installed, so the section it points at has to be about installing from
+// the store, and must not be the load-unpacked path.
+
+const storeInstalledSteps = ceremonyLines.filter((l) =>
+    /^[⬜✅]/.test(l) && /store-installed/.test(l));
+
+assert.ok(storeInstalledSteps.length >= 1,
+    'no checkable step requires the store-installed build any more. Phase 8 had one, and it is the only '
+    + 'criterion that proves the artifact the store actually served can sign. Do not let this pass '
+    + 'vacuously on zero.');
+
+for (const line of storeInstalledSteps) {
+    const link = line.match(/\]\(([^)#]+\.md)#([a-z0-9-]+)\)/);
+    assert.ok(link,
+        'the store-installed exit criterion does not link a specific SECTION of a procedure (it needs a '
+        + 'page.md#anchor link). Linking the runbook as a whole is what sent the operator to its '
+        + 'load-unpacked opening, which is the build this criterion exists to exclude.');
+
+    const [, target, anchor] = link;
+    const page = readFileSync(resolve(dirname(docsPath(...CEREMONY)), target), 'utf8');
+    const slug = (h) => h.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+    const headings = [...page.matchAll(/^#{2,4} (.+)$/gm)].map((m) => m[1]);
+
+    const idx = headings.findIndex((h) => slug(h) === anchor);
+    assert.ok(idx !== -1,
+        `the store-installed exit criterion links ${target}#${anchor}, and that page has no heading with `
+        + `that anchor. Its headings slug to: ${headings.map(slug).join(', ')}. An anchor that does not `
+        + 'resolve drops the operator at the top of the page, which is the load-unpacked procedure.');
+
+    // The section body: from its heading to the next heading of any level.
+    const start = page.indexOf(`## ${headings[idx]}`);
+    const rest = page.slice(start + 1);
+    const nextAt = rest.search(/^#{2,4} /m);
+    const section = nextAt === -1 ? rest : rest.slice(0, nextAt);
+
+    assert.ok(/store link|from the store|unlisted item/i.test(section),
+        `${target}#${anchor} is what the store-installed criterion sends the operator to, and that `
+        + 'section never tells them to install from the store. That is the whole content of the '
+        + 'criterion; a section that does not say it cannot satisfy it.');
+
+    assert.ok(!/Load unpacked/i.test(section) || /not a sideload|replace section 1|rather than/i.test(section),
+        `${target}#${anchor} tells the operator to "Load unpacked", which is the local development build `
+        + 'this criterion explicitly excludes. If the section mentions it in order to rule it out, say '
+        + 'so in the same sentence so a skimming reader cannot follow it by accident.');
 }
 
 // --- 9. Every stage the frontier names has a row in the stage table -----
