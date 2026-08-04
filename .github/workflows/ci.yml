@@ -37,8 +37,66 @@ jobs:
   # pre-push hook run, so local and CI cannot disagree about what "green" means.
   test:
     runs-on: ubuntu-latest
+    env:
+      # Hoisted so the checkout step below can gate on presence: the `secrets`
+      # context is not usable in a step `if`, an `env` one is. Absent secret =
+      # empty string = the step does not run and the docs-coupled smokes behave
+      # exactly as they do today.
+      XCHAIN_DOCS_READ_TOKEN: ${{ secrets.XCHAIN_DOCS_READ_TOKEN }}
+      # Always set, deliberately. When the checkout ran, this is where the docs
+      # are. When it did not, this names a path that does not exist, which is
+      # what _docs-repo.js already reports honestly - and pointing it at a real
+      # location only when a credential happens to exist would make the two
+      # cases differ in more than one way at once.
+      XCHAIN_DOCS_ROOT: ${{ github.workspace }}/.docs-sibling
     steps:
       - uses: actions/checkout@v4
+      # The docs sibling, which `.ci-siblings` declares and this job did not
+      # ship .
+      #
+      # WHY IT MATTERS MORE THAN "some smokes skip". Nineteen docs-coupled
+      # smokes take their documented skip when ../xchain-documentation is
+      # absent, and this job is the ONLY thing the release gate reads: 
+      # §6 step 1 (tools/release/verify-validated-commit.mjs) certifies a tag's
+      # commit on a green run of this workflow. So every release so far would
+      # have been certified by a run in which the three store-ceremony gates,
+      # the verify-release and reproducible-builds page gates, and the privacy
+      # gates were never executed. That is 's "a gate that cannot find
+      # its sibling is indistinguishable from a gate whose sibling is fine",
+      # one layer up, at the gate that authorises signing.
+      #
+      # WHY IT IS CONDITIONAL RATHER THAN UNCONDITIONAL. xchain-documentation
+      # is PRIVATE, and the repository-scoped GITHUB_TOKEN cannot read another
+      # repository, so this needs its own credential. Gated on the secret being
+      # present, exactly as release.yml gates the MAS and APPX steps: the step
+      # is inert until an operator adds XCHAIN_DOCS_READ_TOKEN, and wiring it
+      # ahead of the credential means the credential is the only remaining
+      # step rather than the first of two.
+      #
+      # THE PATH IS NOT ARBITRARY. test/smoke/_docs-repo.js resolves the
+      # sibling from its OWN location as <repo>/../xchain-documentation, never
+      # from cwd, so the checkout has to land beside the workspace and not
+      # inside it. Anything inside would also be swept into the repo's own
+      # working tree, which the drift guards would then report as dirt.
+      # TWO MECHANICS HERE ARE NOT PREFERENCES, they are what the platforms
+      # allow, and both were established by reading rather than guessed:
+      #
+      #   - The gate is `if: env.X != ''` off a JOB-LEVEL env, not
+      #     `if: secrets.X != ''`. That is the idiom release.yml already uses
+      #     for MAS_CSC_LINK and APPX_IDENTITY_NAME; matching it keeps one
+      #     pattern for "this step is inert until a credential exists".
+      #   - `path:` is INSIDE the workspace. actions/checkout refuses a path
+      #     outside GITHUB_WORKSPACE, so the sibling cannot be placed where a
+      #     developer checkout puts it. XCHAIN_DOCS_ROOT exists for exactly
+      #     this and _docs-repo.js honours it ahead of its relative default.
+      - name: Check out the xchain-documentation sibling
+        if: env.XCHAIN_DOCS_READ_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: XChain-Platform/xchain-documentation
+          token: ${{ env.XCHAIN_DOCS_READ_TOKEN }}
+          ref: master
+          path: .docs-sibling
       # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step can't
       # resolve the pnpm store and fails with "Unable to locate executable file: pnpm".
       - name: Enable pnpm (corepack)
