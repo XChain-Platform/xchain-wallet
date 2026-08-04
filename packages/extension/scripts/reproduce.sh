@@ -37,6 +37,47 @@
 
 set -euo pipefail
 
+# THE FIRST POSITIONAL IS A GIT REF, so an unrecognized flag was not
+# ignored, it was checked out . `reproduce.sh --help` reached
+# `git rev-parse --verify "--help^{commit}"` and died there, which reads to
+# a third-party verifier - the audience this whole lane exists for - as the
+# reproducible build being broken rather than as a flag being unsupported.
+# Answered first, and any other leading-dash argument is refused rather
+# than resolved as a ref.
+case "${1:-}" in
+    -h|--help)
+        cat <<'USAGE'
+reproduce.sh - rebuild the Chrome MV3 extension bundle deterministically
+and print its SHA-256 manifest, for diffing against the published
+RELEASE_HASHES.txt.
+
+Usage:
+  scripts/reproduce.sh                       # build current HEAD
+  scripts/reproduce.sh v0.333.1              # build a specific tag
+  scripts/reproduce.sh v0.333.1 ./verify-out # custom output dir
+
+Arguments:
+  ref       git tag / branch / commit to build   (default HEAD)
+  out-dir   where the manifest is written        (default ./reproduce-out)
+
+Requires Docker. On an arm64 host the build runs under emulation and only
+Rosetta finishes it; tools/release/emulation-preflight.sh decides that
+before you spend twenty minutes on it.
+
+The published .crx is re-packaged and re-signed by the Chrome Web Store and
+will NOT be byte-identical. What this reproduces is the pre-store unpacked
+dist/ bundle. See
+https://docs.xchain.io/components/wallet/reproducible-builds
+USAGE
+        exit 0
+        ;;
+    -*)
+        echo "[reproduce] unknown option '$1'" >&2
+        echo "[reproduce] arguments are positional: [ref] [out-dir]. Try --help." >&2
+        exit 2
+        ;;
+esac
+
 REF="${1:-HEAD}"
 OUT_DIR="${2:-./reproduce-out}"
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")/../../.." rev-parse --show-toplevel)"
@@ -88,6 +129,15 @@ $(node -e "
 ")
 EOF
 echo "[reproduce] pnpm=${PNPM_VERSION} node=${NODE_VERSION} platform=${BUILD_PLATFORM}"
+
+# --- 3b. Can this host actually execute that platform? -----------------
+#
+# The flag below asks for amd64; it does not check that anything here can
+# run amd64, and the two emulators that answer it are not equivalent. Under
+# qemu user-mode this build dies minutes in, inside esbuild's Go runtime,
+# with a message that names neither qemu nor the architecture. The
+# preflight refuses that emulator up front and names the routes that work.
+bash "${REPO_ROOT}/tools/release/emulation-preflight.sh" "${BUILD_PLATFORM}"
 
 # --- 4. Build the image ------------------------------------------------
 #
