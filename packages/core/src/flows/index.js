@@ -81,6 +81,7 @@ export {
 } from './pairPartner.js';
 export { sweepToken } from './sweepToken.js';
 export { sweepPreview } from './sweepPreview.js';
+export { quoteMaxSendable, insufficientFundsQuote } from './maxSendable.js';
 export { issueToken } from './issueToken.js';
 export { mintToken } from './mintToken.js';
 export { destroyToken } from './destroyToken.js';

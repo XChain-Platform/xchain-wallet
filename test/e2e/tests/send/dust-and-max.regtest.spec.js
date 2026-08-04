@@ -219,13 +219,19 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
         });
     });
 
-    // D-131/ LIVES HERE, and it is deliberately NOT pinned with
+    // D-131/ LIVES HERE, and it was deliberately NOT pinned with
     // `test.fail()`. That marker was tried and removed: a test marked expected-
     // failure reports green when it fails for ANY reason, and the first thing it
     // hid was a wrong locator of mine rather than the defect. So this test
-    // asserts only what must ALWAYS hold and PRINTS the rest; the "Max should
-    // leave nothing behind" expectation lives in the defect entry, where a
-    // conditional finding belongs.
+    // asserted only what must ALWAYS hold and PRINTED the rest, because a gap
+    // that depends on the venue's fee rate cannot be a red suite.
+    //
+    //  CLOSED THAT, so the printed number is now an assertion. Max no
+    // longer subtracts a static 250-vB estimate; it asks the encoder to price the
+    // sweep it is about to build (flows/maxSendable.js) and subtracts THAT. The
+    // gap is therefore zero at any fee rate, on any input set, with or without an
+    // ADS donation riding along - it is arithmetic the venue cannot influence,
+    // which is exactly what makes it assertable now and not before.
     test('Max empties the address exactly, to the satoshi', async ({ page }) => {
         const { source, fundedSats } = await onboardAndFund(page, 'Max Send Wallet');
 
@@ -244,8 +250,18 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
                 .toBeEnabled({ timeout: 30_000 });
             await max.click();
 
+            //  made Max a round trip: the amount is filled only after the
+            // encoder has priced the sweep, so reading the field straight after
+            // the click races an empty input. Poll instead of waiting a fixed
+            // time - the wait is one encoder call on a venue whose latency is
+            // somebody else's business.
+            await expect
+                .poll(async () => (await amountField(page).inputValue()).trim(),
+                    { timeout: 60_000, message: 'Max never filled the amount field' })
+                .not.toBe('');
+
             const maxAmount = await amountField(page).inputValue();
-            const maxSats = Math.round(Number(maxAmount) * 1e8);
+            const maxSats = Math.round(Number(maxAmount.replace(/,/g, '')) * 1e8);
             expect(maxSats, `Max produced an unusable amount: "${maxAmount}"`).toBeGreaterThan(0);
             expect(maxSats,
                 'Max offers to send MORE than the address holds, so nothing can be built from it')
@@ -261,32 +277,40 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
             // THE ARITHMETIC AT THE HEART OF IT: Max claimed this much is
             // sendable and the transaction pays this much fee, so the address
             // holds their sum only if Max used the fee the transaction actually
-            // pays. It subtracts a fee ESTIMATE sized from a static assumed
-            // vsize instead, so the two agree only by luck. REPORTED rather than
-            // asserted, because the gap depends on the venue's rate and this
-            // suite must not go red on a venue property (D-131/).
+            // pays. It used to subtract a fee ESTIMATE sized from a static
+            // assumed vsize, so the two agreed only by luck;  has it ask
+            // the encoder for the price of the sweep it is about to build, so
+            // they agree by construction and the difference is asserted.
             const gap = fundedSats - (maxSats + feeSats);
             console.log(`[max] balance=${fundedSats} offered=${maxSats} fee=${feeSats} `
                 + `unaccounted=${gap} sats (dust floor ${DUST_SATS[COIN]})`);
+            expect(gap,
+                `Max offered ${maxSats} against a ${feeSats}-sat fee out of ${fundedSats}, leaving ${gap} `
+                + 'satoshis unaccounted for. Max is not pricing the transaction it builds: it is a sweep, '
+                + 'so the outputs plus the fee must be the whole balance and there is nothing left to '
+                + 'become change .')
+                .toBe(0);
 
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
             await page.getByTestId('confirm-approve').click();
             await expect(page.getByRole('main'), 'no transaction id appeared after Approve')
                 .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
 
-            // What must ALWAYS hold, and does: whatever Max got wrong, it can
-            // never strand an UNSPENDABLE remainder. Either the over-estimate is
-            // under the dust floor and the encoder folds it into the miner fee
-            // (address empty), or a change output carries it and it is spendable
-            // (at or above the floor). The middle case - a residue below the
-            // floor, stuck forever - is the one that would be a real loss, and
-            // the encoder's M-6 rule is what rules it out.
+            // And the chain's own answer to the same question. The arithmetic
+            // above is the confirm screen agreeing with itself; this is the utxo
+            // set agreeing with both. "Emptied" means zero, not "zero or a
+            // spendable remainder" - that weaker form was what this leg could
+            // assert while the gap was conditional, and the invariant it rested
+            // on (the encoder's M-6 rule folding a sub-dust residue into the
+            // miner fee) is still true and still worth knowing, it is just no
+            // longer the strongest thing that holds.
             const left = await mineUntilConfirmed(source, 0);
             console.log(`[max] left at source after the sweep: ${left} sats`);
-            expect(left === 0 || left >= DUST_SATS[COIN],
-                `Max left ${left} sats at the source, below the ${DUST_SATS[COIN]}-sat dust floor: that `
-                + 'is unspendable, which would make a sweep lose money rather than merely miss some')
-                .toBe(true);
+            expect(left,
+                `Max left ${left} sats at an address the user was told they had emptied. Anything above `
+                + `zero is money missed; anything under the ${DUST_SATS[COIN]}-sat dust floor is money `
+                + 'lost, because a residue below it cannot be spent again .')
+                .toBe(0);
 
             // And the money went where the screen said. Read as a DELTA, since
             // this destination is a fixed address every run sends to.

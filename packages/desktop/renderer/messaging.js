@@ -204,6 +204,19 @@ export function composeForConfirm(opts) {
 }
 
 /**
+ * : the amount the Max button may offer on a native-coin send, priced by
+ * the encoder that will build the transaction rather than by a static assumed
+ * vsize. Resolves null when the encoder could not be made to answer, which the
+ * form reads as "keep the tier estimate".
+ *
+ * @param {{ walletId?: string, chainId: string, from: object, to: string, feePerKb?: number, rbf?: boolean }} opts
+ * @returns {Promise<{ maxSats: string, feeSats: string, inputSats: string, otherOutputSats: string, source: 'encoder-quote' } | null>}
+ */
+export function quoteMaxSendable(opts) {
+    return /** @type {any} */ (sendMessage('action.quoteMaxSendable', opts));
+}
+
+/**
  *  §4: run sdk.preflight host-side and return the report.
  * @param {{ chainId: string, actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: 'report'|'enforce'|'local' }} opts
  */

@@ -1925,6 +1925,47 @@ export function createBackgroundHost(deps) {
         });
     });
 
+    // : what the Max button is allowed to fill in for a native-coin send.
+    //
+    // The renderer cannot answer this. The number it needs is the fee the
+    // ENCODER will charge for the transaction it is about to build, and the
+    // encoder states that only in the typed details of a refusal - a payload
+    // MessageHost.serializeError drops on the way back ({ name, message } only,
+    // see sdk/encoderErrors.js). So the whole round trip, refusal included, runs
+    // on this side and only the settled satoshi count crosses.
+    //
+    // Deliberately the same preamble as action.composeForConfirm above (source,
+    // change rotation, fee opts): the quote is only worth anything if it prices
+    // the transaction that route will actually compose. Never throws - a quote
+    // that cannot be had returns null and the form keeps its static estimate.
+    host.register('action.quoteMaxSendable', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.quoteMaxSendable: chainId is required');
+        }
+        const source = normalizeSource(req?.from, 'action.quoteMaxSendable');
+        const destination = typeof req?.to === 'string' ? req.to.trim() : '';
+        if (!destination) throw new Error('action.quoteMaxSendable: to is required');
+
+        let encoderOpts = {
+            pubkey: source.publicKey,
+            ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+            ...(req.rbf !== undefined && { rbf: req.rbf }),
+        };
+        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
+            encoderOpts = { ...encoderOpts, attachPrevTx: true };
+        }
+        const { change } = await confirmChangeAndOwnAddresses({
+            req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
+        });
+        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+
+        return flows.quoteMaxSendable({
+            sdkRegistry, chainRegistry, vault, chainId,
+            source: source.address, destination, encoderOpts,
+        });
+    });
+
     // : VOTE's wire params are built by sdk.voting.*Params, which lives
     // HERE, not in the renderer. The three VOTE forms each kept a hand-written
     // client-side mirror of that encoding to feed the generic compose route -

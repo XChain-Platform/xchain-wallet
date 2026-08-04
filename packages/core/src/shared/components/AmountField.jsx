@@ -34,6 +34,7 @@ import styles from './AmountField.module.css';
  * @param {import('react').RefObject<HTMLInputElement>} [props.inputRef]
  * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
  * @param {boolean} [props.maxDisabled]                      grey out the Max button (e.g. while balance is loading)
+ * @param {boolean} [props.maxBusy]                          the Max amount is being priced (: a native-coin Max is an encoder round trip, not arithmetic). Marks the button busy and refuses a second click while the first is in flight.
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  * @param {string} [props.hint]                           hint line under the input, forwarded to Input
  * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
@@ -53,6 +54,7 @@ export function AmountField({
     inputRef,
     onMax,
     maxDisabled = false,
+    maxBusy = false,
     balanceText,
 }) {
     const tickUpper = (typeof tick === 'string' ? tick : '').trim().toUpperCase();
@@ -95,6 +97,7 @@ export function AmountField({
                         className={styles.amountMaxInline}
                         onClick={onMax}
                         disabled={maxDisabled}
+                        aria-busy={maxBusy || undefined}
                         aria-label="Use max available amount"
                     >
                         Max
