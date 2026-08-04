@@ -61,12 +61,46 @@ TAG="v0.0.0-key-verify"
 
 die() { echo "verify-release-key.sh: $*" >&2; exit 1; }
 
+usage() {
+    cat <<'USAGE'
+verify-release-key.sh - prove the release signing key actually works, by
+driving the real signing pipeline end to end against a throwaway tag and a
+throwaway artifact set ( key ceremony).
+
+Usage:
+  bash tools/release/verify-release-key.sh --key <FINGERPRINT>
+
+Options:
+  --key <fpr>         signing key fingerprint            (required)
+  --gnupghome <dir>   GNUPGHOME holding it   (default: ~/.xchain-release)
+  --keep              leave the scratch dirs behind for inspection
+  -h, --help          print this and exit 0
+
+Reads the throwaway artifact set from tools/release/expected-artifacts.txt
+rather than carrying its own copy, so a pattern added to the contract is
+covered here on the next run with no edit. The runbook's hand-written
+fixture went stale exactly once and its failure read as "the key does not
+work" to an operator who had just finished an irreversible ceremony.
+
+Exit 0 means the key signed and the signature verified. Anything else names
+what failed.
+USAGE
+}
+
+# `--help` fell into the `*)` arm below and was answered with
+#
+#   verify-release-key.sh: unknown argument: --help
+#
+# and exit 1 . This tool is typed by an operator holding the one
+# key in the project that cannot be quietly redone, immediately after an
+# offline ceremony, and its first answer must not be a refusal.
 while [ $# -gt 0 ]; do
     case "$1" in
+        -h|--help)   usage; exit 0 ;;
         --key)       KEY="${2:-}"; shift 2 ;;
         --gnupghome) GNUPGHOME_DIR="${2:-}"; shift 2 ;;
         --keep)      KEEP=1; shift ;;
-        *) die "unknown argument: $1" ;;
+        *) die "unknown argument: $1 (try --help)" ;;
     esac
 done
 

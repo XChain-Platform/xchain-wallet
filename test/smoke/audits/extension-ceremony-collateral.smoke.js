@@ -37,14 +37,14 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
 import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
-import { citationsIn, resolveCitation } from '../_spec-frontier.js';
+import { citationsIn, PLATFORM_ROOT, resolveCitation, SPECS_DIR } from '../_spec-frontier.js';
 
 skipUnlessDocs('extension ceremony-collateral smoke');
 
@@ -216,7 +216,25 @@ assert.ok(citations > 0,
 // deleted (the S14 lesson). Only the block that claims to be a live map is
 // held to being one.
 
-const specPath = join(walletRoot, '..', 'claude', 'specs', 'wallet-publishing-chrome-extension.md');
+// S30, and it is this file's own instance of the defect the whole spec is
+// about: a second copy of something the code already knew.
+//
+// This used to hand-derive the platform root as `walletRoot/..`, while
+// `resolveCitation`, imported from the shared module a few lines up, derives
+// it from `XCHAIN_PLATFORM_ROOT` with that same path only as a fallback. The
+// two agree on this machine and nowhere else, and the failure is not the quiet
+// one it sounds like. Driven with `XCHAIN_PLATFORM_ROOT=/nonexistent`: section
+// 6 still FOUND the spec (its own derivation ignored the override) and then
+// resolved every citation in it against the override, so the gate went RED
+// accusing the frontier of citing paths that are all perfectly fine. A check
+// that is red when nothing is wrong is one people waive, which is exactly what
+// S17 and S20 record happening here before.
+//
+// One derivation now, the shared module's, so the override either moves both
+// halves or neither. built that module and documents the variable as
+// the way to run these gates from an isolated checkout; five sections here
+// were silently opting out of it.
+const specPath = join(SPECS_DIR, 'wallet-publishing-chrome-extension.md');
 let pointers = 0;
 
 if (existsSync(specPath)) {
@@ -234,7 +252,10 @@ if (existsSync(specPath)) {
 
     for (const m of block.matchAll(/`(claude\/[A-Za-z0-9_./-]+)`/g)) {
         pointers += 1;
-        if (!existsSync(join(walletRoot, '..', m[1]))) missing.push(m[1]);
+        // PLATFORM_ROOT, not `walletRoot/..`, for the reason given at specPath:
+        // one derivation, so an override cannot move the document without also
+        // moving the paths the document is checked against.
+        if (!existsSync(join(PLATFORM_ROOT, m[1]))) missing.push(m[1]);
     }
 
     assert.equal(missing.length, 0,
@@ -678,75 +699,218 @@ assert.ok(/release-artifacts|the artifact being uploaded/i.test(auditBlock.slice
     }
 }
 
-// --- 13. Every tool the ceremony hands the operator answers --help ------
+// --- 13. Every release script answers --help, and answers ONLY --help ---
 //
 // The first section here that generalizes. Sections 8, 10, 11 and 12 each hold
 // ONE step to its referent, which S28 noted is a weakness: the next defect is
-// wherever those four are not pointed. This one derives its subject from the
-// pages instead. Whatever tool the ceremony or the disclosure tells the
-// operator to run, in a command block, must answer `--help` with exit 0.
+// wherever those four are not pointed.
 //
-// Not a style rule. Both failures found on 2026-08-04 were actively
-// misleading, and each was worst at the moment it would actually be typed:
+// Not a style rule. The failures found on 2026-08-04 were actively misleading,
+// and each was worst at the moment it would actually be typed:
 //
-//   remote-code-audit.mjs --help  ->  "no build at --help" (exit 2)
-//   verify-validated-commit.mjs --help  ->  "RELEASE GATE REFUSED" (exit 1)
+//   remote-code-audit.mjs --help      ->  "no build at --help" (exit 2)
+//   verify-validated-commit.mjs --help->  "RELEASE GATE REFUSED" (exit 1)
+//   ios-archive.sh --help             ->  "APPLE_API_KEY ... is required" (1)
+//   verify-release-key.sh --help      ->  "unknown argument: --help" (exit 1)
 //
 // The first reads as a broken build to someone looking up the argument syntax
 // that S28 had just made load-bearing. The second announces, in the loudest
 // words that tool owns, that the release was rejected, to someone who only
 // asked how to invoke it. `--help` is what people type when a command refuses
 // them, which is exactly when a release ceremony is already going badly.
+//
+// TWO THINGS CHANGED HERE ON 2026-08-04 (), and each closes a hole
+// that a passing run of the previous cut had proved it could not see.
+//
+// (a) THE SUBJECT IS THE DIRECTORY, NOT THE PAGES. The previous cut harvested
+//     tool names out of the two ceremony pages plus the  spec frontier,
+//     which had two consequences. It covered only the Chrome subset, leaving
+//     the mobile and desktop lanes unchecked - nine scripts with NO `--help`
+//     handling at all, which is the more dangerous half. And the frontier half
+//     of the harvest read a repo that is this repo's PARENT and therefore
+//     cannot be a `.ci-siblings` entry, so on the venue that actually gates a
+//     push it silently harvested one tool fewer and still cleared its floor.
+//     A check whose subject lives in a repo the venue does not check out is
+//     not a check in that venue. Scanning `tools/release/` and
+//     `packages/extension/scripts/` removes both problems at once: the subject
+//     is entirely inside this repo, so the venue evaluates exactly what a
+//     local run does, and a script ADDED to either directory is covered on the
+//     day it lands rather than on the day someone remembers to name it.
+//
+//     The pages are still read, for the one thing the scan cannot say: that
+//     nothing the ceremony hands an operator lives OUTSIDE the scanned
+//     directories. That is the assertion, not a second harvest.
+//
+// (b) EXIT 0 IS NOT THE PROPERTY. It was the whole test, and it is satisfied
+//     by the worst behaviour in this class rather than by the best. Measured,
+//     not reasoned:
+//
+//       capture-listing-screenshots.mjs  did not recognise `--help` as a flag,
+//         so it ran the FULL capture - launched a browser, created and
+//         unlocked a demo wallet, drove the UI - and overwrote three of the
+//         four store listing assets on disk. Exit 0, because the work
+//         succeeded.
+//       emulation-preflight.sh           took `--help` as its one positional,
+//         a Docker platform, and printed `host arm64 must EMULATE --help`.
+//         Exit 0.
+//       capture-update-check.mjs         ran the default capture and
+//         OVERWROTE docs/update-check-capture.json, the file the download
+//         page's privacy copy is checked against. Exit 0.
+//       rehearsal-matrix.mjs             printed nothing whatsoever. Exit 0.
+//
+//     An unrecognized flag is not ignored, it is CONSUMED. So three properties
+//     are required, and each rules out one of the four shapes above:
+//
+//       1. exit 0                    the original property
+//       2. real usage on stdout      a usage line, this script's own name, and
+//                                    more than a token of text. Rules out the
+//                                    silent module and the tool that printed
+//                                    its work output instead.
+//       3. the worktree is unchanged rules out the tool that DID the work.
+//                                    `git status --porcelain` before and after
+//                                    each run. This is the one that would have
+//                                    caught the listing-asset overwrite, which
+//                                    is the defect that started this.
+//
+//     Property 3 reads the shared worktree, so a neighbouring session writing
+//     a file during the sub-second window a script runs in would surface here
+//     as a false red naming that file. That is the documented cost of checking
+//     side effects at all, it is loud rather than silent, and on the CI venue
+//     (a clean checkout, one writer) it is deterministic.
 
-const toolRe = /(tools\/release\/[a-z0-9-]+\.(?:mjs|sh)|packages\/extension\/scripts\/[a-z0-9-]+\.mjs)/g;
-// The spec's frontier is harvested too, and that is not scope creep: row 1
-// hands the operator `verify-validated-commit.mjs` to find a commit worth
-// tagging, and that tool is not named on either public page (it is release
-// engineering, not store ceremony). The first cut of this section harvested
-// only the two pages, and a mutation reverting that tool's --help fix passed,
-// which is how the gap was found rather than argued.
-const frontierText = existsSync(specPath)
-    ? (() => {
-        const s = readFileSync(specPath, 'utf8');
-        const o = s.indexOf('<!-- BUILD-SPEC:FRONTIER');
-        const c = s.indexOf('<!-- /BUILD-SPEC:FRONTIER');
-        if (o === -1 || c <= o) return '';
-        // ROWS only, not the surrounding prose, on section 6's precedent. The
-        // frontier narrates neighbouring lanes on purpose ("the concurrent
-        // lane's tools/release/ios-archive.sh"), and the first cut of this
-        // harvest read that as a tool handed to the Chrome operator and failed
-        // on another lane's script. A row is a commitment; prose is a record.
-        return s.slice(o, c).split('\n').filter((l) => l.startsWith('| ')).join('\n');
-    })()
-    : '';
+const toolRe = /(tools\/release\/[a-z0-9-]+\.(?:mjs|sh)|packages\/extension\/scripts\/[a-z0-9-]+\.(?:mjs|sh))/g;
 
-const namedTools = [...new Set(
-    [...ceremony.matchAll(toolRe), ...disclosure.matchAll(toolRe), ...frontierText.matchAll(toolRe)]
-        .map((m) => m[1]),
-)].filter((t) => existsSync(join(walletRoot, t))).sort();
+// Recursive on purpose: `tools/release/drills/` holds deb-update-swap.mjs,
+// whose one positional is a directory it INSTALLS SYSTEM PACKAGES from. A
+// non-recursive scan (and the old page regex, which could not match a nested
+// path) left the single most side-effecting script in the tree uncovered.
+const SCRIPT_DIRS = ['tools/release', 'packages/extension/scripts'];
 
-assert.ok(namedTools.length >= 5,
-    `only ${namedTools.length} runnable tools were found named on the two ceremony pages, fewer than the `
-    + 'five this section was written against. If the pages stopped naming commands, section 1 should '
-    + 'have failed first; if this harvest broke, fix it rather than lowering the floor.');
+const walkScripts = (relDir) => {
+    const out = [];
+    for (const entry of readdirSync(join(walletRoot, relDir), { withFileTypes: true })) {
+        const rel = `${relDir}/${entry.name}`;
+        if (entry.isDirectory()) out.push(...walkScripts(rel));
+        else if (/\.(mjs|sh)$/.test(entry.name)) out.push(rel);
+    }
+    return out;
+};
 
-for (const tool of namedTools) {
-    const cmd = tool.endsWith('.sh') ? ['bash', tool] : ['node', tool];
+const releaseScripts = SCRIPT_DIRS.flatMap(walkScripts).sort();
+
+// The floor is 29: the scripts COMMITTED at HEAD on 2026-08-04, when every one
+// of them was driven and made to pass. It was briefly written as 28, before
+// emulation-preflight.sh's own --help landed in c54af492 () and made
+// it tracked; the number is re-derived from `git ls-files` rather than from
+// what happens to be sitting in the worktree, because the venue gates the
+// COMMITTED tree. A floor taken from uncommitted neighbours (release-record.mjs
+// is one today, and it passes too) would go red on every clean checkout until
+// somebody else's commit landed.
+//
+// It is a floor rather than an equality so the directories may grow; a SHRINK
+// means either a tool was deleted (fine, lower this deliberately and say why)
+// or the scan broke (not fine, and the previous cut of this section proved a
+// broken scan reports OK while checking less).
+assert.ok(releaseScripts.length >= 29,
+    `only ${releaseScripts.length} release scripts were found under ${SCRIPT_DIRS.join(' and ')}, `
+    + 'fewer than the 29 committed when this section was measured. A scan that finds less than it '
+    + 'should still prints a verdict, which is exactly how the page-harvest cut of this section hid '
+    + 'a tool it had stopped checking.');
+
+const harvestTools = (text) => [...new Set([...text.matchAll(toolRe)].map((m) => m[1]))]
+    .filter((t) => existsSync(join(walletRoot, t))).sort();
+
+// The pages' role now: not a source of subjects, a check on the scan's scope.
+// If the ceremony ever hands an operator a script living somewhere else, the
+// directory scan would not cover it and would say nothing about that.
+const pageTools = harvestTools([ceremony, disclosure].join('\n'));
+
+assert.ok(pageTools.length >= 7,
+    `only ${pageTools.length} runnable tools were found named on the two ceremony pages, fewer than `
+    + 'the seven this section was written against. If the pages stopped naming commands, section 1 '
+    + 'should have failed first; if this harvest broke, fix it rather than lowering the floor.');
+
+const outsideScan = pageTools.filter((t) => !releaseScripts.includes(t));
+assert.equal(outsideScan.length, 0,
+    `the ceremony pages hand the operator ${outsideScan.join(', ')}, which the release-script scan `
+    + `does not cover (it reads ${SCRIPT_DIRS.join(' and ')}). Either move the tool into one of those `
+    + 'directories or widen the scan in the same change: a tool an operator is told to run and no '
+    + 'gate exercises is precisely the gap this section was widened to close.');
+
+// Property 3's instrument. Asserted to work before it is trusted: a `git` that
+// errors would otherwise make every comparison trivially equal, which is the
+// silent-pass shape this file refuses everywhere else.
+const worktreeState = () => execFileSync('git', ['status', '--porcelain'],
+    { cwd: walletRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+let worktreeReadable = true;
+try {
+    worktreeState();
+} catch {
+    worktreeReadable = false;
+}
+assert.ok(worktreeReadable,
+    '`git status --porcelain` failed in the wallet checkout, so the side-effect half of this section '
+    + 'cannot run. It is not optional: exit 0 alone is satisfied by a script that does its work and '
+    + 'succeeds, which is the defect measured. Fix the checkout rather than skipping this.');
+
+for (const tool of releaseScripts) {
+    const runner = tool.endsWith('.sh') ? 'bash' : 'node';
+    const before = worktreeState();
+
     let ok = true;
+    let stdout = '';
     let first = '';
     try {
-        execFileSync(cmd[0], [join(walletRoot, cmd[1]), '--help'],
+        stdout = execFileSync(runner, [join(walletRoot, tool), '--help'],
             { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
     } catch (e) {
         ok = false;
+        stdout = String(e.stdout || '');
         first = String(e.stdout || e.stderr || '').split('\n').filter(Boolean)[0] || '(no output)';
     }
+
+    const after = worktreeState();
+
+    // 1. exit 0.
     assert.ok(ok,
-        `${tool} does not answer --help with exit 0. It said: "${first.slice(0, 120)}". The ceremony `
-        + 'hands this command to an operator mid-submission, and --help is what anyone types when a '
-        + 'command refuses them. A tool that answers it with its own failure vocabulary turns a '
-        + 'question into an emergency: remote-code-audit.mjs used to report "no build at --help", and '
-        + 'verify-validated-commit.mjs used to answer "RELEASE GATE REFUSED".');
+        `${tool} does not answer --help with exit 0. It said: "${first.slice(0, 120)}". Release tools `
+        + 'are typed by an operator mid-ceremony, and --help is what anyone types when a command '
+        + 'refuses them. A tool that answers it with its own failure vocabulary turns a question into '
+        + 'an emergency: remote-code-audit.mjs used to report "no build at --help", '
+        + 'verify-validated-commit.mjs used to answer "RELEASE GATE REFUSED", and ios-archive.sh used '
+        + 'to demand APPLE_API_KEY.');
+
+    // 3. No side effects. Checked before the output shape because it is the
+    //    consequential one: a wrong help screen wastes a minute, an overwritten
+    //    listing asset ships to a store.
+    assert.equal(after, before,
+        `${tool} --help CHANGED THE WORKTREE. git status went from ${before.split('\n').filter(Boolean).length} `
+        + `entries to ${after.split('\n').filter(Boolean).length}. Asking a tool how to use it must not `
+        + 'be doing the thing it does. capture-listing-screenshots.mjs used to run a full browser '
+        + 'capture on --help and overwrite three of the four Chrome store listing assets, exiting 0 '
+        + 'because the work succeeded; capture-update-check.mjs used to overwrite the update capture '
+        + 'the download page is checked against. (If a neighbouring session wrote a file during this '
+        + `run, the entry named here will be unrelated to ${tool} - re-run before believing it.)`);
+
+    // 2. Real usage, not silence and not the tool's own work output. Three
+    //    cheap, independent signals; a script that ran its work passes none.
+    const lines = stdout.split('\n').filter((l) => l.trim());
+    const base = tool.slice(tool.lastIndexOf('/') + 1);
+    // Anchored to a line start, so `usage:` inside a sentence does not count,
+    // but tolerant of a comment prefix: the bash tools print their own header
+    // block verbatim (`awk` between the licence rule and the first line of
+    // code), so their usage line arrives as `# Usage:`. Printing the header is
+    // deliberate there - it cannot drift from the documentation it IS.
+    const USAGE_LINE = /^[\s#*/>-]*usage:/im;
+    assert.ok(USAGE_LINE.test(stdout) && stdout.includes(base) && lines.length >= 3,
+        `${tool} exits 0 on --help without printing usage (a "Usage:" line, its own name, and more `
+        + `than a couple of lines). It printed ${lines.length} line(s): `
+        + `"${(lines[0] || '(nothing at all)').slice(0, 100)}". Exit 0 is not the property - it is `
+        + 'satisfied by every shape of this defect. rehearsal-matrix.mjs printed nothing at all and '
+        + 'exited 0; emulation-preflight.sh took --help as its Docker-platform positional and '
+        + 'reported "host arm64 must EMULATE --help", also exiting 0. Both read, to a person and to '
+        + 'the previous cut of this gate, as a help screen having been shown.');
 }
 
 // --- 9. Every stage the frontier names has a row in the stage table -----
@@ -829,10 +993,23 @@ if (existsSync(specPath)) {
         + 'reports directory holds a report for only some stages.');
 }
 
+// The absent branch names §9 as well, which it did not until S30: it reads the
+// same spec as §§5-7 and degraded to nothing with the output saying so nowhere.
+// A summary line that reports only the sections which announce their own skip
+// is how a partial run reads as a full one.
+//
+// §13 is no longer on that list, and that is the point of's rewrite:
+// its subject is two directories in THIS repo, so it reports the same number
+// on the venue as it does locally, and there is no half of it left to skip.
+const toolNote = `${releaseScripts.length} release scripts answer --help with usage, exit 0 and no `
+    + `side effects (${pageTools.length} of them named on the ceremony pages)`;
+
 const pointerNote = existsSync(specPath)
     ? `${pointers} §4a private pointers resolved, ${frontierRows.length} live frontier rows verified, `
-        + `${mapEntries} translation-map pages resolved`
-    : 'the §4a map, the frontier rows and the translation map SKIPPED (platform checkout absent)';
+        + `${mapEntries} translation-map pages resolved, ${toolNote}`
+    : `${toolNote}; the §4a map, the frontier rows, the translation map and the §9 stage table all `
+        + 'SKIPPED (platform checkout absent, as on every CI run: it is this repo\'s parent, not a '
+        + 'sibling)';
 
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `

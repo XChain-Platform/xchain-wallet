@@ -94,6 +94,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
 | `rehearse.mjs` |  §7.5: probes every shipped update lane against the staging feed (pointer, per-arch selection, download, sha512, signed manifest), records human-attested swaps, and gates the production publish on the result. | Live (host pending) |
 | `rehearsal-matrix.mjs` | The shipped update lanes and the named hardware each is smoked on (DD4). Data, not code. | Live |
+| `release-record.mjs` | : the §6 release record, opened and enforced. `open --tag vX.Y.Z` instantiates `claude/reports/wallet-releases/vX.Y.Z.md` from `TEMPLATE.md` with the identity fields filled (store integers asked of `packages/mobile/scripts/version.js`, never recomputed from §2's formula) and never overwrites an existing record. `assert --tag` is the gate `publish.sh` runs before a production publish; an untouched copy of the template does not count. `coverage` checks that every `v*` tag AND the version the working tree declares have a record, and is run by `test/smoke/audits/release-record.smoke.js` inside `pnpm ci`. Exits 0 covered / 1 missing / 3 the records directory is not in this checkout. Tags whose commit declares a different version are reported, not failed: `release.yml`'s verify-tag refuses those, so they never produced a release. | Live, and gating since 2026-08-04 |
 | `deploy-web.sh` | §6 step 5b: unpack the web tarball into a versioned directory and flip a symlink. | Live |
 | `expected-artifacts.txt` | The declared artifact set a release must contain. Data, not code. | Live |
 | `verify-store.sh` |  §4 post-publish verification: verifies the CI-built extension zip via `verify.sh`, then diffs it file-by-file against the store-served item (`--unpacked-dir` or `--crx`), skipping `_metadata/` and structurally diffing `manifest.json`. | Live |
@@ -213,6 +214,7 @@ One key, one ceremony, one thing to rotate. See
 | `XCHAIN_RELEASE_REPO` | Default `--repo` value: the pristine clone the artifacts were built from. Defaults to the checkout the script lives in. | `sign.sh` |
 | `GNUPGHOME` | Optional override for the GPG home directory. | both |
 | `SIGN_SKIP_DEV_MOCK_CHECK` | Set to `1` to skip the pre-sign dev-mock gate. Recorded in the signed header. Release runs never set it. | `sign.sh` |
+| `XCHAIN_WALLET_RELEASE_RECORDS` | Where the §6 release records live. Defaults to `../claude/reports/wallet-releases` beside this checkout. It relocates the records; it does not waive them, and there is no variable that does. | `release-record.mjs`, `publish.sh` |
 
 **One-shot pnpm wrappers.** The root `package.json` exposes
 `pnpm release:sign` and `pnpm release:verify`, which target
@@ -225,6 +227,17 @@ The authoritative checklist is §6 of
 `claude/specs/wallet-release-rails.md`, instantiated per release as
 `claude/reports/wallet-releases/vX.Y.Z.md`. What this directory owns:
 
+0. Open the release record, before anything else:
+
+   ```
+   node tools/release/release-record.mjs open --tag vX.Y.Z --manager <you>
+   ```
+
+   Not optional and not last: step 1's own gate refuses a version bump
+   whose record does not exist, and step 5 refuses to publish without
+   one. v0.334.0 was tagged and built with no record open, and a day
+   later its only account was a CI summary job someone had to
+   reconstruct from .
 1. Run the release gate: `pnpm release:gate` (the full CI suite plus
    the **prod-build** regtest e2e venue). Only the latter proves real
    transaction signing - the dev server silently substitutes the

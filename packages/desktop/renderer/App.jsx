@@ -34,6 +34,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
+import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -557,6 +558,10 @@ function AppInner() {
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
+    // : the wallet-mode gate on the spend surfaces. Signer mode
+    // promises on its own settings screen that Send / Receive are hidden,
+    // so the nav rails and the command palette drop both entries.
+    const { isSignerMode } = useWalletMode();
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
@@ -2178,6 +2183,7 @@ function AppInner() {
                 openHelp: () => setShortcutHelpOpen(true),
                 hasBtcAddress,
                 hasGovernanceAddress,
+                isSignerMode,
             };
             //  entity handlers: tokens open TokenDetail with the full
             // ref the row already carries ( desktop parity); sites land
@@ -2231,6 +2237,7 @@ function AppInner() {
                             onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
                             hasBtcAddress={hasBtcAddress}
+                            isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
                     }
@@ -2242,6 +2249,7 @@ function AppInner() {
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
+                            isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
                     }

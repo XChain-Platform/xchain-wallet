@@ -1382,7 +1382,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // unsigned PSBT for transport to a Signer-mode wallet. Read with the
     // explicit default fallback so v2 records without the field behave
     // like 'full' (the broadcast path).
-    const { isWatcherMode } = useWalletMode();
+    // : `isSignerMode` is the route's own refusal. Gating the nav is
+    // not enough - a command-palette entry, a `xchain:` URI intent, and a
+    // restored view state all reach this component without passing a nav rail.
+    const { isWatcherMode, isSignerMode } = useWalletMode();
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
@@ -1732,6 +1735,20 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         </div>
     ) : null;
 
+    // §20 / : signer mode does not spend. The Wallet Mode screen
+    // promises "Send / receive screens are hidden; this wallet does not
+    // broadcast", so the form is refused rather than rendered - and the
+    // refusal names the way back, because the mode is a setting the same
+    // user chose and can unset.
+    if (isSignerMode) {
+        return wrap(
+            <StatusMessage variant="status">
+                This wallet is in signer mode, so it does not send or broadcast.
+                It signs transactions passed in from a watcher wallet. Switch the
+                mode under Settings, Wallet Mode to send from this device.
+            </StatusMessage>,
+        );
+    }
     if (loadError) {
         return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
     }

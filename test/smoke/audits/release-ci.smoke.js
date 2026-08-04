@@ -82,7 +82,7 @@ for (const trigger of ['pull_request', 'pull_request_target', 'issue_comment',
 assert.ok(/cancel-in-progress:\s*false/.test(header),
     'release builds are never cancelled mid-flight');
 
-// --- 2. Every secret-bearing job sits behind the approval gate ---------
+// --- 2. Every secret-bearing job sits inside the restricted environment -
 
 // Anything that looks like a code-signing credential. Deliberately
 // broad: a new signing secret should trip this until its job is gated.
@@ -92,14 +92,36 @@ for (const [name, block] of jobs) {
     if (!SIGNING_SECRET.test(block)) continue;
     assert.ok(/^\s{4}environment:\s*release-signing\s*$/m.test(block),
         `job '${name}' reads a signing secret and must run in the `
-        + 'release-signing environment, which is the required-reviewer gate');
+        + 'release-signing environment, whose deployment policy admits only the '
+        + 'release tag pattern (there is no reviewer gate on it: )');
 }
 
-// And the gate must actually be used by something, or the check above
-// is vacuously true and nobody would notice.
+// And the environment must actually be used by something, or the check
+// above is vacuously true and nobody would notice.
 const gated = [...jobs].filter(([, b]) => /environment:\s*release-signing/.test(b));
 assert.ok(gated.length >= 2,
     `expected the macOS and Windows signing lanes to be gated (found ${gated.length})`);
+
+// --- 2b. This file must not claim the controls that do not exist -------
+//
+//  corrected the public page. The same two false claims were also
+// written into this workflow's own header ("required-reviewer approval
+// gate", "tag creation is restricted to the release maintainer by a tag
+// protection rule"), which is worse in one way: a reader who opens
+// release.yml to check the page's story finds the page's story repeated
+// back, and reads two independent sources agreeing. Neither exists, and
+// by operator decision 2026-08-03 neither will. Guarded here so restoring
+// the comfortable wording is red rather than invisible.
+for (const [claim, re] of [
+    ['a required-reviewer approval gate on the signing environment',
+        /required[- ]reviewer|reviewer approves|requires a human reviewer/i],
+    ['a rule restricting who may create a release tag',
+        /tag protection rule|tag ruleset/i],
+]) {
+    const offender = wf.split('\n').find((l) => re.test(l));
+    assert.ok(!offender,
+        `release.yml claims ${claim}, which is not in force : ${offender?.trim()}`);
+}
 
 // --- 3. K1 never reaches a runner --------------------------------------
 
@@ -198,6 +220,7 @@ if (docsAvailable()) {
     // Whitespace-flattened: the doc is hard wrapped, so any phrase worth
     // asserting on will eventually straddle a line break.
     const setup = readDoc('release', 'ci-setup.md').replace(/\s+/g, ' ');
+
     // THIS BLOCK USED TO PIN TWO CONTROLS THAT DO NOT EXIST, and that is
     // why the page went on claiming them. It required the doc to say the
     // signing environment "requires a human reviewer to approve" and that
@@ -248,6 +271,54 @@ if (docsAvailable()) {
             + 'what a reader uses to decide whether a release could only have come from '
             + 'an intentional run');
     }
+
+    // Those two guards pin the exact sentences that were there, which is
+    // one paraphrase away from being useless: "gated on an approving
+    // reviewer" says the same false thing and matches neither. So the
+    // property, not the wording - the page may name a reviewer gate or a
+    // tag rule ONLY to say it is absent. Any sentence that mentions one
+    // without a negation in it is asserting it.
+    //
+    // This is not hypothetical: §2 went on saying an environment-scoped
+    // secret is "only readable by a job that has already cleared the
+    // approval gate above" after §1 had been corrected to say there is no
+    // such gate, so the page both denied and asserted the same control
+    // (found 2026-08-04,  re-scan).
+    const NEGATED = /\bno\b|\bnot\b|never|cannot|refuses|previously said|would both fail/i;
+    const sentences = setup.split(/(?<=[.!?])\s+/);
+    for (const [control, mention] of [
+        ['a reviewer approval gate on the signing environment',
+            /approval gate|reviewer|approve each run/i],
+        ['a rule restricting who may create a release tag',
+            /tag ruleset|tag protection|restricted to the release maintainer/i],
+    ]) {
+        for (const sentence of sentences) {
+            if (!mention.test(sentence)) continue;
+            assert.match(sentence, NEGATED,
+                `${SETUP_DOC} mentions ${control} in a sentence that does not deny it, so the `
+                + `page is asserting a control that does not exist: "${sentence.trim()}"`);
+        }
+    }
+
+    // The verification list is the sharp end of this page: a reader runs it
+    // to decide whether to trust a release. Its own count and its bullets
+    // have to agree. They already drifted once - the  artifact
+    // signature check was appended as a fifth bullet under a sentence still
+    // reading "These four", which reads as one step having been dropped
+    // silently, on exactly the list where a missing step is the failure.
+    const raw = readDoc('release', 'ci-setup.md');
+    const section = raw.split(/^## 5\. /m)[1];
+    assert.ok(section, `${SETUP_DOC} has a "## 5." verification section`);
+    const body = section.split(/^(?:---|## )/m)[0];
+    const bullets = body.split('\n').filter((l) => /^- /.test(l));
+    const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five',
+        'six', 'seven', 'eight', 'nine', 'ten'];
+    const claimed = /These (\w+) are what can actually be verified/i.exec(body);
+    assert.ok(claimed, `${SETUP_DOC} §5 states how many steps can actually be verified`);
+    assert.equal(NUMBER_WORDS.indexOf(claimed[1].toLowerCase()), bullets.length,
+        `${SETUP_DOC} §5 says "These ${claimed[1]}" over ${bullets.length} steps. `
+        + 'A reader counting the list finds a different number than the page claims, on the '
+        + 'one list whose whole purpose is that no step goes missing');
     assert.match(setup,
         /manifest-signing key never appears here, and must never be added/i,
         `${SETUP_DOC} states that the manifest-signing key never becomes a CI secret`);

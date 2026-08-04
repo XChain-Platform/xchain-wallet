@@ -175,7 +175,38 @@ async function fetchPackument(fetchImpl = fetch) {
     return res.json();
 }
 
+const USAGE = `electron-cadence.mjs - is the Chromium we ship still getting security
+fixes? ( §9, the CVE clock for a wallet that ships a browser engine.)
+
+Usage:
+  node tools/release/electron-cadence.mjs [--json] [--offline <packument.json>]
+
+Options:
+  --json              machine-readable result instead of the table
+  --offline <file>    read a saved registry packument instead of fetching
+                      https://registry.npmjs.org/electron
+  -h, --help          print this and exit 0
+
+Reads the SHIPPED version out of pnpm-lock.yaml, not the caret range in
+package.json: every release lane installs --frozen-lockfile, so the lockfile
+is the pin and the range never applies.
+
+Exit codes (house convention, verify-privacy-url.mjs):
+  0  current       nothing to do
+  1  behind        actionable: a patch, a major, or the support window
+  2  config        the pin could not be read
+  3  inconclusive  registry unreachable. NEVER folded into "current": a
+                   wallet's CVE clock must not read green because a network
+                   call failed.
+`;
+
 async function main(argv) {
+    // Before the registry fetch. Unhandled, `--help` ran the whole live
+    // network assessment and exited with a CVE verdict .
+    if (argv.some((a) => a === '--help' || a === '-h')) {
+        process.stdout.write(USAGE);
+        return 0;
+    }
     const at = (n) => (argv.indexOf(n) === -1 ? undefined : argv[argv.indexOf(n) + 1]);
     const asJson = argv.includes('--json');
 

@@ -243,3 +243,55 @@ export function lanesByOs() {
     }
     return out;
 }
+
+// A DATA MODULE IS STILL A FILE AN OPERATOR CAN RUN . This one sits
+// among ten executable tools in tools/release/, and `node rehearsal-matrix.mjs
+// --help` printed NOTHING and exited 0 - indistinguishable, to a person and to
+// a gate, from a help screen having been shown. The §13 check that covers this
+// directory now demands real usage on stdout precisely because silence with a
+// zero exit is the cheapest way to fake compliance.
+//
+// So direct invocation says what the module is and prints the matrix, which is
+// the useful thing to see when you are deciding which lanes a release has to
+// rehearse. It is read-only: no argument makes this file do work.
+const USAGE = `rehearsal-matrix.mjs - the shipped desktop update lanes, and what each one
+is smoked on ( §2, §7.5, DD4).
+
+Usage:
+  node tools/release/rehearsal-matrix.mjs           # print the lane table
+  node tools/release/rehearsal-matrix.mjs --json    # the same as JSON
+  node tools/release/rehearsal-matrix.mjs --help
+
+A DATA MODULE, not a command. It runs nothing and changes nothing; it is
+imported by rehearse.mjs, by drills/deb-update-swap.mjs and by the smokes
+that hold the table to what electron-updater actually exports. Printing is
+the only thing it does when run.
+
+A "lane" is an OS/arch pair that RECEIVES updates, plus one artifact format
+electron-updater can swap in place. The dmg and the Windows zip are shipped
+install formats with no auto-update path, so they are not lanes.
+
+Exports: LANES, LINUX_FORMAT_UPDATE_SUPPORT, ALL_OS_TRIGGER_PATHS,
+laneById(id), lanesByOs().
+`;
+
+if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
+    const argv = process.argv.slice(2);
+    if (argv.some((a) => a === '--help' || a === '-h')) {
+        process.stdout.write(USAGE);
+    } else if (argv.includes('--json')) {
+        process.stdout.write(`${JSON.stringify(
+            { lanes: LANES, linuxFormats: LINUX_FORMAT_UPDATE_SUPPORT, allOsTriggerPaths: ALL_OS_TRIGGER_PATHS },
+            null,
+            2,
+        )}\n`);
+    } else {
+        process.stdout.write(`${LANES.length} shipped update lanes ( §2)\n\n`);
+        const w = Math.max(...LANES.map((l) => l.id.length));
+        for (const lane of LANES) {
+            process.stdout.write(`  ${lane.id.padEnd(w)}  ${lane.os}/${lane.arch} `
+                + `${lane.format}  device: ${lane.device ?? 'none'}\n`);
+        }
+        process.stdout.write('\nRun with --help for what a lane is and what imports this.\n');
+    }
+}

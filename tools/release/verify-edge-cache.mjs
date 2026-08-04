@@ -62,6 +62,48 @@ function arg(name, fallback) {
     return i === -1 ? fallback : process.argv[i + 1];
 }
 
+// Importing this module for its judges must not fire a live scan, so main-ness
+// is decided here rather than at the bottom: the help answer below has to come
+// before the argument reads, and both have to stay out of an importer's way.
+const isMain = Boolean(process.argv[1])
+    && process.argv[1].endsWith('verify-edge-cache.mjs');
+
+const USAGE = `verify-edge-cache.mjs - does the CDN edge serve the update feed under the
+cache contract? ( §3.)
+
+Usage:
+  node tools/release/verify-edge-cache.mjs \\
+      --base https://downloads.xchain.io/wallet [--channel stable] \\
+      [--artifact <name>]
+
+Options:
+  --base <url>       feed root, default https://downloads.xchain.io/wallet
+  --channel <name>   update channel, default stable
+  --artifact <name>  also probe one artifact under <base>/desktop/
+  -h, --help         print this and exit 0
+
+The pointer names are NEVER latest*.yml: electron-builder names update-info
+files after the CHANNEL, and desktop's channel is stable. A cache rule
+written against latest* matches nothing and fails silently in the direction
+that looks like working, so this takes the names from update-info.mjs's own
+rule and cannot drift from what the build emits.
+
+PROBES A LIVE CDN, which is why --help is answered before the probes rather
+than after them : unhandled, the flag was dropped by the argument
+reader above and the full scan ran anyway.
+
+Exit codes:
+  0  every probe met the contract AND every probe was real
+  1  a probe FAILED the contract
+  2  UNPROVEN: the names are right and nothing is published at them. This
+     is NOT a pass.
+`;
+
+if (isMain && process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+}
+
 const base = (arg('base') || 'https://downloads.xchain.io/wallet').replace(/\/+$/, '');
 const channel = arg('channel', 'stable');
 const artifact = arg('artifact');
@@ -183,8 +225,7 @@ export function judgeArtifact(r) {
 
 // Importing this module for its judges must not fire a live scan against
 // the production feed. Everything above is pure; everything below probes.
-const isMain = Boolean(process.argv[1])
-    && process.argv[1].endsWith('verify-edge-cache.mjs');
+// `isMain` is computed near the top, where the --help answer needs it.
 if (!isMain) {
     // eslint-disable-next-line no-restricted-syntax
     // (a bare `export` module: the caller wants judgePointer/judgeArtifact)

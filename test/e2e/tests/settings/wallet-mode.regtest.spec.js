@@ -31,18 +31,23 @@
 // one whose promise is a REMOVAL. Watcher mode's promise (builds unsigned
 // PSBTs) needs a second device to be meaningful; this one is checkable on one.
 //
-// ⚠️ THIS SPEC IS RED ON PURPOSE, 2026-08-04, and marked `test.fixme` so a
-// directory of green specs does not learn to ignore it. **It found the defect
-// it was written to look for.** Measured on the Litecoin venue:
-//   - step 1 PASSES: Signer is chosen, and it survives a full reload.
-//   - step 2 PASSES: Home really does become the signer surface (Sign a
+// HISTORY: this spec shipped RED ON PURPOSE on 2026-08-04, marked `test.fixme`
+// so a directory of green specs would not learn to ignore it. **It found the
+// defect it was written to look for.** As measured on the Litecoin
+// venue that day:
+//   - step 1 PASSED: Signer is chosen, and it survives a full reload.
+//   - step 2 PASSED: Home really does become the signer surface (Sign a
 //     transaction / Sign a message, no balance hero), so the mode is applied,
 //     not merely recorded - this is NOT the D-70 shape.
-//   - step 3 FAILS: `LeftNav` has no wallet-mode gating at all, so **Send and
-//     Receive are still one click away** while the Wallet Mode screen told the
+//   - step 3 FAILED: `LeftNav` had no wallet-mode gating at all, so **Send and
+//     Receive were still one click away** while the Wallet Mode screen told the
 //     user "Send / receive screens are hidden; this wallet does not broadcast."
-// Delete the `.fixme` the day the nav honours the mode; the assertions are the
-// specification, and they are correct as written.
+// The fix gates both nav surfaces, the command palette and the Send / Receive
+// routes themselves on `useWalletMode().isSignerMode`, so the `.fixme` is gone
+// and step 3 is now the regression guard on the promise. The assertions have
+// not been touched: they were the specification, and they were correct as
+// written. `test/unit/components/signerModeHidesSpendSurfaces.test.jsx` covers
+// the same promise on all four reachability paths without a chain.
 //
 // RUN IT:
 //   cd test/e2e && npx playwright test \
@@ -69,7 +74,7 @@ async function openWalletMode(page) {
 test.describe('Settings: wallet mode', () => {
     test.setTimeout(300_000);
 
-    test.fixme('choosing Signer persists AND is applied - the send/receive promise is kept',
+    test('choosing Signer persists AND is applied - the send/receive promise is kept',
         async ({ page }) => {
             await createWallet(page, { password: PASSWORD });
 

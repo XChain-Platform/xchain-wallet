@@ -22,6 +22,48 @@
 
 set -euo pipefail
 
+# ANSWERED BEFORE THE CREDENTIAL CHECKS, and that ordering is the whole
+# point . `--help` used to fall through to the `${APPLE_API_KEY:?}`
+# guard below, so asking this script how to invoke it was answered with
+#
+#   ios-archive.sh: line 52: APPLE_API_KEY: APPLE_API_KEY (the .p8 contents)
+#   is required, or set XCHAIN_IOS_ARCHIVE_UNSIGNED=1 ...
+#
+# and exit 1. That is the release lane's loudest refusal vocabulary aimed at
+# someone who only asked for the usage, at the exact moment they asked
+# because something else had already gone wrong. Help is not a build.
+case "${1:-}" in
+    -h|--help)
+        cat <<'USAGE'
+ios-archive.sh - archive the iOS shell for distribution ( §5).
+
+Usage:
+  bash tools/release/ios-archive.sh              # signed, needs the API key
+  XCHAIN_IOS_ARCHIVE_UNSIGNED=1 \
+    bash tools/release/ios-archive.sh            # unsigned, no Apple account
+
+Takes no arguments. Archives only: it does not export and it does not
+upload (see ios-export.sh).
+
+Environment, signed mode (all required):
+  APPLE_API_KEY       App Store Connect API key, the .p8 file CONTENTS
+  APPLE_API_KEY_ID    the key's id
+  APPLE_API_ISSUER    the issuer id
+  APPLE_TEAM_ID       the team the archive is signed for
+
+Environment, unsigned mode:
+  XCHAIN_IOS_ARCHIVE_UNSIGNED=1   archive with signing disabled
+
+Unsigned proves the LANE, not the app: the result cannot be exported for
+App Store distribution, and an unsigned build has no keychain-access-group,
+so every vault call in it returns OSStatus -34018.
+
+Prerequisite: pnpm --filter @xchain-wallet/mobile sync:ios
+USAGE
+        exit 0
+        ;;
+esac
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 project="$here/packages/mobile/ios/App/App.xcodeproj"
 archive="$here/packages/mobile/ios/build/App.xcarchive"

@@ -40,6 +40,38 @@ import { readFileSync } from 'node:fs';
 
 const DEFAULT_IGNORE = ['update_url', 'key'];
 
+const USAGE = `manifest-diff.mjs - structural manifest.json compare ( §4
+post-publish verification). The comparison primitive behind verify-store.sh.
+
+Usage:
+  node tools/release/manifest-diff.mjs <ours.json> <theirs.json> \\
+      [--ignore key1,key2]
+
+Arguments:
+  <ours.json>    the CI-built manifest
+  <theirs.json>  the manifest the Chrome Web Store serves
+
+Options:
+  --ignore <keys>  comma-separated top-level keys deleted from BOTH sides
+                   before comparing (default: ${DEFAULT_IGNORE.join(',')})
+  -h, --help       print this and exit 0
+
+The store REWRITES manifest.json on publish, injecting update_url (its
+update-check endpoint) and key (the base64 public key that keeps the
+extension ID stable). A byte-for-byte diff therefore fails on every publish
+even when nothing changed, and a check that always fails gets waived and
+then ignored. Deleting those keys from both sides is symmetric and loses
+nothing: our own manifest never sets either.
+
+Every other key, at any depth, must be exactly equal. Key ORDER does not
+matter; VALUE does.
+
+Exit codes:
+  0  equal after ignoring the listed keys
+  1  structural mismatch; every differing path is printed
+  2  bad invocation (missing file argument, or --ignore with no value)
+`;
+
 function parseArgs(argv) {
     const positional = [];
     let ignore = DEFAULT_IGNORE;
@@ -54,7 +86,13 @@ function parseArgs(argv) {
             ignore = raw.split(',').map((s) => s.trim()).filter(Boolean);
             i++;
         } else if (arg === '--help' || arg === '-h') {
-            console.log('Usage: node manifest-diff.mjs <ours.json> <theirs.json> [--ignore key1,key2]');
+            // One line was not enough . It named the arguments and
+            // nothing else, so it could not answer the question an operator
+            // running verify-store.sh actually has when a diff comes back
+            // non-empty: which keys are supposed to differ, and what does a
+            // non-zero exit mean. The §13 gate now requires more than a token,
+            // for exactly that reason.
+            console.log(USAGE);
             process.exit(0);
         } else {
             positional.push(arg);

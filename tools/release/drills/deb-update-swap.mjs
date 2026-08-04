@@ -63,6 +63,42 @@ import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 
+const USAGE = `deb-update-swap.mjs - DRILL: watch a real .deb update install itself
+( §5, §7.5).
+
+Usage:
+  node tools/release/drills/deb-update-swap.mjs <artifact-dir>
+
+Arguments:
+  <artifact-dir>  a built desktop artifact directory containing the .deb
+                  pair and the Linux channel pointers
+Options:
+  -h, --help      print this and exit 0
+
+INSTALLS AND THEN UPGRADES A SYSTEM PACKAGE. It refuses to run outside a
+container unless XCHAIN_DRILL_DISPOSABLE=1 is set, and refuses to run as
+root, because root skips the escalation that is half of what is drilled.
+
+This is the install/launch/swap half of a rehearsal for the one shipped
+update path that ends in a root-privileged package install. The feed-side
+probe in \`rehearse.mjs run\` cannot exercise any of it.
+
+Environment:
+  XCHAIN_DRILL_DISPOSABLE=1   allow running outside a container, on a host
+                              you are willing to lose
+`;
+
+// FIRST, because the sole positional here is a directory this drill INSTALLS
+// FROM . Unhandled, `--help` became the artifact directory: outside a
+// container the disposability guard below happened to catch it, and inside one
+// - which is exactly where this drill is meant to run - it would have been
+// read as a real artifact set. An unrecognized flag must never become the
+// input to a command that installs system packages.
+if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+}
+
 const artifactDir = process.argv[2];
 if (!artifactDir) die('usage: deb-update-swap.mjs <artifact-dir>');
 

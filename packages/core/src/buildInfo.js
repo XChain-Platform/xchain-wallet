@@ -23,7 +23,7 @@
 // core's package.json, which was equally stale (, 2026-08-01).
 // test/smoke/audits/version-lockstep.smoke.js now holds it to the ROOT.
 
-export const WALLET_VERSION = '0.334.0';
+export const WALLET_VERSION = '0.335.0';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'GNU Affero General Public License v3.0 (AGPL-3.0)';
