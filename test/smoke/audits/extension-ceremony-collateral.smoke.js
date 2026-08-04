@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
 import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
+import { citationsIn, resolveCitation } from '../_spec-frontier.js';
 
 skipUnlessDocs('extension ceremony-collateral smoke');
 
@@ -339,17 +340,16 @@ if (existsSync(specPath)) {
     // a live file as dead, which is a check firing on correct writing, and this
     // was not a hypothetical - the S24 sweep that found this defect in the
     // sibling specs made exactly that mistake on three of its five hits.
-    const SIBLINGS = [walletRoot, join(walletRoot, '..', 'xchain-websites')];
-    const resolvesSomewhere = (p) => SIBLINGS.some((root) => existsSync(join(root, p)));
-
+    //
+    // The parsing and resolution moved to test/smoke/_spec-frontier.js when
+    // ported this section to EVERY spec (the same rot was live in the
+    // desktop and android publishing specs, and nothing checked them). This
+    // block therefore no longer owns the rule; it keeps the chrome-specific
+    // failure message and delegates, so the two cannot drift apart.
     const dead = [];
     for (const { id, line } of frontierRows) {
-        for (const m of line.matchAll(CITED)) {
-            if (/vX\.Y\.Z|<|\*/.test(m[1])) continue;
-            if (!resolvesSomewhere(m[1])) dead.push(`row ${id} cites ${m[1]}`);
-        }
-        for (const m of line.matchAll(/`(claude\/[A-Za-z0-9_./-]+)`/g)) {
-            if (!existsSync(join(walletRoot, '..', m[1]))) dead.push(`row ${id} cites ${m[1]}`);
+        for (const cited of citationsIn(line).paths) {
+            if (!resolveCitation(cited).ok) dead.push(`row ${id} cites ${cited}`);
         }
     }
 
