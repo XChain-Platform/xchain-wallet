@@ -41,6 +41,7 @@
 // where they get typed, which absence passes both of the others.
 
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -280,11 +281,27 @@ const CITED = /`((?:packages|tools|test|\.github)\/[A-Za-z0-9_./-]+)`/g;
 const dead = [];
 let citations = 0;
 
+// A cited path git IGNORES is a declared build output, not a dead command:
+// `packages/extension/dist/` is produced by the build the ceremony runs first,
+// so it is on the operator's machine and never in a clean checkout. Requiring
+// it on disk made this gate pass in a worked-in tree and fail on a fresh one,
+// which is the exact class of drift the gate exists to catch elsewhere.
+const isDeclaredBuildOutput = (rel) => {
+    try {
+        execFileSync('git', ['-C', walletRoot, 'check-ignore', '-q', rel]);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
 for (const page of storePages) {
     for (const m of readDoc(...page.split('/')).matchAll(CITED)) {
         if (/vX\.Y\.Z|<|\*/.test(m[1])) continue;              // version and shell placeholders
         citations += 1;
-        if (!existsSync(join(walletRoot, m[1]))) dead.push(`${page} cites ${m[1]}`);
+        if (existsSync(join(walletRoot, m[1]))) continue;
+        if (isDeclaredBuildOutput(m[1])) continue;
+        dead.push(`${page} cites ${m[1]}`);
     }
 }
 
