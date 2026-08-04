@@ -48,7 +48,15 @@ assert.ok(block,
     + 'without bound. The fix is to add the group back with master exempted from cancellation, '
     + 'not to leave it absent.');
 
-const body = block[1];
+// Strip comments before matching. The block is heavily commented precisely
+// because this setting keeps being got wrong, and the first cut of this gate
+// then matched the word `cancel-in-progress:` inside its own explanatory
+// comment instead of the setting, reporting the prose as the value.
+const body = block[1]
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+
 const cancel = body.match(/cancel-in-progress:\s*(.+)/);
 
 assert.ok(cancel,
@@ -100,6 +108,37 @@ assert.equal(evaluate('refs/heads/master'), false,
 assert.equal(evaluate('refs/pull/42/merge'), true,
     'the `cancel-in-progress` expression evaluates FALSE for pull requests, so superseded PR runs '
     + 'would pile up. Master is the exemption; everything else should still cancel.');
+
+// The group must be per-COMMIT on master, not merely per-ref.
+//
+// This assertion exists because the first version of this gate passed on a
+// configuration that was measured failing hours later. `cancel-in-progress:
+// false` protects a RUNNING job; GitHub separately keeps only one PENDING run
+// per concurrency group, and a newer push evicts a queued one regardless of
+// that flag. Run 30864080980 on c4008051 was evicted while queued, 0 jobs ever
+// started, by a later push that already carried the flag fix.
+//
+// Grouping per commit removes the contention instead of arbitrating it. There
+// is then no such thing as two master runs in one group, so nothing can evict
+// anything and every commit reaches a verdict.
+const group = body.match(/group:\s*(.+)/);
+
+assert.ok(group,
+    'ci.yml\'s concurrency block sets no `group`. Without one the block does nothing at all.');
+
+const groupValue = group[1].trim();
+
+assert.match(groupValue, /github\.sha/,
+    `ci.yml's concurrency group (${groupValue}) does not vary by github.sha, so every master commit `
+    + 'shares one group and a newer push evicts whichever run is still QUEUED. `cancel-in-progress: '
+    + 'false` does not prevent that: it only protects a run that has already started. A commit whose '
+    + 'run was evicted while queued can never satisfy the release gate. Group per commit on master:\n'
+    + "  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || 'ref' }}");
+
+assert.match(groupValue, /refs\/heads\/master/,
+    `ci.yml's concurrency group (${groupValue}) uses github.sha unconditionally, which would give `
+    + 'every pull-request push its own group too and defeat superseding entirely. The sha must be '
+    + 'conditional on master.');
 
 // A push to master must still be a trigger, or the gate above guards nothing.
 assert.match(ci, /on:\n(?:.*\n)*?\s*push:\n\s*branches:\s*\[\s*master\s*\]/,

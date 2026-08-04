@@ -5,7 +5,22 @@ on:
   pull_request:
     branches: [master]
 concurrency:
-  group: ci-${{ github.ref }}
+  # On master, group per COMMIT. Elsewhere, group per ref.
+  #
+  # `cancel-in-progress: false` below is necessary but NOT sufficient, which was
+  # measured the hard way: it protects a RUNNING job, and GitHub separately keeps
+  # only one PENDING run per concurrency group, so a newer push still evicts a
+  # queued one no matter what that flag says. Observed 2026-08-03 on the very
+  # commit that introduced the flag: run on c4008051 was evicted while queued
+  # (0 jobs ever started, concluded `cancelled`) by a later master push that
+  # already carried the fix, while the in-progress run on bc58ff47 correctly
+  # survived. Half the defect, half the fix.
+  #
+  # Per-commit grouping removes the contention rather than arbitrating it: two
+  # master commits are never in the same group, so neither can evict the other
+  # and every commit reaches a verdict the release gate can read. Pull requests
+  # keep per-ref grouping, where superseding is the whole point.
+  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || 'ref' }}
   # Cancel superseded runs on pull requests and feature branches, where only the
   # latest push matters and runner minutes are the only cost. NEVER cancel on
   # master: the release gate (tools/release/verify-validated-commit.mjs) requires
