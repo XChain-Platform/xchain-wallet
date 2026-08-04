@@ -33,6 +33,32 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 
+// `--help` is answered before anything else, and the reason is specific rather
+// than cosmetic: the store ceremony now tells the operator to pass the unpacked
+// release artifact as an argument, so this script's argument syntax is
+// something they look up mid-submission. Without this, `--help` was read as a
+// directory name and answered "no build at --help", which reads as a broken
+// build at the moment someone is trying to find out how to point it at the
+// right one.
+if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    console.log(`Remote-code audit: scan a BUILT extension bundle for code-loading patterns.
+
+Usage:
+  node packages/extension/scripts/remote-code-audit.mjs [distDir]
+
+  distDir   directory to audit. Defaults to packages/extension/dist, which is a
+            gitignored LOCAL build and is not what the store serves.
+
+For a store submission, audit the artifact being uploaded, not a local build:
+
+  unzip -q -o release-artifacts/vX.Y.Z/xchain-wallet-extension-vX.Y.Z.zip -d /tmp/cws-audit
+  node packages/extension/scripts/remote-code-audit.mjs /tmp/cws-audit
+
+Exit codes: 0 clean, 1 unreviewed code-loading pattern found, 2 no build at the
+given directory (nothing was audited, which is never an all-clear).`);
+    process.exit(0);
+}
+
 const DIST = process.argv[2] || 'packages/extension/dist';
 
 if (!existsSync(DIST)) {

@@ -65,6 +65,37 @@ function arg(name) {
     return i === -1 ? undefined : process.argv[i + 1];
 }
 
+// Answered before any validation, because every refusal this tool prints opens
+// with "RELEASE GATE REFUSED". Without this, `--help` fell through to the
+// missing-sha branch and printed exactly that, so an operator asking how to
+// invoke the gate was told, in the loudest words the tool owns, that their
+// release had been rejected. During a release that is not a cosmetic
+// difference.
+if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    console.log(`Release gate ( §6 step 1): refuse a tag whose commit has no green
+run of every required workflow.
+
+Usage:
+  GITHUB_TOKEN=<token> node tools/release/verify-validated-commit.mjs \\
+    --sha <full-40-char-sha> [--repo owner/name]
+
+  --sha    REQUIRED, and must be the full 40 characters. A short SHA is
+           refused on purpose: this gate names exactly one commit.
+  --repo   owner/name. Defaults to $GITHUB_REPOSITORY.
+
+Env:
+  GITHUB_TOKEN               required; needs \`actions: read\`. Not knowing
+                             whether a commit was validated is a refusal,
+                             never a pass.
+  GITHUB_API_URL             optional, defaults to https://api.github.com
+  XCHAIN_REQUIRED_WORKFLOWS  optional, comma-separated workflow file names;
+                             defaults to \`${REQUIRED_DEFAULT}\`
+
+Exit codes: 0 the commit has a green run of every required workflow; 1 refused
+(including "cannot tell"). A refusal is not a tool fault.`);
+    process.exit(0);
+}
+
 const sha = arg('sha');
 const repo = arg('repo') || process.env.GITHUB_REPOSITORY;
 const apiUrl = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/+$/, '');

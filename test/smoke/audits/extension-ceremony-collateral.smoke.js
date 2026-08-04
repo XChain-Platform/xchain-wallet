@@ -678,6 +678,77 @@ assert.ok(/release-artifacts|the artifact being uploaded/i.test(auditBlock.slice
     }
 }
 
+// --- 13. Every tool the ceremony hands the operator answers --help ------
+//
+// The first section here that generalizes. Sections 8, 10, 11 and 12 each hold
+// ONE step to its referent, which S28 noted is a weakness: the next defect is
+// wherever those four are not pointed. This one derives its subject from the
+// pages instead. Whatever tool the ceremony or the disclosure tells the
+// operator to run, in a command block, must answer `--help` with exit 0.
+//
+// Not a style rule. Both failures found on 2026-08-04 were actively
+// misleading, and each was worst at the moment it would actually be typed:
+//
+//   remote-code-audit.mjs --help  ->  "no build at --help" (exit 2)
+//   verify-validated-commit.mjs --help  ->  "RELEASE GATE REFUSED" (exit 1)
+//
+// The first reads as a broken build to someone looking up the argument syntax
+// that S28 had just made load-bearing. The second announces, in the loudest
+// words that tool owns, that the release was rejected, to someone who only
+// asked how to invoke it. `--help` is what people type when a command refuses
+// them, which is exactly when a release ceremony is already going badly.
+
+const toolRe = /(tools\/release\/[a-z0-9-]+\.(?:mjs|sh)|packages\/extension\/scripts\/[a-z0-9-]+\.mjs)/g;
+// The spec's frontier is harvested too, and that is not scope creep: row 1
+// hands the operator `verify-validated-commit.mjs` to find a commit worth
+// tagging, and that tool is not named on either public page (it is release
+// engineering, not store ceremony). The first cut of this section harvested
+// only the two pages, and a mutation reverting that tool's --help fix passed,
+// which is how the gap was found rather than argued.
+const frontierText = existsSync(specPath)
+    ? (() => {
+        const s = readFileSync(specPath, 'utf8');
+        const o = s.indexOf('<!-- BUILD-SPEC:FRONTIER');
+        const c = s.indexOf('<!-- /BUILD-SPEC:FRONTIER');
+        if (o === -1 || c <= o) return '';
+        // ROWS only, not the surrounding prose, on section 6's precedent. The
+        // frontier narrates neighbouring lanes on purpose ("the concurrent
+        // lane's tools/release/ios-archive.sh"), and the first cut of this
+        // harvest read that as a tool handed to the Chrome operator and failed
+        // on another lane's script. A row is a commitment; prose is a record.
+        return s.slice(o, c).split('\n').filter((l) => l.startsWith('| ')).join('\n');
+    })()
+    : '';
+
+const namedTools = [...new Set(
+    [...ceremony.matchAll(toolRe), ...disclosure.matchAll(toolRe), ...frontierText.matchAll(toolRe)]
+        .map((m) => m[1]),
+)].filter((t) => existsSync(join(walletRoot, t))).sort();
+
+assert.ok(namedTools.length >= 5,
+    `only ${namedTools.length} runnable tools were found named on the two ceremony pages, fewer than the `
+    + 'five this section was written against. If the pages stopped naming commands, section 1 should '
+    + 'have failed first; if this harvest broke, fix it rather than lowering the floor.');
+
+for (const tool of namedTools) {
+    const cmd = tool.endsWith('.sh') ? ['bash', tool] : ['node', tool];
+    let ok = true;
+    let first = '';
+    try {
+        execFileSync(cmd[0], [join(walletRoot, cmd[1]), '--help'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
+    } catch (e) {
+        ok = false;
+        first = String(e.stdout || e.stderr || '').split('\n').filter(Boolean)[0] || '(no output)';
+    }
+    assert.ok(ok,
+        `${tool} does not answer --help with exit 0. It said: "${first.slice(0, 120)}". The ceremony `
+        + 'hands this command to an operator mid-submission, and --help is what anyone types when a '
+        + 'command refuses them. A tool that answers it with its own failure vocabulary turns a '
+        + 'question into an emergency: remote-code-audit.mjs used to report "no build at --help", and '
+        + 'verify-validated-commit.mjs used to answer "RELEASE GATE REFUSED".');
+}
+
 // --- 9. Every stage the frontier names has a row in the stage table -----
 //
 // Bookkeeping, and it is in a gate because doing it by hand has now failed
