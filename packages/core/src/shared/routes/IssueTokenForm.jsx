@@ -90,6 +90,11 @@ export function IssueTokenForm({ walletId, onBack }) {
     // Blank means "mint the whole supply now" . Kept as its own
     // string so an explicit 0 stays distinguishable from an untouched field.
     const [initialMint, setInitialMint] = useState('');
+    // Optional per-transaction MINT cap (ISSUE v0 MAX_MINT). Blank omits the
+    // field entirely, which xchain-indexer stores as 0 and treats as "no
+    // per-tx cap" (xchain-indexer src/actions/mint.js) - matching the Mint
+    // settings panel (TokenAdminForm.jsx mode='mint-settings') left blank.
+    const [maxMint, setMaxMint] = useState('');
     const [divisible, setDivisible] = useState(false);
     const [description, setDescription] = useState('');
     const [lockSupply, setLockSupply] = useState(false);
@@ -117,12 +122,12 @@ export function IssueTokenForm({ walletId, onBack }) {
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
-            chainId, fromAddressId, ticker, supply, initialMint, divisible,
+            chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
             description, lockSupply, transferTo, payFeeInNativeCoin,
         });
     }, [
         stage, draftPending, draft,
-        chainId, fromAddressId, ticker, supply, initialMint, divisible,
+        chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
         description, lockSupply, transferTo, payFeeInNativeCoin,
     ]);
     const restoreDraft = useCallback(() => {
@@ -133,6 +138,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (typeof v.ticker === 'string') setTicker(v.ticker);
         if (typeof v.supply === 'string') setSupply(v.supply);
         if (typeof v.initialMint === 'string') setInitialMint(v.initialMint);
+        if (typeof v.maxMint === 'string') setMaxMint(v.maxMint);
         if (typeof v.divisible === 'boolean') setDivisible(v.divisible);
         if (typeof v.description === 'string') setDescription(v.description);
         if (typeof v.lockSupply === 'boolean') setLockSupply(v.lockSupply);
@@ -253,6 +259,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             const mint = wantsMint === '' ? s : wantsMint;
             if (Number(mint) > 0) p.MINT_SUPPLY = mint;
         }
+        if (maxMint.trim()) p.MAX_MINT = maxMint.trim();
         if (description) p.DESCRIPTION = description.trim();
         if (lockSupply) {
             p.LOCK_MAX_SUPPLY = '1';
@@ -260,7 +267,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         }
         if (transferTo) p.TRANSFER = transferTo.trim();
         return p;
-    }, [ticker, supply, initialMint, divisible, description, lockSupply, transferTo]);
+    }, [ticker, supply, initialMint, maxMint, divisible, description, lockSupply, transferTo]);
 
     // What is left mintable after the initial mint, as a display string, or
     // null when the pair is blank/invalid/fully minted (nothing to say).
@@ -324,6 +331,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                 setFormError(
                     'An initial mint of 0 needs minting left unlocked, or the token can never have any supply.',
                 );
+                return;
+            }
+        }
+        const maxMintText = maxMint.trim();
+        if (maxMintText) {
+            const maxMintNum = Number(maxMintText);
+            if (!Number.isFinite(maxMintNum) || maxMintNum <= 0) {
+                setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
                 return;
             }
         }
@@ -765,6 +780,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                 inputMode="decimal"
                 value={initialMint}
                 onChange={(e) => setInitialMint(e.target.value)}
+                autoComplete="off"
+            />
+            <Input
+                label="Max mint per transaction (optional)"
+                hint="Caps how much can be minted in one transaction. Leave blank for no limit."
+                inputMode="decimal"
+                value={maxMint}
+                onChange={(e) => setMaxMint(e.target.value)}
                 autoComplete="off"
             />
             <label className={styles.checkRow}>
