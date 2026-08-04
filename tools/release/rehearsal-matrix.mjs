@@ -70,6 +70,29 @@
 // spec's own rule - "No named device for a lane = that lane does not
 // ship" - `rehearse.mjs coverage` refuses to call such a lane launch-
 // ready, and says so rather than passing quietly.
+//
+// DD4 IS NOW ANSWERED FOR ALL EIGHT LANES (the last two by operator
+// decision 2026-08-03, ). No lane carries `device: null`, and
+// `rehearsal.smoke.js` refuses a new one that does, rather than letting it
+// inherit the old unanswered state silently.
+//
+// NAMING A DEVICE IS NOT A CLAIM THAT THE LANE HAS BEEN REHEARSED. It says
+// only which machine the swap will be watched on. `coverage` still reports
+// an un-rehearsed lane as ⬜ and still exits non-zero; naming changes only
+// the REASON it gives, from "DD4 unanswered" to "never rehearsed". Those
+// are different blockers with different owners and the output must not
+// conflate them. What actually blocks a rehearsal now is K1.
+//
+// WHY A HOSTED RUNNER DOES NOT TAKE THE WINDOWS LANES, since it is the
+// obvious idea and it was measured rather than dismissed . A
+// `windows-latest` runner IS a free native x64 Windows machine, and the
+// nsis lane has no elevation prompt to answer (`perMachine: false`, so no
+// UAC, unlike the deb lane's pkexec). It still cannot do this job:
+// `rehearse.mjs attest` requires `--by <who watched it>`, because whether
+// the download replaced the running app is an OS-level fact no test in the
+// process can observe. A CI job cannot be the witness without removing the
+// witness. A runner could add an automated swap CHECK as separate evidence;
+// it cannot produce an attestation.
 
 /**
  * @typedef {Object} Lane
@@ -88,16 +111,22 @@ export const LANES = [
         os: 'win32',
         arch: 'x64',
         format: 'exe',
-        device: null,
-        note: 'nsis. Shares stable.yml with win-arm64, so selection is load-bearing.',
+        device: 'Windows 11 in Parallels on the Mac Studio (x64 under Windows-on-ARM emulation)',
+        note: 'nsis. Shares stable.yml with win-arm64, so selection is load-bearing. '
+            + 'EMULATED SILICON, accepted by the operator 2026-08-03 : the '
+            + 'installer, the launch and the update swap are all genuinely exercised, '
+            + 'and only the CPU is not native. Said here because this string is what '
+            + 'attest copies into the rehearsal record.',
     },
     {
         id: 'win-arm64',
         os: 'win32',
         arch: 'arm64',
         format: 'exe',
-        device: null,
-        note: 'nsis. DD4 names no device; selection out of stable.yml is probed regardless.',
+        device: 'Windows 11 ARM in Parallels on the Mac Studio (M3 Ultra, native arm64)',
+        note: 'nsis. NATIVE, and the inversion is the point: this is the lane no cloud '
+            + 'runner covers well, and the same VM that emulates x64 runs arm64 on real '
+            + 'silicon. Selection out of the shared stable.yml is probed regardless.',
     },
     {
         id: 'mac-x64',
