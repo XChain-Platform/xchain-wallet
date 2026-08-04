@@ -37,7 +37,8 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -610,6 +611,71 @@ for (const line of storeInstalledSteps) {
         `${target}#${anchor} tells the operator to "Load unpacked", which is the local development build `
         + 'this criterion explicitly excludes. If the section mentions it in order to rule it out, say '
         + 'so in the same sentence so a skimming reader cannot follow it by accident.');
+}
+
+// --- 12. A command can resolve, run, exit 0, and measure the wrong thing -
+//
+// Sections 8, 10 and 11 ask what a linked PAGE says. This one is the same
+// question asked of a linked COMMAND, and the answer was worse, because a
+// command that measures the wrong artifact still exits 0 and prints a verdict.
+//
+// The disclosure's "before you tick anything" block said: run
+// `remote-code-audit.mjs`, and "the remote-code answer is a measurement rather
+// than a memory". Driven 2026-08-04: it exits 0 and reports the shipped bundle
+// clean. It defaults to packages/extension/dist, which is gitignored, was two
+// days old on the machine that ran it, and is built from whatever the shared
+// worktree happened to hold. The submission runbook's own build-provenance
+// phase refuses a locally built zip for upload in exactly those words. So the
+// ceremony verified one artifact and shipped another, on a store answer that
+// is permanent and public.
+//
+// The script already took an optional directory argument, so the fix was to
+// use it. This section holds both ends: the step must pass one, and the script
+// must still honour it. The second half is DRIVEN, not read, because "it
+// accepts a directory" is precisely the kind of claim that rots silently.
+
+const AUDIT = 'packages/extension/scripts/remote-code-audit.mjs';
+const auditSteps = disclosure.split('\n').filter((l) => /^[⬜✅]/.test(l) && /remote.code audit/i.test(l));
+
+assert.equal(auditSteps.length, 1,
+    `the disclosure carries ${auditSteps.length} checkable steps about the remote-code audit, expected 1. `
+    + 'That step is what turns the store form\'s permanent remote-code answer into a measurement; if it '
+    + 'was split or retired, update this section in the same change.');
+
+// The command block under that step has to name the audit AND give it a target.
+const auditBlock = disclosure.slice(disclosure.indexOf(auditSteps[0]));
+const auditCmd = auditBlock.match(new RegExp(`node\\s+${AUDIT.replace(/[.]/g, '\\.')}([^\\n]*)`));
+assert.ok(auditCmd,
+    `the disclosure's remote-code step no longer shows the ${AUDIT} command. An operator answering a `
+    + 'permanent store question from a step with no command in it is answering from memory.');
+
+assert.ok(auditCmd[1].trim().length > 0,
+    `the disclosure runs ${AUDIT} with no directory argument, so it audits its default `
+    + 'packages/extension/dist. That path is gitignored, locally built, and can be days stale; the '
+    + 'runbook refuses a locally built zip for upload for the same reason. Point it at the unpacked '
+    + 'release artifact instead.');
+
+assert.ok(/release-artifacts|the artifact being uploaded/i.test(auditBlock.slice(0, 1200)),
+    'the disclosure gives the remote-code audit a directory, but never ties that directory to the '
+    + 'release artifact being uploaded. Any directory satisfies a command; only the shipped one '
+    + 'satisfies the claim that the answer is a measurement.');
+
+// And the script must actually honour a directory argument. Driven against a
+// throwaway tree, because a default that silently ignores argv[2] would put
+// the original defect straight back with the documentation looking correct.
+{
+    const probe = join(tmpdir(), `xc997-audit-probe-${process.pid}`);
+    mkdirSync(probe, { recursive: true });
+    writeFileSync(join(probe, 'probe-marker.js'), 'export const x = 1;\n');
+    try {
+        const out = execFileSync('node', [join(walletRoot, AUDIT), probe], { encoding: 'utf8' });
+        assert.ok(out.includes(probe),
+            `${AUDIT} was given ${probe} and its report does not name that directory, so the directory `
+            + 'argument the disclosure depends on is not being honoured. The operator would audit the '
+            + 'local build while believing they audited the release artifact.');
+    } finally {
+        rmSync(probe, { recursive: true, force: true });
+    }
 }
 
 // --- 9. Every stage the frontier names has a row in the stage table -----
