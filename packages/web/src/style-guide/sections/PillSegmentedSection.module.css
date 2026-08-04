@@ -19,6 +19,12 @@
     transition: background-color 160ms ease, color 160ms ease;
     font-family: inherit;
     text-align: center;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .segment:hover { color: var(--xc-text); }
 .segmentActive,

@@ -65,7 +65,9 @@
      * walk get PAST History and reach DEX for the first time - the walk finds
      * these one route at a time, so expect more until the sweep lands.
      * Height has to be stated, not inherited from whichever font the platform
-     * happens to ship.
+     * happens to ship. That sweep is , and it has now landed: the
+     * geometry guard scores this rule rather than trusting that it mentions
+     * the token.
      */
     min-height: var(--xc-tap-min);
     display: inline-flex;

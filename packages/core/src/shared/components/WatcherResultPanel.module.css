@@ -92,6 +92,12 @@
     font-family: inherit;
     text-decoration: underline;
     padding: var(--xc-space-1) 0;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .successLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);

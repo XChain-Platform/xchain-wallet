@@ -44,6 +44,12 @@
     cursor: pointer;
     padding: var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    min-width: var(--xc-tap-min);
+    align-items: center;
+    justify-content: center;
 }
 
 .close:hover, .close:focus-visible { color: var(--xc-text); outline: none; }

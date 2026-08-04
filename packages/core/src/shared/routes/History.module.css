@@ -400,6 +400,12 @@
     cursor: pointer;
     padding: 0;
     font-family: inherit;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .clearLink:hover { text-decoration: underline; }
 
@@ -415,6 +421,9 @@
     font-size: var(--xc-text-xs);
     cursor: pointer;
     font-family: inherit;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
 }
 
 .chipActive {
@@ -807,8 +816,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    /* : 22x22 was two pixels under the WCAG 2.2 AA 2.5.8 pointer-target
+       floor on every platform, not just the CI runner's font. */
+    width: var(--xc-tap-min);
+    height: var(--xc-tap-min);
     flex-shrink: 0;
 }
 
@@ -1114,6 +1125,12 @@
     border-radius: var(--xc-radius-2);
     padding: var(--xc-space-1) var(--xc-space-3);
     cursor: pointer;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .exportTrigger:disabled {

@@ -68,6 +68,12 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text);
     cursor: pointer;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .scanButton:hover:not(:disabled) {
@@ -182,6 +188,9 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     cursor: pointer;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
 }
 
 .laneSwitcher {

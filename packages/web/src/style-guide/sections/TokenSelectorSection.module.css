@@ -154,6 +154,12 @@
     border-radius: 999px;
     cursor: pointer;
     font-family: inherit;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .kindSegment:hover { color: var(--xc-text); }
 .kindSegmentActive,
