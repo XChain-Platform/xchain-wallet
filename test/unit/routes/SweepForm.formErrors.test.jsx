@@ -94,14 +94,21 @@ async function mountSweep() {
     //
     // AND for the submit button to be live, which is a SEPARATE condition and
     // is the one every test below actually depends on. The button is disabled
-    // by `!fromAddress || confirmAction.composing`; the destination field
-    // appears as soon as `fromAddress` resolves, but a compose kicked off by
-    // the same mount can still be in flight after that. A gate that waits only
-    // for the field therefore returns while the button is still disabled, and
-    // the very next line - `expect(q.submit().disabled).toBe(false)` - is a
-    // race against an effect rather than an assertion about behaviour. It won
-    // that race on every dev box and lost it on the `coverage` job, where it
-    // read as the  fix having regressed.
+    // by `!fromAddress || confirmAction.composing`, and the destination field
+    // does NOT imply a resolved `fromAddress`: the form renders the whole
+    // body either way, putting a "No address on this chain" alert where the
+    // From field goes. So a gate that waits only for the field could return
+    // before a source existed, and the next line -
+    // `expect(q.submit().disabled).toBe(false)` - was a race against a render
+    // rather than an assertion about behaviour. It won that race on every dev
+    // box and lost it on the `coverage` job and on the devhost CI venue,
+    // where it read as the  fix having regressed .
+    //
+    // The window itself is gone: useActionForm now derives the default source
+    // in the same render that receives the addresses, so there is no longer a
+    // render with the addresses loaded and no source (driven in
+    // actionFormSourceSelection.test.jsx). This gate stays anyway, because
+    // what these cases need is a submittable form, and saying so is cheap.
     //
     // Nothing in this file wants a disabled button: both cases assert `false`,
     // because the whole point of  / D-58 is that an empty destination
