@@ -198,15 +198,55 @@ if (docsAvailable()) {
     // Whitespace-flattened: the doc is hard wrapped, so any phrase worth
     // asserting on will eventually straddle a line break.
     const setup = readDoc('release', 'ci-setup.md').replace(/\s+/g, ' ');
+    // THIS BLOCK USED TO PIN TWO CONTROLS THAT DO NOT EXIST, and that is
+    // why the page went on claiming them. It required the doc to say the
+    // signing environment "requires a human reviewer to approve" and that
+    // tag creation is "restricted to the release maintainer through a
+    // repository tag ruleset". Both were measured in 2026-08 and neither is
+    // in force: environment reviewers need a plan tier this org does not
+    // have, and a tag rule cannot exempt one named person while another
+    // account holds admin, so none was created rather than a partial one.
+    //
+    // The effect was worse than a stale test. Correcting the page would
+    // have REDDENED this smoke, so the true state could not be documented
+    // without first fixing the gate that demanded the false state. A test
+    // that pins a security claim rather than a security property will
+    // always fail in that direction.
+    //
+    // What is pinned now is what is actually in force, plus the two
+    // absences stated out loud, because an absent control that is written
+    // down is the thing being relied on here.
     for (const [control, re] of [
-        ['a protected signing environment gated on human approval',
-            /protected deployment environment that requires a human reviewer to approve/i],
+        ['the signing environment restricted to the release tag pattern',
+            /restricted to the release tag pattern/i],
         ['signing credentials scoped to that environment, never repository-wide',
             /scoped to the protected environment, never stored as a repository-wide secret/i],
-        ['release-tag creation restricted to the maintainer',
-            /restricted to the release maintainer through a repository tag ruleset/i],
+        ['the signed-tag requirement, which is the control everything rests on',
+            /tag must carry a cryptographic signature from the maintainer/i],
+        ['the absent approval step, stated rather than implied',
+            /there is no human approval step/i],
+        ['the absent tag rule, stated rather than implied',
+            /there is no rule restricting who can create a release tag/i],
+        ['why no partial tag rule was created',
+            /protects nothing and reads[^.]*exactly like a rule that works/i],
+        ['the artifact signature check that precedes manifest signing',
+            /every artifact is checked against the code signature/i],
     ]) {
         assert.match(setup, re, `${SETUP_DOC} covers ${control}`);
+    }
+
+    // And the page must NOT re-acquire either false claim. A future edit
+    // restoring the old wording would otherwise pass every assertion above,
+    // since those only require the true statements to be present.
+    for (const [claim, re] of [
+        ['a human-reviewer approval gate', /requires a human reviewer to approve/i],
+        ['a maintainer-only tag ruleset',
+            /restricted to the release maintainer through a repository tag ruleset/i],
+    ]) {
+        assert.doesNotMatch(setup, re,
+            `${SETUP_DOC} must not claim ${claim}: it does not exist, and this page is `
+            + 'what a reader uses to decide whether a release could only have come from '
+            + 'an intentional run');
     }
     assert.match(setup,
         /manifest-signing key never appears here, and must never be added/i,
