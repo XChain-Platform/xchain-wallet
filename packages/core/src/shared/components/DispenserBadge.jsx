@@ -34,7 +34,13 @@ function extractRows(resp) {
     return [];
 }
 
-function isOpen(row) {
+// Exported as isDispenserRowOpen so other surfaces (ManageToken's
+// Dispensers tab) share this exact rule instead of reinventing their own -
+// see D-39/dispenserQueries.js: the token-listing endpoint only ever
+// returns the frozen creation-time action status ('valid' for anything
+// that indexed successfully), never a real open/closed/sold-out state, so
+// "valid" is treated as active here by design, not a bug to fix later.
+export function isDispenserRowOpen(row) {
     if (!row || typeof row !== 'object') return false;
     const status = String(row.status || '').toLowerCase();
     if (!status) return true; // if explorer omits status, assume row is active
@@ -58,7 +64,7 @@ function resolveCount(messaging, chainId, tick) {
     if (cached && cached.promise) return cached.promise;
     const promise = messaging.getDispensersForToken({ chainId, tick })
         .then((resp) => {
-            const open = extractRows(resp).filter(isOpen).length;
+            const open = extractRows(resp).filter(isDispenserRowOpen).length;
             CACHE.set(key, { state: 'ready', count: open });
             return open;
         })
