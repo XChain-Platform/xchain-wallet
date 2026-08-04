@@ -87,12 +87,20 @@ export const XCHAIN_PAIR = 'XCHAIN/USD';
 /**
  * XCHAIN/USD, at the value production actually publishes.
  *
- * Not a round number picked for convenience: the hub carries forward a
- * bootstrap of 2.00 every round (`XCHAIN_PRICE_BOOTSTRAP_USD`), and the e2e
- * tree pins the same constant in `xchainPriceConstants.BOOTSTRAP_XCHAIN_USD`.
- * Seeding anything else would mean every green fee run asserted against a
- * number no producer emits, which is the specific way a missing-pair bug once
- * survived to launch-blocker status.
+ * A venue fixture, matched to the e2e tree's seeded value in
+ * `xchainPriceConstants.BOOTSTRAP_XCHAIN_USD`, not to a production constant.
+ *
+ * It used to be both: the hub's bootstrap was itself `2.00000000` USD and this
+ * seeded the same number. D2 was redecided on 2026-08-03 to denominate the
+ * bootstrap in SATOSHIS (1000 sat), so the hub no longer holds any fixed USD
+ * figure to match: its USD value is resolved per round by converting 1000 sat
+ * with that round's consensus BTC/USD, and therefore moves with BTC.
+ *
+ * Kept at 2.00 deliberately rather than re-based. What matters for these runs is
+ * that the seeded price and the asserted fee arithmetic agree with each other;
+ * chasing a moving production figure would make the expectations non-deterministic
+ * for no gain. The cross-repo pin that DOES still need to hold lives in
+ * `xchainPriceSeedGuard`, which pins the hub's satoshi constant directly.
  */
 export const XCHAIN_USD_PRICE = '2.00000000';
 
