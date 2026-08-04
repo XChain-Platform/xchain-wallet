@@ -322,19 +322,30 @@ jobs:
       # WITHOUT the credential - unlike appx, no identity is baked in - but
       # snapcraft is not on the runner image and an artifact nothing can
       # upload would ride every release, so the credential is the switch.
-      # THE arm64 HALF CANNOT BE PRODUCED HERE, and that is now read out of
-      # app-builder-lib 26.15.7 rather than left as a question for the first
-      # run . `--build-for` is passed in exactly one place,
-      # generateRemoteBuildArgs(), which is the Launchpad remote-build path;
-      # the local branch runs `snapcraft pack [--use-lxd]` with no arch
-      # argument at all, so a local build is HOST-ARCHITECTURE ONLY. On this
-      # amd64 runner the line below can only ever yield the amd64 snap, and
-      # expected-artifacts.txt's `optional *.snap default x64,arm64` row then
-      # REFUSES the release: an optional row producing nothing passes, one
-      # producing a single arch does not. That is the arch gate working, and
-      # it means this step is blocked on an arm64 strategy (native arm64
-      # runner, Launchpad remote-build, or shipping amd64-only), not on the
-      # store credential. See  §16.
+      # BOTH ARCHES ARE WIRED TO CROSS-BUILD FROM THIS amd64 RUNNER, and the
+      # store credential was never what gated verifying that .
+      # resolveSnapCredentials() returns an empty map when SNAP_CSC_LINK is
+      # unset and throws only on a credential that resolves EMPTY, so a local
+      # `snapcraft pack` needs no store account. Only remote-build
+      # authenticates. The blocker is a snapcraft HOST, nothing else.
+      #
+      # The target arch is NOT carried by a CLI flag. `--build-for` appears
+      # only in generateRemoteBuildArgs() (the Launchpad path), and reading
+      # that as "local builds are host-arch only" is wrong: core24.js emits a
+      # `platforms: { <target>: { build-for: <target>, build-on: <host> } }`
+      # block into the generated snapcraft.yaml whenever the target differs
+      # from process.arch. So the line below DOES declare and attempt the
+      # arm64 cross-build.
+      #
+      # What is unverified is whether that cross-build SUCCEEDS. The part
+      # stages a prebuilt Electron tree rather than compiling, which is the
+      # favourable case, but the stage-packages must resolve as arm64 debs on
+      # this amd64 host, and that is what actually fails when snapcraft
+      # cross-builds fail. Either outcome is loud: expected-artifacts.txt's
+      # `optional *.snap default x64,arm64` passes a lane producing nothing
+      # and REFUSES one producing a single arch, so a half-succeeding build
+      # blocks the release rather than shipping an amd64-only set as
+      # complete. Fallbacks, in order, are in  §16.
       #
       # Also unverified: nothing here sets useLXD/useMultipass/
       # useDestructiveMode, so electron-builder never passes `--use-lxd` and
