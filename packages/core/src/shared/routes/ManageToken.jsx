@@ -15,6 +15,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { isDispenserRowOpen } from '../components/DispenserBadge.jsx';
 import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
@@ -264,10 +265,14 @@ export function ManageToken({
                 const rows = Array.isArray(dispensersRaw)
                     ? dispensersRaw
                     : (Array.isArray(dispensersRaw?.data) ? dispensersRaw.data : []);
+                // isDispenserRowOpen() reads the explorer's string status
+                // label ('valid'/'open'). The old check here did
+                // Number(status) !== 0 against that same string - Number()
+                // of a non-numeric label like "valid" is NaN, which always
+                // failed the !== 0 test, so every real dispenser was
+                // dropped and this tab could never show anything.
                 const open = rows.filter((d) => {
-                    if (!d) return false;
-                    const status = d.status ?? d.dispenser_status;
-                    if (status !== undefined && Number(status) !== 0) return false;
+                    if (!isDispenserRowOpen(d)) return false;
                     const src = d.source || d.source_address || d.dispenser || d.dispenser_address;
                     return !src || mine.has(src);
                 });
