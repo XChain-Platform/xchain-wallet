@@ -28,6 +28,13 @@
 // the dev-server venue.
 
 import { createWallet, expect, test, unlockedShell } from '../../fixtures/wallet.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
+
+// Every wait below sits on the far side of an Argon2id derivation (a create or
+// an unlock), so it takes the shared budget rather than a hand-picked number.
+// These three carried a bare 90_000, which is HALF what CI allows: one of them
+// was in the flaky set of run 30930194072. See.
+const KDF_STEP_MS = kdfStepTimeout();
 
 const PASSWORD = 'add-wallet-activation';
 
@@ -54,7 +61,7 @@ test.describe('adding a second wallet', () => {
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
         });
-        await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
+        await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
         // THE FACT: the app is back on the wallet it started from.
         await expect(page.getByRole('button', { name: /First Wallet/ }).first(),
@@ -94,7 +101,7 @@ test.describe('adding a second wallet', () => {
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
         });
-        await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
+        await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
         await gotoPalette(page, 'Switch wallet');
         await page.getByRole('button', { name: /Second Wallet/ }).first().click();
@@ -105,11 +112,11 @@ test.describe('adding a second wallet', () => {
         // Unlock again: a reload drops the in-memory session key on the web
         // shell. This is the ordinary path, not a contrived one.
         const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
-        await unlock.or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: 60_000 });
+        await unlock.or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: KDF_STEP_MS });
         if (await unlock.count() > 0) {
             await page.getByLabel('Password').fill(PASSWORD);
             await unlock.click();
-            await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
+            await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
         }
 
         await expect(page.getByRole('button', { name: /Second Wallet/ }).first(),

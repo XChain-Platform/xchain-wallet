@@ -33,6 +33,7 @@ import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockP
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
+import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
@@ -772,6 +773,10 @@ function AppInner() {
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
+    // : the wallet-mode gate on the spend surfaces. Signer mode
+    // promises on its own settings screen that Send / Receive are hidden,
+    // so the nav rails and the command palette drop both entries.
+    const { isSignerMode } = useWalletMode();
 
     // : accounts of the active wallet, purely so the AppHeader gear
     // can name the active one. The per-wallet effect above owns SELECTION;
@@ -2504,6 +2509,7 @@ function AppInner() {
                 // command pointing at `markets` would navigate to a view that
                 // no longer exists.
                 hasDexSurface: DEX_SURFACE_ENABLED,
+                isSignerMode,
             };
             //  entity handlers: tokens open TokenDetail with the full
             // ref the row already carries; sites land on the Connected Sites
@@ -2563,6 +2569,7 @@ function AppInner() {
                             walletName={activeWalletName}
                             hasBtcAddress={hasBtcAddress}
                             hasDexSurface={DEX_SURFACE_ENABLED}
+                            isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
                     }
@@ -2575,6 +2582,7 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
                             hasDexSurface={DEX_SURFACE_ENABLED}
+                            isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
                     }

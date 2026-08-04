@@ -137,5 +137,64 @@ assert.ok(/ships? at the same version number/.test(readme),
     'README.md no longer states the lockstep rule. The check would still pass silently while the only '
     + 'human-readable statement of the invariant was gone.');
 
-console.log(`OK: version-lockstep smoke (: ${members.length} packages + the store-facing `
-    + `manifest.json + the user-facing buildInfo.js all at ${rootVersion}; test/e2e exempt and documented)`);
+// --- 5. The prose copies of the version --------------------------------
+//
+// . The lockstep set is 14 files, and until now this check covered
+// 12 of them: the ten package.json files, the manifest and buildInfo. The
+// two it did not cover are the two a human reads first, README.md's version
+// badge and its Status line, and both spell the number out in prose where
+// nothing derives it.
+//
+// That gap is the shape of the defect  was filed for. A signed
+// `v0.335.0` tag was cut against a tree in which every file still declared
+// 0.334.0, so the tag named a version no file in the repo claimed, and
+// release.yml's tag-versus-package.json gate is the only thing that caught
+// it - at the cost of a red release run. A bump that lands in the manifests
+// and stops short of the README leaves the same contradiction behind in the
+// place a reader trusts most.
+
+// shields.io spells the badge as `version-<label>-<color>` and escapes a
+// literal hyphen inside the label as `--`, so a prerelease reads
+// `version-0.335.0--beta.1-blue`. The color is stripped off the end rather
+// than matched by name (it is presentation and may change), and the escape
+// is undone afterwards, or every prerelease would read as a mismatch.
+const badge = readme.match(/img\.shields\.io\/badge\/version-([^"]+)/);
+assert.ok(badge,
+    'README.md no longer carries a shields.io version badge in the expected shape. It is the first version '
+    + 'statement a reader sees, so if it moved, this check has to move with it.');
+const badgeVersion = badge[1].slice(0, badge[1].lastIndexOf('-')).replaceAll('--', '-');
+assert.equal(badgeVersion, rootVersion,
+    `README.md's version badge reads ${badgeVersion} but the root is at ${rootVersion}. `
+    + 'The badge is the first thing a reader sees, and it is rendered from a remote image URL, so nothing '
+    + 'else in the repo will ever contradict it out loud.');
+
+const status = readme.match(/current version: `([^`]+)`/);
+assert.ok(status,
+    'README.md\'s Status section no longer states a "current version: `X.Y.Z`". It is the sentence that '
+    + 'tells a reader what this checkout is, and a version-bump check that cannot find it enforces nothing.');
+assert.equal(status[1], rootVersion,
+    `README.md's Status section says the current version is ${status[1]} but the root is at ${rootVersion}. `
+    + 'A bump that stopped at the manifests leaves the README claiming the previous release.');
+
+// The changelog is where the version's release context lives - buildInfo.js
+// says so in its own comment. A version with no section there is a release
+// whose contents are undocumented at the moment it is tagged.
+//
+// Prereleases are exempt: the beta and respin lanes (packages/mobile/
+// scripts/version.js) ride the version they are betas OF, and they are not
+// separate releases to write up.
+
+const isPrerelease = rootVersion.includes('-');
+if (!isPrerelease) {
+    const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+    const heading = new RegExp(`^## \\[${rootVersion.replaceAll('.', '\\.')}\\]`, 'm');
+    assert.ok(heading.test(changelog),
+        `CHANGELOG.md has no "## [${rootVersion}]" section, but that is the version this tree declares and `
+        + 'the one a release tag would name. buildInfo.js points a reader at the changelog for the version\'s '
+        + 'release context; a bump that skips it ships a version with no recorded contents.');
+}
+
+console.log(`OK: version-lockstep smoke (/: ${members.length} packages + the store-facing `
+    + `manifest.json + the user-facing buildInfo.js + README's badge and Status line all at ${rootVersion}`
+    + `${isPrerelease ? '; prerelease, so no CHANGELOG section is required' : ', with a CHANGELOG section'}`
+    + '; test/e2e exempt and documented)');

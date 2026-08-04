@@ -42,6 +42,7 @@ import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
 const {
+    importedAddressIdsFor,
     createWallet,
     createAccount,
     activateChain,
@@ -320,15 +321,12 @@ async function addressesByChain(req, { vault, chainRegistry }) {
     // result even when one account was asked for - AddressList always
     // passes the active account id, and its "Imported" filter exists to
     // show exactly these.
-    /** @type {Set<string>} */
-    let importedAddressIds = new Set();
-    try {
-        const walletRecord = await vault.wallets.get(walletId);
-        const keys = Array.isArray(walletRecord?.importedKeys) ? walletRecord.importedKeys : [];
-        importedAddressIds = new Set(
-            keys.map((k) => k?.addressId).filter((id) => typeof id === 'string' && id.length > 0),
-        );
-    } catch { /* no wallet record readable: fall through with none */ }
+    //
+    // The rule lives in flows/_importedAddressIds.js and is read from
+    // there, never restated here : this is the query AddressList
+    // actually calls, so an inline copy is the one that would keep
+    // shipping the D-63 defect while the shared resolver looked correct.
+    const importedAddressIds = await importedAddressIdsFor(vault, walletId);
     if (accountIds.size === 0 && importedAddressIds.size === 0) return {};
     // Read activeNetwork once per call so every UI surface that consumes
     // this map (Home, History, AddressList, Send, every action form's
@@ -1924,6 +1922,47 @@ export function createBackgroundHost(deps) {
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
             source: source.address, ownAddresses,
+        });
+    });
+
+    // : what the Max button is allowed to fill in for a native-coin send.
+    //
+    // The renderer cannot answer this. The number it needs is the fee the
+    // ENCODER will charge for the transaction it is about to build, and the
+    // encoder states that only in the typed details of a refusal - a payload
+    // MessageHost.serializeError drops on the way back ({ name, message } only,
+    // see sdk/encoderErrors.js). So the whole round trip, refusal included, runs
+    // on this side and only the settled satoshi count crosses.
+    //
+    // Deliberately the same preamble as action.composeForConfirm above (source,
+    // change rotation, fee opts): the quote is only worth anything if it prices
+    // the transaction that route will actually compose. Never throws - a quote
+    // that cannot be had returns null and the form keeps its static estimate.
+    host.register('action.quoteMaxSendable', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.quoteMaxSendable: chainId is required');
+        }
+        const source = normalizeSource(req?.from, 'action.quoteMaxSendable');
+        const destination = typeof req?.to === 'string' ? req.to.trim() : '';
+        if (!destination) throw new Error('action.quoteMaxSendable: to is required');
+
+        let encoderOpts = {
+            pubkey: source.publicKey,
+            ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+            ...(req.rbf !== undefined && { rbf: req.rbf }),
+        };
+        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
+            encoderOpts = { ...encoderOpts, attachPrevTx: true };
+        }
+        const { change } = await confirmChangeAndOwnAddresses({
+            req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
+        });
+        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+
+        return flows.quoteMaxSendable({
+            sdkRegistry, chainRegistry, vault, chainId,
+            source: source.address, destination, encoderOpts,
         });
     });
 

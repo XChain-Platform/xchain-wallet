@@ -324,8 +324,47 @@ const invokedDirectly = (() => {
     }
 })();
 
+const USAGE = `capture-update-check.mjs - capture what an update check actually sends
+( §7.6). The download page may state only what a CAPTURE shows.
+
+Usage:
+  node tools/release/capture-update-check.mjs [--out <file>]
+  node tools/release/capture-update-check.mjs --listen [--port <n>] [--out <file>]
+  node tools/release/capture-update-check.mjs --drive [--out <file>]
+
+Modes:
+  (default)  Drive a request through builder-util-runtime's own
+             configureRequestOptions at the version this repo pins. Answers
+             the library-policy half without a packaged app, and is honest
+             about being only that half.
+  --listen   Stand up a plain HTTP origin, record every request in full, and
+             write them out. Point a REAL packaged build at it. This is the
+             authoritative mode.
+  --drive    That same origin, with the REAL electron-updater pointed at it
+             behind a stub app adapter. Sees headers the UPDATER adds, which
+             the library mode cannot: x-user-staging-id is one of them, and
+             the download page once said no such identifier existed.
+
+Options:
+  --out <file>  capture destination
+                (default docs/update-check-capture.json, resolved from this
+                file rather than from the cwd - a relative default once left
+                the checked-against capture stale while reporting success)
+  --port <n>    --listen port, default 0 (ephemeral)
+  -h, --help    print this and exit 0
+
+WRITES A FILE IN EVERY MODE. That is why --help is answered before any of
+them: this script used to ignore the flag, run the default capture and
+OVERWRITE the capture the download page's privacy copy is checked against,
+exiting 0 because the work had succeeded .
+`;
+
 if (invokedDirectly) {
     const argv = process.argv.slice(2);
+    if (argv.some((a) => a === '--help' || a === '-h')) {
+        process.stdout.write(USAGE);
+        process.exit(0);
+    }
     const at = (n) => (argv.indexOf(n) === -1 ? undefined : argv[argv.indexOf(n) + 1]);
     // Resolved from this file, not from the CWD. A bare relative default wrote
     // the capture wherever it was invoked from, so a refresh run at the repo

@@ -52,3 +52,10 @@ test/e2e/playwright-report/
 # operator to stage them here, so without this line each one is a bare `git add`
 # away from putting them in a shared repo that has an incident class for exactly that.
 release-artifacts/
+
+# The xchain-documentation sibling, when CI checks it out (, ci.yml).
+# actions/checkout cannot write outside GITHUB_WORKSPACE, so on a runner the
+# sibling lands INSIDE this repo and XCHAIN_DOCS_ROOT points the smokes at it.
+# Ignored so a checkout that has to live in the tree can never be mistaken for
+# a change to it, by a drift guard or by a person.
+/.docs-sibling/

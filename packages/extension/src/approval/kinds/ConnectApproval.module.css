@@ -46,6 +46,9 @@
     font-size: var(--xc-text-sm);
     cursor: pointer;
     padding: var(--xc-space-1) 0;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
 }
 
 .chainLabel input[type="checkbox"] {

@@ -30,6 +30,7 @@
 #   --public-base <url> where that target is served from, for the edge check
 #   --staging           publish the rehearsal set to the staging feed (§7.5)
 #   --rehearsal <file>  the passing rehearsal record for this release
+#   --release-record <file>  the §6 release record for this release
 #   --no-edge-verify    skip the edge check; must be typed, never defaulted
 #   --dry-run           print the plan and change nothing
 #
@@ -82,6 +83,18 @@
 # release after a failed lane produces new bytes that nobody rehearsed,
 # under the same version. Staging publishes are exempt for the obvious
 # reason - publishing the staging set is step one OF the rehearsal.
+#
+# AND THE RELEASE MUST HAVE A RECORD (§6, ). Same shape, same
+# reason, one document over. §6 says the release record is instantiated
+# from TEMPLATE.md at the START of a release and closed by step 8, and
+# for the first release nothing created it and nothing asked for it:
+# v0.334.0 was tagged, built green and left half-finished while
+# `claude/reports/wallet-releases/` still held only TEMPLATE.md, so for a
+# day the only account of it lived in GitHub's run history and had to be
+# reconstructed from a CI summary job afterwards. A production publish
+# now refuses without an instantiated record, with no skip switch. An
+# untouched copy of the template does not count, because `cp TEMPLATE.md
+# vX.Y.Z.md` is the cheapest way to make a gate stop asking.
 
 set -euo pipefail
 
@@ -102,6 +115,7 @@ DRY_RUN=0
 STAGING=0
 EDGE_VERIFY=1
 REHEARSAL_RECORD=""
+RELEASE_RECORD=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -111,6 +125,7 @@ while [[ $# -gt 0 ]]; do
         --public-base) PUBLIC_BASE="${2%/}"; shift 2 ;;
         --staging) STAGING=1; shift ;;
         --rehearsal) REHEARSAL_RECORD="$2"; shift 2 ;;
+        --release-record) RELEASE_RECORD="$2"; shift 2 ;;
         --no-edge-verify) EDGE_VERIFY=0; shift ;;
         --dry-run|-n) DRY_RUN=1; shift ;;
         --help|-h)
@@ -265,6 +280,21 @@ done
 # record as `bootstrap`, where it is visible and dated, rather than by a
 # command-line flag that would outlive the situation that justified it.
 if [[ "$STAGING" -eq 0 ]]; then
+    # The §6 record gate goes first: it costs one file read, while the
+    # rehearsal gate hashes the manifest and verify.sh hashes every
+    # artifact. Refusing early is refusing cheaply.
+    #
+    # Anchored to THIS checkout, like rollback-rerelease.sh's lookup, so
+    # a publish driven from anywhere finds the same records directory.
+    # `--release-record` names a record that lives elsewhere; it does not
+    # waive one, and there is no flag that does.
+    echo "publish.sh: checking the §6 release record ..." >&2
+    if [[ -n "$RELEASE_RECORD" ]]; then
+        node "$HERE/release-record.mjs" assert --tag "$TAG" --record "$RELEASE_RECORD" >&2
+    else
+        node "$HERE/release-record.mjs" assert --tag "$TAG" >&2
+    fi
+
     if [[ -z "$REHEARSAL_RECORD" ]]; then
         REHEARSAL_RECORD="$(cd "$INPUT_DIR/.." && pwd)/REHEARSAL-$TAG.json"
     fi

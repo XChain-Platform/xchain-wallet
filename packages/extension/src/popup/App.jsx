@@ -68,6 +68,7 @@ import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/use
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
+import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
@@ -574,6 +575,10 @@ function AppInner() {
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
+    // : the wallet-mode gate on the spend surfaces. Signer mode
+    // promises on its own settings screen that Send / Receive are hidden,
+    // so the nav rails and the command palette drop both entries.
+    const { isSignerMode } = useWalletMode();
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
@@ -646,6 +651,7 @@ function AppInner() {
             openHelp: () => setShortcutHelpOpen(true),
             hasBtcAddress,
             hasGovernanceAddress,
+            isSignerMode,
         }),
         // : token rows open TokenDetail with the full ref the row
         // carries. : settings-section and settings-backed help commands

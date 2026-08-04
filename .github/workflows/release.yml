@@ -34,13 +34,24 @@ name: Release
 # run with real secrets. See https://docs.xchain.io/components/wallet/release/ci-setup.
 # In short:
 #
-#   1. Signing lanes run in the `release-signing` GitHub Environment,
-#      which has a required-reviewer approval gate.
-#   2. `v*` tag creation is restricted to the release maintainer by a
-#      tag protection rule.
+#   1. A release tag must carry a signature from the maintainer's
+#      offline tag-signing key. `verify-tag` checks that before any job
+#      that can read a signing secret starts. This is the control the
+#      rest rests on, and the only one not held in repo settings.
+#   2. Signing lanes run in the `release-signing` GitHub Environment,
+#      whose deployment-branch policy admits only the release tag
+#      pattern, so no branch or pull request can reach them.
 #   3. Signing secrets are bound to that environment, never repo-level.
 #   4. No workflow with access to signing secrets triggers on
 #      `pull_request`. This one triggers only on `v*` tags.
+#
+# Two controls this comment used to claim are NOT in force and never
+# will be (operator decision 2026-08-03): the environment has no per-run
+# human approval step (that needs a plan tier this org does not have),
+# and no repository rule restricts who may create a `v*` tag (such a rule
+# cannot exempt one named person while a second account holds admin, so
+# none was created rather than a partial one). Anyone with push access
+# can create a tag; what they cannot do is make a signing job run on it.
 #
 # Decisions in force: D3 = Azure Trusted Signing (Windows),
 # D4 = GitHub-hosted runners everywhere.
@@ -322,10 +333,35 @@ jobs:
       # WITHOUT the credential - unlike appx, no identity is baked in - but
       # snapcraft is not on the runner image and an artifact nothing can
       # upload would ride every release, so the credential is the switch.
-      # UNEXERCISED until the credential exists; first run must verify the
-      # snapcraft/LXD build environment and whether the arm64 half can be
-      # produced on an amd64 runner at all (remote-build is the documented
-      # fallback in this app-builder-lib).
+      # BOTH ARCHES ARE WIRED TO CROSS-BUILD FROM THIS amd64 RUNNER, and the
+      # store credential was never what gated verifying that .
+      # resolveSnapCredentials() returns an empty map when SNAP_CSC_LINK is
+      # unset and throws only on a credential that resolves EMPTY, so a local
+      # `snapcraft pack` needs no store account. Only remote-build
+      # authenticates. The blocker is a snapcraft HOST, nothing else.
+      #
+      # The target arch is NOT carried by a CLI flag. `--build-for` appears
+      # only in generateRemoteBuildArgs() (the Launchpad path), and reading
+      # that as "local builds are host-arch only" is wrong: core24.js emits a
+      # `platforms: { <target>: { build-for: <target>, build-on: <host> } }`
+      # block into the generated snapcraft.yaml whenever the target differs
+      # from process.arch. So the line below DOES declare and attempt the
+      # arm64 cross-build.
+      #
+      # What is unverified is whether that cross-build SUCCEEDS. The part
+      # stages a prebuilt Electron tree rather than compiling, which is the
+      # favourable case, but the stage-packages must resolve as arm64 debs on
+      # this amd64 host, and that is what actually fails when snapcraft
+      # cross-builds fail. Either outcome is loud: expected-artifacts.txt's
+      # `optional *.snap default x64,arm64` passes a lane producing nothing
+      # and REFUSES one producing a single arch, so a half-succeeding build
+      # blocks the release rather than shipping an amd64-only set as
+      # complete. Fallbacks, in order, are in  §16.
+      #
+      # Also unverified: nothing here sets useLXD/useMultipass/
+      # useDestructiveMode, so electron-builder never passes `--use-lxd` and
+      # the build relies on snapcraft's own default environment selection.
+      # The `lxd init --auto` below prepares LXD; it does not select it.
       - name: Install snapcraft (Snap Store lane, §16)
         if: env.SNAP_CSC_LINK != ''
         run: |
@@ -401,11 +437,14 @@ jobs:
 
   # ---- Signing lanes -------------------------------------------------
   #
-  # Everything below runs in the `release-signing` environment. That is
-  # the approval gate: a job cannot start, and therefore cannot touch a
-  # signing secret, until a required reviewer approves the run. This is
-  # the single control standing between "can push a tag" and "can mint a
-  # signed binary", so it is not optional and not a formality.
+  # Everything below runs in the `release-signing` environment, whose
+  # deployment-branch policy admits only the release tag pattern: a job
+  # here cannot start, and therefore cannot touch a signing secret, from
+  # a branch or a pull request. There is no human approval step on it (see
+  # the header), so what stands between "can push a tag" and "can mint a
+  # signed binary" is `verify-tag` refusing every tag that does not carry
+  # the maintainer's offline signature. That is not a formality: it is
+  # the whole of it.
 
   desktop-macos:
     needs: verify-tag

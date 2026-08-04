@@ -136,6 +136,9 @@
     font-weight: 600;
     cursor: pointer;
     padding-block: var(--xc-space-1);
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
 }
 
 .unverifiedList {
@@ -145,6 +148,10 @@
 
 .unverifiedList summary {
     cursor: pointer;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    align-content: center;
 }
 
 .unverifiedList ul {

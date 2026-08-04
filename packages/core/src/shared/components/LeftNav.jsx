@@ -20,6 +20,11 @@ import styles from './LeftNav.module.css';
  * a wallet switcher, Settings, and Lock. Active row gets
  * `aria-current="page"`.
  *
+ * Two of those rows are conditional on the wallet, not the build:
+ * `isSignerMode` (§20) removes Send and Receive, because the Wallet Mode
+ * screen promises exactly that when the user picks the air-gapped signer
+ * role .
+ *
  * Visibility is the parent's responsibility: this component renders
  * itself unconditionally. `<FullLayoutWithNav>` decides whether the
  * sidebar shows at all (compact tier hands the slot to the bottom tab
@@ -79,6 +84,7 @@ export function formatBadgeCount(n) {
  * @param {string} [props.walletName]
  * @param {boolean} [props.hasBtcAddress]
  * @param {boolean} [props.hasDexSurface]   false only in a build that compiled the DEX surface out ; the tab is then absent, not disabled
+ * @param {boolean} [props.isSignerMode]   §20 air-gapped signer mode; drops Send + Receive from the nav 
  * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
  */
 export function LeftNav({
@@ -91,13 +97,21 @@ export function LeftNav({
     walletName,
     hasBtcAddress = false,
     hasDexSurface = true,
+    isSignerMode = false,
     badges = {},
 }) {
     const primary = [
         { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
         { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-        { id: 'send', label: 'Send', Icon: Icon.SendIcon },
-        { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
+        // : signer mode's own hint promises "Send / receive screens
+        // are hidden; this wallet does not broadcast". Absent, not disabled,
+        // for the reason the DEX row below is absent: a greyed Send row still
+        // reads as a capability the device has, and the whole value of the
+        // mode is that an air-gapped user can believe the removal.
+        ...(isSignerMode ? [] : [
+            { id: 'send', label: 'Send', Icon: Icon.SendIcon },
+            { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
+        ]),
         { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
         // Absent, not greyed, when the build has no DEX surface: the store
         // build compiles those routes out , so the destination does

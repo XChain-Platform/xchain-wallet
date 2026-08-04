@@ -32,7 +32,7 @@
 // script) lowers its floor DELIBERATELY, in the same change, with a reason.
 
 import assert from 'node:assert/strict';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 
 import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
 
@@ -49,12 +49,26 @@ const FLOORS = {
         note: 'restored 2026-08-03 after the docs port scrubbed it to 0/0',
     },
     'release/mobile/android-play.md': {
-        steps: 9,
-        blocks: 12,
+        steps: 10,
+        blocks: 13,
         note: 'restored 2026-08-03 after the same port scrubbed it to 0/0; the blocks are the '
             + 'ceremony invocation, two manifest dumps, the two Phase 0 preflight scripts, the '
             + 'permission set, the asset-links build, the App Links check, the publisher, the '
-            + 'signature one-liner, the shipped-lanes flip and the character count',
+            + 'signature one-liner, the shipped-lanes flip and the character count. Raised from '
+            + '9/12 by , which added the trader block an operator transcribes and the step '
+            + 'that ticks it off. The page carries more than this today; the floor moves only by '
+            + 'what a change actually put there, so it cannot be propped up by a neighbour\'s '
+            + 'uncommitted work',
+    },
+    'release/desktop/snap-store.md': {
+        steps: 26,
+        blocks: 7,
+        note: 'written 2026-08-03 with the lane, rather than after it: the blocks are the name '
+            + 'registration, the credential export, the opt-in build, the sandbox-declaration check, '
+            + 'the test-channel upload, the interface connect and the stable promotion. The floor is '
+            + 'high on purpose because three of its steps are permanent (a first-come name, a stable '
+            + 'revision that auto-refreshes to every install, and a confinement choice that decides '
+            + 'whether review stays automatic)',
     },
     // ---- KNOWN GAPS, DECLARED RATHER THAN HIDDEN -----------------------
     //
@@ -71,19 +85,31 @@ const FLOORS = {
     // lane's ceremony from this side would be guessing at exactly the steps
     // whose whole value is being right.
     'release/mobile/ios-app-store.md': {
-        steps: 0,
-        blocks: 0,
-        note: 'KNOWN GAP: store ceremony, never restored after the docs port; owned by the iOS lane',
+        steps: 44,
+        blocks: 5,
+        note: 'GAP CLOSED 2026-08-03 . The port left this page at 0/0 and the pre-migration '
+            + 'runbook it came from had no checkable steps either, so this is the ceremony made '
+            + 'operational rather than restored: the phases were already right and were not '
+            + 'followable. The five blocks are the privacy-URL check, the archive and export '
+            + 'invocations, the native-console reader, the trader block an operator transcribes, and '
+            + 'the unauthenticated apple-app-site-association fetch',
     },
     'release/desktop/mac-app-store.md': {
-        steps: 0,
-        blocks: 0,
-        note: 'KNOWN GAP: store ceremony with its own launch-gating enrollment; owned by the desktop lane',
+        steps: 26,
+        blocks: 1,
+        note: 'GAP CLOSED 2026-08-03 by the lane that owned it. The one block is the opt-in build; '
+            + 'the rest of this ceremony is console work and physical hardware, which is exactly why '
+            + 'its step count is high and its command count is not. Phase 1 is first on purpose: '
+            + 'whether a sandboxed build reaches a hardware wallet decides whether the channel ships '
+            + 'at all, and it is answerable from a development certificate, before the full set exists',
     },
     'release/desktop/microsoft-store.md': {
-        steps: 0,
-        blocks: 0,
-        note: 'KNOWN GAP: store ceremony; owned by the desktop lane',
+        steps: 23,
+        blocks: 1,
+        note: 'GAP CLOSED 2026-08-03 by the lane that owned it. The one block is the opt-in build with '
+            + 'its two account-assigned identity values; Phase 2 is a whole phase because all three of '
+            + 'its settings build successfully and fail at ingestion instead, and the publisher string '
+            + 'fails that way even when it is simply left unset',
     },
     'release/desktop/windows.md': { steps: 0, blocks: 0, note: 'distribution lane, not a store ceremony' },
     'release/desktop/macos.md': { steps: 0, blocks: 0, note: 'distribution lane, not a store ceremony' },
@@ -176,6 +202,82 @@ for (const page of storePages) {
         + 'sentence into a terminal, and a value that is only described is a value they guess.');
 }
 
+// ---- THE PHASE SPINE ------------------------------------------------------
+//
+// Counting steps and blocks measures a page's CHARACTER, never its
+// COMPLETENESS, and a page can sit comfortably above both floors while a whole
+// phase is simply absent. That has now happened twice on the same page with
+// this gate green: the docs port dropped the Android page's Phase 2a and Phase
+// 8 whole (restored 2026-08-03), and on 2026-08-04 the console showed that the
+// page had never carried the review submission at all - a step nothing in the
+// console prompts for, so a lane driven from the page alone sits unreviewed
+// while every track promotion appears to succeed.
+//
+// So the phase spine is declared and checked. A page joins by EXISTING: any
+// page that numbers its phases at all must declare them here, which is the
+// same rule the floors use and for the same reason. `first`/`last` are the
+// page's own end phases and every integer between them must appear, so a gap
+// and a lost tail both go red; `sub` names the lettered sub-phases, which
+// numbering alone cannot see.
+//
+// Stated limit: this catches a missing PHASE, not a missing step inside one.
+// It is deliberately not a table of contents - the point is that dropping a
+// unit of the ceremony costs an edit here, in the same change, with a reason.
+const PHASES = {
+    'release/mobile/android-play.md': {
+        first: 0, last: 8, sub: ['2a', '2b', '3a', '3b'],
+        note: '3a/3b added 2026-08-04: managed publishing, then the review submission',
+    },
+    'release/extension/chrome-web-store.md': { first: 0, last: 8, sub: ['2a', '2b', '2c', '4a', '4b'] },
+    'release/mobile/ios-app-store.md': {
+        first: 1, last: 8, sub: [],
+        note: 'starts at 1 rather than 0, which is why the first phase is declared and not assumed',
+    },
+    'release/desktop/mac-app-store.md': { first: 0, last: 5, sub: [] },
+    'release/desktop/microsoft-store.md': { first: 0, last: 5, sub: [] },
+    'release/desktop/snap-store.md': { first: 0, last: 6, sub: [] },
+};
+
+for (const declared of Object.keys(PHASES)) {
+    assert.ok(storePages.includes(declared),
+        `this gate declares a phase spine for ${declared}, which the enumeration never found. A `
+        + 'declaration that matches nothing protects nothing.');
+}
+
+for (const page of storePages) {
+    const text = readDoc(...page.split('/'));
+    const numbered = [...text.matchAll(/^#{3,4} Phase (\d+)/gm)].map((m) => Number(m[1]));
+    const spine = PHASES[page];
+
+    if (!numbered.length) {
+        assert.ok(!spine,
+            `this gate declares a phase spine for ${page}, but the page numbers no phases at all. `
+            + 'Either the ceremony was rewritten without phases, or it was scrubbed.');
+        continue;
+    }
+
+    assert.ok(spine,
+        `${page} numbers its phases but declares no spine in this gate, so a phase can vanish from it `
+        + 'without anything going red. That is how the Android page lost two phases whole in the docs '
+        + 'port while its step count stayed above its floor. Add an entry to PHASES with the first and '
+        + 'last phase the page carries today, and any lettered sub-phases.');
+
+    for (let n = spine.first; n <= spine.last; n += 1) {
+        assert.ok(numbered.includes(n),
+            `${page} is missing Phase ${n}, which its declared spine (${spine.first}-${spine.last}) `
+            + 'requires. A ceremony phase does not go missing harmlessly: the steps it carried are '
+            + 'the ones nobody will improvise, because nothing downstream announces their absence. '
+            + 'If the phase was genuinely retired, move the spine in this same change and say why.');
+    }
+
+    for (const label of spine.sub) {
+        assert.match(text, new RegExp(`^#### ${label}[.:]`, 'm'),
+            `${page} is missing sub-phase ${label}, which its declared spine requires. A lettered `
+            + 'sub-phase is invisible to the phase numbering, so losing one leaves the spine intact '
+            + 'and the ceremony short.');
+    }
+}
+
 // The irreversible steps are the ones worth naming individually, because
 // their cost is not "a rerun" but "a permanent answer". Each of these was a
 // live trap on its own lane: a permanent free-or-paid choice, a version code
@@ -186,6 +288,14 @@ const IRREVERSIBLE = {
         [/io\.xchain\.wallet\.android/, 'the package name, which is immutable once published'],
         [/version ?code/i, 'the version code, which Play accepts exactly once'],
         [/never be rotated|can never be rotated/i, 'that the direct-distribution key cannot be rotated'],
+    ],
+    // Added 2026-08-03 with the iOS ceremony . Same rule as Android's,
+    // and the page could not be held to it while it had no steps to hold.
+    'release/mobile/ios-app-store.md': [
+        [/io\.xchain\.wallet\.ios/, 'the bundle identifier, pinned publicly the moment the app record exists'],
+        [/build number/i, 'the build number, which App Store Connect accepts exactly once'],
+        [/no rollback/i, 'that the App Store has no rollback, only another review cycle'],
+        [/permanently and publicly/i, 'that the trader declaration publishes permanently and publicly'],
     ],
 };
 
@@ -201,5 +311,123 @@ for (const [page, checks] of Object.entries(IRREVERSIBLE)) {
     }
 }
 
+// ----------------------------------------------------------------------
+// A ceremony page has to describe the MACHINE, not just the commands.
+//
+// Found by running the Android ceremony from the page rather than from
+// memory, in the fresh detached worktree the ceremony itself prescribes. It
+// stopped twice before producing anything: once on `apksigner not found`,
+// and once minutes later inside the package manager on a missing build tool,
+// because a fresh worktree has no installed dependencies. Neither was
+// discoverable from the page - it carried zero mentions of the JDK, the SDK,
+// build-tools or bundletool - and the frontier had recorded this wiring as
+// "now in the runbook" for a day while the runbook did not have it.
+//
+// The tools are DERIVED from the script's own preflight rather than listed
+// here, so adding a `command -v` requirement to a ceremony and forgetting the
+// page turns this red on its own. That is the whole point: every previous
+// version of this class of bug was a mechanism scoped narrower than its rule.
+const CEREMONY_TOOLCHAINS = {
+    'android-ceremony.sh': {
+        page: 'release/mobile/android-play.md',
+        enforce: true,
+        note: 'the Android submission ceremony; its operator page is restored and current',
+    },
+    // Declared and not enforced, each with a reason. A floor of "not
+    // enforced" asserts nothing about quality; it exists so the script is
+    // ENUMERATED and cannot be mistaken for covered.
+    'lib.sh': {
+        enforce: false,
+        note: 'a shared library, not an operator entry point: nobody runs it from a page',
+    },
+    'sign.sh': {
+        enforce: false,
+        note: 'KNOWN GAP: the signing step needs gpg and git and no operator page states that; '
+            + 'owned by the release-key lane, which has not run its key ceremony yet',
+    },
+    'verify.sh': {
+        enforce: false,
+        note: 'reader-facing verification, documented on release/verify-release.md as commands rather '
+            + 'than as a machine to set up',
+    },
+    'verify-release-key.sh': {
+        enforce: false,
+        note: 'maintainer key-ceremony verification. Its only requirement is gpg, which is the whole '
+            + 'subject of the ceremony runbook that invokes it, so an operator cannot reach this '
+            + 'script without already having gpg. Documented in the GPG key ceremony runbook '
+            + '(claude/reports/, private by design) rather than on a public docs page, because it '
+            + 'names key custody. Registered here rather than left undeclared: this gate refused it '
+            + 'on sight the moment it was added, which is the gate doing its job',
+    },
+    'verify-store.sh': {
+        enforce: false,
+        note: 'reader-facing verification, same as verify.sh',
+    },
+};
+
+const releaseScripts = readdirSync(new URL('../../../tools/release/', import.meta.url))
+    .filter((name) => name.endsWith('.sh'))
+    .sort();
+
+assert.ok(releaseScripts.length >= 5,
+    `found only ${releaseScripts.length} release scripts, which is fewer than exist. Either the `
+    + 'enumeration broke or the directory moved; both mean this gate is watching nothing.');
+
+for (const declared of Object.keys(CEREMONY_TOOLCHAINS)) {
+    assert.ok(releaseScripts.includes(declared),
+        `this gate declares a toolchain entry for ${declared}, but the enumeration never found that `
+        + 'script. A declaration that matches nothing protects nothing: point it at the new name, or '
+        + 'drop it if the script is genuinely gone.');
+}
+
+let enforced = 0;
+for (const script of releaseScripts) {
+    const source = readFileSync(new URL(`../../../tools/release/${script}`, import.meta.url), 'utf8');
+
+    // The requirements the script itself declares. `command -v X || die` is
+    // how every one of these is written, so this reads the real contract
+    // rather than a copy of it that can drift.
+    const tools = [...source.matchAll(/command -v ([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
+    const uniqueTools = [...new Set(tools)];
+    if (uniqueTools.length === 0) continue;
+
+    const entry = CEREMONY_TOOLCHAINS[script];
+
+    // The load-bearing half: an undeclared script is a FAILURE, not a skip.
+    assert.ok(entry,
+        `tools/release/${script} preflights for [${uniqueTools.join(', ')}] and this gate has no entry `
+        + 'for it, so nothing is checking that an operator can find out they need them. Add an entry '
+        + 'naming the page that documents its machine, or say why it needs none.');
+
+    if (!entry.enforce) continue;
+    enforced += 1;
+
+    const text = readDoc(...entry.page.split('/'));
+    for (const tool of uniqueTools) {
+        assert.ok(new RegExp(`\\b${tool}\\b`, 'i').test(text),
+            `tools/release/${script} refuses to run without \`${tool}\`, and ${entry.page} never `
+            + `mentions it (${entry.note}). An operator on a fresh release worktree finds this out `
+            + 'when the ceremony stops, which is the moment they can least afford to go hunting. '
+            + 'Name it in the phase that runs the script.');
+    }
+
+    // Two requirements the script cannot express as `command -v`, and both
+    // stopped a real run. bundletool is passed by path rather than found on
+    // the path; the workspace install is a state of the directory.
+    assert.ok(/bundletool/i.test(text),
+        `${entry.page} never mentions bundletool, and tools/release/${script} refuses without it. `
+        + 'It is passed by path, so it cannot be discovered the way a command on the path can be.');
+    assert.ok(/node_modules|pnpm install/i.test(text),
+        `${entry.page} never tells the operator to install the workspace. A release worktree is `
+        + 'normally a FRESH one - that is what the clean-tree rule pushes people to - and a fresh '
+        + 'worktree has no dependencies, so the build dies minutes in with an error naming a build '
+        + 'tool instead of the real cause.');
+}
+
+assert.ok(enforced >= 1,
+    'no ceremony toolchain was actually enforced, so this whole section proved nothing. At least one '
+    + 'entry must have enforce: true.');
+
 console.log(`store-ceremony-operational: ${storePages.length} release pages enumerated, all at or above `
-    + `their declared operational floor; ${Object.keys(FLOORS).length} declarations, all reachable`);
+    + `their declared operational floor; ${Object.keys(FLOORS).length} declarations, all reachable; `
+    + `${releaseScripts.length} release scripts enumerated, ${enforced} toolchain(s) enforced`);

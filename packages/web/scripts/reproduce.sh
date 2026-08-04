@@ -87,6 +87,15 @@ $(node -e "
 EOF
 echo "[reproduce] pnpm=${PNPM_VERSION} node=${NODE_VERSION} platform=${BUILD_PLATFORM}"
 
+# --- 3b. Can this host actually execute that platform? -----------------
+#
+# The flag below asks for amd64; it does not check that anything here can
+# run amd64, and the two emulators that answer it are not equivalent. Under
+# qemu user-mode this build dies minutes in, inside esbuild's Go runtime,
+# with a message that names neither qemu nor the architecture. The
+# preflight refuses that emulator up front and names the routes that work.
+bash "${REPO_ROOT}/tools/release/emulation-preflight.sh" "${BUILD_PLATFORM}"
+
 # --- 4. Build the image ------------------------------------------------
 IMAGE_TAG="xchain-wallet-web:reproduce-${COMMIT_SHA:0:12}"
 echo "[reproduce] building image ${IMAGE_TAG}"

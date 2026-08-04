@@ -60,6 +60,7 @@ import { randomBytes } from 'node:crypto';
 
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
+import { kdfStepTimeout } from '../timeout-budget.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -1095,7 +1096,7 @@ export async function unlockAfterReload(page, password) {
     // it in memory and re-locks. Waiting only for the unlock screen hangs for
     // 60s in the extension on a wallet that is fine.
     await unlock.or(unlockedShell(page)).first()
-        .waitFor({ state: 'visible', timeout: 60_000 });
+        .waitFor({ state: 'visible', timeout: kdfStepTimeout() });
 
     if (await unlock.count() === 0) return;
 
@@ -1103,7 +1104,9 @@ export async function unlockAfterReload(page, password) {
     await unlock.click();
     // Home's balance hero, not the Lock button: the popup renders no nav at
     // all, and below 600px Lock sits inside the closed More sheet.
-    await expect(unlockedShell(page)).toBeVisible({ timeout: 90_000 });
+    // Shared budget, not a hand-picked number: this is the far side of an
+    // Argon2id unlock ().
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 
 /**

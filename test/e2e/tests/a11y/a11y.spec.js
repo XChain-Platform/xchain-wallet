@@ -32,6 +32,7 @@ import {
     readRecoveryPhrase,
     test,
 } from '../../fixtures/wallet.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 import { scan } from '../../fixtures/a11y.js';
 
 // The license gate renders ahead of everything else, so it needs the
@@ -108,9 +109,13 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
+        // Same far-side-of-the-KDF wait as acknowledgeDonationConsent: this
+        // heading cannot render until the derivation finishes, so it takes the
+        // shared budget rather than a bare number that happens to be big
+        // enough today.
         await expect(
             page.getByRole('heading', { name: /Support XChain development/i }),
-        ).toBeVisible({ timeout: 90_000 });
+        ).toBeVisible({ timeout: kdfStepTimeout() });
         await scan(page, 'Donation consent');
 
         await acknowledgeDonationConsent(page);

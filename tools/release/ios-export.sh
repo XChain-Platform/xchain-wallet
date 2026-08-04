@@ -19,6 +19,37 @@
 
 set -euo pipefail
 
+# Before the credential guards, for the reason ios-archive.sh states at the
+# same position : `--help` answered with `APPLE_API_KEY ... is
+# required` and exit 1 turns a question into a refusal.
+case "${1:-}" in
+    -h|--help)
+        cat <<'USAGE'
+ios-export.sh - export the archived iOS shell to a named .ipa ( §5).
+
+Usage:
+  XCHAIN_RELEASE_TAG=vX.Y.Z bash tools/release/ios-export.sh
+
+Takes no arguments. Run ios-archive.sh first; this exports that archive and
+stops. Uploading to App Store Connect is a human step in v1, and
+test/smoke/audits/release-ci.smoke.js fails the build if an upload appears
+in this repo's release path.
+
+Environment (all required):
+  XCHAIN_RELEASE_TAG  the release tag, e.g. v0.333.1 (must start with 'v')
+  APPLE_API_KEY       App Store Connect API key, the .p8 file CONTENTS
+  APPLE_API_KEY_ID    the key's id
+  APPLE_API_ISSUER    the issuer id
+  APPLE_TEAM_ID       the team the export is signed for
+
+Output:
+  packages/mobile/ios/build/xchain-wallet-ios-<tag>.ipa, plus its SHA-256.
+  The name is fixed because expected-artifacts.txt matches on it.
+USAGE
+        exit 0
+        ;;
+esac
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 builddir="$here/packages/mobile/ios/build"
 archive="$builddir/App.xcarchive"

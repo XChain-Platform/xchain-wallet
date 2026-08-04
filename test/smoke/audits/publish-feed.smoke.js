@@ -113,6 +113,33 @@ function makeTarget(name, { staging = false } = {}) {
 }
 
 /**
+ * A §6 release records directory holding an instantiated record for TAG.
+ *
+ * Every case below except the one testing the record gate itself runs
+ * with this pointed at by `XCHAIN_WALLET_RELEASE_RECORDS`. Without it
+ * every prod case would stop at the  gate, which is correct
+ * behaviour and useless coverage: the point of those cases is what
+ * happens AFTER the preconditions are satisfied.
+ *
+ * The default (unset) location is the platform repo above this checkout,
+ * which holds real releases and must not gain a fixture for v0.333.1.
+ */
+function makeRecords(name, { withRecord = true } = {}) {
+    const dir = join(work, name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'TEMPLATE.md'),
+        '# XChain Wallet release record - vX.Y.Z\n\n**Version:** X.Y.Z\n**Tag:** vX.Y.Z\n');
+    if (withRecord) {
+        writeFileSync(join(dir, `${TAG}.md`),
+            `# XChain Wallet release record - ${TAG}\n\n`
+            + `**Version:** ${TAG.slice(1)}  \n**Tag:** ${TAG}  \n**Opened:** 2026-08-04  \n`);
+    }
+    return dir;
+}
+
+const RECORDS = makeRecords('release-records');
+
+/**
  * Run publish.sh and collect everything it said.
  *
  * ASYNC, and that is not a style choice. The edge cases below stand a real
@@ -125,7 +152,12 @@ function makeTarget(name, { staging = false } = {}) {
 function run(args, env = {}) {
     return new Promise((resolve) => {
         const child = spawn('bash', [publish, ...args], {
-            env: { ...process.env, GNUPGHOME: gnupg, ...env },
+            env: {
+                ...process.env,
+                GNUPGHOME: gnupg,
+                XCHAIN_WALLET_RELEASE_RECORDS: RECORDS,
+                ...env,
+            },
         });
         let out = '';
         child.stdout.on('data', (d) => { out += d; });
@@ -165,6 +197,46 @@ function writeRehearsalRecord(releaseDir, { manifestFrom = releaseDir, ...over }
         ...over,
     }, null, 2)}\n`);
     return path;
+}
+
+// ------------------------------------------ the §6 record gate 
+//
+// §6's release record was a convention with nothing enforcing it, so the
+// first release was tagged and built with no record open and its only
+// account for a day was GitHub's run history. It is now a precondition of
+// a production publish, in the same shape and for the same reason as the
+// rehearsal record one gate below.
+
+{
+    // No record for this tag. This is the state of any release nobody
+    // opened a record for, so it is the case that has to fail - and it
+    // has to fail BEFORE the rehearsal gate, which is the more expensive
+    // of the two.
+    // No rehearsal record is written here either, deliberately: the point
+    // is that the CHEAPER gate is the one that speaks, and the next
+    // section needs the default rehearsal path still empty.
+    const target = makeTarget('feed-no-record');
+    const r = await run(['--input', prodRelease, '--tag', TAG, '--target', target],
+        { XCHAIN_WALLET_RELEASE_RECORDS: makeRecords('records-empty', { withRecord: false }) });
+    assert.equal(r.status, 1, 'a prod publish with no §6 release record is refused');
+    assert.match(r.out, /no release record at/);
+    assert.match(r.out, /release-record\.mjs open --tag/,
+        'and says how to open one rather than only that it is missing');
+    assert.equal(existsSync(join(target, 'desktop')), false, 'and nothing was uploaded');
+}
+
+{
+    // A staging publish is step ONE of the rehearsal, run while the
+    // record is still being filled in, so the gate must not fire on it.
+    // Proven by the absence of the record error, not by a green publish:
+    // this fixture has no record at all and the staging publish gets past
+    // the point where a prod publish would have stopped.
+    const target = makeTarget('feed-staging-no-record', { staging: true });
+    const r = await run(['--input', stagingRelease, '--tag', TAG, '--target', target,
+        '--no-edge-verify', '--dry-run'],
+    { XCHAIN_WALLET_RELEASE_RECORDS: makeRecords('records-empty-staging', { withRecord: false }) });
+    assert.doesNotMatch(r.out, /no release record at/,
+        'a --staging publish is not refused for want of a §6 record');
 }
 
 // --------------------------------------------- the rehearsal gate (§7.5)

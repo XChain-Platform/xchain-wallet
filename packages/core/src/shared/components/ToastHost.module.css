@@ -94,6 +94,12 @@
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
     font-family: inherit;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .actionBtn:hover {
     background: var(--xc-bg-muted);
@@ -113,6 +119,12 @@
     padding: 0 var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
     font-family: inherit;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .dismissBtn:hover {
     color: var(--xc-text);

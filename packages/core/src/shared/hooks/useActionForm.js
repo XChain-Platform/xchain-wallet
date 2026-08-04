@@ -91,7 +91,9 @@ export function useActionForm({
     const [chainId, setChainId] = useState(
         /** @type {string | null} */ (initialChainId || null),
     );
-    const [fromAddressId, setFromAddressId] = useState(
+    // An EXPLICIT source pick only (the form's source picker, or a caller
+    // that set one). The default is not stored here - see Block 1b for why.
+    const [pickedFromId, setPickedFromId] = useState(
         /** @type {string | null} */ (null),
     );
     const [hwStatus, setHwStatus] = useState('idle');
@@ -132,29 +134,51 @@ export function useActionForm({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [walletId, messaging]);
 
-    // Block 1b: default the fee-paying address for the chosen chain.
-    // Prefer an explicit `initialFromAddress` (a token/owner context the
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+
+    // Block 1b: the fee-paying address for the chosen chain. Prefer an
+    // explicit pick, then an `initialFromAddress` (a token/owner context the
     // caller resolved); otherwise the chain's ACTIVE address, the one Home
     // and Send operate on and the one holding the balance on a wallet that
     // has generated more than one address ( / D-57). Falls back to
     // the newest HD receive-branch address when no active address applies.
-    useEffect(() => {
-        if (!chainId || !addressesByChain || !activeByChain) return;
+    //
+    // DERIVED, not stored . This used to be an effect that wrote
+    // the default into state, which meant the load landed in TWO commits:
+    // the first painted the fully loaded form with no source at all - the
+    // red "No address on this chain. Use Receive to generate one first."
+    // alert under a wallet that has one, and a dead Submit - and the second,
+    // one passive-effect flush later, corrected it. Users saw a false
+    // no-address flash; tests saw an intermittently disabled Submit, because
+    // "the form has loaded" (the destination field exists) and "the form is
+    // usable" (a source resolved) were true in different commits, and the
+    // gap between them is a scheduler task whose length is a property of the
+    // machine. That is what made SweepForm.formErrors flake on a busy CI
+    // venue and pass on every dev box. Deriving it collapses the two commits
+    // into one: `addressesByChain` and `activeByChain` are set in the same
+    // batch, so the first render that has a chain's addresses also has its
+    // source.
+    const fromAddress = useMemo(() => {
+        if (!chainId || !addressesByChain) return null;
         const all = addressesByChain[chainId] || [];
+        // An explicit pick holds only while it belongs to this chain, so a
+        // chain switch re-defaults instead of pointing at a foreign address.
+        const picked = pickedFromId ? all.find((a) => a.id === pickedFromId) : null;
+        if (picked) return picked;
         if (initialFromAddress) {
             const match = all.find((a) => a.address === initialFromAddress);
-            if (match) { setFromAddressId(match.id); return; }
+            if (match) return match;
         }
+        // Never default off a half-loaded pair: the active map decides which
+        // address wins, so an absent one would pick the HD fallback and then
+        // swap it out under the user. Block 1a resolves it to `{}` rather
+        // than leaving it null, so this only holds before the load lands.
+        if (!activeByChain) return null;
         // Shared helper: reads change/index from the END of the path, so a
         // counterwallet-legacy m/0'/C/I wallet resolves too .
-        setFromAddressId(preferredSourceId(all, activeByChain[chainId]));
-    }, [chainId, addressesByChain, activeByChain, initialFromAddress]);
-
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const fromAddress = useMemo(() => {
-        if (!chainId || !fromAddressId || !addressesByChain) return null;
-        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
-    }, [chainId, fromAddressId, addressesByChain]);
+        const id = preferredSourceId(all, activeByChain[chainId]);
+        return all.find((a) => a.id === id) || null;
+    }, [chainId, addressesByChain, activeByChain, pickedFromId, initialFromAddress]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
@@ -212,8 +236,10 @@ export function useActionForm({
         chainId,
         setChainId,
         fromAddress,
-        fromAddressId,
-        setFromAddressId,
+        // The RESOLVED id (default included), not the raw pick, so a caller
+        // reading it sees the address the form is actually sourcing from.
+        fromAddressId: fromAddress?.id ?? null,
+        setFromAddressId: setPickedFromId,
         chainsWithAddresses,
         descriptor,
         signerReady,

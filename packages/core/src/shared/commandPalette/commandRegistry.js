@@ -124,6 +124,7 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (VM / multisig)
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
  * @property {boolean} [hasDexSurface]           false only when the build compiled the DEX surface out ; its commands then point at views that do not exist
+ * @property {boolean} [isSignerMode]            §20 air-gapped signer mode; drops the Send and Receive navigate commands 
  */
 
 /**
@@ -148,8 +149,13 @@ export function buildCommands(ctx) {
     list.push(
         { id: 'nav-home', category: 'Navigate', title: 'Home', subtitle: 'Balances and portfolio', keywords: ['balances', 'portfolio', 'tokens', 'overview'], Icon: Icon.HomeIcon, run: go('home') },
         { id: 'nav-history', category: 'Navigate', title: 'History', subtitle: 'Transaction timeline', keywords: ['transactions', 'activity', 'timeline'], Icon: Icon.HistoryIcon, run: go('history') },
-        { id: 'nav-send', category: 'Navigate', title: 'Send', subtitle: 'Send a coin or token', keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
-        { id: 'nav-receive', category: 'Navigate', title: 'Receive', subtitle: 'Show a receive address', keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
+        // : the palette reaches every route by name, so gating the nav
+        // rails alone would leave Send one Cmd-K away from a wallet whose
+        // Wallet Mode screen says the screen is hidden. Signer mode drops both.
+        ...(ctx.isSignerMode ? [] : [
+            { id: 'nav-send', category: 'Navigate', title: 'Send', subtitle: 'Send a coin or token', keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
+            { id: 'nav-receive', category: 'Navigate', title: 'Receive', subtitle: 'Show a receive address', keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
+        ]),
         // The DEX rows are gated on the surface EXISTING in this build ,
         // not on anything about the wallet: a store build compiles those routes
         // out, so the command would land the user on Home with no explanation.

@@ -32,6 +32,12 @@
     color: var(--xc-text-muted);
     cursor: pointer;
     border-radius: var(--xc-radius-sm);
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .skipBtn:hover {
@@ -102,30 +108,61 @@
 .dots {
     display: flex;
     justify-content: center;
-    gap: var(--xc-space-2);
+    /* The dot buttons carry their own transparent padding out to the 24px
+       tap floor below, so the gap only has to keep the painted pips apart. */
+    gap: 0;
     flex: 0 0 auto;
     padding: var(--xc-space-1) 0;
 }
 
+/*
+ * : these are real tap targets (each one jumps to a step), and at
+ * 8x8 they were a third of the WCAG 2.2 AA 2.5.8 floor. Widening the pip
+ * itself would turn the pagination into a row of blobs, so the button
+ * grows to the floor and hands its paint to a ::before pip - the same
+ * split InfoTip uses to keep a 16px help dot inside a 24px target.
+ *
+ * The buttons are empty (`<button aria-label="Go to step N" />`), so the
+ * pseudo-element is the only thing that renders.
+ */
 .dot,
 .dotActive {
-    width: 8px;
-    height: 8px;
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
     padding: 0;
     border: none;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dot::before,
+.dotActive::before {
+    content: '';
+    display: block;
+    width: 8px;
+    height: 8px;
     border-radius: var(--xc-radius-pill);
     background: var(--xc-border-strong);
-    cursor: pointer;
     transition: width 200ms ease, background 200ms ease;
 }
 
-.dotActive {
+.dotActive::before {
     width: 20px;
     background: var(--xc-accent-primary);
 }
 
+/* Ring the pip, not the padded target box, so the focus ring still reads
+   as "this dot" rather than as a 24px square. */
 .dot:focus-visible,
 .dotActive:focus-visible {
+    outline: none;
+}
+
+.dot:focus-visible::before,
+.dotActive:focus-visible::before {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }

@@ -74,16 +74,61 @@
 # a hard failure, not a default-arch guess: a combined installer and a
 # broken artifactName look identical from here, and both deserve an answer.
 #
-# Format:  <required|optional>  <glob matched against the artifact basename>  <profile>  <arches>
+# THE FIFTH COLUMN IS THE SIGNATURE CLASS , and it exists because
+# this gate counted artifacts and architectures and never once asked
+# whether any of them was SIGNED. Windows signing is selected off three
+# environment variables and electron-builder.config.cjs says in as many
+# words that with them unset it "is entirely inert ... still produces
+# unsigned artifacts"; macOS skips signing with a warning. So ONE missing
+# repository secret yields a complete, correctly-named, two-architecture
+# set of UNSIGNED installers, which this gate passed without comment and
+# sign.sh then hashed into a K1-signed manifest. K1 attests the BYTES, not
+# the publisher, so that manifest verifies perfectly over an unsigned
+# release. Same family as the arch column above: a declared class that is
+# never counted.
+#
+# It matters beyond one bad release. An unsigned build shows the "unknown
+# developer" warning  records as an explicit operator requirement
+# not to have, and electron-updater refuses an update whose signed
+# publisher does not match the installed app's - `WIN_PUBLISHER` is called
+# "effectively a wire format" in the build config - so shipping unsigned
+# can strand the fleet that already installed signed.
+#
+#   authenticode             we sign it; the PE certificate table is read
+#   codesign                 we sign it; the sealed _CodeSignature is read
+#   none                     genuinely unsigned by design (Linux has no OS
+#                            signature for a generic binary; the web
+#                            tarball and extension zip are not OS
+#                            artifacts). Integrity rides the K1 manifest.
+#   store                    the receiving store signs it after upload, so
+#                            what we stage is legitimately unsigned
+#   codesign-unverified      Apple-signed disk image; reading it needs
+#                            macOS codesign, so a Linux runner cannot
+#   authenticode-unverified  the signed PE is inside the archive; the .exe
+#                            row covers the same lane
+#   deferred-android         apksigner's lane , declared not checked
+#
+# THE UNVERIFIED CLASSES ARE STATED GAPS, NOT EXEMPTIONS. The checker
+# reports them as `recorded` and never as `ok`, and prints the two counts
+# separately, because "we did not look" and "we looked and it was fine"
+# being indistinguishable is the exact hole the column was added to close.
+#
+# A row with a MISSING or misspelled class is a hard failure. lib.sh reads
+# only four columns (`status pattern profile arches _rest`), so a fifth
+# column is discarded there without a word - meaning nothing in bash can
+# notice an ungated row. tools/release/verify-signatures.mjs validates the
+# declaration itself, at parse time, before it looks at any artifact.
+#
+# Format:  <required|optional>  <glob>  <profile>  <arches>  <signature class>
 
 # --- Web SPA ------------------------------------------------------------
-required  xchain-wallet-web-v*.tar.gz       default  -
+required  xchain-wallet-web-v*.tar.gz       default  -         none
 # --- Chrome extension ---------------------------------------------------
 # The store zip. What the Chrome Web Store returns to users is a
 # store-signed CRX repacked from this, so the manifest proves what was
 # submitted, not what was delivered (§3,
 # https://docs.xchain.io/components/wallet/release/verify-release).
-required  xchain-wallet-extension-v*.zip    default  -
+required  xchain-wallet-extension-v*.zip    default  -         none
 # --- Desktop (electron-builder) -----------------------------------------
 # Extension globs rather than exact names. They used to be necessary
 # because electron-builder embedded productName ("XChain Wallet", with a
@@ -108,8 +153,8 @@ required  xchain-wallet-extension-v*.zip    default  -
 # (§2): a tag that produced only the artifacts the release machine could
 # build natively is exactly the version skew this gate exists to refuse.
 # Satisfying the Windows and macOS rows needs the §5 CI matrix (S4).
-required  *.dmg                             default  x64,arm64
-required  *mac*.zip                         default  x64,arm64
+required  *.dmg                             default  x64,arm64 codesign-unverified
+required  *mac*.zip                         default  x64,arm64 codesign
 #
 # EXACTLY TWO WINDOWS INSTALLERS, one per arch (, operator decision
 # 2026-08-01). electron-builder's default ALSO emits an un-suffixed
@@ -121,10 +166,10 @@ required  *mac*.zip                         default  x64,arm64
 # suppression flag has been lost and the release should fail loudly rather
 # than put a third installer on the feed and a third choice on the
 # download page. The config is the mechanism; this row is the backstop.
-required  *.exe                             default  x64,arm64
-required  *win*.zip                         default  x64,arm64
-required  *.AppImage                        default  x64,arm64
-required  *.deb                             default  x64,arm64
+required  *.exe                             default  x64,arm64 authenticode
+required  *win*.zip                         default  x64,arm64 authenticode-unverified
+required  *.AppImage                        default  x64,arm64 none
+required  *.deb                             default  x64,arm64 none
 # --- Mobile -------------------------------------------------------------
 # Optional, not required, so a release today does not demand them - but
 # declared, so the day one is staged it is covered by the manifest instead
@@ -155,10 +200,10 @@ required  *.deb                             default  x64,arm64
 # that open until the first submission is assembled. `-` is the honest
 # answer while nobody has decided; the day it is decided, this column is
 # where it gets written.
-optional  xchain-wallet-android-v*.aab      store    -
-optional  xchain-wallet-v*.apk              store    -
-optional  xchain-wallet-ios-v*.ipa          store    -
-optional  *-mas.pkg                         store    -
+optional  xchain-wallet-android-v*.aab      store    -         deferred-android
+optional  xchain-wallet-v*.apk              store    -         deferred-android
+optional  xchain-wallet-ios-v*.ipa          store    -         store
+optional  *-mas.pkg                         store    -         store
 #
 # The Microsoft Store package ( §15). Optional for the same reason
 # as `-mas.pkg`: the channel is a goal, the Partner Center identity does
@@ -170,7 +215,7 @@ optional  *-mas.pkg                         store    -
 # release that staged one arch of the store package would ship half the
 # Windows fleet. Declared x64,arm64 - if the Store lane ever produces a
 # single bundle instead, this column is where that gets written down.
-optional  *-appx.appx                       default  x64,arm64
+optional  *-appx.appx                       default  x64,arm64 store
 #
 # The Snap Store package ( §16, ). Optional for the same
 # reason as the two rows above: the channel is a goal, the Snapcraft store
@@ -182,4 +227,4 @@ optional  *-appx.appx                       default  x64,arm64
 # Arch-partitioned like appx: the store serves a per-arch snap, and the
 # pinned artifactName carries `${arch}` in snapcraft's Debian-style
 # spelling (`_amd64`/`_arm64`), which lib.sh already attributes.
-optional  *.snap                            default  x64,arm64
+optional  *.snap                            default  x64,arm64 store

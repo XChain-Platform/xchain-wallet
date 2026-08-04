@@ -1155,7 +1155,65 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             + 'whole wallet, so pick the address that holds it in the From field above.';
     }, [previewBalances, sourceBalance, tick]);
 
-    const onMax = useCallback(() => {
+    // : Max is a round trip now, so the button has to be able to say it is
+    // working. The wait is one encoder call, but it is a real one.
+    const [maxBusy, setMaxBusy] = useState(false);
+
+    /**
+     * The amount to fill in for "send everything", priced by the encoder that
+     * will build the transaction.
+     *
+     * WHY THIS IS NOT ARITHMETIC ON `feeEstimate`. That estimate is a static
+     * assumed vsize (250 vB) times the tier rate; the fee the transaction pays
+     * is the encoder's size for the transaction it actually builds. Measured on
+     * BTC regtest: the estimate said 1500, the transaction paid 924, and the
+     * 576-sat difference stayed at the address the user was told they had
+     * emptied. See flows/maxSendable.js for how the exact number is obtained.
+     *
+     * Returns null when the quote cannot be had - no host support, no valid
+     * destination to size the payment output against, an encoder that did not
+     * answer - and the caller falls back to the static estimate, which is the
+     * behaviour that shipped. Over-estimating strands satoshis; under-estimating
+     * would make Max unbuildable, so a doubtful quote is no quote.
+     */
+    const quoteMaxSats = useCallback(async () => {
+        if (!isNativeSend || !chainId || !fromAddress) return null;
+        if (typeof messaging.quoteMaxSendable !== 'function') return null; // older host build
+        // The destination's script type is part of the price, so there has to be
+        // one. Before it is filled the static estimate stands, exactly as before.
+        const to = toAddress.trim();
+        if (!to || destinationAddressError(to, descriptor)) return null;
+        setMaxBusy(true);
+        try {
+            const quote = await messaging.quoteMaxSendable({
+                walletId,
+                chainId,
+                from: {
+                    address: fromAddress.address,
+                    publicKey: fromAddress.publicKey,
+                    derivationPath: fromAddress.derivationPath,
+                    addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
+                },
+                to,
+                rbf: rbfEnabled,
+                ...(feePerKb != null ? { feePerKb } : {}),
+            });
+            if (!quote || typeof quote.maxSats !== 'string') return null;
+            const sats = BigInt(quote.maxSats);
+            return sats > 0n ? sats : null;
+        } catch {
+            // A quote is an optimisation, never a gate: a failed one must not be
+            // able to stop the user filling the field.
+            return null;
+        } finally {
+            setMaxBusy(false);
+        }
+    }, [isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfEnabled, feePerKb]);
+
+    const onMax = useCallback(async () => {
+        if (maxBusy) return; // a quote is already in flight; a second one would race it into the field
         if (!sourceBalance || !sourceBalance.amount) return;
         // Exact string/BigInt math: this string is what gets signed, and a
         // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
@@ -1163,9 +1221,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
         if (balanceSats == null || balanceSats <= 0n) return;
         let maxSats = balanceSats;
-        if (isNativeSend && feeEstimate) {
-            const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
-            if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
+        if (isNativeSend) {
+            const quoted = await quoteMaxSats();
+            if (quoted != null) {
+                maxSats = quoted;
+            } else if (feeEstimate) {
+                const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
+                if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
+            }
         }
         const display = decimalStringFromSats(maxSats);
         setAmount(display);
@@ -1173,7 +1236,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             const fv = coinToFiat(display, amountFiatRate);
             setFiatAmount(fv != null ? fv.toFixed(2) : '');
         }
-    }, [sourceBalance, isNativeSend, feeEstimate, amountInputMode, amountFiatRate]);
+    }, [maxBusy, sourceBalance, isNativeSend, feeEstimate, quoteMaxSats, amountInputMode, amountFiatRate]);
 
     // PC-52: the simulator models ONE leg. For a multi-recipient send of a
     // single token that is still exact (the source-side delta is the sum, and
@@ -1319,7 +1382,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // unsigned PSBT for transport to a Signer-mode wallet. Read with the
     // explicit default fallback so v2 records without the field behave
     // like 'full' (the broadcast path).
-    const { isWatcherMode } = useWalletMode();
+    // : `isSignerMode` is the route's own refusal. Gating the nav is
+    // not enough - a command-palette entry, a `xchain:` URI intent, and a
+    // restored view state all reach this component without passing a nav rail.
+    const { isWatcherMode, isSignerMode } = useWalletMode();
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
@@ -1669,6 +1735,20 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         </div>
     ) : null;
 
+    // §20 / : signer mode does not spend. The Wallet Mode screen
+    // promises "Send / receive screens are hidden; this wallet does not
+    // broadcast", so the form is refused rather than rendered - and the
+    // refusal names the way back, because the mode is a setting the same
+    // user chose and can unset.
+    if (isSignerMode) {
+        return wrap(
+            <StatusMessage variant="status">
+                This wallet is in signer mode, so it does not send or broadcast.
+                It signs transactions passed in from a watcher wallet. Switch the
+                mode under Settings, Wallet Mode to send from this device.
+            </StatusMessage>,
+        );
+    }
     if (loadError) {
         return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
     }
@@ -2211,6 +2291,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 inputRef={amountInputRef}
                 onMax={onMax}
                 maxDisabled={!sourceBalance}
+                maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
                         ? 'Loading…'

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.335.0] - 2026-08-04
+
+### Fixed
+- Send's Max amount was priced against a transaction the wallet was not going to build.
+- Every action form was briefly on screen fully loaded with no source address selected.
+- Restoring a backup onto the device it now lives on failed, and three surfaces stated recovery facts they did not know.
+- The extension re-implemented the imported-WIF address rule instead of asking core, so the two could disagree.
+- Controls across the DEX filters and other surfaces sat under the 24px tap-target floor.
+- iOS universal links opened the app but did not reach the wallet screen they named.
+- The Android App Link claim covered a wider path range than the deep-link parser accepts.
+
+### Added
+- Mobile ships its own launcher icon and splash screen in place of the Capacitor defaults.
+- The release path refuses to publish artifacts that were never signed.
+
+### Changed
+- Mainnet protocol activations move to 2026-08-07.
+- `fast-uri` pinned past the host-confusion advisory.
+
 ## [0.334.0] - 2026-08-01
 
 ### Fixed

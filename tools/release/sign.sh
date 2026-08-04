@@ -243,6 +243,23 @@ xr_check_shipped_lanes "$INPUT_DIR" "$LANES" "$EXPECTED"
 # record as though it had .
 xr_assert_store_profile_buildable "$INPUT_DIR" "$EXPECTED"
 
+# --- Signature gate  --------------------------------------------
+# Every gate above this line counts artifacts: how many, which arches,
+# which profile, which lanes. None of them asks whether the artifacts are
+# SIGNED, and the build cannot be relied on to fail if they are not -
+# electron-builder.config.cjs skips Windows signing silently when its three
+# Azure variables are unset, and macOS signing degrades to a warning. So a
+# release cut with one missing repository secret reaches exactly this point
+# looking perfect.
+#
+# It has to run BEFORE xr_write_manifest rather than after, and that
+# ordering is the whole point: K1 attests the BYTES, not the publisher, so
+# a manifest written over unsigned installers verifies perfectly forever
+# and every downstream check - verify.sh, the feed sweep, the updater's own
+# hash check - agrees with it. Once signed, nothing left in the pipeline
+# can tell the difference.
+node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$EXPECTED"
+
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" "$EXPECTED"

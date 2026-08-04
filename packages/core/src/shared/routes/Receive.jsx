@@ -20,6 +20,7 @@ import {
     CopyButton,
     MultisigBadge,
     FeeSelector,
+    StatusMessage,
     Icon,
 } from '@xchain-wallet/core/ui';
 import {
@@ -35,6 +36,7 @@ import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -86,6 +88,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const isFull = variant === 'full';
     const { showToast } = useToast();
     const { settings } = useSettings();
+    // : the Wallet Mode screen promises the receive screen is hidden in
+    // signer mode. Refused here as well as in the nav, because the palette and
+    // `xchain:` URI intents both reach this route without a nav click.
+    const { isSignerMode } = useWalletMode();
 
     const [chainsByWallet, setChainsByWallet] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -519,6 +525,20 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             titleIcon={<Icon.ReceiveIcon />}
         />
     );
+    // §20 / : signer mode hides the receive surface, as its own hint
+    // says. Named the way back, since the mode is a setting the user chose.
+    if (isSignerMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <StatusMessage variant="status">
+                    This wallet is in signer mode, so its receive screen is hidden.
+                    It signs transactions passed in from a watcher wallet, and holds
+                    no address you are meant to fund. Switch the mode under Settings,
+                    Wallet Mode to receive on this device.
+                </StatusMessage>
+            </Screen>
+        );
+    }
     if (addressPickerOpen) {
         return (
             <OwnAddressPickerScreen

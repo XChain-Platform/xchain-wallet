@@ -36,12 +36,15 @@
 // declaration of record (privacy/trader-identity.md) or from the code.
 
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
 import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
+import { citationsIn, PLATFORM_ROOT, resolveCitation, SPECS_DIR } from '../_spec-frontier.js';
 
 skipUnlessDocs('extension ceremony-collateral smoke');
 
@@ -213,7 +216,25 @@ assert.ok(citations > 0,
 // deleted (the S14 lesson). Only the block that claims to be a live map is
 // held to being one.
 
-const specPath = join(walletRoot, '..', 'claude', 'specs', 'wallet-publishing-chrome-extension.md');
+// S30, and it is this file's own instance of the defect the whole spec is
+// about: a second copy of something the code already knew.
+//
+// This used to hand-derive the platform root as `walletRoot/..`, while
+// `resolveCitation`, imported from the shared module a few lines up, derives
+// it from `XCHAIN_PLATFORM_ROOT` with that same path only as a fallback. The
+// two agree on this machine and nowhere else, and the failure is not the quiet
+// one it sounds like. Driven with `XCHAIN_PLATFORM_ROOT=/nonexistent`: section
+// 6 still FOUND the spec (its own derivation ignored the override) and then
+// resolved every citation in it against the override, so the gate went RED
+// accusing the frontier of citing paths that are all perfectly fine. A check
+// that is red when nothing is wrong is one people waive, which is exactly what
+// S17 and S20 record happening here before.
+//
+// One derivation now, the shared module's, so the override either moves both
+// halves or neither. built that module and documents the variable as
+// the way to run these gates from an isolated checkout; five sections here
+// were silently opting out of it.
+const specPath = join(SPECS_DIR, 'wallet-publishing-chrome-extension.md');
 let pointers = 0;
 
 if (existsSync(specPath)) {
@@ -231,7 +252,10 @@ if (existsSync(specPath)) {
 
     for (const m of block.matchAll(/`(claude\/[A-Za-z0-9_./-]+)`/g)) {
         pointers += 1;
-        if (!existsSync(join(walletRoot, '..', m[1]))) missing.push(m[1]);
+        // PLATFORM_ROOT, not `walletRoot/..`, for the reason given at specPath:
+        // one derivation, so an override cannot move the document without also
+        // moving the paths the document is checked against.
+        if (!existsSync(join(PLATFORM_ROOT, m[1]))) missing.push(m[1]);
     }
 
     assert.equal(missing.length, 0,
@@ -247,12 +271,749 @@ if (existsSync(specPath)) {
         + 'is how the migration lost them all in the first place.');
 }
 
+// --- 6. The frontier's LIVE rows have to name artifacts that exist ------
+//
+// S24's finding, and it is section 5's defect one level up. §4a is now held
+// to being a live map; the frontier table above it is not, and it is the
+// table an operator actually reads to learn what is left. It has rotted
+// twice in two stages: S23 found row 3 naming docs/BRIDGE.md, deleted by
+// , and S24 found ROW 1 - the row that IS the goal - still telling an
+// operator to execute SUBMISSION-RUNBOOK.md, which the operator's own
+// one-home ruling deleted at S22, out of this very gate's subject line.
+//
+// The scoping repeats section 5's lesson because this document earns it
+// twice over: the spec deliberately names long-dead files in its superseded
+// rows, so only rows that are still LIVE are held to naming live things. A
+// row is live when its Item cell is neither struck through (~~...~~, this
+// spec's mark for a closed row) nor a parenthesised superseded copy.
+
+const frontierRows = [];
+let goalRow = null;
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const fStart = spec.indexOf('<!-- BUILD-SPEC:FRONTIER');
+    const fEnd = spec.indexOf('<!-- /BUILD-SPEC:FRONTIER', fStart + 1);
+    assert.ok(fStart !== -1 && fEnd > fStart,
+        'the  spec has no BUILD-SPEC:FRONTIER block. That block is the spec\'s own record of '
+        + 'what is left and who owns each row; without it the goal state lives nowhere.');
+
+    for (const line of spec.slice(fStart, fEnd).split('\n')) {
+        if (!line.startsWith('|')) continue;
+        const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+        if (cells.length < 5) continue;
+        const [id, item, , state] = cells;
+        if (!/^\d/.test(id)) continue;                       // header and separator
+        if (item.startsWith('~~') || item.startsWith('(')) continue;   // closed / superseded copy
+        if (/^(DONE|note)/i.test(state)) continue;
+        // The Item cell is what the row is ABOUT - the thing it tells somebody
+        // to go and do. The Evidence cell is where this spec keeps its record,
+        // and that record legitimately names dead files in order to say they
+        // died ("this row named SUBMISSION-RUNBOOK.md until S24"). Holding the
+        // narrative to the subject's rule would fire on correct writing, which
+        // is the S14 lesson and is exactly what the first cut of this check did.
+        frontierRows.push({ id, line, item });
+        if (id === '1') goalRow = item;
+    }
+
+    // 6a. The goal row names the ceremony that exists, not one of the four
+    // wallet-repo documents the one-home ruling deleted. Derived from this
+    // gate's own CEREMONY constant, so a future move repoints both together.
+    assert.ok(goalRow,
+        'the  frontier has no live row 1. Row 1 is the console ceremony, which IS the goal of '
+        + 'this spec; if it closed, the goal is reached and the spec should say so.');
+
+    const ceremonyDoc = CEREMONY[CEREMONY.length - 1];
+    assert.ok(goalRow.includes(ceremonyDoc),
+        `the  frontier's goal row does not name ${ceremonyDoc}, the document that actually `
+        + 'carries the ceremony. This row is the one an operator reads to find out what to execute, '
+        + 'and it pointed at the deleted wallet-repo runbook for two stages after the one-home ruling.');
+
+    const DELETED_BY_RULING = ['SUBMISSION-RUNBOOK.md', 'STORE_LISTING_PACK.md',
+        'DATA_DISCLOSURE.md', 'TEST_DAPP_RUNBOOK.md'];
+    const revenants = frontierRows
+        .filter(({ item }) => DELETED_BY_RULING.some((d) => item.includes(d)))
+        .map(({ id }) => id);
+
+    assert.equal(revenants.length, 0,
+        `live frontier rows ${revenants.join(', ')} name wallet-repo ceremony documents that the `
+        + 'operator\'s one-home ruling deleted on 2026-08-03. A superseded row may name them (that is '
+        + 'the record); a row still telling somebody to go and do something may not.');
+
+    // 6b. The phase range is READ from the ceremony page's own headings. A
+    // phase added or retired there and not here under-executes the ceremony.
+    const phases = [...ceremony.matchAll(/^#{2,4}\s+Phase\s+(\d+)/gm)].map((m) => Number(m[1]));
+    assert.ok(phases.length > 0,
+        'no "Phase N" headings were found on the ceremony page, so the phase-range check below passed '
+        + 'without checking anything. The ceremony is phased on purpose: the ordering-sensitive and '
+        + 'irreversible steps are what the phases separate.');
+
+    const range = `Phases ${Math.min(...phases)}-${Math.max(...phases)}`;
+    assert.ok(goalRow.includes(range),
+        `the  frontier's goal row does not say "${range}", which is the phase range the ceremony `
+        + `page actually carries (${phases.length} phase headings). It said "Phases 1-8" while the `
+        + 'page began at Phase 0: Preconditions, so the row understated the ceremony by a whole phase.');
+
+    // 6c. Anything a live row cites has to resolve, in whichever tree owns it.
+    //
+    // A packages//tools//test/ path is NOT necessarily this repo's: the release
+    // story spans sibling checkouts, and test/wallet-privacy-policy-sync.test.js
+    // lives in xchain-websites. Resolving against the wallet tree alone reports
+    // a live file as dead, which is a check firing on correct writing, and this
+    // was not a hypothetical - the S24 sweep that found this defect in the
+    // sibling specs made exactly that mistake on three of its five hits.
+    //
+    // The parsing and resolution moved to test/smoke/_spec-frontier.js when
+    // ported this section to EVERY spec (the same rot was live in the
+    // desktop and android publishing specs, and nothing checked them). This
+    // block therefore no longer owns the rule; it keeps the chrome-specific
+    // failure message and delegates, so the two cannot drift apart.
+    const dead = [];
+    for (const { id, line } of frontierRows) {
+        for (const cited of citationsIn(line).paths) {
+            if (!resolveCitation(cited).ok) dead.push(`row ${id} cites ${cited}`);
+        }
+    }
+
+    assert.equal(dead.length, 0,
+        `live rows of the  frontier cite paths that do not exist:\n  ${dead.join('\n  ')}\n`
+        + 'The frontier is what a later stage, or the operator, reads to find out what is left. A live '
+        + 'row pointing at a deleted file is how two stages in a row lost the thing they were about.');
+}
+
+// --- 7. The pre-migration translation map has to translate --------------
+//
+//  moved this spec's documents out from under it, and rather than
+// rewrite every citation in a history-bearing spec, §32 answers with a rule:
+// "where a step still cites a pre-migration path, read it as the new home",
+// followed by the map. That is a sound choice, and it makes the map the ONLY
+// route a reader has to a live deliverable - which means the map going stale
+// silently breaks every old citation at once.
+//
+// It had already lost two entries when this check was written, and they were
+// the two it could least afford: docs/Data_Collection.md and
+// docs/Trader_Identity.md, the declarations of record, cited ten times in
+// this spec's live text with no map entry to resolve either.
+//
+// New homes are told from old names by the docs repo's own naming standard
+// rather than by a hand-listed set: published pages are lowercase-kebab-case,
+// and every pre-migration name carries an uppercase letter or an underscore
+// (SUBMISSION-RUNBOOK.md, DATA_SAFETY.md, docs/Verify_Release.md). So the
+// left-hand sides are deliberately NOT resolved - they are supposed to be
+// dead - and only the right-hand sides are held to existing.
+
+let mapEntries = 0;
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const start = spec.indexOf('**Reading older text in this spec**');
+    assert.ok(start !== -1,
+        'the  spec no longer has its "Reading older text in this spec" block. That block is the '
+        + 'rule that lets the spec keep citing pre-migration paths without rewriting its own history; '
+        + 'without it, every older citation in the file resolves to nothing.');
+
+    const end = spec.indexOf('\n\n', start + 1);
+    const block = spec.slice(start, end === -1 ? undefined : end);
+    const unresolved = [];
+
+    for (const m of block.matchAll(/`([a-z0-9][a-z0-9/-]*\.md)`/g)) {
+        mapEntries += 1;
+        if (!existsSync(docsPath(...m[1].split('/')))) unresolved.push(m[1]);
+    }
+
+    assert.equal(unresolved.length, 0,
+        `the  spec's pre-migration translation map points at docs-repo pages that do not `
+        + `exist:\n  ${unresolved.join('\n  ')}\n`
+        + 'Every older citation in this spec resolves through this map and nowhere else, so a stale '
+        + 'right-hand side breaks all of them at once and silently.');
+
+    // The floor is 10, the count AFTER S24 restored the two declarations of
+    // record. Setting it at the pre-S24 count of 8 would have left the exact
+    // regression this section was written for able to walk straight back in.
+    assert.ok(mapEntries >= 10,
+        `the translation map lists ${mapEntries} new-home pages, fewer than the ten it carries. It had `
+        + 'already lost the two declarations of record before anyone checked; a map that loses an '
+        + 'entry is how the migration lost them all in the first place. If a page was genuinely '
+        + 'retired, lower this floor deliberately in the same change and say why.');
+}
+
+// --- 8. A step that says "go edit that page" has to find it there -------
+//
+// Sections 4 and 6 resolve PATHS: they prove a cited file exists. This one
+// is the layer they cannot see, and it was live when it was written.
+//
+// Phase 6 tells the operator to record the store-assigned extension ID into
+// the bridge documentation "wherever it documents chrome-extension://<id>/...
+// (currently a placeholder <id>)". Measured 2026-08-03: the page contained no
+// occurrence of chrome-extension:// at all. 's port had genericized the
+// sentence that carried it ("real windows owned by the wallet's own origin"),
+// which reads perfectly well and quietly deleted the only thing the ceremony
+// step was aiming at. Section 4 stayed green throughout, because the LINK was
+// always fine; it was the destination's contents that had moved on.
+//
+// This is the worst step in the ceremony to leave pointing at nothing. It runs
+// in the minutes after first upload, the ID is assigned exactly once and is
+// permanent, and every earlier phase in this file exists to protect it.
+//
+// Scoped to CHECKABLE STEPS that both link a page and name a placeholder in
+// backticks, on section 6's precedent: this ceremony narrates deleted things
+// on purpose (Phase 3 discusses an old "placeholder document root" that must
+// stay gone), and a check that fires on correct writing is one people delete.
+
+const placeholderSteps = [];
+
+for (const line of ceremony.split('\n')) {
+    if (!/^[⬜✅]/.test(line) || !line.includes('placeholder')) continue;
+    const link = line.match(/\]\(([^)#]+\.md)(?:#[^)]*)?\)/);
+    if (!link) continue;
+    // A trailing ellipsis is prose ("chrome-extension://<id>/..."), not part
+    // of the token the page is supposed to carry.
+    const tokens = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1].replace(/\.{3}$/, ''));
+    placeholderSteps.push({ target: link[1], tokens });
+}
+
+assert.ok(placeholderSteps.length >= 1,
+    'no checkable step on release/extension/chrome-web-store.md names a placeholder in another page any '
+    + 'more. Phase 6 had one, and it is how the permanent extension ID reaches the integrator '
+    + 'documentation. If that step was deliberately retired, delete this section in the same change; do '
+    + 'not let it pass silently on zero, which is how a gate stops being a gate.');
+
+for (const { target, tokens } of placeholderSteps) {
+    const targetPath = resolve(dirname(docsPath(...CEREMONY)), target);
+    const shown = `${target} (${tokens.map((t) => `\`${t}\``).join(', ') || 'no token named'})`;
+
+    assert.ok(existsSync(targetPath),
+        `a ceremony step tells the operator to edit ${shown}, and that page does not exist. The step `
+        + 'runs immediately after first upload, when the store has just assigned an identifier that is '
+        + 'permanent and cannot be re-derived.');
+
+    assert.ok(tokens.length > 0,
+        `a ceremony step tells the operator to edit a placeholder in ${target} without naming it in `
+        + 'backticks. Name the exact text to replace: "edit the placeholder" sends someone reading '
+        + 'under a clock to search a page for something they have to guess the shape of.');
+
+    const page = readFileSync(targetPath, 'utf8');
+    assert.ok(tokens.some((t) => page.includes(t)),
+        `a ceremony step tells the operator to replace a placeholder in ${shown}, and that page carries `
+        + 'none of those. This is exactly what the documentation migration did to bridge.md: it rewrote '
+        + 'the sentence holding `chrome-extension://<id>/approval.html` into a generic one, leaving the '
+        + 'step aiming at nothing while every path check stayed green. Either restore the placeholder '
+        + 'on that page or change the step to name what is really there.');
+}
+
+// --- 10. The value the store form validates has a real source ----------
+//
+// Section 8's defect, found again one field over, and this one sat on the only
+// field the Chrome Web Store form actually validates.
+//
+// Phase 3 said "the canonical URL is the one the wallet's privacy policy
+// publishes, take it from there rather than retyping it, so there is only ever
+// one copy of it", and Phase 5's table sourced the same field the same way.
+// Measured 2026-08-03: privacy/privacy-policy.md has never contained that URL.
+// It names three documentation pages and an issue tracker and never its own
+// hosted address, so the sentence guarding against a second copy of the value
+// was itself pointing at a page holding no copy at all. An operator reaching
+// that step has nothing to transcribe and retypes from memory, which is how
+// the slashless form gets pasted; Phase 3 warns two paragraphs earlier that a
+// redirect hop is a failure under review.
+//
+// The fix was to stop sourcing it from a document. The check the operator
+// already runs in that phase prints the URL as the first line of its output,
+// so the string that was verified live and the string pasted into the console
+// are the same one. This section holds that arrangement together from both
+// ends: the constant is imported from the tool rather than restated here, and
+// the tool is DRIVEN rather than read, because "it prints the URL" is exactly
+// the kind of claim this spec keeps finding to be false.
+
+const { DEFAULT_URL } = await import('../../../tools/release/verify-privacy-url.mjs');
+
+assert.ok(/^https:\/\/\S+\/$/.test(DEFAULT_URL),
+    `verify-privacy-url.mjs exports DEFAULT_URL as "${DEFAULT_URL}", which is not an https URL with a `
+    + 'trailing slash. The trailing slash is load-bearing: the ceremony tells the operator to paste the '
+    + 'canonical form because a redirect hop under review is a failure.');
+
+// The tool must actually hand the operator the value, with no network needed.
+const help = execFileSync('node', [join(walletRoot, 'tools/release/verify-privacy-url.mjs'), '--help'],
+    { encoding: 'utf8' });
+assert.ok(help.includes(DEFAULT_URL),
+    'verify-privacy-url.mjs --help no longer prints the canonical URL it defaults to. The ceremony '
+    + 'sends the operator to this tool for that value; a tool that will not say what it checks sends '
+    + 'them back to retyping it from memory, which is the defect this section exists for.');
+
+// Positively: the page has to tell the operator that the check's own output is
+// where the value comes from. Without this the section could be satisfied by a
+// ceremony that says nothing about the URL at all, and saying nothing is how
+// the operator ends up retyping it.
+const ceremonyLines = ceremony.split('\n');
+assert.ok(ceremonyLines.some((l) => /canonical URL/i.test(l) && l.includes('`url:')),
+    'no line of the ceremony points the operator at the `url:` line the Phase 3 check prints as the '
+    + 'source of the canonical policy URL. That arrangement is the whole fix: the string verified live '
+    + 'and the string pasted into the console are then the same one. If the source moved, move this '
+    + 'assertion with it, in the same change.');
+
+// Negatively: no line may go back to sourcing the value from a page that does
+// not carry it. Scoped to an explicit sourcing instruction aimed at a linked
+// page, NOT to any mention of the canonical URL beside a link. The first cut
+// was the looser rule and it fired on correct writing: "the hosted page is
+// generated from [the privacy policy] by the website build, and the site's
+// canonical URL carries a trailing slash" describes provenance and tells the
+// operator to source nothing. A check that fires on correct writing is one
+// people delete, which is this spec's own S14 lesson turned on this section.
+const SOURCING = /take it from|publishes|copy it (out )?of|transcribe it from/i;
+const urlSourceLines = ceremonyLines.filter((l) =>
+    /canonical (URL|hosted address)/i.test(l) && /\]\(\.\.[^)]*\.md\)/.test(l) && SOURCING.test(l));
+
+for (const line of urlSourceLines) {
+    const target = line.match(/\]\((\.\.[^)#]+\.md)(?:#[^)]*)?\)/)[1];
+    const page = readFileSync(resolve(dirname(docsPath(...CEREMONY)), target), 'utf8');
+    assert.ok(page.includes(DEFAULT_URL),
+        `the ceremony sources the canonical privacy-policy URL from ${target}, and that page does not `
+        + `contain ${DEFAULT_URL}. That is the 2026-08-03 defect exactly: the sentence forbidding a `
+        + 'second copy of this value pointed at a page holding no copy of it. Source it from the check '
+        + 'that prints it, or put the value on that page.');
+}
+
+// --- 11. A step's linked procedure must not contradict the step ---------
+//
+// The same class as sections 8 and 10, and the sharpest instance of it: here
+// the link resolved, the page existed, and its contents told the operator to
+// do the exact thing the step forbids.
+//
+// Phase 8's third exit criterion requires connect and sign driven "from the
+// store-installed build specifically, not a local development build", and
+// linked the test-dapp runbook as a whole. That runbook opens with `pnpm -C
+// packages/extension build` and "Load unpacked", which is a local development
+// build. An operator following the link did the forbidden thing and ticked a
+// public-flip exit criterion having proved nothing about the shipped artifact.
+//
+// So the rule is not "the link resolves" but "the linked SECTION covers what
+// the step asks for". Derived from the step's own words: the criterion says
+// store-installed, so the section it points at has to be about installing from
+// the store, and must not be the load-unpacked path.
+
+const storeInstalledSteps = ceremonyLines.filter((l) =>
+    /^[⬜✅]/.test(l) && /store-installed/.test(l));
+
+assert.ok(storeInstalledSteps.length >= 1,
+    'no checkable step requires the store-installed build any more. Phase 8 had one, and it is the only '
+    + 'criterion that proves the artifact the store actually served can sign. Do not let this pass '
+    + 'vacuously on zero.');
+
+for (const line of storeInstalledSteps) {
+    const link = line.match(/\]\(([^)#]+\.md)#([a-z0-9-]+)\)/);
+    assert.ok(link,
+        'the store-installed exit criterion does not link a specific SECTION of a procedure (it needs a '
+        + 'page.md#anchor link). Linking the runbook as a whole is what sent the operator to its '
+        + 'load-unpacked opening, which is the build this criterion exists to exclude.');
+
+    const [, target, anchor] = link;
+    const page = readFileSync(resolve(dirname(docsPath(...CEREMONY)), target), 'utf8');
+    const slug = (h) => h.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+    const headings = [...page.matchAll(/^#{2,4} (.+)$/gm)].map((m) => m[1]);
+
+    const idx = headings.findIndex((h) => slug(h) === anchor);
+    assert.ok(idx !== -1,
+        `the store-installed exit criterion links ${target}#${anchor}, and that page has no heading with `
+        + `that anchor. Its headings slug to: ${headings.map(slug).join(', ')}. An anchor that does not `
+        + 'resolve drops the operator at the top of the page, which is the load-unpacked procedure.');
+
+    // The section body: from its heading to the next heading of any level.
+    const start = page.indexOf(`## ${headings[idx]}`);
+    const rest = page.slice(start + 1);
+    const nextAt = rest.search(/^#{2,4} /m);
+    const section = nextAt === -1 ? rest : rest.slice(0, nextAt);
+
+    assert.ok(/store link|from the store|unlisted item/i.test(section),
+        `${target}#${anchor} is what the store-installed criterion sends the operator to, and that `
+        + 'section never tells them to install from the store. That is the whole content of the '
+        + 'criterion; a section that does not say it cannot satisfy it.');
+
+    assert.ok(!/Load unpacked/i.test(section) || /not a sideload|replace section 1|rather than/i.test(section),
+        `${target}#${anchor} tells the operator to "Load unpacked", which is the local development build `
+        + 'this criterion explicitly excludes. If the section mentions it in order to rule it out, say '
+        + 'so in the same sentence so a skimming reader cannot follow it by accident.');
+}
+
+// --- 12. A command can resolve, run, exit 0, and measure the wrong thing -
+//
+// Sections 8, 10 and 11 ask what a linked PAGE says. This one is the same
+// question asked of a linked COMMAND, and the answer was worse, because a
+// command that measures the wrong artifact still exits 0 and prints a verdict.
+//
+// The disclosure's "before you tick anything" block said: run
+// `remote-code-audit.mjs`, and "the remote-code answer is a measurement rather
+// than a memory". Driven 2026-08-04: it exits 0 and reports the shipped bundle
+// clean. It defaults to packages/extension/dist, which is gitignored, was two
+// days old on the machine that ran it, and is built from whatever the shared
+// worktree happened to hold. The submission runbook's own build-provenance
+// phase refuses a locally built zip for upload in exactly those words. So the
+// ceremony verified one artifact and shipped another, on a store answer that
+// is permanent and public.
+//
+// The script already took an optional directory argument, so the fix was to
+// use it. This section holds both ends: the step must pass one, and the script
+// must still honour it. The second half is DRIVEN, not read, because "it
+// accepts a directory" is precisely the kind of claim that rots silently.
+
+const AUDIT = 'packages/extension/scripts/remote-code-audit.mjs';
+const auditSteps = disclosure.split('\n').filter((l) => /^[⬜✅]/.test(l) && /remote.code audit/i.test(l));
+
+assert.equal(auditSteps.length, 1,
+    `the disclosure carries ${auditSteps.length} checkable steps about the remote-code audit, expected 1. `
+    + 'That step is what turns the store form\'s permanent remote-code answer into a measurement; if it '
+    + 'was split or retired, update this section in the same change.');
+
+// The command block under that step has to name the audit AND give it a target.
+const auditBlock = disclosure.slice(disclosure.indexOf(auditSteps[0]));
+const auditCmd = auditBlock.match(new RegExp(`node\\s+${AUDIT.replace(/[.]/g, '\\.')}([^\\n]*)`));
+assert.ok(auditCmd,
+    `the disclosure's remote-code step no longer shows the ${AUDIT} command. An operator answering a `
+    + 'permanent store question from a step with no command in it is answering from memory.');
+
+assert.ok(auditCmd[1].trim().length > 0,
+    `the disclosure runs ${AUDIT} with no directory argument, so it audits its default `
+    + 'packages/extension/dist. That path is gitignored, locally built, and can be days stale; the '
+    + 'runbook refuses a locally built zip for upload for the same reason. Point it at the unpacked '
+    + 'release artifact instead.');
+
+assert.ok(/release-artifacts|the artifact being uploaded/i.test(auditBlock.slice(0, 1200)),
+    'the disclosure gives the remote-code audit a directory, but never ties that directory to the '
+    + 'release artifact being uploaded. Any directory satisfies a command; only the shipped one '
+    + 'satisfies the claim that the answer is a measurement.');
+
+// And the script must actually honour a directory argument. Driven against a
+// throwaway tree, because a default that silently ignores argv[2] would put
+// the original defect straight back with the documentation looking correct.
+{
+    const probe = join(tmpdir(), `xc997-audit-probe-${process.pid}`);
+    mkdirSync(probe, { recursive: true });
+    writeFileSync(join(probe, 'probe-marker.js'), 'export const x = 1;\n');
+    try {
+        const out = execFileSync('node', [join(walletRoot, AUDIT), probe], { encoding: 'utf8' });
+        assert.ok(out.includes(probe),
+            `${AUDIT} was given ${probe} and its report does not name that directory, so the directory `
+            + 'argument the disclosure depends on is not being honoured. The operator would audit the '
+            + 'local build while believing they audited the release artifact.');
+    } finally {
+        rmSync(probe, { recursive: true, force: true });
+    }
+}
+
+// --- 13. Every release script answers --help, and answers ONLY --help ---
+//
+// The first section here that generalizes. Sections 8, 10, 11 and 12 each hold
+// ONE step to its referent, which S28 noted is a weakness: the next defect is
+// wherever those four are not pointed.
+//
+// Not a style rule. The failures found on 2026-08-04 were actively misleading,
+// and each was worst at the moment it would actually be typed:
+//
+//   remote-code-audit.mjs --help      ->  "no build at --help" (exit 2)
+//   verify-validated-commit.mjs --help->  "RELEASE GATE REFUSED" (exit 1)
+//   ios-archive.sh --help             ->  "APPLE_API_KEY ... is required" (1)
+//   verify-release-key.sh --help      ->  "unknown argument: --help" (exit 1)
+//
+// The first reads as a broken build to someone looking up the argument syntax
+// that S28 had just made load-bearing. The second announces, in the loudest
+// words that tool owns, that the release was rejected, to someone who only
+// asked how to invoke it. `--help` is what people type when a command refuses
+// them, which is exactly when a release ceremony is already going badly.
+//
+// TWO THINGS CHANGED HERE ON 2026-08-04 (), and each closes a hole
+// that a passing run of the previous cut had proved it could not see.
+//
+// (a) THE SUBJECT IS THE DIRECTORY, NOT THE PAGES. The previous cut harvested
+//     tool names out of the two ceremony pages plus the  spec frontier,
+//     which had two consequences. It covered only the Chrome subset, leaving
+//     the mobile and desktop lanes unchecked - nine scripts with NO `--help`
+//     handling at all, which is the more dangerous half. And the frontier half
+//     of the harvest read a repo that is this repo's PARENT and therefore
+//     cannot be a `.ci-siblings` entry, so on the venue that actually gates a
+//     push it silently harvested one tool fewer and still cleared its floor.
+//     A check whose subject lives in a repo the venue does not check out is
+//     not a check in that venue. Scanning `tools/release/` and
+//     `packages/extension/scripts/` removes both problems at once: the subject
+//     is entirely inside this repo, so the venue evaluates exactly what a
+//     local run does, and a script ADDED to either directory is covered on the
+//     day it lands rather than on the day someone remembers to name it.
+//
+//     The pages are still read, for the one thing the scan cannot say: that
+//     nothing the ceremony hands an operator lives OUTSIDE the scanned
+//     directories. That is the assertion, not a second harvest.
+//
+// (b) EXIT 0 IS NOT THE PROPERTY. It was the whole test, and it is satisfied
+//     by the worst behaviour in this class rather than by the best. Measured,
+//     not reasoned:
+//
+//       capture-listing-screenshots.mjs  did not recognise `--help` as a flag,
+//         so it ran the FULL capture - launched a browser, created and
+//         unlocked a demo wallet, drove the UI - and overwrote three of the
+//         four store listing assets on disk. Exit 0, because the work
+//         succeeded.
+//       emulation-preflight.sh           took `--help` as its one positional,
+//         a Docker platform, and printed `host arm64 must EMULATE --help`.
+//         Exit 0.
+//       capture-update-check.mjs         ran the default capture and
+//         OVERWROTE docs/update-check-capture.json, the file the download
+//         page's privacy copy is checked against. Exit 0.
+//       rehearsal-matrix.mjs             printed nothing whatsoever. Exit 0.
+//
+//     An unrecognized flag is not ignored, it is CONSUMED. So three properties
+//     are required, and each rules out one of the four shapes above:
+//
+//       1. exit 0                    the original property
+//       2. real usage on stdout      a usage line, this script's own name, and
+//                                    more than a token of text. Rules out the
+//                                    silent module and the tool that printed
+//                                    its work output instead.
+//       3. the worktree is unchanged rules out the tool that DID the work.
+//                                    `git status --porcelain` before and after
+//                                    each run. This is the one that would have
+//                                    caught the listing-asset overwrite, which
+//                                    is the defect that started this.
+//
+//     Property 3 reads the shared worktree, so a neighbouring session writing
+//     a file during the sub-second window a script runs in would surface here
+//     as a false red naming that file. That is the documented cost of checking
+//     side effects at all, it is loud rather than silent, and on the CI venue
+//     (a clean checkout, one writer) it is deterministic.
+
+const toolRe = /(tools\/release\/[a-z0-9-]+\.(?:mjs|sh)|packages\/extension\/scripts\/[a-z0-9-]+\.(?:mjs|sh))/g;
+
+// Recursive on purpose: `tools/release/drills/` holds deb-update-swap.mjs,
+// whose one positional is a directory it INSTALLS SYSTEM PACKAGES from. A
+// non-recursive scan (and the old page regex, which could not match a nested
+// path) left the single most side-effecting script in the tree uncovered.
+const SCRIPT_DIRS = ['tools/release', 'packages/extension/scripts'];
+
+const walkScripts = (relDir) => {
+    const out = [];
+    for (const entry of readdirSync(join(walletRoot, relDir), { withFileTypes: true })) {
+        const rel = `${relDir}/${entry.name}`;
+        if (entry.isDirectory()) out.push(...walkScripts(rel));
+        else if (/\.(mjs|sh)$/.test(entry.name)) out.push(rel);
+    }
+    return out;
+};
+
+const releaseScripts = SCRIPT_DIRS.flatMap(walkScripts).sort();
+
+// The floor is 29: the scripts COMMITTED at HEAD on 2026-08-04, when every one
+// of them was driven and made to pass. It was briefly written as 28, before
+// emulation-preflight.sh's own --help landed in c54af492 () and made
+// it tracked; the number is re-derived from `git ls-files` rather than from
+// what happens to be sitting in the worktree, because the venue gates the
+// COMMITTED tree. A floor taken from uncommitted neighbours (release-record.mjs
+// is one today, and it passes too) would go red on every clean checkout until
+// somebody else's commit landed.
+//
+// It is a floor rather than an equality so the directories may grow; a SHRINK
+// means either a tool was deleted (fine, lower this deliberately and say why)
+// or the scan broke (not fine, and the previous cut of this section proved a
+// broken scan reports OK while checking less).
+assert.ok(releaseScripts.length >= 29,
+    `only ${releaseScripts.length} release scripts were found under ${SCRIPT_DIRS.join(' and ')}, `
+    + 'fewer than the 29 committed when this section was measured. A scan that finds less than it '
+    + 'should still prints a verdict, which is exactly how the page-harvest cut of this section hid '
+    + 'a tool it had stopped checking.');
+
+const harvestTools = (text) => [...new Set([...text.matchAll(toolRe)].map((m) => m[1]))]
+    .filter((t) => existsSync(join(walletRoot, t))).sort();
+
+// The pages' role now: not a source of subjects, a check on the scan's scope.
+// If the ceremony ever hands an operator a script living somewhere else, the
+// directory scan would not cover it and would say nothing about that.
+const pageTools = harvestTools([ceremony, disclosure].join('\n'));
+
+assert.ok(pageTools.length >= 7,
+    `only ${pageTools.length} runnable tools were found named on the two ceremony pages, fewer than `
+    + 'the seven this section was written against. If the pages stopped naming commands, section 1 '
+    + 'should have failed first; if this harvest broke, fix it rather than lowering the floor.');
+
+const outsideScan = pageTools.filter((t) => !releaseScripts.includes(t));
+assert.equal(outsideScan.length, 0,
+    `the ceremony pages hand the operator ${outsideScan.join(', ')}, which the release-script scan `
+    + `does not cover (it reads ${SCRIPT_DIRS.join(' and ')}). Either move the tool into one of those `
+    + 'directories or widen the scan in the same change: a tool an operator is told to run and no '
+    + 'gate exercises is precisely the gap this section was widened to close.');
+
+// Property 3's instrument. Asserted to work before it is trusted: a `git` that
+// errors would otherwise make every comparison trivially equal, which is the
+// silent-pass shape this file refuses everywhere else.
+const worktreeState = () => execFileSync('git', ['status', '--porcelain'],
+    { cwd: walletRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+let worktreeReadable = true;
+try {
+    worktreeState();
+} catch {
+    worktreeReadable = false;
+}
+assert.ok(worktreeReadable,
+    '`git status --porcelain` failed in the wallet checkout, so the side-effect half of this section '
+    + 'cannot run. It is not optional: exit 0 alone is satisfied by a script that does its work and '
+    + 'succeeds, which is the defect measured. Fix the checkout rather than skipping this.');
+
+for (const tool of releaseScripts) {
+    const runner = tool.endsWith('.sh') ? 'bash' : 'node';
+    const before = worktreeState();
+
+    let ok = true;
+    let stdout = '';
+    let first = '';
+    try {
+        stdout = execFileSync(runner, [join(walletRoot, tool), '--help'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
+    } catch (e) {
+        ok = false;
+        stdout = String(e.stdout || '');
+        first = String(e.stdout || e.stderr || '').split('\n').filter(Boolean)[0] || '(no output)';
+    }
+
+    const after = worktreeState();
+
+    // 1. exit 0.
+    assert.ok(ok,
+        `${tool} does not answer --help with exit 0. It said: "${first.slice(0, 120)}". Release tools `
+        + 'are typed by an operator mid-ceremony, and --help is what anyone types when a command '
+        + 'refuses them. A tool that answers it with its own failure vocabulary turns a question into '
+        + 'an emergency: remote-code-audit.mjs used to report "no build at --help", '
+        + 'verify-validated-commit.mjs used to answer "RELEASE GATE REFUSED", and ios-archive.sh used '
+        + 'to demand APPLE_API_KEY.');
+
+    // 3. No side effects. Checked before the output shape because it is the
+    //    consequential one: a wrong help screen wastes a minute, an overwritten
+    //    listing asset ships to a store.
+    assert.equal(after, before,
+        `${tool} --help CHANGED THE WORKTREE. git status went from ${before.split('\n').filter(Boolean).length} `
+        + `entries to ${after.split('\n').filter(Boolean).length}. Asking a tool how to use it must not `
+        + 'be doing the thing it does. capture-listing-screenshots.mjs used to run a full browser '
+        + 'capture on --help and overwrite three of the four Chrome store listing assets, exiting 0 '
+        + 'because the work succeeded; capture-update-check.mjs used to overwrite the update capture '
+        + 'the download page is checked against. (If a neighbouring session wrote a file during this '
+        + `run, the entry named here will be unrelated to ${tool} - re-run before believing it.)`);
+
+    // 2. Real usage, not silence and not the tool's own work output. Three
+    //    cheap, independent signals; a script that ran its work passes none.
+    const lines = stdout.split('\n').filter((l) => l.trim());
+    const base = tool.slice(tool.lastIndexOf('/') + 1);
+    // Anchored to a line start, so `usage:` inside a sentence does not count,
+    // but tolerant of a comment prefix: the bash tools print their own header
+    // block verbatim (`awk` between the licence rule and the first line of
+    // code), so their usage line arrives as `# Usage:`. Printing the header is
+    // deliberate there - it cannot drift from the documentation it IS.
+    const USAGE_LINE = /^[\s#*/>-]*usage:/im;
+    assert.ok(USAGE_LINE.test(stdout) && stdout.includes(base) && lines.length >= 3,
+        `${tool} exits 0 on --help without printing usage (a "Usage:" line, its own name, and more `
+        + `than a couple of lines). It printed ${lines.length} line(s): `
+        + `"${(lines[0] || '(nothing at all)').slice(0, 100)}". Exit 0 is not the property - it is `
+        + 'satisfied by every shape of this defect. rehearsal-matrix.mjs printed nothing at all and '
+        + 'exited 0; emulation-preflight.sh took --help as its Docker-platform positional and '
+        + 'reported "host arm64 must EMULATE --help", also exiting 0. Both read, to a person and to '
+        + 'the previous cut of this gate, as a help screen having been shown.');
+}
+
+// --- 9. Every stage the frontier names has a row in the stage table -----
+//
+// Bookkeeping, and it is in a gate because doing it by hand has now failed
+// three times in four stages. S24 found §9 had no row for S23 and added it,
+// calling the omission "the same class" as the defect it was created to fix;
+// S25 then closed a row, landed two commits, and left no row of its own, and
+// nobody noticed until S26 went looking. The hand-fix does not generalize
+// because the person who forgets to write the row is the same person who
+// would have to remember to check for it.
+//
+// It matters more than tidiness. §9 is the model/effort plan the staged-build
+// protocol reads at a stage boundary, and it is the only place a reader who
+// has not read the frontier can see what a stage actually did. A frontier that
+// reasons from "S25 found X" against a table with no S25 in it is a document
+// arguing with itself, and this spec's whole method is that its claims are
+// derived rather than asserted.
+
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+    const open = spec.indexOf('<!-- BUILD-SPEC:FRONTIER');
+    const close = spec.indexOf('<!-- /BUILD-SPEC:FRONTIER');
+    assert.ok(open !== -1 && close > open,
+        'the  spec has no delimited BUILD-SPEC:FRONTIER block any more. That block is the one '
+        + 'place the goal\'s own state is tracked, deliberately in the spec rather than in a sidecar '
+        + 'so it cannot drift from it. If it was renamed, repoint this gate in the same change.');
+
+    const frontier = spec.slice(open, close);
+    const named = [...new Set([...frontier.matchAll(/\bS(\d{1,2})\b/g)].map((m) => Number(m[1])))];
+    const rows = new Set([...spec.matchAll(/^\| S(\d{1,2}) \|/gm)].map((m) => Number(m[1])));
+
+    assert.ok(named.length >= 1,
+        'no build stage is named anywhere in the  frontier block. Every stage since S19 has '
+        + 'reasoned from what an earlier one measured; a frontier that names none has lost the record '
+        + 'this spec argues from. This check must not pass vacuously on zero.');
+
+    const unlisted = named.filter((n) => !rows.has(n)).sort((a, b) => a - b);
+    assert.equal(unlisted.length, 0,
+        `the  frontier reasons from stages that §9's stage table has no row for: `
+        + `${unlisted.map((n) => `S${n}`).join(', ')}. §9 is the model/effort plan the staged-build `
+        + 'protocol reads at a stage boundary, and the only account of a stage a reader who skipped the '
+        + 'frontier will find. Add the row in the same change as the frontier edit, the way S24 had to '
+        + 'add S23\'s and S26 had to add S25\'s.');
+
+    // The same rot, one paragraph higher. S24 found the headline **Status:**
+    // paragraph labelled current while two stages old and fixed it by hand,
+    // and S25 immediately left it stale again. It is the first thing anyone
+    // reads, so a stale one mis-states the spec's own position to every reader
+    // who does not scroll as far as the frontier.
+    //
+    // The live paragraph is the FIRST `**Status:` in the file; the superseded
+    // ones below it are labelled `**Superseded status`, which is what makes
+    // this derivable at all.
+    const statusAt = spec.indexOf('**Status:');
+    assert.ok(statusAt !== -1,
+        'the  spec has no `**Status:` paragraph. It is the dated, stage-labelled headline a '
+        + 'reader meets before anything else; the convention exists because an undated one read as '
+        + 'current for two stages while being two stages wrong.');
+
+    const stageInStatus = spec.slice(statusAt, statusAt + 400).match(/after S(\d{1,2})\b/);
+    assert.ok(stageInStatus,
+        'the  spec\'s headline `**Status:` paragraph no longer says which stage it is current as '
+        + 'of. "after S<n>" is what makes it checkable; without it, staleness is invisible again.');
+
+    const latest = Math.max(...named);
+    assert.equal(Number(stageInStatus[1]), latest,
+        `the  spec's headline status paragraph says it is current after S${stageInStatus[1]}, but `
+        + `the frontier below it reasons as far as S${latest}. That paragraph is the first thing a `
+        + 'reader meets and the last thing a stage remembers to update: S24 fixed it by hand after it '
+        + 'had been two stages stale, and S25 left it stale again the same day.');
+
+    // The floor is the 26 rows standing after S26 added S25's and its own. It
+    // is a floor rather than an equality so the table may grow, and it exists
+    // so a scrub that empties the table cannot pass this section by leaving
+    // the frontier naming nothing.
+    assert.ok(rows.size >= 26,
+        `§9's stage table carries ${rows.size} stage rows, fewer than the 26 standing after S26. A `
+        + 'stage row is the record of what a stage did; deleting one loses that permanently, since the '
+        + 'reports directory holds a report for only some stages.');
+}
+
+// The absent branch names §9 as well, which it did not until S30: it reads the
+// same spec as §§5-7 and degraded to nothing with the output saying so nowhere.
+// A summary line that reports only the sections which announce their own skip
+// is how a partial run reads as a full one.
+//
+// §13 is no longer on that list, and that is the point of's rewrite:
+// its subject is two directories in THIS repo, so it reports the same number
+// on the venue as it does locally, and there is no half of it left to skip.
+const toolNote = `${releaseScripts.length} release scripts answer --help with usage, exit 0 and no `
+    + `side effects (${pageTools.length} of them named on the ceremony pages)`;
+
 const pointerNote = existsSync(specPath)
-    ? `${pointers} §4a private pointers resolved`
-    : 'the §4a private-pointer map SKIPPED (platform checkout absent)';
+    ? `${pointers} §4a private pointers resolved, ${frontierRows.length} live frontier rows verified, `
+        + `${mapEntries} translation-map pages resolved, ${toolNote}`
+    : `${toolNote}; the §4a map, the frontier rows, the translation map and the §9 stage table all `
+        + 'SKIPPED (platform checkout absent, as on every CI run: it is this repo\'s parent, not a '
+        + 'sibling)';
 
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
     + `privacy/trader-identity.md, ${extensionHosts.length} egress hosts from wireAudit.js, `
-    + `${citations} cited wallet-repo paths resolved across the repo boundary, ${pointerNote})`);
+    + `${citations} cited wallet-repo paths resolved across the repo boundary, `
+    + `${placeholderSteps.length} cross-page placeholder step verified, ${pointerNote})`);

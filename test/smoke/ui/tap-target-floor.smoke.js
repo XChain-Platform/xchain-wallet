@@ -23,6 +23,15 @@
 // and keeps each fixed control pointing AT the token, so the next edit to
 // one of these files cannot quietly reintroduce a hard-coded 16px without
 // someone reading a red line that says why the number matters.
+//
+// , and read this before trusting a green run here: "sizes from
+// the token" is NOT the same claim as "the rendered box clears 24px",
+// and this file stayed green through two controls that missed the floor
+// by a pixel on the CI runner's font. The claim about geometry is made
+// by tap-target-sweep.smoke.js, which computes a guaranteed floor for
+// every pointer target in every CSS module. Neither file replaces the
+// other: this one keeps the named fixes pointing at the token, that one
+// keeps the arithmetic honest across the whole UI.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

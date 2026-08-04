@@ -638,9 +638,37 @@ const check = (over) => assertRecord({
 
     const coverage = cli('coverage', '--records', join(work, 'no-records'));
     assert.equal(coverage.status, 1, 'no lane has been swapped, so coverage fails');
-    assert.match(coverage.stdout, /NO DEVICE NAMED \(DD4\)/);
     assert.match(coverage.stdout, /mac-arm64\s+device Mac Studio/,
-        'the one lane with hardware is reported as hardware-ready but unrehearsed');
+        'a lane with hardware is reported as hardware-ready but unrehearsed');
+
+    // THIS ASSERTION IS THE INVERSE OF WHAT IT USED TO BE, and the reason is
+    // worth keeping. It used to require that "NO DEVICE NAMED (DD4)" APPEAR
+    // in the output, which encoded the UNANSWERED state as an invariant: the
+    // day the operator answered DD4, a correct matrix would have failed this
+    // smoke. A test that fails when the open question gets closed is testing
+    // the calendar, not the code.
+    //
+    // DD4 was answered for all eight lanes on 2026-08-03, so the useful claim
+    // is the opposite one: no lane may be unnamed. A lane added later with
+    // `device: null` would otherwise inherit the old state in silence, and
+    // `rehearse.mjs attest` would refuse it at release time - which is a much
+    // worse place to discover it than here.
+    assert.doesNotMatch(coverage.stdout, /NO DEVICE NAMED \(DD4\)/,
+        'every lane must name a smoke device: DD4 is answered for all eight, so an '
+        + 'unnamed lane is a new gap rather than a leftover');
+    for (const lane of LANES) {
+        assert.ok(lane.device, `lane ${lane.id} names no DD4 device`);
+        assert.match(coverage.stdout, new RegExp(`${lane.id}\\s+device `),
+            `${lane.id} must report as named-but-unrehearsed, not as unnamed`);
+    }
+
+    // And naming must NOT read as rehearsing. Every lane is named, none has an
+    // observed swap, so coverage still fails and still says why: the two are
+    // different blockers with different owners (a device is DD4's; an observed
+    // swap is K1's) and the output must not let one stand in for the other.
+    assert.match(coverage.stdout, /never rehearsed/);
+    assert.doesNotMatch(coverage.stdout, /✅/,
+        'no swap has been attested, so no lane may report as covered');
 }
 
 server.close();

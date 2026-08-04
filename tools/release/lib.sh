@@ -59,6 +59,41 @@
 # strips them before checking rather than making users read a warning that
 # means nothing.
 
+# "Sourced, never executed" is a true statement about intent and was not a
+# true statement about behaviour: `bash tools/release/lib.sh --help` defined
+# every function below and exited 0 with no output, which is the exact shape
+# the §13 gate now refuses - a script that answers a question by doing
+# something and returning success . A sourced-only file is still a
+# file an operator can find and run, and the useful answer to running it is
+# "you cannot; here is what sources me".
+#
+# ${0} is the executing script and BASH_SOURCE[0] is this file, so they are
+# equal only under direct execution. Under `source` they differ and nothing
+# here fires, whatever $1 the sourcing script happens to be holding.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    cat <<'USAGE'
+lib.sh - shared release-manifest routines for sign.sh and verify.sh.
+
+Usage:
+  Not runnable. This file is sourced, never executed:
+
+      source tools/release/lib.sh
+
+  It defines xr_* helpers and runs nothing on its own. To do the work it
+  supports, use the tools that source it:
+
+      bash tools/release/sign.sh   --tag vX.Y.Z --input <dir>
+      bash tools/release/verify.sh --tag vX.Y.Z --input <dir>
+
+It exists so those two agree byte for byte on what a release manifest is:
+which files it covers, in what order, and what its header says. Each used
+to carry its own copy of the find|sort|hash pipeline, and the day one grew
+an exclusion the other did not, verify.sh would either fail a good release
+or pass one sign.sh had not covered.
+USAGE
+    exit 0
+fi
+
 # Echo the sha256 command for this platform, or fail.
 xr_sha256_cmd() {
     if command -v sha256sum >/dev/null 2>&1; then

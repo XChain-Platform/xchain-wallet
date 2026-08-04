@@ -565,6 +565,7 @@ function parseArgs(argv) {
 
 const USAGE = `verify-privacy-url.mjs - is the public privacy-policy URL live and current?
 
+Usage:
   node tools/release/verify-privacy-url.mjs [--url <url>] [--source <path>] [--timeout <ms>]
   node tools/release/verify-privacy-url.mjs --html <saved-page.html>
 

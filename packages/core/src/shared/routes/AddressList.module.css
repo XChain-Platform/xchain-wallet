@@ -340,6 +340,12 @@
     cursor: pointer;
     display: inline-flex;
     vertical-align: middle;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    min-width: var(--xc-tap-min);
+    align-items: center;
+    justify-content: center;
 }
 
 .copyIcon:hover {

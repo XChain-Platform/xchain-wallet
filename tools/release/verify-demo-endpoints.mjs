@@ -275,18 +275,48 @@ export async function burstProbe(probes, { fetchImpl, timeoutMs, count }) {
     return { url: target.url, count, blocked, statuses };
 }
 
+const USAGE = `verify-demo-endpoints.mjs - can a reviewer following the scripted demo
+actually reach everything it needs? ( §2.1 pre-submission gate.)
+
+Usage:
+  node tools/release/verify-demo-endpoints.mjs [--network <kind>] [--burst [n]] [--json]
+
+Options:
+  --network <kind>  network to probe, default testnet
+  --burst [n]       also fire a small burst at one endpoint, default 8.
+                    Opt-in because it points at PRODUCTION: one request per
+                    host cannot see a rate limit, and a wallet opening on
+                    three chains is not one request.
+  --json            machine-readable result instead of the table
+  -h, --help        print this and exit 0
+
+PROBES LIVE HOSTS. That is why --help is answered before the probes rather
+than after them .
+
+Exit codes:
+  0  live          every demo endpoint reachable from a plain client
+  1  failure       DO NOT SUBMIT; a reviewer would hit this
+  2  config        a configuration problem, not a reachability one
+  3  inconclusive  something could not be reached. NOT a pass.
+`;
+
 function parseArgs(argv) {
-    const args = { networkKind: 'testnet', burst: 0, json: false };
+    const args = { networkKind: 'testnet', burst: 0, json: false, help: false };
     for (let i = 0; i < argv.length; i += 1) {
         if (argv[i] === '--network') args.networkKind = argv[i + 1];
         else if (argv[i] === '--burst') args.burst = Number(argv[i + 1] ?? 8) || 8;
         else if (argv[i] === '--json') args.json = true;
+        else if (argv[i] === '--help' || argv[i] === '-h') args.help = true;
     }
     return args;
 }
 
 async function main() {
     const args = parseArgs(process.argv.slice(2));
+    if (args.help) {
+        process.stdout.write(USAGE);
+        return EXIT.LIVE;
+    }
     const outcome = await checkDemoEndpoints(args);
 
     if (args.json) {

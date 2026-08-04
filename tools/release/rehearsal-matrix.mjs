@@ -70,6 +70,29 @@
 // spec's own rule - "No named device for a lane = that lane does not
 // ship" - `rehearse.mjs coverage` refuses to call such a lane launch-
 // ready, and says so rather than passing quietly.
+//
+// DD4 IS NOW ANSWERED FOR ALL EIGHT LANES (the last two by operator
+// decision 2026-08-03, ). No lane carries `device: null`, and
+// `rehearsal.smoke.js` refuses a new one that does, rather than letting it
+// inherit the old unanswered state silently.
+//
+// NAMING A DEVICE IS NOT A CLAIM THAT THE LANE HAS BEEN REHEARSED. It says
+// only which machine the swap will be watched on. `coverage` still reports
+// an un-rehearsed lane as ⬜ and still exits non-zero; naming changes only
+// the REASON it gives, from "DD4 unanswered" to "never rehearsed". Those
+// are different blockers with different owners and the output must not
+// conflate them. What actually blocks a rehearsal now is K1.
+//
+// WHY A HOSTED RUNNER DOES NOT TAKE THE WINDOWS LANES, since it is the
+// obvious idea and it was measured rather than dismissed . A
+// `windows-latest` runner IS a free native x64 Windows machine, and the
+// nsis lane has no elevation prompt to answer (`perMachine: false`, so no
+// UAC, unlike the deb lane's pkexec). It still cannot do this job:
+// `rehearse.mjs attest` requires `--by <who watched it>`, because whether
+// the download replaced the running app is an OS-level fact no test in the
+// process can observe. A CI job cannot be the witness without removing the
+// witness. A runner could add an automated swap CHECK as separate evidence;
+// it cannot produce an attestation.
 
 /**
  * @typedef {Object} Lane
@@ -88,16 +111,22 @@ export const LANES = [
         os: 'win32',
         arch: 'x64',
         format: 'exe',
-        device: null,
-        note: 'nsis. Shares stable.yml with win-arm64, so selection is load-bearing.',
+        device: 'Windows 11 in Parallels on the Mac Studio (x64 under Windows-on-ARM emulation)',
+        note: 'nsis. Shares stable.yml with win-arm64, so selection is load-bearing. '
+            + 'EMULATED SILICON, accepted by the operator 2026-08-03 : the '
+            + 'installer, the launch and the update swap are all genuinely exercised, '
+            + 'and only the CPU is not native. Said here because this string is what '
+            + 'attest copies into the rehearsal record.',
     },
     {
         id: 'win-arm64',
         os: 'win32',
         arch: 'arm64',
         format: 'exe',
-        device: null,
-        note: 'nsis. DD4 names no device; selection out of stable.yml is probed regardless.',
+        device: 'Windows 11 ARM in Parallels on the Mac Studio (M3 Ultra, native arm64)',
+        note: 'nsis. NATIVE, and the inversion is the point: this is the lane no cloud '
+            + 'runner covers well, and the same VM that emulates x64 runs arm64 on real '
+            + 'silicon. Selection out of the shared stable.yml is probed regardless.',
     },
     {
         id: 'mac-x64',
@@ -213,4 +242,56 @@ export function lanesByOs() {
         out.get(lane.os).push(lane);
     }
     return out;
+}
+
+// A DATA MODULE IS STILL A FILE AN OPERATOR CAN RUN . This one sits
+// among ten executable tools in tools/release/, and `node rehearsal-matrix.mjs
+// --help` printed NOTHING and exited 0 - indistinguishable, to a person and to
+// a gate, from a help screen having been shown. The §13 check that covers this
+// directory now demands real usage on stdout precisely because silence with a
+// zero exit is the cheapest way to fake compliance.
+//
+// So direct invocation says what the module is and prints the matrix, which is
+// the useful thing to see when you are deciding which lanes a release has to
+// rehearse. It is read-only: no argument makes this file do work.
+const USAGE = `rehearsal-matrix.mjs - the shipped desktop update lanes, and what each one
+is smoked on ( §2, §7.5, DD4).
+
+Usage:
+  node tools/release/rehearsal-matrix.mjs           # print the lane table
+  node tools/release/rehearsal-matrix.mjs --json    # the same as JSON
+  node tools/release/rehearsal-matrix.mjs --help
+
+A DATA MODULE, not a command. It runs nothing and changes nothing; it is
+imported by rehearse.mjs, by drills/deb-update-swap.mjs and by the smokes
+that hold the table to what electron-updater actually exports. Printing is
+the only thing it does when run.
+
+A "lane" is an OS/arch pair that RECEIVES updates, plus one artifact format
+electron-updater can swap in place. The dmg and the Windows zip are shipped
+install formats with no auto-update path, so they are not lanes.
+
+Exports: LANES, LINUX_FORMAT_UPDATE_SUPPORT, ALL_OS_TRIGGER_PATHS,
+laneById(id), lanesByOs().
+`;
+
+if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
+    const argv = process.argv.slice(2);
+    if (argv.some((a) => a === '--help' || a === '-h')) {
+        process.stdout.write(USAGE);
+    } else if (argv.includes('--json')) {
+        process.stdout.write(`${JSON.stringify(
+            { lanes: LANES, linuxFormats: LINUX_FORMAT_UPDATE_SUPPORT, allOsTriggerPaths: ALL_OS_TRIGGER_PATHS },
+            null,
+            2,
+        )}\n`);
+    } else {
+        process.stdout.write(`${LANES.length} shipped update lanes ( §2)\n\n`);
+        const w = Math.max(...LANES.map((l) => l.id.length));
+        for (const lane of LANES) {
+            process.stdout.write(`  ${lane.id.padEnd(w)}  ${lane.os}/${lane.arch} `
+                + `${lane.format}  device: ${lane.device ?? 'none'}\n`);
+        }
+        process.stdout.write('\nRun with --help for what a lane is and what imports this.\n');
+    }
 }

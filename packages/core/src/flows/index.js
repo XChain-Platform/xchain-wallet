@@ -14,6 +14,11 @@ export {
     defaultAddressTypeForFormat,
     defaultAddressTypeForWallet,
 } from './_defaultAddressType.js';
+// Same reason: `addresses.byChain` in the extension's background host is
+// the query AddressList actually reads, so it needs the imported-WIF rule
+// as much as any flow does. Exporting it here is what keeps that host from
+// growing a sixth private copy of the rule .
+export { importedAddressIdsFor } from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
 export { createAccount } from './createAccount.js';
 export { activateChain } from './activateChain.js';
@@ -76,6 +81,7 @@ export {
 } from './pairPartner.js';
 export { sweepToken } from './sweepToken.js';
 export { sweepPreview } from './sweepPreview.js';
+export { quoteMaxSendable, insufficientFundsQuote } from './maxSendable.js';
 export { issueToken } from './issueToken.js';
 export { mintToken } from './mintToken.js';
 export { destroyToken } from './destroyToken.js';

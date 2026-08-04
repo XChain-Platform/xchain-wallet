@@ -76,6 +76,12 @@
     padding: 2px 8px;
     cursor: pointer;
     text-transform: lowercase;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .clear:hover {
@@ -100,6 +106,12 @@
     padding: 2px 8px;
     cursor: pointer;
     text-transform: lowercase;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .pwToggle:hover {
@@ -133,6 +145,12 @@
     padding: 2px 8px;
     cursor: pointer;
     text-transform: lowercase;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .flip:hover {
@@ -155,6 +173,9 @@
     background-repeat: no-repeat;
     background-position: right 6px center;
     background-size: 8px 6px;
+    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
 }
 
 .picker:hover {

@@ -25,11 +25,12 @@
 // never in the helper: it was the hook not calling it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
+import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
 
 const CHAIN = 'bitcoin-mainnet';
 
@@ -50,6 +51,16 @@ const ADDR_NEWEST = Object.freeze({
     address: 'bc1qnewestnewestnewestnewestnewestnewest0',
     publicKey: '02bb',
     derivationPath: "m/84'/0'/0'/0/1",
+    source: 'hd',
+    signerId: 'signer-1',
+});
+// A second chain, for the chain-switch case: the source has to follow the
+// chain, and a pick made on Bitcoin must not survive the move.
+const ADDR_LTC = Object.freeze({
+    id: 'addr-ltc-1',
+    address: 'ltc1qltcltcltcltcltcltcltcltcltcltcltcltc0',
+    publicKey: '02cc',
+    derivationPath: "m/84'/2'/0'/0/0",
     source: 'hd',
     signerId: 'signer-1',
 });
@@ -186,5 +197,129 @@ describe('useActionForm source default ( / D-57)', () => {
         });
         expect(await fromValue()).toBe(ADDR_NEWEST.address);
         expect(screen.queryByText(/host down/)).toBeNull();
+    });
+});
+
+
+// : the loaded form must reach the user with its source already
+// resolved, in ONE render rather than two.
+//
+// The default used to be written into state by an effect, so a form whose
+// addresses had arrived rendered twice: first the fully loaded form with NO
+// source - the red "No address on this chain. Use Receive to generate one
+// first." alert on a wallet that has one, next to a disabled Submit - and
+// then, one passive-effect flush later, the corrected form. Nobody chose that
+// intermediate state; it was a write-then-read across a scheduler task.
+//
+// It cost twice. Users got a false no-address flash on every action form. And
+// tests got an intermittently dead Submit: "the form has loaded" (its fields
+// exist) and "the form is usable" (a source resolved) became true in
+// different renders, so any wait keyed on the first could return inside the
+// window. The window is one scheduler task wide, and how long that is is a
+// property of the machine - which is why SweepForm.formErrors passed on every
+// dev box and went red on a busy CI venue.
+//
+// These record EVERY render of the hook rather than the settled one, and
+// assert an invariant over the whole recording. Recording DOM batches instead
+// would not do: a MutationObserver coalesces mutations that land in the same
+// microtask, so on a fast pass the two renders arrive as one callback and the
+// intermediate state is invisible - the same timing dependence that made the
+// original failure hard to see, reproduced inside the test that is supposed
+// to catch it.
+describe('useActionForm single-render load ', () => {
+    /** Records the hook's output on every render; renders nothing. */
+    function Probe({ log, options }) {
+        const form = useActionForm({
+            walletId: 'w',
+            action: 'SWEEP',
+            submitMethods: { hw: 'sweepTokenHw', software: 'sweepToken' },
+            ...options,
+        });
+        log.push({
+            chainId: form.chainId,
+            // Has the address load landed for the chain being shown?
+            addressesLoaded: !!(form.chainId && form.addressesByChain),
+            fromAddress: form.fromAddress ? form.fromAddress.address : null,
+            fromAddressId: form.fromAddressId,
+            setFromAddressId: form.setFromAddressId,
+            setChainId: form.setChainId,
+        });
+        return null;
+    }
+
+    /** Mount the Probe, wait for the load to settle, return the recording. */
+    async function recordRenders({ options = {}, overrides = {} } = {}) {
+        const target = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ ...ADDRESSES }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDR_ACTIVE.id } }),
+            signerReady: () => Promise.resolve({ ready: true }),
+            getSettings: () => Promise.resolve({ walletMode: 'full' }),
+            getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        };
+        Object.assign(target, overrides);
+        const messaging = new Proxy(target, {
+            get(t, prop) {
+                if (prop in t) return t[prop];
+                return () => Promise.resolve({ rows: [] });
+            },
+            has: (t, prop) => prop in t,
+        });
+        const log = [];
+        render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Probe, { log, options }),
+            ),
+        );
+        await waitFor(() => expect(log[log.length - 1].fromAddress).toBeTruthy());
+        return log;
+    }
+
+    it('no render ever has a chain\'s addresses without a source on that chain', async () => {
+        const log = await recordRenders();
+        const sourceless = log.filter((r) => r.addressesLoaded && r.fromAddress === null);
+        expect(sourceless).toEqual([]);
+    });
+
+    it('the settled source is still the ACTIVE address', async () => {
+        // The single-render invariant must not be bought by defaulting to
+        // whatever is cheapest to compute early ( / D-57).
+        const log = await recordRenders();
+        expect(log[log.length - 1].fromAddress).toBe(ADDR_ACTIVE.address);
+        expect(log[log.length - 1].fromAddressId).toBe(ADDR_ACTIVE.id);
+    });
+
+    it('an explicit pick overrides the default and is what fromAddressId reports', async () => {
+        // SweepForm's source picker calls setFromAddressId; the default is
+        // derived now, so the pick has to win over it on every later render
+        // rather than merely being written first.
+        const log = await recordRenders();
+        await act(async () => { log[log.length - 1].setFromAddressId(ADDR_NEWEST.id); });
+        await waitFor(() => {
+            expect(log[log.length - 1].fromAddress).toBe(ADDR_NEWEST.address);
+        });
+        expect(log[log.length - 1].fromAddressId).toBe(ADDR_NEWEST.id);
+    });
+
+    it('a pick that belongs to another chain re-defaults instead of sticking', async () => {
+        // A derived default reads the pick each render, so a stale id from a
+        // chain the user has left must not survive as the form's source.
+        const log = await recordRenders({
+            overrides: {
+                getAddressesByChain: vi.fn().mockResolvedValue({
+                    [CHAIN]: [ADDR_ACTIVE, ADDR_NEWEST],
+                    'litecoin-mainnet': [ADDR_LTC],
+                }),
+            },
+        });
+        await act(async () => { log[log.length - 1].setFromAddressId(ADDR_NEWEST.id); });
+        await waitFor(() => expect(log[log.length - 1].fromAddress).toBe(ADDR_NEWEST.address));
+
+        await act(async () => { log[log.length - 1].setChainId('litecoin-mainnet'); });
+        await waitFor(() => expect(log[log.length - 1].fromAddress).toBe(ADDR_LTC.address));
+        // And the switch itself never passes through a sourceless render.
+        const sourceless = log.filter((r) => r.addressesLoaded && r.fromAddress === null);
+        expect(sourceless).toEqual([]);
     });
 });
