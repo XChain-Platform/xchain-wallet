@@ -22,6 +22,16 @@
 // `encoder.createTx` actually receives is the closest thing to the real
 // article that does not need a chain.
 //
+// WHAT THIS LANE CANNOT SEE, and where that half lives. A fake encoder proves
+// the wallet ASKS for the fee output; it cannot prove the real encoder puts it
+// in the PSBT it returns, nor that the indexer then accepts the action. That
+// half is `tools/regtest/watcherLaneNativeFee.mjs`, driven on litecoin-regtest
+// 2026-08-04: a watcher-composed ownership sale carrying the FEE_DESTINATION
+// output indexed valid (action 2191, 0.03333333 LTC, payment_mode 1), and the
+// same sale composed WITHOUT the flag - the shape every form whose  fix
+// stopped at the submit path produced - broadcast fine and was rejected
+// `invalid: insufficient fee (native coin output required)` (action 2190).
+//
 // What "correct" looks like, from nativeFeePreflight.js: with the flag set the
 // pre-flight quotes the fee, pushes { address: feeDestination, value: feeSats }
 // onto customOutputs, and STRIPS its own flag so the encoder never sees an
