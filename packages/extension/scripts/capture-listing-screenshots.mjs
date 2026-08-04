@@ -67,6 +67,33 @@ import {
 } from '../../../test/e2e/fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../core/src/buildInfo.js';
 
+// Answered before anything else, and this one is not a courtesy. Without it,
+// `--help` was not recognised as a flag at all: the script ignored it and ran
+// the full capture, launching a browser, creating and unlocking a demo wallet,
+// switching networks and overwriting the listing assets on disk. It then
+// exited 0, so it looked like a help screen had been printed. A tool that does
+// heavy, side-effecting work when asked how to use it is the worst version of
+// this defect, and it hid behind a passing exit code until the check that
+// covers the sibling tools was pointed at it.
+if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    console.log(`Capture the Chrome Web Store listing screenshots and promo tile.
+
+Usage:
+  node packages/extension/scripts/capture-listing-screenshots.mjs
+
+Requires the extension to be built first:
+  pnpm --filter @xchain-wallet/extension build
+
+WHAT THIS DOES, because it is not read-only: it launches a browser with the
+built extension loaded, creates and unlocks a DEMO wallet, drives the UI, and
+OVERWRITES the four listing assets in packages/extension/docs/listing-assets/
+(three 1280x800 screenshots and the 440x280 promo tile).
+
+Demo data only. It never touches a real wallet, and the store listing shows
+only what this produces.`);
+    process.exit(0);
+}
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_DIST = path.resolve(HERE, '../dist');
 const OUT_DIR = path.resolve(HERE, '../docs/listing-assets');
