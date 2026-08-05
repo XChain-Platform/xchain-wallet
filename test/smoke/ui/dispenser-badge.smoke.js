@@ -38,8 +38,16 @@ assert.ok(/messaging\.getDispensersForToken\s*\(/.test(src),
     'DispenserBadge queries messaging.getDispensersForToken');
 assert.ok(/const CACHE = new Map\(\)/.test(src),
     'DispenserBadge declares a module-level CACHE Map');
-assert.ok(/isOpen\b/.test(src),
-    'DispenserBadge filters to open dispensers (isOpen helper)');
+// Assert the FILTERING, not the helper's name. This pinned the literal
+// `isOpen` and went red the moment the helper was renamed to
+// `isDispenserRowOpen` - a rename that was an improvement, made so ManageToken
+// could share the predicate, and that left the behaviour identical. A gate that
+// fails on a rename while the thing it guards still works trains people to edit
+// the gate, which is how a real regression gets waved through next time.
+assert.ok(/filter\(\s*isDispenserRowOpen\s*\)/.test(src),
+    'DispenserBadge filters its rows through the open-dispenser predicate');
+assert.ok(/export function isDispenserRowOpen\b/.test(src),
+    'the open-dispenser predicate is exported, so ManageToken and the badge cannot disagree');
 
 // --- 2. Early-return behaviour -----------------------------------------
 
