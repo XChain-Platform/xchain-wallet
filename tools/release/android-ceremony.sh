@@ -238,6 +238,29 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 cp "$RAW_AAB" "$WORK_DIR/$AAB_NAME"
 
 # ---------------------------------------------------------------------
+# 1b. Verify what is actually inside the bundle, BEFORE any key touches it
+# ---------------------------------------------------------------------
+#
+# Added by. Until then this ceremony checked that its own signatures
+# verified and nothing whatever about what the manifest inside said, while
+# .github/workflows/mobile.yml asserted six manifest facts against a bundle it
+# throws away. The gates were real, correct, and pointed at the one artifact
+# nobody ships; the bundle Google receives had never been through any of them
+# except by hand, in whichever session happened to be feeling careful.
+#
+# It runs here, before section 2, so a bundle that fails is never signed: a
+# signed artifact is a thing somebody may later find on a disk and trust, and
+# the cheapest moment to refuse is before it exists. The same script runs in
+# CI, so a defect surfaces on a dispatch rather than at the ceremony, and both
+# read one copy of the rules rather than two that drift.
+echo "==> verifying the built bundle's manifest (§5, §7)"
+java -jar "$BUNDLETOOL" dump manifest --bundle="$WORK_DIR/$AAB_NAME" \
+    > "$WORK_DIR/merged-manifest.xml" || die "bundletool could not dump the manifest"
+node "$REPO_ROOT/tools/release/verify-android-manifest.mjs" \
+    "$WORK_DIR/merged-manifest.xml" --version-code "$VERSION_CODE" \
+    || die "the built bundle does not match what §5 and §7 pin; nothing was signed"
+
+# ---------------------------------------------------------------------
 # 2. Sign the AAB with K9 (Play upload key)
 # ---------------------------------------------------------------------
 

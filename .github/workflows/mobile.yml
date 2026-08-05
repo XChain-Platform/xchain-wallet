@@ -142,9 +142,25 @@ jobs:
           unzip -p universal.apks universal.apk > xchain-wallet-UNSIGNED-ci.apk
           ls -l xchain-wallet-UNSIGNED-ci.apk
 
-      # The point of the whole tag-purity rule, checked against the artifact
-      # instead of against the source: whatever the tag says, the bundle carries.
-      - name: The bundle's versionCode is the one the tag derives
+      # Every manifest fact this lane pins, checked in ONE place that the
+      # RELEASE CEREMONY also calls.
+      #
+      # These assertions used to live here as five inline steps, and this job
+      # builds a bundle that is thrown away - the header of this file says so,
+      # and so does tools/release/android-ceremony.sh: "CI builds the same two
+      # artifacts unsigned as a health check; nothing it produces is ever
+      # published." The bundle Google receives is built by the ceremony, which
+      # verified its SIGNATURES and nothing at all about what the manifest
+      # inside said. So the entire artifact-gate suite was aimed at the one
+      # bundle nobody ships.
+      #
+      # Sharing the script rather than copying the steps is the point: two
+      # copies of a rule is how this lane has been bitten five times, each time
+      # by a mechanism scoped narrower than the rule it enforced. The script is
+      # falsified against broken bundles by
+      # test/smoke/audits/android-manifest-verify.smoke.js, which runs without a
+      # build and so goes red long before a release does.
+      - name: The built bundle's manifest is the one §5 and §7 pin
         run: |
           set -euo pipefail
           tag="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}"
@@ -152,72 +168,12 @@ jobs:
             tag="v$(node -p "require('./packages/mobile/package.json').version")"
           fi
           expected="$(node packages/mobile/scripts/version.js "$tag" | cut -d' ' -f1)"
-          actual="$(java -jar bundletool.jar dump manifest \
-            --bundle=packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
-            --xpath=/manifest/@android:versionCode)"
-          echo "tag=$tag expected=$expected actual=$actual"
-          test "$expected" = "$actual"
-
-      # §1 allows the app exactly ONE exported component, and the source
-      # manifest is the wrong place to prove it: androidx.profileinstaller
-      # merged in a second exported receiver transitively, which the
-      # source-level smoke could not see and the first real build found
-      # immediately. Assert against the MERGED manifest, where the truth is.
-      - name: Exactly one exported component in the built bundle
-        run: |
-          set -euo pipefail
+          echo "tag=$tag expects versionCode $expected"
           java -jar bundletool.jar dump manifest \
             --bundle=packages/mobile/android/app/build/outputs/bundle/release/app-release.aab \
             > merged-manifest.xml
-          count="$(grep -c 'exported="true"' merged-manifest.xml || true)"
-          echo "exported components: $count"
-          grep -o 'android:exported="true"[^>]*android:name="[^"]*"' merged-manifest.xml || true
-          test "$count" = "1"
-          grep -q 'io.xchain.wallet.android.MainActivity' merged-manifest.xml
-
-      # The hardening that only exists if it survived the merge.
-      - name: Backup and cleartext posture survived into the bundle
-        run: |
-          set -euo pipefail
-          grep -q 'allowBackup="false"' merged-manifest.xml
-          grep -q 'usesCleartextTraffic="false"' merged-manifest.xml
-
-      # §5 states the permission rule as a SET - "camera (QR) and biometrics
-      # only; no location, no contacts, no background anything" - and every
-      # added permission is Play review surface. This used to be
-      # `grep -c android.permission <= 4`, which is a count, and a count cannot
-      # express that rule. Driven against a real signed AAB (2026-08-03), the
-      # count passed three mutations it should have refused: CAMERA swapped for
-      # ACCESS_FINE_LOCATION (same count, entirely different review surface),
-      # USE_FINGERPRINT silently dropped (the API 26-27 unlock path disappears
-      # and the count only goes DOWN), and a vendor permission added, which it
-      # could not see at all because it matched only `android.permission`.
-      # That last one is the one that matters most here: FCM and Play Services
-      # announce themselves through exactly such permissions, and §1 defers push
-      # notifications specifically to keep them out of a self-custody wallet.
-      #
-      # So: the exact set, including the non-android entry, which is AndroidX's
-      # own signature-level permission for RECEIVER_NOT_EXPORTED registration
-      # and is listed because it is REAL and merged-in, not because it is
-      # wanted. Anything added, removed or swapped fails and prints the diff.
-      - name: The merged manifest carries exactly the intended permissions
-        run: |
-          set -euo pipefail
-          grep -o '<uses-permission[^>]*android:name="[^"]*"' merged-manifest.xml \
-            | sed -E 's/.*android:name="([^"]*)".*/\1/' | sort -u > perm-actual.txt
-          printf '%s\n' \
-            'android.permission.CAMERA' \
-            'android.permission.INTERNET' \
-            'android.permission.USE_BIOMETRIC' \
-            'android.permission.USE_FINGERPRINT' \
-            'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION' \
-            | sort -u > perm-expected.txt
-          if ! diff -u perm-expected.txt perm-actual.txt; then
-            echo "::error::The merged manifest's permission set changed (-expected +actual)." \
-                 "A permission is Play review surface and §5 pins the set, not the count." >&2
-            exit 1
-          fi
-          echo "permission set matches exactly"
+          node tools/release/verify-android-manifest.mjs merged-manifest.xml \
+            --version-code "$expected"
 
       # The capability floor that refuses an engine too old to PARSE the app
       # (public/boot-check.js) is only worth anything if it shipped, as a
