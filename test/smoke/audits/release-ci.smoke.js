@@ -393,6 +393,52 @@ assert.ok(/pull_request/.test(ci), 'ci.yml runs on pull_request (as expected)');
 assert.ok(!SIGNING_SECRET.test(ci),
     'ci.yml runs on pull_request and must never read a signing secret');
 
+// --- 9b. ci.yml ships the docs sibling it is contracted to ship --------
+//
+// . `.ci-siblings` declares xchain-documentation, and since  a
+// declared-but-absent sibling is a REFUSAL rather than a skip - so this
+// workflow is the only thing standing between the release gate and 26 red
+// smokes on every master commit. The credential exists (, 2026-08-05:
+// a read-only deploy key on xchain-documentation, private half in the
+// XCHAIN_DOCS_READ_KEY Actions secret), so the failure this guards is no
+// longer "nobody added the secret" but the quieter one: somebody edits this
+// workflow and the checkout step, its gate, or its path stops matching what
+// _docs-repo.js resolves. Each assertion below pins one thing that has to
+// stay true for the docs-coupled smokes to actually RUN.
+const testJob = ci.slice(ci.indexOf('\n  test:'), ci.indexOf('\n  build:'));
+
+// The env hoist. `if: secrets.X != ''` is not legal in a step condition, so
+// the gate reads a job-level env; losing the hoist silently disables the
+// checkout, because an undefined env is the empty string and the step just
+// stops running.
+assert.ok(/^\s{6}XCHAIN_DOCS_READ_KEY:\s*\$\{\{\s*secrets\.XCHAIN_DOCS_READ_KEY\s*\}\}/m.test(testJob),
+    'the test job must hoist XCHAIN_DOCS_READ_KEY into job-level env; a step `if:` '
+    + 'cannot read the secrets context, so without the hoist the sibling checkout '
+    + 'never runs and 26 docs-coupled smokes go red on every commit.');
+
+// The checkout itself: right repo, gated on the credential, and SSH rather
+// than a token. A deploy key cannot authenticate over HTTPS, so a `token:`
+// here would 404 against a private repo while looking perfectly correct.
+assert.ok(/repository:\s*XChain-Platform\/xchain-documentation/.test(testJob),
+    'the sibling checkout must name XChain-Platform/xchain-documentation');
+assert.ok(/ssh-key:\s*\$\{\{\s*env\.XCHAIN_DOCS_READ_KEY\s*\}\}/.test(testJob),
+    'the sibling checkout must authenticate with `ssh-key:`. The credential is a '
+    + 'DEPLOY KEY (repo-scoped, read-only, mintable through the API); deploy keys '
+    + 'are SSH-only, so `token:` cannot read this private repo however valid it looks.');
+assert.ok(/if:\s*env\.XCHAIN_DOCS_READ_KEY\s*!=\s*''/.test(testJob),
+    "the sibling checkout must stay gated on `env.XCHAIN_DOCS_READ_KEY != ''`; a fork "
+    + 'has no access to the secret and an ungated step fails the whole workflow at checkout.');
+
+// The path is not cosmetic: _docs-repo.js resolves the sibling from its own
+// location, never from cwd, and actions/checkout refuses any path outside
+// the workspace. XCHAIN_DOCS_ROOT is what reconciles the two, so the pair
+// must agree or the checkout lands somewhere nothing reads.
+assert.ok(/path:\s*\.docs-sibling/.test(testJob),
+    'the sibling must be checked out to .docs-sibling');
+assert.ok(/^\s{6}XCHAIN_DOCS_ROOT:\s*\$\{\{\s*github\.workspace\s*\}\}\/\.docs-sibling/m.test(testJob),
+    'XCHAIN_DOCS_ROOT must point at the same .docs-sibling path the checkout writes; '
+    + 'if the two ever disagree the checkout succeeds and every docs smoke still refuses.');
+
 // --- 10. Every workflow that builds the web SPA raises Node's heap ------
 //
 // The web bundle is one large synchronous graph carrying every chain, and

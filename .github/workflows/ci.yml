@@ -42,7 +42,7 @@ jobs:
       # context is not usable in a step `if`, an `env` one is. Absent secret =
       # empty string = the step does not run and the docs-coupled smokes behave
       # exactly as they do today.
-      XCHAIN_DOCS_READ_TOKEN: ${{ secrets.XCHAIN_DOCS_READ_TOKEN }}
+      XCHAIN_DOCS_READ_KEY: ${{ secrets.XCHAIN_DOCS_READ_KEY }}
       # Always set, deliberately. When the checkout ran, this is where the docs
       # are. When it did not, this names a path that does not exist, which is
       # what _docs-repo.js already reports honestly - and pointing it at a real
@@ -67,11 +67,22 @@ jobs:
       #
       # WHY IT IS CONDITIONAL RATHER THAN UNCONDITIONAL. xchain-documentation
       # is PRIVATE, and the repository-scoped GITHUB_TOKEN cannot read another
-      # repository, so this needs its own credential. Gated on the secret being
-      # present, exactly as release.yml gates the MAS and APPX steps: the step
-      # is inert until an operator adds XCHAIN_DOCS_READ_TOKEN, and wiring it
-      # ahead of the credential means the credential is the only remaining
-      # step rather than the first of two.
+      # repository, so this needs its own credential. The credential now EXISTS
+      # (, 2026-08-05): a read-only ed25519 DEPLOY KEY on
+      # xchain-documentation, whose private half is the XCHAIN_DOCS_READ_KEY
+      # Actions secret here. The gate is kept anyway, because it is what lets a
+      # fork - which has neither the secret nor any way to obtain it - run this
+      # workflow at all instead of failing at checkout.
+      #
+      # WHY A DEPLOY KEY AND NOT A PAT. A deploy key is scoped to exactly ONE
+      # repository and was verified read-only by driving it: it clones
+      # xchain-documentation, and it is REFUSED both when pushing to that repo
+      # and when reading any other repo in the org. A fine-grained PAT would
+      # carry an account identity, an expiry to re-manage, and a blast radius
+      # wider than the one repo this job needs. It is also why this is
+      # `ssh-key:` rather than `token:` - deploy keys authenticate over SSH,
+      # and unlike a PAT they can be minted through the API, so nothing about
+      # this credential requires a human at a browser.
       #
       # THE PATH IS NOT ARBITRARY. test/smoke/_docs-repo.js resolves the
       # sibling from its OWN location as <repo>/../xchain-documentation, never
@@ -90,11 +101,11 @@ jobs:
       #     developer checkout puts it. XCHAIN_DOCS_ROOT exists for exactly
       #     this and _docs-repo.js honours it ahead of its relative default.
       - name: Check out the xchain-documentation sibling
-        if: env.XCHAIN_DOCS_READ_TOKEN != ''
+        if: env.XCHAIN_DOCS_READ_KEY != ''
         uses: actions/checkout@v4
         with:
           repository: XChain-Platform/xchain-documentation
-          token: ${{ env.XCHAIN_DOCS_READ_TOKEN }}
+          ssh-key: ${{ env.XCHAIN_DOCS_READ_KEY }}
           ref: master
           path: .docs-sibling
       # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step can't
