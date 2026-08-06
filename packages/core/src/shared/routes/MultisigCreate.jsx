@@ -33,17 +33,17 @@ const SCHEMES = [
     {
         value: 'p2sh-multisig',
         label: 'Classic multi-signature',
-        description: 'Classic N-of-M with a redeem script. Universally supported across signers and explorers; higher on-chain footprint.',
+        description: 'The original multi-signature format. Works with virtually every wallet, hardware signer and block explorer, but costs the most in transaction fees.',
     },
     {
         value: 'p2wsh-multisig',
         label: 'SegWit multi-signature (lower fees)',
-        description: 'Same N-of-M semantics, native-segwit witness program. Cheaper fees than P2SH; broad signer support.',
+        description: 'Signs exactly like Classic but costs less in transaction fees. Supported by most current wallets and hardware signers.',
     },
     {
         value: 'taproot-musig2',
         label: 'Taproot multi-signature (most private)',
-        description: 'MuSig2 aggregated key + signature under a single P2TR output. Most private (looks like single-sig on-chain) but requires every cosigner to support MuSig2 (Ledger Bitcoin app ≥ 2.4.0; Trezor T per current firmware).',
+        description: 'The most private option: on the blockchain it looks like an ordinary single-signature wallet, and it is usually the cheapest to spend from. Every device that signs must support this newer scheme (Ledger Bitcoin app 2.4.0 or later; Trezor Model T on current firmware).',
     },
 ];
 
@@ -182,7 +182,7 @@ export function MultisigCreate({ walletId, onBack }) {
         // fewer than N cosigners, so the funds would be permanently locked.
         // Steer the user to P2WSH for a genuine T-of-N policy.
         if (scheme === 'taproot-musig2' && t !== rows.length) {
-            return `Taproot-MuSig2 requires all ${rows.length} cosigners to sign (set threshold to ${rows.length}). For a ${t}-of-${rows.length} policy, choose P2WSH instead.`;
+            return `Taproot multi-signature requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${t} of ${rows.length} sign, pick SegWit multi-signature instead.`;
         }
         for (let i = 0; i < rows.length; i += 1) {
             const r = rows[i];
