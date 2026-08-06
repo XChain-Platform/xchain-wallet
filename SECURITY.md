@@ -27,12 +27,14 @@ Email **security@dankest.llc** with:
 
 For sensitive reports, please encrypt the email body to our PGP key.
 
-> **PGP fingerprint: not yet published (G180).**  
-> The release key ceremony is documented at `claude/reports/launch/GPG-KEY-CEREMONY-RUNBOOK.md` and has not been run yet. Once it has, the fingerprint will be published through **two independent channels**: this file, and <https://xchain.io/security>. A compromise of either one alone therefore cannot silently rewrite the trust root you're checking a signature against, which only works if you can actually find the other one, so each channel names the other by URL. If the two ever disagree, trust neither and email us to ask which is current.
+> **PGP fingerprint: 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7**  
+> `XChain Wallet Release Signing <releases@dankest.llc>`, ed25519, created 2026-08-06, expires 2028-08-05. The primary key is certify-only and offline; the signing subkey that actually signs a release manifest is `27A1593607C828903EF67DAD10ADF79899B41573`.
 >
-> **No XChain Wallet release has been signed or published yet.** Any file offered to you today as a signed XChain Wallet release is not one.
+> This fingerprint is published through **two independent channels**: this file, and <https://xchain.io/security>. A compromise of either one alone therefore cannot silently rewrite the trust root you're checking a signature against, which only works if you can actually find the other one, so each channel names the other by URL. If the two ever disagree, trust neither and email us to ask which is current.
 >
-> Until both are live: the email channel above is acceptable for first contact. We will coordinate an encrypted exchange with you (a session key over a second channel, or a short-lived one-time key) before you share proof-of-concept details or anything else sensitive.
+> **No XChain Wallet release has been signed or published yet.** The key now exists, but nothing has been signed with it: any file offered to you today as a signed XChain Wallet release is not one.
+>
+> Until the first signed release is out: the email channel above is acceptable for first contact. We will coordinate an encrypted exchange with you (a session key over a second channel, or a short-lived one-time key) before you share proof-of-concept details or anything else sensitive.
 
 We do not currently offer a paid bug bounty. We do offer public credit in release notes and the advisory itself, unless you prefer to remain anonymous.
 
@@ -108,7 +110,7 @@ Read that document before reporting. It tells you what we already know, what we 
 
 ## Verifying releases
 
-When release-signing infrastructure ships (tracked as G158 / G159 / G180), the procedure for verifying a release artifact will be documented at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and the desktop section of [https://docs.xchain.io/components/wallet/reproducible-builds](https://docs.xchain.io/components/wallet/reproducible-builds) document the procedure.
+The release signing key now exists and its fingerprint is published above; what has not happened yet is a signed release to verify (tracked as G158 / G159 / G180). The procedure for verifying a release artifact is documented at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and the desktop section of [https://docs.xchain.io/components/wallet/reproducible-builds](https://docs.xchain.io/components/wallet/reproducible-builds) document the procedure.
 
 ### Android APK signing certificate
 

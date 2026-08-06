@@ -6,10 +6,13 @@ credential inventory, CI matrix, the full release procedure and its
 rollback story): `claude/specs/wallet-release-rails.md` .
 
 This directory holds the scripts and conventions for cutting a signed
-release. The gates all run today; the GPG signing step itself is
-blocked on the maintainer's release key being generated and published
-(G180 in `claude/reports/xchain-wallet/SPEC_GAPS.md`), so `sign.sh`
-exits with a clear error pointing at `SECURITY.md` until then.
+release. The gates all run today, and as of 2026-08-06 so does the
+signing step: the maintainer's release key exists and its fingerprint
+is published in `SECURITY.md`. `sign.sh` still exits with a clear error
+when `XCHAIN_RELEASE_GPG_KEY` is unset, which now means "this run was
+not told which key to use" rather than "there is no key". What is left
+of G180 (in `claude/reports/xchain-wallet/SPEC_GAPS.md`) is publication
+reaching a reader, which is a deploy rather than a key.
 
 The companion verification side lives at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release) -
 end users follow that recipe to verify what this pipeline produces.
@@ -88,7 +91,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | Script | Purpose | Status |
 |---|---|---|
 | `lib.sh` | Shared manifest routines: which files a manifest covers, in what order, and what its header says. Sourced by the other scripts so they cannot drift apart. | Live |
-| `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. | Gates live; signing blocked on G180 |
+| `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. | Live; needs `XCHAIN_RELEASE_GPG_KEY` (the key exists, G180's remaining half is publication) |
 | `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). | Live |
 | `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live (host pending) |
 | `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
@@ -313,7 +316,7 @@ which carries a section per shell, for the per-shell verification protocol.
 
 - ✅ Scripts, gates, manifest header and the artifact-set list are live and covered by `test/smoke/audits/release-tools.smoke.js`.
 - ✅ Dev-mock gate scans every shipped shell bundle, including the desktop renderer.
-- ⏸ Actual GPG signing pending G180 (release key generation + publication; ceremony runbook is  S3).
+- ✅ GPG signing works: the release key was generated 2026-08-05 and has signed a manifest end to end. G180's remaining half is publication reaching readers (both channels and the desktop pin are written, the deploy has not run); ceremony runbook is  S3.
 - ✅ CI release lanes exist (`.github/workflows/release.yml`); the repository-settings half is a checklist at [https://docs.xchain.io/components/wallet/release/ci-setup](https://docs.xchain.io/components/wallet/release/ci-setup) and is NOT yet configured, so the workflow must not run with real secrets until it is.
 - ⏸ `downloads.xchain.io` not yet stood up ( S6); the upload tooling (`publish.sh`), the monitoring (`feed-sweep.mjs`) and the host runbook exist, the host does not. The [verify-release page](https://docs.xchain.io/components/wallet/release/verify-release) still points at GitHub release assets.
 - ✅ `publish.sh` and `feed-sweep.mjs` are driven for real, against a signed fixture and a live local HTTP origin, by `test/smoke/audits/publish-feed.smoke.js` and `feed-sweep.smoke.js`. The older coverage of `publish.sh` was greps over its own source, which is how the  stage-1 defect survived: the comments and the code disagreed and both read as correct.

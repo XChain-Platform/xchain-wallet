@@ -32,10 +32,14 @@
 #   XCHAIN_RELEASE_REPO      Default --repo value (optional)
 #   GNUPGHOME                Override GPG home (optional)
 #
-# Status: the signing step itself is blocked on G180 (the release GPG
-# key is not yet generated or published in SECURITY.md). Everything
-# ahead of it - the pristine-clone checks, the dev-mock gate, the
-# artifact-set gate, the manifest header - runs today.
+# Status: HALF OF G180 IS DONE as of 2026-08-06. The release GPG key
+# EXISTS and signs (K1, fingerprint in SECURITY.md), so this script can
+# produce a real signed manifest today given XCHAIN_RELEASE_GPG_KEY.
+# What G180 still covers is publication reaching a reader: the two
+# channels and the desktop pin are written but not yet deployed, so a
+# user cannot look the key up. Everything ahead of the signature - the
+# pristine-clone checks, the dev-mock gate, the artifact-set gate, the
+# manifest header - has run since the beginning.
 #
 # WHAT THIS SCRIPT IS FOR, so the gates below are not mistaken for
 # ceremony: the maintainer's signature is the trust root for artifacts
@@ -128,17 +132,19 @@ if [[ -z "${XCHAIN_RELEASE_GPG_KEY:-}" ]]; then
     cat >&2 <<'EOF'
 sign.sh: XCHAIN_RELEASE_GPG_KEY is not set.
 
-The wallet's release GPG key has not yet been published - see G180 in
-claude/reports/xchain-wallet/SPEC_GAPS.md and the disclosure note in
-SECURITY.md. Until the key is published, this pipeline cannot
-produce a signed manifest.
+This says nothing about whether a key exists - only that this run was
+not told which one to use. K1 was generated on 2026-08-05 and its
+fingerprint is published in SECURITY.md; see G180 in
+claude/reports/xchain-wallet/SPEC_GAPS.md for what remains of that gate
+(publication reaching readers, which is a deploy rather than a key).
 
 Path forward:
-  1. Generate the release key (or import an existing one) into the
-     GnuPG home you intend to use (default ~/.gnupg, override via
-     GNUPGHOME=...).
-  2. Publish the fingerprint in SECURITY.md.
-  3. Re-run with `XCHAIN_RELEASE_GPG_KEY=<fingerprint>`.
+  1. Point GNUPGHOME at the keystore holding the release key
+     (the release machine keeps it outside ~/.gnupg on purpose).
+  2. Re-run with `XCHAIN_RELEASE_GPG_KEY=<fingerprint>`, taking the
+     fingerprint from SECURITY.md rather than from memory.
+  3. If you are standing up a NEW key instead, the ceremony runbook is
+     the entry point; do not generate one ad hoc here.
 
 To compute the unsigned manifest only (no signing), run:
   bash tools/release/verify.sh --input "$INPUT_DIR" --recompute

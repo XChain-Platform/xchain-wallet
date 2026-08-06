@@ -132,18 +132,39 @@ async function good(overrides = {}) {
 // --- the shipped default ------------------------------------------------
 
 describe('the pinned key as shipped', () => {
-    it('is empty until the key ceremony runs', () => {
-        // If either of these is non-empty without the ceremony having
-        // happened, someone pinned a key from somewhere. This is the one
-        // assertion in the file that must never be casually edited.
-        expect(UPDATE_PINNED_PUBKEY_ARMORED).toBe('');
-        expect(UPDATE_PINNED_FINGERPRINT).toBe('');
+    // These two used to assert the constants were EMPTY, on the reasoning
+    // that a non-empty pin before the ceremony meant someone had pinned a
+    // key from somewhere. That was right until 2026-08-06, when the
+    // ceremony ran - and then it was a guard that failed the moment the
+    // thing it guarded actually happened, which is the same shape the
+    // release-key mutation harness was caught in on the same day. The
+    // check that survives the ceremony is not "is it empty" but "do the
+    // two constants describe the same real key", so that is what this
+    // asserts now.
+    it('ships a real key whose fingerprint matches the pinned one', async () => {
+        expect(UPDATE_PINNED_PUBKEY_ARMORED).toMatch(/BEGIN PGP PUBLIC KEY BLOCK/);
+        expect(UPDATE_PINNED_FINGERPRINT).toMatch(/^[0-9A-F]{40}$/);
+
+        // Parsed, not pattern-matched. A swapped armored block that merely
+        // looks plausible is the failure the fingerprint constant exists to
+        // catch, and only openpgp can say whether the two agree.
+        const key = await openpgp.readKey({ armoredKey: UPDATE_PINNED_PUBKEY_ARMORED });
+        expect(key.getFingerprint().toUpperCase()).toBe(UPDATE_PINNED_FINGERPRINT);
+
+        // The primary is certify-only and offline; every manifest signature
+        // is made by a subkey, so a pin carrying only the primary would
+        // verify nothing the app will ever actually see.
+        expect(key.getSubkeys().length).toBeGreaterThan(0);
     });
 
-    it('fails closed while empty rather than skipping the check', async () => {
-        const params = await good();
-        delete params.pinned;
-        const result = await verifyDownloadedUpdate(params);
+    it('fails closed when nothing is pinned rather than skipping the check', async () => {
+        // Passed explicitly rather than relying on the shipped constants
+        // being empty. That reliance is exactly what broke this block when
+        // the ceremony ran: the behaviour under test is "no key pinned",
+        // not "no key exists yet".
+        const result = await verifyDownloadedUpdate(await good({
+            pinned: { armoredKey: '', fingerprint: '' },
+        }));
         expect(result).toEqual({ ok: false, reason: 'update-key-not-pinned' });
     });
 });

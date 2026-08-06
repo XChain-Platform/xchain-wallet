@@ -179,13 +179,44 @@ const security0 = readFileSync(join(wsRoot, SECURITY_REL), 'utf8');
 const verify0 = readFileSync(join(wsRoot, VERIFY_REL), 'utf8');
 const page0 = sitesAvailable ? readFileSync(join(SITES_ROOT, PAGE_REL), 'utf8') : '';
 
+const LIVE = { security: security0, verify: verify0, page: page0 };
+
+/* THE BASE STATES, and why the modes below no longer start from the live tree.
+ *
+ * Every failure mode used to mutate ONE field of the checkout as it stood and
+ * silently assume the other two were still in their pre-ceremony state. That
+ * assumption held for exactly as long as no key existed, and the key ceremony
+ * is what ends it: publishing K1 into SECURITY.md and the security page turned
+ * SEVEN of these checks wrong at once (measured 2026-08-06). FM1 and FM2 went
+ * red for "the two name DIFFERENT keys" rather than for the runbook step they
+ * exist to catch, and ES5 went GREEN, which is the dangerous direction - the
+ * sentence protecting readers from a fake "signed release" stopped being
+ * guarded at the moment the key it accompanies became real.
+ *
+ * A harness whose meaning depends on which side of the ceremony the repo is on
+ * is not a harness on either side. So each mode now names the base it starts
+ * from, both bases are DERIVED from the live files (so a rename or a moved
+ * constant still breaks loudly here), and the live tree is exercised by the
+ * control alone. */
+const UNPUBLISHED_BASE = {
+    security: statesFingerprint(security0, 'not yet published.'),
+    verify: pin(verify0),
+    page: pagePublishes(page0, 'not yet published'),
+};
+const PUBLISHED_BASE = {
+    security: statesFingerprint(security0, `${FP_A}.`),
+    verify: pin(verify0, { fingerprint: FP_A, armored: ARMORED }),
+    page: pagePublishes(page0, FP_A),
+};
+
 /* `wallet` and `sites` are either 'green' or a regex the failure output must
  * match. A mode that only says "something went red" would pass on a syntax
  * error in the guard it is supposed to be exercising. */
 const MODES = [
     {
-        name: 'control: the tree as it stands (no key, nothing pinned)',
-        why: 'if the empty state were not green, every mode below would be red for free',
+        name: 'control: the tree as it stands',
+        why: 'if the tree as it stands were not green, every mode below would be red for free',
+        base: LIVE,
         wallet: 'green',
         sites: 'green',
         mutate: (f) => f,
@@ -193,6 +224,7 @@ const MODES = [
     {
         name: 'happy path: ceremony finished, all three copies agree',
         why: 'a guard that cannot go green after a correct ceremony blocks the release it exists to protect',
+        base: UNPUBLISHED_BASE,
         wallet: 'green',
         sites: 'green',
         mutate: (f) => ({
@@ -204,6 +236,7 @@ const MODES = [
     {
         name: 'FM1 pin without publish: runbook §6 done, §7 skipped',
         why: 'the desktop app would trust a key no user can look up',
+        base: UNPUBLISHED_BASE,
         wallet: /PINS a release key that SECURITY\.md still calls unpublished/,
         // Both channels still say "not yet published" and agree, so the
         // websites test is RIGHT to stay green: the pin is not one of its
@@ -214,6 +247,7 @@ const MODES = [
     {
         name: 'FM2 publish without pin: runbook §7 done, §6 skipped',
         why: 'every desktop update fails closed with update-key-not-pinned while the docs say the key is live',
+        base: UNPUBLISHED_BASE,
         wallet: /pins nothing/,
         sites: /disagree about whether the key is published at all/,
         mutate: (f) => ({ ...f, security: statesFingerprint(f.security, `${FP_A}.`) }),
@@ -221,6 +255,7 @@ const MODES = [
     {
         name: 'FM3 the two publication channels name different keys',
         why: 'our own policy tells a reader who sees this to trust neither, so it must never reach a reader',
+        base: PUBLISHED_BASE,
         // The wallet pair agrees with itself and cannot see the page: green
         // here is the seam, and it is why the websites test is not optional.
         wallet: 'green',
@@ -234,6 +269,7 @@ const MODES = [
     {
         name: 'FM4 a short key id is published instead of the full fingerprint',
         why: 'short ids are forgeable, and a reader comparing gpg output against one learns nothing',
+        base: PUBLISHED_BASE,
         wallet: /contains no 40-character/,
         sites: /full 40 uppercase hex characters|DIFFERENT fingerprints/,
         mutate: (f) => ({
@@ -245,6 +281,7 @@ const MODES = [
     {
         name: 'FM5 the pin is spaced and lowercased, the way gpg prints it',
         why: 'the verifier compares byte-for-byte, so this fails every update at runtime while reading as correct in a diff',
+        base: PUBLISHED_BASE,
         wallet: /40 uppercase hex/,
         sites: 'green',
         mutate: (f) => ({
@@ -259,6 +296,7 @@ const MODES = [
     {
         name: 'ES1 half a pin: an armored key with no fingerprint beside it',
         why: 'the fingerprint is what makes a swapped armored block fail loudly instead of being trusted',
+        base: UNPUBLISHED_BASE,
         wallet: /armored key is pinned with no fingerprint/,
         sites: 'green',
         mutate: (f) => ({ ...f, verify: pin(f.verify, { armored: ARMORED }) }),
@@ -266,6 +304,7 @@ const MODES = [
     {
         name: 'ES2 SECURITY.md goes blank rather than saying "not yet published"',
         why: 'a blank reads as an oversight, and the reader looks for the value somewhere less trustworthy',
+        base: UNPUBLISHED_BASE,
         wallet: /label with a BLANK value/,
         sites: /disagree about whether the key is published at all/,
         mutate: (f) => ({ ...f, security: statesFingerprint(f.security, '') }),
@@ -273,6 +312,7 @@ const MODES = [
     {
         name: 'ES3 SECURITY.md drops the "PGP fingerprint:" label entirely',
         why: 'a SECURITY.md with no fingerprint label has stopped being publication channel one',
+        base: UNPUBLISHED_BASE,
         wallet: /no longer carries a "PGP fingerprint:" line/,
         sites: /no longer carries a "PGP fingerprint:" line/,
         mutate: (f) => ({ ...f, security: f.security.replace(/PGP fingerprint:/gi, 'PGP key:') }),
@@ -280,13 +320,18 @@ const MODES = [
     {
         name: 'ES4 the security page blanks the fingerprint element',
         why: 'an empty element publishes nothing while looking like a channel',
+        base: UNPUBLISHED_BASE,
         wallet: 'green',
         sites: /disagree about whether the key is published at all/,
         mutate: (f) => ({ ...f, page: pagePublishes(f.page, '') }),
     },
     {
         name: 'ES5 the page stops saying that nothing has been signed yet',
+        /* Deliberately run from the PUBLISHED base: this mode is the one the
+         * ceremony silently disarmed, and the state that disarmed it is the
+         * state we are now in. */
         why: 'during this window that sentence is the whole protection against a fake "signed release"',
+        base: PUBLISHED_BASE,
         wallet: 'green',
         sites: /must state plainly that nothing is signed yet/,
         mutate: (f) => ({ ...f, page: drop(f.page, 'No XChain Wallet release has been signed or published yet') }),
@@ -294,6 +339,7 @@ const MODES = [
     {
         name: 'ES6 the page stops naming the other channel and the disagreement rule',
         why: 'a second channel a reader cannot find is one channel, and a reader who finds two values picks one',
+        base: UNPUBLISHED_BASE,
         wallet: 'green',
         sites: /second channel is only useful|trust neither/i,
         mutate: (f) => ({ ...f, page: drop(f.page, 'xchain-wallet/blob/master/SECURITY.md') }),
@@ -306,7 +352,10 @@ const failures = [];
 let sitesChecks = 0;
 
 for (const mode of MODES) {
-    const fixture = mode.mutate({ security: security0, verify: verify0, page: page0 });
+    if (!mode.base) throw new Error(`mode "${mode.name}" names no base state; every mode must say `
+        + 'whether it starts from a published or an unpublished tree, or it silently means something '
+        + 'different on each side of the key ceremony.');
+    const fixture = mode.mutate(mode.base);
     buildFixture(fixture);
 
     const checks = [['release-key-pin.smoke.js', mode.wallet, runWalletGuard()]];

@@ -71,7 +71,7 @@ import * as openpgp from 'openpgp';
  * Rotating this key means shipping a wallet update. That is what pinning
  * costs and what it buys.
  */
-export const UPDATE_PINNED_PUBKEY_ARMORED = '';
+export const UPDATE_PINNED_PUBKEY_ARMORED = '-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nmDMEanQNkhYJKwYBBAHaRw8BAQdAJRcbWezADtAe44CMZDuthZ3B5kZp+LyqxCsS\ny5iSM9+0NFhDaGFpbiBXYWxsZXQgUmVsZWFzZSBTaWduaW5nIDxyZWxlYXNlc0Bk\nYW5rZXN0LmxsYz6ItQQTFgoAXRYhBBop58TCKPDlXUCow7Ww5a2v2nznBQJqdA2S\nGxSAAAAAAAQADm1hbnUyLDIuNSsxLjEyLDAsMwIbAQUJA8JnAAULCQgHAgIiAgYV\nCgkICwIEFgIDAQIeBwIXgAAKCRC1sOWtr9p85zWCAQC+MgPXFdCRpMEDkcqeJypa\n9fxTsJPb3cUJKPsfHN0yIwEAxYmjQ2Syu8uxPRUIOn2tIOL9NR54ZHatrMb+dN5N\n7wu4MwRqdA2bFgkrBgEEAdpHDwEBB0B9igf82CjFb/Lzz/FwMIhPlyLqgwMGKxwn\nhiH6LEX5SYkBEQQYFgoAQhYhBBop58TCKPDlXUCow7Ww5a2v2nznBQJqdA2bGxSA\nAAAAAAQADm1hbnUyLDIuNSsxLjEyLDAsMwIbAgUJA8JnAACBCRC1sOWtr9p853Yg\nBBkWCgAdFiEEJ6FZNgfIKJA+9n2tEK33mJm0FXMFAmp0DZsACgkQEK33mJm0FXNr\n+gD9FJRaj0xvax+379J08dxoyswgCdiSJ2JFXJm54dyiPh0A/3cZAJRZK4qBIFer\n/i1XsEZz9yGYTyZ05hVwWoNE/M8B2EoBAJ9P/Fzuj9V+bI+KqxugnuqG7/d+qWlm\ny7XRQuGi81pbAQCTIZQe/aM+Ph+jzExxMDAqX91DORgoS3fqaOiC/rxZAw==\n=jPNC\n-----END PGP PUBLIC KEY BLOCK-----\n';
 
 /**
  * K1's PRIMARY key fingerprint, uppercase hex, no spaces.
@@ -82,7 +82,7 @@ export const UPDATE_PINNED_PUBKEY_ARMORED = '';
  * armored block fails loudly here instead of silently trusting whatever
  * key someone pasted in.
  */
-export const UPDATE_PINNED_FINGERPRINT = '';
+export const UPDATE_PINNED_FINGERPRINT = '1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const MANIFEST_LINE = /^([0-9a-f]{64}) {2}(.+)$/i;
