@@ -40,7 +40,22 @@ const wsRoot = join(here, '..', '..');
 const DEFAULT_GLOSSARY_PATH = join(
     wsRoot, '..', 'xchain-documentation', 'components', 'wallet', 'glossary.md',
 );
-const GLOSSARY_PATH = process.env.GLOSSARY_PATH || DEFAULT_GLOSSARY_PATH;
+// XCHAIN_DOCS_ROOT is honoured between the two, matching the precedence in
+// test/smoke/_docs-repo.js, so every consumer of the docs sibling resolves it
+// the same way. : GitHub Actions cannot put the sibling beside the
+// workspace (actions/checkout refuses any `path:` outside GITHUB_WORKSPACE),
+// so CI checks it out to `.docs-sibling` INSIDE the workspace and points
+// XCHAIN_DOCS_ROOT at it. This script honoured only the relative default and
+// its own GLOSSARY_PATH, so it could not find the glossary there and exited 2
+// - which is how the first CI run with the sibling actually present still
+// failed, on the one docs gate that shells out to a tool instead of reading
+// the doc through the shared helper.
+const DOCS_ROOT_GLOSSARY_PATH = process.env.XCHAIN_DOCS_ROOT
+    ? join(process.env.XCHAIN_DOCS_ROOT, 'components', 'wallet', 'glossary.md')
+    : null;
+const GLOSSARY_PATH = process.env.GLOSSARY_PATH
+    || DOCS_ROOT_GLOSSARY_PATH
+    || DEFAULT_GLOSSARY_PATH;
 const BRIDGE_SPEC_PATH = join(
     wsRoot, 'packages', 'bridge-spec', 'src', 'index.ts',
 );
