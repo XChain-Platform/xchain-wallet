@@ -69,7 +69,7 @@ RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-
 # at build time - reproduce.sh copies that into a build-arg. Keeping the
 # version out of this Dockerfile means bumping pnpm doesn't rebuild the
 # image, which speeds up verification runs.
-ARG PNPM_VERSION=9.0.0
+ARG PNPM_VERSION=11.8.0
 RUN corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
 # Non-root user - matches host-UID on Linux so files produced in the

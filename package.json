@@ -11,7 +11,7 @@
     },
     "homepage": "https://dankest.llc",
     "author": "Dankest, LLC",
-    "packageManager": "pnpm@9.0.0",
+    "packageManager": "pnpm@11.8.0",
     "engines": {
         "node": ">=22.0.0"
     },

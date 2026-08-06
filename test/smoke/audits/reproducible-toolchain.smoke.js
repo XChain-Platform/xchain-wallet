@@ -48,6 +48,20 @@ const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const toolchain = JSON.parse(read('tools/release/toolchain.json'));
+
+// THREE shells build reproduce containers, not one, and only this one was
+// ever checked. The 2026-08-06 pnpm 9 -> 11 raise moved the desktop
+// Dockerfile's ARG and left the extension's and the web shell's at 9.0.0,
+// which this file would have reported as clean. Each of their reproduce.sh
+// scripts passes --build-arg from `packageManager`, so the stale default is
+// invisible to anyone running the sanctioned path and bites only the
+// third-party verifier who runs `docker build` by hand - which is the one
+// reader the whole reproducible-build protocol is written for.
+const DOCKERFILES = [
+    'packages/desktop/Dockerfile',
+    'packages/extension/Dockerfile',
+    'packages/web/Dockerfile',
+];
 const dockerfile = read('packages/desktop/Dockerfile');
 const workflow = read('.github/workflows/release.yml');
 const reproduceSh = read('packages/desktop/scripts/reproduce.sh');
@@ -96,14 +110,36 @@ const pkg = JSON.parse(read('package.json'));
         'Dockerfile still carries the old unparameterised ENV NODE_SHA256. Two hash '
         + 'declarations means one of them is not the one being used.');
 
-    const pnpmArg = /^ARG PNPM_VERSION=(.+)$/m.exec(dockerfile);
-    assert.ok(pnpmArg, 'Dockerfile must declare ARG PNPM_VERSION');
     const pnpmPinned = /^pnpm@(.+)$/.exec(pkg.packageManager || '');
     assert.ok(pnpmPinned, 'root package.json must pin packageManager to pnpm@<version>');
-    assert.equal(pnpmArg[1].trim(), pnpmPinned[1],
-        `Dockerfile defaults to pnpm ${pnpmArg[1].trim()} but packageManager pins `
-        + `${pnpmPinned[1]}. reproduce.sh overrides this via --build-arg, so the drift is `
-        + 'invisible there and only bites the verifier who runs `docker build` by hand.');
+
+    // Every shell's container, not just this one. They share one
+    // toolchain.json, so a per-shell default that disagrees with it is drift
+    // by definition rather than a shell making its own choice.
+    for (const path of DOCKERFILES) {
+        const text = read(path);
+
+        const pnpmArg = /^ARG PNPM_VERSION=(.+)$/m.exec(text);
+        assert.ok(pnpmArg, `${path} must declare ARG PNPM_VERSION`);
+        assert.equal(pnpmArg[1].trim(), pnpmPinned[1],
+            `${path} defaults to pnpm ${pnpmArg[1].trim()} but packageManager pins `
+            + `${pnpmPinned[1]}. reproduce.sh overrides this via --build-arg, so the drift is `
+            + 'invisible there and only bites the verifier who runs `docker build` by hand.');
+
+        const shellNode = /^ARG NODE_VERSION=(.+)$/m.exec(text);
+        assert.ok(shellNode, `${path} must declare ARG NODE_VERSION`);
+        assert.equal(shellNode[1].trim(), toolchain.node.version,
+            `${path} pins node ${shellNode[1].trim()} but toolchain.json pins `
+            + `${toolchain.node.version}.`);
+
+        const shellSha = /^ARG NODE_SHA256_X64=(.+)$/m.exec(text);
+        assert.ok(shellSha, `${path} must declare ARG NODE_SHA256_X64`);
+        assert.equal(shellSha[1].trim(), toolchain.node.sha256.x64,
+            `${path}'s node tarball sha256 disagrees with toolchain.json.`);
+
+        assert.ok(text.includes(toolchain.baseImage.digest),
+            `${path}'s FROM digest disagrees with toolchain.json's baseImage.digest.`);
+    }
 
     assert.ok(dockerfile.includes(toolchain.baseImage.digest),
         'Dockerfile\'s FROM digest disagrees with toolchain.json\'s baseImage.digest.');

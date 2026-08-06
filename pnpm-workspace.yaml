@@ -2,6 +2,47 @@ packages:
   - 'packages/*'
   - 'test/e2e'
 
+# .npmrc IS NO LONGER READ FOR THESE, and finding that out cost six test
+# files (2026-08-06, the pnpm 9 -> 11 raise). pnpm 11 takes its settings
+# from this file, so `.npmrc`'s `shamefully-hoist`, `supportedArchitectures`
+# and `strict-ssl` were all silently dropped: nothing warned, and the only
+# symptom was root-level tests failing to resolve `@scure/*` because the
+# packages sat in pnpm's private hoist directory instead of at the root.
+#
+# `.npmrc` keeps its copies for the same reason the package.json `pnpm`
+# block below keeps its: whichever the pinned pnpm reads is the live one,
+# and a settings home that goes unread must not read as "unset".
+#
+# supportedArchitectures is the one with teeth beyond convenience. It
+# decides which platform binaries are fetched, so losing it changes what a
+# two-arch build has available to package, and this lane's reproducibility
+# work rides on the toolchain being the same one twice.
+#
+# AND IT DOES NOT MEAN THE SAME THING HERE AS IT DID IN .npmrc. Under pnpm 9
+# the list was ADDITIVE: the current platform was always installed and these
+# were extras. pnpm 11 REPLACES - list only arm64 and an amd64 host installs
+# no x64 binaries at all. Measured on 2026-08-06 inside the amd64 reproduce
+# container, three installs on one image: with the .npmrc list transcribed
+# verbatim (cpu: arm64) `@rollup/rollup-linux-x64-gnu` and
+# `@esbuild/linux-x64` were ABSENT and the reproduce build died in `vite
+# build`; with the block deleted the x64 pair appeared and the arm64 pair
+# vanished; with every target listed, as below, both are present.
+#
+# So this list is now exhaustive rather than supplementary: every OS and CPU
+# any lane builds on has to appear, including win32, because the Windows
+# release lane runs on a windows-latest runner and would otherwise install
+# nothing native at all.
+shamefullyHoist: true
+strictSsl: true
+supportedArchitectures:
+  os:
+    - darwin
+    - linux
+    - win32
+  cpu:
+    - arm64
+    - x64
+
 # WHY THIS FILE DUPLICATES package.json's `pnpm` BLOCK.
 #
 # pnpm moved these settings between two homes. pnpm 9 (the version pinned
@@ -67,3 +108,34 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - tiny-secp256k1
+
+# pnpm 11 replaced the list above with this map, and it does NOT merely
+# rename it: until every entry says true or false, `pnpm install` exits 1
+# with "Ignored build scripts", so the allowlist is not something that can
+# be left to a default. pnpm 11 wrote this block itself, with
+# "set this to true or false" in every value, and that is what a fresh
+# clone hits.
+#
+# BOTH forms are kept on purpose, which is the same reasoning that kept the
+# root package.json copy: whichever one the pinned pnpm reads is the live
+# one, and a major bump must not silently disarm the allowlist by finding
+# nothing where it looked. `onlyBuiltDependencies` above is the pnpm 9
+# form; this is the pnpm 11 form. Keep them in agreement.
+#
+# secp256k1 is FALSE deliberately, and it is the one entry that is a
+# decision rather than a transcription. pnpm 11 surfaces it because it asks
+# to run a build script; it was never on the pnpm 9 allowlist, so its
+# scripts have never run here and nothing needs them. Only tiny-secp256k1,
+# which builds the bindings this wallet actually uses, is allowed. Flipping
+# it to true is a supply-chain decision, per the note above.
+#
+# electron is absent because pnpm 11 does not ask about it: its postinstall
+# is no longer classified as a build script needing approval. Listing a
+# package pnpm never asks about is harmless but misleading, so it is left
+# out rather than written for symmetry.
+allowBuilds:
+  electron-winstaller: true
+  esbuild: true
+  secp256k1: false
+  sharp: true
+  tiny-secp256k1: true

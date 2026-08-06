@@ -42,9 +42,9 @@ All packages ship at the **same version number**. See "Versioning" below.
 
 ### Prerequisites
 
-- **Node.js** ≥ 18 (`engines.node` in `package.json`).
-- **pnpm** 9.x (declared in `packageManager`). Install with `corepack enable && corepack prepare pnpm@9.0.0 --activate`.
-- A sibling `xchain-sdk` checkout. The wallet's web + extension packages link `xchain-sdk` from `../../../xchain-sdk` (a symlink resolved at install time). Clone https://github.com/XChain-Platform/xchain-sdk next to `xchain-wallet` before installing.
+- **Node.js** ≥ 22 (`engines.node` in `package.json`; the release toolchain pins the exact patch in `tools/release/toolchain.json`).
+- **pnpm** 11.x (declared in `packageManager`). Install with `corepack enable && corepack prepare pnpm@11.8.0 --activate`. Nothing else is supported: pnpm 9 cannot re-resolve this workspace, and pnpm reads its settings from a different file on either side of that boundary.
+- No sibling checkout is required. The SDK used to be linked from `../../../xchain-sdk`, which meant a plain clone could not build; it is now an ordinary pinned dependency (`npm:@dankest-llc/xchain-sdk`) installed from the lockfile like any other. A sibling checkout is only for working ON the SDK (`pnpm run sdk:link`).
 
 ### First-time install
 

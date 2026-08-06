@@ -87,7 +87,7 @@ RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-
 
 # pnpm version comes from the root package.json's `packageManager` field
 # at build time - reproduce.sh copies that into a build-arg.
-ARG PNPM_VERSION=9.0.0
+ARG PNPM_VERSION=11.8.0
 RUN corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
 # Non-root user - matches host-UID on Linux so files produced in the
