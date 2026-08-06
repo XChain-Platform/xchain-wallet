@@ -533,6 +533,223 @@ xr_artifact_arch() {
     echo ""
 }
 
+# Echo the architecture an ELF file's own header declares, or nothing if
+# the file is not an ELF at all.
+#
+# WHY A HEADER READ AND NOT `file`: this runs on the release host and on a
+# developer's Mac, `file`'s wording differs between them, and parsing prose
+# to decide whether a release ships is the kind of dependency that breaks on
+# an OS upgrade. The two bytes at 0x12 are e_machine and they are the same
+# two bytes everywhere.
+#
+# The pair is read one byte at a time and reassembled little-endian, rather
+# than with `od -tx2`, because -tx2 prints in HOST byte order and would read
+# every value backwards on a big-endian builder.
+xr_elf_machine() {
+    local f="$1" magic bytes value
+    [[ -f "$f" ]] || { echo ""; return 0; }
+    magic="$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d ' \n')"
+    [[ "$magic" == "7f454c46" ]] || { echo ""; return 0; }
+    bytes="$(od -An -tx1 -j18 -N2 "$f" 2>/dev/null | tr -d ' \n')"
+    value="${bytes:2:2}${bytes:0:2}"
+    case "$value" in
+        003e) echo x64 ;;
+        00b7) echo arm64 ;;
+        0028) echo armv7l ;;
+        0003) echo ia32 ;;
+        *) echo "unknown-e_machine-0x${value}" ;;
+    esac
+}
+
+# The Debian multiarch triplet directory each architecture's libraries live
+# in. A payload built for one arch and filled with another's libraries says
+# so in its own paths, which is the cheapest true signal available without
+# unpacking 120MB of squashfs.
+xr_arch_triplet() {
+    case "$1" in
+        x64) echo x86_64-linux-gnu ;;
+        arm64) echo aarch64-linux-gnu ;;
+        armv7l) echo arm-linux-gnueabihf ;;
+        ia32) echo i386-linux-gnu ;;
+        *) echo "" ;;
+    esac
+}
+
+# Does what an artifact CONTAINS agree with what its name CLAIMS?
+#
+# THE GATE USED TO ANSWER THIS FROM THE FILENAME ALONE, and on 2026-08-06 a
+# probe showed what that misses: snapcraft packed x86-64 libraries into a
+# snap whose own meta/snap.yaml declared `architectures: [arm64]`, exit 0,
+# no warning (). Filename, metadata and payload all have to agree,
+# and only the payload is the thing a user's machine has to execute. An
+# arm64-labelled artifact full of x86-64 code installs, passes every hash
+# and signature check we have, and cannot start.
+#
+# A MISSING EXTRACTOR IS A PROBLEM, NOT A SKIP. This gate decides whether a
+# release ships; a check that quietly becomes a no-op on the one host where
+# it was needed is the "mechanism nothing ran" family this lane keeps
+# rediscovering. It names the tool and the artifact rather than shrugging.
+#
+# Args: dir name declared-arch. Prints problems on stderr, count on stdout.
+xr_check_payload_arch() {
+    local dir="$1" name="$2" arch="$3"
+    local f="$dir/${name#./}" problems=0 triplet machine listing="" n
+
+    triplet="$(xr_arch_triplet "$arch")"
+    [[ -n "$triplet" ]] || { echo 0; return 0; }
+
+    case "${name#./}" in
+        *.AppImage)
+            # An AppImage IS an ELF: its runtime is the executable a user
+            # runs, so its own header is the definitive answer and needs no
+            # extractor at all.
+            machine="$(xr_elf_machine "$f")"
+            if [[ -n "$machine" && "$machine" != "$arch" ]]; then
+                echo "PAYLOAD-ARCH  '${name#./}' is named $arch and its ELF header says" >&2
+                echo "              $machine. The file a user executes is the one that" >&2
+                echo "              decides, and it disagrees with the name the feed" >&2
+                echo "              publishes it under." >&2
+                problems=$((problems + 1))
+            elif [[ -z "$machine" ]]; then
+                echo "PAYLOAD-ARCH  '${name#./}' does not start with an ELF magic, so it is" >&2
+                echo "              not the self-executing image an AppImage must be." >&2
+                problems=$((problems + 1))
+            fi
+            ;;
+        *.snap)
+            if ! command -v unsquashfs >/dev/null 2>&1; then
+                # NOT a failure, and the reason is where signing happens.
+                # sign.sh runs on the RELEASE MACHINE, never in CI (§8: a
+                # runner that could sign the manifest would make the manifest
+                # worth exactly as much as the runner), and that machine is a
+                # Mac with no squashfs-tools. Refusing here would block the
+                # one path the release depends on to enforce a check the
+                # operator can install in one command. So it says out loud
+                # what it did not check, by name.
+                echo "PAYLOAD-ARCH-UNCHECKED  '${name#./}' was NOT checked: unsquashfs is not on" >&2
+                echo "              this host, and a snap's declared architecture is not" >&2
+                echo "              evidence of its contents (). Install it" >&2
+                echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
+                echo "              have this artifact checked." >&2
+            elif ! listing="$(unsquashfs -l "$f" 2>/dev/null)"; then
+                echo "PAYLOAD-ARCH  '${name#./}' could not be read as a squashfs image by" >&2
+                echo "              unsquashfs. An artifact whose contents cannot be read is" >&2
+                echo "              not an artifact whose contents have been checked." >&2
+                problems=$((problems + 1))
+                listing=""
+            fi
+            ;;
+        *.deb)
+            if ! command -v dpkg-deb >/dev/null 2>&1; then
+                # Same reasoning as the snap branch above.
+                echo "PAYLOAD-ARCH-UNCHECKED  '${name#./}' was NOT checked: dpkg-deb is not on" >&2
+                echo "              this host, so nothing has confirmed its contents match the" >&2
+                echo "              architecture its name claims. Install it (brew install" >&2
+                echo "              dpkg / apt install dpkg) to have this artifact checked." >&2
+            elif ! listing="$(dpkg-deb -c "$f" 2>/dev/null)"; then
+                echo "PAYLOAD-ARCH  '${name#./}' could not be read as a Debian package by" >&2
+                echo "              dpkg-deb. An artifact whose contents cannot be read is" >&2
+                echo "              not an artifact whose contents have been checked." >&2
+                problems=$((problems + 1))
+                listing=""
+            else
+                local declared
+                declared="$(dpkg-deb -f "$f" Architecture 2>/dev/null || true)"
+                case "$declared" in
+                    amd64) declared=x64 ;;
+                    arm64) declared=arm64 ;;
+                    armhf) declared=armv7l ;;
+                    i386) declared=ia32 ;;
+                esac
+                if [[ -n "$declared" && "$declared" != "$arch" ]]; then
+                    echo "PAYLOAD-ARCH  '${name#./}' is named $arch and its own control file" >&2
+                    echo "              declares $declared." >&2
+                    problems=$((problems + 1))
+                fi
+            fi
+            ;;
+    esac
+
+    # One listing, every foreign triplet.
+    if [[ -n "$listing" ]]; then
+        n="$(xr_check_foreign_triplets "$listing" "$arch" "${name#./}")"
+        problems=$((problems + n))
+    fi
+
+    echo "$problems"
+}
+
+# Scan a package's FILE LISTING for another architecture's library
+# directory. A payload carrying `x86_64-linux-gnu/` is carrying x86-64 code,
+# whatever its label says, and this is the check that caught's
+# arm64-labelled snap (180 such paths).
+#
+# It takes the listing as text rather than opening the package itself, so it
+# can be driven without unsquashfs, dpkg-deb, or a 120MB fixture. That is not
+# a convenience: the version of this that lived inside the extractor branches
+# could only ever be tested on a host that had them, which is the same shape
+# as a check that quietly does not run.
+#
+# Args: listing arch artifact-name. Problems on stderr, count on stdout.
+xr_check_foreign_triplets() {
+    local listing="$1" arch="$2" name="$3"
+    local triplet foreign found problems=0
+
+    triplet="$(xr_arch_triplet "$arch")"
+    [[ -n "$triplet" ]] || { echo 0; return 0; }
+
+    for foreign in x86_64-linux-gnu aarch64-linux-gnu arm-linux-gnueabihf i386-linux-gnu; do
+        [[ "$foreign" == "$triplet" ]] && continue
+        found="$(printf '%s\n' "$listing" | grep -c "/${foreign}/" || true)"
+        if [[ "${found:-0}" -gt 0 ]]; then
+            echo "PAYLOAD-ARCH  '$name' is named $arch and carries $found path(s) under" >&2
+            echo "              $foreign, which is another architecture's library" >&2
+            echo "              directory. snapcraft will cross-build a package like this" >&2
+            echo "              and exit 0 (); the machine that installs it" >&2
+            echo "              cannot run it." >&2
+            problems=$((problems + 1))
+        fi
+    done
+
+    echo "$problems"
+}
+
+# Run the payload check over every Linux artifact in a directory.
+#
+# Deliberately NOT folded into xr_check_expected. That function answers "is
+# the set complete and correctly named", which it can do against placeholder
+# files; this one has to open the bytes, so it is a different question asked
+# of a different thing, and keeping them apart is what lets each be driven
+# honestly. sign.sh calls both, in that order, before it signs anything.
+xr_check_payload_arches() {
+    local dir="$1" name arch problems=0 n
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        case "${name#./}" in
+            *.AppImage|*.snap|*.deb) ;;
+            *) continue ;;
+        esac
+        arch="$(xr_artifact_arch "$name")"
+        # An unattributable name is xr_check_expected's finding to report,
+        # not this one's; reporting it twice would double-count one defect.
+        [[ -n "$arch" ]] || continue
+        n="$(xr_check_payload_arch "$dir" "$name" "$arch")"
+        problems=$((problems + n))
+    done < <(xr_list_artifacts "$dir")
+
+    if [[ "$problems" -gt 0 ]]; then
+        echo >&2
+        echo "release/lib.sh: payload-architecture gate FAILED ($problems problem(s))." >&2
+        echo "  An artifact's name, its metadata and its contents all have to" >&2
+        echo "  agree. Publishing one that does not gives a user a download that" >&2
+        echo "  installs, verifies against the signed manifest, and cannot run." >&2
+        return 1
+    fi
+
+    echo "release/lib.sh: payload-architecture gate ok." >&2
+}
+
 # Check one declared row's per-architecture coverage.
 #
 # Prints a problem count on stdout and the problems themselves on stderr,
@@ -788,6 +1005,7 @@ xr_check_expected() {
             failures=$((failures + 1))
         fi
     done
+
 
     if [[ "$failures" -gt 0 ]]; then
         echo >&2

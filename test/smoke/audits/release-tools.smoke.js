@@ -20,6 +20,7 @@
 // the wrong reason still "fails").
 
 import { strict as assert } from 'node:assert';
+import { gzipSync } from 'node:zlib';
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -247,6 +248,66 @@ try {
     // Writing plain bytes for all of them would have made every case in
     // this file fail for one reason - "unsigned" - and hidden whatever it
     // was actually testing.
+    // --- A minimal, genuinely valid .deb ------------------------------
+    //
+    // ar archive of debian-binary + control.tar.gz + data.tar.gz, written by
+    // hand because neither dpkg-deb nor GNU ar is guaranteed on a developer
+    // machine and the fixture has to be identical on both. The control file
+    // carries the Architecture the filename claims, and the data member holds
+    // one file under this architecture's own multiarch triplet, so the
+    // payload-architecture gate sees an honest package rather than a foreign
+    // one .
+    const tarGz = (entries) => {
+        const blocks = [];
+        for (const [path, body] of entries) {
+            const h = Buffer.alloc(512);
+            h.write(path, 0, 100, 'utf8');
+            h.write('0000644\0', 100, 8, 'utf8');       // mode
+            h.write('0000000\0', 108, 8, 'utf8');       // uid
+            h.write('0000000\0', 116, 8, 'utf8');       // gid
+            h.write(`${body.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'utf8');
+            h.write('00000000000\0', 136, 12, 'utf8');  // mtime 0, deterministic
+            h.write('        ', 148, 8, 'utf8');         // checksum field, spaces while summing
+            h.write('0', 156, 1, 'utf8');                // typeflag: regular file
+            h.write('ustar\0' + '00', 257, 8, 'utf8');
+            let sum = 0;
+            for (const b of h) sum += b;
+            h.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'utf8');
+            blocks.push(h);
+            const data = Buffer.from(body);
+            blocks.push(data, Buffer.alloc((512 - (data.length % 512)) % 512));
+        }
+        blocks.push(Buffer.alloc(1024));                 // two zero blocks: end of archive
+        return gzipSync(Buffer.concat(blocks), { mtime: 0 });
+    };
+
+    const deb = (arch) => {
+        const triplet = arch === 'arm64' ? 'aarch64-linux-gnu' : 'x86_64-linux-gnu';
+        const control = tarGz([['./control',
+            'Package: xchain-wallet\nVersion: 9.9.9\n'
+            + `Architecture: ${arch}\nMaintainer: XChain <releases@dankest.llc>\n`
+            + 'Description: fixture\n']]);
+        const data = tarGz([[`./usr/lib/${triplet}/libfixture.so`, 'fixture\n']]);
+        const member = (memberName, body) => {
+            const h = Buffer.alloc(60, 0x20);
+            h.write(memberName, 0, 16, 'utf8');
+            h.write('0', 16, 12, 'utf8');                // mtime
+            h.write('0', 28, 6, 'utf8');                 // uid
+            h.write('0', 34, 6, 'utf8');                 // gid
+            h.write('100644', 40, 8, 'utf8');
+            h.write(String(body.length), 48, 10, 'utf8');
+            h.write('`\n', 58, 2, 'utf8');
+            const pad = body.length % 2 ? Buffer.from('\n') : Buffer.alloc(0);
+            return Buffer.concat([h, body, pad]);
+        };
+        return Buffer.concat([
+            Buffer.from('!<arch>\n'),
+            member('debian-binary', Buffer.from('2.0\n')),
+            member('control.tar.gz', control),
+            member('data.tar.gz', data),
+        ]);
+    };
+
     const signedBytes = (name) => {
         if (name.endsWith('.exe')) {
             const b = Buffer.alloc(0x400);
@@ -264,6 +325,32 @@ try {
             return Buffer.from(
                 `PK bytes of ${name}\n`
                 + 'XChain Wallet.app/Contents/_CodeSignature/CodeResources');
+        }
+        // A .deb has to be a REAL Debian archive for the same reason, and it
+        // is the case that only shows up on the venue: the gate reads a deb
+        // with dpkg-deb, which a Mac does not have (so the artifact is
+        // reported UNCHECKED and the fixture passed locally) and the Linux CI
+        // venue does (so a text file is an unreadable package and the whole
+        // release is refused). Built here rather than shelled out to
+        // `dpkg-deb -b`, which the Mac also lacks.
+        if (name.endsWith('.deb')) {
+            return deb(/arm64/.test(name) ? 'arm64' : 'amd64');
+        }
+        // An AppImage IS an ELF, and sign.sh's payload-architecture gate
+        // () reads its header rather than its name, so a plain-text
+        // fixture reads to that gate as an artifact that is not the
+        // self-executing image the format promises - the same trap the
+        // realArchive() note below describes. 64 bytes of real header, with
+        // the e_machine the filename claims.
+        if (name.endsWith('.AppImage')) {
+            const b = Buffer.alloc(64);
+            b.write('\x7fELF', 0, 'binary');
+            b[4] = 2;                                    // 64-bit
+            b[5] = 1;                                    // little-endian
+            b[6] = 1;                                    // version
+            b[16] = 2;                                   // e_type: executable
+            b.writeUInt16LE(/arm64/.test(name) ? 0xb7 : 0x3e, 18);
+            return b;
         }
         return Buffer.from(`bytes of ${name}\n`);
     };

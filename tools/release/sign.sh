@@ -382,6 +382,14 @@ fi
 
 xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED"
 
+# The gate above reads NAMES. This one opens the bytes, because on
+# 2026-08-06 snapcraft was shown packing x86-64 libraries into a snap whose
+# own metadata declared `architectures: [arm64]`, exit 0, no warning
+# (). Name, metadata and contents all have to agree before a
+# signature says they do: an artifact signed under the wrong arch installs,
+# verifies against this manifest, and cannot start.
+xr_check_payload_arches "$INPUT_DIR"
+
 # A lane that already has users must not vanish from a release. The gate
 # above cannot ask this: every store lane is `optional` there until it has
 # shipped once, and nothing about a first upload edits that file

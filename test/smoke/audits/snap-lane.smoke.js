@@ -292,6 +292,23 @@ const targets = (cfg) => cfg.linux.target.map((t) => (typeof t === 'string' ? t 
         'and it must be gated on the Snapcraft store credential being present: '
         + 'snapcraft is not on the runner image, and a store artifact nothing '
         + 'can upload would ride every release');
+
+    // Measured 2026-08-06 while standing up the first snapcraft host: on any
+    // host that also runs Docker, and the hosted ubuntu images do, Docker's
+    // FORWARD policy is DROP with an empty DOCKER-USER chain, so LXD bridge
+    // traffic is dropped and snapcraft dies with "A network related operation
+    // failed in a context of no network access" - which names neither Docker
+    // nor the bridge, so the lane would read as broken rather than as blocked.
+    // These two rules are the whole fix and they are one deletion from gone.
+    assert.ok(/iptables -I DOCKER-USER -i lxdbr0 -j ACCEPT/.test(wf)
+        && /iptables -I DOCKER-USER -o lxdbr0 -j ACCEPT/.test(wf),
+        'release.yml must let LXD bridge traffic through Docker\'s DOCKER-USER '
+        + 'chain in both directions before building the snap, or the build fails '
+        + 'with a network error that names neither Docker nor lxdbr0');
+    assert.ok(/iptables -S DOCKER-USER/.test(wf),
+        'and it must first check that the DOCKER-USER chain exists: an -I into a '
+        + 'chain Docker never created fails the step on a runner with no Docker, '
+        + 'which would trade one lane-wide failure for another');
 }
 
 console.log(

@@ -348,25 +348,45 @@ jobs:
       # from process.arch. So the line below DOES declare and attempt the
       # arm64 cross-build.
       #
-      # What is unverified is whether that cross-build SUCCEEDS. The part
-      # stages a prebuilt Electron tree rather than compiling, which is the
-      # favourable case, but the stage-packages must resolve as arm64 debs on
-      # this amd64 host, and that is what actually fails when snapcraft
-      # cross-builds fail. Either outcome is loud: expected-artifacts.txt's
-      # `optional *.snap default x64,arm64` passes a lane producing nothing
-      # and REFUSES one producing a single arch, so a half-succeeding build
-      # blocks the release rather than shipping an amd64-only set as
-      # complete. Fallbacks, in order, are in  §16.
+      # THE CROSS-BUILD SUCCEEDS, driven 2026-08-06 on a real amd64 host
+      # ( frontier row 43): both `_amd64.snap` and `_arm64.snap` are
+      # produced, exit 0, and the arm64 image really carries an aarch64 ELF.
+      # Two claims that used to sit here were wrong and are not restored:
+      # the stage-packages cross-resolution is not this lane's failure mode
+      # (under base: core24 electron-builder generates no stage-packages at
+      # all; those libraries come from the gnome extension and gpu-2404),
+      # and the arch gate is NOT a safety net against the failure that does
+      # exist - snapcraft will pack host-arch libraries into an arm64-labelled
+      # snap with exit 0, and lib.sh attributes arch by filename substring, so
+      # it would pass (). expected-artifacts.txt's
+      # `optional *.snap default x64,arm64` still does what it was built for:
+      # it passes a lane producing nothing and REFUSES one producing a single
+      # arch.
       #
-      # Also unverified: nothing here sets useLXD/useMultipass/
-      # useDestructiveMode, so electron-builder never passes `--use-lxd` and
-      # the build relies on snapcraft's own default environment selection.
-      # The `lxd init --auto` below prepares LXD; it does not select it.
+      # Environment selection is settled too: snapcraft picks LXD by default
+      # ("Using default provider 'lxd' on linux system") and adds the
+      # craft-com.ubuntu.cloud-buildd remote itself, so `lxd init --auto` with
+      # no `--use-lxd` is sufficient and nothing needs useLXD/useMultipass/
+      # useDestructiveMode set.
+      #
+      # THE FIREWALL RULES BELOW ARE NOT HOUSEKEEPING. On any host that also
+      # runs Docker - which includes the GitHub-hosted ubuntu images - Docker
+      # sets `FORWARD` policy DROP with an empty DOCKER-USER chain, so LXD
+      # bridge traffic is dropped and every snapcraft build dies with `A
+      # network related operation failed in a context of no network access`,
+      # a message naming neither Docker nor the bridge. Measured while
+      # standing up the first snapcraft host. The rules are scoped to lxdbr0,
+      # leave Docker's own networks alone, and are skipped when there is no
+      # DOCKER-USER chain to insert into.
       - name: Install snapcraft (Snap Store lane, §16)
         if: env.SNAP_CSC_LINK != ''
         run: |
           sudo snap install snapcraft --classic
           sudo lxd init --auto
+          if sudo iptables -S DOCKER-USER >/dev/null 2>&1; then
+            sudo iptables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+            sudo iptables -I DOCKER-USER -o lxdbr0 -j ACCEPT
+          fi
       - name: Build the Snap Store package (opt-in, §16)
         if: env.SNAP_CSC_LINK != ''
         env:
