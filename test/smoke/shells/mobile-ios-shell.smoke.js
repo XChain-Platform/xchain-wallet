@@ -873,6 +873,87 @@ assert.ok(
     'the native and JS link filters disagree on the origin they accept',
 );
 
+// --- 16. The age rating declares what the STORE BUILD actually ships --------
+//
+// Two mismatches were found on one day  by opening a form the
+// frontier had already recorded as DONE, and both were the same shape: the
+// questionnaire was answered section by section, at different times, against
+// nobody's memory of what the binary contains. A capability that ships while
+// its question is answered NO is a rejection class before approval and a
+// removal class after it, which is §2.6's privacy-label doctrine applied to a
+// different form.
+//
+// So this asserts a RELATIONSHIP rather than a presence, on the same reasoning
+// §15 gives: a presence check ("the runbook has an age-rating table") was green
+// through both defects. What is checked is that for each capability the store
+// profile does NOT compile out, the runbook's age rating says so.
+//
+// The link between the two halves is HIDDEN_SURFACES. A surface listed there
+// for the `store` profile is genuinely absent from the artifact (vite swaps the
+// module for an importing-nothing twin, and the build fails if anything else
+// imports it), so hiding a surface is the ONE thing that legitimately lets its
+// question stay NO.
+const { HIDDEN_SURFACES: STORE_HIDDEN, SURFACES: ALL_SURFACES } = await import(
+    pathToFileURL(join(wsRoot, 'packages', 'web', 'src', 'surfaces', 'registry.js')).href
+);
+const hiddenInStore = STORE_HIDDEN.store ?? [];
+
+// Each row: the capability, the surface that would hide it, the routes that
+// prove it ships, and what the runbook has to say while it does ship.
+const RATED_CAPABILITIES = [
+    {
+        name: 'messaging and chat',
+        surface: 'messaging',
+        // Routed unconditionally in App.jsx; not owned by any hideable surface.
+        evidence: join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'ComposeMessage.jsx'),
+        // Answered YES 2026-08-06; the calculated rating stayed 4+, so honesty
+        // cost nothing here and the next person should not re-litigate it.
+        declares: /\|\s*\*\*Messaging and chat\*\*\s*\|\s*\*\*Yes\.\*\*/,
+        why: 'the wallet composes and sends address-to-address encrypted messages, which is exactly the'
+            + ' "users can directly communicate" question',
+    },
+    {
+        name: 'gambling',
+        surface: 'betting',
+        evidence: join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'BetFeedsList.jsx'),
+        // Deliberately NOT a "declare it" assertion. The operator decided to
+        // ship the surface and leave the answer as it stands, which is a
+        // decision and not an oversight - but a decision to leave a known
+        // mismatch in place still needs a tripwire, or it reads to the next
+        // session exactly like a resolved row. What is asserted is that the
+        // runbook carries the re-read instruction for as long as the surface
+        // ships, since the form and the binary are only asserted together at
+        // the moment submit is pressed.
+        declares: /[Bb]efore you submit, re-read the gambling answers/,
+        why: 'the parimutuel betting lane is compiled into the store build, and gambling is a different review'
+            + ' guideline (5.3) whose answer nobody has given',
+    },
+];
+
+for (const cap of RATED_CAPABILITIES) {
+    // A capability can only be exempt if there is a mechanism that removes it
+    // AND that mechanism is switched on for the store profile. Checking the
+    // second without the first is how `bet-markets` came to be treated as
+    // hideable for a year while no `betting` twin pair existed.
+    const hideable = ALL_SURFACES.includes(cap.surface);
+    const compiledOut = hideable && hiddenInStore.includes(cap.surface);
+    if (compiledOut) continue;
+
+    assert.ok(
+        existsSync(cap.evidence),
+        `${cap.name}: ${cap.evidence} is gone, so this guard is asserting against a capability that no longer`
+        + ' exists - re-derive the row rather than deleting the assertion',
+    );
+    assert.match(
+        runbook,
+        cap.declares,
+        `the store build ships ${cap.name} (${cap.why}), and the App Store submission runbook's age rating does`
+        + ` not account for it. Either compile the surface out - add '${cap.surface}' to SURFACES and to`
+        + " HIDDEN_SURFACES.store with its twin pair - or make the runbook's age rating say what ships."
+        + ' A rating that understates the app is a rejection class before approval and a removal class after it.',
+    );
+}
+
 console.log(
     'OK: iOS shell smoke ( S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -886,5 +967,7 @@ console.log(
     + ' debug-only, and ios-console.sh keeps the NSUnbufferedIO recipe that makes the channel readable at all.'
     + ' §15: the XChainLinks plugin exists, answers to the name the SPA looks up, is registered, and SceneDelegate'
     + ' feeds all FOUR link doors into it - including connectionOptions, where the launching tap arrives and'
-    + ' nowhere else)',
+    + ' nowhere else. §16: every capability the store profile does not compile out is accounted for in the'
+    + " runbook's age rating, so the questionnaire cannot drift from the binary the way it did twice on"
+    + ' 2026-08-06)',
 );

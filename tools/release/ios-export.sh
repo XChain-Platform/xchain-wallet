@@ -101,6 +101,24 @@ cat > "$options" <<PLIST
 </plist>
 PLIST
 
+# Xcode's IPA-packaging step shells out to `rsync`, and it means APPLE'S rsync.
+# A Homebrew rsync earlier on PATH (3.4.x tightened its argument parsing) rejects
+# the invocation Xcode makes, and the whole export dies with a message that names
+# neither rsync nor PATH:
+#
+#     error: exportArchive Copy failed
+#     ** EXPORT FAILED **
+#
+# The real cause is only visible three logs deep, in IDEDistributionPipeline.log:
+# "rsync error: syntax or usage error (code 1) at main.c(1806) [server=3.4.4]".
+# Measured 2026-08-06 on the release Mac, where /opt/homebrew/bin/rsync 3.4.4
+# shadows the system openrsync; the same export succeeds unchanged with the
+# system one first. Pinned here rather than left to whoever's shell runs the
+# lane, because this is a release script whose failure mode is a dead-end error
+# on submission day. Prepending is deliberate: it does not remove anything from
+# PATH, so every other tool the step calls resolves exactly as before.
+export PATH="/usr/bin:$PATH"
+
 xcodebuild -exportArchive \
     -archivePath "$archive" \
     -exportPath "$builddir/export" \
