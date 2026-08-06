@@ -30,7 +30,7 @@ For sensitive reports, please encrypt the email body to our PGP key.
 > **PGP fingerprint: 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7**  
 > `XChain Wallet Release Signing <releases@dankest.llc>`, ed25519, created 2026-08-06, expires 2028-08-05. The primary key is certify-only and offline; the signing subkey that actually signs a release manifest is `27A1593607C828903EF67DAD10ADF79899B41573`.
 >
-> This fingerprint is published through **two independent channels**: this file, and <https://xchain.io/security>. A compromise of either one alone therefore cannot silently rewrite the trust root you're checking a signature against, which only works if you can actually find the other one, so each channel names the other by URL. If the two ever disagree, trust neither and email us to ask which is current.
+> This fingerprint is published at <https://xchain.io/security>, and that is currently the **only** place a public reader can read it: this file is a second copy, but this repository is private, so every URL naming it returns 404 to anyone outside the project. **Two independent channels is the design and one is the reality**, so do not treat the pair as a cross-check yet. When the second channel is genuinely reachable, both copies will name the other by URL and the rule for a disagreement will be: trust neither, and email us to ask which is current.
 >
 > **No XChain Wallet release has been signed or published yet.** The key now exists, but nothing has been signed with it: any file offered to you today as a signed XChain Wallet release is not one.
 >

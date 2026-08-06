@@ -337,12 +337,20 @@ const MODES = [
         mutate: (f) => ({ ...f, page: drop(f.page, 'No XChain Wallet release has been signed or published yet') }),
     },
     {
-        name: 'ES6 the page stops naming the other channel and the disagreement rule',
-        why: 'a second channel a reader cannot find is one channel, and a reader who finds two values picks one',
+        /* This mode used to delete the page's link to SECURITY.md and expect
+         * the sites guard to complain that a reader cannot find the other
+         * channel. That link is gone on purpose as of 2026-08-06: the wallet
+         * repository is private, so the URL 404s for every reader, and the
+         * page now DECLARES how many channels a reader can actually reach
+         * instead of naming one they cannot. The property worth guarding did
+         * not change - a page must not claim a cross-check the reader cannot
+         * perform - only where it is written down. */
+        name: 'ES6 the page stops declaring how many channels a reader can reach',
+        why: 'a page that claims a second channel a reader cannot find is worse than one that admits it has one',
         base: UNPUBLISHED_BASE,
         wallet: 'green',
-        sites: /second channel is only useful|trust neither/i,
-        mutate: (f) => ({ ...f, page: drop(f.page, 'xchain-wallet/blob/master/SECURITY.md') }),
+        sites: /carries no data-channel-count/i,
+        mutate: (f) => ({ ...f, page: drop(f.page, ' data-channel-count="one"') }),
     },
 ];
 
