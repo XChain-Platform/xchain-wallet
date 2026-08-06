@@ -1445,6 +1445,64 @@ assert.ok(ceremonyStagePaths.every((prefix) => prefix === 'v'),
     + 'procedure must agree on one, or the operator hash-checks a directory the release was not '
     + 'staged into.');
 
+// --- 21. The assets are checked for their SIZE; the page has to ask what
+//         they SHOW ---------------------------------------------------------
+//
+// Row 42, and it is §8's two halves aimed at an image. §6 of the listing-pack
+// smoke re-reads every asset's pixel dimensions out of its PNG header, and
+// this page states that check as though it settled the assets. It settles the
+// address. Measured 2026-08-06: the four assets were captured at v0.333.1
+// (438ba6d8) while the release staged for submission was v0.336.0, with 33
+// commits to the surfaces they depict in between - one of them a fix to the
+// consent lines that render inside the sign-approval window, which IS one of
+// the three screenshots. Every check was green through it.
+//
+// The drift half cannot live in a smoke: it would go red on every UI commit
+// until somebody recaptured, and a permanently red gate teaches people to
+// ignore it. So it goes where the artifact matters, in the step that uploads
+// the images, which is exactly where row 31 put the monitor's own drift. What
+// this section holds is that the step is really there and really runs the
+// tool - the same shape as §12 and §18, because a step that merely SAYS to
+// check the screenshots is the prose this spec keeps finding behind a green
+// check.
+const phase5 = ceremony.slice(ceremony.indexOf('### Phase 5'),
+    ceremony.indexOf('### Phase 6'));
+assert.ok(phase5.length > 0,
+    'FAIL: Phase 5 (the listing form) is not on the ceremony page, and it is the phase that uploads '
+    + 'the four listing assets.');
+
+const assetTool = 'tools/release/verify-listing-assets.mjs';
+assert.ok(existsSync(join(walletRoot, assetTool)),
+    `FAIL: ${assetTool} does not exist, so the Phase 5 step below hands the operator a command that `
+    + 'cannot run. §12s defect: a cited command is a citation like any other.');
+assert.ok(phase5.includes(assetTool),
+    `FAIL: Phase 5 never runs ${assetTool}. The assets' pixel dimensions are checked in two places `
+    + 'and what they DEPICT in none, so a screenshot of a build nobody can install uploads clean - '
+    + 'onto a listing whose extension ID is permanent from the first upload.');
+
+// --since, and named against the TAG. Run against a working tree, the tool
+// answers a question nobody asked: the subject is the build being uploaded.
+// This is §12's own finding (a command that resolves, runs, exits 0 and
+// measures the wrong thing) applied before it can happen again.
+const assetStep = phase5.split('\n').find((l) => l.includes(assetTool)) || '';
+assert.ok(/--since\s+v/.test(assetStep),
+    `FAIL: Phase 5 runs ${assetTool} without \`--since vX.Y.Z\`. Defaulted to HEAD it measures this `
+    + "machine's working tree, which is not what is being uploaded, and it would report CLEAN on a "
+    + 'checkout that happens to sit at the capture commit.');
+
+// All three outcomes have to be written down, and INCONCLUSIVE is the one that
+// gets dropped: a tool that cannot tell prints a verdict either way, and a
+// page that names only CLEAN and STALE lets "it printed something" pass.
+for (const [word, why] of [
+    ['CLEAN', 'the passing outcome'],
+    ['STALE', 'the outcome that must stop the upload'],
+    ['INCONCLUSIVE', 'the outcome that looks like neither and is not a pass'],
+]) {
+    assert.ok(phase5.includes(word),
+        `FAIL: Phase 5 does not say what ${word} means (${why}) when the listing-asset check runs. `
+        + 'A three-state check read as two states resolves the missing state as a pass.');
+}
+
 for (const script of ['release:sign', 'release:verify']) {
     const cmd = pkg.scripts?.[script];
     assert.ok(typeof cmd === 'string' && cmd.length > 0,
@@ -1470,4 +1528,5 @@ console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03
     + `the published policy matches the canonical one, ${monitorSteps.length} monitor steps `
     + `including a checksum identity check, Phase 4's key-ceremony state anchored to `
     + `${existsSync(keyPinPath) ? 'an observed signing run' : 'its absent-note branch'}, `
-    + `and ${driftNote}; the release shorthand reaches the ceremony's own staging path)`);
+    + `and ${driftNote}; the release shorthand reaches the ceremony's own staging path, and Phase 5 `
+    + 'asks what the listing assets DEPICT, not only what size they are)');

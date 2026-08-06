@@ -66,6 +66,10 @@ import {
     dismissIntroCarousel,
 } from '../../../test/e2e/fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../core/src/buildInfo.js';
+// One map of what each asset is, shared with the verifier rather than
+// restated here, so the capture and the check cannot come to disagree about
+// which four files this produces.
+import { ASSETS, writePin } from '../../../tools/release/verify-listing-assets.mjs';
 
 // Answered before anything else, and this one is not a courtesy. Without it,
 // `--help` was not recognised as a flag at all: the script ignored it and ran
@@ -248,6 +252,26 @@ async function main() {
         const file = path.join(OUT_DIR, name);
         const meta = await sharp(file).metadata();
         log(`${name}: ${meta.width}x${meta.height}`);
+    }
+
+    // Record WHICH BUILD these images depict. Their pixel dimensions cannot
+    // say it and nothing else in the repo could, which is how four assets came
+    // to sit three versions behind the release staged for submission with
+    // every check green ( row 42). This is the only moment the answer is
+    // knowable: the capture is the thing that drove the tree.
+    //
+    // Only on a COMPLETE capture. A partial one leaves the un-recaptured
+    // asset's old bytes beside three new ones, and pinning that set would
+    // record a build none of them all came from. Left un-pinned, the next
+    // verify reports the three hash mismatches loudly, which is the honest
+    // outcome.
+    if (missing.length === 0 && produced.length === ASSETS.length) {
+        const pin = writePin({ how: 'capture' });
+        log(`pinned to ${pin.capturedFrom.commit.slice(0, 8)} (v${pin.capturedFrom.version}): `
+            + 'docs/listing-assets/capture-pin.json');
+    } else {
+        fail('capture was INCOMPLETE, so the capture pin was NOT updated. The assets on disk are '
+            + 'now a mixture of builds; re-run this script until it produces all four.');
     }
 }
 

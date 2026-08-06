@@ -20,12 +20,15 @@
 // the wrong reason still "fails").
 
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+// One implementation of "do the listing assets still match their pin", shared
+// with the ceremony tool rather than reimplemented here.
+import { verifyPin, ASSETS } from '../../../tools/release/verify-listing-assets.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -42,6 +45,7 @@ const files = [
     'tools/release/shipped-lanes.txt',
     'tools/release/publish.sh',
     'tools/release/deploy-web.sh',
+    'tools/release/verify-listing-assets.mjs',
 ];
 for (const p of files) {
     assert.ok(existsSync(join(root, p)), `${p} exists`);
@@ -784,9 +788,111 @@ for (const shell of ['web', 'extension']) {
         `packages/${shell}/package.json has a reproduce script`);
 }
 
+// -------------------------------------- the store listing assets are pinned
+//
+//  row 42. The listing-pack smoke re-reads every listing asset's pixel
+// dimensions out of its PNG header, and the ceremony page states that check as
+// though it settled the assets. It settles the ADDRESS. A 1280x800 screenshot
+// of a product three versions old passes it perfectly, and on 2026-08-06 that
+// was not hypothetical: the four assets were captured at v0.333.1 while the
+// release staged for submission was v0.336.0, with 33 commits to the surfaces
+// they depict in between - including a fix to the consent lines that render
+// inside the sign-approval window, which is one of the three screenshots.
+// Nothing could say so, because nothing recorded which build they came from.
+//
+// This section holds the half that is checkable everywhere: the pin exists,
+// covers every asset, and still matches the bytes on disk. It deliberately
+// does NOT gate the drift half (has anything an asset depicts moved since
+// capture), which would go red on every UI commit until somebody recaptured.
+// Drift is only a defect at the moment the images are uploaded, so it lives in
+// the ceremony's Phase 5 step - the same placement row 31 chose for the
+// monitor's own drift, and for the same reason.
+//
+// It lives in THIS file rather than beside the dimension check because its
+// subject is entirely inside this repo. extension-listing-pack.smoke.js skips
+// itself when the documentation sibling is absent, and §13's lesson was that a
+// check whose subject the venue does not check out is not a check in that
+// venue.
+const pinned = verifyPin();
+assert.ok(!pinned.reason,
+    `the Chrome Web Store listing assets have no usable capture pin: ${pinned.reason}. `
+    + 'Their pixel dimensions cannot say which build they depict, so without this note the '
+    + 'submission uploads four images nobody can date. Write it with '
+    + 'node tools/release/verify-listing-assets.mjs --write.');
+assert.deepEqual(pinned.hashProblems, [],
+    'the listing assets no longer match their capture pin. Either an asset was replaced, '
+    + 're-cropped or hand-edited without a capture run, or the pin was edited to describe bytes '
+    + 'that are not there. Re-run packages/extension/scripts/capture-listing-screenshots.mjs, '
+    + 'which re-pins as it goes.');
+assert.deepEqual(pinned.extra, [],
+    'the capture pin describes files that are not listing assets. The pin and the asset map in '
+    + 'tools/release/verify-listing-assets.mjs have to name the same four files.');
+assert.ok(['capture', 'derived'].includes(pinned.pin.capturedFrom.how),
+    `capture pin records how=${pinned.pin.capturedFrom.how}, which is neither 'capture' (a real `
+    + "capture run wrote it) nor 'derived' (reconstructed from git history). The field exists so a "
+    + 'reader can tell an observation from a reconstruction.');
+
+// The pin is only worth anything if a capture keeps writing it. A future edit
+// that drops the call leaves the last pin sitting there describing bytes that
+// have since been replaced - which reads as a pass, not as an omission.
+const captureSrc = read('packages/extension/scripts/capture-listing-screenshots.mjs');
+assert.ok(/writePin\(/.test(captureSrc),
+    'capture-listing-screenshots.mjs no longer calls writePin(). A capture that does not re-pin '
+    + 'leaves a stale note beside fresh images, and the note is the only thing that says which '
+    + 'build the store listing shows.');
+assert.equal(ASSETS.length, 4,
+    `the listing-asset map names ${ASSETS.length} assets; the store listing takes four (three `
+    + '1280x800 screenshots and the 440x280 promo tile). A map that shrank stops checking an '
+    + 'asset that is still uploaded.');
+
+// ------------------------------- the README's Scripts table is the inventory
+//
+//  row 43, and it is §13's own lesson arriving one layer up. §13 stopped
+// harvesting tool names out of prose and started scanning the DIRECTORY,
+// because a page-derived list covers whatever somebody remembered to name.
+// Nobody turned that on the page itself. Measured 2026-08-06: the README's
+// Scripts table, which is the map an operator reads to find out what exists,
+// described 16 of the 30 scripts in this directory and looked complete.
+// Among the fourteen it did not name were verify-signatures.mjs (the gate
+// that refuses an unsigned release, and the reason v0.336.0 cannot be
+// signed), verify-release-key.sh (which ceremony Phase 4b hands the
+// operator), and cws-upload.mjs (built, gated and landed two stages earlier).
+//
+// A tool absent from the inventory is not absent from the tree: it is
+// invisible until somebody greps for it, which is the state row 24 already
+// showed is expensive mid-ceremony. Derived rather than remembered, on the
+// same reasoning as §9's stage table: the person who forgets to add the row
+// is the person who would have to remember to check for it.
+// Recursive, for the same reason §13's scan is: tools/release/drills/ holds
+// the single most side-effecting script in the tree, and a non-recursive walk
+// would report a complete inventory without it.
+const walkScripts = (relDir) => readdirSync(join(root, relDir), { withFileTypes: true })
+    .flatMap((entry) => (entry.isDirectory()
+        ? walkScripts(`${relDir}/${entry.name}`)
+        : (/\.(mjs|sh)$/.test(entry.name) ? [`${relDir}/${entry.name}`] : [])));
+const releaseScriptFiles = walkScripts('tools/release').sort();
+assert.ok(releaseScriptFiles.length >= 30,
+    `only ${releaseScriptFiles.length} scripts found under tools/release/, fewer than the 30 there `
+    + 'when this was measured. A scan that finds less than it should still prints a verdict.');
+
+const readmeScripts = read('tools/release/README.md');
+const undocumented = releaseScriptFiles.filter((rel) => {
+    const name = rel.replace(/^tools\/release\//, '');
+    // Nested scripts are named with their subdirectory, since that is how the
+    // reader would type them.
+    return !readmeScripts.includes(`\`${name}\``);
+});
+assert.deepEqual(undocumented, [],
+    `tools/release/README.md's Scripts table does not name ${undocumented.length} script(s) that `
+    + `exist in the directory: ${undocumented.join(', ')}. That table is the inventory an operator `
+    + 'reads to find out what exists, and a tool missing from it is invisible until somebody greps. '
+    + 'Add a row (Script | Purpose | Status), or delete the script.');
+
 if (failures > 0) {
     console.error(`\n${failures} release-pipeline gate check(s) failed`);
     process.exit(1);
 }
 
-console.log('OK: tools/release/ signing pipeline smoke ( §6 gates + signed round trip)');
+console.log('OK: tools/release/ signing pipeline smoke ( §6 gates + signed round trip, '
+    + `${ASSETS.length} listing assets pinned to ${pinned.pin.capturedFrom.commit.slice(0, 8)} `
+    + `v${pinned.pin.capturedFrom.version})`);
