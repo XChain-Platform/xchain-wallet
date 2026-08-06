@@ -954,6 +954,59 @@ for (const cap of RATED_CAPABILITIES) {
     );
 }
 
+// --- 17. The review walkthrough lands the reviewer where the demo needs them --
+//
+// The review notes used to tell Apple, in step 2 of the scripted demo, that the
+// wallet was "already set to a public test network". It is not. Both onboarding
+// paths default to DEFAULT_ACTIVE_CHAIN_IDS, and the import flow infers the
+// active network from the first of those chains, so an imported wallet opens on
+// MAINNET - empty, because the demo phrase is funded on a test network. The
+// airplane-mode signing step is the primary guideline 4.2 defense in this whole
+// spec, and it would have been performed on a wallet with nothing to spend.
+//
+// Same shape as §16 and asserted the same way: a RELATIONSHIP, because a
+// presence check ("the runbook has review notes") was green through the defect.
+// The exemption is real rather than decorative - if the shells ever default a
+// new wallet onto a test network, the switch step is redundant and this guard
+// gets out of the way instead of demanding a step nobody needs.
+const hostBridgeSrc = readFileSync(
+    join(wsRoot, 'packages', 'web', 'src', 'hostBridge.js'), 'utf8',
+);
+const defaultChainsBlock = /export const DEFAULT_ACTIVE_CHAIN_IDS = \[([\s\S]*?)\]/
+    .exec(hostBridgeSrc);
+assert.ok(
+    defaultChainsBlock,
+    'DEFAULT_ACTIVE_CHAIN_IDS is gone from hostBridge.js, so this guard can no longer tell which network a'
+    + ' fresh wallet opens on - re-derive it against whatever replaced it rather than deleting the assertion',
+);
+const defaultChainIds = [...defaultChainsBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+assert.ok(defaultChainIds.length > 0, 'DEFAULT_ACTIVE_CHAIN_IDS parsed as empty');
+
+// The chain id carries its own network kind as its suffix, which is the same
+// thing chainRegistry.descriptorFor(id).networkKind reports; parsed rather than
+// imported because a smoke that checks shipped configuration should not need
+// the app's dependency tree to be trustworthy (see the plist reader above).
+const startsOnMainnet = defaultChainIds.every((id) => id.endsWith('-mainnet'));
+
+if (startsOnMainnet) {
+    assert.match(
+        runbook,
+        /Open Settings and set Network to "Testnet"/,
+        'a wallet created or imported in the app opens on the MAIN networks (DEFAULT_ACTIVE_CHAIN_IDS is'
+        + ` ${defaultChainIds.join(', ')}), so the App Store review walkthrough has to switch the network`
+        + ' before it shows the reviewer a funded test-network balance. Without that step the reviewer sees an'
+        + ' empty mainnet wallet and the airplane-mode signing demo - the guideline 4.2 defense this listing'
+        + ' rests on - has nothing to spend.',
+    );
+    assert.doesNotMatch(
+        runbook,
+        /already set to a (public )?test network/i,
+        'the review walkthrough tells Apple the wallet is already on a test network, and it is not: it opens'
+        + ' on the main networks. Telling a reviewer a false thing about the first screen they see is worse'
+        + ' than telling them nothing.',
+    );
+}
+
 console.log(
     'OK: iOS shell smoke ( S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -969,5 +1022,7 @@ console.log(
     + ' feeds all FOUR link doors into it - including connectionOptions, where the launching tap arrives and'
     + ' nowhere else. §16: every capability the store profile does not compile out is accounted for in the'
     + " runbook's age rating, so the questionnaire cannot drift from the binary the way it did twice on"
-    + ' 2026-08-06)',
+    + " 2026-08-06. §17: while a new wallet opens on the main networks, the reviewer's scripted walkthrough"
+    + ' switches the network before it claims a test-network balance, so the airplane-mode signing demo has'
+    + ' something to spend)',
 );
