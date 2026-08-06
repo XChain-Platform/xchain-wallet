@@ -497,6 +497,15 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     assert.match(r.out, /NOT uploading xchain-wallet-android-v0\.333\.1\.aab/,
         'and it says so by name: a silent skip creates the "where did my artifact go" question');
 
+    // The plan is read BEFORE the upload, and it used to promise a count the
+    // upload could not keep: the manifest's artifact count, printed whole,
+    // while Phase 1 refuses every .aab in it. An operator who reads
+    // "2 artifact(s)" and finds one file on the feed has to work out which
+    // half of their own tooling lied. It now splits the count in the same
+    // terms Phase 1 refuses them.
+    assert.match(r.out, /\d+ artifact\(s\): \d+ uploaded, 1 store-bound \(\.aab, never hosted\)/,
+        'the plan counts what actually lands, not what the manifest lists');
+
     // The desktop lane is untouched by the new cases.
     assert.ok(existsSync(join(target, 'desktop', 'xchain-wallet-0.333.1-x86_64.AppImage')),
         'desktop artifacts still route to desktop/');
@@ -504,6 +513,113 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     // The rehearsal record lives at ONE path shared by every block in this
     // file, so pointing it at the Android release leaves it pointing at the
     // wrong manifest for everything below. Put it back.
+    writeRehearsalRecord(prodRelease);
+}
+
+// ------------------------------ a PARTIAL release, no channel pointers 
+//
+// The block above publishes the Android pair ALONGSIDE a full desktop release,
+// which is the case that existed when it was written. It is not the case that
+// arrived: with Play frozen the Android lane is signed on its own, by
+// `sign.sh --lane android`, and such a directory holds two artifacts, a signed
+// manifest, and NO channel pointer at all - electron-updater's feed is a
+// desktop concern and no store lane has ever produced one.
+//
+// publish.sh asserted the input was a `stable` build by reading those pointers,
+// and with none present it refused: "With none, this assertion has nothing to
+// check and would pass an empty or wrong directory straight through to the
+// feed." Correct as far as it went, and it made the direct lane unpublishable
+// for exactly the reason sign.sh had been unable to sign it - the same defect,
+// one step downstream, found by running the real script rather than reading it.
+//
+// THE ANSWER IS NOT A FLAG. The manifest publish.sh already requires carries
+// the coverage in its SIGNED bytes (`# coverage: partial`, `# lanes: android`),
+// so the release says what it is and argv does not get a vote. What that
+// replaces the pointer check with is strictly stronger for these lanes: a
+// pointer is an unsigned file in the directory, and this is inside the
+// signature.
+{
+    const partial = join(work, 'release-partial');
+    mkdirSync(partial, { recursive: true });
+    writeFileSync(join(partial, 'xchain-wallet-v0.333.1.apk'), 'apk-bytes');
+    writeFileSync(join(partial, 'xchain-wallet-android-v0.333.1.aab'), 'aab-bytes');
+    // Written through lib.sh with a lane set, so the fixture is the same shape
+    // `sign.sh --lane android` produces rather than a hand-rolled header.
+    execFileSync('bash', ['-c',
+        `. "${join(root, 'tools/release/lib.sh')}" && `
+        + `scope=$(xr_lane_scope "${join(root, 'tools/release/shipped-lanes.txt')}" `
+        + `"${join(root, 'tools/release/expected-artifacts.txt')}" android) && `
+        + `printf '%s\\n' "$scope" > "${join(work, 'scope-android.txt')}" && `
+        + `xr_write_manifest "${partial}" "${TAG}" "${'0'.repeat(40)}" `
+        + `"2026-07-31T00:00:00Z" "enforced" "${join(work, 'scope-android.txt')}" "android"`],
+    { env: process.env });
+    execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
+        join(partial, 'RELEASE_HASHES.txt')], { env: { ...process.env, GNUPGHOME: gnupg } });
+
+    assert.match(readFileSync(join(partial, 'RELEASE_HASHES.txt'), 'utf8'),
+        /^# coverage: partial$/m, 'the fixture really is a partial manifest');
+
+    // NO rehearsal record is written for this release, deliberately. The
+    // §7.5 matrix declares eight lanes and all eight are desktop, so a
+    // store-lane release has nothing there to probe - and the point of this
+    // case is that publish.sh must not demand a record about lanes the
+    // release does not contain.
+    const target = makeTarget('feed-partial');
+    const r = await run(['--input', partial, '--tag', TAG, '--target', target,
+        '--no-edge-verify']);
+
+    assert.equal(r.status, 0, `a pointerless partial release publishes:\n${r.out}`);
+    assert.match(r.out, /rehearsal NOT REQUIRED[\s\S]*NOT PERFORMED/,
+        'the waived rehearsal is stated, not silent');
+    assert.match(r.out, /unrehearsed, not proven/,
+        'and it names what stays uncovered: the direct APK feed nothing rehearses');
+    assert.match(r.out, /PARTIAL release/,
+        'and says out loud that the channel assertion was answered from the '
+        + 'signed manifest rather than from pointers that do not exist');
+    assert.ok(existsSync(join(target, 'android', 'xchain-wallet-v0.333.1.apk')),
+        'the APK still routes to android/');
+    assert.equal(existsSync(join(target, 'android', 'xchain-wallet-android-v0.333.1.aab')), false,
+        'and the store-bound .aab is still refused');
+
+    // The staging feed is the DESKTOP update rehearsal venue (§7.5): it exists
+    // to prove electron-updater walks a pointer to a binary. A lane with no
+    // pointer has nothing to rehearse there, so asking for it is a mistake
+    // worth naming rather than a no-op to allow.
+    const stagingTarget = makeTarget('feed-partial-staging', { staging: true });
+    const s = await run(['--input', partial, '--tag', TAG, '--target', stagingTarget,
+        '--staging', '--no-edge-verify']);
+    assert.notEqual(s.status, 0, `--staging with a partial release is refused:\n${s.out}`);
+    assert.match(s.out, /staging/i, 'and the refusal says why');
+
+    // And the guard has not been widened into "no pointers is fine". A FULL
+    // release with no pointers is still the empty-or-wrong directory the
+    // original message describes, and must still be refused.
+    const noPointers = join(work, 'release-nopointers');
+    mkdirSync(noPointers, { recursive: true });
+    writeFileSync(join(noPointers, 'xchain-wallet-v0.333.1.apk'), 'apk-bytes');
+    execFileSync('bash', ['-c',
+        `. "${join(root, 'tools/release/lib.sh')}" && `
+        + `xr_write_manifest "${noPointers}" "${TAG}" "${'0'.repeat(40)}" `
+        + `"2026-07-31T00:00:00Z" "enforced" "${join(root, 'tools/release/expected-artifacts.txt')}"`],
+    { env: process.env });
+    execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
+        join(noPointers, 'RELEASE_HASHES.txt')], { env: { ...process.env, GNUPGHOME: gnupg } });
+    writeRehearsalRecord(noPointers, { manifestFrom: noPointers });
+    const n = await run(['--input', noPointers, '--tag', TAG,
+        '--target', makeTarget('feed-nopointers'), '--no-edge-verify']);
+    assert.notEqual(n.status, 0,
+        `a FULL release with no channel pointers is still refused:\n${n.out}`);
+    // Asserted on the SPECIFIC message, not on the words "no channel
+    // pointers", because publish.sh has two guards for this condition and
+    // both say that. Measured by disarming the later one and watching this
+    // block stay green: the `assert-channel` step always fires first, so the
+    // pointer-count guard further down is unreachable for a full release and
+    // cannot be falsified there. A loose match would have read as coverage of
+    // a check nothing can exercise.
+    assert.match(n.out, /this assertion has nothing to check/,
+        'refused by the channel assertion, which is the guard that actually '
+        + 'fires for a full release with no pointers');
+
     writeRehearsalRecord(prodRelease);
 }
 

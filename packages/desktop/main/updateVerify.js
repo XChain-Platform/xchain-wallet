@@ -237,6 +237,17 @@ export async function verifyDownloadedUpdate({
         return { ok: false, reason: `manifest describes ${parsed.header.tag}, not ${tag}` };
     }
 
+    // A PARTIAL manifest is never an update authority . sign.sh
+    // --lane signs one lane's artifacts on their own, and such a manifest
+    // is legitimate - it just cannot speak for the desktop lane, which it
+    // was never gated against. The hash lookup below would refuse it
+    // anyway, but with `not covered by the signed manifest`, which reads
+    // as a tampered release rather than as the wrong manifest. Refuse it
+    // by name instead, before the reason gets confusing.
+    if (parsed.header.lanes) {
+        return { ok: false, reason: `manifest covers only the ${parsed.header.lanes} lane, not a full release` };
+    }
+
     // The gate that was skipped at signing time is not one to inherit.
     if (parsed.header['dev-mock-gate'] !== 'enforced') {
         return { ok: false, reason: `release was signed with the dev-mock gate ${parsed.header['dev-mock-gate'] || 'unrecorded'}` };

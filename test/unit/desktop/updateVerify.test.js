@@ -92,6 +92,7 @@ function manifestFor({
     gate = 'enforced',
     entries = [[ARTIFACT, ARTIFACT_SHA]],
     count = null,
+    lanes = null,
 } = {}) {
     const lines = [
         '# XChain Wallet release manifest',
@@ -102,6 +103,8 @@ function manifestFor({
         `# dev-mock-gate: ${gate}`,
         `# artifacts: ${count ?? entries.length}`,
     ];
+    // The two fields sign.sh --lane writes for a PARTIAL release .
+    if (lanes) lines.push('# coverage: partial', `# lanes: ${lanes}`);
     for (const [name, hash] of entries) lines.push(`${hash}  ./${name}`);
     return Buffer.from(`${lines.join('\n')}\n`);
 }
@@ -322,6 +325,26 @@ describe('verifyDownloadedUpdate', () => {
         }));
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/dev-mock gate SKIPPED/);
+    });
+
+    it('refuses a PARTIAL manifest, which never covered the desktop lane', async () => {
+        // sign.sh --lane signs one lane's artifacts on their own ,
+        // so an Android manifest can be perfectly signed, name the right
+        // tag, and have been gated against the Android pair alone. It is
+        // not wrong; it is simply not about this artifact.
+        //
+        // The entry is DELIBERATELY present here. Without the coverage
+        // check a partial manifest that happened to hash a same-named file
+        // would authorize the install, and with the check the refusal has
+        // to come from the coverage field rather than from a hash miss -
+        // which is what makes this test able to tell the two apart.
+        const partial = manifestFor({ lanes: 'android' });
+        const result = await verifyDownloadedUpdate(await good({
+            manifestBytes: partial,
+            armoredSignature: await signWith(partial),
+        }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/covers only the android lane, not a full release/);
     });
 
     it('refuses when there is no version to check against', async () => {

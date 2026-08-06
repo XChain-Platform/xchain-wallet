@@ -256,13 +256,57 @@ if [[ "$EDGE_VERIFY" -eq 1 && -z "$PUBLIC_BASE" ]] && is_remote; then
     exit 2
 fi
 
+MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
+
+# IS THIS A PARTIAL RELEASE?  Read BEFORE the channel assertion,
+# because the answer decides which question that assertion can even ask.
+#
+# `sign.sh --lane` signs one lane's artifacts on their own, and the lanes
+# that can be named there are the store lanes - every one of them ships
+# without an electron-updater feed, because channel pointers are a desktop
+# concern. So a partial release directory legitimately holds NO pointer,
+# and the assertion below, which reads the pointers to tell a prod build
+# from a rehearsal one, has nothing to read. It refused, and it was right
+# to on its own terms: with no pointers it would otherwise wave an empty
+# or wrong directory through to the feed.
+#
+# THE ANSWER IS TAKEN FROM THE SIGNED MANIFEST, NOT FROM A FLAG, and that
+# is the same principle sign.sh applies one step upstream: the release
+# says what it is, and argv does not get a vote. For these lanes it is
+# also STRICTER than what it replaces - a channel pointer is an unsigned
+# file sitting in the directory, and `# lanes:` is inside the signature.
+#
+# Read before the existence check below so the diagnostic can be precise;
+# a missing manifest yields an empty string and falls through to it.
+COVERAGE_LANES=""
+if [[ -f "$MANIFEST" ]]; then
+    COVERAGE_LANES="$(sed -n 's/^# lanes: //p' "$MANIFEST" | head -1)"
+fi
+
+if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
+    echo "publish.sh: --staging is not available for a partial release." >&2
+    echo "  This manifest covers: $COVERAGE_LANES" >&2
+    echo "  The staging feed exists to rehearse the DESKTOP update path (§7.5):" >&2
+    echo "  publish a pointer, let electron-updater walk it to a binary, and" >&2
+    echo "  prove the swap on real hardware. A lane with no channel pointer has" >&2
+    echo "  nothing to rehearse there, so this is a mistake worth naming rather" >&2
+    echo "  than a no-op to allow." >&2
+    exit 2
+fi
+
 # Are these the bytes for the feed we are about to write to? The
 # installers cannot answer that (identical names either way), the
 # pointers can.
-echo "publish.sh: checking the input is a '$EXPECT_CHANNEL' build ..." >&2
-node "$HERE/update-info.mjs" assert-channel "$INPUT_DIR" --channel "$EXPECT_CHANNEL" >&2
+if [[ -n "$COVERAGE_LANES" ]]; then
+    echo "publish.sh: PARTIAL release - the signed manifest covers lane(s):" \
+         "$COVERAGE_LANES" >&2
+    echo "  These lanes ship no channel pointer, so the '$EXPECT_CHANNEL' check" >&2
+    echo "  is answered by the signed header instead of by the pointers." >&2
+else
+    echo "publish.sh: checking the input is a '$EXPECT_CHANNEL' build ..." >&2
+    node "$HERE/update-info.mjs" assert-channel "$INPUT_DIR" --channel "$EXPECT_CHANNEL" >&2
+fi
 
-MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
 for required in "$MANIFEST" "$MANIFEST.asc"; do
     if [[ ! -f "$required" ]]; then
         echo "publish.sh: $required is missing; sign the release first." >&2
@@ -302,12 +346,35 @@ if [[ "$STAGING" -eq 0 ]]; then
         node "$HERE/release-record.mjs" assert --tag "$TAG" >&2
     fi
 
-    if [[ -z "$REHEARSAL_RECORD" ]]; then
-        REHEARSAL_RECORD="$(cd "$INPUT_DIR/.." && pwd)/REHEARSAL-$TAG.json"
+    # THE §7.5 REHEARSAL IS A DESKTOP INSTRUMENT, by its own data:
+    # rehearsal-matrix.mjs declares eight lanes and every one of them is
+    # win/mac/linux. What it proves is that electron-updater walks a
+    # published pointer to a binary and swaps it on real hardware. A
+    # partial release covering only store lanes contains no such lane, so
+    # demanding a rehearsal record of it is demanding evidence about lanes
+    # that are not in the release - the same shape as the two checks above,
+    # a third time .
+    #
+    # SAID OUT LOUD RATHER THAN SKIPPED, because the direct APK does have
+    # an update path of its own (its `latest.json` feed) and NOTHING
+    # rehearses it. Waiving quietly here would turn "we have not built that
+    # rehearsal yet" into "this release was rehearsed", which is the exact
+    # substitution §7.5 exists to prevent.
+    if [[ -n "$COVERAGE_LANES" ]]; then
+        echo "publish.sh: §7.5 rehearsal NOT REQUIRED for lane(s) $COVERAGE_LANES," \
+             "and NOT PERFORMED." >&2
+        echo "  The rehearsal matrix declares desktop lanes only, so there is no" >&2
+        echo "  lane in this release for it to probe. Note what that leaves" >&2
+        echo "  uncovered: the direct APK's own update feed has never been" >&2
+        echo "  rehearsed by anything. This release is unrehearsed, not proven." >&2
+    else
+        if [[ -z "$REHEARSAL_RECORD" ]]; then
+            REHEARSAL_RECORD="$(cd "$INPUT_DIR/.." && pwd)/REHEARSAL-$TAG.json"
+        fi
+        echo "publish.sh: checking the §7.5 rehearsal record ..." >&2
+        node "$HERE/rehearse.mjs" assert \
+            --record "$REHEARSAL_RECORD" --tag "$TAG" --prod-input "$INPUT_DIR" >&2
     fi
-    echo "publish.sh: checking the §7.5 rehearsal record ..." >&2
-    node "$HERE/rehearse.mjs" assert \
-        --record "$REHEARSAL_RECORD" --tag "$TAG" --prod-input "$INPUT_DIR" >&2
 fi
 
 # Verify before uploading, not after. An artifact that fails here has
@@ -371,7 +438,28 @@ while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
 # downstream would fail: the artifacts land, the manifest verifies, the
 # feed looks healthy, and every wallet in the field simply never hears
 # about the version. Refuse here, where it is still a build problem.
-if [[ ${#YMLS[@]} -eq 0 ]]; then
+#
+# EXCEPT ON A PARTIAL RELEASE , where "no pointer" is not a
+# missing desktop build but the correct shape: the store lanes have no
+# electron-updater feed to point into, and their own update path is the
+# per-lane one (`latest.json` for the direct APK). The distinction is
+# read from the signed manifest, so a directory cannot talk its way out
+# of this check by simply lacking a yml - it has to have been SIGNED as
+# a partial release, by a run that named its lanes and was gated against
+# exactly them.
+#
+# THE REFUSAL BRANCH BELOW IS UNREACHABLE FOR A FULL RELEASE, and that is
+# worth writing down rather than discovering again. `assert-channel`
+# earlier in this script already refuses a directory with zero pointers,
+# so a full release never gets this far with an empty YMLS. Measured
+# 2026-08-06 by disarming this branch and watching the smoke stay green.
+# Kept anyway: it is the guard that would still hold if the channel
+# assertion were ever narrowed, and its message names the build problem
+# where the other names the feed problem. Not counted as coverage.
+if [[ ${#YMLS[@]} -eq 0 && -n "$COVERAGE_LANES" ]]; then
+    echo "publish.sh: no channel pointers, and none is expected: this release" \
+         "covers lane(s) $COVERAGE_LANES, which ship no electron-updater feed." >&2
+elif [[ ${#YMLS[@]} -eq 0 ]]; then
     echo "publish.sh: no channel pointers in $INPUT_DIR." >&2
     echo "  A release with no update-info yml is invisible to every" >&2
     echo "  installed wallet, permanently, with nothing logged. Check that" >&2
@@ -380,8 +468,29 @@ if [[ ${#YMLS[@]} -eq 0 ]]; then
     exit 1
 fi
 
+# The plan used to print the manifest's artifact count as if every one of
+# them landed on the feed. For an Android release that is wrong by half:
+# the .aab is refused by name in Phase 1 below, so a plan reading
+# "2 artifact(s)" precedes an upload of one. Counting the store-bound
+# artifacts here, in the same terms Phase 1 refuses them, keeps the plan
+# and the upload describing the same release.
+HOSTED_COUNT=0
+STORE_BOUND_COUNT=0
+for rel in "${BINARIES[@]}"; do
+    if [[ "${rel#./}" == *.aab ]]; then
+        STORE_BOUND_COUNT=$((STORE_BOUND_COUNT + 1))
+    else
+        HOSTED_COUNT=$((HOSTED_COUNT + 1))
+    fi
+done
+
 echo "publish.sh: plan for $TAG -> $TARGET ($EXPECT_CHANNEL)" >&2
-echo "  1. ${#BINARIES[@]} artifact(s)" >&2
+if [[ "$STORE_BOUND_COUNT" -gt 0 ]]; then
+    echo "  1. ${#BINARIES[@]} artifact(s): $HOSTED_COUNT uploaded," \
+         "$STORE_BOUND_COUNT store-bound (.aab, never hosted)" >&2
+else
+    echo "  1. ${#BINARIES[@]} artifact(s)" >&2
+fi
 echo "  2. signed manifest as RELEASE_HASHES/$TAG.txt (+ .asc)" >&2
 if [[ "$EDGE_VERIFY" -eq 1 && -n "$PUBLIC_BASE" ]]; then
     echo "  3. edge check: every artifact must return 200 via $PUBLIC_BASE" >&2

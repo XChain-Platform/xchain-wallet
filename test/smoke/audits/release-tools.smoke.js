@@ -167,6 +167,15 @@ const ARTIFACTS = [
     'xchain-wallet-9.9.9-arm64.AppImage',
     'xchain-wallet_9.9.9_amd64.deb',
     'xchain-wallet_9.9.9_arm64.deb',
+    // The Android pair, because "complete" is not a fixed list: it is
+    // whatever tools/release/shipped-lanes.txt currently says has users.
+    // Android shipped in v0.336.0 (2026-08-06), so a release without these
+    // two is a lane regression and sign.sh refuses it - correctly, and this
+    // case exists to prove sign.sh signs a complete set rather than to
+    // preserve the shape of a release cut before any lane had shipped.
+    // The next lane to flip adds its artifacts here in the same commit.
+    'xchain-wallet-android-v9.9.9.aab',
+    'xchain-wallet-v9.9.9.apk',
 ];
 
 const work = mkdtempSync(join(tmpdir(), 'xc-rel-'));
@@ -195,8 +204,15 @@ try {
     // second instance of that shape: sign.sh invokes it unconditionally
     // before writing the manifest, so a clone without it cannot sign at
     // all. Being a gate input that fails shut is the point of both.
+    // store-profile-status.txt is the third instance of that shape, and it
+    // stayed invisible until the Android pair joined ARTIFACTS: the gate that
+    // reads it only fires on a store-profile artifact, so a fixture missing
+    // the file signed happily for as long as no such artifact was staged.
+    // Absent, it reads '<unreadable>' and sign.sh refuses - correctly, since
+    // an unreadable status is not permission.
     for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt',
-        'shipped-lanes.txt', 'update-info.mjs', 'verify-signatures.mjs']) {
+        'shipped-lanes.txt', 'update-info.mjs', 'verify-signatures.mjs',
+        'store-profile-status.txt']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     cpSync(join(root, 'tools/build-reproduce/check-no-dev-mock.sh'),
@@ -266,6 +282,14 @@ try {
         const r = name.endsWith('.zip')
             ? spawnSync('zip', ['-qr', join(dir, name), '.'], { cwd: src, encoding: 'utf8' })
             : spawnSync('tar', ['czf', join(dir, name), '.'], { cwd: src, encoding: 'utf8' });
+        // A missing binary gives status null and an undefined stderr, so the
+        // bare assertion read "staged a real ...zip: undefined / null !== 0"
+        // and named neither the tool nor the machine. That is what the CI
+        // venue reported for an hour on 2026-08-06 while `zip` was simply not
+        // installed there.
+        assert.ok(!r.error, `staged a real ${name}: ${r.error?.code === 'ENOENT'
+            ? `the '${name.endsWith('.zip') ? 'zip' : 'tar'}' command is not installed on this machine`
+            : r.error?.message}`);
         assert.equal(r.status, 0, `staged a real ${name}: ${r.stderr}`);
         rmSync(src, { recursive: true, force: true });
     };

@@ -142,11 +142,19 @@ const withAndroid = (status) => lanes(
 );
 
 try {
-    // 1. Today's release: nothing has shipped, so a desktop-only set passes.
-    //    This is the case that must keep working, and it is why the row
+    // 1. A release cut before any lane shipped: a desktop-only set passes.
+    //    This is the case that must keep working, and it is why the rows
     //    cannot simply be flipped to `required` now.
+    //
+    //    IT READS A FIXTURE, NOT THE COMMITTED FILE, and that distinction
+    //    cost a red gate to learn. It used to run against the real
+    //    shipped-lanes.txt and passed only because every lane happened to be
+    //    NOT-SHIPPED. The first lane to ship (android, v0.336.0, 2026-08-06)
+    //    turned it red for doing its job, which made a property test look
+    //    like a regression. The property is about the word, so the word
+    //    belongs in the fixture.
     {
-        const r = gate(stage());
+        const r = gate(stage(), lanes(BASE.join('\n') + '\n'));
         check('a desktop-only release passes while every lane is NOT-SHIPPED',
             r.ok && /shipped-lane gate ok/.test(r.out), r.out);
     }
@@ -230,17 +238,41 @@ try {
                 < sign.indexOf('xr_check_shipped_lanes "$INPUT_DIR"'));
     }
 
-    // 10. The committed file, read as a claim about the world. Android is
-    //     NOT-SHIPPED because nothing is on Play and the direct feed is
-    //     404; when that stops being true this assertion is the reminder.
+    // 10. The committed file, read as a claim about the world.
     {
         const text = readFileSync(lanesFile, 'utf8');
         const row = text.split('\n').find((l) => /^android\s/.test(l));
         check('the committed android row exists and declares both globs',
             !!row && /xchain-wallet-android-v\*\.aab/.test(row)
             && /xchain-wallet-v\*\.apk/.test(row), row ?? '<no android row>');
+
+        // The pair-agreement check (every optional artifact is claimed by
+        // some lane) has to satisfy whatever the committed file currently
+        // demands, or it reports a lane regression under a label about
+        // drift. Derive the staging set from the file itself: each SHIPPED
+        // row's globs, with the wildcard filled in. Then this keeps testing
+        // agreement as more lanes ship, instead of needing a new artifact
+        // name hand-added here every time one does.
+        const shippedArtifacts = text.split('\n')
+            .filter((l) => /^\S+\s+SHIPPED\s/.test(l))
+            .flatMap((l) => l.trim().split(/\s+/).slice(2))
+            .map((glob) => glob.replace(/\*/g, V));
         check('every optional artifact in expected-artifacts.txt is claimed by a lane',
-            gate(stage()).ok, 'the committed pair does not agree');
+            gate(stage(shippedArtifacts)).ok, 'the committed pair does not agree');
+    }
+
+    // 11. What the first shipped lane actually bought, asserted against the
+    //     committed file rather than a fixture: android shipped in v0.336.0,
+    //     so a release that stages no Android artifact now fails BY NAME.
+    //     Case 1 proves the gate is quiet before a lane ships; this proves
+    //     it is loud after, which is the whole reason the word was flipped.
+    //     If android is ever genuinely retired, this is the assertion that
+    //     makes the retirement a decision instead of a deletion.
+    {
+        const r = gate(stage());
+        check('the committed file now demands the Android pair of every release',
+            !r.ok && /LANE-REGRESSION/.test(r.out)
+            && /xchain-wallet-v\*\.apk/.test(r.out), r.out);
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

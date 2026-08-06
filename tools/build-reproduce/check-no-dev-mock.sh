@@ -191,6 +191,24 @@ if [ -n "$ARTIFACT_DIR" ]; then
     ext_zip="$(find "$ARTIFACT_DIR" -maxdepth 1 -name 'xchain-wallet-extension-v*.zip' | head -n 1)"
     if [ -n "$ext_zip" ]; then
         mkdir -p "$UNPACK_ROOT/extension"
+        # The tool, before the artifact. `unzip` is absent from a minimal
+        # Debian image and is declared nowhere, so a machine without it fell
+        # into the branch below and refused the release with "is not a
+        # readable zip archive" - blaming a perfectly good artifact for a
+        # missing package. That is the most expensive kind of wrong message:
+        # it sends whoever reads it to rebuild the one thing that was never
+        # broken. Measured on the CI venue 2026-08-06, which had neither
+        # `zip` nor `unzip` installed.
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo "FAIL cannot read $(basename "$ext_zip"): 'unzip' is not installed"
+            echo "  This is an ENVIRONMENT failure, not an artifact failure. The"
+            echo "  archive was never opened, so nothing is known about it either"
+            echo "  way. Install unzip (Debian/Ubuntu: apt-get install unzip),"
+            echo "  then run this again."
+            echo
+            echo "Pre-release gate FAILED - a required tool is missing."
+            exit 1
+        fi
         if ! unzip -q "$ext_zip" -d "$UNPACK_ROOT/extension" 2>/dev/null; then
             echo "FAIL $(basename "$ext_zip") is not a readable zip archive"
             echo

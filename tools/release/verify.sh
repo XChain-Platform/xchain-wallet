@@ -247,6 +247,17 @@ if xr_has_header "$MANIFEST"; then
         exit 1
     fi
 
+    # Partial coverage, said out loud . Without this line, "the
+    # artifact I have is not in the manifest" reads as a tampering alarm
+    # when the truth may be that this manifest was never about that lane.
+    M_LANES="$(xr_header_field "$MANIFEST" 'lanes')"
+    if [[ -n "$M_LANES" ]]; then
+        echo "verify.sh: this is a PARTIAL release manifest, covering: $M_LANES" >&2
+        echo "  It attests the artifacts it hashes and says nothing about any" >&2
+        echo "  other lane of ${M_TAG:-this release}. An artifact absent from it" >&2
+        echo "  is not evidence that the release omitted that artifact." >&2
+    fi
+
     if [[ "$M_GATE" != "enforced" ]]; then
         echo "verify.sh: WARNING - dev-mock gate state is '$M_GATE', not 'enforced'." >&2
         echo "  This release was signed without the gate that keeps the" >&2

@@ -251,7 +251,14 @@ xr_assert_store_profile_buildable() {
 }
 
 # Write "$dir/RELEASE_HASHES.txt" with the signed header + sorted hashes.
-# Args: dir tag tag_commit built_utc dev_mock_gate_state [expected_file]
+# Args: dir tag tag_commit built_utc dev_mock_gate_state [expected_file] [lanes]
+#
+# `lanes` is set only for a PARTIAL release (, sign.sh --lane) and
+# writes two header fields, `coverage: partial` and `lanes: <names>`. A
+# full release writes neither, so a manifest that says nothing about
+# coverage is a full one - and since the signature covers these bytes,
+# stripping the fields to pass a partial manifest off as complete breaks
+# the signature rather than the claim.
 #
 # expected_file is optional ONLY for verify.sh --recompute, which writes a
 # manifest already stamped "(none)" for tag and commit and announces
@@ -260,6 +267,7 @@ xr_assert_store_profile_buildable() {
 # that omits the one thing v2 exists for.
 xr_write_manifest() {
     local dir="$1" tag="$2" commit="$3" built="$4" gate="$5" expected="${6:-}"
+    local lanes="${7:-}"
     local sha
     sha="$(xr_sha256_cmd)" || return 2
 
@@ -305,6 +313,10 @@ xr_write_manifest() {
         echo "# built: $built"
         echo "# dev-mock-gate: $gate"
         echo "# artifacts: $count"
+        if [[ -n "$lanes" ]]; then
+            echo "# coverage: partial"
+            echo "# lanes: $lanes"
+        fi
         [[ ${#profile_lines[@]} -gt 0 ]] && printf '%s\n' "${profile_lines[@]}"
     } > "$dir/RELEASE_HASHES.txt"
 
@@ -811,9 +823,19 @@ xr_check_expected() {
 # an unknown status, a glob that no expected-artifacts row declares, and
 # an `optional` row that no lane claims are all hard failures.
 #
-# Args: dir lanes_file expected_file
+# A FOURTH ARGUMENT NARROWS IT TO A PARTIAL RELEASE . When a
+# release covers only some lanes - the Android pair signed on its own
+# while the desktop lanes are not built - the parity question is asked of
+# the lanes in that scope and of nothing else, because a lane the release
+# never claimed to cover cannot have been dropped from it. The two DRIFT
+# checks below are deliberately NOT narrowed: they are about whether the
+# two committed files agree with each other, which is true or false
+# independently of what is being signed today.
+#
+# Args: dir lanes_file expected_file [scope]
+#       scope: space-separated lane names; empty means every lane.
 xr_check_shipped_lanes() {
-    local dir="$1" lanes="$2" expected="$3"
+    local dir="$1" lanes="$2" expected="$3" scope="${4:-}"
 
     if [[ ! -f "$lanes" ]]; then
         echo "release/lib.sh: shipped-lane list not found: $lanes" >&2
@@ -875,6 +897,14 @@ xr_check_shipped_lanes() {
 
             [[ "$lstatus" == "SHIPPED" ]] || continue
 
+            # Out of scope on a partial release: this release never
+            # claimed to carry the lane, so its absence is not a lane
+            # left behind. Matched against a space-padded scope so
+            # `android` does not also match a lane called `androidtv`.
+            if [[ -n "$scope" && " $scope " != *" $lane "* ]]; then
+                continue
+            fi
+
             matched=0
             for name in "${artifacts[@]:-}"; do
                 # shellcheck disable=SC2254  # $pat is a glob by design.
@@ -920,5 +950,193 @@ xr_check_shipped_lanes() {
         return 1
     fi
 
+    if [[ -n "$scope" ]]; then
+        echo "release/lib.sh: shipped-lane gate ok (scope: $scope; lanes outside" \
+             "it were not checked, because this release does not claim them)." >&2
+        return 0
+    fi
     echo "release/lib.sh: shipped-lane gate ok." >&2
+}
+
+# Restrict an expected-artifact list to the lanes a PARTIAL release covers,
+# and print the restricted list on stdout .
+#
+# WHY A PARTIAL RELEASE EXISTS AT ALL. sign.sh signs one manifest for a
+# whole release and xr_check_expected demands every `required` row - web,
+# extension, and both architectures of six desktop artifacts. On
+# 2026-08-06 the Android ceremony produced a real signed AAB and APK and
+# the step after it, signing the manifest, could not run: an Android-only
+# directory fails that gate with twenty problems, and the ceremony's own
+# closing line told the operator to run exactly that command. A lane whose
+# artifacts are ready must be publishable without waiting for lanes that
+# are not.
+#
+# WHY IT IS DERIVED RATHER THAN PASSED. The scope is computed from
+# shipped-lanes.txt, which is committed, reviewed, and already the single
+# place a lane's identity is declared. A `--glob` flag would let the
+# command line decide what a release contains, which is the property this
+# gate exists to take AWAY from the command line.
+#
+# WHY IT IS STRICTER INSIDE ITS SCOPE, not weaker:
+#
+#   * every glob the named lanes claim is emitted as `required`, even
+#     where the source list calls it optional. `optional` there means "a
+#     RELEASE need not contain this lane"; it never meant "this lane may
+#     arrive half-built". The Android pair is one build - the ceremony
+#     derives the APK from the AAB it just signed - so half of it is an
+#     interrupted ceremony, never a smaller release.
+#   * every row the named lanes do not claim is DROPPED, so an artifact
+#     belonging to another lane is undeclared and hard-fails. A per-lane
+#     manifest must not become a place where a stray file is laundered
+#     into the release's trust root.
+#
+# The caller is responsible for recording the partial coverage in the
+# signed manifest (xr_write_manifest's `lanes` argument). A partial
+# manifest that did not say so would be precisely the defect the full
+# gate exists to prevent, arriving from the other side: a record that
+# verifies perfectly and describes a release nobody built.
+#
+# Args: lanes_file expected_file lane [lane ...]
+xr_lane_scope() {
+    local lanes="$1" expected="$2"
+    shift 2
+    local -a want=("$@")
+
+    if [[ ${#want[@]} -eq 0 ]]; then
+        echo "release/lib.sh: xr_lane_scope was given no lane names." >&2
+        return 2
+    fi
+    if [[ ! -f "$lanes" ]]; then
+        echo "release/lib.sh: shipped-lane list not found: $lanes" >&2
+        echo "  It is where a lane's identity is declared, so without it there" >&2
+        echo "  is no such thing as a lane to scope a release to." >&2
+        return 1
+    fi
+    if [[ ! -f "$expected" ]]; then
+        echo "release/lib.sh: expected-artifact list not found: $expected" >&2
+        return 1
+    fi
+
+    local -a known=() scoped=() lane_globs=()
+    local lane lstatus rest w
+
+    while read -r lane lstatus rest || [[ -n "$lane" ]]; do
+        case "$lane" in ''|'#'*) continue ;; esac
+
+        # The same fail-shut parse as xr_check_shipped_lanes, for the same
+        # reason: a typo in the status word must not reach a permissive
+        # branch, and here it would also decide which artifacts a signed
+        # manifest demands.
+        if [[ "$lstatus" != "SHIPPED" && "$lstatus" != "NOT-SHIPPED" ]]; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares status" \
+                 "'${lstatus:-<missing>}'; expected SHIPPED or NOT-SHIPPED." >&2
+            return 1
+        fi
+        known+=("$lane")
+
+        for w in "${want[@]}"; do
+            [[ "$w" == "$lane" ]] || continue
+            if [[ -z "$rest" ]]; then
+                echo "release/lib.sh: $lanes: lane '$lane' declares no artifact glob." >&2
+                return 1
+            fi
+            # `read -r -a` rather than `for p in $rest`: every word here IS
+            # a glob, and an unquoted expansion would let the working
+            # directory decide which of them survive.
+            read -r -a lane_globs <<< "$rest"
+            scoped+=("${lane_globs[@]}")
+        done
+    done < "$lanes"
+
+    # An unknown lane name fails here rather than resolving to an empty
+    # scope. An empty scope would demand nothing at all, which is the one
+    # outcome this whole mechanism exists to make impossible.
+    local found k
+    for w in "${want[@]}"; do
+        found=0
+        for k in "${known[@]:-}"; do
+            [[ "$w" == "$k" ]] && { found=1; break; }
+        done
+        if [[ "$found" -eq 0 ]]; then
+            echo "release/lib.sh: '$w' is not a lane declared in $lanes." >&2
+            echo "  Declared lanes: ${known[*]:-<none>}" >&2
+            echo "  A lane name decides which artifacts the gate demands, so a" >&2
+            echo "  typo fails here instead of narrowing the release to nothing." >&2
+            return 1
+        fi
+    done
+
+    if [[ ${#scoped[@]} -eq 0 ]]; then
+        echo "release/lib.sh: the requested lane(s) claim no artifact globs: ${want[*]}" >&2
+        return 1
+    fi
+
+    # THE ROW IS COPIED, NOT REBUILT, and that is load-bearing. An earlier
+    # version parsed four columns and re-emitted them, which silently
+    # dropped the fifth (the signature class, ) - so a scoped release
+    # reached verify-signatures.mjs with every artifact declaring no class
+    # at all. That is this file's own recurring defect, a gate that cannot
+    # fail on a column it was never told about, committed by the very
+    # function meant to preserve the gate's power. Everything after the
+    # status word travels verbatim, including whatever column is added
+    # next; only the strength is rewritten, and `optional` and `required`
+    # are the same width so the alignment survives too.
+    local -a rows=()
+    local line status tail_ trimmed pattern p
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in ''|'#'*|[[:space:]]*) continue ;; esac
+        status="${line%%[[:space:]]*}"
+        tail_="${line#"$status"}"
+        case "$status" in
+            required|optional) ;;
+            *)
+                echo "release/lib.sh: $expected: unknown status '$status'" \
+                     "(expected 'required' or 'optional')" >&2
+                return 1
+                ;;
+        esac
+        trimmed="${tail_#"${tail_%%[![:space:]]*}"}"
+        pattern="${trimmed%%[[:space:]]*}"
+        for p in "${scoped[@]}"; do
+            if [[ "$pattern" == "$p" ]]; then
+                rows+=("required$tail_")
+                break
+            fi
+        done
+    done < "$expected"
+
+    # Drift, the same direction xr_check_shipped_lanes guards: a lane that
+    # claims a glob no release row declares would put the two files on
+    # different releases, and here it would silently shrink the scope.
+    local matched r r_pattern r_tail r_trimmed
+    for p in "${scoped[@]}"; do
+        matched=0
+        for r in "${rows[@]:-}"; do
+            r_tail="${r#required}"
+            r_trimmed="${r_tail#"${r_tail%%[![:space:]]*}"}"
+            r_pattern="${r_trimmed%%[[:space:]]*}"
+            [[ "$r_pattern" == "$p" ]] && { matched=1; break; }
+        done
+        if [[ "$matched" -eq 0 ]]; then
+            echo "release/lib.sh: $lanes claims glob '$p', which no row of" \
+                 "$expected declares." >&2
+            echo "  The two files would be describing different releases, and a" >&2
+            echo "  scope built from them would demand less than either." >&2
+            return 1
+        fi
+    done
+
+    printf '%s\n' \
+        "# GENERATED by xr_lane_scope. Do not edit and do not commit: this is a" \
+        "# PARTIAL release scope, derived per-run from the two committed lists." \
+        "#" \
+        "#   lanes:    ${want[*]}" \
+        "#   from:     $expected" \
+        "#   and:      $lanes" \
+        "#" \
+        "# Every row is 'required' even where the source list says optional: a" \
+        "# lane is optional to a RELEASE, never to itself. Rows belonging to any" \
+        "# other lane are absent, so their artifacts read as undeclared here." \
+        "" \
+        "${rows[@]}"
 }

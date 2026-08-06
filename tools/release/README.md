@@ -91,7 +91,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | Script | Purpose | Status |
 |---|---|---|
 | `lib.sh` | Shared manifest routines: which files a manifest covers, in what order, and what its header says. Sourced by the other scripts so they cannot drift apart. | Live |
-| `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. | Live; needs `XCHAIN_RELEASE_GPG_KEY` (the key exists, G180's remaining half is publication) |
+| `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. `--lane <name>` signs a PARTIAL release covering only the named lanes . | Live; needs `XCHAIN_RELEASE_GPG_KEY` (the key exists, G180's remaining half is publication) |
 | `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). | Live |
 | `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live (host pending) |
 | `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
@@ -229,6 +229,7 @@ One key, one ceremony, one thing to rotate. See
 | `XCHAIN_RELEASE_TAG` | Default `--tag` value. | both |
 | `XCHAIN_RELEASE_DIR` | Default `--input` value (the artifact directory). | both |
 | `XCHAIN_RELEASE_REPO` | Default `--repo` value: the pristine clone the artifacts were built from. Defaults to the checkout the script lives in. | `sign.sh` |
+| `XCHAIN_RELEASE_LANES` | Default `--lane` value, comma-separated: signs a PARTIAL release covering only those lanes, whose globs come from `shipped-lanes.txt`. Inside that scope the artifact-set gate is stricter than the full list, not weaker, and the manifest records `coverage: partial` in its signed header. | `sign.sh` |
 | `GNUPGHOME` | Optional override for the GPG home directory. | both |
 | `SIGN_SKIP_DEV_MOCK_CHECK` | Set to `1` to skip the pre-sign dev-mock gate. Recorded in the signed header. Release runs never set it. | `sign.sh` |
 | `XCHAIN_WALLET_RELEASE_RECORDS` | Where the §6 release records live. Defaults to `../claude/reports/wallet-releases` beside this checkout. It relocates the records; it does not waive them, and there is no variable that does. | `release-record.mjs`, `publish.sh` |

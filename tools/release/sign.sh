@@ -25,11 +25,44 @@
 #   XCHAIN_RELEASE_GPG_KEY=<fingerprint> \
 #     bash tools/release/sign.sh --tag vX.Y.Z --input release-artifacts/vX.Y.Z/
 #
+# Options:
+#   --input, -i <dir>   directory holding the staged artifacts
+#   --tag,   -t <tag>   the release tag the manifest describes
+#   --repo,  -r <dir>   the checkout to verify the tag against
+#   --lane,  -l <name>  sign a PARTIAL release covering only this lane.
+#                       Repeatable, and comma-separated names are accepted.
+#                       Lane names come from tools/release/shipped-lanes.txt
+#                       (android, ios, mas, msstore, snap).
+#   --force, -f         overwrite an existing manifest
+#
+# PARTIAL RELEASES, and why the flag is narrower than it looks. Without
+# --lane a manifest must cover a whole release: the artifact-set gate
+# demands the web tarball, the extension zip and both architectures of
+# six desktop artifacts, and that is the correct default, because a
+# manifest missing a lane verifies perfectly while describing a release
+# nobody built. But a lane whose artifacts ARE ready must not have to
+# wait for lanes that are not - the Android ceremony produces a signed
+# AAB and APK on a machine that builds no desktop artifact at all, and
+# before this flag existed the ceremony's own closing instruction (run
+# sign.sh) could not be followed .
+#
+# --lane resolves to the globs that lane claims in shipped-lanes.txt, and
+# inside that scope the gate is STRICTER rather than weaker: every one of
+# the lane's artifacts is required even where the release list calls it
+# optional, and an artifact belonging to any other lane is undeclared.
+# The signed manifest records `coverage: partial` and the lane names, so
+# verify.sh, an operator and the desktop updater all know what it does
+# not attest.
+#
+#   bash tools/release/sign.sh --tag v0.336.0 --lane android \
+#       --input ~/xchain-release-artifacts/0.336.0/
+#
 # Environment:
 #   XCHAIN_RELEASE_GPG_KEY   GPG key fingerprint or email (required)
 #   XCHAIN_RELEASE_TAG       Default --tag value (optional)
 #   XCHAIN_RELEASE_DIR       Default --input value (optional)
 #   XCHAIN_RELEASE_REPO      Default --repo value (optional)
+#   XCHAIN_RELEASE_LANES     Default --lane value, comma-separated (optional)
 #   GNUPGHOME                Override GPG home (optional)
 #
 # Status: HALF OF G180 IS DONE as of 2026-08-06. The release GPG key
@@ -60,11 +93,26 @@ INPUT_DIR=""
 REPO_ROOT=""
 TAG=""
 FORCE=0
+LANE_NAMES=()
+
+# Split one --lane value on commas so `--lane android,ios` and two flags
+# mean the same thing. Empty words are dropped rather than becoming an
+# unnamed lane, which xr_lane_scope would then have to refuse by accident.
+add_lanes() {
+    local raw="$1" word
+    for word in $(printf '%s' "$raw" | tr ',' ' '); do
+        [[ -n "$word" ]] && LANE_NAMES+=("$word")
+    done
+}
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --input|-i)
             INPUT_DIR="$2"
+            shift 2
+            ;;
+        --lane|-l)
+            add_lanes "$2"
             shift 2
             ;;
         --tag|-t)
@@ -103,6 +151,10 @@ fi
 if [[ ! -d "$INPUT_DIR" ]]; then
     echo "sign.sh: input dir '$INPUT_DIR' does not exist" >&2
     exit 2
+fi
+
+if [[ ${#LANE_NAMES[@]} -eq 0 && -n "${XCHAIN_RELEASE_LANES:-}" ]]; then
+    add_lanes "$XCHAIN_RELEASE_LANES"
 fi
 
 if [[ -z "$TAG" ]]; then
@@ -305,18 +357,45 @@ fi
 
 # --- Artifact-set gate --------------------------------------------------
 EXPECTED="$REPO_ROOT/tools/release/expected-artifacts.txt"
-xr_check_expected "$INPUT_DIR" "$EXPECTED"
+LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
+
+# GATE_EXPECTED is what every artifact-level gate below is pointed at. It
+# is the committed list for a full release, and a per-run scope derived
+# from that list plus shipped-lanes.txt for a partial one (--lane,
+# ). Derived rather than hand-written on purpose: the command line
+# names a LANE, and the committed files decide what that lane contains.
+COVERAGE_LANES=""
+GATE_EXPECTED="$EXPECTED"
+SCOPE_FILE=""
+if [[ ${#LANE_NAMES[@]} -gt 0 ]]; then
+    COVERAGE_LANES="${LANE_NAMES[*]}"
+    SCOPE_FILE="$(mktemp "${TMPDIR:-/tmp}/xchain-lane-scope.XXXXXX")"
+    # Removed on every exit path: a scope file left behind is a list that
+    # looks committed and is not, and this one demands less than the real
+    # one by design.
+    trap 'rm -f "$SCOPE_FILE"' EXIT
+    xr_lane_scope "$LANES" "$EXPECTED" "${LANE_NAMES[@]}" > "$SCOPE_FILE"
+    GATE_EXPECTED="$SCOPE_FILE"
+    echo "sign.sh: PARTIAL release - gating against lane(s): $COVERAGE_LANES" >&2
+    grep -v '^#' "$SCOPE_FILE" | grep . | sed 's/^/  scope: /' >&2
+fi
+
+xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED"
 
 # A lane that already has users must not vanish from a release. The gate
 # above cannot ask this: every store lane is `optional` there until it has
 # shipped once, and nothing about a first upload edits that file
 # ( §6 release parity,  §2).
-LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
-xr_check_shipped_lanes "$INPUT_DIR" "$LANES" "$EXPECTED"
+#
+# It reads the FULL expected list even on a partial release, because its
+# two drift checks are about whether the two committed files agree with
+# each other - a question whose answer does not depend on what is being
+# signed today. Only the parity requirement is narrowed, by COVERAGE_LANES.
+xr_check_shipped_lanes "$INPUT_DIR" "$LANES" "$EXPECTED" "$COVERAGE_LANES"
 
 # A profile the build cannot actually produce must not be signed into the
 # record as though it had .
-xr_assert_store_profile_buildable "$INPUT_DIR" "$EXPECTED"
+xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 
 # --- Signature gate  --------------------------------------------
 # Every gate above this line counts artifacts: how many, which arches,
@@ -333,11 +412,12 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$EXPECTED"
 # and every downstream check - verify.sh, the feed sweep, the updater's own
 # hash check - agrees with it. Once signed, nothing left in the pipeline
 # can tell the difference.
-node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$EXPECTED"
+node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECTED"
 
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" "$EXPECTED"
+xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" \
+    "$GATE_EXPECTED" "$COVERAGE_LANES"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
 gpg --batch --yes \
@@ -351,6 +431,14 @@ echo "sign.sh: ok" >&2
 echo "  tag:       $TAG ($TAG_COMMIT)" >&2
 echo "  manifest:  $MANIFEST" >&2
 echo "  signature: $SIG" >&2
+if [[ -n "$COVERAGE_LANES" ]]; then
+    echo "  coverage:  PARTIAL - lane(s) $COVERAGE_LANES only" >&2
+    echo >&2
+    echo "  This manifest attests the artifacts it hashes and says NOTHING" >&2
+    echo "  about any other lane of $TAG. Publish it under the same versioned" >&2
+    echo "  name; verify.sh reads the coverage out of the signed header, so a" >&2
+    echo "  reader is told what it does not cover rather than inferring it." >&2
+fi
 echo >&2
 echo "  This one signature is checked three ways: by verify.sh, by a user" >&2
 echo "  following https://docs.xchain.io/components/wallet/release/verify-release, and by the desktop updater" >&2

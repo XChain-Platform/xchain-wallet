@@ -328,6 +328,21 @@ mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
 # Say, next to the bytes, exactly what they were built from. Without this a
 # rehearsal artifact and a release artifact are indistinguishable on disk, and
 # the rehearsal one is signed by the same unrotatable key.
+#
+# IN A SUBDIRECTORY, AND THAT IS NOT TIDINESS. These are RECORDS, not
+# artifacts, and the staging directory is the signing input: sign.sh hard-fails
+# any file in it that expected-artifacts.txt does not declare, which is what
+# stops a stray build output being laundered into the release's trust root. A
+# record written beside the bytes therefore blocked the very command the closing
+# line below tells the operator to run - measured 2026-08-06, 21 problems where
+# 20 were the unbuilt desktop lanes and the twenty-first was this file. The
+# obvious fix, declaring it in expected-artifacts.txt, was tried and correctly
+# refused by CI: every optional row must be claimed by a distribution lane, and
+# a provenance note belongs to none. `records/` is invisible to the artifact
+# list (top-level files only) and to the version gate (`-maxdepth 1`), so the
+# record keeps travelling with the bytes without pretending to be one.
+RECORDS_DIR="$OUTPUT_DIR/records"
+mkdir -p "$RECORDS_DIR"
 {
     echo "tag:        $TAG"
     echo "head:       $HEAD_SHA"
@@ -335,10 +350,10 @@ mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
     echo "dirty_paths: $DIRTY_COUNT"
     echo "rehearsal:  $([ "$REHEARSAL" -eq 1 ] && echo yes || echo no)"
     echo "built_at:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > "$OUTPUT_DIR/PROVENANCE.txt"
+} > "$RECORDS_DIR/PROVENANCE.txt"
 if [ "$REHEARSAL" -eq 1 ]; then
     echo "REHEARSAL ARTIFACTS. Do not upload to Play, do not publish, delete when done." \
-        > "$OUTPUT_DIR/DO-NOT-PUBLISH.txt"
+        > "$RECORDS_DIR/DO-NOT-PUBLISH.txt"
 fi
 
 echo
@@ -351,7 +366,15 @@ echo "    one assetlinks.json needs (packages/mobile/assetlinks.template.json)."
 echo "    SECURITY.md holds the canonical copy; the download page is convenience."
 apksigner verify --print-certs "$OUTPUT_DIR/$APK_NAME" | grep -i 'SHA-256' || true
 echo
-echo "Next: run tools/release/sign.sh over $OUTPUT_DIR so both artifacts land in"
-echo "the GPG-signed manifest (K1). Publish the APK only after the Play staged"
+echo "Next: sign both artifacts into a GPG-signed manifest (K1). This lane is"
+echo "signed on its own, so pass --lane android - without it the artifact-set"
+echo "gate demands the web, extension and desktop artifacts this ceremony does"
+echo "not build, and refuses :"
+echo
+echo "    XCHAIN_RELEASE_GPG_KEY=<K1 fingerprint from SECURITY.md> \\"
+echo "      bash tools/release/sign.sh --tag $TAG --lane android \\"
+echo "        --input $OUTPUT_DIR"
+echo
+echo "Publish the APK only after the Play staged"
 echo "rollout reaches 100%, or on an explicit operator promote when Play stalls -"
 echo "the direct lane never waits on a Play clock (§6 step 6)."

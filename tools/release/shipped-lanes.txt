@@ -58,11 +58,22 @@
 # release carrying one and not the other means the ceremony was
 # interrupted, never that only one lane was intended. They flip together.
 #
-# NOT-SHIPPED because nothing has been uploaded to Play and nothing is
-# published on downloads.xchain.io: measured 2026-08-02, the feed path
-# `downloads.xchain.io/wallet/android/latest.json` is 404 and no signed
-# artifact exists on the release machine.
-android   NOT-SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*.apk
+# SHIPPED in v0.336.0, published 2026-08-06 to
+# downloads.xchain.io/wallet/android/xchain-wallet-v0.336.0.apk and attested
+# by the signed partial manifest at RELEASE_HASHES/v0.336.0.txt. Verified
+# after upload by fetching both from the public URL and re-running verify.sh
+# against them: hashes match, the header anchors to v0.336.0, and the GPG
+# signature is good.
+#
+# The DIRECT half is what shipped. Play has never distributed this app - the
+# developer account is suspended and under appeal  - and the lane
+# flips on the direct half deliberately: §6 says the direct lane never waits
+# on a Play clock, so the parity requirement it arms is the one that matters
+# to the users who can actually install this. The .aab glob stays in the row
+# because the pair is one build: the ceremony derives the APK from the same
+# bundle it signs as the AAB, so a release carrying one without the other
+# means the ceremony was interrupted.
+android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*.apk
 
 # iOS . Store-bound only; there is no direct-install lane on that
 # platform, so this row is one glob and always will be.
