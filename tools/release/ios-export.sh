@@ -117,6 +117,13 @@ PLIST
 # lane, because this is a release script whose failure mode is a dead-end error
 # on submission day. Prepending is deliberate: it does not remove anything from
 # PATH, so every other tool the step calls resolves exactly as before.
+#
+# DO NOT "FIX" THIS BY REMOVING THE HOMEBREW RSYNC. The desktop/web publish lane
+# REQUIRES it: publish.sh refuses openrsync outright, because a forced-command
+# rrsync feed rejects the `--dirs` long option openrsync sends. The two lanes
+# need opposite rsyncs on the same machine, so the release Mac carries both and
+# each lane picks its own - this one by PATH, publish.sh by absolute path, which
+# is why that script is immune to the line below.
 export PATH="/usr/bin:$PATH"
 
 xcodebuild -exportArchive \

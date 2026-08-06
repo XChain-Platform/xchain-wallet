@@ -171,6 +171,13 @@ target_path() {
 # option that rrsync's allowlist does not carry, so every upload dies with
 # "invalid rsync-command syntax or options" and no hint that the CLIENT is
 # the problem. Measured on the release machine 2026-08-01.
+#
+# The iOS lane needs the OPPOSITE rsync, so keep both installed. Xcode's
+# IPA-packaging step drives Apple's openrsync and a Homebrew rsync ahead of it
+# on PATH kills `-exportArchive` (see tools/release/ios-export.sh, measured
+# 2026-08-06). Resolving by absolute path here rather than by PATH is what lets
+# the two coexist: ios-export.sh prepends /usr/bin for its own step and this
+# script still finds the GNU one.
 RSYNC="${XCHAIN_RSYNC:-}"
 if [[ -z "$RSYNC" ]]; then
     for candidate in /opt/homebrew/bin/rsync /usr/local/bin/rsync rsync; do
