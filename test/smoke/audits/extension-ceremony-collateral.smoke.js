@@ -43,8 +43,17 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
-import { docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
+import { DOCS_ROOT, docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
 import { citationsIn, PLATFORM_ROOT, resolveCitation, SPECS_DIR } from '../_spec-frontier.js';
+// §14. The tool is the only thing here that can see what is PUBLISHED; these
+// are its own fingerprint functions, so the gate and the tool cannot drift
+// into two opinions about what "the same policy" means.
+// DEFAULT_URL is aliased: §10 already binds that name from its own dynamic
+// import of this module, and a second top-level binding is a SyntaxError that
+// kills the whole file at parse time rather than failing one section.
+import {
+    DEFAULT_URL as CANONICAL_POLICY_URL, policyFingerprint, policyTextFromMarkdown,
+} from '../../../tools/release/verify-privacy-url.mjs';
 
 skipUnlessDocs('extension ceremony-collateral smoke');
 
@@ -1011,9 +1020,179 @@ const pointerNote = existsSync(specPath)
         + 'SKIPPED (platform checkout absent, as on every CI run: it is this repo\'s parent, not a '
         + 'sibling)';
 
+// --- 14. The policy the store validates is PUBLISHED, not merely written ---
+//
+// S30 ended by naming the next question: the other gates all read the docs
+// sibling, and `.ci-siblings` ships it at origin/master while a developer
+// machine reads a dirty working tree, so ask whether each gate's subject is
+// the same REVISION in both venues. It measured the answer as "real in shape,
+// absent in fact: all five pages byte-identical to origin/master". That was
+// true for one day. On 2026-08-05 the analytics-rollout lane edited
+// privacy/privacy-policy.md - the single page of the five whose DEPLOYED copy
+// the Chrome Web Store form validates - and `verify-privacy-url.mjs` went to
+// exit 1 while the whole smoke suite stayed green.
+//
+// THE OBVIOUS CHECK IS THE WRONG ONE, and building it first is how this would
+// have been missed a fifth time. Comparing the working tree against
+// origin/master goes GREEN the moment the editing lane COMMITS, which is
+// precisely the state where the gap is real and unattended: written, pushed,
+// not deployed. Git can only ever see what would be published.
+//
+// So the subject is the DEPLOY, and the anchor is docs/privacy-deploy-pin.json.
+// verify-privacy-url.mjs is the one thing in this repo that fetches, and on a
+// confirmed live observation it writes down the fingerprint of the policy text
+// it actually saw being served. This section compares the canonical policy
+// against that note. It is red from the moment the canonical text moves and
+// stays red until someone REDEPLOYS and re-runs the tool - it follows the
+// deploy rather than the commit, which is the whole point.
+//
+// This spec has now been wrong about this four times (S10's 404, S17's edge
+// obfuscation, S22's stale policy, S31's), and every time the sentence in the
+// spec that should have prevented it was PROSE addressed to whoever edits the
+// policy. The lane that edited it this time has never read this spec. A rule
+// that depends on its reader having read it is not a mechanism.
+const policyMarkdown = readDoc('privacy', 'privacy-policy.md');
+const canonicalFingerprint = policyFingerprint(policyTextFromMarkdown(policyMarkdown));
+
+// Venue drift, declared rather than asserted. A developer legitimately edits a
+// docs page before committing, so this is not a failure on its own - but S30's
+// §13 finding was that a check which degrades quietly still prints a verdict,
+// so local-green and CI-green must be distinguishable by reading the output.
+// The subject is the whole wallet docs tree rather than a list of pages: a
+// list is the thing that rots, and `docsPath` is variadic so a call-site
+// harvest would silently miss any computed or multi-argument reader.
+let driftNote;
+try {
+    const drifted = execFileSync('git',
+        ['-C', DOCS_ROOT, 'diff', '--name-only', 'origin/master', '--', 'components/wallet'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+        .split('\n').map((l) => l.trim()).filter(Boolean);
+    driftNote = drifted.length
+        ? `${drifted.length} wallet docs page(s) differ from origin/master (${drifted.join(', ')}), `
+            + 'so this run read text the CI venue will not'
+        : 'wallet docs match origin/master, so this run read what the CI venue reads';
+} catch (err) {
+    // Not a pass. An unfetched or absent origin is a thing this section could
+    // not look at, and saying "no drift" would be a confident wrong answer.
+    driftNote = `wallet docs revision NOT COMPARED (${String(err.message).split('\n')[0]}), `
+        + 'so whether this run read what CI reads is unknown';
+}
+
+const pinPath = join(walletRoot, 'docs', 'privacy-deploy-pin.json');
+assert.ok(existsSync(pinPath),
+    `FAIL: ${pinPath} is missing, so nothing records that the published privacy policy was ever `
+    + 'observed live. The Chrome Web Store form validates that URL. Run '
+    + '`node tools/release/verify-privacy-url.mjs`; on exit 0 it writes the pin.');
+
+const pin = JSON.parse(readFileSync(pinPath, 'utf8'));
+
+// ROW 32, and it is this gate's own defect one stage old. The assertion below
+// compared the hash and only PRINTED the URL, so a pin recorded at any address
+// satisfied it. Driven rather than reasoned: a pin carrying the correct policy
+// hash and the URL `https://staging.internal/policy/` passed the previous cut.
+//
+// That is not a hypothetical, because --url exists and is meant to be used: a
+// run against a staging host observes a real page, writes an honest pin, and
+// silently retires the evidence about the address the store form actually
+// validates. The hash answers "is this the current policy text"; nothing
+// answered "somewhere anybody cares about". D5 fixed one canonical URL,
+// trailing slash included, and this is the field S27's row 21 already found
+// this ceremony sourcing from a page that never carried it.
+//
+// Checked BEFORE the hash, because a pin from elsewhere makes the hash
+// comparison meaningless rather than merely incomplete.
+assert.equal(pin.url, CANONICAL_POLICY_URL,
+    `FAIL: the deploy pin was recorded at ${pin.url}, not at the URL the Chrome Web Store form `
+    + `validates (${CANONICAL_POLICY_URL}). Whatever was observed, it was not the published policy, so this `
+    + 'gate can say nothing about what a store reviewer will load. Re-run '
+    + '`node tools/release/verify-privacy-url.mjs` with no --url override.');
+
+assert.equal(pin.policySha256, canonicalFingerprint,
+    'FAIL: the canonical privacy policy is NOT the one being served at the URL the Chrome Web '
+    + 'Store form validates.\n'
+    + `  canonical (xchain-documentation): ${canonicalFingerprint}\n`
+    + `  last observed live at ${pin.url}: ${pin.policySha256} (${pin.observedAt})\n`
+    + `  ${driftNote}\n`
+    + '  This is a DEPLOY gap, not a build gap, and rebuilding is not publishing. The policy is\n'
+    + '  finished when the live URL serves it, in this order:\n'
+    + '    1. land the change in xchain-documentation (components/wallet/privacy/privacy-policy.md)\n'
+    + '    2. rebuild xchain-websites: node xchain.io/build/privacy.build.js,\n'
+    + '       then npm run build:docs && npm run build:og, and DEPLOY it\n'
+    + '    3. node tools/release/verify-privacy-url.mjs   # exit 0 advances the pin, closing this\n'
+    + '  Diagnose which of the three is missing WITHOUT deploying anything: point the tool at the\n'
+    + '  built page with --html <xchain-websites>/xchain.io/wallet/privacy/index.html. Exit 0 there\n'
+    + '  means the build is already correct and only publication is missing.\n'
+    + '  CHECK THE COUPLING FIRST. The policy edit may be one piece of a larger undeployed change\n'
+    + '  (2026-08-05: a 122-file analytics rollout), in which case publishing the policy ALONE\n'
+    + '  makes it describe behaviour the site does not yet have. That is the overstating direction\n'
+    + '  of the same policy/disclosure disagreement this gate exists to prevent. Deploy together.\n'
+    + '  Until then ceremony Phase 3 does not pass and the listing must not be submitted: a store\n'
+    + '  reviewer cross-checks the hosted policy against the data-disclosure answers.');
+
+// --- 15. Arming the monitor has to check IDENTITY, not just presence -------
+//
+// Row 31. The rogue-publish monitor is this spec's security control for a
+// compromised publisher account, and it lives on a host no test can reach. Its
+// row was "verified" by three separate stages, and every one of them measured
+// that a file EXISTS at the install path. Measured 2026-08-05, the installed
+// copy and the repo copy had already diverged (`75c26eb3...` at 19176 bytes
+// against `47d1f7a7...` at 19244).
+//
+// That is S26's lesson, which this gate already enforces for documentation in
+// §8: a citation has two halves, the address and the contents, and checking
+// only the address is how a step comes to point at nothing. §8 applies it to a
+// page. Nothing applied it to a deployed BINARY ARTIFACT, which is the same
+// defect with a worse blast radius, because a page that says the wrong thing
+// is read by a person and a monitor that is the wrong version is read by
+// nobody.
+//
+// THE FIX IS A CEREMONY STEP RATHER THAN A CONTINUOUS CHECK, deliberately.
+// The suite cannot reach the host, and the S31 pin pattern (let the tool that
+// CAN observe write a note the suite reads) would need a NEW tool that holds
+// SSH credentials, which is a real security surface to add for what turned out
+// to be a help-text drift. The drift also cannot matter until the monitor is
+// armed, and arming happens once, in Phase 8, by hand. So the check belongs at
+// the one moment the artifact matters, and this section holds the ceremony to
+// still carrying it.
+//
+// The published page states this generically ("the installed copy"), never by
+// hostname: §5 forbids internal hostnames on a public page, and this artifact
+// lives on one.
+const monitorSteps = ceremony.split('\n').filter((l) => /store-version-monitor/.test(l));
+assert.ok(monitorSteps.length >= 2,
+    'FAIL: the ceremony describes the store-version monitor in fewer than two steps. Arming it '
+    + 'asks two separate questions (is the JOB running, and is the INSTALLED SCRIPT the reviewed '
+    + 'one) and they are easy to collapse into one. Row 31 exists because only the first was ever '
+    + `asked. Found ${monitorSteps.length} step(s).`);
+
+const identityStep = monitorSteps.find((l) => /sha256/i.test(l));
+assert.ok(identityStep,
+    'FAIL: no step tells the operator to compare the INSTALLED monitor against the reviewed one by '
+    + 'checksum. Measured 2026-08-05: the installed copy and the repo copy had already diverged, '
+    + 'and every earlier verification of that row checked only that a file existed at the path. A '
+    + 'file at the right path is not evidence that it is the right file.');
+
+// The comparison has to have a SUBJECT, and the subject has to be a COMMAND.
+// The first cut of this assertion accepted the words "release tag" appearing
+// anywhere nearby, and a mutation that deleted the actual comparison still
+// passed it, because the prose underneath happens to say "reinstall from the
+// release tag". Prose about a check is not a check. So both halves of the
+// comparison must be present as runnable commands: a hash of the installed
+// file, and a hash taken from the release tag rather than from the working
+// tree, which can hold anything.
+const identityWindow = ceremony.slice(ceremony.indexOf(identityStep))
+    .split('\n').slice(0, 14).join('\n');
+assert.ok(/git show[^\n]*store-version-monitor[^\n]*sha256sum/.test(identityWindow),
+    'FAIL: the checksum step never says what the installed copy must MATCH, as a command. A hash '
+    + 'with nothing to compare it against is a number, not a check, and prose naming the release '
+    + 'tag is not a comparison. The step needs the second hash taken from the tag itself '
+    + '(git show <release-tag>:tools/release/store-version-monitor.mjs | sha256sum).');
+
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
     + `privacy/trader-identity.md, ${extensionHosts.length} egress hosts from wireAudit.js, `
     + `${citations} cited wallet-repo paths resolved across the repo boundary, `
-    + `${placeholderSteps.length} cross-page placeholder step verified, ${pointerNote})`);
+    + `${placeholderSteps.length} cross-page placeholder step verified, ${pointerNote}; `
+    + `the published policy matches the canonical one, ${monitorSteps.length} monitor steps `
+    + `including a checksum identity check, and ${driftNote})`);

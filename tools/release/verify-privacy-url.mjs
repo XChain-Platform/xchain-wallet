@@ -133,7 +133,8 @@
 // exit 1, 2, 3 and 4, so this can be run from cron the same way the
 // store-version monitor is.
 
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -160,6 +161,65 @@ export const DEFAULT_SOURCE_PATH = join(
 export const DEFAULT_TIMEOUT_MS = 15000;
 
 export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3, CONTACT_GATED: 4 };
+
+// THE DEPLOY PIN ( S31). This script is the only thing in this repo
+// that can see what is actually PUBLISHED; everything else can prove at most
+// what would be published. That asymmetry has now cost this spec four times
+// (S10's 404, S17's edge obfuscation, S22's stale policy, S31's again), and
+// each time the repo was fully green while the store-validated URL was wrong.
+//
+// A test suite cannot fetch: it would be non-deterministic and offline-hostile.
+// So instead of the suite learning to look, this script WRITES DOWN what it
+// saw, and the suite reads the note. The pin records one fact and only one:
+// this exact normalized policy text was observed live at this URL.
+//
+// It is deliberately NOT a hash of the markdown. `pageCarriesPolicy` compares
+// normalized policy TEXT, so that is what is fingerprinted; a markdown-only
+// edit that changes no published wording must not invalidate a good deploy.
+//
+// Only a real network observation may advance it. The --html form returns
+// EXIT.LIVE too, and it explicitly is not a liveness check (the bytes were
+// handed to this script), so it writes nothing. A pin that could be advanced
+// by supplying your own bytes would certify exactly the thing it exists to
+// catch.
+export const DEFAULT_PIN_PATH = join(here, '..', '..', 'docs', 'privacy-deploy-pin.json');
+
+/**
+ * The fingerprint the pin stores, over normalized policy text rather than
+ * markdown, so it means "this published wording" and not "this file".
+ */
+export function policyFingerprint(policyText) {
+    return createHash('sha256').update(normalizeText(policyText), 'utf8').digest('hex');
+}
+
+/**
+ * Record a confirmed live observation. Rewrites only when the observation
+ * actually differs from what is already pinned, so an ordinary re-run of a
+ * good deploy leaves the worktree clean: `observedAt` is carried forward
+ * rather than restamped, because the fact being recorded has not changed.
+ */
+export function writeDeployPin(observed, { pinPath = DEFAULT_PIN_PATH, now } = {}) {
+    let previous = null;
+    try {
+        previous = JSON.parse(readFileSync(pinPath, 'utf8'));
+    } catch { /* no pin yet, or an unreadable one; either way this run writes it */ }
+
+    if (previous && previous.url === observed.url
+        && previous.policySha256 === observed.policySha256) {
+        return { written: false, path: pinPath, pin: previous };
+    }
+
+    const pin = {
+        _comment: 'Written by tools/release/verify-privacy-url.mjs on a CONFIRMED LIVE fetch. '
+            + 'Records that this normalized policy text was observed being served at this URL. '
+            + 'Do not hand-edit: the value of this file is that only an observation can set it.',
+        url: observed.url,
+        policySha256: observed.policySha256,
+        observedAt: now || new Date().toISOString(),
+    };
+    writeFileSync(pinPath, `${JSON.stringify(pin, null, 4)}\n`);
+    return { written: true, path: pinPath, pin, previous };
+}
 
 // Status codes that mean "definitely not there" as opposed to "I was not
 // allowed to look". Everything else non-200 lands in inconclusive.
@@ -524,6 +584,13 @@ export async function checkPrivacyUrl({
 
     lines.push('LIVE: the URL resolves directly and carries the current policy verbatim.');
 
+    // The one place in this repo where "what is deployed" is a fact rather
+    // than an inference. Attached to both remaining outcomes: EXIT.CONTACT_GATED
+    // says the deployed bytes ARE the current policy and the edge is mangling a
+    // mailto, which the report itself calls "NOT a submission blocker", so the
+    // deploy is as current there as it is on EXIT.LIVE.
+    const observed = { url, policySha256: policyFingerprint(policyText) };
+
     const contacts = contactAddressesFrom(policyText);
     const gated = gatedContacts(fetched.html, contacts);
     if (gated.length) {
@@ -537,12 +604,12 @@ export async function checkPrivacyUrl({
             'policy, and it does. Two ways out: turn Email Address Obfuscation off for',
             '/wallet/privacy/* in the Cloudflare dashboard, or additionally publish the address as',
             'plain text, which the obfuscator does not rewrite (it targets mailto links).');
-        return { code: EXIT.CONTACT_GATED, lines, errors };
+        return { code: EXIT.CONTACT_GATED, lines, errors, observed };
     }
     lines.push(contacts.length
         ? `contact: ${contacts.join(', ')} readable without JavaScript.`
         : 'contact: the policy publishes no email address to check.');
-    return { code: EXIT.LIVE, lines, errors };
+    return { code: EXIT.LIVE, lines, errors, observed };
 }
 
 function parseArgs(argv) {
@@ -557,6 +624,8 @@ function parseArgs(argv) {
         else if (arg === '--source') out.sourcePath = argv[++i];
         else if (arg === '--html') out.htmlPath = argv[++i];
         else if (arg === '--timeout') out.timeoutMs = Number(argv[++i]);
+        else if (arg === '--pin') out.pinPath = argv[++i];
+        else if (arg === '--no-pin') out.noPin = true;
         else if (arg === '--help' || arg === '-h') out.help = true;
         else out.unknown = arg;
     }
@@ -589,6 +658,14 @@ Exit codes: 0 live, 1 not live / not current / redirects, 2 config error,
 current but a contact address is JavaScript-gated at the edge (submittable;
 fix the edge setting).
 
+THE DEPLOY PIN. On exit 0 or 4 this writes docs/privacy-deploy-pin.json,
+recording that this normalized policy text was observed live at this URL.
+It is the only thing in this repo that knows what is actually published, so
+the smoke suite reads that note instead of fetching. The pin is rewritten
+only when the observation changes, so a re-run of a good deploy leaves the
+worktree clean. --pin <path> writes elsewhere; --no-pin writes nothing.
+The --html form never writes it: those bytes were supplied, not observed.
+
 Run it before any store submission, and after any deploy that touches the
 websites repo. See tools/release/README.md.`;
 
@@ -602,7 +679,20 @@ async function main() {
         process.stderr.write(`unknown argument: ${args.unknown}\n${USAGE}\n`);
         return EXIT.CONFIG;
     }
-    const { code, lines, errors } = await checkPrivacyUrl(args);
+    const { code, lines, errors, observed } = await checkPrivacyUrl(args);
+    if (observed && !args.noPin) {
+        try {
+            const { written, path: pinPath } = writeDeployPin(observed, { pinPath: args.pinPath });
+            lines.push(written
+                ? `pin:    updated ${pinPath} (this text is now recorded as observed live)`
+                : `pin:    already current at ${pinPath}`);
+        } catch (err) {
+            // Never turn a good live verdict into a failure because a note
+            // could not be filed. Say so loudly and keep the exit code.
+            errors.push(`could not write the deploy pin: ${err.message}`,
+                'The live check itself PASSED; only the record of it failed.');
+        }
+    }
     if (lines.length) process.stdout.write(`${lines.join('\n')}\n`);
     if (errors.length) process.stderr.write(`${errors.join('\n')}\n`);
     return code;

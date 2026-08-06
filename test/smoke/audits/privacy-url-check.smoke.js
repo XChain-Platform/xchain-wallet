@@ -48,6 +48,7 @@
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -55,7 +56,7 @@ import { readDoc, skipUnlessDocs } from '../_docs-repo.js';
 
 import {
     checkPrivacyUrl, normalizeText, policyTextFromMarkdown, pageTextFromHtml,
-    pageCarriesPolicy, contactAddressesFrom, gatedContacts,
+    pageCarriesPolicy, contactAddressesFrom, gatedContacts, policyFingerprint, writeDeployPin,
     EXIT, DEFAULT_URL, DEFAULT_SOURCE_PATH,
 } from '../../../tools/release/verify-privacy-url.mjs';
 
@@ -424,6 +425,61 @@ const LISTING_DOCS = [
     }
     assert.ok(docsChecked === LISTING_DOCS.length,
         `only ${docsChecked} of ${LISTING_DOCS.length} store documents were read`);
+}
+
+// --- 9. The deploy pin: only an OBSERVATION may advance it ( S31) ----
+//
+// The pin is how the smoke suite learns what is actually published without
+// fetching. Its entire worth is that it cannot be set by anything except this
+// script seeing the live URL serve that text, so the cases that matter are the
+// ones where a verdict of "live" must still write NOTHING.
+{
+    const pinPath = join(tmpdir(), `privacy-deploy-pin-${process.pid}.json`);
+    rmSync(pinPath, { force: true });
+
+    // A real live fetch reports what it observed.
+    let r = await checkPrivacyUrl({ fetchImpl: stub(respond({ body: pageWith(POLICY_TEXT) })) });
+    assert.equal(r.code, EXIT.LIVE);
+    assert.ok(r.observed, 'a confirmed live fetch reports an observation');
+    assert.equal(r.observed.policySha256, policyFingerprint(POLICY_TEXT),
+        'the observation fingerprints the policy TEXT, which is what pageCarriesPolicy compares');
+
+    // Supplied bytes are not an observation. This is the one that keeps the
+    // pin honest: --html exits 0, and certifying a deploy from bytes handed to
+    // the script would certify exactly what the pin exists to catch.
+    const htmlPath = join(tmpdir(), `supplied-${process.pid}.html`);
+    writeFileSync(htmlPath, pageWith(POLICY_TEXT));
+    r = await checkPrivacyUrl({ htmlPath });
+    assert.equal(r.code, EXIT.LIVE, '--html still exits 0');
+    assert.ok(!r.observed, 'but supplied bytes are NOT a live observation and pin nothing');
+    rmSync(htmlPath, { force: true });
+
+    // Every non-live verdict pins nothing.
+    for (const [label, reply] of [
+        ['404', respond({ status: 404 })],
+        // Truncated, not extended: the page legitimately wraps the policy in
+        // site chrome, so "carries" is containment. A stale deploy is one
+        // MISSING the newest wording, which is exactly the 2026-08-05 case.
+        ['a stale deploy', respond({ body: pageWith(POLICY_TEXT.slice(0, -400)) })],
+        ['an unrelated page', respond({ body: pageWith('an unrelated page') })],
+    ]) {
+        const bad = await checkPrivacyUrl({ fetchImpl: stub(reply) });
+        assert.notEqual(bad.code, EXIT.LIVE, `${label} is not live`);
+        assert.ok(!bad.observed, `${label} pins nothing`);
+    }
+
+    // Writing: absent -> written; identical -> NOT rewritten, so an ordinary
+    // re-run of a good deploy leaves the worktree clean; changed -> rewritten.
+    const first = writeDeployPin({ url: DEFAULT_URL, policySha256: 'a'.repeat(64) }, { pinPath });
+    assert.ok(first.written && existsSync(pinPath), 'an absent pin is written');
+    const again = writeDeployPin({ url: DEFAULT_URL, policySha256: 'a'.repeat(64) }, { pinPath });
+    assert.ok(!again.written, 'an unchanged observation does not rewrite the pin');
+    assert.equal(again.pin.observedAt, first.pin.observedAt,
+        'and does not restamp it, because the fact recorded has not changed');
+    const moved = writeDeployPin({ url: DEFAULT_URL, policySha256: 'b'.repeat(64) }, { pinPath });
+    assert.ok(moved.written, 'a changed observation rewrites the pin');
+    assert.equal(JSON.parse(readFileSync(pinPath, 'utf8')).policySha256, 'b'.repeat(64));
+    rmSync(pinPath, { force: true });
 }
 
 console.log('privacy-url-check.smoke.js OK');
