@@ -1331,6 +1331,88 @@ assert.ok(/absent stamp[^\n]*not the same as|treat it as unknown/i.test(phase4),
     + '`default` is the assumption the mechanism exists to prevent: an unstamped bundle is one whose '
     + 'profile nobody recorded. Every release before this step landed is unstamped.');
 
+// --- 20. The ceremony page may say what it does not COVER; it may not
+//         report what has not been DECIDED ------------------------------
+//
+// Row 41. The operator answered four banked decisions on 2026-08-06, and two
+// of the answers changed what this page should say. Measured the next day:
+// the page's own "deliberately does not cover" list still read "Store API
+// upload automation. Not decided. Nothing here assumes it exists." while
+// tools/release/cws-upload.mjs was built, gated and on origin/master, and
+// "A second unlisted item for a beta-lane soak. A separate setup ceremony
+// once decided" after that ceremony had been decided ON.
+//
+// The generalizing form is the one worth gating, because the instance will
+// not recur in the same words. A decision's state lives in the spec's
+// register, which this page cannot see and must not mirror: a public page
+// carries no internal bookkeeping (the same rule that keeps item ids and
+// internal paths off it). Saying "this page does not cover X" is durable and
+// stays true whatever is decided. Saying "X is not decided" is a copy of a
+// fact held somewhere else, which is this spec's oldest recurring defect,
+// and it rots the day the decision is taken - silently, because the person
+// taking the decision is not reading this page.
+const decisionState = [...ceremony.matchAll(/[^\n]*\b(not decided|undecided|not yet decided|once decided|pending a decision)\b[^\n]*/gi)]
+    .map((m) => m[0].trim());
+assert.equal(decisionState.length, 0,
+    'FAIL: the ceremony page reports the STATE of a decision rather than what it covers:\n  '
+    + decisionState.map((l) => l.slice(0, 160)).join('\n  ')
+    + '\nA decision is recorded in the spec\'s own register, which this page cannot see. The page '
+    + 'goes stale the moment the decision is taken, and it goes stale silently, because whoever '
+    + 'takes the decision is not reading this page. Say what the runbook does not cover, or say '
+    + 'what was decided and point at the thing it produced. Do not report that nobody has chosen.');
+
+// --- 19. A fix to the signing tooling does not reach a release already
+//         tagged, so the field it makes honest can still be a lie --------
+//
+// Row 40, and it is §17's class one level up. §17 (row 38) and every other
+// check here asks whether a step reads the right artifact. This one asks
+// whether the EVIDENCE a step reads was produced by tooling that could see
+// anything, and the answer is a property of the tag rather than of the
+// working tree.
+//
+// sign.sh refuses to run anywhere but a pristine clone checked out at the
+// release tag, which is deliberate and right. The consequence nobody had
+// written down is that signing runs THAT TAG'S copy of the signing script.
+// S33 fixed the pre-sign dev-mock gate on 2026-08-06 so it scans the staged
+// artifacts instead of the repo's `dist/` trees; measured against the tags
+// that actually exist, `git show v0.334.0:tools/release/sign.sh` and
+// `v0.336.0` both contain ZERO occurrences of `--artifacts` while
+// origin/master contains one. So a v0.336.0 signing run still calls the gate
+// bare, still finds no dist/ in the pristine clone it is required to use,
+// still prints `OK` on an empty scan, and still writes `# dev-mock-gate:
+// enforced` into the SIGNED manifest - which Phase 4a then reads as
+// provenance and the desktop updater refuses a release without.
+//
+// The check is therefore on the ceremony rather than on the code: the code
+// is already right and cannot be made retroactive. The operator has to be
+// able to ask a tag which gate it carries.
+const tagGateSteps = phase4.split('\n')
+    .filter((l) => /^⬜/.test(l) && /--artifacts|dev-mock-gate/.test(l));
+assert.ok(tagGateSteps.length >= 2,
+    'FAIL: Phase 4a checks the `# dev-mock-gate:` header field but never asks which gate wrote it. '
+    + 'Signing runs from a pristine clone at the release TAG, so it runs that tag\'s sign.sh: a fix '
+    + 'to the gate protects the next release and never one already tagged. Both existing tags carry '
+    + 'the version that scans the repo\'s dist/ trees, which a pristine clone does not have, so they '
+    + 'write `enforced` on a scan that read nothing. The step must let the operator ask the tag.');
+
+// The two halves again (§8): the step has to name a marker that is really in
+// the signing script, or it rots into a grep that matches nothing and passes
+// every tag forever - which is the same empty-scan failure wearing the
+// check's own clothes.
+const tagGateProbe = phase4.match(/git show[^\n]*sign\.sh[^\n]*\n?[^\n]*/);
+assert.ok(tagGateProbe && /--artifacts/.test(tagGateProbe[0]),
+    'FAIL: Phase 4a has no command that reads the signing script OUT OF THE TAG. Reading the working '
+    + 'tree\'s copy answers a question nobody asked: the working tree is not what signs a release.');
+
+const signSh = readFileSync(join(walletRoot, 'tools', 'release', 'sign.sh'), 'utf8');
+const devMockInvocation = signSh.slice(signSh.indexOf('DEV_MOCK_CHECK='));
+assert.ok(/--artifacts/.test(devMockInvocation),
+    'FAIL: the marker the ceremony greps a tag for (`--artifacts`) is no longer how sign.sh points '
+    + 'the dev-mock gate at the release. Either the invocation was reworded, in which case the '
+    + 'ceremony step now passes every tag including the blind ones, or the gate went back to '
+    + 'scanning the repo. Both are worse than the defect this step was written for, because this '
+    + 'time a check says OK.');
+
 // --- 18. The command the ceremony hands you must reach the ceremony's own
 //         staging path ---------------------------------------------------
 //
