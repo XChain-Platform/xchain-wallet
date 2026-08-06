@@ -100,6 +100,22 @@ const exportDoc = flat(DOCS.export);
 const NOT_EGRESS = new Map([
     ['xchain.io', 'our own site, named as the policy URL and the wallet website'],
     ['docs.xchain.io', 'our own documentation site, where this policy is published; a link, not a request the wallet makes'],
+    // Added 2026-08-05 for the analytics-rollout scoping paragraph, and it is
+    // the same class as the two entries above rather than a new exception:
+    // our own web origin, named because website cookies are set for the whole
+    // xchain.io domain and therefore exist for this subdomain too. The policy
+    // names it in order to say the wallet NEVER reads or sends it, which is a
+    // denial of egress, not a disclosure of it. Confirmed against the source of
+    // truth rather than the prose: `wallet.xchain.io` appears nowhere in
+    // packages/core/src/privacy/wireAudit.js, so no shell contacts it.
+    //
+    // Deliberately an entry here rather than teaching the check to detect
+    // negation in prose. Negation-detection would be the structural fix in
+    // spirit, and it fails in the dangerous direction: a regex that decides a
+    // sentence is a denial would SUPPRESS a genuinely disclosed host the day
+    // someone writes "we do not sell your data to example.com". Under-declaring
+    // is the failure this whole section exists to prevent.
+    ['wallet.xchain.io', 'our own web origin, named only to deny that the wallet reads the website cookie set for it; absent from wireAudit.js'],
     ['dankest.llc', 'the publisher, in the contact line'],
     ['github.com', 'the source repository and issue tracker, not something the wallet contacts'],
     ['chrome.storage.local', 'a browser storage API, matched only because it looks like a hostname'],
