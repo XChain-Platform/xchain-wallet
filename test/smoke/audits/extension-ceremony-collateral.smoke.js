@@ -1188,6 +1188,197 @@ assert.ok(/git show[^\n]*store-version-monitor[^\n]*sha256sum/.test(identityWind
     + 'tag is not a comparison. The step needs the second hash taken from the tag itself '
     + '(git show <release-tag>:tools/release/store-version-monitor.mjs | sha256sum).');
 
+// --- 16. A BLOCKER the page states has to be anchored to the thing that clears it ---
+//
+// §14 anchored a published page to the deploy that publishes it, and its
+// closing lesson generalized past privacy policies: for any fact whose
+// subject lives OUTSIDE this repo, git cannot see it, so a document that
+// depends on that fact ends up hardcoding it, and a hardcoded fact rots. The
+// question it left was which other outside-the-repo dependency has no note.
+//
+// The release signing key is one, and it is the one Phase 4 turns on. It
+// lives in a GNUPGHOME on the release machine. Measured 2026-08-06: the key
+// ceremony had run the previous evening and the key signs, while Phase 4 of
+// the ceremony page still read "this phase cannot be completed before the
+// release-signing key exists ... and therefore no upload in Phase 6".
+//
+// THAT DIRECTION IS THE WORSE ONE, which is why this section exists rather
+// than a note in the frontier. Every other instance of this defect in this
+// spec made unfinished work look finished. A stale BLOCKER makes available
+// work look impossible, and it survives longer because nobody re-measures a
+// blocker: the frontier said the same thing for six stages, and when the
+// third clause of its own standing instruction was finally exercised, both
+// halves of the Phase 4 blocker turned out to be already satisfied.
+//
+// So the page may no longer assert either state. It is held to
+// docs/release-key-pin.json, which verify-release-key.sh writes only after
+// signing a manifest for real, and the EMPTY state is checked as strictly as
+// the filled one - a guard that starts working only after the event it
+// guards is not a guard.
+const keyPinPath = join(walletRoot, 'docs', 'release-key-pin.json');
+const phase4 = ceremony.slice(ceremony.indexOf('### Phase 4'),
+    ceremony.indexOf('### Phase 5'));
+assert.ok(phase4.length > 0,
+    'FAIL: Phase 4 (build artifact provenance) is not on the ceremony page. It is the phase that '
+    + 'ties the uploaded zip to a signed release manifest, and the store assigns a permanent '
+    + 'extension ID to whatever is uploaded first.');
+
+// The claim the page must not make on its own authority, in either direction.
+const assertsNoKey = /cannot be completed before the release-signing key exists/.test(phase4)
+    || /[Uu]ntil the key ceremony lands/.test(phase4);
+
+if (!existsSync(keyPinPath)) {
+    // No note means nobody has proved the key signs on this machine. The page
+    // must say so plainly, because the alternative failure is the dangerous
+    // one: an operator uploads a zip with no signed manifest behind it, and
+    // the first upload is what the store binds the permanent ID to.
+    assert.ok(/release-key-pin\.json/.test(phase4) && /verify-release-key\.sh/.test(phase4),
+        `FAIL: ${keyPinPath} is absent, so nothing records that the release signing key was ever `
+        + 'observed signing, and Phase 4 does not tell the operator that or how to fix it. The '
+        + 'phase must name the note and the command that writes it '
+        + '(bash tools/release/verify-release-key.sh --key <fingerprint>).');
+} else {
+    const keyPin = JSON.parse(readFileSync(keyPinPath, 'utf8'));
+
+    assert.ok(!assertsNoKey,
+        'FAIL: Phase 4 still tells the operator the phase cannot be completed until the release '
+        + `key ceremony runs, but ${keyPinPath} records that it already has (${keyPin.observedAt}: `
+        + `${keyPin.proved}). That is a blocker outliving the fact, which is the direction that `
+        + 'makes available work look impossible. Correct the phase text; do not delete the note.');
+
+    assert.ok(/release-key-pin\.json/.test(phase4),
+        'FAIL: Phase 4 no longer states the key blocker and does not name the note it was replaced '
+        + `by (${keyPinPath}). The phase then asserts nothing about the key at all, which is worse `
+        + 'than the stale claim: an absent note would stop nobody.');
+
+    // The note has to be an OBSERVATION, not a placeholder. Row 31's defect
+    // was a check that measured presence where it needed identity, and a pin
+    // file is exactly the kind of artifact that gets hand-created empty.
+    assert.ok(/^[0-9A-F]{40}$/.test(String(keyPin.fingerprint || '')),
+        `FAIL: ${keyPinPath} carries no 40-hex uppercase fingerprint (${keyPin.fingerprint}). The `
+        + 'note exists to say WHICH key was observed signing; without that it records only that '
+        + 'something happened. Re-run verify-release-key.sh rather than editing the file.');
+    assert.ok(/^[0-9A-F]{16,}$/.test(String(keyPin.signingSubkey || '')),
+        `FAIL: ${keyPinPath} does not record the subkey that actually made the signature `
+        + `(${keyPin.signingSubkey}). The release identity's primary is certify-only, so the key a `
+        + 'user checks and the key that signs are different values, and a note holding only one of '
+        + 'them cannot be compared against a published trust root.');
+
+    // AND THE CROSS-CHECK NOTHING ELSE MAKES. release-key-pin.smoke.js
+    // compares the two PUBLISHED channels (SECURITY.md and xchain.io/security)
+    // against each other and against the desktop updater's pin. All three are
+    // transcriptions of the same documented value, so they can agree perfectly
+    // and still name a key that has never signed anything. This is the only
+    // place a published trust root meets the key that actually signs.
+    //
+    // It is deliberately conditional: the fingerprint is unpublished today
+    // (pre-launch, and correctly so), and this is not the channel to publish
+    // it on. The day it is published, this compares.
+    const security = readFileSync(join(walletRoot, 'SECURITY.md'), 'utf8');
+    const published = security.match(/PGP fingerprint:\s*`?([0-9A-Fa-f]{40})`?/);
+    if (published) {
+        assert.equal(published[1].toUpperCase(), keyPin.fingerprint.toUpperCase(),
+            'FAIL: SECURITY.md publishes a release-key fingerprint that is NOT the key observed '
+            + `signing.\n  published as the trust root: ${published[1].toUpperCase()}\n`
+            + `  observed signing (${keyPin.observedAt}): ${keyPin.fingerprint}\n`
+            + '  Users verify downloads against the published value, so a mismatch means every '
+            + 'signature check fails for everyone, or worse, succeeds against the wrong key.');
+    }
+}
+
+// --- 17. The ceremony has to know WHICH build it is uploading -------------
+//
+// Row 38. The wallet builds at two profiles and they differ in which surfaces
+// exist. Measured 2026-08-06 against the real v0.336.0 release zip:
+// `XCHAIN_BUILD_PROFILE: store` appears exactly once in release.yml, on the
+// mobile lane, so the artifact bound for the Chrome Web Store is a `default`
+// build carrying the DEX surfaces  compiles out of a store build - and
+// it carried no stamp saying so, while the web shell has stamped its own
+// bundle since .
+//
+// The step is worth checking rather than trusting because of WHEN it runs:
+// Chrome assigns a permanent extension ID to whatever is uploaded first, and
+// "which build was that" is not a question anyone can answer later from a
+// workflow file that has since moved on.
+//
+// This asserts the step exists and reads the stamp from the ARTIFACT. It
+// deliberately does NOT assert which profile is correct: that is an operator
+// decision (2026-08-06: `default`), and a gate that pinned it would have to be
+// edited by the same change that revisits it, which is how a check comes to
+// rubber-stamp whatever it is pointed at.
+const profileSteps = phase4.split('\n').filter((l) => /build-profile\.txt/.test(l));
+assert.ok(profileSteps.length >= 1,
+    'FAIL: Phase 4 never tells the operator to record which build profile is being uploaded. The wallet '
+    + 'builds at two profiles that differ in which surfaces exist, the mobile lane uses `store` and this '
+    + 'lane uses `default`, and the store binds a permanent extension ID to the first upload. The step '
+    + 'must read the stamp out of the artifact (unzip -p ... build-profile.txt).');
+
+// The stamp has to be read from the ZIP, not from a build directory. This is
+// S28's row 23 exactly: `packages/extension/dist` is gitignored and is
+// whatever the shared worktree last built, so a step pointed there would
+// certify a profile the uploaded bytes never had.
+const profileWindow = phase4.slice(phase4.indexOf(profileSteps[0]) - 400);
+assert.ok(/unzip[^\n]*\.zip[^\n]*build-profile\.txt|unzip -p[^\n]*release-artifacts/.test(profileWindow),
+    'FAIL: the build-profile step does not read the stamp out of the release ZIP. Reading it from a build '
+    + 'directory certifies whatever this machine last built rather than the bytes being uploaded, which is '
+    + 'the defect §12 already fixed once for the remote-code audit.');
+
+// And the absent case has to be called unknown rather than default, which is
+// the one thing the stamp's own helper insists on: an unstamped bundle is one
+// whose profile nobody recorded, not one built without flags.
+assert.ok(/absent stamp[^\n]*not the same as|treat it as unknown/i.test(phase4),
+    'FAIL: Phase 4 does not say what an ABSENT build-profile stamp means. Reading a missing stamp as '
+    + '`default` is the assumption the mechanism exists to prevent: an unstamped bundle is one whose '
+    + 'profile nobody recorded. Every release before this step landed is unstamped.');
+
+// --- 18. The command the ceremony hands you must reach the ceremony's own
+//         staging path ---------------------------------------------------
+//
+// §12 caught a linked command that ran, exited 0 and audited the wrong
+// artifact. This is the same class one step earlier: a linked command that
+// cannot reach the artifact AT ALL, and whose failure reads as "the release
+// was never staged" rather than "the shorthand is wrong".
+//
+// Phase 4a checks `release-artifacts/vX.Y.Z/`, and that is where the release
+// procedure stages a set. `pnpm release:sign` resolved to
+// `release-artifacts/<version>` - the `v` on the tag and missing from the
+// path - so the documented shorthand pointed at a directory that has never
+// existed for any release. An operator meeting that mid-ceremony sees
+// sign.sh say the input dir does not exist and has no reason to doubt the
+// command; the natural next move is to re-stage, or to pass the path by hand
+// and get it subtly wrong.
+//
+// The assertion is deliberately about AGREEMENT rather than about a literal:
+// the point is that the ceremony page and the package script cannot drift
+// into two different answers about where a release lives, which is this
+// spec's oldest recurring defect in its smallest form.
+const pkg = JSON.parse(readFileSync(join(walletRoot, 'package.json'), 'utf8'));
+const ceremonyStagePaths = [...ceremony.matchAll(/release-artifacts\/(v?)X\.Y\.Z/g)]
+    .map((m) => m[1]);
+assert.ok(ceremonyStagePaths.length > 0,
+    'FAIL: the ceremony page no longer names release-artifacts/vX.Y.Z, so Phase 4 has stopped '
+    + 'saying where the artifact it hash-checks comes from.');
+assert.ok(ceremonyStagePaths.every((prefix) => prefix === 'v'),
+    'FAIL: the ceremony page spells the staging directory both ways. Phase 4a and the release '
+    + 'procedure must agree on one, or the operator hash-checks a directory the release was not '
+    + 'staged into.');
+
+for (const script of ['release:sign', 'release:verify']) {
+    const cmd = pkg.scripts?.[script];
+    assert.ok(typeof cmd === 'string' && cmd.length > 0,
+        `FAIL: package.json has no ${script} script, and the ceremony's Phase 4 is written around `
+        + 'the release procedure that uses it.');
+    const input = cmd.match(/--input\s+(\S+)/);
+    assert.ok(input,
+        `FAIL: ${script} passes no --input, so it cannot be the command that operates on the `
+        + 'staged release the ceremony checks.');
+    assert.ok(/^release-artifacts\/v/.test(input[1]),
+        `FAIL: ${script} targets '${input[1]}', which is not the release-artifacts/vX.Y.Z path the `
+        + 'ceremony page hash-checks in Phase 4a. The v belongs on both or on neither; today the '
+        + 'tag carries it, the ceremony carries it, and this script does not, so the documented '
+        + 'shorthand resolves to a directory no release has ever been staged into.');
+}
+
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
@@ -1195,4 +1386,6 @@ console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03
     + `${citations} cited wallet-repo paths resolved across the repo boundary, `
     + `${placeholderSteps.length} cross-page placeholder step verified, ${pointerNote}; `
     + `the published policy matches the canonical one, ${monitorSteps.length} monitor steps `
-    + `including a checksum identity check, and ${driftNote})`);
+    + `including a checksum identity check, Phase 4's key-ceremony state anchored to `
+    + `${existsSync(keyPinPath) ? 'an observed signing run' : 'its absent-note branch'}, `
+    + `and ${driftNote}; the release shorthand reaches the ceremony's own staging path)`);
