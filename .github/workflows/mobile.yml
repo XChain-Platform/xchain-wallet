@@ -108,6 +108,17 @@ jobs:
           # package.json. On a tag this is the tag, and the assertion below
           # proves the AAB carries exactly the number that tag derives.
           XCHAIN_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          # Not optional, and its absence hid for the same reason the OOM above
+          # did: `scripts/build.js` only REFUSES a non-store bundle when
+          # XCHAIN_RELEASE_TAG is set, and merely warns otherwise. Off a tag
+          # this lane therefore built a `default` bundle, gated it, and went
+          # green - so every artifact assertion below was measuring an artifact
+          # nobody ships. On a tag the same gap is loud instead: v0.336.0's own
+          # run (31072271048) died here with "refusing to stage a default web
+          # bundle into a release build of v0.336.0", while every master run
+          # around it passed. release.yml, android-ceremony.sh and
+          # screenshots.sh all set this; this file was the one that did not.
+          XCHAIN_BUILD_PROFILE: store
           NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm --filter "@xchain-wallet/mobile..." build
 
