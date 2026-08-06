@@ -18,6 +18,7 @@ import {
     permissionsToVerbs,
     bpsToPercent,
     KNOWN_ACTION_TYPES,
+    UNMAPPED_ACTION_TYPES,
 } from '../../../packages/core/src/shared/utils/contractConsentLabels.js';
 
 describe('permissionsToVerbs', () => {
@@ -75,9 +76,25 @@ describe('permissionsToVerbs', () => {
             const [verb] = permissionsToVerbs([action]);
             expect(typeof verb).toBe('string');
             expect(verb.length).toBeGreaterThan(0);
-            // A mapped verb is never just the lower-cased token unless we
-            // deliberately chose that; the guard here is just non-empty.
+            // Non-empty is all this can prove, because the raw-token
+            // fallback is non-empty too. The real guard is below.
         }
+    });
+
+    // The non-empty check above passed for years while ADDRESS and BET
+    // had no verb at all, because the fallback lower-cases the opcode
+    // and "bet" is a non-empty string. This is the assertion that would
+    // have caught it: a new authorable action fails here until someone
+    // writes its line of consent copy.
+    it('leaves no authorable action falling through to the raw opcode', () => {
+        expect(UNMAPPED_ACTION_TYPES).toEqual([]);
+    });
+
+    it('spells out the two actions that had silently drifted', () => {
+        expect(permissionsToVerbs(['BET']))
+            .toEqual(['open betting markets and place bets']);
+        expect(permissionsToVerbs(['ADDRESS']))
+            .toEqual(['change this address\'s settings and controller']);
     });
 });
 

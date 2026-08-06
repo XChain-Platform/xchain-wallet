@@ -20,6 +20,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isWebHidSupported, detectBrowserFamilyForWebHidHint } from '../utils/webhidSupport.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './PairSignerForm.module.css';
 
 const { checkFirmware } = signersLib;
@@ -106,7 +107,12 @@ export function PairSignerForm({
             setLabel(`${labelFor(v)} #1`);
             setStage('confirm');
         } catch (err) {
-            setError(err?.message || 'Pairing failed.');
+            // D-52 / D-64: the pairing factories throw function-prefixed
+            // precondition errors ("pairTrezorSigner: ..."), and Trezor
+            // Connect hands back library internals verbatim. Filter both
+            // before they reach the dialog; copy already written for a
+            // reader passes through untouched.
+            setError(userFacingMessage(err, 'Pairing failed.'));
             setStage('error');
         }
     }
@@ -132,7 +138,7 @@ export function PairSignerForm({
             }
             setStage('done');
         } catch (err) {
-            setError(err?.message || 'Save failed.');
+            setError(userFacingMessage(err, 'Save failed.'));
             setStage('confirm');
         }
     }

@@ -30,8 +30,18 @@ import {
 // the raw token so a future action still renders something readable
 // rather than being silently dropped.
 const VERB_MAP = /** @type {Record<string, string>} */ ({
+    // ADDRESS is two grants under one wire name: v0 sets this address's
+    // own options (fee disposition, memo requirement, who may open a
+    // dispenser on it) and v1 binds it to a controller contract that can
+    // then gate or veto the bound action class. The line has to cover
+    // the second one, which is by far the larger grant.
+    ADDRESS: 'change this address\'s settings and controller',
     AIRDROP: 'airdrop tokens',
     BATCH: 'submit batched actions',
+    // BET is the whole market lifecycle, not just wagering: v0 opens a
+    // market, v2 places a bet, v3 resolves one to an outcome, v4 cancels
+    // and refunds. A bare "place bets" would understate the grant.
+    BET: 'open betting markets and place bets',
     BROADCAST: 'publish broadcasts',
     CALLBACK: 'run callbacks',
     COINPAY: 'take coin payments',
@@ -69,6 +79,17 @@ export const KNOWN_ACTION_TYPES = /** @type {readonly string[]} */ ([
     ...COMMON_ACTIONS,
     ...BTC_EXCLUSIVE_ACTIONS,
 ]);
+
+// The guard above only listed what SHOULD be mapped, so it could not
+// catch the drift it was written to catch: ADDRESS and BET both entered
+// COMMON_ACTIONS with their authoring forms (PC-32, ) and neither
+// got a verb, which the consent panel rendered as the bare opcode "It
+// can bet." Naming the gap is what makes it assertable, so the unit test
+// requires this to be empty and a new authorable action fails there
+// until someone writes its line of copy.
+export const UNMAPPED_ACTION_TYPES = /** @type {readonly string[]} */ (
+    KNOWN_ACTION_TYPES.filter((a) => !VERB_MAP[a])
+);
 
 /**
  * Humanize a single permission token: known action → mapped verb,

@@ -136,11 +136,18 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
         // instead. The wallet does not support Ledger on testnet at all
         // (LedgerSigner's unsupportedBitcoinNetworkError), so this is a
         // wrong-app prompt rather than a missing feature.
+        //
+        // Worded as end-user copy on purpose: PairSignerForm renders it in the
+        // pairing dialog, so it carries no `pairLedgerSigner:` prefix (that
+        // prefix is what userFacingMessage strips, and stripping this one
+        // would cost the reader the only actionable sentence) and no
+        // coin-type / derivation wording (the reason lives in the comment
+        // above, where the person who needs it is reading).
         if (appInfo.name !== 'Bitcoin' && /test/i.test(appInfo.name)) {
             throw new Error(
-                `pairLedgerSigner: the "${appInfo.name}" app is open on this device. `
-                + 'Open the Bitcoin app to pair. (Test apps derive at coin-type 1\', which '
-                + 'diverges from this wallet\'s derivation, so testnet is not supported on hardware.)',
+                `The "${appInfo.name}" app is open on this device. `
+                + 'Open the Bitcoin app to pair. A hardware signer can only be paired '
+                + 'for the main Bitcoin network, not a test one.',
             );
         }
 
