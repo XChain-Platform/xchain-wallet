@@ -1503,6 +1503,78 @@ for (const [word, why] of [
         + 'A three-state check read as two states resolves the missing state as a pass.');
 }
 
+// --- 22. The escape hatch out of another lane's blocker has to be real ---
+//
+// Row 44. For most of 2026-08 this ceremony's Phase 4 was blocked by two
+// Windows installers that could not be Authenticode-signed, for want of a
+// vendor account, because sign.sh signs a release as a SET. Nothing about that
+// had anything to do with the extension, whose own signature requirement is
+// `none`: Chrome signs the store item itself, with a key we never see.
+//
+//'s --lane mode made a partial release signable, and it reached
+// origin/master without this spec noticing, because every stage re-drove the
+// blockers in the TREE and none of them re-read the LEDGER. The operator
+// decided on 2026-08-06 to use it here (dq id=1).
+//
+// Three things have to hold together for the step to be more than prose, and
+// the middle one is the one a page cannot assert about itself: the lane must
+// exist in the committed list, its scope must resolve to the extension zip
+// and nothing else, and the page must tell the operator that a tag predating
+// the mode cannot use it - which is row 40's property, not a new one.
+const laneFile = 'tools/release/shipped-lanes.txt';
+const lanes = readFileSync(join(walletRoot, laneFile), 'utf8');
+const laneRow = lanes.split('\n').find((l) => /^extension\s+/.test(l));
+assert.ok(laneRow,
+    `FAIL: ${laneFile} declares no 'extension' lane, so \`sign.sh --lane extension\` resolves to `
+    + 'nothing and Phase 4a-bis hands the operator a command that refuses. A lane name is where a '
+    + "lane's identity is declared; without the row there is no such thing as this lane.");
+assert.ok(/xchain-wallet-extension-v\*\.zip/.test(laneRow),
+    `FAIL: the 'extension' lane in ${laneFile} does not claim the extension zip glob, so its scope `
+    + 'would demand some other artifact. The row must claim xchain-wallet-extension-v*.zip, which is '
+    + 'the file the store actually receives.');
+// SHIPPED or NOT-SHIPPED, and deliberately NOT pinned to either: the value
+// flips in the commit that records the first upload (Phase 6), and a gate that
+// pinned it would have to be edited by the same change that flips it, which is
+// how a check comes to rubber-stamp whatever it is pointed at (§17's rule).
+assert.ok(/^extension\s+(SHIPPED|NOT-SHIPPED)\s/.test(laneRow),
+    `FAIL: the 'extension' lane declares neither SHIPPED nor NOT-SHIPPED. lib.sh fails shut on an `
+    + 'unrecognised status word rather than defaulting to the permissive branch, so this row would '
+    + 'break every signing run rather than only this ceremony.');
+
+const partial = ceremony.slice(ceremony.indexOf('#### 4a-bis'), ceremony.indexOf('#### 4b.'));
+assert.ok(partial.length > 0,
+    'FAIL: Phase 4 no longer carries the 4a-bis partial-release path. Without it the ceremony is '
+    + "blocked whenever another lane's artifacts are not signable, which is the state it sat in for "
+    + 'most of 2026-08 while the extension zip itself was fine.');
+assert.ok(/--lane\s+extension/.test(partial),
+    'FAIL: the 4a-bis step does not run `sign.sh --lane extension`. A partial release is scoped by '
+    + 'LANE NAME; without it sign.sh demands the whole set again.');
+assert.ok(/coverage:\s*partial/.test(partial) && /lanes:\s*extension/.test(partial),
+    'FAIL: 4a-bis does not name the two header fields a partial manifest writes (`coverage: partial` '
+    + 'and `lanes: extension`). Those fields are the whole reason a partial manifest is honest rather '
+    + 'than a smaller claim made quietly, and an operator who does not know to look for them cannot '
+    + 'tell a scoped manifest from a full one.');
+// The tag check, which is row 40's class arriving on a second flag. A step
+// that says "use --lane" without saying "ask the tag whether it has --lane"
+// sends the operator to a command that this tag's own copy of sign.sh does not
+// implement, and the failure would read as a broken tool.
+assert.ok(/git show v[X.Y.Z]+:tools\/release\/sign\.sh/.test(partial) && /--lane/.test(partial),
+    'FAIL: 4a-bis does not tell the operator to ask the TAG whether it carries --lane. Signing runs '
+    + "from a pristine clone at the release tag, so it runs that tag's copy of sign.sh: a tag cut "
+    + 'before the per-lane mode existed cannot use it, and the refusal would look like a tool fault. '
+    + 'This is exactly the check 4a already makes for the dev-mock gate.');
+
+// And the other half of the arrangement: the lane is NOT-SHIPPED only until
+// the first upload, so the ceremony has to flip it in the same breath as the
+// upload it records. A parity flip that waits to be remembered is one nobody
+// makes ( is the same defect on the Android lane).
+const phase6 = ceremony.slice(ceremony.indexOf('### Phase 6'), ceremony.indexOf('### Phase 7'));
+assert.ok(/shipped-lanes\.txt/.test(phase6) && /SHIPPED/.test(phase6),
+    'FAIL: Phase 6 never flips the extension lane to SHIPPED. The lane is NOT-SHIPPED so that this '
+    + 'submission could be signed while the desktop lanes were not signable; once real users have '
+    + 'installed from the store, a release staging no extension zip is a lane left behind, and only '
+    + 'the flip makes the shipped-lane gate say so.');
+
 for (const script of ['release:sign', 'release:verify']) {
     const cmd = pkg.scripts?.[script];
     assert.ok(typeof cmd === 'string' && cmd.length > 0,

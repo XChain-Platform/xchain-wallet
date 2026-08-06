@@ -92,3 +92,31 @@ msstore   NOT-SHIPPED   *-appx.appx
 # reserved name + exported login). Flip to SHIPPED in the commit that
 # records the first store upload.
 snap      NOT-SHIPPED   *.snap
+
+# Chrome Web Store . THE ODD ONE OUT, and the reason it belongs
+# here is worth stating, because the shape of every other row above is
+# "an artifact nothing else builds".
+#
+# The extension zip is `required` in expected-artifacts.txt and is built
+# by the same CI run as the web tarball and the desktop installers, so it
+# never had a lane: it could not go missing from a release without the
+# artifact-set gate saying so, which is what a lane row exists to catch.
+#
+# What it shares with the rows above is the other half: it is uploaded to
+# a STORE, on its own schedule, and until 2026-08-06 that upload was held
+# hostage by a credential belonging to a different lane. `sign.sh` signs a
+# release as a set, two Windows installers in that set were unsigned for
+# want of an Azure Trusted Signing account, and so the Chrome submission
+# could not have a signed manifest at all - not for any reason inside the
+# Chrome ceremony, and not for anything the extension zip itself lacked.
+# This row is what lets `sign.sh --lane extension` attest the one artifact
+# the store is actually getting (operator decision 2026-08-06).
+#
+# NOT-SHIPPED until the first upload clears review, exactly like the rows
+# above: flip it to SHIPPED in the commit that records that upload in
+# packages/extension/docs/publish-log.md, and from then on a release that
+# stages no extension zip is a lane left behind rather than a smaller
+# release. The signature class of its glob is `none`, so a partial
+# manifest scoped to this lane demands no OS code signature; Chrome signs
+# the item itself, with a key the store holds and we never see.
+extension NOT-SHIPPED   xchain-wallet-extension-v*.zip
