@@ -1,6 +1,6 @@
 {
     "_comment": "Written by tools/release/verify-privacy-url.mjs on a CONFIRMED LIVE fetch. Records that this normalized policy text was observed being served at this URL. Do not hand-edit: the value of this file is that only an observation can set it.",
     "url": "https://xchain.io/wallet/privacy/",
-    "policySha256": "06ae69249faf547c0ecae81ed4814e9871dab357360652af4a790b619c62aa23",
-    "observedAt": "2026-08-05T22:38:07.841Z"
+    "policySha256": "f742bbce0cc0d4bdccd52419c28b1625d8ca64c5cbd30f607bcfd98245aad267",
+    "observedAt": "2026-08-06T15:17:01.185Z"
 }

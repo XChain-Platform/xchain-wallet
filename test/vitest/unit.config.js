@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { workspaceAlias } from './workspaceAlias.js';
-import { maxForks, instrumentedMaxForks } from './poolSize.js';
+import { maxForks } from './poolSize.js';
 import { slowTimeout } from '../helpers/testEnvSpeed.js';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -102,7 +102,7 @@ export default defineConfig({
         // the ceiling is now computed rather than fixed at 8.
         pool: 'forks',
         poolOptions: {
-            forks: { maxForks: INSTRUMENTED ? instrumentedMaxForks : maxForks },
+            forks: { maxForks },
         },
         // Carries the instrumentation flag into the test processes, where
         // test/helpers/testEnvSpeed.js turns it into a multiplier for the

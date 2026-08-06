@@ -82,11 +82,25 @@ assert.equal(dead.length, 0,
 // would each leave the assertion above passing on an empty set, and a gate
 // that passes vacuously is indistinguishable from one that was deleted.
 
-assert.ok(withFrontier.length >= 7,
+// Lowered 7 -> 6 on 2026-08-04, taking this assertion's own instruction: a
+// spec WAS genuinely retired.'s taproot-envelope spec moved to
+// claude/specs/resolved/ in fd16bf6 ("the spec is RESOLVED"), carrying its
+// frontier block with it, which is the convention the eleven specs already
+// there set. So the floor was measuring a population that had legitimately
+// shrunk, and it went red on a correct change. Verified rather than assumed:
+// the moved file still contains its block, and the six remaining are the five
+// publishing/rails specs plus spv-state-subtree.
+//
+// Found by S30, which is not this gate's lane. It is recorded here
+// rather than left red because the alternative is a red gate nobody owns: the
+// session that retired the spec had no reason to read this floor, and the
+// session that wrote the floor had no way to know the spec would retire.
+assert.ok(withFrontier.length >= 6,
     `only ${withFrontier.length} of ${specs.length} specs in ${SPECS_DIR} carry a BUILD-SPEC:FRONTIER `
-    + 'block, fewer than the 7 standing when this gate was written. That block is where a spec keeps '
-    + 'its own record of what is left and who owns each row; if one lost its block, the goal state now '
-    + 'lives nowhere. If a spec was genuinely retired, lower this floor in the same change and say why.');
+    + 'block, fewer than the 6 standing after retired its spec to claude/specs/resolved/. That '
+    + 'block is where a spec keeps its own record of what is left and who owns each row; if one lost '
+    + 'its block, the goal state now lives nowhere. If a spec was genuinely retired, lower this floor '
+    + 'in the same change and say why.');
 
 assert.ok(liveRows > 0,
     'no live frontier rows were found in any spec, so the citation check above passed without checking '
