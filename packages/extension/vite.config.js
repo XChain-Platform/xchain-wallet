@@ -33,6 +33,12 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+// The web shell's mechanism, imported rather than reimplemented: a second
+// copy of "what does this profile stamp say" is how the two shells would
+// come to disagree about what a `store` build even is.
+import {
+    PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile,
+} from '../web/buildProfile.js';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import sharp from 'sharp';
 
@@ -82,6 +88,43 @@ const polyfillShimResolver = {
 const musigBaseCrypto = createRequire(
     createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
+
+/**
+ * Emit `build-profile.txt` into the extension bundle.
+ *
+ * The web shell has done this since , for a reason that reads as
+ * mobile-specific and is not: `packages/mobile` stages `packages/web/dist`
+ * verbatim, so without a stamp travelling INSIDE the bundle there is nothing
+ * to stop a `default` build being wrapped in a store artifact and labelled
+ * `store` in a signed manifest.
+ *
+ * The extension shell has the same exposure by a different route. Measured
+ * 2026-08-06 against the real v0.336.0 release zip: it carries no stamp, the
+ * release workflow sets `XCHAIN_BUILD_PROFILE: store` on the mobile lane and
+ * on no other, and the artifact bound for the Chrome Web Store therefore
+ * contains the review-hidden DEX surfaces with nothing in it saying so. The
+ * upload ceremony could assert nothing about which of the two builds it was
+ * submitting, and Chrome assigns a permanent extension ID to whatever is
+ * uploaded first.
+ *
+ * `resolveBuildProfile` THROWS on an unrecognized value rather than falling
+ * back, which is the whole point of the shared helper: a typo that silently
+ * produced a `default` build for a lane that then labelled it `store` is the
+ * failure this mechanism exists to prevent.
+ */
+function stampBuildProfilePlugin() {
+    const profile = resolveBuildProfile();
+    return {
+        name: 'xchain-stamp-build-profile',
+        generateBundle() {
+            this.emitFile({
+                type: 'asset',
+                fileName: PROFILE_STAMP_FILE,
+                source: profileStampFor(profile),
+            });
+        },
+    };
+}
 
 function copyManifestPlugin() {
     return {
@@ -244,6 +287,7 @@ export default defineConfig({
     publicDir: false,
     plugins: [
         polyfillShimResolver,
+        stampBuildProfilePlugin(),
         react(),
         nodePolyfills({
             include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util'],

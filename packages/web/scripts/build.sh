@@ -52,8 +52,15 @@ bash tools/build-reproduce/check-no-dev-mock.sh
 # The verifier compares this manifest against the official release's
 # published RELEASE_HASHES.txt. Mismatches indicate build-environment
 # drift (toolchain pinning bug) or supply-chain tampering.
+#
+# No node_modules filter here, deliberately . See the extension
+# twin for the full reason: inside a `dist/` tree that pattern can only
+# match a dependency payload the artifact ships, and on desktop it silently
+# dropped 112 such files including a compiled native binary. Measured
+# against the real v0.334.0 tarball: 33 files, zero matches, so this is a
+# no-op today and a removed trap tomorrow.
 cd /workspace/packages/web/dist
-find . -type f -not -path '*/node_modules/*' -print0 \
+find . -type f -print0 \
     | sort -z \
     | xargs -0 sha256sum \
     > /out/RELEASE_HASHES.txt

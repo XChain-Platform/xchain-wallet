@@ -248,10 +248,33 @@ try {
         return Buffer.from(`bytes of ${name}\n`);
     };
 
+    // The web tarball and the extension zip are staged as REAL archives,
+    // for the same reason signedBytes() above writes real PE and
+    // _CodeSignature bytes: sign.sh's pre-sign dev-mock gate now unpacks
+    // and greps them ( S33), so a file merely NAMED .tar.gz reads to
+    // that gate as a corrupt release artifact and every case in this file
+    // would fail for one reason that is not the one it is testing. Each
+    // carries the real-SDK literal and none of the mock markers, which is
+    // what a healthy shipped bundle looks like to it.
+    const realArchive = (dir, name) => {
+        const src = mkdtempSync(join(work, 'bundle-'));
+        writeFileSync(join(src, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
+        const r = name.endsWith('.zip')
+            ? spawnSync('zip', ['-qr', join(dir, name), '.'], { cwd: src, encoding: 'utf8' })
+            : spawnSync('tar', ['czf', join(dir, name), '.'], { cwd: src, encoding: 'utf8' });
+        assert.equal(r.status, 0, `staged a real ${name}: ${r.stderr}`);
+        rmSync(src, { recursive: true, force: true });
+    };
+
     const stage = (extra = [], omit = []) => {
         const dir = mkdtempSync(join(work, 'stage-'));
         for (const name of ARTIFACTS) {
             if (omit.includes(name)) continue;
+            if (/^xchain-wallet-web-v.*\.tar\.gz$/.test(name)
+                || /^xchain-wallet-extension-v.*\.zip$/.test(name)) {
+                realArchive(dir, name);
+                continue;
+            }
             writeFileSync(join(dir, name), signedBytes(name));
         }
         for (const name of extra) writeFileSync(join(dir, name), 'extra\n');
@@ -371,6 +394,33 @@ try {
         check('sign.sh refuses an undeclared artifact', r.status === 1, `exit ${r.status}`);
         check('sign.sh names the undeclared file',
             /UNDECLARED.*blockmap/.test(r.stderr), r.stderr);
+    }
+
+    // 7b. The tag names one version and the staged bytes are another
+    //     ( S33). Every gate above counts artifacts; none of them
+    //     asked whether they are the version the tag names, so the anchor
+    //     this script exists to provide - "a manifest cannot float between
+    //     versions" - was asserted in its own --tag diagnostic and derived
+    //     from nothing.
+    //
+    //     Reachable by accident, not by attack, which is why it is here.
+    //     `pnpm release:sign` builds BOTH --tag and --input from the local
+    //     package.json, so a checkout behind the staged release (this repo
+    //     is worked by several sessions at once, and one sat 55 commits
+    //     behind a staged v0.336.0 set) signs the older tag over the newer
+    //     bytes. Every other gate passes and the signature is good.
+    {
+        git(repo, ['-c', 'tag.gpgsign=false', 'tag', '-f', 'v9.9.8']);
+        const r = sh(signArgs(stage(), 'v9.9.8'), { env: gateEnv });
+        check('sign.sh refuses a tag that is not the staged version',
+            r.status === 1, `exit ${r.status}: ${r.stderr}`);
+        check('sign.sh names the artifacts whose version disagrees with the tag',
+            /does not match the staged artifacts/.test(r.stderr)
+            && /xchain-wallet-web-v9\.9\.9\.tar\.gz/.test(r.stderr), r.stderr);
+        // The other direction, or "always refuse" would satisfy the above.
+        const ok = sh(signArgs(stage()), { env: gateEnv });
+        check('sign.sh does NOT refuse the matching tag on that account',
+            !/does not match the staged artifacts/.test(ok.stderr), ok.stderr);
     }
 
     // 8. --help prints the usage block, not the licence header.

@@ -57,6 +57,7 @@ CONTRACT="$SCRIPT_DIR/expected-artifacts.txt"
 KEY=""
 GNUPGHOME_DIR="$HOME/.xchain-release"
 KEEP=0
+WRITE_PIN=1
 TAG="v0.0.0-key-verify"
 
 die() { echo "verify-release-key.sh: $*" >&2; exit 1; }
@@ -74,7 +75,15 @@ Options:
   --key <fpr>         signing key fingerprint            (required)
   --gnupghome <dir>   GNUPGHOME holding it   (default: ~/.xchain-release)
   --keep              leave the scratch dirs behind for inspection
+  --no-pin            do not record docs/release-key-pin.json
   -h, --help          print this and exit 0
+
+On success this writes docs/release-key-pin.json, the note saying a key was
+observed SIGNING rather than merely existing. The extension ceremony's
+Phase 4 reads it, because the key lives outside the repo and a document
+that hardcodes whether it exists goes stale the day the ceremony runs. Use
+--no-pin when driving a throwaway or test key, so the note keeps describing
+the real release key.
 
 Reads the throwaway artifact set from tools/release/expected-artifacts.txt
 rather than carrying its own copy, so a pattern added to the contract is
@@ -100,6 +109,7 @@ while [ $# -gt 0 ]; do
         --key)       KEY="${2:-}"; shift 2 ;;
         --gnupghome) GNUPGHOME_DIR="${2:-}"; shift 2 ;;
         --keep)      KEEP=1; shift ;;
+        --no-pin)    WRITE_PIN=0; shift ;;
         *) die "unknown argument: $1 (try --help)" ;;
     esac
 done
@@ -214,9 +224,13 @@ SIGN_SKIP_DEV_MOCK_CHECK=1 \
 [ -f "$ARTIFACTS/RELEASE_HASHES.txt.asc" ] || die "sign.sh produced no detached signature"
 
 echo "==> verifying the signature independently of the tool that made it"
-GNUPGHOME="$GNUPGHOME_DIR" gpg --verify \
-    "$ARTIFACTS/RELEASE_HASHES.txt.asc" "$ARTIFACTS/RELEASE_HASHES.txt" 2>&1 \
-    | sed 's/^/    /'
+# Captured rather than streamed because the subkey that actually made the
+# signature is in this output and nowhere else. The primary of this identity
+# is certify-only, so "the key that signs" and "the key that is published"
+# are different 40-hex strings, and the pin below records both.
+VERIFY_OUT="$(GNUPGHOME="$GNUPGHOME_DIR" gpg --verify \
+    "$ARTIFACTS/RELEASE_HASHES.txt.asc" "$ARTIFACTS/RELEASE_HASHES.txt" 2>&1)"
+printf '%s\n' "$VERIFY_OUT" | sed 's/^/    /'
 
 # gpg --verify proves the signature. It says nothing about whether the
 # manifest describes these artifacts or anchors to this tag, which is a
@@ -225,6 +239,53 @@ echo "==> verifying the manifest with the shipped verifier"
 GNUPGHOME="$GNUPGHOME_DIR" \
     bash "$CLONE/tools/release/verify.sh" --input "$ARTIFACTS" --tag "$TAG" 2>&1 \
     | sed 's/^/    /'
+
+# THE KEY-CEREMONY PIN.
+#
+# The release signing key lives in a GNUPGHOME on one machine. No test can
+# see it, so every document that depends on it has had to HARDCODE whether
+# it exists yet - and on 2026-08-05 the extension ceremony's Phase 4 was
+# still telling an operator the phase "cannot be completed before the
+# release-signing key exists" for a full day after K1 had been generated and
+# was signing. Nobody re-measures a blocker, which is what makes a stale one
+# worse than a stale row: it makes available work look impossible.
+#
+# So this follows the pattern verify-privacy-url.mjs established for the
+# published policy: the one tool that CAN observe the fact writes down what
+# it saw, and the suite reads the note instead of trying to look. Only a real
+# run can advance it, and this tool's run is a real signature - it signed a
+# manifest above and verified it with two independent code paths.
+#
+# The note records BOTH 40-hex strings on purpose. The primary is
+# certify-only by design, so the fingerprint a user checks and the subkey
+# that actually made the signature are different values, and a gate that
+# compares a published trust root against a signature has to know which is
+# which.
+if [ "$WRITE_PIN" -eq 1 ]; then
+    PIN_PATH="$REPO_ROOT/docs/release-key-pin.json"
+    SIGNING_SUBKEY="$(printf '%s\n' "$VERIFY_OUT" \
+        | sed -n 's/.*using [A-Za-z0-9]* key \([0-9A-Fa-f]\{16,\}\).*/\1/p' | head -1)"
+    [ -n "$SIGNING_SUBKEY" ] || SIGNING_SUBKEY="(not parsed)"
+    # Display-only, and stripped of the two characters that would need JSON
+    # escaping. The uid is here so a human reading the note can tell which
+    # identity signed; nothing compares against it.
+    KEY_UID="$(GNUPGHOME="$GNUPGHOME_DIR" gpg --list-keys --with-colons "$KEY" 2>/dev/null \
+        | awk -F: '$1 == "uid" { print $10; exit }' | tr -d '"\\')"
+    [ -n "$KEY_UID" ] || KEY_UID="(no uid)"
+
+    umask 022
+    cat > "$PIN_PATH" <<PINEOF
+{
+    "_comment": "Written by tools/release/verify-release-key.sh after it drove the real signing pipeline end to end. Records that this key was observed SIGNING a release manifest, not merely being present. Do not hand-edit: the value of this file is that only an observation can set it. This is not a publication channel for the fingerprint - SECURITY.md and https://xchain.io/security are the two channels, and a gate compares them against this.",
+    "fingerprint": "$KEY",
+    "signingSubkey": "$SIGNING_SUBKEY",
+    "uid": "$KEY_UID",
+    "proved": "signed a release manifest, gpg verified the detached signature, and verify.sh confirmed the manifest anchors to its tag",
+    "observedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+PINEOF
+    echo "pin: recorded at $PIN_PATH (this key is now on record as one that signs)"
+fi
 
 echo
 echo "OK: $KEY signed a release manifest, the signature verifies, and the"

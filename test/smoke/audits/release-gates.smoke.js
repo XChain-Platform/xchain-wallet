@@ -16,7 +16,10 @@
 // a clean (empty dist) tree.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, existsSync } from 'node:fs';
+import {
+    readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -127,22 +130,91 @@ for (const marker of [
     assert.ok(scriptSrc.includes(marker), `script greps for "${marker}"`);
 }
 
-// --- 3. Script runs + exits 0 against a clean (no-dist) tree --------
+// --- 3. Script REFUSES a tree where it can scan nothing --------------
+//
+// This assertion used to read "exits 0 when no dist exists", and it was the
+// reason the defect it enshrined survived ( S33). A pristine clone
+// checked out at the tag is precisely a tree with no dist/, and it is the
+// only tree sign.sh will sign from, so the state this test blessed as
+// success was the state the gate ran in for every real release: three
+// SKIP lines, zero bytes read, `OK`, exit 0, and `# dev-mock-gate:
+// enforced` in the signed manifest header on that basis.
+//
+// A test that asserts a gate is quiet when it has nothing to look at is
+// not testing the gate, it is testing that nobody notices. The property
+// worth holding is the opposite one, and it is checked in both directions
+// below so that neither a silent pass nor a blanket refusal can satisfy it.
+//
+// AND THE CWD IS THE POINT, which the old assertion also got wrong. It ran
+// the script at `wsRoot` and called that "when no dist exists" - true on a
+// clean checkout and false on any machine that has ever built, where it
+// silently became a scan of three real bundles. So the sentence describing
+// what it measured and the thing it measured had drifted apart, and on a
+// developer machine it was green for the opposite reason to the stated one.
+// The pristine-clone condition is reproduced literally instead: an empty
+// directory, where the script's relative SCAN_TARGETS resolve to nothing.
 
-const result = spawnSync('bash', [checkScript], {
-    cwd: wsRoot,
-    encoding: 'utf8',
-});
+const noDist = mkdtempSync(join(tmpdir(), 'xchain-devmock-nodist-'));
+let empty;
+try {
+    empty = spawnSync('bash', [checkScript], {
+        cwd: noDist,
+        encoding: 'utf8',
+    });
+} finally {
+    rmSync(noDist, { recursive: true, force: true });
+}
 assert.equal(
-    result.status,
-    0,
-    `check-no-dev-mock.sh exits 0 when no dist exists; stdout: ${result.stdout}`,
+    empty.status,
+    1,
+    'check-no-dev-mock.sh must REFUSE a tree with nothing to scan. It exited '
+    + `${empty.status}. "The gate could not run" and "the gate passed" must not `
+    + `produce the same release (sign.sh says so about a missing script; an `
+    + `empty scan produces the identical release). stdout: ${empty.stdout}`,
 );
 assert.match(
-    result.stdout,
-    /no dev-SDK markers in dist/,
-    'script reports success cleanly',
+    empty.stdout,
+    /scanned NOTHING/,
+    'the refusal says what actually happened, rather than reporting a failure '
+    + 'that reads like a leaked dev-mock bundle',
 );
+
+// The other direction: given something real to read, it reads it and says
+// how much. Without this, "always exit 1" would pass the assertion above.
+const staged = mkdtempSync(join(tmpdir(), 'xchain-devmock-gate-'));
+try {
+    const bundle = join(staged, 'bundle');
+    mkdirSync(bundle, { recursive: true });
+    // A minimal stand-in for a shipped bundle: carries the real-SDK literal
+    // and none of the mock markers, which is what a healthy release looks
+    // like to this gate.
+    writeFileSync(join(bundle, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
+    const tarball = join(staged, 'xchain-wallet-web-v0.0.0-test.tar.gz');
+    assert.equal(
+        spawnSync('tar', ['czf', tarball, '-C', bundle, '.'], { encoding: 'utf8' }).status,
+        0,
+        'staged a test web tarball',
+    );
+
+    const scanned = spawnSync('bash', [checkScript, '--artifacts', staged], {
+        cwd: wsRoot,
+        encoding: 'utf8',
+    });
+    assert.equal(
+        scanned.status,
+        0,
+        'check-no-dev-mock.sh --artifacts passes a clean staged bundle; '
+        + `stdout: ${scanned.stdout}\nstderr: ${scanned.stderr}`,
+    );
+    assert.match(
+        scanned.stdout,
+        /OK - 1 bundle\(s\) scanned/,
+        'the OK line COUNTS what it scanned, so "scanned three bundles" and '
+        + '"skipped three bundles" can never print the same words again',
+    );
+} finally {
+    rmSync(staged, { recursive: true, force: true });
+}
 
 console.log(
     'OK: release-gates smoke (threat model §1–§7, reproducible-build README + check script, dry-run exit 0)',

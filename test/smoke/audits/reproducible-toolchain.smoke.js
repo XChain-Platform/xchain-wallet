@@ -234,8 +234,16 @@ const pkg = JSON.parse(read('package.json'));
         + 'first step and the published verification protocol cannot be executed by anyone. '
         + 'Isolation from the local checkout comes from the detached worktree, not the flag.');
 
-    assert.ok(/--platform "\$\{BUILD_PLATFORM\}"/.test(reproduceSh),
-        'reproduce.sh must pass --platform explicitly: the pinned base digest is amd64-only, '
+    // Counted, not merely present. Both `docker build` and `docker run`
+    // need it: pinning the build and letting the run take the host arch
+    // gives "image platform does not match" at best and a quietly
+    // different container at worst. A presence test passes with one of
+    // the two, which is exactly the half-fix this file exists to catch -
+    // and it is how the extension and web lanes stayed broken while the
+    // desktop twin looked like the reference implementation.
+    assert.equal((reproduceSh.match(/--platform "\$\{BUILD_PLATFORM\}"/g) || []).length, 2,
+        'reproduce.sh must pass --platform explicitly on BOTH docker invocations: '
+        + 'the pinned base digest is amd64-only, '
         + 'and an arm64 verifier should emulate on purpose rather than discover it.');
 
     assert.ok(/XCHAIN_EXPECTED_NODE/.test(reproduceSh) && /XCHAIN_EXPECTED_NODE/.test(buildSh),

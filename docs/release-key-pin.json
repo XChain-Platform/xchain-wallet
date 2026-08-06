@@ -1,0 +1,8 @@
+{
+    "_comment": "Written by tools/release/verify-release-key.sh after it drove the real signing pipeline end to end. Records that this key was observed SIGNING a release manifest, not merely being present. Do not hand-edit: the value of this file is that only an observation can set it. This is not a publication channel for the fingerprint - SECURITY.md and https://xchain.io/security are the two channels, and a gate compares them against this.",
+    "fingerprint": "1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7",
+    "signingSubkey": "27A1593607C828903EF67DAD10ADF79899B41573",
+    "uid": "XChain Wallet Release Signing <releases@dankest.llc>",
+    "proved": "signed a release manifest, gpg verified the detached signature, and verify.sh confirmed the manifest anchors to its tag",
+    "observedAt": "2026-08-06T05:20:37Z"
+}

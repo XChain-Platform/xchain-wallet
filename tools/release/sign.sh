@@ -218,8 +218,77 @@ elif [[ ! -f "$DEV_MOCK_CHECK" ]]; then
     echo "  Refusing to sign. A gate that cannot run has not passed." >&2
     exit 1
 else
-    echo "sign.sh: running pre-sign dev-mock gate ..." >&2
-    ( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" ) >&2
+    # THE GATE IS POINTED AT THE ARTIFACTS, NOT AT THE REPO ( S33).
+    #
+    # It used to run bare, which scans the repo's dist/ trees. Signing is
+    # documented to happen from a pristine clone checked out at the tag -
+    # this script refuses a dirty or non-tag tree, so that is not optional -
+    # and a pristine clone has no dist/. Every target therefore printed
+    # `SKIP ... (not built)`, the gate exited 0 having scanned nothing, and
+    # the `enforced` below was written into the SIGNED manifest header on
+    # the strength of it. That is the exact failure the comment eight lines
+    # above forbids, arriving through an empty scan instead of a missing
+    # script, and the desktop updater refuses any release whose header is
+    # not exactly `enforced` - so that one word carries real weight.
+    #
+    # $INPUT_DIR holds the shipped bytes, which is a better subject than a
+    # local rebuild would have been anyway: it is what Phase 4 of every
+    # store ceremony is about (the uploaded artifact is the CI-built one).
+    # The gate now refuses a scan that covers nothing, so reaching the line
+    # after this one means at least one shipped bundle was really read.
+    echo "sign.sh: running pre-sign dev-mock gate against $INPUT_DIR ..." >&2
+    DEV_MOCK_INPUT="$(cd "$INPUT_DIR" && pwd)"
+    ( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" --artifacts "$DEV_MOCK_INPUT" ) >&2
+fi
+
+# --- Tag/artifact version gate ( S33) -----------------------------
+#
+# This script's own reason for embedding the tag, stated in its --tag
+# diagnostic, is "so a signed manifest cannot float between versions:
+# without it, a manifest lifted from one release and served as another
+# verifies perfectly". Every gate below then checks the artifact SET - how
+# many, which arches, which lanes, which profile, whether they are signed -
+# and not one of them checks that those artifacts are the version the tag
+# names. The anchor was asserted and derived from nothing.
+#
+# It is reachable by accident rather than by attack, which is why it
+# matters. `pnpm release:sign` builds both --tag and --input out of the
+# local package.json, so on a checkout whose package.json is behind the
+# staged release (this repo is worked by several sessions at once, and one
+# was 55 commits behind while a v0.336.0 set sat staged) the documented
+# command signs a v0.335.0 manifest over v0.336.0 bytes. Every gate passes,
+# the signature is good, and verify.sh anchors the manifest to the wrong
+# tag - which the store ceremonies then read as artifact provenance.
+#
+# Channel pointers carry no version in their name and are skipped; they are
+# excluded from the manifest entirely (lib.sh).
+# Compared on the NUMERIC CORE (X.Y.Z) rather than the whole string: a
+# prerelease tag (v0.336.0-rc1) is legitimate and its artifacts carry the
+# same core, and this gate is about a release signing ANOTHER release's
+# bytes, not about prerelease spelling.
+TAG_VERSION="$(printf '%s' "${TAG#v}" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
+if [[ -z "$TAG_VERSION" ]]; then
+    echo "sign.sh: --tag '$TAG' carries no X.Y.Z version to check the artifacts against." >&2
+    exit 2
+fi
+VERSION_MISMATCH=""
+while IFS= read -r artifact; do
+    name="$(basename "$artifact")"
+    versions="$(printf '%s' "$name" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+    [[ -z "$versions" ]] && continue
+    if ! printf '%s\n' "$versions" | grep -qxF "$TAG_VERSION"; then
+        VERSION_MISMATCH+="    $name"$'\n'
+    fi
+done < <(find "$INPUT_DIR" -maxdepth 1 -type f | sort)
+
+if [[ -n "$VERSION_MISMATCH" ]]; then
+    echo "sign.sh: --tag $TAG does not match the staged artifacts." >&2
+    echo "  Expected every versioned filename to carry $TAG_VERSION. These do not:" >&2
+    printf '%s' "$VERSION_MISMATCH" >&2
+    echo "  Refusing to sign. A manifest naming one version over another" >&2
+    echo "  version's bytes verifies perfectly and is wrong in the one way" >&2
+    echo "  the embedded tag exists to prevent." >&2
+    exit 1
 fi
 
 MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
