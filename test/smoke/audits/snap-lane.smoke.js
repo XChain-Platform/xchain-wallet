@@ -37,6 +37,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachUpdater, selectUpdater } from '../../../packages/desktop/main/updater.js';
+import { docsAvailable, readDoc } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..', '..', '..', 'packages', 'desktop');
@@ -309,6 +310,59 @@ const targets = (cfg) => cfg.linux.target.map((t) => (typeof t === 'string' ? t 
         'and it must first check that the DOCKER-USER chain exists: an -I into a '
         + 'chain Docker never created fails the step on a runner with no Docker, '
         + 'which would trade one lane-wide failure for another');
+}
+
+// --- The determinism NON-CLAIM, held in place -------------------------
+//
+// The snap does not reproduce, and that is now a measured, decided
+// position rather than an open question (§16, frontier rows 70 and 76):
+// two epoch-pinned builds hash all 84 payload files identically and still
+// differ, because snapcraft writes wall-clock mtimes and a squashfs
+// creation time that SOURCE_DATE_EPOCH never reaches. The remedy exists
+// (`-all-time` / `-mkfs-time` on the mksquashfs 4.6.1 that snapcraft
+// bundles) and is unreachable: snapcraft assembles inside LXD, so there is
+// no invocation of ours to add flags to.
+//
+// Two ways that decision rots, and this holds both shut. The claim can
+// widen - a later edit sweeping the snap in beside the AppImage and .deb
+// would promise byte-for-byte reproducibility for an artifact that has
+// been measured not to deliver it. Or it can narrow back to "untested",
+// which reads as unexamined when the truth is examined-and-decided, and
+// invites somebody to spend the day again.
+if (docsAvailable()) {
+    const repro = readDoc('reproducible-builds.md');
+    const snapPage = readDoc('release', 'desktop', 'snap-store.md');
+
+    for (const [name, text] of [['reproducible-builds.md', repro], ['snap-store.md', snapPage]]) {
+        assert.match(
+            text,
+            /\.snap|Snap Store package/i,
+            `${name} must NAME the snap when it talks about what reproduces. `
+            + 'Silence is how a reader concludes the snap behaves like the .deb '
+            + 'beside it.',
+        );
+        assert.ok(
+            !/\bsnap\b[^.]{0,120}\b(is|are)\s+(byte-for-byte\s+)?reproducible/i.test(text),
+            `${name} claims the snap is reproducible. It is not: measured `
+            + '2026-08-07, two epoch-pinned builds differ on snapcraft-written '
+            + 'timestamps the epoch does not reach.',
+        );
+        assert.ok(
+            !/snap[^.]{0,120}\bdeterminism\b[^.]{0,60}\buntested\b/i.test(text)
+            && !/\buntested\b[^.]{0,80}\bsnap\b/i.test(text),
+            `${name} calls the snap's determinism "untested". It was tested to `
+            + 'completion and the remedy proven; what is unreachable is applying '
+            + 'it. "Untested" reads as unexamined and invites the same day of '
+            + 'work again.',
+        );
+    }
+
+    assert.match(
+        repro,
+        /Snap Store signs what it serves|snapd installs only what the Store/i,
+        'reproducible-builds.md states the integrity story a snap DOES have, so '
+        + 'the non-claim reads as a different trust model rather than as a gap',
+    );
 }
 
 console.log(
