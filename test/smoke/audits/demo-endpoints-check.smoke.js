@@ -34,6 +34,7 @@ import { strict as assert } from 'node:assert';
 
 import {
     demoProbesFor, classifyProbe, checkDemoEndpoints, burstProbe, EXIT,
+    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS,
 } from '../../../tools/release/verify-demo-endpoints.mjs';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 
@@ -114,6 +115,80 @@ assert.equal(wrongChain.state, 'failure', 'an explorer that no longer serves TBT
 assert.match(wrongChain.detail, /TBTC is not among/);
 assert.equal(classifyProbe(explorerProbe, { status: 200, body: '{}' }).state, 'failure');
 
+// --- 2a. Indexer freshness (2026-08-06) ---------------------------------
+//
+// Serving the coin is not serving it CURRENTLY. This gate reported all three
+// testnet chains live on 2026-08-06 while TDOGE's indexer trailed its decoder
+// by 756,703 blocks with a 32-day-old newest block, and TLTC's newest block was
+// 38 hours old. A demo wallet funded on either would have shown the reviewer an
+// empty balance screen - the same failure  fixed one layer up, where the
+// notes sent the reviewer to a network the demo phrase was not funded on.
+
+const NOW = 1_786_000_000_000;
+const secondsAgo = (ms) => Math.floor((NOW - ms) / 1000);
+const explorerBody = (coin, { blockTime, lag } = {}) => {
+    const body = { available: { [coin]: 'a network' } };
+    if (blockTime !== undefined) body.last_block_time = { [coin]: blockTime };
+    if (lag !== undefined) body.decoder_lag_blocks = { [coin]: lag };
+    return JSON.stringify(body);
+};
+const demoProbe = { service: 'explorer', coin: 'TBTC', isDemoCoin: true };
+const otherProbe = { service: 'explorer', coin: 'TDOGE', isDemoCoin: false };
+const at = (probe, body) => classifyProbe(probe, { status: 200, body }, { nowMs: NOW });
+
+// The demo chain, current: live, and it SAYS it measured freshness rather than
+// leaving the reader to assume the old check is all that ran.
+const currentDemo = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(10 * 60_000), lag: 2 }));
+assert.equal(currentDemo.state, 'live');
+assert.match(currentDemo.detail, /demo chain current/);
+
+// The demo chain, stopped: fatal, and the detail says what it costs rather than
+// reporting a number.
+const stoppedDemo = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(3 * 24 * 60 * 60_000), lag: 0 }));
+assert.equal(stoppedDemo.state, 'failure', 'a stale demo chain is a failure: the funding tx would never appear');
+assert.match(stoppedDemo.detail, /would not appear on the balance screen/);
+
+// The demo chain, running but hopelessly behind. Kept separate from the case
+// above because the two signals fail apart: a stalled node stops the clock, a
+// backlogged indexer does not.
+const behindDemo = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: 756_703 }));
+assert.equal(behindDemo.state, 'failure', 'a recent block time does not excuse a 756k-block indexer backlog');
+assert.match(behindDemo.detail, /trails the decoder by 756,703 blocks/);
+
+// Both thresholds falsified at the boundary, so a future retune cannot silently
+// widen them past the state actually found in production.
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(STALE_AFTER_MS - 60_000), lag: 0 })).state, 'live');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(STALE_AFTER_MS + 60_000), lag: 0 })).state, 'failure');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS })).state, 'live');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS + 1 })).state, 'failure');
+
+// A body with no clock at all cannot answer the question, and this script's
+// standing rule is that a check which cannot tell says so instead of passing.
+const noClock = at(demoProbe, explorerBody('TBTC'));
+assert.equal(noClock.state, 'inconclusive');
+assert.match(noClock.detail, /freshness cannot be checked/);
+
+// A chain the demo is NOT funded on stays live and is named unfundable, with
+// the chain to use instead. Failing here would hold a submission over a chain
+// nobody's demo wallet touches, which is how a gate gets routed around.
+const staleOther = at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(32 * 24 * 60 * 60_000), lag: 756_703 }));
+assert.equal(staleOther.state, 'live', 'a stale non-demo chain is information, not a blocker');
+assert.match(staleOther.detail, /NOT FUNDABLE/);
+assert.match(staleOther.detail, new RegExp(`Fund the demo wallet on ${DEMO_COIN}`));
+assert.doesNotMatch(
+    at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(60_000), lag: 0 })).detail,
+    /NOT FUNDABLE/,
+    'a current non-demo chain is not warned about, so the warning means something',
+);
+
+// The flag has to reach the real probe list, or every check above is dead code
+// in production. Exactly one explorer probe carries it, and it is the pinned
+// demo coin: a descriptor rename that drops TBTC fails here rather than
+// silently downgrading the gate to the lenient path.
+const demoExplorerProbes = testnet.filter((p) => p.service === 'explorer' && p.isDemoCoin);
+assert.equal(demoExplorerProbes.length, 1, 'exactly one explorer probe is the demo chain');
+assert.equal(demoExplorerProbes[0].coin, DEMO_COIN);
+
 // Encoder: healthy is not the same as able to compose.
 assert.equal(
     classifyProbe(encoderProbe, {
@@ -171,8 +246,16 @@ const FAKE = [
 ];
 
 const reply = (body, status = 200) => async () => ({ status, text: async () => body });
+// The clock is computed rather than pinned: a literal timestamp would pass
+// today and start failing on its own six hours later, which is the shape of
+// test that gets deleted rather than fixed.
+const nowSec = Math.floor(Date.now() / 1000);
 const HEALTHY = {
-    'https://explorer.example/TBTC/api/status': JSON.stringify({ available: { TBTC: 'BTC (testnet)' } }),
+    'https://explorer.example/TBTC/api/status': JSON.stringify({
+        available: { TBTC: 'BTC (testnet)' },
+        last_block_time: { TBTC: nowSec - 60 },
+        decoder_lag_blocks: { TBTC: 0 },
+    }),
     'https://encoder.example/TBTC/status': JSON.stringify({ status: 'healthy', tracker_reachable: true, tracker_synced: true }),
 };
 
@@ -187,6 +270,22 @@ const routed = (overrides = {}) => async (url) => {
 const allBroken = await checkDemoEndpoints({ descriptors: FAKE, fetchImpl: routed() });
 assert.equal(allBroken.exit, EXIT.FAILURE, 'the unsignable hub body keeps this run red, which is the correct answer');
 assert.equal(allBroken.results.filter((r) => r.state === 'live').length, 2, 'explorer and encoder still pass on their own merits');
+
+// A stale demo chain has to reach the EXIT CODE, not just the detail line: the
+// operator reads `echo $?` before they read the report, and the whole point of
+// the check is to stop a submission whose demo cannot show a balance.
+const staleDemoRun = await checkDemoEndpoints({
+    descriptors: FAKE,
+    fetchImpl: routed({
+        'https://explorer.example/TBTC/api/status': reply(JSON.stringify({
+            available: { TBTC: 'BTC (testnet)' },
+            last_block_time: { TBTC: nowSec - 32 * 24 * 60 * 60 },
+            decoder_lag_blocks: { TBTC: 756_703 },
+        })),
+    }),
+});
+assert.equal(staleDemoRun.exit, EXIT.FAILURE);
+assert.equal(staleDemoRun.results.find((r) => r.service === 'explorer').state, 'failure');
 
 // A failure outranks an inconclusive: a run that has both must not be reported
 // as merely "could not tell", which reads as retryable.

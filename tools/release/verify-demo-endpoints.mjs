@@ -39,7 +39,16 @@
 //              as far as the demo is concerned even at HTTP 200.
 //   - explorer /{COIN}/api/status, and the demo's own coin must appear in the
 //              `available` map. An explorer that is up but no longer serves
-//              TBTC leaves the reviewer on an empty balance screen.
+//              TBTC leaves the reviewer on an empty balance screen. Serving it
+//              is not enough either: the coin's INDEXER must be current, or the
+//              balance screen is served from a stale view and a funding
+//              transaction sent for the rehearsal never appears. Measured
+//              2026-08-06, this gate reported all three testnet chains live
+//              while TDOGE's indexer trailed its decoder by 756,703 blocks and
+//              its newest indexed block was 32 days old, and TLTC's newest was
+//              1.6 days old. Only the DEMO coin is fatal (below); the others
+//              are reported, because the demo runs on one chain and a stale
+//              chain nobody funds is information, not a blocker.
 //   - encoder  /{COIN}/status, and `status` must be healthy with its UTXO
 //              tracker reachable AND synced. A desynced tracker composes
 //              transactions against a stale chain view, which is exactly the
@@ -73,6 +82,85 @@ export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3 };
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /**
+ * The one chain the scripted demo is funded on.
+ *
+ * STATED rather than derived, unlike the endpoint list, because which chain the
+ * reviewer's demo wallet holds coin on is a listing decision and not a fact any
+ * descriptor carries. It is TBTC because §2.1 already names the TBTC encoder
+ * and hub as the demo endpoints, and because it is the only testnet chain whose
+ * indexer was current when this was measured. The runbook cites this constant
+ * rather than restating it.
+ */
+export const DEMO_COIN = 'TBTC';
+
+/**
+ * Freshness thresholds for the demo coin's indexer.
+ *
+ * Both are deliberately loose, because a gate that flaps is a gate an operator
+ * routes around on submission day. Six hours clears BTC testnet4's documented
+ * min-difficulty stalls (~2h) with headroom, and 1,000 blocks clears ordinary
+ * churn even on DOGE testnet, which mints blocks many times a minute. What they
+ * do not clear is the state actually found in production: 32 days and 756,703
+ * blocks.
+ */
+export const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+export const MAX_INDEXER_LAG_BLOCKS = 1000;
+
+/**
+ * How current is one coin's indexed view, per the explorer's own status body.
+ *
+ * Two independent signals, because they fail apart: `last_block_time` catches a
+ * pipeline that has stopped, and `decoder_lag_blocks` (the indexer's distance
+ * BEHIND the decoder, per the explorer's own definition) catches one that is
+ * running but hopelessly behind. TDOGE showed both at once; a chain whose node
+ * has stalled would show only the first.
+ *
+ * @param {any} json      the explorer's /{COIN}/api/status body
+ * @param {string} coin
+ * @param {number} nowMs
+ * @returns {{ state: 'fresh'|'stale'|'unknown', detail: string }}
+ */
+export function indexerFreshness(json, coin, nowMs = Date.now()) {
+    const blockTimeSec = json?.last_block_time?.[coin];
+    const lagBlocks = json?.decoder_lag_blocks?.[coin];
+    const haveTime = typeof blockTimeSec === 'number' && Number.isFinite(blockTimeSec);
+    const haveLag = typeof lagBlocks === 'number' && Number.isFinite(lagBlocks);
+
+    if (!haveTime && !haveLag) {
+        return {
+            state: 'unknown',
+            detail: `the status body carries no indexer clock for ${coin}`
+                + ' (no last_block_time, no decoder_lag_blocks)',
+        };
+    }
+
+    const reasons = [];
+    if (haveTime) {
+        const ageMs = nowMs - blockTimeSec * 1000;
+        if (ageMs > STALE_AFTER_MS) {
+            reasons.push(`its newest indexed block is ${describeAge(ageMs)} old`);
+        }
+    }
+    if (haveLag && lagBlocks > MAX_INDEXER_LAG_BLOCKS) {
+        reasons.push(`its indexer trails the decoder by ${lagBlocks.toLocaleString('en-US')} blocks`);
+    }
+
+    if (reasons.length > 0) {
+        return { state: 'stale', detail: reasons.join(' and ') };
+    }
+    const age = haveTime ? describeAge(nowMs - blockTimeSec * 1000) : 'unknown age';
+    return { state: 'fresh', detail: `newest indexed block ${age} old, indexer lag ${haveLag ? lagBlocks : '?'}` };
+}
+
+function describeAge(ms) {
+    const minutes = Math.max(0, Math.round(ms / 60_000));
+    if (minutes < 90) return `${minutes}m`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours}h`;
+    return `${Math.round(hours / 24)}d`;
+}
+
+/**
  * Probe list for one network kind, derived from the shipped descriptors.
  *
  * Deduplicated by URL: all three chains point their explorer at one host, and
@@ -88,7 +176,10 @@ export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DES
     const add = (service, coin, url) => {
         if (seen.has(url)) return;
         seen.add(url);
-        probes.push({ service, coin, url });
+        // Only the demo coin's freshness is fatal, so the flag travels with the
+        // probe rather than being re-derived inside the classifier, which has
+        // no idea which network kind it was built for.
+        probes.push({ service, coin, url, isDemoCoin: coin === DEMO_COIN });
     };
 
     for (const d of descriptors) {
@@ -118,7 +209,7 @@ function trimSlash(url) {
  * @param {{ status?: number, body?: string, error?: string }} raw
  * @returns {{ state: 'live' | 'failure' | 'inconclusive', detail: string }}
  */
-export function classifyProbe(probe, raw) {
+export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
     if (raw.error) {
         return { state: 'inconclusive', detail: `could not reach it: ${raw.error}` };
     }
@@ -169,7 +260,37 @@ export function classifyProbe(probe, raw) {
                     + ` (${Object.keys(available).join(', ') || 'none'}): the demo's balance screen would be empty`,
             };
         }
-        return { state: 'live', detail: `serving ${probe.coin} (${Object.keys(available).length} networks)` };
+
+        // Serving the coin and serving it CURRENTLY are different questions,
+        // and only the second one answers "will the demo wallet's balance be
+        // there". Fatal on the demo coin only: the rehearsal is funded on one
+        // chain, so a stale chain nobody funds is a fact worth printing rather
+        // than a reason to hold a submission.
+        const served = `serving ${probe.coin} (${Object.keys(available).length} networks)`;
+        const fresh = indexerFreshness(json, probe.coin, nowMs);
+        if (probe.isDemoCoin) {
+            if (fresh.state === 'unknown') {
+                return {
+                    state: 'inconclusive',
+                    detail: `${served}, but ${fresh.detail}, so its freshness cannot be checked`,
+                };
+            }
+            if (fresh.state === 'stale') {
+                return {
+                    state: 'failure',
+                    detail: `${served}, but ${fresh.detail}: the demo wallet's funding transaction`
+                        + ' would not appear on the balance screen the reviewer is looking at',
+                };
+            }
+            return { state: 'live', detail: `${served}, demo chain current (${fresh.detail})` };
+        }
+        if (fresh.state === 'stale') {
+            return {
+                state: 'live',
+                detail: `${served} - NOT FUNDABLE: ${fresh.detail}. Fund the demo wallet on ${DEMO_COIN}.`,
+            };
+        }
+        return { state: 'live', detail: served };
     }
 
     if (probe.service === 'encoder') {
