@@ -28,7 +28,7 @@ describe('chainIdToTrezorCoin', () => {
     // see. Hardware-unsupported instead (see CHAIN_ID_TO_TREZOR_COIN).
     it("throws for bitcoin-testnet (coin-type parity with the 0' descriptor anchor)", () => {
         expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/software wallet/);
-        expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/coin-type 1'/);
+        expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/funds would appear missing/);
     });
 
     // Trezor's 'regtest' coin carries the identical SLIP-44 coin-type 1' hazard
@@ -37,7 +37,7 @@ describe('chainIdToTrezorCoin', () => {
     // reject with an unrelated internal error (uuid 8fc65869).
     it("throws for bitcoin-regtest (same coin-type 1' hazard as bitcoin-testnet)", () => {
         expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/software wallet/);
-        expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/coin-type 1'/);
+        expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/funds would appear missing/);
     });
 
     it('bitcoin-testnet and bitcoin-regtest produce the identical rejection message', () => {

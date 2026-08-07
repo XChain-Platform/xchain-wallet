@@ -135,8 +135,8 @@ function chainIdToLedgerFormat(chainId) {
 function unsupportedBitcoinNetworkError(chainId) {
     return new Error(
         `This hardware device can't be used on ${chainId} - use a software wallet for this network. `
-        + "(The Ledger Bitcoin Test app derives at SLIP-44 coin-type 1', which diverges "
-        + "from the wallet's 0'-anchored derivation, so funds would appear missing.)",
+        + '(On this network the device would derive a different set of addresses than the '
+        + 'rest of the wallet, so any funds would appear missing.)',
     );
 }
 

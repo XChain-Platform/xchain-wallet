@@ -31,7 +31,7 @@ describe('chainIdToLedgerCurrency', () => {
     // Hardware-unsupported instead (see chainIdToLedgerCurrency).
     it("throws for bitcoin-testnet (coin-type parity with the 0' descriptor anchor)", () => {
         expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/software wallet/);
-        expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/coin-type 1'/);
+        expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/funds would appear missing/);
     });
 
     it('maps litecoin-mainnet to litecoin', () => {

@@ -573,8 +573,7 @@ function PermissionsSummary({ permissions }) {
                     <ul style={{ margin: 0, paddingLeft: 'var(--xc-space-3)', listStyle: 'disc' }}>
                         {Object.entries(actions).map(([action, perm]) => (
                             <li key={action} style={{ color: 'var(--xc-text)' }}>
-                                {actionDisplayLabel(action)}{' '}
-                                (<code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{action}</code>)
+                                {actionDisplayLabel(action)}
                                 {': '}
                                 <span style={{ color: permColor(perm) }}>{perm}</span>
                             </li>

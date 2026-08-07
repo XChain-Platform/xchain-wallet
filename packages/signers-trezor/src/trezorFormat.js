@@ -176,8 +176,9 @@ export function chainIdToTrezorCoin(chainId) {
         if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
             throw new Error(
                 `This hardware device can't be used on ${chainId} - use a software `
-                + "wallet for this network. (Trezor's testnet/regtest coins derive at "
-                + "coin-type 1', diverging from the wallet's 0'-anchored derivation.)",
+                + 'wallet for this network. (On this network the device would derive a '
+                + 'different set of addresses than the rest of the wallet, so any funds '
+                + 'would appear missing.)',
             );
         }
         throw new Error(

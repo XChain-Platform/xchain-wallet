@@ -55,9 +55,9 @@ export function chainIdToLedgerCurrency(chainId) {
         case 'bitcoin-testnet':
             throw new Error(
                 'ledgerFormat: bitcoin-testnet is not supported on this hardware '
-                + "signer (the Bitcoin Test app derives at coin-type 1', diverging "
-                + "from the wallet's 0'-anchored derivation); use a software "
-                + 'wallet for this network.',
+                + 'signer; use a software wallet for this network. (On this network '
+                + 'the device would derive a different set of addresses than the rest '
+                + 'of the wallet, so any funds would appear missing.)',
             );
         default:
             throw new Error(
