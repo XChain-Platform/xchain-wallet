@@ -670,21 +670,42 @@ const assetlinks = JSON.parse(
     readFileSync(join(mobile, 'assetlinks.template.json'), 'utf8'),
 );
 assert.equal(assetlinks[0].target.package_name, 'io.xchain.wallet.android');
-assert.equal(
-    assetlinks[0].target.sha256_cert_fingerprints.length,
-    2,
-    'both lanes: Play app-signing and K10, under the one applicationId (D3a)',
+// The Play side is a LIST, and this assertion used to demand exactly 2 entries -
+// one Play slot plus K10. That was the same defect the PUBLISHED file had: a
+// key rotation was INEXPRESSIBLE, so no test and no diff could notice one.
+// Google's app signing key carries a classical and a post-quantum certificate
+// at once and can be rotated, which is how xchain.io came to serve a retired
+// fingerprint for three days. The template must therefore SHOW a list, and the
+// guard here is that it keeps showing one.
+const fingerprints = assetlinks[0].target.sha256_cert_fingerprints;
+const k10Fp = fingerprints[fingerprints.length - 1];
+const playSlots = fingerprints.slice(0, -1);
+assert.ok(
+    playSlots.length >= 2,
+    'the template must show MORE THAN ONE Play slot, or it teaches the single-value '
+    + 'shape that made a key rotation impossible to express',
 );
 // K10 exists as of 2026-08-01, so its fingerprint is a real value here and
 // must be the SAME value SECURITY.md publishes: those two disagreeing is the
 // failure users cannot detect, because the file that authenticates the APK
-// would name a key that did not sign it. The other entry stays a placeholder
-// on purpose - it is Google's app-signing certificate under Play App Signing,
-// which does not exist until the first upload.
-const [playFp, k10Fp] = assetlinks[0].target.sha256_cert_fingerprints;
-assert.ok(
-    playFp.startsWith('REPLACE_WITH_'),
-    'the Play app-signing fingerprint stays a placeholder until the first upload',
+// would name a key that did not sign it. Every other entry stays a placeholder
+// on purpose - they are Google's app-signing certificates under Play App
+// Signing, which do not exist until the first upload.
+for (const playFp of playSlots) {
+    assert.ok(
+        playFp.startsWith('REPLACE_WITH_'),
+        'every Play app-signing slot stays a placeholder until the first upload',
+    );
+}
+// The shortcut that must be warned against by name, because Google offers it on
+// the very page this template sends the operator to: the console's own
+// `Digital Asset Links JSON` snippet publishes a SINGLE fingerprint and was
+// measured naming a retired key, so pasting it drops both live Play
+// certificates and K10 together.
+assert.match(
+    JSON.stringify(assetlinks[0].target),
+    /Digital Asset Links JSON/,
+    'the template must warn against pasting the console snippet',
 );
 assert.match(k10Fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/, 'K10 fingerprint is a real SHA-256, uppercase colon-separated');
 const security = readFileSync(join(wsRoot, 'SECURITY.md'), 'utf8');

@@ -1,6 +1,6 @@
 [
   {
-    "//": "TEMPLATE, NOT THE PUBLISHED FILE.  §1/S3. Publish the RESULT at https://xchain.io/.well-known/assetlinks.json from the websites repo. K10's fingerprint is FILLED IN (key generated 2026-08-01) and matches SECURITY.md, which is canonical. The remaining placeholder is NOT K9: the Play lane is signed by Google's app-signing key under Play App Signing, so that value only exists after the first upload, at Play Console -> Setup -> App integrity.",
+    "//": "TEMPLATE, NOT THE PUBLISHED FILE.  §1/S3. The published file is GENERATED, not hand-edited: xchain-websites/xchain.io/build/assetlinks.build.js emits it from play-app-signing-sha256.txt, which holds one line per Play certificate. This file exists to show the SHAPE. K10's fingerprint is FILLED IN (key generated 2026-08-01) and matches SECURITY.md, which is canonical. The placeholders are NOT K9: the Play lane is signed by Google's app-signing key under Play App Signing, so those values only exist after the first upload, at Play Console -> Setup -> App integrity.",
     "//owner": "Publishing is a websites-repo deploy (Cloudflare proxy is fine). It must be served as application/json; the path is extensionless, so Apache needs a ForceType on the vhost, and the edge must allow /.well-known/* unauthenticated - Android fetches it with its own client, not a browser.",
     "//verify": "After publishing: curl -sI https://xchain.io/.well-known/assetlinks.json | grep -i content-type, then install the app and run `adb shell pm get-app-links io.xchain.wallet.android` - it must print 'verified' for xchain.io. A failure here is SILENT: links just open in the browser.",
     "relation": [
@@ -9,9 +9,12 @@
     "target": {
       "namespace": "android_app",
       "package_name": "io.xchain.wallet.android",
-      "//fingerprints": "BOTH lanes, under the one applicationId (D3(a)): the Play build is signed by Google's app-signing key (Play Console -> Setup -> App integrity -> App signing key certificate, SHA-256), and the direct APK by K10 (`keytool -list -v -keystore <k10> -alias <alias>`, or `apksigner verify --print-certs xchain-wallet-vX.Y.Z.apk`). Omitting either one breaks App Links for every user of that lane.",
+      "//fingerprints": "EVERY certificate either lane may be signed by, under the one applicationId (D3(a)). Omitting one breaks App Links for every user of that lane, silently. The Play side is a LIST and never a single value: the current app signing key has a classical certificate AND, under quantum-ready signing, a post-quantum one, and Google can ROTATE the key, which adds a Previous entry that installs already in the field still verify against. Read them all at Play Console -> Setup -> App integrity -> App signing, from the key panels. The direct APK is signed by K10 (`apksigner verify --print-certs xchain-wallet-vX.Y.Z.apk`), which is not on Google's page at all.",
+      "//do-not-paste-googles-snippet": "That page ends with a `Digital Asset Links JSON` block captioned 'copy and paste this snippet into your Digital Asset Links JSON file'. Do not. Measured 2026-08-07, it offered ONE fingerprint and it was the key Google had already rotated AWAY from, so pasting it drops both live Play certificates and K10 at once. Listing a superseded certificate is harmless (it only widens what Android accepts); omitting a live one is the silent, cached failure. The generator refuses any build that publishes fewer fingerprints than the live file already carries.",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256",
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_CLASSICAL",
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_POST_QUANTUM",
+        "REPLACE_WITH_EACH_PREVIOUS_PLAY_APP_SIGNING_SHA256_OR_DROP_THIS_LINE",
         "4B:5D:E0:91:CF:39:97:31:06:11:B8:46:8B:67:79:DC:72:F5:8A:2A:94:0E:53:4F:1E:0A:59:AD:D8:25:9E:28"
       ]
     }
