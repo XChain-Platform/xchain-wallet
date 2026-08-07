@@ -47,24 +47,10 @@
 //   pnpm --filter @xchain-wallet/extension build
 //   node packages/extension/scripts/capture-listing-screenshots.mjs
 
-import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
-
-// Reused, not duplicated: the same localStorage-seeding keys and DOM walks
-// the extension e2e suite already verified against this UI. Plain functions
-// that take a Playwright `page`, so they work fine outside the Playwright
-// test-runner fixture system this script isn't running under.
-import {
-    LICENSE_ACCEPTED_AT_KEY,
-    LICENSE_ACCEPTED_VERSION_KEY,
-    unlockedShell,
-    openSettings,
-    dismissIntroCarousel,
-} from '../../../test/e2e/fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../core/src/buildInfo.js';
 // One map of what each asset is, shared with the verifier rather than
 // restated here, so the capture and the check cannot come to disagree about
@@ -79,6 +65,14 @@ import { ASSETS, writePin } from '../../../tools/release/verify-listing-assets.m
 // heavy, side-effecting work when asked how to use it is the worst version of
 // this defect, and it hid behind a passing exit code until the check that
 // covers the sibling tools was pointed at it.
+//
+// "Before anything else" was only true of the STATEMENTS, and that is not
+// where a module starts ( row 50). An ES module evaluates every static
+// import before its first statement, so in a tree with no node_modules this
+// block never ran: the process died on `@playwright/test` with a
+// module-not-found stack trace, which is the same defect this comment
+// describes wearing a different failure. The three imports that reach
+// node_modules are therefore loaded BELOW, dynamically, after this exits.
 if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
     console.log(`Capture the Chrome Web Store listing screenshots and promo tile.
 
@@ -97,6 +91,25 @@ Demo data only. It never touches a real wallet, and the store listing shows
 only what this produces.`);
     process.exit(0);
 }
+
+// Everything below here needs installed dependencies; nothing above did.
+// Top-level await, so the bindings are as ordinary as static ones for the
+// rest of the file - the only thing that changed is that they are resolved
+// after --help has had its chance to answer.
+const { chromium } = await import('@playwright/test');
+const { default: sharp } = await import('sharp');
+// Reused, not duplicated: the same localStorage-seeding keys and DOM walks
+// the extension e2e suite already verified against this UI. Plain functions
+// that take a Playwright `page`, so they work fine outside the Playwright
+// test-runner fixture system this script isn't running under. It imports
+// @playwright/test itself, which is why it moved down here with the rest.
+const {
+    LICENSE_ACCEPTED_AT_KEY,
+    LICENSE_ACCEPTED_VERSION_KEY,
+    unlockedShell,
+    openSettings,
+    dismissIntroCarousel,
+} = await import('../../../test/e2e/fixtures/wallet.js');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_DIST = path.resolve(HERE, '../dist');

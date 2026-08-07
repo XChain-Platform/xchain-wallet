@@ -185,6 +185,7 @@ assert.equal(status[1], rootVersion,
 // separate releases to write up.
 
 const isPrerelease = rootVersion.includes('-');
+let entryCount = 0;
 if (!isPrerelease) {
     const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
     const heading = new RegExp(`^## \\[${rootVersion.replaceAll('.', '\\.')}\\]`, 'm');
@@ -192,9 +193,32 @@ if (!isPrerelease) {
         `CHANGELOG.md has no "## [${rootVersion}]" section, but that is the version this tree declares and `
         + 'the one a release tag would name. buildInfo.js points a reader at the changelog for the version\'s '
         + 'release context; a bump that skips it ships a version with no recorded contents.');
+
+    // The heading is the SHAPE of the record. This is the substance, and
+    // until /S39 nothing anywhere asked for it: a section consisting
+    // of a heading and nothing else satisfied the assertion above, passed
+    // every gate in this repo, and shipped a release whose contents are
+    // undocumented at the exact moment the tag makes them permanent. That
+    // is not hypothetical either - `## [Unreleased]` sat empty across the
+    // 26 commits between v0.336.0 and the bump that follows it, so a bump
+    // taken then would have created exactly that section.
+    //
+    // tools/release/bump-version.mjs refuses to CREATE one, which stops the
+    // tool-driven path. This is the gate that also covers the hand-edited
+    // one, because the tool is a convenience and the rule is not.
+    const start = changelog.search(heading);
+    const after = changelog.indexOf('\n## [', start + 1);
+    const section = after === -1 ? changelog.slice(start) : changelog.slice(start, after);
+    entryCount = section.split('\n').filter((line) => /^[-*] \S/.test(line)).length;
+    assert.ok(entryCount > 0,
+        `CHANGELOG.md's "## [${rootVersion}]" section carries no entries. A heading with nothing under it `
+        + 'is the shape of a release record without its substance: it satisfies the check above, and tells '
+        + 'a reader installing this version nothing about what changed. Write one short sentence per change '
+        + `under a "### Fixed" / "### Added" / "### Changed" subsection (\`git log --oneline v<previous>..HEAD\` `
+        + 'is the raw material), or run tools/release/bump-version.mjs, which promotes them from Unreleased.');
 }
 
 console.log(`OK: version-lockstep smoke (/: ${members.length} packages + the store-facing `
     + `manifest.json + the user-facing buildInfo.js + README's badge and Status line all at ${rootVersion}`
-    + `${isPrerelease ? '; prerelease, so no CHANGELOG section is required' : ', with a CHANGELOG section'}`
+    + `${isPrerelease ? '; prerelease, so no CHANGELOG section is required' : `, with a CHANGELOG section carrying ${entryCount} entries`}`
     + '; test/e2e exempt and documented)');

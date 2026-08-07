@@ -75,7 +75,34 @@
 
 import { BUNDLED_DESCRIPTORS } from '../../packages/core/src/registry/descriptors/index.js';
 import { explorerCoinCode } from '../../packages/core/src/registry/coinTicker.js';
-import { verifyChainRegistry } from '../../packages/core/src/registry/remote.js';
+
+// registry/remote.js is the only import here that reaches node_modules
+// (@noble/curves, for the registry signature), and it is loaded dynamically
+// for a reason about WHERE this tool gets typed rather than about cost.
+//
+//  row 50: an ES module's static imports are evaluated before any
+// top-level statement in the file, so the --help handling below cannot run
+// at all in a tree without dependencies installed. The process dies on the
+// import with a module-not-found stack trace, which is exactly the "a tool
+// answering how-do-I-use-you with its own failure vocabulary" the ceremony
+// gate's §13 forbids - and §13 could not see it, because CI and every
+// developer machine have node_modules. The tree that does not is the
+// pristine clone the release ceremony mandates.
+//
+// The failure is not swallowed, only moved to the one probe that needs it:
+// the hub's registry verdict. The probe table, the HTTP classification and
+// --help all work with no dependencies at all, and the hub probe says what
+// is missing rather than pretending the registry verified.
+let verifyChainRegistry;
+try {
+    ({ verifyChainRegistry } = await import('../../packages/core/src/registry/remote.js'));
+} catch (err) {
+    verifyChainRegistry = () => {
+        throw new Error('the chain-registry verifier could not be loaded in this tree '
+            + `(${err.message}). Run "pnpm install" and re-run; --help and the probe table `
+            + 'work without it, but the hub probe cannot be classified honestly.');
+    };
+}
 
 export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3 };
 

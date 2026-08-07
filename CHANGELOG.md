@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.337.0] - 2026-08-07
+
+### Fixed
+- Two wallet screens spoke raw protocol at the user where plain wording belonged.
+- The multisig scheme picker described its own options in protocol jargon.
+- Contract consent lines rendered as bare opcodes and pairing errors reached the dialog unformatted.
+- Release verification accepted a good signature from any key in the keyring instead of only the release key.
+- The pre-signing dev-mock check reported success without saying whether it had read anything.
+- The release manifest dropped files that ship inside the archives it describes.
+- The architecture gate trusted an artifact's filename instead of reading its payload.
+- The artifact-set gate had no shape for a rehearsal set, so a rehearsal could not be signed.
+- The iOS lane attached its build to the wrong store version and could not run its export at all.
+- The Android CI gate built a bundle nobody ships.
+- Native binaries failed to build after the pnpm 11 upgrade moved where settings are read from.
+
+### Added
+- Releases can be signed and published one distribution lane at a time.
+- A Chrome Web Store upload lane, with checks on the listing collateral it uploads.
+- The release-signing key is published on two channels and pinned in the repo.
+- Store screenshots record which build they depict and are held to it.
+- `tools/release/bump-version.mjs` writes the release version into every place that declares it.
+
+### Changed
+- SECURITY.md states what has actually been signed and how to check it.
+- The demo-endpoint gate stopped certifying chains whose indexers cannot show a new balance.
+
 ## [0.336.0] - 2026-08-05
 
 ### Fixed
