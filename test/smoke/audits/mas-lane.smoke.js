@@ -37,6 +37,8 @@
 //   5. The mas target is opt-in, and never present on a staging build.
 //   6. The direct-download lane is untouched when MAS is off.
 //   7. attachUpdater refuses to run on a store build (process.mas).
+//   8. The listing has screenshots, at a canvas Apple accepts, pinned to
+//      the build they were captured from.
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
@@ -359,6 +361,51 @@ try {
     }
 }
 
+// --- 8. Listing screenshots ( row 95) ---------------------------
+//
+// Apple refuses a listing with no screenshot, and until 2026-08-07 this repo
+// could neither produce nor check one of the desktop shell: the listing tools
+// knew three Chrome Web Store PNGs, and the ceremony page said "the listing
+// text, screenshots and icon are in place" about a pipeline that did not
+// exist. The capture script drives the real Electron app; this holds its
+// output to what App Store Connect will actually take.
+
+const { SETS, verifyPin, MAC_APP_STORE_SIZES } = await import('../../../tools/release/verify-listing-assets.mjs');
+
+const masSet = SETS.mas;
+assert.ok(
+    existsSync(join(here, '..', '..', '..', masSet.capture)),
+    `the Mac App Store listing has no capture script at ${masSet.capture}; hand-taken screenshots `
+    + 'cannot be re-cut at the ref being submitted, which is the whole reason the extension set has one',
+);
+assert.ok(
+    masSet.assets.length >= 1,
+    'the Mac App Store asset map names no screenshots, and Apple takes no listing without one',
+);
+
+const masPin = verifyPin({ set: 'mas' });
+assert.equal(
+    masPin.reason,
+    undefined,
+    `the Mac App Store listing assets are not pinned to a build: ${masPin.reason}. Run `
+    + `node ${masSet.capture}, which captures and pins in the same run.`,
+);
+// verifyPin already re-reads every PNG header against both the pin and
+// Apple's accepted canvases, so this is the whole verdict rather than a
+// summary of it.
+assert.deepEqual(
+    masPin.hashProblems,
+    [],
+    'the Mac App Store listing assets disagree with their capture pin, or sit at a canvas Apple '
+    + `refuses (accepted: ${MAC_APP_STORE_SIZES.map((c) => `${c.width}x${c.height}`).join(', ')}): `
+    + `${masPin.hashProblems.join(' | ')}`,
+);
+assert.deepEqual(
+    masPin.extra,
+    [],
+    `the Mac App Store pin covers files that are not listing assets: ${masPin.extra.join(', ')}`,
+);
+
 console.log(
     'OK: MAS lane smoke ( §13: build/entitlements.mas{,.inherit}.plist exist and are well-formed; the '
         + 'store build declares com.apple.security.app-sandbox plus exactly network.client, device.usb (Ledger/'
@@ -370,6 +417,8 @@ console.log(
         + 'when off; attachUpdater short-circuits on process.mas before loading electron-updater, because an '
         + 'App Store build must never ship its own updater; the release workflow asks for --universal and no '
         + 'per-arch flag, because naming a target on the CLI discards the config arch and emits two packages for '
-        + 'a store slot that holds one; and the config relocates the .pkg out of the pack directory into the '
-        + 'output directory, driven on a temp tree, because every release tool reads a flat dist/)',
+        + 'a store slot that holds one; the config relocates the .pkg out of the pack directory into the '
+        + 'output directory, driven on a temp tree, because every release tool reads a flat dist/; and the '
+        + `listing carries ${masSet.assets.length} screenshot(s) of the desktop shell, each hashing to its `
+        + 'capture pin at a canvas App Store Connect accepts)',
 );

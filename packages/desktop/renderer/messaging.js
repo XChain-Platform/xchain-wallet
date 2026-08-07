@@ -1521,3 +1521,184 @@ export function getAirdropRecipients(req) {
 export function getNativePricesRequest(opts) {
     return /** @type {any} */ (sendMessage('prices.native', opts));
 }
+
+// ---------------------------------------------------------------------
+//  row 105: the calls this file's own header promised and did not
+// have.
+//
+// Measured 2026-08-07 by driving the real app for the first time (which
+// only became possible once row 102's fix made the window render at all):
+// every section of Settings painted "Settings unavailable:
+// messaging.getSettings is not available in this shell", the message
+// core/shared/hooks/useSettings.js raises when the wrapper is absent.
+// Appearance, Language & Region, Privacy, Safety, Wallet Mode, Backup,
+// Fees, Network and Notifications were all dead on the desktop shell, and
+// so were encrypted backup export, mnemonic reveal, dry-run restore,
+// label publishing, message signing and verification, the connected-sites
+// list and the blocklist audit log.
+//
+// Nothing in the main process was missing. Desktop wires the SAME
+// `createBackgroundHost` the extension service worker does
+// (main/messageHost.js), and every message type below is registered
+// there - the renderer simply never asked. Seventeen wrappers, each one
+// the web shell's implementation verbatim, because both shells talk to
+// the same host and a second opinion about the wire format is a defect
+// waiting to happen.
+//
+// The drift is held shut from here on by
+// test/smoke/shells/desktop-messaging-parity.smoke.js.
+// ---------------------------------------------------------------------
+
+// §35 Settings: read + patch the per-vault Settings record. Patch is a
+// deep-merge body; see flows/settings.js for the merge semantics.
+export function getSettings() {
+    return /** @type {any} */ (sendMessage('settings.get'));
+}
+
+/** @param {Record<string, unknown>} patch */
+export function updateSettings(patch) {
+    return /** @type {any} */ (sendMessage('settings.update', { patch }));
+}
+
+/**
+ * §19.4 encrypted backup. Resolves to `{ fileContent }`: the
+ * pretty-printed JSON envelope ready to write to disk.
+ *
+ * @param {{ walletId: string, password: string, includePendingTxs?: boolean }} opts
+ * @returns {Promise<{ fileContent: string }>}
+ */
+export function exportBackupFile(opts) {
+    return /** @type {any} */ (sendMessage('wallet.exportBackup', opts));
+}
+
+/**
+ * §19.3: reveal the wallet's seed mnemonic. Returns plaintext;
+ * caller is responsible for the reveal-screen guardrails.
+ *
+ * @param {{ walletId: string, password: string }} opts
+ * @returns {Promise<{ mnemonic: string, format: 'bip39' | 'counterwallet-legacy', passphraseEnabled: boolean }>}
+ */
+export function revealMnemonicRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.revealMnemonic', opts));
+}
+
+/**
+ * §19.6: dry-run restore from a candidate mnemonic.
+ *
+ * @param {{ walletId: string, mnemonic: string, format?: string, bip39Passphrase?: string, gapLimit?: number }} opts
+ * @returns {Promise<{ overallMatch: boolean, perChain: Array<object> }>}
+ */
+export function dryRunRestoreRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.dryRunRestore', opts));
+}
+
+/**
+ * §19.5.2 / G037: manual on-chain label publish. Encrypts the wallet's
+ * labels + contacts and broadcasts the ciphertext as a FILE action on
+ * the chosen chain.
+ *
+ * Resolves to `{ txid, chainId, discoveryName, sizeBytes, fromAddress }`.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, bip39Passphrase?: string, fee?: number, feePerKb?: number }} opts
+ */
+export function publishLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.publishLabels', opts));
+}
+
+/**
+ * §17.4 / §30.1 / G024: user-initiated message signing.
+ *
+ * @param {{ walletId: string, addressId: string, password: string, message: string, bip39Passphrase?: string }} opts
+ * @returns {Promise<{ signature: string }>}
+ */
+export function signMessageRequest(opts) {
+    return /** @type {any} */ (sendMessage('auth.signMessage', opts));
+}
+
+/**
+ * §17.5 / G025: verify a signature against an address. Pure SDK call.
+ *
+ * @param {{ chainId: string, address: string, message: string, signature: string }} opts
+ * @returns {Promise<{ valid: boolean }>}
+ */
+export function verifyMessageRequest(opts) {
+    return /** @type {any} */ (sendMessage('auth.verifyMessage', opts));
+}
+
+/**
+ * Single-address balance read; feeds the §21.2 simulator preview on
+ * Send.jsx review and SignApproval. Returns the SDK's raw
+ * `{ native, tokens }` shape; callers convert via
+ * `decoder.balancesFromSdk(...)` before feeding `simulateAction`.
+ *
+ * @param {string} chainId
+ * @param {string} address
+ * @returns {Promise<unknown>}
+ */
+export function getAddressBalances(chainId, address) {
+    return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
+}
+
+/**
+ * §7/§8 SPV: verify a single token balance against a quorum-signed
+ * checkpoint. Resolves to a normalized `{ status, amount, height, reason }`
+ * verdict (never rejects for a failed proof).
+ *
+ * @param {{ chainId: string, address: string, tick: string, atHeight?: number | string }} req
+ * @returns {Promise<{ status: string, amount: string | null, height: number | null, reason: string | null }>}
+ */
+export function verifyBalance(req) {
+    return /** @type {any} */ (sendMessage('balances.verify', req));
+}
+
+/**
+ * §7/§8 SPV: verify a single action's inclusion against a quorum-signed
+ * checkpoint.
+ *
+ * @param {{ chainId: string, actionIndex: number | string }} req
+ * @returns {Promise<{ status: string, height: number | null, reason: string | null }>}
+ */
+export function verifyAction(req) {
+    return /** @type {any} */ (sendMessage('history.verify', req));
+}
+
+/**
+ * §49.1 / G153: reachability probe across the supplied chains.
+ *
+ * @param {{ chainIds: string[], timeoutMs?: number }} opts
+ */
+export function checkReachabilityRequest(opts) {
+    return /** @type {any} */ (sendMessage('reachability.check', opts));
+}
+
+// §35.1 + §43 connected-sites: list / disconnect. Approvals create
+// the records in bridge/handlers.js.
+export function listConnectedSites() {
+    return /** @type {any} */ (sendMessage('sites.list'));
+}
+
+/** @param {{ id: string }} req */
+export function deleteConnectedSite(req) {
+    return /** @type {any} */ (sendMessage('sites.delete', req));
+}
+
+/**
+ * §37.2 / Cluster D FOLLOWUP 1: restore a ConnectedSite from a
+ * full record snapshot. Used by the Disconnect-site Undo toast.
+ *
+ * @param {{ site: object }} req
+ */
+export function restoreConnectedSite(req) {
+    return /** @type {any} */ (sendMessage('sites.restore', req));
+}
+
+/** Cluster S FOLLOWUP 4: blocklist audit log surface. */
+export function listBlocklistAuditLog() {
+    return /** @type {Promise<Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>>} */ (
+        sendMessage('sites.auditLog.list')
+    );
+}
+
+export function clearBlocklistAuditLog() {
+    return /** @type {Promise<{ cleared: number }>} */ (sendMessage('sites.auditLog.clear'));
+}

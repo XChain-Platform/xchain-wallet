@@ -1,0 +1,30 @@
+{
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write), normally from the end of a successful packages/desktop/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "set": "mas",
+    "capturedFrom": {
+        "commit": "42bda8b1365545412f3881fedf4654c9ced26093",
+        "version": "0.337.0",
+        "how": "capture"
+    },
+    "observedAt": "2026-08-07T15:14:22.682Z",
+    "assets": {
+        "screenshot-home.png": {
+            "sha256": "896d449a14612ecfdf454f0574f268b378817f104d70039727bf84c7c8bc5b2a",
+            "width": 1440,
+            "height": 900,
+            "shows": "Desktop window, Home view with the coin list"
+        },
+        "screenshot-tokens.png": {
+            "sha256": "ba7e7d87e93cb48a2bec74e87a87dd9f0dabb2e329630343c33537b032245c53",
+            "width": 1440,
+            "height": 900,
+            "shows": "Desktop window, Tokens view"
+        },
+        "screenshot-settings.png": {
+            "sha256": "5be14906c565a90e9ea766c682423f4ba128703fdbc07bd9064eae87ab24be0f",
+            "width": 1440,
+            "height": 900,
+            "shows": "Desktop window, Settings"
+        }
+    }
+}

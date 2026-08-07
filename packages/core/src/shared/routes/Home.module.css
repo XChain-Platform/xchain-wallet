@@ -240,8 +240,18 @@
     color: var(--xc-accent-primary);
 }
 
+/*  row 106: nine buttons, one line, no wrap and no scroll affordance.
+   Measured 2026-08-07 in the real desktop app: this row's scrollWidth is 1300
+   against a clientWidth of 1048 at EVERY window size (the container is
+   width-capped, so widening the window does not help), overflow-x is
+   `visible` on the row and its parent, and the last button is simply cut in
+   half by the window edge. It reads as a rendering fault rather than a full
+   row, and it was about to be that in a Mac App Store listing screenshot.
+   Wrapping is the whole fix: the row is a grid of independent actions, not an
+   ordered strip, so a second line costs nothing. */
 .actionsFull {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
 }

@@ -85,6 +85,18 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../..');
 const ASSET_DIR = path.join(REPO_ROOT, 'packages/extension/docs/listing-assets');
 const PIN_PATH = path.join(ASSET_DIR, 'capture-pin.json');
+const MAS_ASSET_DIR = path.join(REPO_ROOT, 'packages/desktop/docs/listing-assets');
+
+//  row 95: Apple's accepted macOS screenshot canvases. A listing image
+// at any other size is refused by App Store Connect at upload, which is a slow
+// and manual way to find out, so the capture asserts it as it writes and the
+// verifier re-reads it from the PNG header rather than trusting the capture.
+export const MAC_APP_STORE_SIZES = [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 2560, height: 1600 },
+    { width: 2880, height: 1800 },
+];
 
 // Everything the three screenshots have in common: they are all the same React
 // tree rendered in an extension window, over the demo dataset the capture
@@ -150,6 +162,90 @@ export const ASSETS = [
     },
 ];
 
+/**
+ * The Mac App Store listing images ( §13, frontier row 95).
+ *
+ * WHY A SECOND SET RATHER THAN A SECOND TOOL. Apple refuses a listing with no
+ * screenshot exactly as Google and Chrome do, and until 2026-08-07 nothing in
+ * this repo could produce or check a picture of the DESKTOP shell: this file
+ * verified three named Chrome Web Store PNGs, and the only capture script was
+ * the extension's. Copying either would have produced two implementations of
+ * "which build do these images depict", which is the very drift the extension
+ * set exists to catch, one level up. So the mechanism is shared and only the
+ * data differs.
+ *
+ * Everything the desktop screenshots have in common: the same React tree the
+ * other shells render, in an Electron window over the demo dataset, driven by
+ * the desktop capture script.
+ */
+const DESKTOP_SHELL = [
+    'packages/core/src/shared',
+    'packages/core/src/ui',
+    'packages/core/src/flows/demoFixtures.js',
+    'packages/desktop/renderer',
+    'packages/desktop/vite.config.js',
+    'packages/desktop/scripts/capture-listing-screenshots.mjs',
+];
+
+export const MAS_ASSETS = [
+    {
+        name: 'screenshot-home.png',
+        shows: 'Desktop window, Home view with the coin list',
+        depends: [...DESKTOP_SHELL],
+    },
+    {
+        name: 'screenshot-tokens.png',
+        shows: 'Desktop window, Tokens view',
+        depends: [...DESKTOP_SHELL],
+    },
+    {
+        name: 'screenshot-settings.png',
+        shows: 'Desktop window, Settings',
+        // Deliberately this screen and not a prettier one: it is the screen
+        // that was dead on desktop until row 105, and a listing image of it is
+        // one more thing that cannot go quietly blank again.
+        depends: [...DESKTOP_SHELL, 'packages/core/src/shared/components/settings'],
+    },
+];
+
+/**
+ * The sets this tool knows about. `extension` is the default everywhere, so
+ * every caller that predates the Mac App Store lane keeps its behaviour.
+ */
+export const SETS = {
+    extension: {
+        id: 'extension',
+        label: 'Chrome Web Store',
+        dir: ASSET_DIR,
+        pinPath: PIN_PATH,
+        assets: ASSETS,
+        capture: 'packages/extension/scripts/capture-listing-screenshots.mjs',
+        // The Chrome Web Store canvases are fixed per asset and already held
+        // by the listing-pack smoke, so there is no set-wide size rule here.
+        sizes: null,
+    },
+    mas: {
+        id: 'mas',
+        label: 'Mac App Store',
+        dir: MAS_ASSET_DIR,
+        pinPath: path.join(MAS_ASSET_DIR, 'capture-pin.json'),
+        assets: MAS_ASSETS,
+        capture: 'packages/desktop/scripts/capture-listing-screenshots.mjs',
+        sizes: MAC_APP_STORE_SIZES,
+    },
+};
+
+/** @param {string | { id: string } | undefined} set */
+function resolveSet(set) {
+    if (!set) return SETS.extension;
+    if (typeof set === 'object') return set;
+    const found = SETS[set];
+    if (!found) {
+        throw new Error(`unknown listing-asset set '${set}'; known sets: ${Object.keys(SETS).join(', ')}`);
+    }
+    return found;
+}
+
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
 /** PNG dimensions straight out of the IHDR, no image library needed. */
@@ -173,7 +269,8 @@ function git(args, opts = {}) {
  * the images: a pin written by anything else is a claim about a capture
  * nobody watched.
  */
-export function writePin({ commit, how = 'capture', version } = {}) {
+export function writePin({ commit, how = 'capture', version, set } = {}) {
+    const target = resolveSet(set);
     const at = commit || git(['rev-parse', 'HEAD']);
     const full = git(['rev-parse', at]);
     // Read the version out of the pinned COMMIT, not out of the working tree.
@@ -185,8 +282,8 @@ export function writePin({ commit, how = 'capture', version } = {}) {
         || JSON.parse(git(['show', `${full}:package.json`])).version;
 
     const assets = {};
-    for (const asset of ASSETS) {
-        const file = path.join(ASSET_DIR, asset.name);
+    for (const asset of target.assets) {
+        const file = path.join(target.dir, asset.name);
         const buf = fs.readFileSync(file);
         const size = pngSize(buf);
         assets[asset.name] = {
@@ -198,15 +295,16 @@ export function writePin({ commit, how = 'capture', version } = {}) {
 
     const pin = {
         _comment: 'Written by tools/release/verify-listing-assets.mjs (--write), normally from the '
-            + 'end of a successful packages/extension/scripts/capture-listing-screenshots.mjs run. '
+            + `end of a successful ${target.capture} run. `
             + 'Records WHICH BUILD the store listing images depict, which their pixel dimensions '
             + 'cannot say. Do not hand-edit: a pin that was not written by a capture is a claim '
             + 'about a capture nobody watched.',
+        set: target.id,
         capturedFrom: { commit: full, version: pkgVersion, how },
         observedAt: new Date().toISOString(),
         assets,
     };
-    fs.writeFileSync(PIN_PATH, `${JSON.stringify(pin, null, 4)}\n`);
+    fs.writeFileSync(target.pinPath, `${JSON.stringify(pin, null, 4)}\n`);
     return pin;
 }
 
@@ -217,10 +315,11 @@ export function writePin({ commit, how = 'capture', version } = {}) {
  * rather than two that can drift. Returns { pin, hashProblems, extra } or a
  * `reason` when there is nothing to check against.
  */
-export function verifyPin() {
-    if (!fs.existsSync(PIN_PATH)) {
+export function verifyPin({ set } = {}) {
+    const target = resolveSet(set);
+    if (!fs.existsSync(target.pinPath)) {
         return {
-            reason: `no capture pin at ${path.relative(REPO_ROOT, PIN_PATH)}. Nothing records which `
+            reason: `no capture pin at ${path.relative(REPO_ROOT, target.pinPath)}. Nothing records which `
                 + 'build the listing images depict. Run the capture, or bootstrap the pin with '
                 + '--write --how derived --commit <the commit the assets landed in>.',
         };
@@ -228,7 +327,7 @@ export function verifyPin() {
 
     let pin;
     try {
-        pin = JSON.parse(fs.readFileSync(PIN_PATH, 'utf8'));
+        pin = JSON.parse(fs.readFileSync(target.pinPath, 'utf8'));
     } catch (err) {
         return { reason: `capture pin is not readable JSON: ${err.message}` };
     }
@@ -237,13 +336,13 @@ export function verifyPin() {
     }
 
     const hashProblems = [];
-    for (const asset of ASSETS) {
+    for (const asset of target.assets) {
         const recorded = pin.assets[asset.name];
         if (!recorded) {
             hashProblems.push(`${asset.name}: not covered by the pin at all`);
             continue;
         }
-        const file = path.join(ASSET_DIR, asset.name);
+        const file = path.join(target.dir, asset.name);
         if (!fs.existsSync(file)) {
             hashProblems.push(`${asset.name}: pinned, but no such file`);
             continue;
@@ -263,17 +362,28 @@ export function verifyPin() {
         if (recorded.width && size && (recorded.width !== size.width || recorded.height !== size.height)) {
             hashProblems.push(`${asset.name}: PNG header says ${size.width}x${size.height}, `
                 + `pin says ${recorded.width}x${recorded.height}`);
+            continue;
+        }
+        // A set-wide canvas rule, where the store has one. The Mac App Store
+        // takes any of four sizes and refuses everything else at upload, so
+        // the answer is worth having here rather than out of App Store Connect
+        // at the end of a submission.
+        if (target.sizes && size && !target.sizes.some((c) => c.width === size.width && c.height === size.height)) {
+            hashProblems.push(`${asset.name}: ${size.width}x${size.height} is not one of the `
+                + `${target.label}'s accepted canvases (`
+                + `${target.sizes.map((c) => `${c.width}x${c.height}`).join(', ')})`);
         }
     }
-    const extra = Object.keys(pin.assets).filter((n) => !ASSETS.some((a) => a.name === n));
+    const extra = Object.keys(pin.assets).filter((n) => !target.assets.some((a) => a.name === n));
     return { pin, hashProblems, extra };
 }
 
 /**
  * The read-only whole: the pin half above, plus the drift half that needs git.
  */
-export function verifyListingAssets({ since } = {}) {
-    const pinned = verifyPin();
+export function verifyListingAssets({ since, set } = {}) {
+    const assetSet = resolveSet(set);
+    const pinned = verifyPin({ set: assetSet });
     if (pinned.reason) return { state: 'INCONCLUSIVE', reason: pinned.reason };
     const { pin, hashProblems, extra } = pinned;
 
@@ -294,7 +404,7 @@ export function verifyListingAssets({ since } = {}) {
     }
 
     const drift = [];
-    for (const asset of ASSETS) {
+    for (const asset of assetSet.assets) {
         const log = git([
             'log', '--oneline', '--no-decorate',
             `${pin.capturedFrom.commit}..${targetSha}`,
@@ -307,6 +417,7 @@ export function verifyListingAssets({ since } = {}) {
     const problems = hashProblems.length > 0 || drift.length > 0;
     return {
         state: problems ? 'STALE' : 'CLEAN',
+        set: assetSet.id,
         pin: {
             commit: pin.capturedFrom.commit,
             version: pin.capturedFrom.version,
@@ -339,6 +450,8 @@ depicts.
   --commit <sha>  with --write, the commit the capture ran against.
   --how <how>     with --write, capture (default) or derived.
   --json          machine-readable result on stdout.
+  --set <id>      which listing to check: 'extension' (Chrome Web Store, the
+                  default) or 'mas' (Mac App Store, the desktop shell).
 
 Exit codes: 0 clean, 1 stale (a hash disagrees or a depicted surface moved),
 2 inconclusive (no pin, or the history needed is not in this checkout).
@@ -355,17 +468,20 @@ function main(argv) {
         return i === -1 ? undefined : argv[i + 1];
     };
 
+    const set = flag('--set') || 'extension';
+
     if (argv.includes('--write')) {
         const pin = writePin({
             commit: flag('--commit'),
             how: flag('--how') || 'capture',
+            set,
         });
         console.log(`[verify-listing-assets] pinned ${Object.keys(pin.assets).length} assets to `
             + `${pin.capturedFrom.commit.slice(0, 8)} (v${pin.capturedFrom.version}, how=${pin.capturedFrom.how})`);
         return 0;
     }
 
-    const result = verifyListingAssets({ since: flag('--since') });
+    const result = verifyListingAssets({ since: flag('--since'), set });
     if (argv.includes('--json')) {
         console.log(JSON.stringify(result, null, 2));
     } else if (result.state === 'INCONCLUSIVE') {
@@ -392,13 +508,13 @@ function main(argv) {
                 + 'depicts has changed since it was captured');
         } else {
             console.error('[verify-listing-assets] STALE. Two honest ways out, and uploading anyway '
-                + 'is neither: (1) rebuild the extension at the ref you are submitting and re-run '
-                + 'packages/extension/scripts/capture-listing-screenshots.mjs, which re-pins as it '
+                + 'is neither: (1) rebuild the shell at the ref you are submitting and re-run '
+                + `${SETS[result.set || 'extension'].capture}, which re-pins as it `
                 + 'goes; or (2) read the commits above and record in the release record why none of '
                 + 'them can change these pixels. This tool deliberately cannot tell a cosmetic '
-                + 'commit from a visible one, so it names them rather than guessing. The store '
-                + 'assigns a permanent extension ID to the first upload and a reviewer compares the '
-                + 'screenshots against the product.');
+                + 'commit from a visible one, so it names them rather than guessing. A reviewer '
+                + 'compares these screenshots against the product they are sent, and the Chrome Web '
+                + 'Store additionally assigns a permanent extension ID to the first upload.');
         }
     }
     return { CLEAN: 0, STALE: 1, INCONCLUSIVE: 2 }[result.state];
