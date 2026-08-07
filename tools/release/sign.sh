@@ -299,9 +299,54 @@ else
     # store ceremony is about (the uploaded artifact is the CI-built one).
     # The gate now refuses a scan that covers nothing, so reaching the line
     # after this one means at least one shipped bundle was really read.
+    #
+    # EXCEPT THAT IT IS NOT THIS SCRIPT'S GATE ( S38). This file comes
+    # from whichever checkout invoked it; $DEV_MOCK_CHECK comes from --repo,
+    # which is the tree at the release tag. Those are routinely different
+    # trees, deliberately: --repo exists so a current sign.sh can sign an
+    # older tag's artifacts, and that is how the only signed manifest this
+    # project has published was made (v0.336.0, --lane android, by a sign.sh
+    # that tag does not contain).
+    #
+    # So the empty-scan refusal above is a property of the TAG's copy of the
+    # gate, and every tag cut before it was written carries a copy that does
+    # not take --artifacts at all. Driven against v0.336.0: the flag is
+    # ignored, the pristine clone's absent dist/ trees are scanned instead,
+    # three SKIP lines and `OK` come back, exit 0 - and `enforced` goes into
+    # the SIGNED header on a scan that read zero bytes. That is the exact
+    # defect the empty-scan refusal was built to end, arriving from the one
+    # direction it cannot see, and the desktop updater refuses any release
+    # whose header is not exactly `enforced`, so the word carries weight.
+    #
+    # Requiring the gate's RECEIPT rather than its exit status is what closes
+    # it, and the receipt is derived rather than a proxy: only a gate that
+    # really opened staged bundles can say how many it opened. Grepping the
+    # gate script for `--artifacts` would pass on a comment mentioning it.
     echo "sign.sh: running pre-sign dev-mock gate against $INPUT_DIR ..." >&2
     DEV_MOCK_INPUT="$(cd "$INPUT_DIR" && pwd)"
-    ( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" --artifacts "$DEV_MOCK_INPUT" ) >&2
+    DEV_MOCK_OUT=""
+    if ! DEV_MOCK_OUT="$( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" --artifacts "$DEV_MOCK_INPUT" 2>&1 )"; then
+        printf '%s\n' "$DEV_MOCK_OUT" >&2
+        echo "sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign." >&2
+        exit 1
+    fi
+    printf '%s\n' "$DEV_MOCK_OUT" >&2
+
+    if ! printf '%s\n' "$DEV_MOCK_OUT" | grep -qE '^OK - [1-9][0-9]* bundle\(s\) scanned'; then
+        echo "sign.sh: the dev-mock gate exited 0 without saying it read anything." >&2
+        echo "  Gate script: $DEV_MOCK_CHECK" >&2
+        echo "  That script comes from --repo ($REPO_ROOT), the tree at $TAG," >&2
+        echo "  while this sign.sh comes from the checkout you invoked. A gate" >&2
+        echo "  predating --artifacts ignores the flag, scans the pristine" >&2
+        echo "  clone's absent dist/ trees, and reports OK having read nothing." >&2
+        echo "  Refusing to sign: 'the gate could not run' and 'the gate passed'" >&2
+        echo "  must never produce the same release, and this header is what" >&2
+        echo "  the desktop updater reads as proof the gate ran." >&2
+        echo "  Fix: sign a tag whose own tools/build-reproduce/check-no-dev-mock.sh" >&2
+        echo "  takes --artifacts, or set SIGN_SKIP_DEV_MOCK_CHECK=1 deliberately," >&2
+        echo "  which records SKIPPED in the header instead of claiming enforced." >&2
+        exit 1
+    fi
 fi
 
 # --- Tag/artifact version gate ( S33) -----------------------------

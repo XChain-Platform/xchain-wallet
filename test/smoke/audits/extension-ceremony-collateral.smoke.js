@@ -1417,26 +1417,56 @@ assert.equal(decisionState.length, 0,
 // enforced` into the SIGNED manifest - which Phase 4a then reads as
 // provenance and the desktop updater refuses a release without.
 //
-// The check is therefore on the ceremony rather than on the code: the code
-// is already right and cannot be made retroactive. The operator has to be
-// able to ask a tag which gate it carries.
+// S38 CORRECTS THE PREMISE ABOVE, and the correction is this section's
+// finding rather than a tidy-up. "Signing runs the tag's copy of sign.sh"
+// is FALSE. The tree sign.sh verifies the tag against is the `--repo`
+// argument, and only the files sign.sh reads out of that tree belong to the
+// tag; sign.sh itself, and the lib.sh beside it, come from whichever
+// checkout was invoked. Two measurements, either of which settles it: the
+// published v0.336.0 manifest carries `coverage: partial` and
+// `lanes: android`, header fields only post-tag tooling can write; and a
+// current sign.sh driven with `--repo <clone at v0.336.0>` signs perfectly
+// well (2026-08-07).
+//
+// So the class splits in two, and each half has to be asked about the file
+// that really carries it:
+//
+//   * The dev-mock GATE SCRIPT does come from the tag, so the empty-scan
+//     defect is real and reachable today - pointing a current sign.sh at an
+//     old tag reproduces it exactly. It is now refused in code rather than
+//     left to be noticed: sign.sh requires the gate's own receipt ("N
+//     bundle(s) scanned") before it will write `enforced`
+//     (release-dev-mock-receipt.smoke.js). The ceremony step is a diagnosis
+//     of that refusal, so it must name the GATE script, not sign.sh.
+//   * The `--lane` FLAG does not come from the tag. The step that asked
+//     `git show TAG:tools/release/sign.sh | grep -c -- '--lane'` answers 0
+//     for every tag that has ever existed, and it would have blocked the
+//     one partial manifest this project has actually published. What the
+//     tag must carry is the lane TABLE, which sign.sh reads out of --repo.
+//
+// The floor stays at two steps because the failure being prevented is a
+// phase that reads the header and asks nothing about who wrote it.
 const tagGateSteps = phase4.split('\n')
     .filter((l) => /^⬜/.test(l) && /--artifacts|dev-mock-gate/.test(l));
 assert.ok(tagGateSteps.length >= 2,
     'FAIL: Phase 4a checks the `# dev-mock-gate:` header field but never asks which gate wrote it. '
-    + 'Signing runs from a pristine clone at the release TAG, so it runs that tag\'s sign.sh: a fix '
-    + 'to the gate protects the next release and never one already tagged. Both existing tags carry '
-    + 'the version that scans the repo\'s dist/ trees, which a pristine clone does not have, so they '
-    + 'write `enforced` on a scan that read nothing. The step must let the operator ask the tag.');
+    + 'The gate script comes from the tag even though sign.sh does not, and every tag cut to date '
+    + 'carries the version that scans the repo\'s dist/ trees, which a pristine clone does not have, '
+    + 'so it writes `enforced` on a scan that read nothing. sign.sh refuses that now; the step is '
+    + 'how an operator reads the refusal.');
 
 // The two halves again (§8): the step has to name a marker that is really in
-// the signing script, or it rots into a grep that matches nothing and passes
+// the file it greps, or it rots into a grep that matches nothing and passes
 // every tag forever - which is the same empty-scan failure wearing the
-// check's own clothes.
-const tagGateProbe = phase4.match(/git show[^\n]*sign\.sh[^\n]*\n?[^\n]*/);
+// check's own clothes. The FILE is the assertion here: aiming this probe at
+// sign.sh is the defect S38 measured, since sign.sh is the one file in the
+// signing path that a tag does not supply.
+const tagGateProbe = phase4.match(/git show[^\n]*check-no-dev-mock\.sh[^\n]*\n?[^\n]*/);
 assert.ok(tagGateProbe && /--artifacts/.test(tagGateProbe[0]),
-    'FAIL: Phase 4a has no command that reads the signing script OUT OF THE TAG. Reading the working '
-    + 'tree\'s copy answers a question nobody asked: the working tree is not what signs a release.');
+    'FAIL: Phase 4a has no command that reads the DEV-MOCK GATE out of the tag. If it greps '
+    + '`vX.Y.Z:tools/release/sign.sh`, that is the pre-S38 step and it asks the tag about the one '
+    + 'file that does not come from the tag: sign.sh is supplied by the checkout the operator '
+    + 'invokes, which is why `--repo` exists at all.');
 
 const signSh = readFileSync(join(walletRoot, 'tools', 'release', 'sign.sh'), 'utf8');
 const devMockInvocation = signSh.slice(signSh.indexOf('DEV_MOCK_CHECK='));
@@ -1446,6 +1476,39 @@ assert.ok(/--artifacts/.test(devMockInvocation),
     + 'ceremony step now passes every tag including the blind ones, or the gate went back to '
     + 'scanning the repo. Both are worse than the defect this step was written for, because this '
     + 'time a check says OK.');
+assert.ok(/bundle\\\(s\\\) scanned/.test(devMockInvocation),
+    'FAIL: sign.sh no longer requires the dev-mock gate to say how many staged bundles it read, so '
+    + '`# dev-mock-gate: enforced` is back to meaning "the gate exited 0", which an older tag\'s '
+    + 'gate does after scanning nothing. That word is read as provenance by Phase 4a and the '
+    + 'desktop updater refuses any release without it.');
+
+// The lane half. Named on the same evidence: this grep must not be aimed at
+// sign.sh, and the file it IS aimed at has to declare the lane the ceremony
+// signs with.
+const laneProbe = phase4.match(/git show[^\n]*shipped-lanes\.txt[^\n]*/);
+assert.ok(laneProbe,
+    'FAIL: Phase 4a-bis does not ask whether the tag DECLARES the extension lane. If it greps the '
+    + 'tag\'s sign.sh for `--lane` instead, that answers 0 for every tag ever cut - including '
+    + 'v0.336.0, from which a partial manifest was in fact signed and published - and sends the '
+    + 'operator to cut a new tag for a reason that is not the real one.');
+// Scoped to the fenced blocks, which is what an operator actually runs.
+// The prose is deliberately allowed to quote the retired command while
+// warning against it, and a check that reddened on that warning would be
+// one firing on correct writing - the S14 lesson this file keeps.
+const phase4Commands = [...phase4.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
+    .map((m) => m[1]).join('\n');
+assert.doesNotMatch(phase4Commands, /git show[^\n]*sign\.sh[^\n]*--lane/,
+    'FAIL: Phase 4a-bis still hands the operator a grep of the TAG\'s sign.sh for `--lane`. '
+    + 'sign.sh comes from the checkout the operator invokes, not from the tag; `--repo` is what '
+    + 'makes that so, and the Android lane signed v0.336.0 that way. This step blocks a submission '
+    + 'that is not blocked.');
+
+const laneTable = readFileSync(join(walletRoot, 'tools', 'release', 'shipped-lanes.txt'), 'utf8');
+assert.match(laneTable, /^extension\s+(SHIPPED|NOT-SHIPPED)\s/m,
+    'FAIL: tools/release/shipped-lanes.txt no longer declares the `extension` lane, so the command '
+    + 'Phase 4a-bis hands the operator greps for a row that cannot exist and `--lane extension` '
+    + 'refuses every release. That row is what takes the Chrome submission off the desktop lanes\' '
+    + 'signing blockers.');
 
 // --- 18. The command the ceremony hands you must reach the ceremony's own
 //         staging path ---------------------------------------------------
@@ -1623,6 +1686,106 @@ for (const script of ['release:sign', 'release:verify']) {
         + 'ceremony page hash-checks in Phase 4a. The v belongs on both or on neither; today the '
         + 'tag carries it, the ceremony carries it, and this script does not, so the documented '
         + 'shorthand resolves to a directory no release has ever been staged into.');
+}
+
+// --- 23. Every internal artifact the page REFERS TO has a map entry -----
+//
+// S38, and it is §5 run backwards. §5 proves that each pointer in the
+// spec's §4a block resolves; nothing proved that each reference the
+// ceremony MAKES has a pointer. That is the direction the S23 defect
+// travelled in: the docs standard bars claude/ paths from a published
+// page, so the page can only ever say "the correspondence log", and if
+// nobody adds the entry there is no document anywhere that says where it
+// is. §5 stays green throughout, because §5 only ever looks at what the
+// map already contains.
+//
+// Measured 2026-08-07: "the project's own release tracking" appears twice,
+// in the ground rules and in Phase 0's second precondition - the first two
+// things an operator reads - and no document in either repo said what it
+// was. Phase 0's step tells them to check the audits and release tooling
+// against it "not from memory", which is the one way left to satisfy it.
+//
+// Derived from the page rather than listed, so a reference added tomorrow
+// is caught: the harvest is a definite noun phrase over the nouns this
+// project keeps such things under, and every phrase it finds must be
+// CLASSIFIED below - mapped into §4a, or publicly resolvable on the page.
+// A new phrase belongs to neither and turns this red, which is the point:
+// the classification is a decision somebody has to make once, and it is
+// this file's job to make sure they are asked.
+{
+    const prose = ceremony
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`]*`/g, '')
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+
+    // Bare "the store"/"the runbook" are excluded by requiring a qualifier:
+    // an unqualified definite reference resolves from its own sentence. The
+    // stop words drop phrases the pattern picks up mid-sentence ("the same
+    // path the store", "the easy way to register"), which are not noun
+    // phrases at all.
+    const STOP = new Set(['same', 'one', 'all', 'easy', 'live', 'first', 'next',
+        'other', 'only', 'whole', 'real', 'right', 'wrong', 'way', 'path', 'zip',
+        'declaration', 'chrome', 'web', 'that', 'this', 'two', 'three', 'each',
+        'any', 'new', 'old']);
+    const HEADS = 'log|inventory|runbook|tracking|ledger|register|store';
+    const re = new RegExp(`\\bthe ((?:[a-z][a-z0-9-]*(?:.s)? ){0,3}?)(${HEADS})\\b`, 'g');
+
+    const found = new Set();
+    for (const m of prose.matchAll(re)) {
+        const quals = m[1].trim().split(/\s+/).filter(Boolean);
+        if (!quals.length) continue;
+        if (quals.some((w) => STOP.has(w.replace(/.s$/, '')))) continue;
+        found.add(`the ${quals.join(' ')} ${m[2]}`);
+    }
+
+    // The classification. `map` names the §4a pointer the phrase resolves
+    // through; `why` records what makes a phrase need no map at all.
+    const CLASSIFIED = {
+        'the correspondence log': { map: 'claude/reports/xchain-wallet/extension-store-correspondence.md' },
+        "the operator's correspondence log": { map: 'claude/reports/xchain-wallet/extension-store-correspondence.md' },
+        'the incident runbook': { map: 'claude/reports/launch/INCIDENT-RUNBOOK.md' },
+        'the credential inventory': { map: 'claude/specs/wallet-release-rails.md' },
+        'the release credential inventory': { map: 'claude/specs/wallet-release-rails.md' },
+        'the recovery-credential store': { map: 'claude/specs/wallet-release-rails.md' },
+        "the project's own release tracking": { map: 'claude/OPEN-ITEMS.md' },
+        'the publish log': { why: 'the page gives its repo path in the same Phase 6 step' },
+        'the explorer access log': { why: 'a server-side log described in the privacy prose, not an operator artifact' },
+    };
+
+    const unclassified = [...found].filter((p) => !CLASSIFIED[p]).sort();
+    assert.equal(unclassified.length, 0,
+        `the ceremony page refers to internal artifacts this file has never classified:\n  `
+        + `${unclassified.join('\n  ')}\n`
+        + 'Each is either something the operator can only find through the spec\'s §4a map (add the '
+        + 'pointer there and the entry here) or something the page resolves itself (record why '
+        + 'here). Leaving it unclassified is how "the project\'s own release tracking" sat on the '
+        + 'ceremony\'s first two steps with no document anywhere naming it.');
+
+    const dead = Object.keys(CLASSIFIED).filter((p) => !found.has(p)).sort();
+    assert.equal(dead.length, 0,
+        `this file classifies phrases the ceremony page no longer uses:\n  ${dead.join('\n  ')}\n`
+        + 'A classification nobody can reach is a second copy going stale on its own, which is the '
+        + 'defect this whole gate exists to prevent. Drop the entry in the same change that '
+        + 'reworded the page.');
+
+    // The mapped ones have to be mapped WHERE the operator is told to look.
+    // §5 then proves those paths resolve, so the two halves meet: this one
+    // says the map covers the page, §5 says the map is not dangling.
+    if (existsSync(specPath)) {
+        const spec4a = readFileSync(specPath, 'utf8');
+        const s = spec4a.indexOf('## 4a. The private pointers');
+        const e = spec4a.indexOf('\n## ', s + 1);
+        const map4a = s === -1 ? '' : spec4a.slice(s, e === -1 ? undefined : e);
+        const unmapped = Object.entries(CLASSIFIED)
+            .filter(([, v]) => v.map && !map4a.includes(v.map))
+            .map(([p, v]) => `${p} -> ${v.map}`);
+        assert.equal(unmapped.length, 0,
+            `the ceremony refers to these, and the spec's §4a map does not carry them:\n  `
+            + `${unmapped.join('\n  ')}\n`
+            + 'The published page is forbidden to name them, so §4a is the only place an operator '
+            + 'can find them. A reference with no entry is a step that cannot be executed by '
+            + 'anyone who does not already know the answer.');
+    }
 }
 
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
