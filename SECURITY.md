@@ -32,9 +32,9 @@ For sensitive reports, please encrypt the email body to our PGP key.
 >
 > This fingerprint is published at <https://xchain.io/security>, and that is currently the **only** place a public reader can read it: this file is a second copy, but this repository is private, so every URL naming it returns 404 to anyone outside the project. **Two independent channels is the design and one is the reality**, so do not treat the pair as a cross-check yet. When the second channel is genuinely reachable, both copies will name the other by URL and the rule for a disagreement will be: trust neither, and email us to ask which is current.
 >
-> **No XChain Wallet release has been signed or published yet.** The key now exists, but nothing has been signed with it: any file offered to you today as a signed XChain Wallet release is not one.
+> **One XChain Wallet release has been signed with this key: `v0.336.0`, published 2026-08-06, covering the Android lane only.** Nothing else has been signed with it, so a file offered to you today as a signed desktop, extension or iOS release is not one. See "Verifying releases" below for where the Android artifact and its manifest live.
 >
-> Until the first signed release is out: the email channel above is acceptable for first contact. We will coordinate an encrypted exchange with you (a session key over a second channel, or a short-lived one-time key) before you share proof-of-concept details or anything else sensitive.
+> The email channel above is acceptable for first contact. We will coordinate an encrypted exchange with you (a session key over a second channel, or a short-lived one-time key) before you share proof-of-concept details or anything else sensitive.
 
 We do not currently offer a paid bug bounty. We do offer public credit in release notes and the advisory itself, unless you prefer to remain anonymous.
 
@@ -110,7 +110,9 @@ Read that document before reporting. It tells you what we already know, what we 
 
 ## Verifying releases
 
-The release signing key now exists and its fingerprint is published above; what has not happened yet is a signed release to verify (tracked as G158 / G159 / G180). The procedure for verifying a release artifact is documented at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and the desktop section of [https://docs.xchain.io/components/wallet/reproducible-builds](https://docs.xchain.io/components/wallet/reproducible-builds) document the procedure.
+The release signing key exists, its fingerprint is published above, and **one release has now been signed with it: `v0.336.0`, published 2026-08-06, covering the Android lane only.** The `.apk` is at <https://downloads.xchain.io/wallet/android/> and the manifest describing it is at <https://downloads.xchain.io/wallet/RELEASE_HASHES/v0.336.0.txt> with its detached signature beside it. That manifest declares `coverage: partial` and `lanes: android` in its own signed header, so it is full proof for the artifacts it lists and says nothing about any other lane.
+
+No desktop, extension or iOS release has been signed or published yet (tracked as G158 / G159 / G180), so a file offered as one of those is not a release of ours. For those platforms, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and the desktop section of [https://docs.xchain.io/components/wallet/reproducible-builds](https://docs.xchain.io/components/wallet/reproducible-builds) document the procedure. The procedure for verifying any release artifact is documented at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release).
 
 ### Android APK signing certificate
 
