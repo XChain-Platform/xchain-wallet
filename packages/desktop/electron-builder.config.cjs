@@ -90,6 +90,23 @@ const ARCHES = ['x64', 'arm64'];
 // owns updates for that channel, so there is no feed to rehearse against.
 const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 
+// The qualifier the store build looks its TWO certificates up by, and it
+// has to be a qualifier rather than a certificate name .
+//
+// `mas.identity` is not only the app-signing identity: app-builder-lib
+// passes the same string to the installer lookup,
+// `findIdentity('3rd Party Mac Developer Installer', mas.identity)`, and
+// `_findIdentity` matches with `line.includes(qualifier)`. So the full name
+// of the Apple Distribution certificate finds the app certificate and then
+// cannot find the installer one, and the build dies at the pkg step. The
+// value that matches both is the part they share, which is the team.
+//
+// It must also never be `null` or absent. `mas` config is
+// `deepAssign(mac, mas)`, `mac.identity` is null on any machine without
+// CSC_IDENTITY_NAME, and `macPackager.sign` returns on a null identity
+// BEFORE the step that builds the .pkg - silently, exit 0, no artifact.
+const MAS_IDENTITY = process.env.MAS_IDENTITY_NAME || process.env.CSC_IDENTITY_NAME || 'Dankest, LLC';
+
 // The Microsoft Store lane ( §15), opt-in for the same three
 // reasons as MAS. It needs a Partner-Center-assigned publisher identity
 // nobody has yet; it can only be produced on a Windows 10+ host (or a
@@ -245,6 +262,17 @@ const config = {
     productName: 'XChain Wallet',
     copyright: 'Copyright © Dankest, LLC',
 
+    // A store build that cannot sign must FAIL, not succeed quietly
+    // . Every macOS signing miss in app-builder-lib is silent by
+    // default: `handleNullIdentity` logs and returns false, and a missing
+    // certificate goes through `reportError`, which only throws when this
+    // flag is on. Both paths end the same way, exit 0 with no .pkg, and
+    // that is exactly how this lane read as healthy while producing
+    // nothing. Scoped to the store lane because a dev or CI mac build with
+    // no certificate at all is a legitimate unsigned build; a Mac App
+    // Store build never is.
+    forceCodeSigning: buildMas,
+
     // --- Reproducible AppImage ( DD7) ----------------------------
     //
     // The AppImage was the one shipped artifact that did NOT reproduce,
@@ -269,6 +297,53 @@ const config = {
             prepareDeterministicAppImageToolset,
         } = require('./scripts/appimage-toolset.cjs');
         await prepareDeterministicAppImageToolset(context.arch);
+    },
+
+    // --- The store package lands where nothing looks  ---------
+    //
+    // Every other artifact this config produces is written to `dist/`.
+    // The Mac App Store `.pkg` is not: app-builder-lib's
+    // `MacTargetHelper.createMasInstaller` resolves the artifact name
+    // against the PACK directory it was handed (`path.resolve(outDir,
+    // artifactName)` where outDir is `dist/mas-universal`), so the one
+    // artifact this channel ships arrives one level below every tool that
+    // goes looking for one. Measured with a real signed .pkg on disk:
+    // `update-info.mjs artifacts packages/desktop/dist` printed nothing
+    // and exited 0, so `xr_list_artifacts` saw an empty set, the
+    // `optional  *-mas.pkg` row in expected-artifacts.txt could never
+    // match, sign.sh would never sign it and publish.sh would never
+    // publish it. An optional row that can never match is
+    // indistinguishable from one that simply was not built, which is why
+    // this survived six days behind the identity defect above.
+    //
+    // Fixed HERE rather than in the release tooling deliberately. The
+    // alternative is teaching update-info.mjs, lib.sh, sign.sh and
+    // publish.sh to look inside pack directories, which is four tools
+    // learning one upstream quirk and carrying a path with a slash in it
+    // through a manifest that has never held one. Normalising the layout
+    // at the seam that creates it leaves every downstream tool reading a
+    // flat directory, which is what they were written against.
+    //
+    // The name cannot be used to do this: createMasInstaller runs the
+    // artifactName template through `path.basename`, on purpose, so a
+    // `../` in it is stripped rather than honoured.
+    afterAllArtifactBuild: async (buildResult) => {
+        const { renameSync } = require('node:fs');
+        const { basename, dirname, join, resolve } = require('node:path');
+
+        const distRoot = resolve(buildResult.outDir);
+        const relocated = [];
+        for (const file of buildResult.artifactPaths) {
+            if (!file.endsWith('.pkg')) continue;
+            if (resolve(dirname(file)) === distRoot) continue;
+            const destination = join(distRoot, basename(file));
+            renameSync(file, destination);
+            relocated.push(destination);
+        }
+        // Returned so electron-builder's own artifact list names where the
+        // file actually is; the build itself never publishes (§8), so this
+        // is bookkeeping rather than an upload.
+        return relocated;
     },
 
     // NOTE: the `homepage` the .deb lane requires is NOT settable here.
@@ -368,7 +443,17 @@ const config = {
             // and a rehearsal build must never carry it: `mas` has no
             // auto-update path, so a staging variant of it exercises
             // nothing (same reasoning as UPDATE_CAPABLE_TARGET).
-            ...(buildMas ? [{ target: 'mas', arch: ARCHES }] : []),
+            // UNIVERSAL, not ARCHES, and that is a constraint before it is a
+            // preference (operator decision 2026-08-07, spec dq6). An App
+            // Store version carries exactly ONE build, so a per-arch pair is
+            // two candidates for one slot rather than a choice the store can
+            // serve - unlike the Microsoft Store below, which really does
+            // ship an architecture-specific package to each device. The
+            // trade is a download roughly twice the size; the alternative was
+            // an arm64-only listing, which silently makes "installs the
+            // native way on every platform" untrue for every Intel Mac and
+            // gives the store no way to offer them anything.
+            ...(buildMas ? [{ target: 'mas', arch: ['universal'] }] : []),
         ],
         // Signing identity comes from CSC_LINK / CSC_KEY_PASSWORD
         // (electron-builder picks these up automatically). If unset,
@@ -440,6 +525,16 @@ const config = {
         entitlements: 'build/entitlements.mas.plist',
         entitlementsInherit: 'build/entitlements.mas.inherit.plist',
         hardenedRuntime: false,
+        // THE THIRD INSTANCE OF THE INHERITANCE TRAP, and the one that made
+        // this lane produce nothing at all . Without this line the
+        // store build inherits `mac.identity`, which is null unless
+        // CSC_IDENTITY_NAME is set, and a null identity short-circuits
+        // signing before `createMasInstaller` - the only thing that emits a
+        // .pkg. It does not fail: it logs "skipped macOS code signing" and
+        // exits 0 with no artifact, which is why six days of "the lane is
+        // built, it just needs certificates" was wrong. See MAS_IDENTITY
+        // above for why the value is a team qualifier and not a cert name.
+        identity: MAS_IDENTITY,
         // Apple issues this per app id; it is not a secret but it IS
         // account-specific, so it stays env-driven like every other
         // credential here. Absent, electron-builder passes "none" and the

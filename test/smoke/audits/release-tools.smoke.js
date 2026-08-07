@@ -296,7 +296,21 @@ try {
             'Package: xchain-wallet\nVersion: 9.9.9\n'
             + `Architecture: ${arch}\nMaintainer: XChain <releases@dankest.llc>\n`
             + 'Description: fixture\n']]);
-        const data = tarGz([[`./usr/lib/${triplet}/libfixture.so`, 'fixture\n']]);
+        // Two payload files, and the second is not decoration. The
+        // multiarch library is what sign.sh's payload-architecture gate
+        // reads (). `resources/app.asar` is what the pre-sign
+        // dev-mock gate reads now that it opens desktop installers
+        // : a `.deb` with no app bundle inside fails that gate's
+        // positive check - "does not contain the real xchain-sdk" - and
+        // every case in this file would then fail for a reason that is not
+        // the one it is testing. Same lesson as realArchive() below and as
+        // the ELF header above: a fixture has to be real enough for the
+        // gates that have learned to read it.
+        const data = tarGz([
+            [`./usr/lib/${triplet}/libfixture.so`, 'fixture\n'],
+            ['./opt/XChain Wallet/resources/app.asar',
+                '{"files":{}}throw new Error("SDKWalletError");\n'],
+        ]);
         const member = (memberName, body) => {
             const h = Buffer.alloc(60, 0x20);
             h.write(memberName, 0, 16, 'utf8');
@@ -330,11 +344,15 @@ try {
             b.writeUInt32LE(2048, opt + 112 + 36);     // and its size
             return b;
         }
-        if (/mac.*\.zip$/.test(name)) {
-            return Buffer.from(
-                `PK bytes of ${name}\n`
-                + 'XChain Wallet.app/Contents/_CodeSignature/CodeResources');
-        }
+        // A mac zip is staged as a REAL zip, and this fixture has now been
+        // caught by the same class of change twice. The signature gate reads
+        // it as a bundle, so the `_CodeSignature` path has to be inside it;
+        // the pre-sign dev-mock gate now UNZIPS it and greps the app bundle
+        // , so a file merely NAMED `-mac.zip` reads to that gate as
+        // a corrupt release artifact and every case in this file would fail
+        // for a reason that is not the one it is testing. Returns null so the
+        // caller builds it with `zip`, which needs a directory to work from.
+        if (/mac.*\.zip$/.test(name)) return null;
         // A .deb has to be a REAL Debian archive for the same reason, and it
         // is the case that only shows up on the venue: the gate reads a deb
         // with dpkg-deb, which a Mac does not have (so the artifact is
@@ -390,6 +408,24 @@ try {
         rmSync(src, { recursive: true, force: true });
     };
 
+    // A mac zip both gates can read: the `_CodeSignature` entry the signature
+    // gate looks for, and an `app.asar` carrying the real-SDK literal for the
+    // dev-mock gate, which now opens desktop artifacts.
+    const realMacZip = (dir, name) => {
+        const src = mkdtempSync(join(work, 'macapp-'));
+        const contents = join(src, 'XChain Wallet.app', 'Contents');
+        mkdirSync(join(contents, '_CodeSignature'), { recursive: true });
+        mkdirSync(join(contents, 'Resources'), { recursive: true });
+        writeFileSync(join(contents, '_CodeSignature', 'CodeResources'), '<plist/>\n');
+        writeFileSync(join(contents, 'Resources', 'app.asar'),
+            '{"files":{}}throw new Error("SDKWalletError");\n');
+        const r = spawnSync('zip', ['-qr', join(dir, name), '.'], { cwd: src, encoding: 'utf8' });
+        assert.ok(!r.error, `staged a real ${name}: ${r.error?.code === 'ENOENT'
+            ? "the 'zip' command is not installed on this machine" : r.error?.message}`);
+        assert.equal(r.status, 0, `staged a real ${name}: ${r.stderr}`);
+        rmSync(src, { recursive: true, force: true });
+    };
+
     const stage = (extra = [], omit = []) => {
         const dir = mkdtempSync(join(work, 'stage-'));
         for (const name of ARTIFACTS) {
@@ -397,6 +433,10 @@ try {
             if (/^xchain-wallet-web-v.*\.tar\.gz$/.test(name)
                 || /^xchain-wallet-extension-v.*\.zip$/.test(name)) {
                 realArchive(dir, name);
+                continue;
+            }
+            if (/mac.*\.zip$/.test(name)) {
+                realMacZip(dir, name);
                 continue;
             }
             writeFileSync(join(dir, name), signedBytes(name));
@@ -845,14 +885,24 @@ const expectedRows = expected.split('\n')
     .map((l) => l.split(/\s+/));
 assert.ok(expectedRows.length > 0, 'expected-artifacts.txt declares rows');
 // The status column names both the strength AND the release set :
-// `required`/`optional` describe a production release, and the `staging-*`
-// pair the §7.5 rehearsal set, which holds only the update-capable formats
+// `required`/`optional` describe a production release, and the
+// `staging-<os>-*` tokens the §7.5 rehearsal set, which holds only the update-capable formats
 // and therefore can never satisfy the production rows. Enumerated rather
 // than matched on a `staging-` prefix on purpose: a typo like
 // `stagng-required` has to fail here rather than be waved through, which is
 // the same reason lib.sh and verify-signatures.mjs both refuse an unknown
 // status instead of skipping the row.
-const EXPECTED_STATUSES = ['required', 'optional', 'staging-required', 'staging-optional'];
+// AND, on a staging row, the OS it belongs to (§7.5, 2026-08-07): a
+// rehearsal is per-OS, so the whole list is enumerated here rather than
+// derived, and this array is the third of three places that must agree
+// about what a status means (lib.sh's xr_set_for_status,
+// verify-signatures.mjs's SET_FOR_STATUS, and this).
+const EXPECTED_STATUSES = [
+    'required', 'optional',
+    'staging-linux-required', 'staging-linux-optional',
+    'staging-mac-required', 'staging-mac-optional',
+    'staging-windows-required', 'staging-windows-optional',
+];
 for (const [status, pattern] of expectedRows) {
     assert.ok(EXPECTED_STATUSES.includes(status),
         `expected-artifacts.txt row status is one of ${EXPECTED_STATUSES.join('|')} (got '${status}')`);

@@ -328,6 +328,48 @@ assert.ok(desktopRow, 'check-no-dev-mock.sh scans the desktop renderer bundle');
 assert.ok(/SDKWalletError/.test(desktopRow),
     'desktop renderer requires a wallet-module SDK marker (it has no package index)');
 
+// --- The DESKTOP MAIN process wires the real SDK  -------------
+//
+// Everything above this line is about bundles, and the defect it missed was
+// about wiring. The extension and the web shell build their registry on the
+// dev mock synchronously and then REPLACE it once `resolveSdkFactory`
+// settles - asserted for both further up. The desktop main process only ever
+// did the first half: it imported `createDevMockSdk` and passed it straight
+// into `new SDKRegistry({...})`, nothing swapped it, and `SDKRegistry` has no
+// fallback of its own, so the shipped wallet derived fabricated addresses and
+// could not sign or broadcast at all. It survived every gate because the
+// dev-mock scan's desktop target is the RENDERER bundle and the mock was
+// wired in MAIN - which ships as unbundled source and so never meets the
+// tree-shaking that keeps the mock out of the other two shells.
+//
+// A main process is not a service worker, so it needs no two-step: it takes
+// the real SDK statically. What is asserted is therefore the stronger
+// property - the mock is not reachable from this shell at all.
+{
+    const mainSrc = readFileSync(
+        join(wsRoot, 'packages', 'desktop', 'main', 'index.js'),
+        'utf8',
+    );
+    assert.ok(
+        /sdkFactory:\s*REAL_SDK_FACTORY/.test(mainSrc),
+        'desktop main builds its SDKRegistry on the real adapted SDK',
+    );
+    assert.ok(
+        /adaptXChainSDK\(/.test(mainSrc),
+        'and adapts the real xchain-sdk class rather than passing a factory it was handed',
+    );
+    assert.ok(
+        !/^import\s+\{[^}]*createDevMockSdk/m.test(mainSrc),
+        'desktop main does not import the dev-mock factory at all: this shell has no '
+        + 'synchronous-registry constraint, so there is nothing for a mock to stand in for',
+    );
+    assert.ok(
+        /refusing to start rather than fall back to a mock SDK/.test(mainSrc),
+        'and an unusable SDK export stops the app instead of degrading to fake data, '
+        + 'which is the rule the other two shells state in their own resolver',
+    );
+}
+
 // : both shell Vite configs must give the link:-resolved SDK the CJS
 // transform (commonjsOptions.include) and resolve the polyfill shim +
 // SDK-repl specifiers the transform surfaces.

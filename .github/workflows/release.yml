@@ -494,6 +494,13 @@ jobs:
           # environment, never repo-level.
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          # WITHOUT THIS THE STEP SIGNS NOTHING AND SAYS SO ONLY IN AN INFO
+          # LINE . `mac.identity` is `CSC_IDENTITY_NAME || null`,
+          # and app-builder-lib treats an explicit null as "do not sign",
+          # checked BEFORE it ever looks at CSC_LINK - so this step shipped
+          # unsigned, unnotarized artifacts while reading as configured.
+          # The value is a qualifier matched by substring, not a cert name.
+          CSC_IDENTITY_NAME: Dankest, LLC
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -512,8 +519,36 @@ jobs:
           XCHAIN_BUILD_MAS: '1'
           CSC_LINK: ${{ secrets.MAS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAS_CSC_KEY_PASSWORD }}
+          # A store package is signed TWICE, by two different certificates:
+          # the app by Apple Distribution, the .pkg by 3rd Party Mac
+          # Developer Installer. electron-builder imports the second from
+          # CSC_INSTALLER_LINK, and without it the build reaches the pkg
+          # step and dies there with "Cannot find valid identity".
+          CSC_INSTALLER_LINK: ${{ secrets.MAS_CSC_INSTALLER_LINK }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.MAS_CSC_INSTALLER_KEY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm -C packages/desktop dist --mac --x64 --arm64
+        # `mas`, EXPLICITLY. `--mac` with no target value does not mean
+        # "the mac targets I named", it means every target in mac.target
+        # (electron-builder builder.js processTargets: an empty type list
+        # leaves the config list in force). So this step used to rebuild
+        # dmg and zip into the same dist/, over the top of the signed
+        # direct-download artifacts the step above had just produced, under
+        # the store certificate instead of the Developer ID one.
+        #
+        # `--universal`, and NO `--x64 --arm64`. Naming a target on the CLI
+        # makes electron-builder ignore the config's per-target `arch`
+        # entirely: `computeArchToTargetNamesMap` returns the CLI's own
+        # arch->target map unchanged the moment any entry has a target name
+        # in it, and only falls through to the config's target list when
+        # every entry is empty. Driven against the installed
+        # app-builder-lib: `--mac mas --x64 --arm64` answers
+        # `x64 -> mas, arm64 -> mas`, so this step used to emit the two
+        # per-arch packages the App Store cannot accept - two candidates for
+        # one slot - while the config said `arch: ['universal']` and every
+        # gate reading the config agreed with it. Same defect family as the
+        # `--mac` with no target above, and as the missing `--` separator
+        # that made every lane build one architecture.
+        run: pnpm -C packages/desktop dist --mac mas --universal
       - name: Drop delta metadata and build byproducts
         run: rm -f packages/desktop/dist/*.blockmap packages/desktop/dist/builder-debug.yml
       # Expected URL + channel come from the builder config, not from a
@@ -544,6 +579,11 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          # Same reason as the production step above : without a
+          # qualifier the rehearsal build is unsigned, and an unsigned zip
+          # is exactly what the publisher-match half of the update chain
+          # cannot rehearse.
+          CSC_IDENTITY_NAME: Dankest, LLC
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}

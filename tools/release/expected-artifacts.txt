@@ -121,8 +121,26 @@
 #
 # THE FIRST COLUMN ALSO NAMES THE RELEASE SET ( §7.5, ).
 #
-# `required`/`optional` describe a PRODUCTION release. `staging-required`/
-# `staging-optional` describe the §7.5 rehearsal set, which exists so the
+# AND, ON A STAGING ROW, THE OS THAT ROW BELONGS TO (operator answer, §7.5,
+# 2026-08-07). A rehearsal is per-OS - §7.5 says to watch a swap complete
+# "on at least one OS" and to emit variants "on the arches being rehearsed" -
+# but the gate used to demand every staging row at once, so a Linux-only
+# rehearsal failed on the mac and windows rows and the first rehearsal this
+# project could run was one that needed the Apple and Azure credentials the
+# rehearsal exists to de-risk. Spelling the OS into the status token keeps
+# ONE file and one parse: `xr_set_for_status` returns nothing for a token it
+# does not recognise, and an unrecognised status is already a hard failure,
+# so a misspelled or ungated OS cannot slip through the way a discarded
+# sixth column would (see the four-column warning above).
+#
+# `sign.sh --staging --os linux` then gates against the linux rows only and
+# writes `# rehearsal-os: linux` into the signed header, so a scoped
+# rehearsal manifest says what it covers instead of leaving a reader to
+# infer it from which files are listed. A bare `--staging` still demands
+# every staging row, which is the whole-set rehearsal a full release cuts.
+#
+# `required`/`optional` describe a PRODUCTION release. `staging-<os>-required`/
+# `staging-<os>-optional` describe the §7.5 rehearsal set, which exists so the
 # update path can be exercised against a staging feed before anything is
 # published. `xr_check_expected` takes the set as its third argument and
 # skips every row belonging to another one, so the two shapes cannot
@@ -229,16 +247,16 @@ required  *.deb                             default  x64,arm64 none
 #
 # All four mobile/store rows are arch-agnostic here. The Android pair is
 # universal by construction (one AAB, one derived universal APK) and the
-# .ipa is a single fat archive. The `-mas.pkg` is the one that could be
-# either: it inherits mac.artifactName's `-${arch}`, so today it would be
-# per-arch, but the store prefers a single universal upload and §13 leaves
-# that open until the first submission is assembled. `-` is the honest
-# answer while nobody has decided; the day it is decided, this column is
-# where it gets written.
+# .ipa is a single fat archive. The `-mas.pkg` used to be the one that
+# could be either. DECIDED 2026-08-07 by the operator and written here,
+# which is where this comment always said it would go: the store package is
+# UNIVERSAL. It is a constraint before it is a preference, because an App
+# Store version carries exactly one build, so a per-arch pair is two
+# candidates for one slot rather than something the store can serve.
 optional  xchain-wallet-android-v*.aab      store    -         deferred-android
 optional  xchain-wallet-v*.apk              store    -         deferred-android
 optional  xchain-wallet-ios-v*.ipa          store    -         store
-optional  *-mas.pkg                         store    -         store
+optional  *-mas.pkg                         store    universal store
 #
 # The Microsoft Store package ( §15). Optional for the same reason
 # as `-mas.pkg`: the channel is a goal, the Partner Center identity does
@@ -284,7 +302,7 @@ optional  *.snap                            default  x64,arm64 store
 # match the installed app's - so an unsigned staging mac zip or nsis
 # installer would fail in the rehearsal exactly as it would in
 # production, which is the point.
-staging-required  *mac*.zip                 default  x64,arm64 codesign
-staging-required  *.exe                     default  x64,arm64 authenticode
-staging-required  *.AppImage                default  x64,arm64 none
-staging-required  *.deb                     default  x64,arm64 none
+staging-mac-required      *mac*.zip                 default  x64,arm64 codesign
+staging-windows-required  *.exe                     default  x64,arm64 authenticode
+staging-linux-required    *.AppImage                default  x64,arm64 none
+staging-linux-required    *.deb                     default  x64,arm64 none

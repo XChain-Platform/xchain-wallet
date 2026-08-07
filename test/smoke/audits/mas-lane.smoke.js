@@ -40,7 +40,8 @@
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachUpdater } from '../../../packages/desktop/main/updater.js';
@@ -170,6 +171,52 @@ assert.notEqual(
 );
 assert.equal(config.mac.hardenedRuntime, true, 'the direct-download channel keeps the hardened runtime');
 
+// --- 4b. The identity, which is the instance of the trap that shipped --
+//
+// . `mac.identity` is null on any machine without CSC_IDENTITY_NAME,
+// and app-builder-lib's `macPackager.sign` returns on a null identity BEFORE
+// `createMasInstaller`, the only thing that emits a .pkg. It logs, exits 0,
+// and produces nothing. Two separate things have to hold, so both are
+// asserted separately: the store config must never resolve to null, and it
+// must not be a full certificate NAME, because the same string is used to
+// look the installer certificate up and no one string is both names.
+assert.notEqual(
+    config.mas.identity,
+    null,
+    'mas.identity is not null: an inherited null silently skips the step that builds the .pkg',
+);
+assert.ok(
+    typeof config.mas.identity === 'string' && config.mas.identity.length > 0,
+    'mas.identity resolves to a usable qualifier with no signing env set at all',
+);
+assert.ok(
+    !/^(Apple Distribution|3rd Party Mac Developer)/.test(config.mas.identity),
+    'mas.identity is a qualifier, not a certificate name: it must match BOTH the app and the installer certificate',
+);
+assert.equal(
+    loadConfig({ MAS_IDENTITY_NAME: 'Some Other Org' }).mas.identity,
+    'Some Other Org',
+    'MAS_IDENTITY_NAME overrides the qualifier for a differently-named team',
+);
+assert.equal(
+    loadConfig({ CSC_IDENTITY_NAME: 'From CSC' }).mas.identity,
+    'From CSC',
+    'CSC_IDENTITY_NAME is honoured when MAS_IDENTITY_NAME is unset',
+);
+
+// A store build that cannot sign has to fail rather than emit nothing:
+// every miss in app-builder-lib is silent unless forceCodeSigning is on.
+assert.equal(
+    loadConfig({ XCHAIN_BUILD_MAS: '1' }).forceCodeSigning,
+    true,
+    'a store build refuses to finish unsigned instead of exiting 0 with no artifact',
+);
+assert.equal(
+    config.forceCodeSigning,
+    false,
+    'an ordinary mac build is still allowed to be unsigned: that is what a dev machine produces',
+);
+
 // --- 5/6. The target is opt-in and never on staging -------------------
 
 const names = (cfg) => (cfg.mac.target || []).map((t) => t.target);
@@ -183,6 +230,22 @@ assert.deepEqual(
 const masOn = loadConfig({ XCHAIN_BUILD_MAS: '1' });
 assert.ok(names(masOn).includes('mas'), 'XCHAIN_BUILD_MAS=1 adds the store target');
 assert.ok(names(masOn).includes('dmg'), 'and does not displace the direct-download targets');
+
+// The store target is universal, and it is a constraint rather than a
+// preference: an App Store version carries ONE build, so a per-arch pair is
+// two candidates for one slot. Decided by the operator 2026-08-07 (dq6).
+const masEntry = (masOn.mac.target || []).find((t) => t.target === 'mas');
+assert.deepEqual(
+    masEntry.arch,
+    ['universal'],
+    'the store target is universal only: the App Store takes one build per version, so a per-arch pair cannot be uploaded',
+);
+assert.ok(
+    (masOn.mac.target || [])
+        .filter((t) => t.target !== 'mas')
+        .every((t) => !(t.arch || []).includes('universal')),
+    'the direct download stays per-arch (DD3): only the store channel goes universal',
+);
 
 const masStaging = loadConfig({
     XCHAIN_BUILD_MAS: '1',
@@ -229,6 +292,71 @@ try {
         'and it must be gated on the Apple Distribution cert being present: it '
         + 'is a different certificate from the Developer ID one, so the lane '
         + 'must not ride the direct-download credentials');
+
+    // ...and it must ask for the architecture the config declares.
+    //
+    // Naming a target on the CLI makes electron-builder DISCARD the
+    // config's per-target arch: app-builder-lib's
+    // computeArchToTargetNamesMap returns the CLI's arch->target map
+    // unchanged as soon as any entry carries a target name, and only
+    // consults config.mac.target when every entry is empty. So the
+    // `arch: ['universal']` asserted above is invisible to this step, and
+    // `--x64 --arm64` produced the per-arch pair the App Store cannot
+    // accept while every config-reading gate reported universal.
+    const masStep = wf.slice(wf.indexOf("XCHAIN_BUILD_MAS: '1'"));
+    const runLine = (masStep.match(/^\s*run:.*$/m) || [''])[0];
+    assert.ok(/\bmas\b/.test(runLine),
+        'the store step names the mas target explicitly, or `--mac` rebuilds '
+        + 'the direct-download artifacts over the top of the signed ones');
+    assert.ok(/--universal\b/.test(runLine),
+        'the store step passes --universal: naming a target on the CLI '
+        + 'discards config.mac.target[].arch, so the universal decision has to '
+        + 'be made again here or it is not made at all');
+    assert.ok(!/--(x64|arm64|ia32|armv7l)\b/.test(runLine),
+        'and passes no per-arch flag: one would override --universal and emit '
+        + 'two packages for a store slot that holds one');
+}
+
+// --- 8. The store package ends up where the release tooling looks -----
+//
+// app-builder-lib writes the .pkg into the PACK directory for its
+// architecture (`dist/mas-universal/`), not into `dist/` where every other
+// artifact lands and where update-info.mjs, lib.sh, sign.sh and publish.sh
+// all read. Driven with a real signed package on disk, `update-info.mjs
+// artifacts` printed nothing: the `optional *-mas.pkg` row could never
+// match, which is indistinguishable from the lane simply not being built.
+{
+    const hook = config.afterAllArtifactBuild;
+    assert.equal(typeof hook, 'function',
+        'the config relocates the store package into the output directory: '
+        + 'nothing downstream looks inside pack directories');
+
+    const outDir = mkdtempSync(join(tmpdir(), 'mas-pkg-'));
+    try {
+        const packDir = join(outDir, 'mas-universal');
+        mkdirSync(packDir);
+        const buried = join(packDir, 'xchain-wallet-0.0.0-universal-mas.pkg');
+        const flat = join(outDir, 'xchain-wallet-0.0.0-mac.zip');
+        const already = join(outDir, 'already-there-mas.pkg');
+        writeFileSync(buried, 'pkg');
+        writeFileSync(flat, 'zip');
+        writeFileSync(already, 'pkg');
+
+        const returned = await hook({
+            outDir,
+            artifactPaths: [buried, flat, already],
+        });
+
+        const landed = join(outDir, 'xchain-wallet-0.0.0-universal-mas.pkg');
+        assert.ok(existsSync(landed), 'the .pkg is moved to the top of the output directory');
+        assert.ok(!existsSync(buried), 'and is not left behind in the pack directory as a second copy');
+        assert.deepEqual(returned, [landed],
+            'and the new path is returned, so electron-builder\'s own artifact list is not left naming a file that moved');
+        assert.ok(existsSync(flat), 'artifacts that are not packages are untouched');
+        assert.ok(existsSync(already), 'a package already at the top level is left where it is');
+    } finally {
+        rmSync(outDir, { recursive: true, force: true });
+    }
 }
 
 console.log(
@@ -239,6 +367,9 @@ console.log(
         + 'overrides entitlements + hardenedRuntime, which app-builder-lib would otherwise deepAssign in from '
         + 'mac and silently produce an unsandboxed, hardened store build; the mas target is opt-in via '
         + 'XCHAIN_BUILD_MAS and never present on a staging build, leaving the direct-download lane byte-identical '
-        + 'when off; and attachUpdater short-circuits on process.mas before loading electron-updater, because an '
-        + 'App Store build must never ship its own updater)',
+        + 'when off; attachUpdater short-circuits on process.mas before loading electron-updater, because an '
+        + 'App Store build must never ship its own updater; the release workflow asks for --universal and no '
+        + 'per-arch flag, because naming a target on the CLI discards the config arch and emits two packages for '
+        + 'a store slot that holds one; and the config relocates the .pkg out of the pack directory into the '
+        + 'output directory, driven on a temp tree, because every release tool reads a flat dist/)',
 );

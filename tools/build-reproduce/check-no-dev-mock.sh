@@ -218,10 +218,131 @@ if [ -n "$ARTIFACT_DIR" ]; then
         SCAN_TARGETS+=("$UNPACK_ROOT/extension|CONTRACT_LINT_FAILED,ENCODER_NOT_CONFIGURED|$(basename "$ext_zip")")
     fi
 
-    # Stated, not silent. The renderer bundle is sealed inside app.asar in
-    # every installer, so there is nothing here to grep; it is gated on the
-    # built tree by the release workflow instead.
-    echo "GAP  desktop renderer - sealed in app.asar, gated post-build in release.yml, not here"
+    # THE DESKTOP INSTALLER, WHICH THIS USED TO DECLARE UNREACHABLE.
+    #
+    # The line here used to read "GAP desktop renderer - sealed in app.asar
+    # ... not here", and that gap had a cost nobody had met yet: a §7.5
+    # staging set contains ONLY the update-capable desktop formats - no web
+    # tarball, no extension zip - so on a Linux rehearsal set this loop
+    # collected zero targets, `scanned` stayed 0, and the gate refused with
+    # "it scanned NOTHING". `sign.sh` treats that as fatal, correctly, so
+    # NO staging manifest could ever be signed and the §7.5 rehearsal that
+    # gates the entire desktop publish was unreachable. Driven 2026-08-07
+    # against the four real Linux artifacts: exit 1, before any signing.
+    #
+    # The asar is not actually sealed against reading. A `.deb` is an `ar`
+    # archive of tarballs, both of which unpack with tools that exist on
+    # the release machine, and the renderer bundle inside `app.asar` is
+    # plain UTF-8 in a binary container - so the same literals the repo-tree
+    # target greps for are readable in place, with no asar tooling.
+    #
+    # THE `.deb` AND NOT THE AppImage, deliberately. An AppImage is an ELF
+    # launcher with a squashfs appended; reading it needs unsquashfs or a
+    # Linux host to run `--appimage-extract` on, and signing happens on a
+    # Mac that has neither (the same constraint 's payload-arch
+    # check ran into). Both Linux artifacts are built from one renderer
+    # output in one electron-builder run, so the `.deb` answers for both,
+    # and UPDATE_CAPABLE_TARGET puts a `.deb` in every staging set there
+    # is. A set with AppImages and no `.deb` is refused below rather than
+    # waved through, because a scan that covered nothing must never read
+    # like a scan that passed.
+    #
+    # WHAT THIS DEMANDS, STATED PLAINLY, BECAUSE IT IS RED TODAY. The first
+    # run of it against the real v0.336.0 Linux artifacts FAILED, and the
+    # failure is a true positive: `app.asar` carries
+    # `@xchain-wallet/extension/src/background/sdkFactory.js`, the dev-mock
+    # stub itself, because the desktop main process is shipped as unbundled
+    # source and never meets the tree-shaking that keeps the mock out of the
+    # web and extension bundles. `packages/desktop/main/index.js` then wires
+    # that stub in as the SDKRegistry factory and never swaps it for the
+    # real one, which the other two shells both do. So the gate is asking
+    # for something worth having and not merely for tidiness: no
+    # fabricated-address SDK stub inside a production installer, whether or
+    # not today's code path reaches it. Satisfying it means moving
+    # `createDevMockSdk` into a module the desktop shell does not import, or
+    # bundling the main process the way the renderer already is.
+    deb="$(find "$ARTIFACT_DIR" -maxdepth 1 -name '*.deb' | sort | head -n 1)"
+    if [ -n "$deb" ]; then
+        mkdir -p "$UNPACK_ROOT/desktop" "$UNPACK_ROOT/deb-members"
+        # THREE ROUTES, AND THE VERDICT COMES FROM THE RESULT RATHER THAN
+        # FROM AN EXIT CODE. No single tool opens a `.deb` on both a Debian
+        # build host and the Mac the release is signed from, and one of the
+        # candidates lies: Apple's `ar` prints "debian-binary/: No such file
+        # or directory" for every member and still exits **0**, so a branch
+        # written the ordinary way reports a successful extraction of an
+        # empty directory. Measured 2026-08-07 on macOS 26. Each route is
+        # therefore judged by whether a tree came out.
+        if command -v dpkg-deb >/dev/null 2>&1; then
+            dpkg-deb -x "$deb" "$UNPACK_ROOT/desktop" 2>/dev/null || true
+        fi
+        if [ -z "$(ls -A "$UNPACK_ROOT/desktop" 2>/dev/null)" ]; then
+            # bsdtar reads `ar` archives directly and is the system tar on
+            # macOS; GNU tar does not, which is why `ar` is still tried.
+            ( cd "$UNPACK_ROOT/deb-members" && tar xf "$deb" ) 2>/dev/null || true
+            if [ -z "$(ls -A "$UNPACK_ROOT/deb-members")" ] && command -v ar >/dev/null 2>&1; then
+                ( cd "$UNPACK_ROOT/deb-members" && ar x "$deb" ) 2>/dev/null || true
+            fi
+            deb_data="$(find "$UNPACK_ROOT/deb-members" -maxdepth 1 -name 'data.tar.*' | head -n 1)"
+            if [ -n "$deb_data" ]; then
+                tar xf "$deb_data" -C "$UNPACK_ROOT/desktop" 2>/dev/null || true
+            fi
+        fi
+        if [ -z "$(ls -A "$UNPACK_ROOT/desktop" 2>/dev/null)" ]; then
+            echo "FAIL nothing could be extracted from $(basename "$deb")"
+            echo "  Tried dpkg-deb, then tar (bsdtar reads ar archives), then ar."
+            echo "  If this host has GNU tar, no dpkg and no binutils, that is an"
+            echo "  ENVIRONMENT failure and the package was never opened - install"
+            echo "  dpkg (Debian/Ubuntu: apt-get install dpkg) and run this again."
+            echo "  Otherwise the staged package itself is unreadable."
+            echo
+            echo "Pre-release gate FAILED - a staged release artifact could not be unpacked."
+            exit 1
+        fi
+        SCAN_TARGETS+=("$UNPACK_ROOT/desktop|SDKWalletError,MULTISIG_DERIVE_FAILED|$(basename "$deb")|positive-only")
+    elif find "$ARTIFACT_DIR" -maxdepth 1 -name '*.AppImage' | grep -q .; then
+        # Named rather than skipped: this set HAS a desktop artifact and it
+        # is the one shape that cannot be opened here.
+        echo "GAP  desktop renderer - this set ships AppImages and no .deb, and an"
+        echo "     AppImage cannot be opened without a Linux host or unsquashfs"
+    fi
+
+    # THE MAC HALF OF THE SAME REHEARSAL, and it would have hit the identical
+    # wall a week later. §7.5's staging set is UPDATE_CAPABLE_TARGET per OS:
+    # `.deb` + AppImage on Linux, `*-mac.zip` on macOS, `.exe` on Windows. So
+    # covering only the `.deb` would have left the mac rehearsal refused for
+    # exactly the reason the Linux one was, discovered on the day someone ran
+    # it. A mac zip is an ordinary zip holding `XChain Wallet.app`, and the
+    # renderer bundle sits at `Contents/Resources/app.asar` inside it.
+    mac_zip="$(find "$ARTIFACT_DIR" -maxdepth 1 -name '*-mac.zip' | sort | head -n 1)"
+    if [ -n "$mac_zip" ]; then
+        mkdir -p "$UNPACK_ROOT/desktop-mac"
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo "FAIL cannot read $(basename "$mac_zip"): 'unzip' is not installed"
+            echo "  This is an ENVIRONMENT failure, not an artifact failure."
+            echo
+            echo "Pre-release gate FAILED - a required tool is missing."
+            exit 1
+        fi
+        if ! unzip -q "$mac_zip" -d "$UNPACK_ROOT/desktop-mac" 2>/dev/null \
+            || [ -z "$(ls -A "$UNPACK_ROOT/desktop-mac")" ]; then
+            echo "FAIL $(basename "$mac_zip") is not a readable zip archive"
+            echo
+            echo "Pre-release gate FAILED - a staged release artifact could not be unpacked."
+            exit 1
+        fi
+        SCAN_TARGETS+=("$UNPACK_ROOT/desktop-mac|SDKWalletError,MULTISIG_DERIVE_FAILED|$(basename "$mac_zip")|positive-only")
+    fi
+
+    # The Windows half is a stated gap rather than a silent one. An NSIS
+    # `.exe` is an installer archive that needs 7-Zip to open, which the
+    # release machine does not have, so a windows-only staging set still
+    # refuses below - loudly, naming what it could not read, which is the
+    # right answer until someone decides to add that dependency.
+    if find "$ARTIFACT_DIR" -maxdepth 1 -name '*.exe' | grep -q . \
+        && [ -z "$deb" ] && [ -z "$mac_zip" ]; then
+        echo "GAP  desktop renderer - this set ships only NSIS .exe installers,"
+        echo "     which need 7-Zip to open; nothing here can read one"
+    fi
 fi
 
 MARKERS=(
@@ -251,23 +372,63 @@ for entry in "${SCAN_TARGETS[@]+"${SCAN_TARGETS[@]}"}"; do
     # is an unpack under $TMPDIR, and a FAIL naming that path tells an
     # operator mid-ceremony nothing about WHICH artifact is bad.
     if [ "$rest" = "$sdk_markers" ]; then label="$dir"; else label="${rest#*|}"; fi
+    # Fourth field, optional: `positive-only`. WHY A DESKTOP INSTALLER IS
+    # JUDGED DIFFERENTLY FROM A BUNDLE, and it is a limit of the artifact
+    # rather than a softening of the rule. The web and extension targets are
+    # BUILT bundles, where the mock is dead-code-eliminated, so a marker in
+    # one is proof it leaked. A desktop installer is not a bundle: the main
+    # process ships as unbundled source, and its `node_modules` legitimately
+    # contains the extension package - whose `sdkFactory.js` defines the mock
+    # next to the real resolver. So those markers are present in every
+    # desktop artifact that will ever be built, and everything inside one
+    # asar is one blob to a grep, with no way to tell our code from a
+    # dependency's. A marker scan here can only ever say "refuse", which is
+    # a gate nobody can satisfy and therefore a gate somebody switches off.
+    # What an installer CAN answer is the positive half - is the real SDK in
+    # there - and that is kept. Whether the mock is WIRED is a source
+    # property, and sdk-wiring.smoke.js asserts it for all three shells,
+    # which is where  is actually held.
+    scan_mode=""
+    case "$rest" in *"|positive-only") scan_mode="positive-only"; label="${label%|positive-only}" ;; esac
     if [ ! -d "$dir" ]; then
         echo "SKIP $label (not built)"
         skipped=$((skipped + 1))
         continue
     fi
     scanned=$((scanned + 1))
+    # `-a`, BECAUSE THE DESKTOP TARGET IS A BINARY CONTAINER. The renderer
+    # bundle ships inside app.asar, plain UTF-8 wrapped in a format with NUL
+    # bytes in it, and whether a binary match is reported at all is a
+    # property of the grep rather than of the file. Measured 2026-08-07:
+    # BSD grep (the /usr/bin/grep a script gets on macOS) and GNU grep both
+    # name the file; ugrep, which is what `grep` resolves to in this
+    # operator's interactive shell, reports NOTHING without this flag. So
+    # the difference decides whether a leaked marker is found, and it is
+    # invisible from a passing run on any one host - the direction that
+    # fails silently is the one where the gate says clean.
+    #
+    # No fixture can hold this from here, and that is stated rather than
+    # papered over: on a host whose grep reports binaries, removing `-a`
+    # changes no observable behaviour. release-gates.smoke.js asserts the
+    # flag is present in this file's text instead, which is the honest
+    # instrument for a property that only manifests on some machines.
+    if [ "$scan_mode" = "positive-only" ]; then
+        echo "NOTE $label - real-SDK check only; the mock's SOURCE ships inside this"
+        echo "     artifact by construction (unbundled main process), so wiring is"
+        echo "     gated at source instead"
+    fi
     for marker in "${MARKERS[@]}"; do
-        if grep -r -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
+        [ "$scan_mode" = "positive-only" ] && break
+        if grep -r -a -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
             echo "FAIL $label contains dev-SDK marker: \"$marker\""
-            grep -r -l -F --exclude='*.map' "$marker" "$dir" | sed "s|^$dir|    $label|"
+            grep -r -a -l -F --exclude='*.map' "$marker" "$dir" | sed "s|^$dir|    $label|"
             failures=$((failures + 1))
         fi
     done
     real_sdk_found=0
     IFS=',' read -r -a target_sdk_markers <<< "$sdk_markers"
     for marker in "${target_sdk_markers[@]}"; do
-        if grep -r -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
+        if grep -r -a -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
             real_sdk_found=1
             break
         fi

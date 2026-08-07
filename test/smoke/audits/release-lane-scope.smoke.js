@@ -334,6 +334,67 @@ try {
         check('the desktop updater refuses a partial manifest',
             /header\.lanes|header\['lanes'\]/.test(upd), 'partial coverage not checked');
     }
+    // --- The per-OS rehearsal scope (§7.5, operator answer 2026-08-07) ------
+    //
+    // The staging profile used to demand every OS at once, so a Linux-only
+    // rehearsal - the only kind that can be built until the Apple and Azure
+    // credentials exist - failed the artifact-set gate on the mac and windows
+    // rows. That made the first rehearsal wait on exactly what a rehearsal is
+    // meant to de-risk. Driven here against the real declaration rather than a
+    // fixture, because the property is about what that file says.
+
+    const AI = `xchain-wallet-${V}-x86_64.AppImage`;
+    const AI_ARM = `xchain-wallet-${V}-arm64.AppImage`;
+    const DEB = `xchain-wallet_${V}_amd64.deb`;
+    const DEB_ARM = `xchain-wallet_${V}_arm64.deb`;
+    const MACZIP = `xchain-wallet-${V}-x64-mac.zip`;
+    const MACZIP_ARM = `xchain-wallet-${V}-arm64-mac.zip`;
+
+    const linuxOnly = stage([AI, AI_ARM, DEB, DEB_ARM]);
+
+    const scopedOk = sh(`xr_check_expected ${JSON.stringify(linuxOnly)} ${JSON.stringify(expected)} staging linux`);
+    check('a Linux-only rehearsal set passes the staging gate scoped to linux',
+        scopedOk.ok, scopedOk.out);
+
+    // The direction that matters more: without the scope the SAME directory
+    // must still fail, or the scope is decorative and a half-built rehearsal
+    // set would pass whichever way it was invoked.
+    const unscoped = sh(`xr_check_expected ${JSON.stringify(linuxOnly)} ${JSON.stringify(expected)} staging`);
+    check('the same set still FAILS an unscoped staging run, which demands every OS',
+        !unscoped.ok, unscoped.out);
+
+    // A scope does not widen what is allowed IN. A mac zip sitting in a linux
+    // rehearsal directory is undeclared for that run, exactly as a staging
+    // artifact is undeclared in a production directory - the reason the set
+    // filter exists at all.
+    const mixed = stage([AI, AI_ARM, DEB, DEB_ARM, MACZIP, MACZIP_ARM]);
+    const mixedRun = sh(`xr_check_expected ${JSON.stringify(mixed)} ${JSON.stringify(expected)} staging linux`);
+    check('a mac zip in a linux rehearsal directory is UNDECLARED, not tolerated',
+        !mixedRun.ok, mixedRun.out);
+
+    // And the scope has to be a real OS, and only legal on a staging run.
+    const badOs = sh(`xr_check_expected ${JSON.stringify(linuxOnly)} ${JSON.stringify(expected)} staging macos`);
+    check('an unknown rehearsal OS is refused rather than silently matching nothing',
+        !badOs.ok && /unknown rehearsal OS/.test(badOs.out), badOs.out);
+
+    const osOnRelease = sh(`xr_check_expected ${JSON.stringify(linuxOnly)} ${JSON.stringify(expected)} release linux`);
+    check('an OS scope on a PRODUCTION run is refused, never ignored',
+        !osOnRelease.ok && /only a staging run is per-OS/.test(osOnRelease.out), osOnRelease.out);
+
+    // The signed header has to say which OS was rehearsed. A reader of a
+    // staging manifest must be told, not left to infer it from which files
+    // happen to be listed - and it must NOT be spelled as `lanes:`, which
+    // publish.sh refuses on the staging path by design.
+    const hdrDir = stage([AI, AI_ARM, DEB, DEB_ARM]);
+    const wrote = sh(`xr_write_manifest ${JSON.stringify(hdrDir)} v${V} deadbeef 2026-01-01T00:00:00Z enforced ${JSON.stringify(expected)} "" linux`);
+    check('xr_write_manifest accepts the rehearsal OS', wrote.ok, wrote.out);
+    if (wrote.ok) {
+        const header = readFileSync(join(hdrDir, 'RELEASE_HASHES.txt'), 'utf8');
+        check('the signed header records `rehearsal-os: linux`',
+            /^# rehearsal-os: linux$/m.test(header), header);
+        check('and does NOT spell it as a lane, which publish.sh refuses on staging',
+            !/^# lanes:/m.test(header), header);
+    }
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

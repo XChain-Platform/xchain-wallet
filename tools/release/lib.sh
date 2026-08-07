@@ -181,7 +181,7 @@ XR_PROFILES=(default store)
 #
 # A row's `status` column says both whether the artifact is demanded AND
 # which set demands it. `required`/`optional` describe a PRODUCTION
-# release; `staging-required`/`staging-optional` describe the §7.5
+# release; `staging-<os>-required`/`staging-<os>-optional` describe the §7.5
 # rehearsal set, which by design holds only the update-capable formats
 # (mac zip, win nsis, linux AppImage + deb) and therefore can never
 # satisfy the production rows.
@@ -199,23 +199,57 @@ XR_PROFILES=(default store)
 # not an ambiguity.
 XR_SETS=(release staging)
 
+# The OSes a staging row can name. A rehearsal is per-OS by §7.5's own
+# words - "on the arches being rehearsed", "at least one OS" - and until
+# 2026-08-07 the gate demanded every staging row at once, so a Linux-only
+# rehearsal failed on the mac and windows rows and could only ever run once
+# the Apple and Azure credentials existed. Those credentials are what the
+# rehearsal is meant to de-risk, so the rule made the rehearsal wait on its
+# own purpose. Operator answer that day: scope it per OS, properly.
+XR_STAGING_OSES=(linux mac windows)
+
 # Echo the release set a status token belongs to, or nothing if the token
 # is not a status at all. The empty answer is what makes an unknown
 # status a hard failure at the call site rather than a silently skipped
 # row - the failure mode this whole file exists to refuse.
 xr_set_for_status() {
     case "$1" in
-        required|optional)                 echo release ;;
-        staging-required|staging-optional) echo staging ;;
-        *)                                 echo "" ;;
+        required|optional) echo release ;;
+        staging-linux-required|staging-linux-optional) echo staging ;;
+        staging-mac-required|staging-mac-optional) echo staging ;;
+        staging-windows-required|staging-windows-optional) echo staging ;;
+        *) echo "" ;;
     esac
+}
+
+# Echo the OS a staging status token names, or nothing for a production
+# token. Deliberately enumerated rather than pattern-matched out of the
+# string: a `staging-macos-required` typo must reach the unknown-status
+# refusal in xr_check_expected, not quietly create a fourth OS that no
+# rehearsal will ever ask for and no gate will ever miss.
+xr_os_for_status() {
+    case "$1" in
+        staging-linux-required|staging-linux-optional) echo linux ;;
+        staging-mac-required|staging-mac-optional) echo mac ;;
+        staging-windows-required|staging-windows-optional) echo windows ;;
+        *) echo "" ;;
+    esac
+}
+
+# True if $1 is a declared rehearsal OS.
+xr_is_staging_os() {
+    local candidate="$1" o
+    for o in "${XR_STAGING_OSES[@]}"; do
+        [[ "$candidate" == "$o" ]] && return 0
+    done
+    return 1
 }
 
 # True if a status token DEMANDS its artifact, as opposed to allowing it.
 xr_status_is_required() {
     case "$1" in
-        required|staging-required) return 0 ;;
-        *)                         return 1 ;;
+        required|staging-*-required) return 0 ;;
+        *)                           return 1 ;;
     esac
 }
 
@@ -318,7 +352,7 @@ xr_assert_store_profile_buildable() {
 # that omits the one thing v2 exists for.
 xr_write_manifest() {
     local dir="$1" tag="$2" commit="$3" built="$4" gate="$5" expected="${6:-}"
-    local lanes="${7:-}"
+    local lanes="${7:-}" staging_os="${8:-}"
     local sha
     sha="$(xr_sha256_cmd)" || return 2
 
@@ -367,6 +401,19 @@ xr_write_manifest() {
         if [[ -n "$lanes" ]]; then
             echo "# coverage: partial"
             echo "# lanes: $lanes"
+        fi
+        # A SCOPED REHEARSAL SAYS SO, in its own field rather than in the
+        # `lanes` one (§7.5, operator answer 2026-08-07). Two reasons, and
+        # the second is the load-bearing one. A reader of a staging manifest
+        # must be told which OS was rehearsed instead of inferring it from
+        # which files happen to be listed. And `publish.sh` refuses any
+        # manifest carrying `# lanes:` on the staging path, deliberately -
+        # reusing that field to mean "one OS" would have made a correctly
+        # scoped rehearsal unpublishable, which is the shape that blocked
+        # this for a day. Coverage stays whole WITHIN the OS it names, so
+        # this is not `coverage: partial`.
+        if [[ -n "$staging_os" ]]; then
+            echo "# rehearsal-os: $staging_os"
         fi
         [[ ${#profile_lines[@]} -gt 0 ]] && printf '%s\n' "${profile_lines[@]}"
     } > "$dir/RELEASE_HASHES.txt"
@@ -938,7 +985,15 @@ xr_check_arch_row() {
 # it, and catches the opposite defect too: an artifact that belongs to no
 # architecture at all .
 #
-# Args: dir expected_file [release_set]
+# Args: dir expected_file [release_set] [staging_os]
+#
+# staging_os narrows a `staging` run to the rows naming that OS (§7.5,
+# operator answer 2026-08-07). Empty means the whole rehearsal set, which
+# is what a full release cuts. It is meaningless on a production run and
+# refused there rather than ignored: a caller that passes one is confused
+# about which gate it is running, and silently dropping it would gate a
+# production release against the full list while its operator believed it
+# had scoped the run.
 #
 # release_set defaults to `release`, so every existing caller keeps its
 # exact behaviour: rows belonging to another set are skipped entirely,
@@ -950,7 +1005,7 @@ xr_check_arch_row() {
 # production row, or the gate would let a staging binary be signed and
 # published as the real one (§7.5's byte-different-twins hazard).
 xr_check_expected() {
-    local dir="$1" expected="$2" want_set="${3:-release}"
+    local dir="$1" expected="$2" want_set="${3:-release}" want_os="${4:-}"
 
     if [[ ! -f "$expected" ]]; then
         echo "release/lib.sh: expected-artifact list not found: $expected" >&2
@@ -963,6 +1018,19 @@ xr_check_expected() {
         echo "release/lib.sh: unknown release set '$want_set'" \
              "(expected one of: ${XR_SETS[*]})" >&2
         return 1
+    fi
+
+    if [[ -n "$want_os" ]]; then
+        if [[ "$want_set" != staging ]]; then
+            echo "release/lib.sh: OS scope '$want_os' given for release set" \
+                 "'$want_set'; only a staging run is per-OS (§7.5)." >&2
+            return 1
+        fi
+        if ! xr_is_staging_os "$want_os"; then
+            echo "release/lib.sh: unknown rehearsal OS '$want_os'" \
+                 "(expected one of: ${XR_STAGING_OSES[*]})" >&2
+            return 1
+        fi
     fi
 
     local -a req_pats=() opt_pats=() req_arch=() opt_arch=()
@@ -978,8 +1046,8 @@ xr_check_expected() {
         row_set="$(xr_set_for_status "$status")"
         if [[ -z "$row_set" ]]; then
             echo "release/lib.sh: $expected: unknown status '$status'" \
-                 "(expected required, optional, staging-required or" \
-                 "staging-optional)" >&2
+                 "(expected required, optional, or staging-<os>-required" \
+                 "/staging-<os>-optional for os in ${XR_STAGING_OSES[*]})" >&2
             return 1
         fi
         # Every row is VALIDATED (profile, arch tokens) whichever set it
@@ -987,7 +1055,15 @@ xr_check_expected() {
         # set would let a typo sit undetected in the staging rows through
         # every production release, and surface on the one day the
         # rehearsal runs - which is the release day.
-        if [[ "$row_set" == "$want_set" ]]; then
+        # The OS filter sits INSIDE the set filter and after validation, so
+        # a scoped run still parses and refuses a bad row in an OS it is not
+        # rehearsing - the same reason every row is validated whichever set
+        # it belongs to. A row this run does not want contributes nothing:
+        # not a requirement, and not an allowance to the UNDECLARED sweep,
+        # so a stray Windows installer in a Linux rehearsal directory is
+        # still undeclared rather than quietly permitted.
+        if [[ "$row_set" == "$want_set" ]] \
+           && { [[ -z "$want_os" ]] || [[ "$(xr_os_for_status "$status")" == "$want_os" ]]; }; then
             seen_rows=$((seen_rows + 1))
             if xr_status_is_required "$status"; then
                 req_pats+=("$pattern"); req_arch+=("$arches")
@@ -1165,7 +1241,7 @@ xr_check_shipped_lanes() {
             # release, and a rehearsal set is not a release. Naming them
             # here rather than letting them fall through the `esac` keeps
             # the omission deliberate instead of accidental.
-            staging-required|staging-optional) continue ;;
+            staging-*-required|staging-*-optional) continue ;;
         esac
     done < "$expected"
 
@@ -1409,11 +1485,11 @@ xr_lane_scope() {
             # are skipped here rather than scoped or rejected. Skipping
             # is stated out loud because a silently dropped row is the
             # failure mode this file keeps being bitten by.
-            staging-required|staging-optional) continue ;;
+            staging-*-required|staging-*-optional) continue ;;
             *)
                 echo "release/lib.sh: $expected: unknown status '$status'" \
-                     "(expected required, optional, staging-required or" \
-                     "staging-optional)" >&2
+                     "(expected required, optional, or staging-<os>-required" \
+                     "/staging-<os>-optional for os in ${XR_STAGING_OSES[*]})" >&2
                 return 1
                 ;;
         esac

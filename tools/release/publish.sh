@@ -283,6 +283,29 @@ if [[ -f "$MANIFEST" ]]; then
     COVERAGE_LANES="$(sed -n 's/^# lanes: //p' "$MANIFEST" | head -1)"
 fi
 
+# THE SYMMETRIC GUARD, and it is the dangerous direction (§7.5, 2026-08-07).
+# A scoped rehearsal manifest attests ONE OS's update-capable formats. It is
+# a real K1 signature over real bytes from a real tag, so nothing downstream
+# can tell it apart from a release manifest by inspection - and a rehearsal
+# set is byte-different twins of the production files under identical names,
+# which is the hazard §7.5 names. Publishing one to the production feed would
+# hand every user a manifest that verifies perfectly and covers a fraction of
+# the release. The header says which it is; this refuses on it.
+REHEARSAL_OS=""
+if [[ -f "$MANIFEST" ]]; then
+    REHEARSAL_OS="$(sed -n 's/^# rehearsal-os: //p' "$MANIFEST" | head -1)"
+fi
+
+if [[ -n "$REHEARSAL_OS" && "$STAGING" -ne 1 ]]; then
+    echo "publish.sh: this is a REHEARSAL manifest, scoped to $REHEARSAL_OS." >&2
+    echo "  Refusing to publish it to the production feed." >&2
+    echo "  It is a real signature over real bytes, so nothing downstream" >&2
+    echo "  could tell it from a release manifest; it just covers one OS's" >&2
+    echo "  update-capable formats. Re-run with --staging, or sign a" >&2
+    echo "  production set." >&2
+    exit 2
+fi
+
 if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
     echo "publish.sh: --staging is not available for a partial release." >&2
     echo "  This manifest covers: $COVERAGE_LANES" >&2

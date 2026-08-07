@@ -659,5 +659,38 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
         'and never as a command-line argument');
 }
 
+// A REHEARSAL MANIFEST MUST NEVER REACH THE PRODUCTION FEED (§7.5,
+// operator answer 2026-08-07). A scoped rehearsal manifest is a real K1
+// signature over real bytes from a real tag, so nothing downstream can tell
+// it from a release manifest by inspection - it just covers one OS's
+// update-capable formats. And a rehearsal set is byte-different twins of
+// the production files under identical names, which is the hazard §7.5
+// names, so a file listing cannot answer this either. The signed header
+// can, and this is the guard that reads it.
+{
+    const reh = join(work, 'rehearsal-set');
+    mkdirSync(reh, { recursive: true });
+    writeFileSync(join(reh, 'xchain-wallet-0.333.1-x86_64.AppImage'), 'ai-bytes');
+    writeFileSync(join(reh, 'xchain-wallet_0.333.1_amd64.deb'), 'deb-bytes');
+    execFileSync('bash', ['-c',
+        `. "${join(root, 'tools/release/lib.sh')}" && `
+        + `xr_write_manifest "${reh}" "${TAG}" "${'0'.repeat(40)}" `
+        + `"2026-07-31T00:00:00Z" "enforced" `
+        + `"${join(root, 'tools/release/expected-artifacts.txt')}" "" "linux"`],
+    { env: process.env });
+
+    assert.match(readFileSync(join(reh, 'RELEASE_HASHES.txt'), 'utf8'),
+        /^# rehearsal-os: linux$/m, 'the fixture really is a scoped rehearsal manifest');
+
+    const prodTarget = makeTarget('feed-prod-for-rehearsal');
+    const r = await run(['--input', reh, '--tag', TAG, '--target', prodTarget,
+        '--no-edge-verify']);
+    assert.notEqual(r.status, 0,
+        `a rehearsal manifest must be refused by a production publish:\n${r.out}`);
+    assert.match(r.out, /REHEARSAL manifest/,
+        'and the refusal names what it found, rather than failing on some '
+        + 'downstream symptom the operator would misread');
+}
+
 rmSync(work, { recursive: true, force: true });
 console.log('publish-feed.smoke.js: ok');

@@ -33,6 +33,7 @@
 #                       Repeatable, and comma-separated names are accepted.
 #                       Lane names come from tools/release/shipped-lanes.txt
 #                       (android, ios, mas, msstore, snap).
+#   --os <name>         rehearse ONE OS (linux|mac|windows). --staging only.
 #   --force, -f         overwrite an existing manifest
 #
 # PARTIAL RELEASES, and why the flag is narrower than it looks. Without
@@ -97,6 +98,7 @@ FORCE=0
 # `release`, so an invocation that says nothing signs a production set
 # exactly as it always has.
 RELEASE_SET=release
+STAGING_OS=""
 LANE_NAMES=()
 
 # Split one --lane value on commas so `--lane android,ios` and two flags
@@ -137,6 +139,13 @@ while [[ $# -gt 0 ]]; do
         --staging)
             RELEASE_SET=staging
             shift
+            ;;
+        # Which OS this rehearsal covers (§7.5, operator answer
+        # 2026-08-07). Only meaningful with --staging, and refused
+        # elsewhere rather than ignored - see the check below.
+        --os)
+            STAGING_OS="$2"
+            shift 2
             ;;
         --help|-h)
             # The usage block: everything between the license header's
@@ -266,6 +275,26 @@ fi
 # path meant a rename or a bad checkout silently downgraded signing to
 # unchecked.
 DEV_MOCK_CHECK="$REPO_ROOT/tools/build-reproduce/check-no-dev-mock.sh"
+DEV_MOCK_GATE_TREE="release"
+# The same rehearsal exception the artifact list takes further down, for the
+# same reason and under the same operator answer (`dq7`, 2026-08-07): a
+# rehearsal exercises the CURRENT tooling against the LAST release's bytes.
+#
+# It is needed here as well as there, and that is not an expansion of the
+# answer but the whole of it: a staging run that got its artifact list from
+# the tools and its dev-mock gate from the tag still cannot be signed,
+# because a tag predating `--artifacts` reports OK having read nothing and
+# the receipt check below refuses it - correctly. Measured in that exact
+# order against `v0.336.0` before this was written.
+#
+# `enforced` stays honest under this, which is the property that matters:
+# the receipt check is untouched, so the word is written only if a gate
+# really opened staged bundles and said how many. What changes is WHICH
+# copy of the gate gets the chance to read them, and only for `--staging`.
+if [[ "$RELEASE_SET" == "staging" ]]; then
+    DEV_MOCK_GATE_TREE="tool"
+    DEV_MOCK_CHECK="$(cd "$HERE/../.." && pwd)/tools/build-reproduce/check-no-dev-mock.sh"
+fi
 DEV_MOCK_STATE="enforced"
 if [[ "${SIGN_SKIP_DEV_MOCK_CHECK:-0}" == "1" ]]; then
     # The escape hatch survives for artifact sets with no dist tree (a
@@ -323,6 +352,10 @@ else
     # really opened staged bundles can say how many it opened. Grepping the
     # gate script for `--artifacts` would pass on a comment mentioning it.
     echo "sign.sh: running pre-sign dev-mock gate against $INPUT_DIR ..." >&2
+    # Named on every run, not only on a refusal: which of the two trees the
+    # gate came from is the single fact this whole section turns on, and a
+    # signing log that does not say it leaves a reader inferring it.
+    echo "  gate ($DEV_MOCK_GATE_TREE tree): $DEV_MOCK_CHECK" >&2
     DEV_MOCK_INPUT="$(cd "$INPUT_DIR" && pwd)"
     DEV_MOCK_OUT=""
     if ! DEV_MOCK_OUT="$( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" --artifacts "$DEV_MOCK_INPUT" 2>&1 )"; then
@@ -415,6 +448,41 @@ fi
 EXPECTED="$REPO_ROOT/tools/release/expected-artifacts.txt"
 LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
 
+# A REHEARSAL READS ITS RULES FROM THE TOOLS, NOT FROM THE TAG (§7.5,
+# frontier row 101, operator answer `dq7` 2026-08-07). This is the one
+# deliberate exception to the line above and it is narrow on purpose.
+#
+# A PRODUCTION manifest is a public claim about a released tree, so its gate
+# data has to be the data that tree shipped with - otherwise a newer list
+# could excuse a lane the tag never built, or demand one it could not have.
+# That is why $REPO_ROOT is the default and stays the default.
+#
+# A rehearsal is the opposite thing. It exists to exercise the tooling that
+# will cut the NEXT release, against the LAST release's bytes, and its
+# manifest never leaves the staging feed: publish.sh refuses a `--staging`
+# target without the `.staging-feed` marker and a production target with it,
+# in both directions. Reading the staging profile from the tag makes the
+# rehearsal permanently one release behind its own tooling, which is not a
+# delay but a dead end - measured 2026-08-07 against `v0.336.0`, whose
+# `expected-artifacts.txt` declares no staging rows at all, so `--staging`
+# refused at the only tag that exists and would refuse the same way at every
+# tag cut before the profile that describes it.
+#
+# The tag still decides everything a signature is ABOUT: the pristine-clone
+# check, the tag/version agreement and the artifacts themselves are
+# untouched by this. What moves is only which file lists the shapes a
+# rehearsal set may contain.
+if [[ "$RELEASE_SET" == "staging" ]]; then
+    TOOL_ROOT="$(cd "$HERE/../.." && pwd)"
+    if [[ "$TOOL_ROOT" != "$REPO_ROOT" ]]; then
+        echo "sign.sh: REHEARSAL - reading the artifact list from the TOOL tree" >&2
+        echo "  tools:   $TOOL_ROOT/tools/release/expected-artifacts.txt" >&2
+        echo "  release: $REPO_ROOT (still gates the tag, the tree and the bytes)" >&2
+    fi
+    EXPECTED="$TOOL_ROOT/tools/release/expected-artifacts.txt"
+    LANES="$TOOL_ROOT/tools/release/shipped-lanes.txt"
+fi
+
 # GATE_EXPECTED is what every artifact-level gate below is pointed at. It
 # is the committed list for a full release, and a per-run scope derived
 # from that list plus shipped-lanes.txt for a partial one (--lane,
@@ -430,6 +498,15 @@ SCOPE_FILE=""
 # channel pointer has nothing to rehearse there". A partial rehearsal set
 # would produce a manifest that publish.sh must then refuse, which turns
 # a nonsense invocation into a confusing failure two steps later.
+if [[ -n "$STAGING_OS" && "$RELEASE_SET" != "staging" ]]; then
+    echo "sign.sh: --os is only meaningful with --staging." >&2
+    echo "  A production release covers every OS by definition; scoping one" >&2
+    echo "  is what --lane is for. Ignoring the flag here would gate a full" >&2
+    echo "  release against the full list while its operator believed the" >&2
+    echo "  run was narrowed, which is the worst of the three outcomes." >&2
+    exit 2
+fi
+
 if [[ ${#LANE_NAMES[@]} -gt 0 && "$RELEASE_SET" == "staging" ]]; then
     echo "sign.sh: --staging cannot be combined with --lane." >&2
     echo "  The rehearsal set is defined by which formats can auto-update," >&2
@@ -452,9 +529,16 @@ if [[ ${#LANE_NAMES[@]} -gt 0 ]]; then
 fi
 
 if [[ "$RELEASE_SET" == "staging" ]]; then
-    echo "sign.sh: REHEARSAL set (§7.5) - gating against the staging rows." >&2
+    if [[ -n "$STAGING_OS" ]]; then
+        echo "sign.sh: REHEARSAL set (§7.5), scoped to $STAGING_OS - gating" >&2
+        echo "  against that OS's staging rows only, and recording the scope" >&2
+        echo "  in the signed header as 'rehearsal-os: $STAGING_OS'." >&2
+    else
+        echo "sign.sh: REHEARSAL set (§7.5) - gating against every staging row." >&2
+        echo "  Pass --os <${XR_STAGING_OSES[*]}> to rehearse one OS." >&2
+    fi
 fi
-xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
+xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET" "$STAGING_OS"
 
 # The gate above reads NAMES. This one opens the bytes, because on
 # 2026-08-06 snapcraft was shown packing x86-64 libraries into a snap whose
@@ -473,7 +557,28 @@ xr_check_payload_arches "$INPUT_DIR"
 # two drift checks are about whether the two committed files agree with
 # each other - a question whose answer does not depend on what is being
 # signed today. Only the parity requirement is narrowed, by COVERAGE_LANES.
-xr_check_shipped_lanes "$INPUT_DIR" "$LANES" "$EXPECTED" "$COVERAGE_LANES"
+#
+# A REHEARSAL IS NOT A RELEASE AND THIS GATE DOES NOT APPLY TO IT (§7.5,
+# 2026-08-07). Lane parity asks "does this release abandon users who already
+# installed a lane" - a question about something being PUBLISHED to those
+# users. A staging set is defined by §7.5 as the update-capable DESKTOP
+# formats only, so it contains no Android or iOS artifact by construction,
+# and its manifest goes to the staging feed, which no user's app has ever
+# fetched. Driven before this was written: the gate refused a correct
+# Linux rehearsal for staging no `.apk` and no `.aab`, which is the gate
+# working perfectly on a question nobody asked it.
+#
+# The two drift checks it also performs are not lost, only deferred: they
+# compare two committed files with each other, and every production
+# signing run makes them.
+if [[ "$RELEASE_SET" == "staging" ]]; then
+    echo "sign.sh: REHEARSAL - skipping the shipped-lane parity gate." >&2
+    echo "  A staging set holds update-capable desktop formats only (§7.5)," >&2
+    echo "  so it has no store lane to be at parity with, and nothing here" >&2
+    echo "  reaches a user: the manifest goes to the staging feed." >&2
+else
+    xr_check_shipped_lanes "$INPUT_DIR" "$LANES" "$EXPECTED" "$COVERAGE_LANES"
+fi
 
 # A profile the build cannot actually produce must not be signed into the
 # record as though it had .
@@ -499,7 +604,7 @@ node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECT
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" \
-    "$GATE_EXPECTED" "$COVERAGE_LANES"
+    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
 gpg --batch --yes \

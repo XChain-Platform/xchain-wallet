@@ -72,8 +72,28 @@ import { basename } from 'node:path';
 export const SET_FOR_STATUS = {
     required: 'release',
     optional: 'release',
-    'staging-required': 'staging',
-    'staging-optional': 'staging',
+    'staging-linux-required': 'staging',
+    'staging-linux-optional': 'staging',
+    'staging-mac-required': 'staging',
+    'staging-mac-optional': 'staging',
+    'staging-windows-required': 'staging',
+    'staging-windows-optional': 'staging',
+};
+
+/**
+ * Which OS a staging status token names, for the per-OS rehearsal scope
+ * (§7.5, operator answer 2026-08-07). Mirrors `xr_os_for_status` in lib.sh.
+ * Enumerated rather than parsed out of the token for the same reason as
+ * there: a `staging-macos-required` typo must reach the unknown-status
+ * refusal instead of quietly inventing a fourth OS.
+ */
+export const OS_FOR_STATUS = {
+    'staging-linux-required': 'linux',
+    'staging-linux-optional': 'linux',
+    'staging-mac-required': 'mac',
+    'staging-mac-optional': 'mac',
+    'staging-windows-required': 'windows',
+    'staging-windows-optional': 'windows',
 };
 
 /**
@@ -274,7 +294,7 @@ export function parseExpected(text, releaseSet = 'release') {
         rows.push({
             pattern,
             cls,
-            required: status === 'required' || status === 'staging-required',
+            required: status === 'required' || /^staging-\w+-required$/.test(status),
             profile,
             arches,
         });

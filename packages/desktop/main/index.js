@@ -44,7 +44,7 @@ import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib, flows as flowsLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
-import { createDevMockSdk } from '@xchain-wallet/extension/src/background/sdkFactory.js';
+import * as sdkModule from 'xchain-sdk';
 
 import { IPC_CHANNEL } from './messageHost.js';
 // Pre-host + runtime helpers live in the pure-JS runtime module so the
@@ -158,6 +158,39 @@ function forwardDeepLink(event) {
     if (!target.isFocused()) target.focus();
 }
 
+// THE SDK THIS SHELL ACTUALLY USES, and it was the dev mock until .
+//
+// The extension and the web shell both build their registry on
+// `createDevMockSdk` synchronously - a service worker has to register its
+// handlers before anything can be awaited - and then REPLACE it with the real
+// factory once `resolveSdkFactory` settles. This shell only ever did the
+// first half. Nothing swapped, `SDKRegistry` has no fallback of its own, and
+// so every SDK instance the main process handed out was the stub: fabricated
+// addresses out of `mockDeriveAddress`, and `signPsbt` / `importWIF` /
+// `signMessage` / `broadcastTx` throwing "Dev SDK stub". It shipped that way.
+//
+// There is no reason for the two-step here. A main process is not a service
+// worker: nothing forces a synchronous registry, so the real SDK is imported
+// statically and adapted once, the way `sdkStatic.js` does it for the shell
+// that genuinely cannot. That removes the mock from this shell entirely
+// rather than racing it.
+//
+// FAILING HERE IS THE POINT. A wallet whose SDK did not load cannot derive,
+// sign or broadcast, and the one behaviour that must never happen is
+// continuing on a mock that answers every call with plausible nonsense. The
+// other two shells say this in as many words in their own resolver; on this
+// path a bad export shape stops the app at startup instead.
+const XChainSDK = sdkModule?.XChainSDK
+    ?? sdkModule?.default?.XChainSDK
+    ?? sdkModule?.default;
+if (typeof XChainSDK !== 'function') {
+    throw new Error(
+        '[xchain-wallet/desktop] xchain-sdk did not expose an `XChainSDK` class; '
+        + 'refusing to start rather than fall back to a mock SDK (it serves fake data).',
+    );
+}
+const REAL_SDK_FACTORY = sdkLib.adaptXChainSDK(XChainSDK);
+
 function buildRuntime() {
     const userData = app.getPath('userData');
     const chainRegistry = registryLib.defaultRegistry();
@@ -175,7 +208,7 @@ function buildRuntime() {
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
-            sdkFactory: createDevMockSdk,
+            sdkFactory: REAL_SDK_FACTORY,
         }),
         // : Tor routing has to take effect on the next request,
         // not the next launch. The shared host calls this after any
