@@ -64,6 +64,19 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { basename } from 'node:path';
 
 /**
+ * Which release set each status token belongs to ( §7.5, ).
+ * Mirrors `xr_set_for_status` in lib.sh; the two files read the same
+ * declaration and must agree about what a status means, or one of them
+ * gates a row the other ignores.
+ */
+export const SET_FOR_STATUS = {
+    required: 'release',
+    optional: 'release',
+    'staging-required': 'staging',
+    'staging-optional': 'staging',
+};
+
+/**
  * The signature classes an artifact row may declare, and what this tool
  * does about each. `verify: true` means a failure here fails the release.
  */
@@ -225,14 +238,29 @@ export function checkArtifact(path, cls) {
  *
  * Returns { rows: [{ pattern, cls, required }], problems: [string] }.
  */
-export function parseExpected(text) {
+export function parseExpected(text, releaseSet = 'release') {
     const rows = [];
     const problems = [];
     for (const raw of text.split('\n')) {
         const line = raw.trim();
         if (!line || line.startsWith('#')) continue;
         const [status, pattern, profile, arches, cls] = line.split(/\s+/);
-        if (status !== 'required' && status !== 'optional') continue;
+        const rowSet = SET_FOR_STATUS[status];
+        // An UNKNOWN status is a problem, not a skip. This used to be a
+        // bare `continue`, which meant a row whose status was misspelled
+        // vanished from this checker without a word - and this file's own
+        // header explains why that shape is the one to refuse: a column
+        // silently discarded leaves the row ungated with nothing able to
+        // notice. The staging rows  are exactly the case that
+        // would have hit it: they parse fine in lib.sh and would have
+        // been invisible here, so a rehearsal set could have been signed
+        // with no signature class checked at all.
+        if (!rowSet) {
+            problems.push(`'${pattern ?? line}' declares unknown status '${status}'.`
+                + ' Expected one of: ' + Object.keys(SET_FOR_STATUS).join(', '));
+            continue;
+        }
+        if (rowSet !== releaseSet) continue;
         if (!cls) {
             problems.push(`'${pattern}' declares no signature class (5th column).`
                 + ' Use one of: ' + Object.keys(SIGNATURE_CLASSES).join(', '));
@@ -243,10 +271,17 @@ export function parseExpected(text) {
                 + ' Expected one of: ' + Object.keys(SIGNATURE_CLASSES).join(', '));
             continue;
         }
-        rows.push({ pattern, cls, required: status === 'required', profile, arches });
+        rows.push({
+            pattern,
+            cls,
+            required: status === 'required' || status === 'staging-required',
+            profile,
+            arches,
+        });
     }
     if (!rows.length && !problems.length) {
-        problems.push('no artifact rows found; the declaration is empty');
+        problems.push(`no artifact rows found for release set '${releaseSet}';`
+            + ' the declaration is empty');
     }
     return { rows, problems };
 }
@@ -278,7 +313,7 @@ export function summarise(results) {
  * Check every artifact in `dir` against the declaration in `expectedPath`.
  * Returns an exit code; prints a report shaped like the other release gates.
  */
-export function run(dir, expectedPath) {
+export function run(dir, expectedPath, releaseSet = 'release') {
     let text;
     try {
         text = readFileSync(expectedPath, 'utf8');
@@ -286,7 +321,7 @@ export function run(dir, expectedPath) {
         process.stderr.write(`verify-signatures: cannot read ${expectedPath}: ${String(err?.message || err)}\n`);
         return 1;
     }
-    const { rows, problems } = parseExpected(text);
+    const { rows, problems } = parseExpected(text, releaseSet);
     if (problems.length) {
         process.stderr.write('verify-signatures: the artifact declaration is not usable.\n');
         for (const p of problems) process.stderr.write(`  - ${p}\n`);
@@ -370,10 +405,14 @@ if (invokedDirectly && process.argv.slice(2).some((a) => a === '--help' || a ===
 }
 
 if (invokedDirectly) {
-    const [, , dir, expected] = process.argv;
+    const [, , dir, expected, releaseSet] = process.argv;
     if (!dir || !expected) {
-        process.stderr.write('usage: verify-signatures.mjs <artifact-dir> <expected-artifacts.txt>\n');
+        process.stderr.write('usage: verify-signatures.mjs <artifact-dir> <expected-artifacts.txt> [release-set]\n');
         process.exit(2);
     }
-    process.exit(run(dir, expected));
+    if (releaseSet && !Object.values(SET_FOR_STATUS).includes(releaseSet)) {
+        process.stderr.write(`verify-signatures: unknown release set '${releaseSet}'\n`);
+        process.exit(2);
+    }
+    process.exit(run(dir, expected, releaseSet || 'release'));
 }

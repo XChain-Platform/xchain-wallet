@@ -119,7 +119,42 @@
 # notice an ungated row. tools/release/verify-signatures.mjs validates the
 # declaration itself, at parse time, before it looks at any artifact.
 #
-# Format:  <required|optional>  <glob>  <profile>  <arches>  <signature class>
+# THE FIRST COLUMN ALSO NAMES THE RELEASE SET ( §7.5, ).
+#
+# `required`/`optional` describe a PRODUCTION release. `staging-required`/
+# `staging-optional` describe the §7.5 rehearsal set, which exists so the
+# update path can be exercised against a staging feed before anything is
+# published. `xr_check_expected` takes the set as its third argument and
+# skips every row belonging to another one, so the two shapes cannot
+# satisfy each other in either direction.
+#
+# WHY THE REHEARSAL SET NEEDED ITS OWN SHAPE AT ALL. A staging build
+# deliberately emits ONLY the update-capable formats - mac zip, win nsis,
+# linux AppImage and deb - because a staging variant of a format with no
+# auto-update path exercises nothing. So it can never contain the web
+# tarball, the extension zip, the dmg or the mobile artifacts, and the
+# production rows below can never be satisfied by it. Until 2026-08-07
+# that meant the rehearsal set could not be signed at all: `sign.sh` ran
+# the production gate over it and refused with 14 problems, while
+# release.yml's own ceremony summary instructed the operator to sign it
+# and §7.5 recorded an operator decision that K1 signs it. The rule, the
+# instruction and the tool disagreed, and the tool won every time, which
+# is why the live rehearsal had never once run.
+#
+# WHY NOT THE PROFILE COLUMN, which is the obvious place. A staging
+# AppImage is built by the `default` profile - the same code with a
+# different feed URL baked in - so that column already says something
+# true about it. Overloading it would also break `xr_profile_for`, which
+# refuses when one filename matches two globs declaring DIFFERENT
+# profiles. Splitting on status keeps both shapes in this one file where
+# they can be read against each other, and leaves that function correct
+# with no change.
+#
+# THE ARCH AND SIGNATURE COLUMNS STILL MEAN WHAT THEY MEAN on a staging
+# row. The rehearsal is per-arch for the same reason the release is: a
+# rehearsal that exercised one arch would prove nothing about the other.
+#
+# Format:  <required|optional|staging-required|staging-optional>  <glob>  <profile>  <arches>  <signature class>
 
 # --- Web SPA ------------------------------------------------------------
 required  xchain-wallet-web-v*.tar.gz       default  -         none
@@ -228,3 +263,28 @@ optional  *-appx.appx                       default  x64,arm64 store
 # pinned artifactName carries `${arch}` in snapcraft's Debian-style
 # spelling (`_amd64`/`_arm64`), which lib.sh already attributes.
 optional  *.snap                            default  x64,arm64 store
+
+# --- The §7.5 rehearsal set ---------------------------------------------
+#
+# The update-capable formats, and ONLY those, per OS. This is the same
+# list `UPDATE_CAPABLE_TARGET` builds in electron-builder.config.cjs, and
+# the two must be changed together: a format added there and not here is
+# an artifact the gate will refuse as undeclared, and a format added here
+# and not there is one the gate will demand and never receive.
+#
+# The dmg and the win zip are deliberately ABSENT rather than optional -
+# neither has an auto-update path, so a staging variant of either
+# exercises nothing and staging one means something went wrong in the
+# build. Same for the web tarball, the extension zip and every mobile
+# artifact: those lanes do not update through this feed at all.
+#
+# Signature classes are inherited from the production rows rather than
+# relaxed. A rehearsal is meant to exercise the REAL update path, and
+# electron-updater refuses an update whose signed publisher does not
+# match the installed app's - so an unsigned staging mac zip or nsis
+# installer would fail in the rehearsal exactly as it would in
+# production, which is the point.
+staging-required  *mac*.zip                 default  x64,arm64 codesign
+staging-required  *.exe                     default  x64,arm64 authenticode
+staging-required  *.AppImage                default  x64,arm64 none
+staging-required  *.deb                     default  x64,arm64 none

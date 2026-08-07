@@ -844,9 +844,18 @@ const expectedRows = expected.split('\n')
     .filter((l) => l && !l.startsWith('#'))
     .map((l) => l.split(/\s+/));
 assert.ok(expectedRows.length > 0, 'expected-artifacts.txt declares rows');
+// The status column names both the strength AND the release set :
+// `required`/`optional` describe a production release, and the `staging-*`
+// pair the §7.5 rehearsal set, which holds only the update-capable formats
+// and therefore can never satisfy the production rows. Enumerated rather
+// than matched on a `staging-` prefix on purpose: a typo like
+// `stagng-required` has to fail here rather than be waved through, which is
+// the same reason lib.sh and verify-signatures.mjs both refuse an unknown
+// status instead of skipping the row.
+const EXPECTED_STATUSES = ['required', 'optional', 'staging-required', 'staging-optional'];
 for (const [status, pattern] of expectedRows) {
-    assert.ok(status === 'required' || status === 'optional',
-        `expected-artifacts.txt row status is required|optional (got '${status}')`);
+    assert.ok(EXPECTED_STATUSES.includes(status),
+        `expected-artifacts.txt row status is one of ${EXPECTED_STATUSES.join('|')} (got '${status}')`);
     assert.ok(pattern && pattern.length > 0, 'expected-artifacts.txt row has a pattern');
 }
 const requiredPats = expectedRows.filter(([s]) => s === 'required').map(([, p]) => p);

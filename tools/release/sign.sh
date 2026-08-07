@@ -93,6 +93,10 @@ INPUT_DIR=""
 REPO_ROOT=""
 TAG=""
 FORCE=0
+# Which artifact set this run is signing ( §7.5, ). Default
+# `release`, so an invocation that says nothing signs a production set
+# exactly as it always has.
+RELEASE_SET=release
 LANE_NAMES=()
 
 # Split one --lane value on commas so `--lane android,ios` and two flags
@@ -125,6 +129,13 @@ while [[ $# -gt 0 ]]; do
             ;;
         --force|-f)
             FORCE=1
+            shift
+            ;;
+        # §7.5 rehearsal set . Spelled `--staging` to match
+        # publish.sh's flag of the same name, so the two halves of the
+        # rehearsal read the same way on the command line.
+        --staging)
+            RELEASE_SET=staging
             shift
             ;;
         --help|-h)
@@ -367,6 +378,21 @@ LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
 COVERAGE_LANES=""
 GATE_EXPECTED="$EXPECTED"
 SCOPE_FILE=""
+# --lane and --staging are mutually exclusive, and refusing the
+# combination here rather than letting it through is the same call
+# publish.sh already makes at the other end: it rejects `--staging` for
+# any manifest carrying a `# lanes:` header, because "a lane with no
+# channel pointer has nothing to rehearse there". A partial rehearsal set
+# would produce a manifest that publish.sh must then refuse, which turns
+# a nonsense invocation into a confusing failure two steps later.
+if [[ ${#LANE_NAMES[@]} -gt 0 && "$RELEASE_SET" == "staging" ]]; then
+    echo "sign.sh: --staging cannot be combined with --lane." >&2
+    echo "  The rehearsal set is defined by which formats can auto-update," >&2
+    echo "  not by which store lane shipped, and publish.sh refuses a" >&2
+    echo "  partial-coverage manifest on the staging feed anyway (§7.5)." >&2
+    exit 2
+fi
+
 if [[ ${#LANE_NAMES[@]} -gt 0 ]]; then
     COVERAGE_LANES="${LANE_NAMES[*]}"
     SCOPE_FILE="$(mktemp "${TMPDIR:-/tmp}/xchain-lane-scope.XXXXXX")"
@@ -380,7 +406,10 @@ if [[ ${#LANE_NAMES[@]} -gt 0 ]]; then
     grep -v '^#' "$SCOPE_FILE" | grep . | sed 's/^/  scope: /' >&2
 fi
 
-xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED"
+if [[ "$RELEASE_SET" == "staging" ]]; then
+    echo "sign.sh: REHEARSAL set (§7.5) - gating against the staging rows." >&2
+fi
+xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
 
 # The gate above reads NAMES. This one opens the bytes, because on
 # 2026-08-06 snapcraft was shown packing x86-64 libraries into a snap whose
@@ -420,7 +449,7 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 # and every downstream check - verify.sh, the feed sweep, the updater's own
 # hash check - agrees with it. Once signed, nothing left in the pipeline
 # can tell the difference.
-node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECTED"
+node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
 
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

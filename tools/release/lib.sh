@@ -177,6 +177,57 @@ xr_list_update_info() {
 # because every reader of a manifest has to know what the name means.
 XR_PROFILES=(default store)
 
+# The RELEASE SETS a declaration row can belong to ( §7.5, ).
+#
+# A row's `status` column says both whether the artifact is demanded AND
+# which set demands it. `required`/`optional` describe a PRODUCTION
+# release; `staging-required`/`staging-optional` describe the §7.5
+# rehearsal set, which by design holds only the update-capable formats
+# (mac zip, win nsis, linux AppImage + deb) and therefore can never
+# satisfy the production rows.
+#
+# WHY THIS IS A SET AND NOT A PROFILE. The obvious move is to reuse the
+# profile column, and it does not work: `xr_profile_for` scans every row
+# for a name match and refuses when one filename matches two globs
+# declaring DIFFERENT profiles, because then "the list cannot say what it
+# was built with". A staging AppImage is built by the `default` profile -
+# the same code with a different feed baked in - so that column is
+# already telling the truth about it and must not be overloaded to mean a
+# second thing. Splitting on status keeps ONE file, keeps both shapes
+# visible side by side, and leaves `xr_profile_for` correct with no
+# change at all: the duplicate globs declare the SAME profile, which is
+# not an ambiguity.
+XR_SETS=(release staging)
+
+# Echo the release set a status token belongs to, or nothing if the token
+# is not a status at all. The empty answer is what makes an unknown
+# status a hard failure at the call site rather than a silently skipped
+# row - the failure mode this whole file exists to refuse.
+xr_set_for_status() {
+    case "$1" in
+        required|optional)                 echo release ;;
+        staging-required|staging-optional) echo staging ;;
+        *)                                 echo "" ;;
+    esac
+}
+
+# True if a status token DEMANDS its artifact, as opposed to allowing it.
+xr_status_is_required() {
+    case "$1" in
+        required|staging-required) return 0 ;;
+        *)                         return 1 ;;
+    esac
+}
+
+# True if $1 is a declared release set.
+xr_is_set() {
+    local candidate="$1" s
+    for s in "${XR_SETS[@]}"; do
+        [[ "$candidate" == "$s" ]] && return 0
+    done
+    return 1
+}
+
 # True if $1 is a declared profile name.
 xr_is_profile() {
     local candidate="$1" p
@@ -887,9 +938,19 @@ xr_check_arch_row() {
 # it, and catches the opposite defect too: an artifact that belongs to no
 # architecture at all .
 #
-# Args: dir expected_file
+# Args: dir expected_file [release_set]
+#
+# release_set defaults to `release`, so every existing caller keeps its
+# exact behaviour: rows belonging to another set are skipped entirely,
+# which means they contribute no required pattern, no arch requirement,
+# and - importantly - no allowance to the UNDECLARED sweep below. A
+# staging artifact staged into a production directory is still undeclared
+# there, and vice versa. That is the point of a set rather than a widened
+# list: it must be impossible for a rehearsal artifact to satisfy a
+# production row, or the gate would let a staging binary be signed and
+# published as the real one (§7.5's byte-different-twins hazard).
 xr_check_expected() {
-    local dir="$1" expected="$2"
+    local dir="$1" expected="$2" want_set="${3:-release}"
 
     if [[ ! -f "$expected" ]]; then
         echo "release/lib.sh: expected-artifact list not found: $expected" >&2
@@ -898,22 +959,42 @@ xr_check_expected() {
         return 1
     fi
 
+    if ! xr_is_set "$want_set"; then
+        echo "release/lib.sh: unknown release set '$want_set'" \
+             "(expected one of: ${XR_SETS[*]})" >&2
+        return 1
+    fi
+
     local -a req_pats=() opt_pats=() req_arch=() opt_arch=()
-    local status pattern profile arches tok
+    local status pattern profile arches tok row_set
+    local seen_rows=0
     # `|| [[ -n "$status" ]]` so a file with no trailing newline does not
     # silently drop its last row - which, in this file, would mean
     # silently dropping a required artifact.
     while read -r status pattern profile arches _rest || [[ -n "$status" ]]; do
         case "$status" in
             ''|'#'*) continue ;;
-            required) req_pats+=("$pattern"); req_arch+=("$arches") ;;
-            optional) opt_pats+=("$pattern"); opt_arch+=("$arches") ;;
-            *)
-                echo "release/lib.sh: $expected: unknown status '$status'" \
-                     "(expected 'required' or 'optional')" >&2
-                return 1
-                ;;
         esac
+        row_set="$(xr_set_for_status "$status")"
+        if [[ -z "$row_set" ]]; then
+            echo "release/lib.sh: $expected: unknown status '$status'" \
+                 "(expected required, optional, staging-required or" \
+                 "staging-optional)" >&2
+            return 1
+        fi
+        # Every row is VALIDATED (profile, arch tokens) whichever set it
+        # belongs to, and only then filtered. Validating just the active
+        # set would let a typo sit undetected in the staging rows through
+        # every production release, and surface on the one day the
+        # rehearsal runs - which is the release day.
+        if [[ "$row_set" == "$want_set" ]]; then
+            seen_rows=$((seen_rows + 1))
+            if xr_status_is_required "$status"; then
+                req_pats+=("$pattern"); req_arch+=("$arches")
+            else
+                opt_pats+=("$pattern"); opt_arch+=("$arches")
+            fi
+        fi
         # The profile column is checked HERE, at parse time, rather than
         # when a manifest is written: a missing one is a stale list, and
         # the release that discovers it should be the one being declared,
@@ -946,7 +1027,8 @@ xr_check_expected() {
     done < "$expected"
 
     if [[ ${#req_pats[@]} -eq 0 ]]; then
-        echo "release/lib.sh: $expected declares no required artifacts." >&2
+        echo "release/lib.sh: $expected declares no required artifacts" \
+             "for release set '$want_set'." >&2
         return 1
     fi
 
@@ -1010,14 +1092,21 @@ xr_check_expected() {
     if [[ "$failures" -gt 0 ]]; then
         echo >&2
         echo "release/lib.sh: artifact-set gate FAILED ($failures problem(s))." >&2
-        echo "  Checked against: $expected" >&2
+        echo "  Checked against: $expected (release set '$want_set')" >&2
         echo "  Either the staging directory is wrong, or the list is stale." >&2
         echo "  If the artifact set genuinely changed, update the list in the" >&2
         echo "  same commit that changed it." >&2
         return 1
     fi
 
-    echo "release/lib.sh: artifact-set gate ok (${#artifacts[@]} artifact(s))." >&2
+    # The leading parenthetical is kept EXACTLY as it was, and the set
+    # detail appended after it, because release-arch-coverage.smoke.js
+    # pins this line. A gate's success message is part of its contract
+    # with the guard that watches it: breaking it to add nicer wording
+    # would have meant editing the guard to accept whatever the gate now
+    # says, which is the wrong direction of travel for a release check.
+    echo "release/lib.sh: artifact-set gate ok (${#artifacts[@]} artifact(s))" \
+         "[release set '$want_set', $seen_rows declared row(s)]." >&2
 }
 
 # Gate a release against the lanes that have already shipped.
@@ -1071,6 +1160,12 @@ xr_check_shipped_lanes() {
             ''|'#'*) continue ;;
             required) all_pats+=("$pattern") ;;
             optional) all_pats+=("$pattern"); opt_pats+=("$pattern") ;;
+            # The §7.5 rehearsal rows are deliberately NOT collected: this
+            # function asks whether a lane that has SHIPPED is present in a
+            # release, and a rehearsal set is not a release. Naming them
+            # here rather than letting them fall through the `esac` keeps
+            # the omission deliberate instead of accidental.
+            staging-required|staging-optional) continue ;;
         esac
     done < "$expected"
 
@@ -1307,9 +1402,18 @@ xr_lane_scope() {
         tail_="${line#"$status"}"
         case "$status" in
             required|optional) ;;
+            # A lane scope is a PRODUCTION concept: it narrows a release
+            # to the lanes whose artifacts are ready. The §7.5 rehearsal
+            # rows describe a different set entirely, and sign.sh refuses
+            # `--staging` together with `--lane` for that reason, so they
+            # are skipped here rather than scoped or rejected. Skipping
+            # is stated out loud because a silently dropped row is the
+            # failure mode this file keeps being bitten by.
+            staging-required|staging-optional) continue ;;
             *)
                 echo "release/lib.sh: $expected: unknown status '$status'" \
-                     "(expected 'required' or 'optional')" >&2
+                     "(expected required, optional, staging-required or" \
+                     "staging-optional)" >&2
                 return 1
                 ;;
         esac
