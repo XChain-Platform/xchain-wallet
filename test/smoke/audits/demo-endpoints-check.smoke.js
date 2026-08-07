@@ -269,7 +269,83 @@ const routed = (overrides = {}) => async (url) => {
 
 const allBroken = await checkDemoEndpoints({ descriptors: FAKE, fetchImpl: routed() });
 assert.equal(allBroken.exit, EXIT.FAILURE, 'the unsignable hub body keeps this run red, which is the correct answer');
-assert.equal(allBroken.results.filter((r) => r.state === 'live').length, 2, 'explorer and encoder still pass on their own merits');
+assert.equal(allBroken.results.filter((r) => r.state === 'live').length, 3, 'explorer, encoder and the hub JSON-RPC probe still pass on their own merits');
+
+// --- CORS: the half that reported green while the app could not call anything -
+//
+// These fixtures carry real Headers, because the distinction under test is one
+// the stubs above cannot express: a response with NO readable headers is
+// "cannot tell", a response whose headers simply lack the key is "blocked".
+// Collapsing the two is what the first cut of this check got wrong.
+const withHeaders = (body, headers = {}) => async () => ({
+    status: 200,
+    text: async () => body,
+    headers: new Headers(headers),
+});
+const ENCODER_OK = JSON.stringify({ status: 'healthy', tracker_reachable: true, tracker_synced: true });
+const encoderCors = async (headers) => {
+    const run = await checkDemoEndpoints({
+        descriptors: FAKE,
+        fetchImpl: routed({ 'https://encoder.example/TBTC/status': withHeaders(ENCODER_OK, headers) }),
+    });
+    return run.results.find((r) => r.service === 'encoder');
+};
+
+// A healthy service with no ACAO is a FAILURE, not a warning: the shipped app
+// is a WebView and cannot read the reply at all.
+const noAcao = await encoderCors({});
+assert.equal(noAcao.state, 'failure', 'a healthy encoder that serves no Access-Control-Allow-Origin is unusable by the store build');
+assert.match(noAcao.detail, /UNREACHABLE FROM THE APP/, 'the reason has to name itself, or it reads as an unrelated encoder fault');
+
+// The comma-joined value: looks configured, accepted by no browser, and needs a
+// different remedy from "no header", so it is reported as its own thing.
+const commaJoined = await encoderCors({
+    'access-control-allow-origin': 'capacitor://localhost,https://wallet.xchain.io',
+});
+assert.equal(commaJoined.state, 'failure', 'a multi-value ACAO is rejected by every browser');
+assert.match(commaJoined.detail, /names several origins/, 'the multi-origin case must be named, since its fix is an allowlist rather than a wider string');
+
+// An origin that is allowed, and one that is allowed but not OURS.
+assert.equal((await encoderCors({ 'access-control-allow-origin': '*' })).state, 'live', 'a wildcard permits the shell');
+assert.equal(
+    (await encoderCors({ 'access-control-allow-origin': 'capacitor://localhost' })).state,
+    'live',
+    'the shell origin echoed back to itself permits the shell',
+);
+const wrongOrigin = await encoderCors({ 'access-control-allow-origin': 'https://example.invalid' });
+assert.equal(wrongOrigin.state, 'failure', 'an ACAO naming somebody else does not permit this shell');
+
+// --origin re-points the probe at another shell, because iOS and Android do not
+// share an origin (capacitor.config.json declares androidScheme and no iosScheme).
+const asAndroid = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: 'https://localhost',
+    fetchImpl: routed({
+        'https://encoder.example/TBTC/status': withHeaders(ENCODER_OK, { 'access-control-allow-origin': 'https://localhost' }),
+    }),
+});
+assert.equal(asAndroid.results.find((r) => r.service === 'encoder').state, 'live', 'the Android origin is permitted when the service names it');
+
+// The probe must actually SEND the Origin, not merely read the reply. Asserted
+// on the outgoing request because every check above is satisfied by fixtures
+// that answer with CORS headers regardless of what was asked - so deleting the
+// header from the request would leave them all green while restoring the exact
+// blind spot this whole section exists to remove.
+const sentOrigins = [];
+await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: 'https://localhost',
+    fetchImpl: async (url, init) => {
+        sentOrigins.push(init?.headers?.origin);
+        return { status: 200, text: async () => '{}', headers: new Headers({ 'access-control-allow-origin': '*' }) };
+    },
+});
+assert.ok(sentOrigins.length > 0, 'no probe was issued at all');
+assert.ok(
+    sentOrigins.every((o) => o === 'https://localhost'),
+    'every probe must carry the shell Origin header. Without it the services answer as they do to curl,'
+    + ` and the gate goes back to certifying endpoints the app cannot use. Sent: ${JSON.stringify(sentOrigins)}`,
+);
 
 // A stale demo chain has to reach the EXIT CODE, not just the detail line: the
 // operator reads `echo $?` before they read the report, and the whole point of

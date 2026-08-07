@@ -55,6 +55,18 @@
 //              airplane-mode signing step the demo asks the reviewer to
 //              perform.
 //
+// AND, on every probe, whether the response is READABLE from the origin the
+// store build sends. This half was missing until 2026-08-07 and it is the one
+// that mattered most. Everything above asks "is the service up", answered from
+// a terminal; the shipped app is a WebView whose only HTTP path is `fetch`,
+// because the §4 SSC-1 hardening blocks Capacitor's native-HTTP interceptor. So
+// a service can be perfectly healthy, answer this gate 200, and be unusable by
+// the app. Measured that day: this gate exited 0 while the encoder and the hub
+// served no Access-Control-Allow-Origin on any path, so a reviewer following
+// the scripted demo could read a balance and could not send - the failure the
+// gate exists to prevent, sitting inside a green run. A blocked origin is now a
+// FAILURE, named as UNREACHABLE FROM THE APP so it cannot be read as a warning.
+//
 // The endpoint list is DERIVED from the descriptors, never restated here: the
 // reviewer reaches whatever the shipped build resolves, so a moved host or a
 // new chain has to change this gate without anyone remembering to.
@@ -107,6 +119,77 @@ try {
 export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3 };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+
+/**
+ * The Origin a store build actually sends, and it is not the obvious one.
+ *
+ * packages/mobile/capacitor.config.json sets `androidScheme: "https"` and
+ * declares NO `iosScheme`, so the two mobile shells do not share an origin:
+ * iOS falls to Capacitor's default `capacitor://localhost` while Android sends
+ * `https://localhost`. iOS is the default here because this is the iOS
+ * submission gate; `--origin` re-points it at another shell.
+ *
+ * This matters because the store build has no way around CORS. The §4 SSC-1
+ * hardening compiles a WKContentRuleList into the app that blocks Capacitor's
+ * native-HTTP interceptor, so every call the wallet makes is a WebView fetch.
+ * A service that answers 200 to curl and serves no Access-Control-Allow-Origin
+ * is, to the shipped app, down.
+ */
+const SHELL_ORIGIN = 'capacitor://localhost';
+
+/**
+ * Would a browser at the probed origin be allowed to READ this response?
+ *
+ * Kept apart from the service checks on purpose: reachability and health are
+ * different questions, and conflating them is what let the encoder and hub sit
+ * "healthy" in this gate's own output while the app could not call them.
+ */
+export function corsVerdict(raw) {
+    if (raw?.error || typeof raw?.status !== 'number') {
+        return { state: 'unknown', detail: 'no response to read CORS from' };
+    }
+    const { acao, origin } = raw;
+    if (acao === undefined) {
+        return { state: 'unknown', detail: 'the response carried no readable headers, so its CORS posture could not be checked' };
+    }
+    if (acao === '*' || (acao && acao === origin)) {
+        return { state: 'ok', detail: `Access-Control-Allow-Origin: ${acao}` };
+    }
+    if (acao === null) {
+        return {
+            state: 'blocked',
+            detail: 'it serves no Access-Control-Allow-Origin, so a browser-based shell cannot read the'
+                + ' response at all - the request is made and the answer is thrown away',
+        };
+    }
+    // A comma-joined value looks configured and is accepted by nothing. Named
+    // separately because the remedy is different: the service needs an
+    // allowlist matched per-origin, not a wider string.
+    if (acao.includes(',')) {
+        return {
+            state: 'blocked',
+            detail: `Access-Control-Allow-Origin names several origins ("${acao}"), which every browser`
+                + ' rejects: the service must match one origin per request, not echo a comma-joined list',
+        };
+    }
+    return {
+        state: 'blocked',
+        detail: `Access-Control-Allow-Origin is "${acao}", which does not permit ${origin}`,
+    };
+}
+
+/**
+ * Fold the CORS verdict into the service verdict. A service that is healthy but
+ * unreachable from the app is a FAILURE for this gate's purpose, because the
+ * gate's question is whether the reviewer's demo can be performed.
+ */
+function withCors(verdict, cors) {
+    if (cors.state !== 'blocked') return verdict;
+    return {
+        state: 'failure',
+        detail: `${verdict.detail} - but UNREACHABLE FROM THE APP: ${cors.detail}`,
+    };
+}
 
 /**
  * The one chain the scripted demo is funded on.
@@ -215,6 +298,14 @@ export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DES
         // The hub's registry route is origin-level and carries no coin, unlike
         // the per-coin URL the descriptor names for everything else.
         add('hub', coin, new URL('/api/v1/chain-registry', d.hub.defaultUrl).href);
+        // The registry route above is the hub's ONE annotated cross-origin
+        // exception (it sets ACAO: * explicitly), so probing only that route
+        // reports the hub reachable while the JSON-RPC surface the wallet also
+        // needs - getAllConfig, service-endpoint discovery, capability
+        // thresholds - is closed. That is the same trap this file just fixed,
+        // one level in: a green signal for the relationship it measures and no
+        // other. Mounted at the origin root (`app.use(jsonRouter(...))`).
+        add('hub-rpc', coin, new URL('/', d.hub.defaultUrl).href);
         add('explorer', coin, `${trimSlash(d.explorer.defaultUrl)}/${coin}/api/status`);
         add('encoder', coin, `${trimSlash(d.encoder.defaultUrl)}/status`);
     }
@@ -239,6 +330,18 @@ function trimSlash(url) {
 export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
     if (raw.error) {
         return { state: 'inconclusive', detail: `could not reach it: ${raw.error}` };
+    }
+    // Handled before the status ladder below because this probe is not asking
+    // about health at all. The JSON-RPC surface is POST-only, so a GET's status
+    // carries no information; the only question is whether a browser at the
+    // shell's origin would be allowed to read a reply, and withCors() answers
+    // that from the same response.
+    if (probe.service === 'hub-rpc') {
+        return {
+            state: 'live',
+            detail: `JSON-RPC surface answered HTTP ${raw.status} to a GET (it is POST-only);`
+                + ' probed for its CORS posture, not its health',
+        };
     }
     if (raw.status === 403) {
         return {
@@ -344,19 +447,42 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
  * Fetch one probe. Never throws; a transport failure comes back as `error` so
  * the caller can keep it out of the pass/fail axis entirely.
  */
-export async function probeOnce(url, { fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function probeOnce(url, {
+    fetchImpl = globalThis.fetch,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    origin = SHELL_ORIGIN,
+} = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
         // No User-Agent override on purpose: this must look like the plain
         // client a reviewer's device is not, and an allowlist is not.
+        //
+        // The Origin header is the half this gate was missing until 2026-08-07,
+        // and it is the difference between "the service is up" and "the app can
+        // use it". curl reaches these hosts; the store build is a WebView, so
+        // every call it makes is bound by CORS, and a service answering 200 with
+        // no Access-Control-Allow-Origin is unreachable to it. Not hypothetical:
+        // on 2026-08-07 this gate reported exit 0 while the encoder and the hub
+        // served no ACAO on any path, so a reviewer could read a balance and
+        // could not send. Sending an Origin makes the probe ask what a browser
+        // asks rather than what curl asks.
         const res = await fetchImpl(url, {
             method: 'GET',
-            headers: { accept: 'application/json' },
+            headers: { accept: 'application/json', origin },
             redirect: 'follow',
             signal: controller.signal,
         });
-        return { status: res.status, body: await res.text() };
+        // `undefined` and `null` mean different things here and must not be
+        // collapsed. A real Response always carries headers, so `null` means
+        // the header is genuinely ABSENT (blocked). `undefined` means the
+        // response had no readable headers at all - an offline fixture - and
+        // that is "cannot tell", not "blocked", per this file's own rule that a
+        // check which cannot tell has to say so rather than fold into a verdict.
+        const acao = typeof res.headers?.get === 'function'
+            ? res.headers.get('access-control-allow-origin')
+            : undefined;
+        return { status: res.status, body: await res.text(), acao, origin };
     } catch (e) {
         return { error: e?.name === 'AbortError' ? `timed out after ${timeoutMs}ms` : (e?.message ?? String(e)) };
     } finally {
@@ -375,6 +501,7 @@ export async function checkDemoEndpoints({
     fetchImpl = globalThis.fetch,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     burst = 0,
+    origin = SHELL_ORIGIN,
 } = {}) {
     const probes = demoProbesFor(networkKind, descriptors);
     if (probes.length === 0) {
@@ -383,8 +510,9 @@ export async function checkDemoEndpoints({
 
     const results = [];
     for (const probe of probes) {
-        const raw = await probeOnce(probe.url, { fetchImpl, timeoutMs });
-        results.push({ ...probe, ...classifyProbe(probe, raw) });
+        const raw = await probeOnce(probe.url, { fetchImpl, timeoutMs, origin });
+        const cors = corsVerdict(raw);
+        results.push({ ...probe, ...withCors(classifyProbe(probe, raw), cors), cors: cors.state });
     }
 
     let burstResult;
@@ -428,9 +556,18 @@ actually reach everything it needs? ( §2.1 pre-submission gate.)
 
 Usage:
   node tools/release/verify-demo-endpoints.mjs [--network <kind>] [--burst [n]] [--json]
+  node tools/release/verify-demo-endpoints.mjs --origin https://localhost
 
 Options:
   --network <kind>  network to probe, default testnet
+  --origin <url>    the browser Origin to probe as, default capacitor://localhost
+                    (what the iOS store build sends). Android sends
+                    https://localhost and the hosted web wallet its own https
+                    origin, so re-point this to check another shell. Every probe
+                    carries an Origin: the store build is a WebView with no
+                    native-HTTP bypass, so a service that answers 200 to curl
+                    and serves no Access-Control-Allow-Origin is, to the app,
+                    down. This gate reported exit 0 through exactly that.
   --burst [n]       also fire a small burst at one endpoint, default 8.
                     Opt-in because it points at PRODUCTION: one request per
                     host cannot see a rate limit, and a wallet opening on
@@ -442,17 +579,18 @@ PROBES LIVE HOSTS. That is why --help is answered before the probes rather
 than after them .
 
 Exit codes:
-  0  live          every demo endpoint reachable from a plain client
+  0  live          every demo endpoint reachable, and readable from the app's origin
   1  failure       DO NOT SUBMIT; a reviewer would hit this
   2  config        a configuration problem, not a reachability one
   3  inconclusive  something could not be reached. NOT a pass.
 `;
 
 function parseArgs(argv) {
-    const args = { networkKind: 'testnet', burst: 0, json: false, help: false };
+    const args = { networkKind: 'testnet', burst: 0, json: false, help: false, origin: SHELL_ORIGIN };
     for (let i = 0; i < argv.length; i += 1) {
         if (argv[i] === '--network') args.networkKind = argv[i + 1];
         else if (argv[i] === '--burst') args.burst = Number(argv[i + 1] ?? 8) || 8;
+        else if (argv[i] === '--origin') args.origin = argv[i + 1];
         else if (argv[i] === '--json') args.json = true;
         else if (argv[i] === '--help' || argv[i] === '-h') args.help = true;
     }
@@ -472,7 +610,8 @@ async function main() {
         return outcome.exit;
     }
 
-    console.log(`Demo-path endpoints, ${args.networkKind} ( §2.1 pre-submission gate)\n`);
+    console.log(`Demo-path endpoints, ${args.networkKind}, as seen from ${args.origin}`
+        + ' ( §2.1 pre-submission gate)\n');
     for (const r of outcome.results) {
         const mark = r.state === 'live' ? 'OK  ' : r.state === 'failure' ? 'FAIL' : '??  ';
         console.log(`${mark} ${r.service.padEnd(10)} ${r.url}`);
@@ -480,7 +619,7 @@ async function main() {
     }
     console.log();
     if (outcome.exit === EXIT.LIVE) {
-        console.log('All demo endpoints reachable from a plain client. Announce the submission window'
+        console.log(`All demo endpoints reachable AND readable from ${args.origin}. Announce the submission window`
             + ' in the ledger so a concurrent session knows a review may be in flight.');
     } else if (outcome.exit === EXIT.FAILURE) {
         console.log('DO NOT SUBMIT. A reviewer following the scripted demo would hit this.');

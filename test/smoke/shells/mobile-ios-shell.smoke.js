@@ -1007,6 +1007,61 @@ if (startsOnMainnet) {
     );
 }
 
+// --- 18. The airplane-mode demo cuts the network AFTER composing, not before --
+//
+// Step 4 is the primary guideline 4.2 defense: a reviewer watching the device
+// sign with the radio off. It used to read "Turn on Airplane Mode. Tap Send ...
+// The app builds and signs the transaction on the device", and the build half
+// of that is false. BUILDING a transaction - selecting UTXOs and sizing the fee
+// - is a call to the remote encoder (`encoder.createTx`); only signing is local.
+// So the step as written asked the reviewer to do the one thing that cannot work
+// offline, and then offered the result as proof that no server was involved. It
+// would have failed before any signing happened.
+//
+// A RELATIONSHIP, like §16 and §17, because every presence check was green
+// through the defect: the runbook had an airplane-mode step the whole time. The
+// exemption is real - if a local compose path ever lands, cutting the network
+// first becomes the correct instruction and this guard gets out of the way
+// rather than pinning an ordering nobody needs.
+const composeSrcs = [
+    join(wsRoot, 'packages', 'core', 'src', 'flows', 'composeForConfirm.js'),
+    join(wsRoot, 'packages', 'core', 'src', 'flows', 'buildSendPsbt.js'),
+].map((p) => readFileSync(p, 'utf8'));
+const composeIsRemote = composeSrcs.every((src) => /encoder\.createTx\s*\(/.test(src));
+
+// Scoped to the review-notes blockquote rather than the whole page, and that is
+// load-bearing: the prose around it deliberately QUOTES the old wrong step so
+// the correction keeps its reason (a discarded instruction reads as prudent and
+// is not). Only the blockquote is pasted into App Store Connect, so only the
+// blockquote is what Apple is told.
+const reviewNotes = runbook.split('\n').filter((l) => l.startsWith('>')).join('\n');
+
+if (composeIsRemote) {
+    assert.doesNotMatch(
+        reviewNotes,
+        /builds and signs the transaction on the device/i,
+        'the review walkthrough tells Apple the app BUILDS the transaction on the device. It does not:'
+        + ' composing calls the remote encoder (encoder.createTx) to select inputs and size the fee, and only'
+        + ' signing is local. Claiming both makes the airplane-mode step impossible as written.',
+    );
+
+    const step4 = /^> 4\. (.*)$/m.exec(reviewNotes);
+    assert.ok(
+        step4,
+        'step 4 of the scripted demo is gone from the review notes, so this guard cannot check the ordering'
+        + ' of the airplane-mode step - re-derive it against whatever replaced it rather than deleting this',
+    );
+    const composeAt = step4[1].search(/confirmation screen/i);
+    const cutoffAt = step4[1].search(/Airplane Mode/i);
+    assert.ok(
+        composeAt !== -1 && cutoffAt !== -1 && composeAt < cutoffAt,
+        'step 4 must reach the confirmation screen BEFORE it turns on Airplane Mode. Composing a transaction'
+        + ' is a network call to the encoder; signing is what happens on the device. Cutting the network first'
+        + ' fails at compose, in front of the reviewer, at the one moment the demo exists to prove the app'
+        + ` works. Step 4 currently reads: ${step4[1]}`,
+    );
+}
+
 console.log(
     'OK: iOS shell smoke ( S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -1024,5 +1079,6 @@ console.log(
     + " runbook's age rating, so the questionnaire cannot drift from the binary the way it did twice on"
     + " 2026-08-06. §17: while a new wallet opens on the main networks, the reviewer's scripted walkthrough"
     + ' switches the network before it claims a test-network balance, so the airplane-mode signing demo has'
-    + ' something to spend)',
+    + ' something to spend. §18: while composing routes through the remote encoder, that same demo reaches the'
+    + ' confirmation screen before it cuts the network, and never claims the device BUILDS the transaction)',
 );
