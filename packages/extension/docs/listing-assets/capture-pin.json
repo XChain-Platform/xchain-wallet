@@ -1,26 +1,26 @@
 {
     "_comment": "Written by tools/release/verify-listing-assets.mjs (--write), normally from the end of a successful packages/extension/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "capturedFrom": {
-        "commit": "438ba6d8181bca346ea25f6e7a47526d88eced7a",
-        "version": "0.333.1",
-        "how": "derived"
+        "commit": "fe014c883c12dea03bcf30b2e0e56fa500cf0446",
+        "version": "0.336.0",
+        "how": "capture"
     },
-    "observedAt": "2026-08-06T20:21:52.526Z",
+    "observedAt": "2026-08-07T03:10:16.105Z",
     "assets": {
         "screenshot-popup.png": {
-            "sha256": "ff7fc851f31ab48ef114db7d4e2c1f0d6db548707b1838b369106dd512faaf19",
+            "sha256": "58eedf7ea89e89141086684c0134aae89ed72098a200223c5956cfcf3e725072",
             "width": 1280,
             "height": 800,
             "shows": "Toolbar popup, Home view"
         },
         "screenshot-sidepanel.png": {
-            "sha256": "adaa5970e4886d506d6a1a9f64cac8428552fbb3e08c92cf948e20fe082fc2f0",
+            "sha256": "2868e2953cda8c9e05e98d6533f81f6b0019d638fc09e29f11002c3790806f11",
             "width": 1280,
             "height": 800,
             "shows": "Side panel, Tokens view"
         },
         "screenshot-sign-approval.png": {
-            "sha256": "452a7f08f0abd441de4ffa166735d52297cb05bfed4698b3ee3eacc2dd6384bf",
+            "sha256": "cecf8e3ad9e08c4974cc5c4c6d8d87fe4a77fd9c412f62eb8bd1d7487aafb195",
             "width": 1280,
             "height": 800,
             "shows": "Sign-approval window (dApp message signature)"
