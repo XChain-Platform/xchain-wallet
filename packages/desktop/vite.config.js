@@ -18,10 +18,49 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
+
+// THE RENDERER HAD NO NODE POLYFILLS AND THE OTHER TWO SHELLS BOTH DO
+// ( there, frontier row 102 here). xchain-sdk is CJS and touches
+// `Buffer` at MODULE LOAD - bitcoinjs-lib runs `check({ script:
+// Buffer.alloc(1), value: 1n })` while its module is still evaluating - and
+// this window runs with `nodeIntegration: false`, `contextIsolation: true`
+// and `sandbox: true`, so there is no `Buffer` for it to find and the
+// preload exposes none.
+//
+// Measured 2026-08-07 by launching the real app under Playwright's Electron
+// driver: `ReferenceError: Buffer is not defined` at module scope, the React
+// tree never mounts, and the window is BLANK WHITE. The same bytes are in
+// the shipped v0.336.0 `.deb`. Nothing caught it because nothing in this
+// repo had ever launched the app and looked at it - "it starts" had been
+// measured as "a window appeared".
+//
+// The shim resolver mirrors packages/web and packages/extension: the
+// polyfill plugin rewrites Buffer/process/global inside transformed CJS to
+// bare `vite-plugin-node-polyfills/shims/*` specifiers, which Rollup cannot
+// resolve from a dependency's own directory under pnpm's strict layout, so
+// they are resolved to absolute paths from THIS package's context, under the
+// ESM condition (the CJS branch has no default export and dies at boot).
+const shimRequire = createRequire(import.meta.url);
+const polyfillShimResolver = {
+    name: 'xchain-polyfill-shim-resolver',
+    enforce: 'pre',
+    resolveId(source) {
+        if (source.startsWith('vite-plugin-node-polyfills/shims/')) {
+            try {
+                return fileURLToPath(import.meta.resolve(source));
+            } catch {
+                return shimRequire.resolve(source);
+            }
+        }
+        return null;
+    },
+};
 
 export default defineConfig({
     root: resolve(here, 'renderer'),
@@ -48,7 +87,15 @@ export default defineConfig({
             },
         },
     },
-    plugins: [react()],
+    plugins: [
+        polyfillShimResolver,
+        react(),
+        nodePolyfills({
+            include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util'],
+            globals: { Buffer: true, process: true, global: true },
+            protocolImports: true,
+        }),
+    ],
     // Electron renderer runs under `file://` (via loadFile); no base
     // prefix or dev server needed.
     base: './',
