@@ -32,7 +32,14 @@
 #   --lane,  -l <name>  sign a PARTIAL release covering only this lane.
 #                       Repeatable, and comma-separated names are accepted.
 #                       Lane names come from tools/release/shipped-lanes.txt
-#                       (android, ios, mas, msstore, snap).
+#                       in the tree given to --repo, which is the TAG's
+#                       copy rather than this checkout's . The
+#                       roster is PRINTED at the end of this help instead
+#                       of listed here: a hand-copied list is how
+#                       `extension` stayed missing from this text for
+#                       two stages after its lane row landed, while the
+#                       Chrome ceremony's only signing path is
+#                       `--lane extension`.
 #   --os <name>         rehearse ONE OS (linux|mac|windows). --staging only.
 #   --force, -f         overwrite an existing manifest
 #
@@ -152,6 +159,18 @@ while [[ $# -gt 0 ]]; do
             # closing rule and the first line of code. Bounded by content,
             # not by line numbers - those drifted and printed the licence.
             awk '/^#\*+$/{seen++; next} seen>=2 && /^set -euo pipefail/{exit} seen>=2{print}' "$0"
+            # The lane roster is DERIVED here, at print time, from the
+            # same file --lane validates against - one source, read twice,
+            # rather than a list this comment block keeps a copy of. What
+            # is shown is THIS checkout's copy; at signing time the
+            # authoritative one is the tree passed to --repo, and the two
+            # differ exactly when a lane row landed after the tag was cut.
+            help_lanes="$(cd "$(dirname "$0")" && pwd)/shipped-lanes.txt"
+            if [[ -r "$help_lanes" ]]; then
+                echo "#"
+                echo "# Lane names declared in this checkout's shipped-lanes.txt:"
+                awk '!/^#/ && NF { printf "#   %-10s %s\n", $1, $2 }' "$help_lanes"
+            fi
             exit 0
             ;;
         *)

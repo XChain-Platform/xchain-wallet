@@ -118,14 +118,26 @@ if (!token) {
 }
 
 async function api(path) {
-    const res = await fetch(`${apiUrl}${path}`, {
-        headers: {
-            authorization: `Bearer ${token}`,
-            accept: 'application/vnd.github+json',
-            'x-github-api-version': '2022-11-28',
-            'user-agent': 'xchain-release-gate',
-        },
-    });
+    let res;
+    try {
+        res = await fetch(`${apiUrl}${path}`, {
+            headers: {
+                authorization: `Bearer ${token}`,
+                accept: 'application/vnd.github+json',
+                'x-github-api-version': '2022-11-28',
+                'user-agent': 'xchain-release-gate',
+            },
+        });
+    } catch (e) {
+        // The header above promises that "API unreachable" is a refusal.
+        // It was not: an unreachable host threw out of fetch and the gate
+        // died with a stack trace, which in a workflow reads as the tool
+        // being broken rather than the release being refused.  S41.
+        fail(`Cannot reach the GitHub API at ${apiUrl} (${e.message}).\n\n`
+            + 'Not knowing whether a commit was validated is a refusal, never a\n'
+            + 'pass, so this is a REFUSAL and not a tool fault. Check network\n'
+            + 'reachability and GITHUB_API_URL, then run it again.');
+    }
     if (!res.ok) {
         fail(`GitHub API ${res.status} on ${path}.\n\n`
             + (res.status === 403 || res.status === 404
@@ -142,6 +154,69 @@ const all = runs.workflow_runs || [];
 
 const problems = [];
 const evidence = [];
+const diagnoses = [];
+
+//  S41. The verdict below was always right and the ADVICE under it was
+// not. A red run got one sentence - "make CI green on this exact commit" -
+// which assumes the suite ran and something in it failed. On 2026-08-07 the
+// tip of wallet `master` refused here while every one of the run's six jobs
+// had died inside two seconds having executed ZERO steps, because GitHub had
+// stopped starting jobs on the account over a billing failure. Nothing about
+// the commit was wrong, nothing in the suite had run, and the gate sent the
+// operator to debug tests that never executed. The logs were already expired;
+// the reason was sitting in the check-run annotations, one API call away,
+// which nothing in this project had ever read.
+//
+// So the gate now separates two failures that print identically and mean
+// opposite things: the suite ran and something failed (fix the commit), or
+// the suite never ran at all (fix the account, the commit is not the
+// subject). It changes no verdict - a run that is not `success` is still a
+// refusal, fail-closed as ever - only what the operator is told to do next.
+//
+// Never-started is measured, not guessed: a job that executed no steps did
+// no work, whatever its conclusion says. Every diagnostic call is wrapped,
+// because a gate must not turn a refusal into a crash while explaining it.
+async function tryApi(path) {
+    try {
+        const res = await fetch(`${apiUrl}${path}`, {
+            headers: {
+                authorization: `Bearer ${token}`,
+                accept: 'application/vnd.github+json',
+                'x-github-api-version': '2022-11-28',
+                'user-agent': 'xchain-release-gate',
+            },
+        });
+        return res.ok ? await res.json() : null;
+    } catch {
+        return null;
+    }
+}
+
+async function diagnose(runId) {
+    const jobs = (await tryApi(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`))?.jobs;
+    if (!Array.isArray(jobs) || jobs.length === 0) return null;
+
+    const ran = jobs.filter((j) => Array.isArray(j.steps) && j.steps.length > 0);
+    if (ran.length > 0) return null;
+
+    // Every job executed nothing. Ask the check-run annotations why: this is
+    // where GitHub puts "the job was not started because ...", and it is the
+    // only place that survives the logs expiring.
+    const reasons = new Set();
+    for (const job of jobs.slice(0, 3)) {
+        const notes = await tryApi(`/repos/${repo}/check-runs/${job.id}/annotations`);
+        for (const n of Array.isArray(notes) ? notes : []) {
+            if (n.message) reasons.add(String(n.message).trim());
+        }
+    }
+
+    return `run ${runId}: all ${jobs.length} job(s) executed ZERO steps, so the suite `
+        + 'never ran and this is not a failure of the commit.'
+        + (reasons.size > 0
+            ? `\n    GitHub's own reason:\n${[...reasons].map((r) => `      "${r}"`).join('\n')}`
+            : '\n    GitHub gave no annotation for it; check the run page and the '
+              + 'account\'s Actions billing and runner availability.');
+}
 
 for (const wanted of required) {
     // Match on the workflow's FILE PATH, not its display name: the name is
@@ -170,6 +245,8 @@ for (const wanted of required) {
     if (newest.conclusion !== 'success') {
         problems.push(`\`${wanted}\` run ${newest.id} concluded \`${newest.conclusion}\`, `
             + 'not `success`');
+        const why = await diagnose(newest.id);
+        if (why) diagnoses.push(why);
     }
 }
 
@@ -181,6 +258,13 @@ if (problems.length > 0) {
     fail(`This tag points at a commit that was never validated:\n\n`
         + problems.map((p) => `  - ${p}`).join('\n')
         + '\n\n'
+        + (diagnoses.length > 0
+            ? 'THE SUITE NEVER RAN, so nothing here is evidence about this commit:\n\n'
+              + diagnoses.map((d) => `  - ${d}`).join('\n')
+              + '\n\nFix that first. Re-running CI or cutting a different tag changes\n'
+              + 'nothing while jobs cannot start, and the advice below is about a\n'
+              + 'suite that failed, which is not what happened.\n\n'
+            : '')
         + 'A `cancelled` conclusion is the common one and is not benign: the CI\n'
         + 'concurrency group cancels the previous push\'s run, so a commit that\n'
         + 'was superseded before its suite finished looks untroubled and was\n'

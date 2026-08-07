@@ -308,6 +308,59 @@ try {
             /--lane/.test(sign.slice(0, sign.indexOf('set -euo pipefail'))), 'undocumented');
     }
 
+    // 11b. The help must name every lane that EXISTS, and the check above
+    //      cannot tell. It asserts the string `--lane` appears, which is
+    //      the flag's label; the lane NAMES beside it were a hand-copied
+    //      list and went stale the moment a row was added. Measured
+    //      2026-08-07: `shipped-lanes.txt` had carried an `extension` row
+    //      since  while this help still read "(android, ios, mas,
+    //      msstore, snap)", so an operator reading it to find the lane
+    //      name for the Chrome ceremony - whose ONLY signing path is
+    //      `--lane extension` - was told that lane did not exist, and
+    //      every gate in this repo was green.
+    //
+    //      So this drives `--help` rather than reading the source: the
+    //      question is what the operator is shown, and a roster derived
+    //      at print time is only worth anything if it actually prints.
+    {
+        const lanes = readFileSync(lanesFile, 'utf8')
+            .split('\n')
+            .filter((l) => l.trim() && !l.startsWith('#'))
+            .map((l) => l.trim().split(/\s+/)[0]);
+        check('shipped-lanes.txt declares at least one lane', lanes.length > 0, 'no lanes parsed');
+
+        let help = '';
+        let helpOk = true;
+        try {
+            help = execFileSync('bash', [join(repo, 'tools', 'release', 'sign.sh'), '--help'], {
+                encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+            });
+        } catch (e) {
+            helpOk = false;
+            help = String(e.stdout || '') + String(e.stderr || '');
+        }
+        check('sign.sh --help exits 0', helpOk, help.slice(0, 400));
+
+        // Scope the match to the ROSTER, not to the whole help text. A
+        // bare search over `help` passes on any lane whose name happens
+        // to appear in the surrounding prose - and both `android` and
+        // `extension` do, in the paragraphs explaining why the flag
+        // exists. That version of this check stayed green with the
+        // roster deleted, which is the same defect one layer up: it
+        // would have been testing the documentation's vocabulary rather
+        // than what the operator is actually shown.
+        const rosterAt = help.indexOf("Lane names declared in this checkout's shipped-lanes.txt:");
+        check('sign.sh --help prints a derived lane roster', rosterAt !== -1,
+            'no roster header in --help output');
+        const roster = rosterAt === -1 ? '' : help.slice(rosterAt);
+
+        for (const lane of lanes) {
+            check(`sign.sh --help lists '${lane}' in its roster, so an operator can find it`,
+                new RegExp(`^#\\s+${lane}\\s`, 'm').test(roster),
+                `'${lane}' is declared in shipped-lanes.txt and absent from the --help roster`);
+        }
+    }
+
     // 12. verify.sh is the reader an operator and a user actually run. A
     //     partial manifest must announce itself there, or "my artifact is
     //     not in the manifest" reads as a tampering alarm instead of the
