@@ -37,6 +37,34 @@
 #   --manifest <path>  manifest to check (default <input>/RELEASE_HASHES.txt)
 #   --tag <vX.Y.Z>     release this manifest must claim to describe
 #   --artifact <name>  check ONLY this artifact, not the whole manifest
+#   --key <fpr>        fingerprint the signature must come from
+#                      (default: docs/release-key-pin.json; env
+#                      XCHAIN_VERIFY_KEY)
+#
+# WHICH KEY SIGNED IT IS PART OF THE CHECK, NOT A DETAIL AROUND IT
+# ( S37). Until 2026-08-06 this script ran a bare `gpg --verify`,
+# which answers "did somebody in your keyring sign this" and never "was
+# it the release key". Those are the same output on a machine holding
+# more than one project key, and this project has three that are
+# explicitly not interchangeable (the wallet release key, the tag-signing
+# key, and the platform key at releases@xchain.io). The release machine
+# holds all three by design, so does any maintainer's, and the store
+# ceremony's only signature check before a permanent listing is this
+# command.
+#
+# It was found by driving it rather than by reading it: a manifest signed
+# with the TAG-signing key came back `ok - hashes match, header anchors
+# to v0.336.0, GPG signature is good`. The verify-release recipe states
+# as claim 3 that "the maintainer's release GPG key signed the hash
+# manifest, and that key matches the fingerprint published through the
+# two independent channels", and says this script does that claim in one
+# command. Half of it was true.
+#
+# So the signer is bound to a fingerprint the caller names, and a run
+# that cannot name one does not get to call anything verified: a check
+# that cannot run has not passed. Third parties take the fingerprint from
+# https://xchain.io/security and pass --key; in-repo callers get the
+# pinned value for free.
 #
 # --artifact is for the person who downloaded one installer. The manifest
 # covers every artifact in the release, so without it a user who fetched
@@ -63,6 +91,7 @@ TAG=""
 ARTIFACT=""
 RECOMPUTE=0
 NO_SIG=0
+EXPECT_KEY="${XCHAIN_VERIFY_KEY:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -80,6 +109,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --artifact|-a)
             ARTIFACT="$2"
+            shift 2
+            ;;
+        --key|-k)
+            EXPECT_KEY="$2"
             shift 2
             ;;
         --no-sig)
@@ -290,7 +323,72 @@ if ! command -v gpg >/dev/null 2>&1; then
     exit 2
 fi
 
-echo "verify.sh: verifying GPG signature on $MANIFEST ..." >&2
-gpg --verify "$SIG" "$MANIFEST"
+# The expected signer, resolved before gpg runs so a missing one is a
+# refusal rather than a green run with a footnote. The pin is not a
+# publication channel for the fingerprint (SECURITY.md and
+# https://xchain.io/security are the two channels, and release-key-pin
+# .smoke.js compares them against it); it is used here because it is the
+# one value in this repo that only an observed signing run can write.
+PIN_FILE="$HERE/../../docs/release-key-pin.json"
+PIN_SOURCE="--key"
+if [[ -z "$EXPECT_KEY" && -f "$PIN_FILE" ]]; then
+    EXPECT_KEY="$(sed -n 's/.*"fingerprint"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
+        "$PIN_FILE" | head -1)"
+    PIN_SOURCE="docs/release-key-pin.json"
+fi
+EXPECT_KEY="$(printf '%s' "$EXPECT_KEY" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+if [[ -z "$EXPECT_KEY" ]]; then
+    echo "verify.sh: no expected signing key, so the signature cannot be attributed." >&2
+    echo "  A good signature from an unknown key is not a verification: this" >&2
+    echo "  project has three GPG keys in its orbit and they are not" >&2
+    echo "  interchangeable." >&2
+    echo "  Pass --key <fingerprint>, taking it from https://xchain.io/security," >&2
+    echo "  or run from a checkout carrying docs/release-key-pin.json." >&2
+    exit 1
+fi
+if [[ ! "$EXPECT_KEY" =~ ^[0-9A-F]{40}$ ]]; then
+    # A key id, an email or a partial fingerprint would all be accepted by
+    # gpg as a --local-user and none of them can be compared against what
+    # gpg reports having verified, which is always the full fingerprint.
+    echo "verify.sh: --key must be a full 40-character fingerprint, not '$EXPECT_KEY'." >&2
+    echo "  A short id or an email selects a key without identifying it." >&2
+    exit 2
+fi
 
-echo "verify.sh: ok - hashes match, header anchors to $EXPECT_TAG, GPG signature is good" >&2
+echo "verify.sh: verifying GPG signature on $MANIFEST ..." >&2
+echo "verify.sh: signature must come from $EXPECT_KEY (via $PIN_SOURCE)" >&2
+
+# --status-fd rather than the human output, because "Good signature from
+# <uid>" is a name and names are not the check. VALIDSIG carries the
+# signing key's fingerprint as its first field and the PRIMARY key's as
+# its last, which is the pair that matters here: K1's primary is
+# certify-only and a signing subkey makes the signature, so the
+# fingerprint a user reads on the published channel never appears as the
+# signer. Either half may be named by --key; a mismatch on both is a
+# wrong key. The human output still goes to stderr for the operator.
+GPG_STATUS="$(gpg --status-fd 3 --verify "$SIG" "$MANIFEST" 3>&1 1>&2)" || {
+    echo "verify.sh: gpg could not verify the signature on $MANIFEST" >&2
+    exit 1
+}
+
+SIGNER_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($3); exit}')"
+PRIMARY_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($NF); exit}')"
+if [[ -z "$SIGNER_FPR" ]]; then
+    echo "verify.sh: gpg reported no VALIDSIG for $MANIFEST; refusing to call it verified." >&2
+    exit 1
+fi
+if [[ "$SIGNER_FPR" != "$EXPECT_KEY" && "$PRIMARY_FPR" != "$EXPECT_KEY" ]]; then
+    echo "verify.sh: the signature is GOOD and it is from the WRONG KEY." >&2
+    echo "  expected:  $EXPECT_KEY (via $PIN_SOURCE)" >&2
+    echo "  signed by: $SIGNER_FPR (primary $PRIMARY_FPR)" >&2
+    echo "  This is the failure a bare 'gpg --verify' cannot report: it" >&2
+    echo "  answers whether somebody in your keyring signed the manifest," >&2
+    echo "  never whether the release key did. Do not publish or install" >&2
+    echo "  this release. If the release key was rotated, pass the" >&2
+    echo "  fingerprint this release was signed with as --key, taking it" >&2
+    echo "  from https://xchain.io/security." >&2
+    exit 1
+fi
+
+echo "verify.sh: signer ok - $SIGNER_FPR (primary $PRIMARY_FPR)" >&2
+echo "verify.sh: ok - hashes match, header anchors to $EXPECT_TAG, GPG signature is good and from the expected key" >&2

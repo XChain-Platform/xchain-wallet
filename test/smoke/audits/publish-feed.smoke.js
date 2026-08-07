@@ -53,6 +53,16 @@ execFileSync('gpg', ['--batch', '--quiet', '--passphrase', '', '--quick-generate
     'XChain Publish Smoke <smoke@example.invalid>', 'ed25519', 'sign', '0'],
 { env: { ...process.env, GNUPGHOME: gnupg } });
 
+/* publish.sh runs verify.sh, and verify.sh binds a signature to an
+ * expected fingerprint since  S37 rather than accepting any good
+ * one. Left unset it would resolve the repo's own pin, which is K1 - the
+ * real release key, which this throwaway key is emphatically not - and
+ * every publish here would fail on a wrong-key refusal that has nothing
+ * to do with what the file is testing. */
+const SMOKE_FPR = execFileSync('gpg', ['--list-keys', '--with-colons', 'smoke@example.invalid'],
+    { env: { ...process.env, GNUPGHOME: gnupg }, encoding: 'utf8' })
+    .split('\n').find((l) => l.startsWith('fpr:')).split(':')[9];
+
 const TAG = 'v0.333.1';
 const ARTIFACTS = {
     'xchain-wallet-0.333.1-x86_64.AppImage': 'appimage-bytes-x64',
@@ -155,6 +165,7 @@ function run(args, env = {}) {
             env: {
                 ...process.env,
                 GNUPGHOME: gnupg,
+                XCHAIN_VERIFY_KEY: SMOKE_FPR,
                 XCHAIN_WALLET_RELEASE_RECORDS: RECORDS,
                 ...env,
             },

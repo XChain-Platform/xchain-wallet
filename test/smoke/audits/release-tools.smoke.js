@@ -134,7 +134,16 @@ assert.ok(/\. "\$HERE\/lib\.sh"/.test(publishSrcOrder),
     'publish.sh sources lib.sh, so its split is the one sign.sh hashed');
 assert.ok(/no channel pointers in/.test(publishSrcOrder),
     'publish.sh refuses a release with no channel pointer (invisible to every install)');
-assert.ok(/gpg --verify/.test(verifySrc), 'verify.sh runs gpg --verify');
+/* Not /gpg --verify/: that string is in this file's own prose about the
+ * bare check S37 replaced, so the assertion passed on a comment saying
+ * the opposite of what it was asserting. What has to be true is that the
+ * signature is attributed to an expected fingerprint, which is a
+ * VALIDSIG comparison; release-verify-signer.smoke.js drives it for
+ * real. */
+assert.ok(/--status-fd/.test(verifySrc) && /VALIDSIG/.test(verifySrc),
+    'verify.sh reads gpg status output so it can attribute the signature to a key');
+assert.ok(/EXPECT_KEY/.test(verifySrc) && /--key/.test(verifySrc),
+    'verify.sh binds the signature to an expected fingerprint ( S37)');
 assert.ok(/--no-sig/.test(verifySrc) && /--recompute/.test(verifySrc),
     'verify.sh accepts --no-sig and --recompute');
 
@@ -584,7 +593,12 @@ try {
     if (!fpr) {
         console.log('SKIP  signed round trip (no usable gpg in this environment)');
     } else {
-        const env = { ...gpgEnv, XCHAIN_RELEASE_GPG_KEY: fpr };
+        /* XCHAIN_VERIFY_KEY because verify.sh binds a signature to an
+         * expected fingerprint since  S37, and this fixture repo
+         * carries no docs/release-key-pin.json to supply one. The
+         * throwaway key IS the expected key here; that binding has its
+         * own driver in release-verify-signer.smoke.js. */
+        const env = { ...gpgEnv, XCHAIN_RELEASE_GPG_KEY: fpr, XCHAIN_VERIFY_KEY: fpr };
         delete env.SIGN_SKIP_DEV_MOCK_CHECK;
 
         const dir = stage();

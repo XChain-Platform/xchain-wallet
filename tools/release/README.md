@@ -209,6 +209,23 @@ bash tools/release/verify.sh --input ~/Downloads \
   --artifact 'xchain-wallet-0.333.1-x86_64.AppImage'
 ```
 
+### Which key signed it
+
+`verify.sh` refuses a signature that is good but not from the expected
+key ( S37). It takes the expectation from `--key <fingerprint>`,
+then `XCHAIN_VERIFY_KEY`, then `docs/release-key-pin.json`, and refuses
+to call anything verified when none of the three resolves. Both halves
+of a key are accepted, because K1's published fingerprint is a
+certify-only primary while its signing subkey is what gpg reports.
+
+This existed as a bare `gpg --verify` until 2026-08-06, which answers
+whether somebody in your keyring signed the manifest rather than whether
+the release key did. The two are the same answer on a keyring holding one
+key and different answers on this machine, which holds three by design.
+It was found by rehearsing the Chrome ceremony's Phase 4 against the real
+release zip: the manifest had been signed with the tag-signing key and
+the check said `ok`.
+
 ### One signature, checked three ways
 
 The manifest is signed once, by K1, with GPG. That single signature is

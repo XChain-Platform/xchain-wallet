@@ -236,8 +236,14 @@ printf '%s\n' "$VERIFY_OUT" | sed 's/^/    /'
 # manifest describes these artifacts or anchors to this tag, which is a
 # separate failure with the same symptom, so run the real verifier too.
 echo "==> verifying the manifest with the shipped verifier"
+# --key "$KEY" rather than letting verify.sh fall back to the pin: the pin
+# is what THIS run is about to write, so reading it here would check the
+# new key against the old one and, on the very first ceremony, against
+# nothing at all. Naming the key under test is also the stronger claim -
+# it proves this key signed the manifest, where the fallback would only
+# prove the previously pinned one did.
 GNUPGHOME="$GNUPGHOME_DIR" \
-    bash "$CLONE/tools/release/verify.sh" --input "$ARTIFACTS" --tag "$TAG" 2>&1 \
+    bash "$CLONE/tools/release/verify.sh" --input "$ARTIFACTS" --tag "$TAG" --key "$KEY" 2>&1 \
     | sed 's/^/    /'
 
 # THE KEY-CEREMONY PIN.

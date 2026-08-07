@@ -1286,6 +1286,40 @@ if (!existsSync(keyPinPath)) {
     }
 }
 
+// --- 16b. Phase 4b has to check WHICH KEY signed, not that a signature -----
+//          was good ( S37).
+//
+// This is section 16's other half and it was missing for as long as the
+// phase existed. Section 16 holds the page to the note proving a key was
+// observed SIGNING. Nothing held the page to checking that the release
+// manifest it is about to upload was signed by THAT key, because the tool
+// it hands the operator could not answer the question: verify.sh ran a
+// bare `gpg --verify`, which reports whether somebody in your keyring
+// signed the manifest and prints `Good signature from <uid>` when the
+// answer is yes.
+//
+// It was found by rehearsing this phase against the real CI-built
+// extension zip. The manifest was signed with the tag-signing key and
+// Phase 4b reported `ok`. A name is not the check, and the ceremony's
+// only signature gate before a permanent store listing may not rest on
+// one.
+//
+// Both halves are asserted, because either alone rots: the page must ask
+// for the attribution, and the tool must still be able to produce it.
+const verifySh = readFileSync(join(walletRoot, 'tools', 'release', 'verify.sh'), 'utf8');
+assert.ok(/signer ok/.test(verifySh) && /VALIDSIG/.test(verifySh),
+    'FAIL: tools/release/verify.sh no longer attributes the signature to a key (no VALIDSIG '
+    + 'comparison, no `signer ok` line). Phase 4b of the ceremony is the only signature check '
+    + 'between the store-bound zip and a permanent listing, and a bare `gpg --verify` answers '
+    + 'whether somebody in the operator\'s keyring signed the manifest, never whether the '
+    + 'release key did. On the release machine, which holds three keys by design, those are '
+    + 'different questions with the same green answer.');
+assert.ok(/signer ok/.test(phase4),
+    'FAIL: Phase 4 no longer tells the operator to check WHICH key signed the manifest. The step '
+    + 'must require the `signer ok - <fingerprint>` line and say that fingerprint is the release '
+    + 'key\'s; "the signature is OK" was true of a manifest signed with the tag-signing key for '
+    + 'as long as this phase existed.');
+
 // --- 17. The ceremony has to know WHICH build it is uploading -------------
 //
 // Row 38. The wallet builds at two profiles and they differ in which surfaces
