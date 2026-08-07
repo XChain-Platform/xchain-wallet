@@ -36,8 +36,12 @@
 //      is not the same wallet.
 
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+    existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -739,6 +743,52 @@ for (const guard of [
     assert.match(ceremony, guard, `the ceremony refuses to sign unprovenanced bytes (${guard})`);
 }
 assert.match(ceremony, /PROVENANCE\.txt/, 'every run records what it was built from, next to the bytes');
+
+// A staging directory that already holds artifacts is evidence, not scratch
+// space - and this is the one assertion in this file that RUNS the ceremony
+// instead of reading it. v0.336.0 was built twice from one tag; the second run
+// overwrote the first one's artifacts and its records/PROVENANCE.txt, and
+// afterwards nothing on disk could say which of the two builds Google had
+// received. A text match would not hold that: renaming the message keeps a
+// text match green while the check itself is gone. So drive it, and require
+// both that it refuses AND that it refuses HERE, before the keystore checks a
+// removed guard would fall through to.
+for (const [label, seed] of [
+    ['artifacts', (dir) => writeFileSync(join(dir, 'xchain-wallet-android-v0.336.0.aab'), 'x')],
+    // Artifacts already moved out for signing, leaving only the record. sign.sh
+    // hard-fails on an undeclared file in the staging directory, which is why
+    // the record lives in records/ - so this is the ordinary post-signing
+    // shape, and the case where clobbering costs most.
+    ['records only', (dir) => {
+        mkdirSync(join(dir, 'records'), { recursive: true });
+        writeFileSync(join(dir, 'records', 'PROVENANCE.txt'), 'tag:        v0.336.0\n');
+    }],
+]) {
+    const staged = mkdtempSync(join(tmpdir(), 'xc999-ceremony-'));
+    try {
+        seed(staged);
+        const run = spawnSync(
+            'bash',
+            [join(wsRoot, 'tools', 'release', 'android-ceremony.sh'),
+                '--tag', 'v0.336.0', '--output', staged],
+            { encoding: 'utf8', env: { ...process.env, CI: '', GITHUB_ACTIONS: '' } },
+        );
+        const err = run.stderr || '';
+        assert.notEqual(run.status, 0, `the ceremony fails on a staged directory (${label})`);
+        assert.match(
+            err,
+            /refusing to overwrite staged artifacts/,
+            `the ceremony refuses to overwrite staged artifacts (${label})`,
+        );
+        assert.doesNotMatch(
+            err,
+            /XCHAIN_K9_KEYSTORE must be set/,
+            `the refusal precedes the keystore checks, so a removed guard cannot pass as one (${label})`,
+        );
+    } finally {
+        rmSync(staged, { recursive: true, force: true });
+    }
+}
 assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not built again');
 const expectedArtifacts = readFileSync(
     join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',

@@ -85,6 +85,48 @@ fi
 [ -n "$TAG" ] || die "--tag vX.Y.Z is required"
 [ -n "$OUTPUT_DIR" ] || die "--output <dir> is required"
 
+# A staging directory that already holds artifacts is EVIDENCE, not scratch
+# space. `mkdir -p` below used to just write over it, and that is how the record
+# of the bundle Google actually holds was destroyed: v0.336.0 was built TWICE
+# from one tag - once at 18:57 on 2026-08-05, whose bundle was uploaded to Play
+# 13 minutes later, and again at 2026-08-06T15:21:17Z into the same directory,
+# whose APK is the one published on downloads.xchain.io. The second run
+# overwrote the first one's artifacts AND its records/PROVENANCE.txt, so nothing
+# on disk can now say what the store received. Reproducible builds are
+# post-launch (D5), so two runs of one tag are two different binaries.
+#
+# The refusal sits here rather than beside the `mkdir -p` so it costs a second
+# instead of a full gradle build, and it names what it found: moving the old
+# directory aside keeps the provenance that would otherwise be lost.
+if [ -d "$OUTPUT_DIR" ]; then
+    # records/PROVENANCE.txt counts as much as the artifacts do. sign.sh
+    # hard-fails on any file the artifact list does not declare, which is why
+    # the record lives in records/ at all - so a release that has been signed
+    # and shipped can leave a directory holding nothing BUT the evidence. That
+    # is the case where clobbering costs the most, not the least.
+    EXISTING="$(ls -1 "$OUTPUT_DIR" 2>/dev/null \
+        | grep -E '\.(aab|apk)$|^PROVENANCE\.txt$' || true)"
+    PROVENANCE_AT=""
+    for candidate in "$OUTPUT_DIR/records/PROVENANCE.txt" "$OUTPUT_DIR/PROVENANCE.txt"; do
+        [ -f "$candidate" ] && PROVENANCE_AT="$candidate" && break
+    done
+    [ -n "$PROVENANCE_AT" ] && EXISTING="$(printf '%s\n%s' "$EXISTING" \
+        "${PROVENANCE_AT#$OUTPUT_DIR/}" | grep -v '^$' | sort -u)"
+    if [ -n "$EXISTING" ]; then
+        echo >&2 "android-ceremony.sh: $OUTPUT_DIR already holds ceremony output:"
+        echo "$EXISTING" | sed 's/^/  /' >&2
+        if [ -n "$PROVENANCE_AT" ]; then
+            echo >&2 "$PROVENANCE_AT records:"
+            sed 's/^/  /' "$PROVENANCE_AT" >&2
+        fi
+        echo >&2 "Overwriting it would destroy the only on-disk record of what those"
+        echo >&2 "artifacts were built from, and they may already have been uploaded."
+        echo >&2 "Move it aside first, then re-run:"
+        echo >&2 "  mv $OUTPUT_DIR $OUTPUT_DIR.superseded-\$(date -u +%Y%m%dT%H%M%SZ)"
+        die "refusing to overwrite staged artifacts in $OUTPUT_DIR"
+    fi
+fi
+
 for var in XCHAIN_K9_KEYSTORE XCHAIN_K9_ALIAS XCHAIN_K10_KEYSTORE XCHAIN_K10_ALIAS; do
     eval "value=\${$var:-}"
     [ -n "$value" ] || die "$var must be set (paths and aliases only; passwords are prompted)"
