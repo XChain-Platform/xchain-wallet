@@ -198,6 +198,46 @@ The original steps follow, still accurate for what they cover.
    stdout and nothing on stderr, then leave the cron to carry it going
    forward.
 
+### The Play lane, and why it installs before Chrome 
+
+The script now carries a second lane, for the Android listing. It runs by
+default and needs no id, because the `applicationId` is fixed. Two things
+about it change the install above.
+
+**It can, and should, be installed before a Chrome item exists.** Android is
+ahead of Chrome in this programme. A whole-run config error (no
+`CWS_MAIN_ITEM_ID`) stops BOTH lanes, so until the extension is uploaded,
+install the Play-only form and move to the combined line later:
+
+```
+0 */6 * * * /usr/bin/node /opt/xchain/store-version-monitor.mjs --no-chrome >/dev/null
+```
+
+**It keeps state, which the Chrome lane does not.** The Play lane checks that
+the listing is PRESENT and is ours, not what version it is, because a Play
+listing page does not publish one. A 404 is the correct and clean answer
+until the listing goes public, so tolerating it forever would leave the check
+useless on the day it mattered. Instead the first sighting of a live listing
+writes a latch, and from then on a 404 is an ALERT. That file defaults to
+`/opt/xchain/store-monitor-state.json`, beside the script:
+
+- **The directory must be writable by the cron user.** If it is not, the run
+  exits 2 (config error) rather than reporting clean, so the failure is loud
+  rather than silent - but it will be loud every six hours until it is fixed.
+- **Do not delete it.** Deleting it disarms the latch back to "never seen",
+  which is precisely the state that cannot tell a listing that was taken down
+  from one that was never published.
+- Override it with `PLAY_STATE_PATH` or `--state <path>` if `/opt/xchain` is
+  not the right home on that host.
+
+**What this lane does NOT detect, stated so nobody assumes it does:** a
+silent rollback to an older version. Suspension and unpublishing are presence
+changes and are caught; a version moving underneath us is invisible without
+the authenticated Play Developer API (`androidpublisher`), which this script
+deliberately holds no credential for. Verify the Play half by hand the same
+way as step 5 but with `--no-chrome`: before the listing is public it should
+print `no public Play listing yet` and exit 0.
+
 ### Verifying one artifact
 
 `verify.sh` checks the whole manifest by default, which is what the
