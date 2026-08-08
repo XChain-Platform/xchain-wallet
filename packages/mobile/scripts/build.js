@@ -75,12 +75,39 @@ const stagedProfile = existsSync(stampPath)
     ? parseProfileStamp(readFileSync(stampPath, 'utf8'))
     : null;
 
-if (releaseTag && stagedProfile !== 'store') {
+// WHICH profile this release build is allowed to stage. `store` unless the
+// caller says otherwise, because that is what every store artifact must
+// carry and an unset variable must never widen a gate.
+//
+// It is a variable at all because of : the direct-download lane now
+// has a SECOND APK built at the `default` profile, for the audience that
+// avoids Play deliberately and was getting Play's review restrictions
+// anyway. Until this line a release tag hard-required `store`, so that
+// artifact was not merely unbuilt, it was inexpressible.
+//
+// NOTE WHAT THIS IS NOT: it is not a relaxation. The check still refuses
+// ANY mismatch on a release build; what changed is that the expected value
+// is stated instead of assumed, so staging `default` requires SAYING
+// `default`, and the profile written into the signed manifest is the one
+// somebody asked for. Allowing store-or-default instead would have
+// re-opened the exact hole the guard exists to close: a `default` bundle
+// wrapped in an artifact the manifest labels `store`.
+const releaseProfile = process.env.XCHAIN_MOBILE_RELEASE_PROFILE || 'store';
+if (!['store', 'default'].includes(releaseProfile)) {
+    console.error(
+        `@xchain-wallet/mobile: XCHAIN_MOBILE_RELEASE_PROFILE='${releaseProfile}' is not a`
+        + ' known build profile. Expected `store` or `default`.',
+    );
+    process.exit(1);
+}
+
+if (releaseTag && stagedProfile !== releaseProfile) {
     console.error(
         `@xchain-wallet/mobile: refusing to stage a ${stagedProfile ?? 'unstamped'} web bundle`
-        + ` into a release build of ${releaseTag}.\n`
-        + 'Mobile store artifacts must carry the `store` profile. Rebuild the web shell with\n'
-        + '  XCHAIN_BUILD_PROFILE=store pnpm --filter @xchain-wallet/web build\n'
+        + ` into a ${releaseProfile}-profile release build of ${releaseTag}.\n`
+        + `This release build must carry the \`${releaseProfile}\` profile.`
+        + ' Rebuild the web shell with\n'
+        + `  XCHAIN_BUILD_PROFILE=${releaseProfile} pnpm --filter @xchain-wallet/web build\n`
         + 'and stage again. (An unstamped bundle is one whose profile nobody recorded,'
         + ' which is not the same as a default build.)',
     );

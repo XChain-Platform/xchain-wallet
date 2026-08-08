@@ -73,7 +73,33 @@
 # because the pair is one build: the ceremony derives the APK from the same
 # bundle it signs as the AAB, so a release carrying one without the other
 # means the ceremony was interrupted.
-android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*.apk
+#
+# The APK glob is ANCHORED to a trailing digit, and the reason lives in
+# expected-artifacts.txt beside the row it guards: `xchain-wallet-v*.apk`
+# also swallowed the full-feature APK below, silently labelling it `store`.
+# This row must keep spelling the glob exactly as that file does, because a
+# glob here that no row there declares is a hard failure by design.
+android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk
+
+# The second direct APK (, operator answer 2026-08-07): the same tag
+# built at the `default` profile and signed by K10, for the audience that
+# avoids Play deliberately and has been getting Play's restrictions anyway.
+#
+# ITS OWN LANE RATHER THAN A THIRD GLOB ON THE ANDROID ROW, and that is the
+# whole reason this could land before the artifact exists. The android row is
+# SHIPPED, so every glob on it is DEMANDED of every release from now on:
+# adding this one there would make `android SHIPPED` require an artifact
+# nothing builds yet, failing every release until a ceremony with the K9/K10
+# keystores and a real Android toolchain had run. A separate NOT-SHIPPED lane
+# claims the glob - so the optional row is not an unclaimed artifact, which is
+# also a hard failure here - while demanding nothing, exactly like the four
+# store lanes below.
+#
+# The ceremony leg that builds it is opt-in behind XCHAIN_BUILD_ANDROID_FULL=1
+# for the same reason. Flip this to SHIPPED in the commit that records the
+# first release actually carrying the file, and from then on a release that
+# omits it is a lane left behind rather than a smaller release.
+android-full NOT-SHIPPED xchain-wallet-v*-full.apk
 
 # iOS . Store-bound only; there is no direct-install lane on that
 # platform, so this row is one glob and always will be.

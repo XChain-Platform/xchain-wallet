@@ -811,10 +811,21 @@ for (const [label, seed] of [
     }
 }
 assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not built again');
+
+// The STORE APK is derived and must stay derived. The second, full-feature
+// APK  is a genuine second build, because the `default` profile
+// compiles different code in and so there is no bundle to derive it from.
+// What stops that eroding the rule above is that it is OPT-IN: an unset
+// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was, and its
+// lane is NOT-SHIPPED, so no release demands the file either.
+assert.match(ceremony, /if \[ -n "\$\{XCHAIN_BUILD_ANDROID_FULL:-\}" \]/,
+    'the full-feature APK leg exists and is opt-in, leaving the store lane untouched');
+
 const expectedArtifacts = readFileSync(
     join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',
 );
-for (const glob of ['xchain-wallet-android-v*.aab', 'xchain-wallet-v*.apk']) {
+for (const glob of ['xchain-wallet-android-v*.aab', 'xchain-wallet-v*[0-9].apk',
+    'xchain-wallet-v*-full.apk']) {
     assert.ok(
         expectedArtifacts.includes(glob),
         `the release manifest declares ${glob} (undeclared artifacts hard-fail sign.sh)`,
@@ -982,7 +993,8 @@ assert.ok(
 const declaredArtifacts = readFileSync(
     join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',
 );
-for (const pattern of ['xchain-wallet-android-v*.aab', 'xchain-wallet-v*.apk']) {
+for (const pattern of ['xchain-wallet-android-v*.aab', 'xchain-wallet-v*[0-9].apk',
+    'xchain-wallet-v*-full.apk']) {
     assert.ok(declaredArtifacts.includes(pattern), `expected-artifacts declares ${pattern}`);
 }
 assert.ok(existsSync(join(wsRoot, 'tools', 'release', 'android-ceremony.sh')),
@@ -1018,8 +1030,19 @@ const shippedLanes = readFileSync(
 );
 assert.match(
     shippedLanes,
-    /^android\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\.apk\s*$/m,
+    /^android\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
     'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
+);
+// The full-feature direct APK  is its OWN lane, and this pins that
+// separation rather than merely that the lane exists. Hanging its glob off the
+// android row above would arm the parity requirement for an artifact no
+// ceremony builds by default, failing every release until one did; a lane of
+// its own can be declared before the artifact exists, which is what let the
+// declaration and the ceremony land together instead of in a forced order.
+assert.match(
+    shippedLanes,
+    /^android-full\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-v\*-full\.apk\s*$/m,
+    'the full-feature APK is declared as its own lane, not as a third android glob',
 );
 // The two assertions that used to sit here pinned the runbook's own mention
 // of tools/release/shipped-lanes.txt, and the order it mentioned it in. The

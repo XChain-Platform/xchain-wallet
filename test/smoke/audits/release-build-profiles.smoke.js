@@ -298,17 +298,107 @@ assert.deepEqual(
 // The staging rule that makes the label truthful: `packages/mobile` compiles
 // nothing, it copies `packages/web/dist` verbatim, so without this a `default`
 // bundle could be wrapped in a store artifact and signed as `store`.
+//
+// The expected profile became a VARIABLE when  added a second direct
+// APK at the `default` profile, so what is asserted here is the pair of
+// properties that keep the guard honest once it is parameterised:
+//   1. it refuses any MISMATCH, rather than accepting a set of profiles;
+//   2. the variable DEFAULTS to `store`, so an unset environment can never
+//      widen the gate - which is the only way a parameter is safe here.
+// A disjunction (`!== 'store' && !== 'default'`) would satisfy a naive
+// "still mentions store" check while re-opening the exact hole: a `default`
+// bundle wrapped in an artifact the signed manifest labels `store`.
 const mobileBuild = readFileSync(join(repo, 'packages', 'mobile', 'scripts', 'build.js'), 'utf8');
 assert.match(
     mobileBuild,
-    /releaseTag && stagedProfile !== 'store'/,
-    'a release build must refuse to stage a bundle that is not the store profile',
+    /releaseProfile\s*=\s*process\.env\.XCHAIN_MOBILE_RELEASE_PROFILE\s*\|\|\s*'store'/,
+    'the expected release profile must default to `store` when nothing sets it',
+);
+assert.match(
+    mobileBuild,
+    /releaseTag && stagedProfile !== releaseProfile/,
+    'a release build must refuse to stage a bundle whose profile is not the expected one',
+);
+assert.ok(
+    !/stagedProfile !== '\w+' &&\s*stagedProfile !== '\w+'/.test(mobileBuild),
+    'and must refuse on mismatch, not accept a SET of profiles: a disjunction here '
+    + 'lets a `default` bundle ride inside an artifact the manifest labels `store`',
 );
 assert.match(
     mobileBuild,
     /process\.exit\(1\)/,
     'and refuse by exiting, not by warning',
 );
+
+// ---- The two direct APKs must not be able to wear each other's label ----
+//
+//  puts a SECOND direct APK at the `default` profile beside the
+// store-derived one, and the failure this guards was measured rather than
+// imagined (2026-08-07, against this same function): while the store row's
+// glob was the greedy `xchain-wallet-v*.apk`, a default-profile APK named
+// the obvious way did NOT fail the gate. It resolved to `store`, silently,
+// because both names matched one glob declaring one profile - so there was
+// nothing ambiguous for `xr_profile_for` to report. A verifier reads `store`
+// as "the review-hidden surfaces are absent" from the one build that still
+// contains them, which is the false claim in a signed, append-only record
+// that this whole mechanism exists to prevent.
+//
+// Driven against the REAL committed declaration, not a fixture: a fixture
+// here would only re-ask the question the declaration is the answer to.
+{
+    const profileOf = (name) => bashResult(
+        `source ${JSON.stringify(lib)}; `
+        + `xr_profile_for ${JSON.stringify(name)} ${JSON.stringify(expected)}`,
+    );
+
+    const store = profileOf('xchain-wallet-v0.336.0.apk');
+    assert.ok(store.ok && store.out.trim() === 'store',
+        `the released store APK name must still resolve \`store\`: ${store.out}`);
+
+    const full = profileOf('xchain-wallet-v0.336.0-full.apk');
+    assert.ok(full.ok && full.out.trim() === 'default',
+        `the full-feature APK name must resolve \`default\`: ${full.out}`);
+
+    // The class, not just the instance. Any OTHER suffixed APK is a name
+    // nobody planned, and the defect above WAS a name nobody planned being
+    // silently given a meaning - so the answer has to be a refusal, never an
+    // inherited profile.
+    for (const stray of [
+        'xchain-wallet-v0.336.0-default.apk',
+        'xchain-wallet-v0.336.0-beta.apk',
+    ]) {
+        const r = profileOf(stray);
+        assert.ok(!r.ok, `an undeclared APK name must fail shut, not inherit a profile: ${stray} -> ${r.out}`);
+        assert.match(r.out, /no profile declared/,
+            'and must say the list does not describe it');
+    }
+
+    // THE GENERAL FORM, so the next instance is caught by the gate instead
+    // of by somebody noticing. The defect above was one glob quietly
+    // answering for an artifact that belonged to another; nothing about it
+    // was specific to APKs. Every declared row must own its own canonical
+    // name: generate the plainest filename each glob describes and check
+    // that the list still calls it that row's profile.
+    //
+    // This is deliberately weaker than proving the globs are pairwise
+    // disjoint, which is not decidable from this file - and stronger than
+    // it looks, because the pattern that steals a name is nearly always
+    // the one that also matches its neighbour's ordinary release name.
+    // All 15 rows pass as of 2026-08-07; the APK row did not before the
+    // anchor above.
+    const declared = readFileSync(expected, 'utf8').split('\n')
+        .filter((l) => /^(required|optional)\s/.test(l))
+        .map((l) => { const c = l.trim().split(/\s+/); return { glob: c[1], profile: c[2] }; });
+    assert.ok(declared.length > 0, 'the declaration parsed to at least one row');
+    for (const { glob, profile } of declared) {
+        const name = glob.replace(/\[([^\]]+)\]/g, (_m, set) => set[0]).replace(/\*/g, '0.336.0');
+        const r = profileOf(name);
+        assert.ok(r.ok && r.out.trim() === profile,
+            `the glob '${glob}' declares '${profile}', but the list resolves its own `
+            + `canonical name '${name}' to '${r.ok ? r.out.trim() : 'a refusal'}' - `
+            + 'some other row is answering for this one');
+    }
+}
 
 rmSync(work, { recursive: true, force: true });
 

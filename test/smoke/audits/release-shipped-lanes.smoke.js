@@ -131,11 +131,17 @@ function gate(dir, lanesPath = lanesFile, expectedPath = expected) {
 // expected-artifacts.txt must be claimed here too, or the fixture fails
 // the same claimed-by-no-lane check the real file would.
 const BASE = [
-    'android   NOT-SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*.apk',
+    'android   NOT-SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
     'ios       NOT-SHIPPED   xchain-wallet-ios-v*.ipa',
     'mas       NOT-SHIPPED   *-mas.pkg',
     'msstore   NOT-SHIPPED   *-appx.appx',
     'snap      NOT-SHIPPED   *.snap',
+    //  declared a second direct APK as an `optional` row, and every
+    // optional row must be claimed by SOME lane or the gate refuses. Its own
+    // NOT-SHIPPED lane is what lets the declaration exist before the artifact
+    // does; without this line the fixture fails that check rather than the
+    // property each case is about.
+    'android-full NOT-SHIPPED xchain-wallet-v*-full.apk',
 ];
 const withAndroid = (status) => lanes(
     [BASE[0].replace('NOT-SHIPPED', status), ...BASE.slice(1)].join('\n') + '\n',
@@ -166,7 +172,7 @@ try {
             !r.ok, r.out);
         check('...and it names BOTH halves of the pair',
             /xchain-wallet-android-v\*\.aab/.test(r.out)
-            && /xchain-wallet-v\*\.apk/.test(r.out), r.out);
+            && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
         check('...as a lane regression, not as an undeclared artifact',
             /LANE-REGRESSION/.test(r.out), r.out);
     }
@@ -185,7 +191,7 @@ try {
     {
         const r = gate(stage([ANDROID_AAB]), withAndroid('SHIPPED'));
         check('the AAB alone does not satisfy the lane: the direct APK is named',
-            !r.ok && /xchain-wallet-v\*\.apk/.test(r.out), r.out);
+            !r.ok && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
         check('...and the AAB is not reported missing',
             !/LANE-REGRESSION[\s\S]*android-v\*\.aab/.test(r.out), r.out);
     }
@@ -215,7 +221,15 @@ try {
     //    added: an optional artifact belonging to no lane has no shipping
     //    state at all, which is the hole the gate exists to close.
     {
-        const r = gate(stage(), lanes(BASE.slice(0, 3).join('\n') + '\n'));
+        // Drop exactly ONE lane, by name rather than by slicing the list. A
+        // positional slice made this case quietly depend on how many lanes
+        // exist and on the order expected-artifacts.txt lists their globs in:
+        // adding 's android-full lane changed which unclaimed row the
+        // gate reported first, so the case failed on the artifact it named
+        // rather than on the property it is actually about.
+        const r = gate(stage(), lanes(
+            BASE.filter((l) => !/^msstore\s/.test(l)).join('\n') + '\n',
+        ));
         check('an optional row claimed by no lane is refused',
             !r.ok && /no lane in/.test(r.out) && /appx/.test(r.out), r.out);
     }
@@ -242,9 +256,12 @@ try {
     {
         const text = readFileSync(lanesFile, 'utf8');
         const row = text.split('\n').find((l) => /^android\s/.test(l));
+        // The APK glob is ANCHORED (`*[0-9].apk`) so it cannot also swallow
+        // the full-feature APK, which is a different profile; see
+        // expected-artifacts.txt for the measurement behind the anchor.
         check('the committed android row exists and declares both globs',
             !!row && /xchain-wallet-android-v\*\.aab/.test(row)
-            && /xchain-wallet-v\*\.apk/.test(row), row ?? '<no android row>');
+            && /xchain-wallet-v\*\[0-9\]\.apk/.test(row), row ?? '<no android row>');
 
         // The pair-agreement check (every optional artifact is claimed by
         // some lane) has to satisfy whatever the committed file currently
@@ -253,10 +270,20 @@ try {
         // row's globs, with the wildcard filled in. Then this keeps testing
         // agreement as more lanes ship, instead of needing a new artifact
         // name hand-added here every time one does.
+        //
+        // Character classes are expanded BEFORE the wildcard, and that order
+        // is not cosmetic: `xchain-wallet-v*[0-9].apk` with `*` filled in
+        // first yields a name ending `[0-9].apk`, whose last character before
+        // the extension is `]` rather than a digit - so it matches the very
+        // glob it was generated from in NO shell, and this case would fail
+        // reporting a lane regression that does not exist.
+        const sampleName = (glob) => glob
+            .replace(/\[([^\]]+)\]/g, (_m, set) => set[0])
+            .replace(/\*/g, V);
         const shippedArtifacts = text.split('\n')
             .filter((l) => /^\S+\s+SHIPPED\s/.test(l))
             .flatMap((l) => l.trim().split(/\s+/).slice(2))
-            .map((glob) => glob.replace(/\*/g, V));
+            .map(sampleName);
         check('every optional artifact in expected-artifacts.txt is claimed by a lane',
             gate(stage(shippedArtifacts)).ok, 'the committed pair does not agree');
     }
@@ -272,7 +299,7 @@ try {
         const r = gate(stage());
         check('the committed file now demands the Android pair of every release',
             !r.ok && /LANE-REGRESSION/.test(r.out)
-            && /xchain-wallet-v\*\.apk/.test(r.out), r.out);
+            && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

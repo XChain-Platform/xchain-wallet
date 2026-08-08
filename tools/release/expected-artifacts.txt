@@ -47,6 +47,13 @@
 # different key. Anything compiled out for review is therefore also
 # absent from the direct download.
 #
+# THAT COUPLING IS NOW A CHOICE RATHER THAN A CONSEQUENCE (operator answer
+# to , 2026-08-07). A SECOND direct APK is declared below at the
+# `default` profile, so the audience that deliberately avoids Play can get
+# the full feature set. The store-derived APK above stays exactly as it is:
+# it is what Play's review posture permits, it is derived from the uploaded
+# bundle, and it remains the file the download page offers by default.
+#
 # THE FOURTH COLUMN IS THE ARCHITECTURE SET, and it exists because this
 # file's globs are extension-shaped: `*.dmg` is satisfied by ONE dmg. On
 # 2026-08-01 every desktop lane turned out to be building one architecture
@@ -254,7 +261,37 @@ required  *.deb                             default  x64,arm64 none
 # Store version carries exactly one build, so a per-arch pair is two
 # candidates for one slot rather than something the store can serve.
 optional  xchain-wallet-android-v*.aab      store    -         deferred-android
-optional  xchain-wallet-v*.apk              store    -         deferred-android
+optional  xchain-wallet-v*[0-9].apk         store    -         deferred-android
+#
+# THE SECOND DIRECT APK: same tag, `default` profile, K10 signature, and it
+# exists because  was answered `build it` rather than `document the
+# coupling`. The `store` profile genuinely compiles the DEX lane out (eight
+# modules) along with the Trezor connect CSP origin, so until this row the
+# users who avoid Play on principle were getting Play's restrictions anyway.
+#
+# WHY THE ROW ABOVE IS ANCHORED `*[0-9].apk`, WHICH LOOKS LIKE FUSS AND IS
+# NOT. `xchain-wallet-v*.apk` is GREEDY: measured 2026-08-07 against the real
+# `xr_profile_for`, a default-profile APK named the obvious way did NOT fail
+# the gate. It resolved to `store`, silently, because both names matched one
+# glob declaring one profile, so there was nothing ambiguous to report. That
+# writes a FALSE profile into a signed, append-only manifest - a verifier
+# reads `store` as "the review-hidden surfaces are absent" from the one build
+# that still contains them, which is precisely what
+# `xr_assert_store_profile_buildable` exists to make impossible, arriving
+# through the filename instead of the status file.
+#
+# Anchoring the store row to a trailing DIGIT and suffixing this one makes
+# the two globs disjoint by construction rather than by care: a released
+# name ends in its version, this one ends in `-full`, and any OTHER suffixed
+# APK now matches NEITHER row and fails shut as undeclared instead of
+# inheriting `store`. Fail-shut is the correct answer for a name nobody
+# planned - the whole defect above was a name nobody planned being silently
+# given a meaning.
+#
+# `deferred-android` like its twin: apksigner's lane, declared not checked.
+# Optional, and its lane is NOT-SHIPPED in shipped-lanes.txt, so nothing
+# demands it until the first ceremony actually produces one.
+optional  xchain-wallet-v*-full.apk         default  -         deferred-android
 optional  xchain-wallet-ios-v*.ipa          store    -         store
 optional  *-mas.pkg                         store    universal store
 #

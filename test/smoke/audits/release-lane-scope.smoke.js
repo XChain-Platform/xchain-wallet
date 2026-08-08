@@ -126,7 +126,7 @@ try {
         check('...keeping the store profile the source list declares',
             rows.every((r) => /\sstore\s/.test(r)), s.out);
         check('...and naming both halves of the pair',
-            rows.some((r) => r.includes('*.aab')) && rows.some((r) => r.includes('*.apk')), s.out);
+            rows.some((r) => r.includes('.aab')) && rows.some((r) => r.includes('.apk')), s.out);
         check('...and no row from any other lane',
             !/\.dmg|\.exe|\.deb|tar\.gz|\.zip/.test(s.out), s.out);
 
@@ -150,7 +150,7 @@ try {
         // The android rows' fifth column specifically, by value: this is
         // what verify-signatures.mjs reads, and `deferred-android` is the
         // class that says the ceremony verified the signature itself.
-        const androidSource = sourceRows.filter((l) => /android-v\*\.aab|wallet-v\*\.apk/.test(l));
+        const androidSource = sourceRows.filter((l) => /android-v\*\.aab|wallet-v\*\[0-9\]\.apk/.test(l));
         check('...preserving the signature class verbatim',
             androidSource.length === 2 && androidSource.every((src) => {
                 const cols = src.trim().split(/\s+/);
@@ -196,7 +196,7 @@ try {
         const s = scope(['android']);
         const r = gate(stage([AAB]), s.path);
         check('the AAB alone fails under scope: the direct APK is required',
-            !r.ok && /MISSING.*\*\.apk/.test(r.out), r.out);
+            !r.ok && /MISSING.*\.apk/.test(r.out), r.out);
     }
 
     // 6. A lane name is not free text. A typo must fail here rather than
@@ -257,11 +257,15 @@ try {
     {
         const lanesShipped = join(work, 'lanes-shipped.txt');
         writeFileSync(lanesShipped, [
-            'android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*.apk',
+            'android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
             'ios       SHIPPED       xchain-wallet-ios-v*.ipa',
             'mas       NOT-SHIPPED   *-mas.pkg',
             'msstore   NOT-SHIPPED   *-appx.appx',
             'snap      NOT-SHIPPED   *.snap',
+            // See release-shipped-lanes.smoke.js: an optional row claimed by
+            // no lane is a hard failure, so `s second direct APK needs
+            // its lane present even in a fixture that never stages it.
+            'android-full NOT-SHIPPED xchain-wallet-v*-full.apk',
             '',
         ].join('\n'));
         const dir = stage([AAB, APK]);
