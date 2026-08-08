@@ -259,11 +259,19 @@ const HEALTHY = {
     'https://encoder.example/TBTC/status': JSON.stringify({ status: 'healthy', tracker_reachable: true, tracker_synced: true }),
 };
 
-const routed = (overrides = {}) => async (url) => {
+// What the hub answers a JSON-RPC ping with, which is the call the wallet's
+// own reachability check makes (sdk.pingHub()) and therefore the one the
+// hub-rpc probe stands in for.
+const RPC_PONG = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { status: 'success', db: true } });
+
+const routed = (overrides = {}) => async (url, init = {}) => {
     if (overrides[url]) return overrides[url]();
     if (HEALTHY[url]) return { status: 200, text: async () => HEALTHY[url] };
-    // The hub: signed bodies cannot be forged offline, so it is held at a
-    // shape the classifier rejects and the tests below account for it.
+    // The hub's JSON-RPC root answers the ping POST and nothing else; its
+    // registry route is a signed body that cannot be forged offline, so that
+    // one is held at a shape the classifier rejects and the tests below
+    // account for it.
+    if (init.method === 'POST') return { status: 200, text: async () => RPC_PONG };
     return { status: 200, text: async () => '{}' };
 };
 
@@ -445,7 +453,7 @@ assert.ok(
     'the explorer route is GET-only; it must not preflight',
 );
 for (const p of testnet.filter((p) => p.service === 'hub-rpc')) {
-    assert.equal(p.preflightUrl, p.url, 'the hub-rpc preflight targets the same URL as its GET: there is only one JSON-RPC root');
+    assert.equal(p.preflightUrl, p.url, 'the hub-rpc preflight targets the same URL as its POST: there is only one JSON-RPC root');
 }
 for (const p of testnet.filter((p) => p.service === 'encoder')) {
     assert.notEqual(p.preflightUrl, p.url, 'the encoder preflight target must not be the /status health path');
@@ -458,7 +466,7 @@ for (const p of testnet.filter((p) => p.service === 'encoder')) {
 
 // 3. Wired into the full run, against fixtures shaped like the two production
 // hosts that diverge: an encoder whose preflight is blocked though its GET is
-// fine, and a hub whose preflight is blocked though its GET carries a real
+// fine, and a hub whose preflight is blocked though its POST carries a real
 // ACAO (the exact "POST carries the header, preflight does not" split found
 // on 2026-08-07).
 const methodRouted = (routes) => async (url, init = {}) => {
@@ -489,7 +497,7 @@ const encoderPreflightBlocked = await checkDemoEndpoints({
         ...baseRoutes,
         'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
         'OPTIONS https://encoder.example/TBTC/': jsonReply('', {}),
-        'GET https://hub.example/': jsonReply('{}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'POST https://hub.example/': jsonReply(RPC_PONG, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
         'OPTIONS https://hub.example/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST' }),
     }),
 });
@@ -514,7 +522,7 @@ const hubPreflightBlocked = await checkDemoEndpoints({
         ...baseRoutes,
         'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
         'OPTIONS https://encoder.example/TBTC/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'GET,HEAD,PUT,PATCH,POST,DELETE' }),
-        'GET https://hub.example/': jsonReply('{}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'POST https://hub.example/': jsonReply(RPC_PONG, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
         'OPTIONS https://hub.example/': jsonReply('', {}),
     }),
 });
@@ -536,7 +544,7 @@ const noPostRun = await checkDemoEndpoints({
         ...baseRoutes,
         'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
         'OPTIONS https://encoder.example/TBTC/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'GET,HEAD' }),
-        'GET https://hub.example/': jsonReply('{}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'POST https://hub.example/': jsonReply(RPC_PONG, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
         'OPTIONS https://hub.example/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST' }),
     }),
 });
@@ -556,9 +564,10 @@ const fullRun = await checkDemoEndpoints({
     origin: PREFLIGHT_ORIGIN,
     fetchImpl: async (url, init = {}) => {
         if (init.method === 'OPTIONS') preflightRequests.push({ url, headers: init.headers ?? {} });
+        const body = url.includes('encoder') ? ENCODER_OK : (init.method === 'POST' ? RPC_PONG : '{}');
         return {
             status: 200,
-            text: async () => (url.includes('encoder') ? ENCODER_OK : '{}'),
+            text: async () => body,
             headers: new Headers({ 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST' }),
         };
     },
@@ -575,6 +584,147 @@ assert.deepEqual(
     'the preflight has to target the exact POST path (trailing slash on the encoder), not the /status GET path',
 );
 assert.ok(fullRun); // the run itself must complete without throwing on this fixture
+
+// --- The verb has to match the call it stands in for (row 72) -----------
+//
+// The hub's JSON-RPC root answers TWO different resources at one URL: a POST
+// is proxied to the app, a GET is served from the vhost's DocumentRoot as a
+// static landing page. This gate used to GET it and read that landing page's
+// (absent) CORS headers, which on 2026-08-08 reported the hub UNREACHABLE FROM
+// THE APP on the same day every request the wallet issues to it started
+// working. Row 67's blind spot inverted: that one asserted nothing about a
+// relationship the app depends on, this one asserted on a relationship the app
+// does not have. Both are the same root cause, and this is the guard for it.
+
+const HUB_LANDING_PAGE = '<!DOCTYPE html><html><body>XChain Hub</body></html>';
+const productionShapedHub = {
+    // Exactly what origin-host serves today, measured: the GET is HTML with no
+    // ACAO at all, the POST is JSON-RPC with the shell origin echoed, and the
+    // preflight is row 70's repaired 204.
+    'GET https://hub.example/': jsonReply(HUB_LANDING_PAGE, {}),
+    'POST https://hub.example/': jsonReply(RPC_PONG, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+    'OPTIONS https://hub.example/': jsonReply('', {
+        'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    }, 204),
+    'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+    'OPTIONS https://encoder.example/TBTC/': jsonReply('', {
+        'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST',
+    }, 204),
+};
+const hubVerbRequests = [];
+const hubVerbRun = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: async (url, init = {}) => {
+        hubVerbRequests.push({ url, method: init.method ?? 'GET', headers: init.headers ?? {}, body: init.body });
+        return methodRouted({ ...baseRoutes, ...productionShapedHub })(url, init);
+    },
+});
+const hubVerbResult = hubVerbRun.results.find((r) => r.service === 'hub-rpc');
+assert.equal(
+    hubVerbResult.state, 'live',
+    'a hub whose POST and preflight both carry the shell origin is reachable from the app, whatever its landing page serves',
+);
+assert.equal(
+    hubVerbRun.results.find((r) => r.service === 'encoder').state, 'live',
+    'and the encoder beside it stays live, so the hub verdict above is not riding on a fixture that passes everything',
+);
+// The run's own exit stays FAILURE here, and deliberately: baseRoutes answers
+// the registry route with an unsignable body, which no offline fixture can
+// forge. Asserting exit 0 would mean asserting a signature this file cannot
+// produce, so the verdict under test is read off the hub-rpc row itself.
+
+// The landing page must not be fetched AT ALL. Asserted on the outgoing
+// request rather than on the verdict: leaving the GET in and merely ignoring
+// its headers would pass every reply-side check above while still spending a
+// request on a resource this gate has no question about, and the next reader
+// would take its presence as evidence that it means something.
+const hubRootRequests = hubVerbRequests.filter((r) => r.url === 'https://hub.example/');
+assert.ok(hubRootRequests.length > 0, 'the hub JSON-RPC root was never probed at all');
+assert.deepEqual(
+    hubRootRequests.map((r) => r.method).sort(),
+    ['OPTIONS', 'POST'],
+    'the JSON-RPC root gets exactly its preflight and its POST: a GET there is a different resource (the static'
+    + ' landing page) and reading a POST-only surface\'s CORS posture off it is the whole of row 72',
+);
+const hubPost = hubRootRequests.find((r) => r.method === 'POST');
+assert.equal(hubPost.headers.origin, PREFLIGHT_ORIGIN, 'the POST must carry the shell Origin, or it measures curl\'s posture again');
+assert.equal(
+    hubPost.headers['content-type'], 'application/json',
+    'the SDK POSTs JSON, and it is that content-type which makes the request non-simple and gives the preflight something to be about',
+);
+const hubPostBody = JSON.parse(hubPost.body);
+assert.equal(
+    hubPostBody.method, 'ping',
+    'the probe sends the method the wallet\'s own reachability check sends (sdk.pingHub()), so a pass means the app can talk to the hub',
+);
+assert.notEqual(
+    hubPostBody.method, 'getallconfigs',
+    'getallconfigs is the hub\'s one sensitive read (it returns every service\'s DB credentials) and answers 401 to any'
+    + ' client without HUB_API_KEY, which the shipped wallet correctly does not carry: probing it would paint'
+    + ' working-as-designed red',
+);
+
+// And the failures on that POST still have to land. A JSON-RPC surface that
+// answers the ping with an error, or that is answered by the static root
+// instead of being proxied, is a hub the app cannot use.
+const hubRpcOnly = (hubRoutes) => methodRouted({
+    ...baseRoutes,
+    ...productionShapedHub,
+    ...hubRoutes,
+});
+const hubRefuses = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: hubRpcOnly({
+        'POST https://hub.example/': jsonReply(
+            JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32001, message: 'Unauthorized' } }),
+            { 'access-control-allow-origin': PREFLIGHT_ORIGIN }, 401,
+        ),
+    }),
+});
+const refusedResult = hubRefuses.results.find((r) => r.service === 'hub-rpc');
+assert.equal(refusedResult.state, 'failure', 'a hub that refuses the ping is a hub the reviewer\'s app sees as down');
+assert.match(refusedResult.detail, /HTTP 401/, 'the status has to be in the message, or the operator cannot tell a refusal from an outage');
+assert.match(refusedResult.detail, /POST/, 'and it has to say the verb, or the reader goes looking at the landing page');
+assert.equal(hubRefuses.exit, EXIT.FAILURE);
+
+const hubAnsweredByVhost = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: hubRpcOnly({
+        'POST https://hub.example/': jsonReply(HUB_LANDING_PAGE, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+    }),
+});
+const vhostResult = hubAnsweredByVhost.results.find((r) => r.service === 'hub-rpc');
+assert.equal(vhostResult.state, 'failure', '200 with an HTML body means the vhost answered the POST rather than proxying it');
+assert.match(vhostResult.detail, /not JSON/);
+
+// A JSON-RPC 200 with no result member: the shape a stub or a half-deployed
+// route produces, and it must not read as health.
+const hubNoResult = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: hubRpcOnly({
+        'POST https://hub.example/': jsonReply('{"jsonrpc":"2.0","id":1}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+    }),
+});
+assert.equal(hubNoResult.results.find((r) => r.service === 'hub-rpc').state, 'failure');
+
+// And the CORS verdict now comes off the POST, which is the only reply a
+// browser would ever read here. A POST with no ACAO is UNREACHABLE FROM THE
+// APP even though the preflight beside it is perfect - the reverse of the
+// row-69 split, and just as fatal.
+const hubPostNoAcao = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: hubRpcOnly({
+        'POST https://hub.example/': jsonReply(RPC_PONG, {}),
+    }),
+});
+const postNoAcaoResult = hubPostNoAcao.results.find((r) => r.service === 'hub-rpc');
+assert.equal(postNoAcaoResult.state, 'failure', 'the app cannot read a POST reply that carries no ACAO, whatever the preflight said');
+assert.match(postNoAcaoResult.detail, /UNREACHABLE FROM THE APP/);
 
 // A stale demo chain has to reach the EXIT CODE, not just the detail line: the
 // operator reads `echo $?` before they read the report, and the whole point of
@@ -646,7 +796,9 @@ console.log(
     + ' each turn a healthy-looking response into the failure a reviewer would hit; inconclusive never becomes a'
     + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit; the encoder'
     + ' and hub-rpc probes also send a CORS preflight at the exact POST path the SDK uses, trailing slash'
-    + ' included, and a blocked preflight is a FAILURE named UNREACHABLE FROM THE APP even when the GET beside it'
-    + ' is healthy, asserted on the outgoing OPTIONS request itself so a dropped header cannot hide behind a'
-    + ' permissive fixture)',
+    + ' included, and a blocked preflight is a FAILURE named UNREACHABLE FROM THE APP even when the reply beside'
+    + ' it is healthy, asserted on the outgoing OPTIONS request itself so a dropped header cannot hide behind a'
+    + ' permissive fixture; and the hub JSON-RPC root is probed with the ping POST the wallet itself sends and'
+    + ' never with a GET, because a GET there is the vhost static landing page, a different resource whose absent'
+    + ' CORS headers reported the hub unreachable while every call the app makes worked)',
 );

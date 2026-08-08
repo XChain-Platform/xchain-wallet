@@ -37,6 +37,15 @@
 //              against the pinned federation key. The wallet refuses an
 //              unsigned or mis-signed snapshot, so a hub serving one is down
 //              as far as the demo is concerned even at HTTP 200.
+//   - hub-rpc  the JSON-RPC root, probed with a POST, because that is the only
+//              verb it answers. Its GET is a different resource entirely - the
+//              static landing page the vhost serves from DocumentRoot - and
+//              reading a POST-only surface's CORS posture off that page is how
+//              this gate spent 2026-08-08 reporting the hub unreachable while
+//              every request the wallet issues to it worked. The call is
+//              `ping`, the same method `sdk.pingHub()` sends from the wallet's
+//              own reachability check (§49.1), so a pass means the reviewer's
+//              app can talk to the hub rather than that some other method can.
 //   - explorer /{COIN}/api/status, and the demo's own coin must appear in the
 //              `available` map. An explorer that is up but no longer serves
 //              TBTC leaves the reviewer on an empty balance screen. Serving it
@@ -69,7 +78,7 @@
 //
 // AND, for the two endpoints whose load-bearing call is a POST (the encoder's
 // create_tx and the hub's JSON-RPC surface), whether a browser would even be
-// ALLOWED to issue that POST. Every probe above is a GET, and a GET is
+// ALLOWED to issue that POST. Every other probe is a GET, and a GET is
 // CORS-simple: it never triggers a preflight, so none of it can see an edge
 // that blocks the one request a browser actually sends before a POST - the
 // OPTIONS with Access-Control-Request-Method. Measured 2026-08-07: the hub's
@@ -377,7 +386,7 @@ function describeAge(ms) {
 export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DESCRIPTORS) {
     const probes = [];
     const seen = new Set();
-    const add = (service, coin, url, preflightUrl) => {
+    const add = (service, coin, url, preflightUrl, postBody) => {
         if (seen.has(url)) return;
         seen.add(url);
         // Only the demo coin's freshness is fatal, so the flag travels with the
@@ -385,9 +394,12 @@ export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DES
         // no idea which network kind it was built for. `preflightUrl` is set
         // only for the two services whose load-bearing call is a POST; its
         // presence is what tells checkDemoEndpoints() to also issue an OPTIONS.
+        // `postBody` goes further: it marks a probe whose MAIN request is a
+        // POST, so the run issues that instead of a GET (see checkDemoEndpoints).
         probes.push({
             service, coin, url, isDemoCoin: coin === DEMO_COIN,
             ...(preflightUrl ? { preflightUrl } : {}),
+            ...(postBody ? { postBody } : {}),
         });
     };
 
@@ -406,8 +418,23 @@ export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DES
         // other. Mounted at the origin root (`app.use(jsonRouter(...))`), and
         // it is POST-only for the calls that matter, so the preflight is
         // issued at this same root - there is no separate JSON-RPC path.
+        //
+        // Probed with a POST rather than a GET, and that is the whole of row
+        // 72. A GET of this root is answered by the vhost's DocumentRoot with
+        // a static HTML landing page - a different resource, which naturally
+        // carries no Access-Control-Allow-Origin - so a CORS verdict taken
+        // from it says nothing about the JSON-RPC surface. It said something
+        // false: on 2026-08-08, with the preflight repaired and every call the
+        // wallet makes working, this gate still reported the hub unreachable
+        // from the app because it was reading the landing page's headers.
+        // `ping` is the method the wallet's own reachability check sends
+        // (sdk.pingHub() -> POST {method:'ping'}), so the probe stands in for
+        // a call the app actually makes. NOT `getallconfigs`: that one is the
+        // hub's one sensitive read (it returns every service's DB credentials)
+        // and answers 401 to any client without HUB_API_KEY, which the shipped
+        // wallet correctly does not carry - a red gate for working-as-designed.
         const hubRpcUrl = new URL('/', d.hub.defaultUrl).href;
-        add('hub-rpc', coin, hubRpcUrl, hubRpcUrl);
+        add('hub-rpc', coin, hubRpcUrl, hubRpcUrl, { jsonrpc: '2.0', id: 1, method: 'ping', params: [] });
         add('explorer', coin, `${trimSlash(d.explorer.defaultUrl)}/${coin}/api/status`);
         // The encoder's create_tx call is POST '/' against an axios client
         // whose baseURL is the descriptor's URL, and axios's combineURLs joins
@@ -441,16 +468,36 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
     if (raw.error) {
         return { state: 'inconclusive', detail: `could not reach it: ${raw.error}` };
     }
-    // Handled before the status ladder below because this probe is not asking
-    // about health at all. The JSON-RPC surface is POST-only, so a GET's status
-    // carries no information; the only question is whether a browser at the
-    // shell's origin would be allowed to read a reply, and withCors() answers
-    // that from the same response.
+    // Handled before the status ladder below because this reply came from a
+    // POST, not a GET, and its failure vocabulary has to say so: an operator
+    // reading "HTTP 404" here would otherwise go looking at the landing page
+    // this probe deliberately no longer touches.
     if (probe.service === 'hub-rpc') {
+        if (typeof raw.status !== 'number' || raw.status < 200 || raw.status >= 300) {
+            return {
+                state: 'failure',
+                detail: `the JSON-RPC surface answered HTTP ${raw.status} to the same ping POST the wallet's`
+                    + ' reachability check sends, so the app cannot see the hub as up',
+            };
+        }
+        let rpc;
+        try {
+            rpc = JSON.parse(raw.body ?? '');
+        } catch {
+            // An HTML body on a 200 here means the POST was answered by the
+            // vhost's static root rather than proxied to the app - the shape
+            // row 70 fixed for OPTIONS, one verb over.
+            return { state: 'failure', detail: '200 to the ping POST but the body is not JSON (the vhost answered it, not the hub)' };
+        }
+        if (rpc?.error) {
+            return { state: 'failure', detail: `the hub refused the ping: ${JSON.stringify(rpc.error)}` };
+        }
+        if (!rpc?.result) {
+            return { state: 'failure', detail: 'the ping POST came back without a JSON-RPC result member' };
+        }
         return {
             state: 'live',
-            detail: `JSON-RPC surface answered HTTP ${raw.status} to a GET (it is POST-only);`
-                + ' probed for its CORS posture, not its health',
+            detail: `JSON-RPC ping answered ${JSON.stringify(rpc.result)} (POST, the only verb this surface answers)`,
         };
     }
     if (raw.status === 403) {
@@ -601,6 +648,46 @@ export async function probeOnce(url, {
 }
 
 /**
+ * Fetch one probe whose real call is a POST. Same contract as probeOnce()
+ * (never throws, same undefined/null header distinction), different verb.
+ *
+ * This exists because a probe's HTTP verb has to match the call it is standing
+ * in for. The hub's JSON-RPC root answers a GET from the vhost's DocumentRoot
+ * and a POST from the app behind it: two different resources at one URL, and
+ * only one of them is what the wallet talks to. Probing the wrong one is not a
+ * near-miss, it is a measurement of something else entirely.
+ */
+export async function postOnce(url, {
+    fetchImpl = globalThis.fetch,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    origin = SHELL_ORIGIN,
+    body = {},
+} = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetchImpl(url, {
+            method: 'POST',
+            // The same content-type the SDK's axios POST sends, which is also
+            // what makes this request non-simple and gives the preflight below
+            // something to be about.
+            headers: { 'content-type': 'application/json', accept: 'application/json', origin },
+            body: JSON.stringify(body),
+            redirect: 'follow',
+            signal: controller.signal,
+        });
+        const acao = typeof res.headers?.get === 'function'
+            ? res.headers.get('access-control-allow-origin')
+            : undefined;
+        return { status: res.status, body: await res.text(), acao, origin };
+    } catch (e) {
+        return { error: e?.name === 'AbortError' ? `timed out after ${timeoutMs}ms` : (e?.message ?? String(e)) };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
  * Issue the ONE request a browser actually sends before the POST a GET can
  * never provoke: an OPTIONS carrying Access-Control-Request-Method and
  * Access-Control-Request-Headers. Never throws, same contract as probeOnce().
@@ -665,13 +752,18 @@ export async function checkDemoEndpoints({
 
     const results = [];
     for (const probe of probes) {
-        const raw = await probeOnce(probe.url, { fetchImpl, timeoutMs, origin });
+        // A probe carrying a postBody is POST-only at the HTTP layer, and its
+        // GET is a DIFFERENT RESOURCE (row 72). Issuing one anyway and reading
+        // its CORS headers is not a harmless extra data point: it is the bug.
+        const raw = probe.postBody
+            ? await postOnce(probe.url, { fetchImpl, timeoutMs, origin, body: probe.postBody })
+            : await probeOnce(probe.url, { fetchImpl, timeoutMs, origin });
         const cors = corsVerdict(raw);
         let verdict = withCors(classifyProbe(probe, raw), cors);
 
         // Only the two POST-load-bearing services carry a preflightUrl (set in
-        // demoProbesFor()). The GET-side verdict above still runs for them -
-        // it is what catches a service down entirely - and the preflight is
+        // demoProbesFor()). The main-request verdict above still runs for them
+        // - it is what catches a service down entirely - and the preflight is
         // folded on top, same shape as withCors(), because either one blocked
         // is a FAILURE for this gate's purpose.
         let preflight;
@@ -742,7 +834,10 @@ Options:
                     native-HTTP bypass, so a service that answers 200 to curl
                     and serves no Access-Control-Allow-Origin is, to the app,
                     down. This gate reported exit 0 through exactly that. The
-                    encoder and hub-rpc probes ALSO send a CORS preflight
+                    hub-rpc probe is a POST (a JSON-RPC ping, the only verb
+                    that surface answers; its GET is the vhost's static landing
+                    page, a different resource whose headers say nothing about
+                    the hub). The encoder and hub-rpc probes ALSO send a CORS preflight
                     (OPTIONS with Access-Control-Request-Method: POST) at this
                     same origin, because their load-bearing call is a POST and
                     a GET can never provoke the preflight a browser actually
