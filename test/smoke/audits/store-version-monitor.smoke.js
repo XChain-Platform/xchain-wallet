@@ -30,9 +30,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 import {
     checkItem,
+    classifyPlayListingHtml,
     extractVersionFromListingHtml,
+    judgePlay,
     parsePublishLog,
+    readState,
     run,
+    writeState,
 } from '../../../tools/release/store-version-monitor.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'xchain-store-version-monitor-'));
@@ -168,7 +172,7 @@ writeFileSync(logPath, LOG);
     // silent on stderr (so cron mails nothing).
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: [],
+        argv: ['--no-play'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', CWS_BETA_ITEM_ID: 'bbbb', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -182,7 +186,7 @@ writeFileSync(logPath, LOG);
     // loud on stderr so cron mails it.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('9.9.9')) });
     const result = await run({
-        argv: [],
+        argv: ['--no-play'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -196,7 +200,7 @@ writeFileSync(logPath, LOG);
     // code from both clean (0) and alert (1), loud on stderr.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => { throw new Error('ETIMEDOUT'); } });
     const result = await run({
-        argv: [],
+        argv: ['--no-play'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -209,7 +213,7 @@ writeFileSync(logPath, LOG);
     // error: it must not alert or fail the run by itself.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: [],
+        argv: ['--no-play'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -221,7 +225,7 @@ writeFileSync(logPath, LOG);
     // compare against), not a clean run.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: [],
+        argv: ['--no-play'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: join(dir, 'no-such-file.md') },
         fetchImpl,
     });
@@ -232,7 +236,7 @@ writeFileSync(logPath, LOG);
     // --main-id / --beta-id flags override the environment.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: ['--main-id', 'aaaa', '--log', logPath],
+        argv: ['--main-id', 'aaaa', '--log', logPath, '--no-play'],
         env: {},
         fetchImpl,
     });
@@ -360,5 +364,136 @@ const realRows = parsePublishLog(realLog);
     }
 }
 
+// ------------------------------------------------------------ Play lane
+//
+//  row 69. The Play lane's whole contract is the absence LATCH:
+// a 404 is normal before the listing exists and an incident after it
+// has been seen live even once. The cases below are that distinction
+// plus the ways it can be defeated. No version is asserted anywhere,
+// because a Play listing page does not carry one (measured; see the
+// script header) - if a future change starts reporting a Play version,
+// these tests are the thing that should look wrong.
+
+// A page shaped like a real Play listing, matching what was measured
+// 2026-08-08 against play.google.com/store/apps/details?id=
+// org.thoughtcrime.securesms: og:title carries "<name> - Apps on
+// Google Play" and the package name appears in the body.
+function playHtml(pkg, name) {
+    return `<html><head><meta property="og:title" content="${name} - Apps on Google Play">`
+        + `</head><body><c-wiz data-item-id="${pkg}">...</c-wiz></body></html>`;
+}
+
+const statePath = join(dir, 'store-monitor-state.json');
+const PKG = 'io.xchain.wallet.android';
+
+{
+    const live = classifyPlayListingHtml(playHtml(PKG, 'XChain Wallet'), PKG);
+    assert.deepEqual(live, { ok: true, title: 'XChain Wallet' }, 'reads the app name off a live listing');
+}
+{
+    // A 200 that never names our package is the shape of a soft-404, a
+    // redirect or an interstitial. Arming the latch on it would mean a
+    // later real 404 alerts for a listing that was never live.
+    const other = classifyPlayListingHtml(playHtml('com.someone.else', 'Some Other App'), PKG);
+    assert.equal(other.ok, false, 'a 200 for a different package is not our listing going live');
+    assert.match(other.reason, /never names/);
+}
+{
+    const noTitle = classifyPlayListingHtml(`<html><body>${PKG}</body></html>`, PKG);
+    assert.equal(noTitle.ok, false, 'the package name alone, with no og:title, is not a confident match');
+}
+
+// --- the latch, which is the reason this lane can exist before the listing
+
+{
+    // Never seen + absent = the expected pre-publish state, and it must
+    // NOT arm the latch: a latch armed here would alert forever.
+    const judged = judgePlay({ fetched: { state: 'absent' }, packageName: PKG, firstSeen: null });
+    assert.equal(judged.state, 'ok', 'a 404 before the listing has ever been seen is not an alert');
+    assert.equal(judged.sawLive, false, 'nothing was seen, so nothing may be latched');
+}
+{
+    // Seen before + absent = the takedown/suspension/unpublish signal.
+    const judged = judgePlay({ fetched: { state: 'absent' }, packageName: PKG, firstSeen: '2026-08-08T00:00:00.000Z' });
+    assert.equal(judged.state, 'alert', 'a 404 AFTER the listing has been seen live is the incident signal');
+    assert.match(judged.detail, /unpublished, suspended or removed/);
+}
+{
+    const judged = judgePlay({
+        fetched: { state: 'live', html: playHtml(PKG, 'XChain Wallet') }, packageName: PKG, firstSeen: null,
+    });
+    assert.equal(judged.state, 'ok');
+    assert.equal(judged.sawLive, true, 'a first sighting arms the latch');
+    assert.match(judged.detail, /FIRST SIGHTING/);
+}
+{
+    // An unrecognisable page must never be folded into "ok", and must
+    // never arm the latch either - same honesty rule as the Chrome lane.
+    const judged = judgePlay({
+        fetched: { state: 'inconclusive', reason: 'HTTP 503 fetching the Play listing' },
+        packageName: PKG, firstSeen: '2026-08-08T00:00:00.000Z',
+    });
+    assert.equal(judged.state, 'inconclusive', 'a 503 is not a takedown and is not clean either');
+    assert.equal(judged.sawLive, false);
+}
+
+// --- persistence: the latch survives a run, and refuses to be guessed past
+
+{
+    const fresh = readState(join(dir, 'does-not-exist.json'));
+    assert.deepEqual(fresh, { firstSeen: null, lastSeen: null }, 'a missing latch means "never seen"');
+}
+{
+    writeFileSync(statePath, 'not json{');
+    assert.throws(() => readState(statePath), /JSON/,
+        'a corrupt latch throws rather than silently reading as "never seen", which would disarm it');
+    rmSync(statePath, { force: true });
+}
+{
+    writeState(statePath, { firstSeen: '2026-08-08T00:00:00.000Z', lastSeen: '2026-08-08T01:00:00.000Z' });
+    assert.deepEqual(readState(statePath), {
+        firstSeen: '2026-08-08T00:00:00.000Z', lastSeen: '2026-08-08T01:00:00.000Z',
+    }, 'the latch round-trips');
+    rmSync(statePath, { force: true });
+}
+
+// --- end to end through run(), the way cron sees it
+
+{
+    const first = await run({
+        argv: ['--no-chrome', '--state', statePath],
+        env: {},
+        fetchImpl: fakeFetch({ 'play.google.com': () => ok(playHtml(PKG, 'XChain Wallet')) }),
+    });
+    assert.equal(first.exitCode, 0, 'a live listing is clean');
+    assert.match(first.stdout, /FIRST SIGHTING/);
+    assert.ok(!/version=/.test(first.stdout), 'the Play lane must not print a version column');
+
+    // Same state file, listing now gone: this is the transition the lane exists for.
+    const after = await run({
+        argv: ['--no-chrome', '--state', statePath],
+        env: {},
+        fetchImpl: fakeFetch({ 'play.google.com': () => ok('gone', 404) }),
+    });
+    assert.equal(after.exitCode, 1, 'the listing disappearing after a sighting is an ALERT');
+    assert.match(after.stderr, /PLAY LISTING INCIDENT SIGNAL/);
+    rmSync(statePath, { force: true });
+}
+{
+    // Disabling both lanes must not look like a clean run.
+    const none = await run({ argv: ['--no-chrome', '--no-play'], env: {} });
+    assert.equal(none.exitCode, 2, 'a run that checked nothing is a config error, not clean');
+}
+{
+    // The Chrome contract is unchanged: no item id is still a hard config
+    // error - but it must now also say the Play lane did not run, so an
+    // operator cannot read it as "the Android listing is being watched".
+    const unset = await run({ argv: [], env: {} });
+    assert.equal(unset.exitCode, 2);
+    assert.match(unset.stderr, /--no-chrome/,
+        'the config error must name the way to run the Play lane on its own');
+}
+
 rmSync(dir, { recursive: true, force: true });
-console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md)');
+console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md, '
+    + 'and the Play absence latch)');

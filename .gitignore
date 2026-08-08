@@ -59,3 +59,11 @@ release-artifacts/
 # Ignored so a checkout that has to live in the tree can never be mistaken for
 # a change to it, by a drift guard or by a person.
 /.docs-sibling/
+
+# Runtime state for the store-version monitor's Play absence latch
+# . The monitor defaults its state file to beside itself, which
+# is right on the monitor host (/opt/xchain) but means a run from inside
+# a checkout drops an untracked file in tools/release/. Two coders share
+# one index here, so an untracked stray is one `git add .` away from
+# somebody else's commit.
+/tools/release/store-monitor-state.json
