@@ -47,8 +47,21 @@
 // must say so rather than fold into a pass or a failure.
 //
 //   exit 0  CLEAN         pin matches the bytes, no drift since capture
-//   exit 1  STALE         a hash disagrees, or a depicted surface moved
+//   exit 1  STALE         a hash disagrees, a depicted surface moved, or the
+//                         capture is AHEAD of the ref being submitted
 //   exit 2  INCONCLUSIVE  no pin, no git history, or the pin is unreadable
+//
+// DRIFT HAS TWO DIRECTIONS AND THIS TOOL SAW ONLY ONE UNTIL 2026-08-07. The
+// per-asset scan below asks `git log pin..target`, which is empty whenever
+// target is an ANCESTOR of pin, so a capture taken from a build NEWER than
+// the release reads as CLEAN. That is not a corner case, it is what
+// submission looks like here: the only commit a tag may name is the last one
+// carrying a green CI run, while captures get re-taken on the tip. Measured
+// on 2026-08-07, the pin stood at 42bda8b1 and the sole taggable commit was
+// 51bed8f0, five commits behind it; `--since 51bed8f0` printed CLEAN while
+// the four images depicted a build the release did not contain. A reviewer
+// compares the screenshots against the product they are sent, and neither
+// direction of that mismatch is the one they forgive.
 //
 // WHERE IT IS CHECKED FROM. The hash half is held by the listing-pack smoke,
 // which runs everywhere. The drift half is NOT: it would go red on every UI
@@ -379,6 +392,33 @@ export function verifyPin({ set } = {}) {
 }
 
 /**
+ * Where the capture sits relative to the ref being submitted. Exported and
+ * kept free of any repository state so it can be tested against a purpose-built
+ * history rather than against whatever this checkout happens to contain: the
+ * bug it exists to catch is a direction, and a direction needs both.
+ *
+ * Returns 'same' | 'behind' | 'ahead' | 'divergent', where 'behind' is the
+ * ordinary case the per-asset drift scan already covers (capture older than
+ * the release) and 'ahead' is the one that used to read as CLEAN.
+ */
+export function captureVsTarget(pinSha, targetSha, opts = {}) {
+    if (pinSha === targetSha) return 'same';
+    // `merge-base --is-ancestor` answers by exit code, so a false answer
+    // arrives here as a throw rather than as a value.
+    const isAncestor = (a, b) => {
+        try {
+            git(['merge-base', '--is-ancestor', a, b], opts);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    if (isAncestor(pinSha, targetSha)) return 'behind';
+    if (isAncestor(targetSha, pinSha)) return 'ahead';
+    return 'divergent';
+}
+
+/**
  * The read-only whole: the pin half above, plus the drift half that needs git.
  */
 export function verifyListingAssets({ since, set } = {}) {
@@ -414,9 +454,28 @@ export function verifyListingAssets({ since, set } = {}) {
         if (commits.length > 0) drift.push({ asset: asset.name, shows: asset.shows, commits });
     }
 
-    const problems = hashProblems.length > 0 || drift.length > 0;
+    // The other direction. Reported per asset the same way, over the reversed
+    // range, so the operator reads what the IMAGES contain that the release
+    // does not, rather than being told only that two hashes disagree.
+    const direction = captureVsTarget(pin.capturedFrom.commit, targetSha);
+    const ahead = [];
+    if (direction === 'ahead' || direction === 'divergent') {
+        for (const asset of assetSet.assets) {
+            const log = git([
+                'log', '--oneline', '--no-decorate',
+                `${targetSha}..${pin.capturedFrom.commit}`,
+                '--', ...asset.depends,
+            ]);
+            const commits = log ? log.split('\n') : [];
+            if (commits.length > 0) ahead.push({ asset: asset.name, shows: asset.shows, commits });
+        }
+    }
+
+    const problems = hashProblems.length > 0 || drift.length > 0 || ahead.length > 0;
     return {
         state: problems ? 'STALE' : 'CLEAN',
+        direction,
+        ahead,
         set: assetSet.id,
         pin: {
             commit: pin.capturedFrom.commit,
@@ -503,7 +562,32 @@ function main(argv) {
             for (const c of d.commits.slice(0, 5)) console.error(`    ${c}`);
             if (d.commits.length > 5) console.error(`    ... and ${d.commits.length - 5} more`);
         }
+        for (const a of result.ahead || []) {
+            console.error(`[verify-listing-assets] AHEAD: ${a.asset} (${a.shows}) - depicts `
+                + `${a.commits.length} commit(s) that ${target.ref} does NOT contain:`);
+            for (const c of a.commits.slice(0, 5)) console.error(`    ${c}`);
+            if (a.commits.length > 5) console.error(`    ... and ${a.commits.length - 5} more`);
+        }
+        if ((result.ahead || []).length > 0) {
+            console.error('[verify-listing-assets] the capture is '
+                + `${result.direction === 'divergent' ? 'on a divergent history from' : 'NEWER than'} `
+                + `${target.ref}, so these images advertise a product the upload does not contain. `
+                + 'This is the same defect as a stale screenshot and it is likelier at submission '
+                + 'time, because the ref you may tag is the last one with a green CI run while '
+                + 'captures get re-taken on the tip. Re-capture at the ref you are submitting, or '
+                + 'submit the ref the images depict; do not upload the pair as they stand.');
+        }
         if (result.state === 'CLEAN') {
+            // Silence is the wrong answer even when the verdict is right: the
+            // capture ran against a build that is not the one being uploaded,
+            // and only the surface scan makes that harmless. Say so, so the
+            // reader knows the tool looked rather than that it had nothing.
+            if (result.direction === 'ahead' || result.direction === 'divergent') {
+                console.log('[verify-listing-assets] NOTE: the capture ran at '
+                    + `${result.pin.commit.slice(0, 8)}, which ${target.ref} does not contain, but no `
+                    + 'surface any asset depicts moved in between, so the images and the upload still '
+                    + 'show the same product.');
+            }
             console.log('[verify-listing-assets] CLEAN: every asset hashes to its pin and nothing it '
                 + 'depicts has changed since it was captured');
         } else {
