@@ -34,6 +34,7 @@ import {
     encodeXcwChunks,
     decodeXcwChunks,
 } from '../../../packages/core/src/uri/index.js';
+import { MULTISIG_SESSION_STATUSES } from '../../../packages/core/src/schemas/multisigSigningSession.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -208,8 +209,8 @@ const route = readFileSync(routePath, 'utf8');
 
 assert.ok(/AnimatedQrFrames/.test(route),
     'route renders the animated-QR component');
-assert.ok(/Round 1.{0,2}Collect nonces/.test(route),
-    'route uses §22.3 "Round 1: Collect nonces" label for MuSig2 nonce round');
+assert.ok(/Round 1.{0,2}Collect cosigner replies/.test(route),
+    'route labels the §22.3 nonce round in plain language: "Round 1: Collect cosigner replies"');
 assert.ok(/Round 2.{0,2}Collect signatures/.test(route),
     'route uses §22.3 "Round 2: Collect signatures" label for MuSig2 partial round');
 assert.ok(/Collect signatures/.test(route),
@@ -226,6 +227,30 @@ assert.ok(/encodeXcwChunks/.test(route),
     'route runs the chunked §20.3 transport on outbound envelopes');
 assert.ok(/createXcwCollector|addChunkToCollector/.test(route),
     'route ingests chunks via the §20.3 collector');
+
+// ─── Sign-screen copy carries no raw crypto jargon (#3879/#3880/#3881) ──
+
+// Strip the code identifiers first: publicNonceHex, contributeMultisigNonce,
+// aggregatedSchnorrSig and the STATUS_LABELS keys are wire/API vocabulary and
+// are allowed to say "nonce"/"Schnorr". Only the remaining text is user copy.
+const routeCopy = route
+    .replace(/\b\w*[Nn]once\w*\b(?=\s*[:,)\]}.=])/g, '')
+    .replace(/\bcontributeMultisigNonce\b|\bpublicNonceHex\b|\baggregatedSchnorrSig\b|\baggNonce\b/g, '')
+    .replace(/'collecting-nonces'/g, '');
+
+assert.ok(!/Round 1 nonce from/.test(routeCopy),
+    'paste-inbox results say "Round 1 reply", not "Round 1 nonce" (#3879)');
+assert.ok(!/aggregated Schnorr signature/.test(routeCopy),
+    'round-2 progress hint reads " (aggregated)" like round 1, with no scheme name (#3880)');
+assert.ok(!/\{'? ?·'? ?'\}\{(?:s|active)\.status\}|\{' · status: '\}/.test(route),
+    'session status renders through statusLabel(), never as the raw enum token (#3881)');
+assert.ok(/const STATUS_LABELS = \{([\s\S]*?)\};/.test(route),
+    'route declares a STATUS_LABELS humanization map (#3881)');
+const statusLabelMap = route.match(/const STATUS_LABELS = \{([\s\S]*?)\};/)[1];
+for (const status of MULTISIG_SESSION_STATUSES) {
+    assert.ok(statusLabelMap.includes(`'${status}'`),
+        `STATUS_LABELS covers the "${status}" session status (#3881)`);
+}
 
 // ─── AnimatedQrFrames is exported from core/ui ──────────────────
 

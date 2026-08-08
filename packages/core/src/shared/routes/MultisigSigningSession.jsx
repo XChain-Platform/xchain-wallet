@@ -25,6 +25,19 @@ const {
     encodeMultisigEnvelope,
 } = uriLib;
 
+// Humanize the session status enum for display (#3881): the raw tokens are
+// backend vocabulary and one of them leaks "nonce" onto a signing screen.
+// Covers every value of schemas.multisigSigningSession.MULTISIG_SESSION_STATUSES.
+const STATUS_LABELS = {
+    'collecting-nonces': 'Waiting for cosigner replies',
+    'collecting-sigs': 'Collecting signatures',
+    'ready-to-finalize': 'Ready to finalize',
+    'finalized': 'Finalized, ready to broadcast',
+    'broadcast': 'Broadcast',
+    'cancelled': 'Cancelled',
+};
+const statusLabel = (s) => STATUS_LABELS[s] || s;
+
 /**
  * §22.3 + §42.9 multisig sign-screen tracker (Phase 4 Step 19).
  *
@@ -236,7 +249,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     pubkey: envelope.contribution.pubkey,
                     publicNonceHex: envelope.contribution.publicNonce,
                 });
-                setPasteResult(`Round 1 nonce from ${shortPk(envelope.contribution.pubkey)} scanned.`);
+                setPasteResult(`Round 1 reply from ${shortPk(envelope.contribution.pubkey)} scanned.`);
             } else if (envelope.kind === 'multisig-round-2-reply') {
                 await messaging.contributeMultisigSignature({
                     sessionId: active.id,
@@ -331,7 +344,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     pubkey: envelope.contribution.pubkey,
                     publicNonceHex: envelope.contribution.publicNonce,
                 });
-                setPasteResult(`Round 1 nonce from ${shortPk(envelope.contribution.pubkey)} accepted.`);
+                setPasteResult(`Round 1 reply from ${shortPk(envelope.contribution.pubkey)} accepted.`);
             } else if (envelope.kind === 'multisig-round-2-reply') {
                 await messaging.contributeMultisigSignature({
                     sessionId: active.id,
@@ -433,7 +446,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                                     </span>
                                     <span className={styles.rowMeta}>
                                         {summary?.label}: {summary?.current} of {summary?.threshold}
-                                        {' · '}{s.status}
+                                        {' · '}{statusLabel(s.status)}
                                     </span>
                                     {s.actionSummary
                                         ? <span className={styles.rowSubtle}>{s.actionSummary}</span>
@@ -458,7 +471,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const isMusig2 = active.scheme === 'taproot-musig2';
     const roundLabel = isMusig2
         ? (active.status === 'collecting-nonces'
-            ? 'Round 1: Collect nonces'
+            ? 'Round 1: Collect cosigner replies'
             : (active.status === 'collecting-sigs'
                 ? 'Round 2: Collect signatures'
                 : null))
@@ -621,7 +634,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     cosignerCount={active.cosignerPubkeys.length}
                     scheme={active.scheme}
                 />
-                {' · status: '}{active.status}
+                {' · '}{statusLabel(active.status)}
             </p>
             {isMusig2 ? (
                 <p className={styles.hint}>
@@ -629,7 +642,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     {active.aggNonce ? ' (aggregated)' : ''}
                     <br />
                     Round 2: Signatures collected: {active.partialSigs.length} of {active.threshold}
-                    {active.aggregatedSchnorrSig ? ' (aggregated Schnorr signature ready)' : ''}
+                    {active.aggregatedSchnorrSig ? ' (aggregated)' : ''}
                 </p>
             ) : null}
             {active.actionSummary ? (

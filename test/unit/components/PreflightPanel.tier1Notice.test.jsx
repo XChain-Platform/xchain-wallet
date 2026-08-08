@@ -31,7 +31,10 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { PreflightPanel } from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
+import { PreflightPanel, TIER1_NOTICE_CODES } from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
+// Test-only import. The panel itself must not reach for the SDK; see the
+// parity case at the bottom of this file.
+import preflightConstants from '../../../../xchain-sdk/src/preflight/constants.js';
 
 afterEach(cleanup);
 
@@ -215,5 +218,24 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
         // The palette moves too, and the pass arm is the one that must: this is
         // the other side of the fail-chip assertion above.
         expect(chip().className).toMatch(/chip_unreached/);
+    });
+
+    // The panel duplicates the two Tier-1 codes as literals on purpose: it is
+    // rendered by the extension approval root and must not pull the SDK into
+    // that bundle. So the parity lives here, where importing the SDK is free
+    // (#3935). A silent rename in the registry would otherwise leave the panel
+    // matching a code the SDK no longer emits, failing the way the original
+    //  defect did: by rendering nothing.
+    it('keeps the Tier-1 notice codes in parity with the SDK registry', () => {
+        expect(TIER1_NOTICE_CODES.DRYRUN_VALID)
+            .toBe(preflightConstants.FINDING_CODES.DRYRUN_VALID);
+        expect(TIER1_NOTICE_CODES.DRYRUN_UNAVAILABLE)
+            .toBe(preflightConstants.FINDING_CODES.DRYRUN_UNAVAILABLE);
+        // Every pinned code must still exist in the registry, so a deletion is
+        // caught rather than read as undefined matching undefined.
+        const registry = Object.values(preflightConstants.FINDING_CODES);
+        for (const code of Object.values(TIER1_NOTICE_CODES)) {
+            expect(registry).toContain(code);
+        }
     });
 });

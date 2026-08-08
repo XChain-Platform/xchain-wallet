@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Multisig signing no longer leaks internal crypto jargon into user-facing copy: the raw session status enum, the Schnorr aggregation hint and nonce round labels all read in plain language ().
+
 ## [0.337.0] - 2026-08-07
 
 ### Fixed

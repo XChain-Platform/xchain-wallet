@@ -26,6 +26,10 @@ import styles from './PreflightPanel.module.css';
 const DRYRUN_VALID       = 'DRYRUN_VALID';
 const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
 
+// Export the pair so a test can pin it against the SDK registry without this
+// component importing the SDK (#3935). Adds no runtime import, no bundle weight.
+export const TIER1_NOTICE_CODES = Object.freeze({ DRYRUN_VALID, DRYRUN_UNAVAILABLE });
+
 // Plain-language copy for the Tier-1 notices. The SDK messages are written
 // for a report reader ("relying on client checks"); this surface is read by
 // someone about to sign. The SDK's own text still renders underneath the
