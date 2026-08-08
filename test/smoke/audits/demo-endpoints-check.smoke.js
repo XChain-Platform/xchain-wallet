@@ -34,7 +34,7 @@ import { strict as assert } from 'node:assert';
 
 import {
     demoProbesFor, classifyProbe, checkDemoEndpoints, burstProbe, EXIT,
-    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS,
+    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS, preflightVerdict,
 } from '../../../tools/release/verify-demo-endpoints.mjs';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 
@@ -347,6 +347,235 @@ assert.ok(
     + ` and the gate goes back to certifying endpoints the app cannot use. Sent: ${JSON.stringify(sentOrigins)}`,
 );
 
+// --- Preflight: the POST no GET can ever provoke ------------------------
+//
+// corsVerdict() above reads the ACAO on a GET's own reply. A GET is
+// CORS-simple and never triggers a preflight, so every check above it is
+// structurally blind to a service that answers the GET fine and blocks the
+// OPTIONS - which is exactly what production does. Measured 2026-08-07:
+// `OPTIONS https://encoder.xchain.io/TBTC/` with Access-Control-Request-Method:
+// POST returns 204 with ACAO echoing the origin and Allow-Methods naming POST
+// (a pass); `OPTIONS https://hub.xchain.io/` with the same headers returns 200
+// with an `allow:` header (the plain HTTP verb list, a red herring) and NO
+// access-control-* header at all, even though a plain POST to that same URL
+// DOES carry one. A gate that only ever sends GET cannot see that gap.
+
+const PREFLIGHT_ORIGIN = 'capacitor://localhost';
+
+// 1. Classification, unit level, no network.
+const passingPreflight = preflightVerdict({
+    status: 204, origin: PREFLIGHT_ORIGIN,
+    acao: PREFLIGHT_ORIGIN, allowMethods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+});
+assert.equal(passingPreflight.state, 'ok', 'ACAO echoing the origin plus Allow-Methods naming POST is a pass, matching the encoder\'s measured shape');
+
+assert.equal(
+    preflightVerdict({ status: 204, origin: PREFLIGHT_ORIGIN, acao: '*', allowMethods: 'POST' }).state,
+    'ok',
+    'a wildcard ACAO permits the preflight the same way it permits a GET',
+);
+
+// The hub's exact measured shape: HTTP 200, a plain `Allow` header (not read
+// here at all), and no access-control-* header whatsoever.
+const hubMeasuredShape = preflightVerdict({ status: 200, origin: PREFLIGHT_ORIGIN, acao: null, allowMethods: null });
+assert.equal(hubMeasuredShape.state, 'blocked', 'no ACAO on the preflight blocks the POST, same rule as no ACAO on a GET');
+assert.match(hubMeasuredShape.detail, /no Access-Control-Allow-Origin/);
+
+const preflightWrongOrigin = preflightVerdict({ status: 204, origin: PREFLIGHT_ORIGIN, acao: 'https://example.invalid', allowMethods: 'POST' });
+assert.equal(preflightWrongOrigin.state, 'blocked', 'an ACAO naming somebody else does not permit this shell to preflight either');
+
+// ACAO is fine but POST is not among the allowed methods: a service that
+// wired CORS for its GET-based health check and never for its write path.
+const noPostMethod = preflightVerdict({
+    status: 204, origin: PREFLIGHT_ORIGIN, acao: PREFLIGHT_ORIGIN, allowMethods: 'GET,HEAD',
+});
+assert.equal(noPostMethod.state, 'blocked', 'an Allow-Methods that never names POST blocks the one request the demo needs');
+assert.match(noPostMethod.detail, /does not name POST/);
+
+// Allow-Methods genuinely absent on a real reply is "blocked", not "unknown" -
+// the same undefined/null rule this file uses everywhere else.
+assert.equal(
+    preflightVerdict({ status: 204, origin: PREFLIGHT_ORIGIN, acao: PREFLIGHT_ORIGIN, allowMethods: null }).state,
+    'blocked',
+    'a real reply missing Access-Control-Allow-Methods is BLOCKED, not unknown - it answered, and it answered without the header',
+);
+
+// No readable headers at all (an offline fixture) cannot tell either way, kept
+// apart from "blocked" for the same reason corsVerdict() keeps them apart.
+assert.equal(
+    preflightVerdict({ status: 204, origin: PREFLIGHT_ORIGIN, acao: undefined, allowMethods: undefined }).state,
+    'unknown',
+);
+assert.equal(
+    preflightVerdict({ status: 204, origin: PREFLIGHT_ORIGIN, acao: PREFLIGHT_ORIGIN, allowMethods: undefined }).state,
+    'unknown',
+    'ACAO readable and matching but Allow-Methods unreadable is still "cannot tell", not a pass',
+);
+assert.equal(preflightVerdict({ error: 'ENOTFOUND' }).state, 'unknown');
+
+// 2. Probe-list shape: only the two POST-load-bearing services carry a
+// preflightUrl at all, and the encoder's targets the exact slashed path the
+// SDK's create_tx call hits - NOT the /status health path this probe already
+// GETs. The SDK builds its encoder client with axios baseURL = the descriptor
+// URL and calls client.post('/'); axios's combineURLs joins that into a
+// TRAILING-SLASHED path, which is the only one the Apache vhost proxies to the
+// encoder - the un-slashed path is served from DocumentRoot instead, a
+// different route entirely. Probing the wrong one would measure a landing
+// page, not the encoder.
+const preflightingProbes = testnet.filter((p) => p.preflightUrl);
+assert.ok(preflightingProbes.length > 0, 'at least one probe must carry a preflightUrl or this whole row is dead code');
+assert.ok(
+    preflightingProbes.every((p) => p.service === 'encoder' || p.service === 'hub-rpc'),
+    'only the encoder and hub-rpc probes preflight; their load-bearing call is a POST',
+);
+assert.ok(
+    testnet.filter((p) => p.service === 'hub-rpc').every((p) => p.preflightUrl),
+    'every hub-rpc probe must carry a preflightUrl',
+);
+assert.ok(
+    testnet.filter((p) => p.service === 'encoder').every((p) => p.preflightUrl),
+    'every encoder probe must carry a preflightUrl',
+);
+assert.ok(
+    testnet.filter((p) => p.service === 'hub').every((p) => !p.preflightUrl),
+    'the hub registry route is GET-only; it must not preflight',
+);
+assert.ok(
+    testnet.filter((p) => p.service === 'explorer').every((p) => !p.preflightUrl),
+    'the explorer route is GET-only; it must not preflight',
+);
+for (const p of testnet.filter((p) => p.service === 'hub-rpc')) {
+    assert.equal(p.preflightUrl, p.url, 'the hub-rpc preflight targets the same URL as its GET: there is only one JSON-RPC root');
+}
+for (const p of testnet.filter((p) => p.service === 'encoder')) {
+    assert.notEqual(p.preflightUrl, p.url, 'the encoder preflight target must not be the /status health path');
+    assert.match(p.preflightUrl, /\/$/, 'the encoder preflight target must carry the trailing slash the SDK\'s POST actually uses');
+    assert.equal(
+        p.preflightUrl, p.url.replace(/\/status$/, '/'),
+        'the preflight base is the /status URL with /status swapped for the trailing slash the POST hits',
+    );
+}
+
+// 3. Wired into the full run, against fixtures shaped like the two production
+// hosts that diverge: an encoder whose preflight is blocked though its GET is
+// fine, and a hub whose preflight is blocked though its GET carries a real
+// ACAO (the exact "POST carries the header, preflight does not" split found
+// on 2026-08-07).
+const methodRouted = (routes) => async (url, init = {}) => {
+    const method = init.method ?? 'GET';
+    const handler = routes[`${method} ${url}`];
+    if (!handler) throw new Error(`unhandled ${method} ${url} in preflight test fixture`);
+    return handler();
+};
+const jsonReply = (body, headers, status = 200) => () => ({
+    status, text: async () => body, headers: new Headers(headers),
+});
+
+const baseRoutes = {
+    'GET https://explorer.example/TBTC/api/status': jsonReply(
+        HEALTHY['https://explorer.example/TBTC/api/status'],
+        { 'access-control-allow-origin': PREFLIGHT_ORIGIN },
+    ),
+    'GET https://hub.example/api/v1/chain-registry': jsonReply('{}', { 'access-control-allow-origin': '*' }),
+};
+
+// The encoder's GET and CORS are both fine; only its preflight - the hub's
+// exact measured shape - is blocked. A reviewer's balance screen would load
+// and the send button would still be dead.
+const encoderPreflightBlocked = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: methodRouted({
+        ...baseRoutes,
+        'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'OPTIONS https://encoder.example/TBTC/': jsonReply('', {}),
+        'GET https://hub.example/': jsonReply('{}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'OPTIONS https://hub.example/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST' }),
+    }),
+});
+const encoderPfResult = encoderPreflightBlocked.results.find((r) => r.service === 'encoder');
+assert.equal(encoderPfResult.state, 'failure', 'a healthy encoder with a healthy GET is still unreachable from the app if its preflight is blocked');
+assert.match(encoderPfResult.detail, /UNREACHABLE FROM THE APP/, 'the register matches row 67s so a blocked preflight cannot be read as a warning');
+assert.match(encoderPfResult.detail, /the browser never sends the POST at all/, 'the message has to say plainly that the POST never leaves the device');
+assert.equal(encoderPreflightBlocked.exit, EXIT.FAILURE, 'a preflight-only failure still has to fail the exit code, or `echo $?` lies');
+assert.equal(
+    encoderPreflightBlocked.results.find((r) => r.service === 'hub-rpc').state,
+    'live',
+    'the hub-rpc probe passes on its own in this fixture, which isolates the encoder failure above from a coincidence',
+);
+
+// The hub: GET carries a real ACAO (it would pass corsVerdict() alone) but the
+// preflight carries none. This is the split row 69 exists to catch, and it
+// must not be excused by the GET having gone fine.
+const hubPreflightBlocked = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: methodRouted({
+        ...baseRoutes,
+        'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'OPTIONS https://encoder.example/TBTC/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'GET,HEAD,PUT,PATCH,POST,DELETE' }),
+        'GET https://hub.example/': jsonReply('{}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'OPTIONS https://hub.example/': jsonReply('', {}),
+    }),
+});
+const hubPfResult = hubPreflightBlocked.results.find((r) => r.service === 'hub-rpc');
+assert.equal(hubPfResult.state, 'failure', 'a passing GET does not excuse a blocked preflight: they are different requests, and only the preflight guards the POST');
+assert.match(hubPfResult.detail, /the preflight is blocked/);
+assert.doesNotMatch(hubPfResult.detail, /ALSO blocked/, 'this fixture only breaks the preflight, not the GET, so the doubled wording must not appear here');
+assert.equal(
+    hubPreflightBlocked.results.find((r) => r.service === 'encoder').state,
+    'live',
+    'a healthy encoder whose GET and preflight both pass stays live',
+);
+
+// A service whose preflight answers Allow-Methods without POST in it.
+const noPostRun = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: methodRouted({
+        ...baseRoutes,
+        'GET https://encoder.example/TBTC/status': jsonReply(ENCODER_OK, { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'OPTIONS https://encoder.example/TBTC/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'GET,HEAD' }),
+        'GET https://hub.example/': jsonReply('{}', { 'access-control-allow-origin': PREFLIGHT_ORIGIN }),
+        'OPTIONS https://hub.example/': jsonReply('', { 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST' }),
+    }),
+});
+assert.equal(noPostRun.results.find((r) => r.service === 'encoder').state, 'failure', 'Allow-Methods that never names POST is a failure even with a correct ACAO');
+
+// 4. The request itself has to carry the three preflight headers - row 67's
+// own trap, one probe over. Row 67 deleted the outgoing Origin and every
+// reply-side assertion stayed green, because its fixtures answered with CORS
+// headers regardless of what was actually asked. The fixture below does the
+// same thing on purpose (every OPTIONS gets a fully-permissive reply no
+// matter what it was asked) so that ONLY an assertion on the outgoing request
+// can catch a preflight that stopped being issued, or that dropped one of its
+// two request headers.
+const preflightRequests = [];
+const fullRun = await checkDemoEndpoints({
+    descriptors: FAKE,
+    origin: PREFLIGHT_ORIGIN,
+    fetchImpl: async (url, init = {}) => {
+        if (init.method === 'OPTIONS') preflightRequests.push({ url, headers: init.headers ?? {} });
+        return {
+            status: 200,
+            text: async () => (url.includes('encoder') ? ENCODER_OK : '{}'),
+            headers: new Headers({ 'access-control-allow-origin': PREFLIGHT_ORIGIN, 'access-control-allow-methods': 'POST' }),
+        };
+    },
+});
+assert.equal(preflightRequests.length, 2, 'exactly one preflight per POST-load-bearing service (the encoder and hub-rpc), not more, not zero');
+for (const req of preflightRequests) {
+    assert.equal(req.headers.origin, PREFLIGHT_ORIGIN, 'the preflight must carry the shell Origin, or it measures curl\'s CORS posture, not the app\'s');
+    assert.equal(req.headers['access-control-request-method'], 'POST', 'without this header the server has no way to know a POST is coming, and it is not a preflight at all');
+    assert.equal(req.headers['access-control-request-headers'], 'content-type', 'the demo POST sends a JSON content-type; the preflight must ask permission for the exact header it will send');
+}
+assert.deepEqual(
+    preflightRequests.map((r) => r.url).sort(),
+    ['https://encoder.example/TBTC/', 'https://hub.example/'].sort(),
+    'the preflight has to target the exact POST path (trailing slash on the encoder), not the /status GET path',
+);
+assert.ok(fullRun); // the run itself must complete without throwing on this fixture
+
 // A stale demo chain has to reach the EXIT CODE, not just the detail line: the
 // operator reads `echo $?` before they read the report, and the whole point of
 // the check is to stop a submission whose demo cannot show a balance.
@@ -415,5 +644,9 @@ console.log(
     + ' deduplicated; 403 is a failure that names  and 429 one that names ; a 200 is not a pass on'
     + ' its own, since the hub signature, the explorer available-networks map and the encoder tracker-sync flag'
     + ' each turn a healthy-looking response into the failure a reviewer would hit; inconclusive never becomes a'
-    + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit)',
+    + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit; the encoder'
+    + ' and hub-rpc probes also send a CORS preflight at the exact POST path the SDK uses, trailing slash'
+    + ' included, and a blocked preflight is a FAILURE named UNREACHABLE FROM THE APP even when the GET beside it'
+    + ' is healthy, asserted on the outgoing OPTIONS request itself so a dropped header cannot hide behind a'
+    + ' permissive fixture)',
 );

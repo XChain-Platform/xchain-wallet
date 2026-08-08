@@ -67,6 +67,25 @@
 // gate exists to prevent, sitting inside a green run. A blocked origin is now a
 // FAILURE, named as UNREACHABLE FROM THE APP so it cannot be read as a warning.
 //
+// AND, for the two endpoints whose load-bearing call is a POST (the encoder's
+// create_tx and the hub's JSON-RPC surface), whether a browser would even be
+// ALLOWED to issue that POST. Every probe above is a GET, and a GET is
+// CORS-simple: it never triggers a preflight, so none of it can see an edge
+// that blocks the one request a browser actually sends before a POST - the
+// OPTIONS with Access-Control-Request-Method. Measured 2026-08-07: the hub's
+// JSON-RPC route answers a plain GET with a real Access-Control-Allow-Origin
+// AND answers `POST` itself with one too, while its preflight OPTIONS comes
+// back HTTP 200 with no access-control-* header at all (the Apache vhost
+// proxies `%{REQUEST_METHOD} =POST` only, so the preflight never reaches the
+// app behind it). A browser that receives that OPTIONS reply never sends the
+// POST - create_tx and the hub's writes are unreachable from the app even
+// though the GET probe above, and a plain POST from curl, both come back
+// healthy. The preflight is issued at the exact path the SDK's POST hits
+// (trailing slash included; the un-slashed path is a different, unproxied
+// route on these hosts), and a blocked preflight is FATAL for the same reason
+// a blocked GET is: UNREACHABLE FROM THE APP, because the browser never sends
+// the POST at all.
+//
 // The endpoint list is DERIVED from the descriptors, never restated here: the
 // reviewer reaches whatever the shipped build resolves, so a moved host or a
 // new chain has to change this gate without anyone remembering to.
@@ -138,17 +157,13 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const SHELL_ORIGIN = 'capacitor://localhost';
 
 /**
- * Would a browser at the probed origin be allowed to READ this response?
- *
- * Kept apart from the service checks on purpose: reachability and health are
- * different questions, and conflating them is what let the encoder and hub sit
- * "healthy" in this gate's own output while the app could not call them.
+ * The Access-Control-Allow-Origin classification, shared by the GET-reply
+ * check (corsVerdict) and the preflight check (preflightVerdict) below: same
+ * header, same rule, matched against a value that may be genuinely absent
+ * (`null`, a real response) or unreadable at all (`undefined`, an offline
+ * fixture) - see probeOnce()'s comment for why those two must not collapse.
  */
-export function corsVerdict(raw) {
-    if (raw?.error || typeof raw?.status !== 'number') {
-        return { state: 'unknown', detail: 'no response to read CORS from' };
-    }
-    const { acao, origin } = raw;
+function acaoVerdict(acao, origin) {
     if (acao === undefined) {
         return { state: 'unknown', detail: 'the response carried no readable headers, so its CORS posture could not be checked' };
     }
@@ -179,6 +194,56 @@ export function corsVerdict(raw) {
 }
 
 /**
+ * Would a browser at the probed origin be allowed to READ this response?
+ *
+ * Kept apart from the service checks on purpose: reachability and health are
+ * different questions, and conflating them is what let the encoder and hub sit
+ * "healthy" in this gate's own output while the app could not call them.
+ */
+export function corsVerdict(raw) {
+    if (raw?.error || typeof raw?.status !== 'number') {
+        return { state: 'unknown', detail: 'no response to read CORS from' };
+    }
+    return acaoVerdict(raw.acao, raw.origin);
+}
+
+/**
+ * Would a browser at the probed origin be allowed to SEND the POST at all?
+ *
+ * A GET is CORS-simple and never provokes a preflight, so corsVerdict() above
+ * is structurally blind to an edge that answers the OPTIONS wrong: it only ever
+ * sees the GET's own reply. Measured 2026-08-07, this is not hypothetical - the
+ * hub's JSON-RPC route passes corsVerdict() on its GET (and answers a plain
+ * POST with a real ACAO too) while its OPTIONS preflight comes back HTTP 200
+ * with no access-control-* header at all, because the Apache vhost proxies
+ * `%{REQUEST_METHOD} =POST` only and the preflight never reaches the app. A
+ * browser that receives that OPTIONS reply never issues the POST, full stop -
+ * the ACAO on the POST's own reply is never seen because the POST is never
+ * sent. A pass requires BOTH the same origin-matching ACAO as a GET, and an
+ * Access-Control-Allow-Methods naming POST; either missing means the browser
+ * stops at the preflight.
+ */
+export function preflightVerdict(raw) {
+    if (raw?.error || typeof raw?.status !== 'number') {
+        return { state: 'unknown', detail: 'no response to read the preflight from' };
+    }
+    const { origin, allowMethods } = raw;
+    const acao = acaoVerdict(raw.acao, origin);
+    if (acao.state !== 'ok') return acao;
+    if (allowMethods === undefined) {
+        return { state: 'unknown', detail: 'the preflight reply carried no readable headers, so its allowed methods could not be checked' };
+    }
+    const methods = allowMethods === null ? [] : allowMethods.split(',').map((m) => m.trim().toUpperCase());
+    if (!methods.includes('POST')) {
+        return {
+            state: 'blocked',
+            detail: `the preflight's Access-Control-Allow-Methods is ${JSON.stringify(allowMethods)}, which does not name POST`,
+        };
+    }
+    return { state: 'ok', detail: `preflight permits POST from ${origin} (${acao.detail}, Allow-Methods: ${allowMethods})` };
+}
+
+/**
  * Fold the CORS verdict into the service verdict. A service that is healthy but
  * unreachable from the app is a FAILURE for this gate's purpose, because the
  * gate's question is whether the reviewer's demo can be performed.
@@ -188,6 +253,35 @@ function withCors(verdict, cors) {
     return {
         state: 'failure',
         detail: `${verdict.detail} - but UNREACHABLE FROM THE APP: ${cors.detail}`,
+    };
+}
+
+/**
+ * Fold the preflight verdict into the service verdict, same shape as
+ * withCors() above and for the same reason: a blocked preflight means the
+ * browser never sends the POST at all, which is a FAILURE, not a warning.
+ */
+function withPreflight(verdict, preflight) {
+    if (preflight.state !== 'blocked') return verdict;
+    // The GET-CORS fold above may already have failed this same probe (an
+    // encoder can serve no ACAO on both its GET and its OPTIONS at once).
+    // Named differently in that case so the detail reads as one host with two
+    // problems rather than repeating the same headline twice.
+    if (verdict.state === 'failure') {
+        // Only carry the preflight's own reason when it differs from the GET's.
+        // When one Apache rule blocks both, the two reasons are the same
+        // sentence and appending it verbatim prints the explanation twice.
+        const alsoWhy = verdict.detail.includes(preflight.detail) ? '' : `: ${preflight.detail}`;
+        return {
+            state: 'failure',
+            detail: `${verdict.detail} - and the preflight is ALSO blocked, so the browser never sends the POST`
+                + ` at all either${alsoWhy}`,
+        };
+    }
+    return {
+        state: 'failure',
+        detail: `${verdict.detail} - but UNREACHABLE FROM THE APP: the preflight is blocked, so the browser never`
+            + ` sends the POST at all - ${preflight.detail}`,
     };
 }
 
@@ -283,13 +377,18 @@ function describeAge(ms) {
 export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DESCRIPTORS) {
     const probes = [];
     const seen = new Set();
-    const add = (service, coin, url) => {
+    const add = (service, coin, url, preflightUrl) => {
         if (seen.has(url)) return;
         seen.add(url);
         // Only the demo coin's freshness is fatal, so the flag travels with the
         // probe rather than being re-derived inside the classifier, which has
-        // no idea which network kind it was built for.
-        probes.push({ service, coin, url, isDemoCoin: coin === DEMO_COIN });
+        // no idea which network kind it was built for. `preflightUrl` is set
+        // only for the two services whose load-bearing call is a POST; its
+        // presence is what tells checkDemoEndpoints() to also issue an OPTIONS.
+        probes.push({
+            service, coin, url, isDemoCoin: coin === DEMO_COIN,
+            ...(preflightUrl ? { preflightUrl } : {}),
+        });
     };
 
     for (const d of descriptors) {
@@ -304,10 +403,21 @@ export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DES
         // needs - getAllConfig, service-endpoint discovery, capability
         // thresholds - is closed. That is the same trap this file just fixed,
         // one level in: a green signal for the relationship it measures and no
-        // other. Mounted at the origin root (`app.use(jsonRouter(...))`).
-        add('hub-rpc', coin, new URL('/', d.hub.defaultUrl).href);
+        // other. Mounted at the origin root (`app.use(jsonRouter(...))`), and
+        // it is POST-only for the calls that matter, so the preflight is
+        // issued at this same root - there is no separate JSON-RPC path.
+        const hubRpcUrl = new URL('/', d.hub.defaultUrl).href;
+        add('hub-rpc', coin, hubRpcUrl, hubRpcUrl);
         add('explorer', coin, `${trimSlash(d.explorer.defaultUrl)}/${coin}/api/status`);
-        add('encoder', coin, `${trimSlash(d.encoder.defaultUrl)}/status`);
+        // The encoder's create_tx call is POST '/' against an axios client
+        // whose baseURL is the descriptor's URL, and axios's combineURLs joins
+        // that into a TRAILING-SLASHED path. The Apache vhost proxies
+        // `/<COIN>/` and does not proxy the un-slashed `/<COIN>` (that one is
+        // served from DocumentRoot, a different route entirely) - so the
+        // preflight has to target the exact slashed path the SDK calls, not
+        // the `/status` health path this probe already uses for its GET.
+        const encoderBase = trimSlash(d.encoder.defaultUrl);
+        add('encoder', coin, `${encoderBase}/status`, `${encoderBase}/`);
     }
     return probes;
 }
@@ -491,6 +601,51 @@ export async function probeOnce(url, {
 }
 
 /**
+ * Issue the ONE request a browser actually sends before the POST a GET can
+ * never provoke: an OPTIONS carrying Access-Control-Request-Method and
+ * Access-Control-Request-Headers. Never throws, same contract as probeOnce().
+ *
+ * This is the request row 69 exists to add. Everything probeOnce() sends is
+ * CORS-simple and skips the preflight step entirely, which is how a service
+ * can pass every GET-based check here and still refuse the one request the
+ * demo's `create_tx` call actually depends on.
+ */
+export async function preflightOnce(url, {
+    fetchImpl = globalThis.fetch,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    origin = SHELL_ORIGIN,
+} = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetchImpl(url, {
+            method: 'OPTIONS',
+            headers: {
+                origin,
+                'access-control-request-method': 'POST',
+                'access-control-request-headers': 'content-type',
+            },
+            redirect: 'follow',
+            signal: controller.signal,
+        });
+        // Same undefined/null distinction as probeOnce(): undefined means no
+        // readable headers at all (an offline fixture, "cannot tell"), null
+        // means a real response that genuinely omits the header ("blocked").
+        const acao = typeof res.headers?.get === 'function'
+            ? res.headers.get('access-control-allow-origin')
+            : undefined;
+        const allowMethods = typeof res.headers?.get === 'function'
+            ? res.headers.get('access-control-allow-methods')
+            : undefined;
+        return { status: res.status, acao, allowMethods, origin };
+    } catch (e) {
+        return { error: e?.name === 'AbortError' ? `timed out after ${timeoutMs}ms` : (e?.message ?? String(e)) };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
  * Run the whole gate.
  *
  * @returns {Promise<{ exit: number, results: object[], burst?: object }>}
@@ -512,7 +667,26 @@ export async function checkDemoEndpoints({
     for (const probe of probes) {
         const raw = await probeOnce(probe.url, { fetchImpl, timeoutMs, origin });
         const cors = corsVerdict(raw);
-        results.push({ ...probe, ...withCors(classifyProbe(probe, raw), cors), cors: cors.state });
+        let verdict = withCors(classifyProbe(probe, raw), cors);
+
+        // Only the two POST-load-bearing services carry a preflightUrl (set in
+        // demoProbesFor()). The GET-side verdict above still runs for them -
+        // it is what catches a service down entirely - and the preflight is
+        // folded on top, same shape as withCors(), because either one blocked
+        // is a FAILURE for this gate's purpose.
+        let preflight;
+        if (probe.preflightUrl) {
+            const preflightRaw = await preflightOnce(probe.preflightUrl, { fetchImpl, timeoutMs, origin });
+            preflight = preflightVerdict(preflightRaw);
+            verdict = withPreflight(verdict, preflight);
+        }
+
+        results.push({
+            ...probe,
+            ...verdict,
+            cors: cors.state,
+            ...(preflight ? { preflight: preflight.state } : {}),
+        });
     }
 
     let burstResult;
@@ -567,7 +741,13 @@ Options:
                     carries an Origin: the store build is a WebView with no
                     native-HTTP bypass, so a service that answers 200 to curl
                     and serves no Access-Control-Allow-Origin is, to the app,
-                    down. This gate reported exit 0 through exactly that.
+                    down. This gate reported exit 0 through exactly that. The
+                    encoder and hub-rpc probes ALSO send a CORS preflight
+                    (OPTIONS with Access-Control-Request-Method: POST) at this
+                    same origin, because their load-bearing call is a POST and
+                    a GET can never provoke the preflight a browser actually
+                    sends first; a blocked preflight means the POST is never
+                    sent at all, and this gate reported exit 0 through that too.
   --burst [n]       also fire a small burst at one endpoint, default 8.
                     Opt-in because it points at PRODUCTION: one request per
                     host cannot see a rate limit, and a wallet opening on
