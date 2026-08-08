@@ -192,6 +192,65 @@ for (const [name, block] of jobs) {
         `job '${name}' produces artifacts and must pin SOURCE_DATE_EPOCH`);
 }
 
+// --- 6b. A macOS build step must name a signing identity ---------------
+//
+// : `mac.identity` is `process.env.CSC_IDENTITY_NAME || null`, and
+// app-builder-lib reads an explicit null as "do not sign", checked BEFORE
+// it looks at CSC_LINK. So a mac step holding the Developer ID cert and
+// the notarization credentials, and nothing else, signs nothing, notarizes
+// nothing, exits 0 and says so in one info line. That is how the direct
+// download channel shipped unsigned while reading as fully configured.
+//
+// The fix was one env line per step, and one env line is exactly what a
+// later edit drops without noticing - the config still validates, the
+// build still succeeds, the artifacts still upload, and the only
+// difference is that Gatekeeper now blocks every user. The MAS lane got a
+// guard (mas-lane.smoke.js) because the identity lives in the config
+// there; this lane's identity lives only in the workflow, so it needs its
+// guard here.
+//
+// A `--mac mas` step is exempt: `mas.identity` has its own non-null
+// default in the builder config, which mas-lane.smoke.js pins.
+function stepBlocks(jobBlock) {
+    const out = [];
+    let current = null;
+    for (const line of jobBlock.split('\n')) {
+        if (/^ {6}- /.test(line)) {
+            current = [line];
+            out.push(current);
+            continue;
+        }
+        // A step ends where the next one begins or the job's key list resumes.
+        if (current && line.trim() !== '' && !/^ {8}/.test(line)) current = null;
+        else if (current) current.push(line);
+    }
+    return out.map((s) => s.join('\n'));
+}
+
+let macBuildSteps = 0;
+for (const [name, block] of jobs) {
+    for (const step of stepBlocks(block)) {
+        const run = step.match(/^\s*run: (.*)$/m)?.[1] ?? '';
+        if (!/dist .*--mac/.test(run)) continue;
+        if (/--mac\s+mas\b/.test(run)) continue;
+        macBuildSteps++;
+        const stepName = step.match(/- name: (.*)/)?.[1]?.trim() ?? run.trim();
+        assert.ok(/^\s*CSC_IDENTITY_NAME:\s*\S/m.test(step),
+            `job '${name}' step '${stepName}' builds the macOS Developer ID channel `
+            + 'and sets no CSC_IDENTITY_NAME, so mac.identity resolves to null and '
+            + 'app-builder-lib skips signing and notarization silently ');
+        // Signing without notarizing is its own quiet failure: Gatekeeper
+        // rejects an un-notarized signed app on first launch just as hard.
+        assert.ok(/APPLE_API_KEY_ID:/.test(step),
+            `job '${name}' step '${stepName}' signs but passes no APPLE_API_KEY_ID, `
+            + 'so notarize is false and Gatekeeper blocks the result anyway');
+    }
+}
+assert.ok(macBuildSteps >= 2,
+    'expected the production and rehearsal macOS build steps to be checked '
+    + `for a signing identity (found ${macBuildSteps}); if the steps were renamed `
+    + 'or restructured this check is passing vacuously');
+
 // --- 7. The tag must be what it claims ---------------------------------
 
 assert.ok(jobs.has('verify-tag'), 'workflow has a verify-tag gate');
