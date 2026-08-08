@@ -1,0 +1,60 @@
+{
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write), normally from the end of a successful packages/mobile/scripts/screenshots.sh run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "set": "ios",
+    "capturedFrom": {
+        "commit": "2731745ecf35a41c093abba6004778afee2cdf87",
+        "version": "0.336.0",
+        "how": "capture"
+    },
+    "observedAt": "2026-08-08T15:29:31.935Z",
+    "assets": {
+        "iphone-17-pro-max/01-balances.png": {
+            "sha256": "aa56e21832ddf6a136f6830477737ff0f8cbfd96ee43a72936ff0a9c0197b054",
+            "width": 1320,
+            "height": 2868,
+            "shows": "iPhone 6.9\": Balances (the wallet home screen)"
+        },
+        "iphone-17-pro-max/02-receive.png": {
+            "sha256": "e0e64c41ed6ac1f548fcd6c598d9a0582a8ac0880642b6cdc8bb6b499c729aa3",
+            "width": 1320,
+            "height": 2868,
+            "shows": "iPhone 6.9\": Receive, with the address QR"
+        },
+        "iphone-17-pro-max/03-send.png": {
+            "sha256": "67dc7f6a94908f6ebcabaed16f7864adfd03e74125c1116bc7872f7285d5a547",
+            "width": 1320,
+            "height": 2868,
+            "shows": "iPhone 6.9\": Send"
+        },
+        "iphone-17-pro-max/04-settings.png": {
+            "sha256": "4447c7e44ccd93863ee31a573960b607bb2be55552be7077d5dbd463d868d854",
+            "width": 1320,
+            "height": 2868,
+            "shows": "iPhone 6.9\": Settings"
+        },
+        "ipad-pro-13-inch-m5/01-balances.png": {
+            "sha256": "a3d00b195182c7382b366d5696ae0af8fa8efff721eb66c49bce641d72f9a6e0",
+            "width": 2064,
+            "height": 2752,
+            "shows": "iPad 13\": Balances (the wallet home screen)"
+        },
+        "ipad-pro-13-inch-m5/02-receive.png": {
+            "sha256": "1616bbfe6ea686659061bf945b03e9eea3f3b7c0141f35d1a44b909ee9a1efe8",
+            "width": 2064,
+            "height": 2752,
+            "shows": "iPad 13\": Receive, with the address QR"
+        },
+        "ipad-pro-13-inch-m5/03-send.png": {
+            "sha256": "bfb07eaaedd04c56e61b5e869200c0b8138c4786b5d311fb175af0e902b10246",
+            "width": 2064,
+            "height": 2752,
+            "shows": "iPad 13\": Send"
+        },
+        "ipad-pro-13-inch-m5/04-settings.png": {
+            "sha256": "455bde2a2d49a060905a529edd680fc25e6c0b0a0119a9244b8cda2a2d58f55d",
+            "width": 2064,
+            "height": 2752,
+            "shows": "iPad 13\": Settings"
+        }
+    }
+}

@@ -222,6 +222,80 @@ export const MAS_ASSETS = [
 ];
 
 /**
+ * The App Store listing images ( §6, frontier row 63).
+ *
+ * WHY A THIRD SET AND NOT A THIRD TOOL: the same reason as the Mac App Store
+ * one above, and this lane is the reason the question came up. On 2026-08-07
+ * the iOS listing was found carrying eight images captured 18 shared-UI
+ * commits before the tag whose binary Apple holds - three of those commits
+ * changed what the captured scenes render - and nothing in the repo could say
+ * so, because the images were not merely unpinned, they were `.gitignore`d.
+ * Eight files on one disk, in no history, uploaded to a store. Apple's 2.3.3
+ * accurate-metadata rule is a metadata-rejection class, and the mechanism that
+ * catches it already existed one lane over.
+ *
+ * The iOS canvases are the two App Store Connect requires for a universal
+ * app - the 6.9" iPhone and the 13" iPad. A universal app with no iPad set
+ * cannot be submitted at all, which is why both idioms are in the set rather
+ * than the iPhone alone.
+ */
+const IOS_ASSET_DIR = path.join(REPO_ROOT, 'packages/mobile/screenshots');
+
+export const APP_STORE_SIZES = [
+    { width: 1320, height: 2868 },
+    { width: 2064, height: 2752 },
+];
+
+/**
+ * What an iOS screenshot depicts: the same shared React tree the other shells
+ * render, served from the WEB shell's bundle inside the Capacitor WebView, so
+ * the mobile surfaces here are the shell around it rather than the UI itself.
+ * `packages/web/src` is in the list because the mobile app literally loads the
+ * web build (`packages/mobile/www`), which is what made the drift in row 63
+ * possible without a single file under `packages/mobile` changing.
+ */
+const IOS_SHELL = [
+    'packages/core/src/shared',
+    'packages/core/src/ui',
+    'packages/web/src',
+    'packages/mobile/ios/App/App',
+    'packages/mobile/scripts/screenshots.sh',
+];
+
+// The four scenes the harness drives, in the order it shoots them, and the two
+// idiom directories it writes them to. Spelled out as a product rather than
+// eight literals so a new scene cannot be added to one idiom and forgotten in
+// the other - which is a partial listing set, and a partial set on a universal
+// app blocks submission.
+const IOS_SCENES = [
+    { file: '01-balances.png', shows: 'Balances (the wallet home screen)' },
+    { file: '02-receive.png', shows: 'Receive, with the address QR' },
+    {
+        file: '03-send.png',
+        shows: 'Send',
+        // The send form is the scene the §2.1 demo walks the reviewer through,
+        // and the one whose controls the tap-target work resized.
+        extra: ['packages/core/src/shared/routes/Send.jsx'],
+    },
+    {
+        file: '04-settings.png',
+        shows: 'Settings',
+        extra: ['packages/core/src/shared/components/settings'],
+    },
+];
+
+const IOS_IDIOMS = [
+    { dir: 'iphone-17-pro-max', label: 'iPhone 6.9"' },
+    { dir: 'ipad-pro-13-inch-m5', label: 'iPad 13"' },
+];
+
+export const IOS_ASSETS = IOS_IDIOMS.flatMap((idiom) => IOS_SCENES.map((scene) => ({
+    name: `${idiom.dir}/${scene.file}`,
+    shows: `${idiom.label}: ${scene.shows}`,
+    depends: [...IOS_SHELL, ...(scene.extra ?? [])],
+})));
+
+/**
  * The sets this tool knows about. `extension` is the default everywhere, so
  * every caller that predates the Mac App Store lane keeps its behaviour.
  */
@@ -245,6 +319,15 @@ export const SETS = {
         assets: MAS_ASSETS,
         capture: 'packages/desktop/scripts/capture-listing-screenshots.mjs',
         sizes: MAC_APP_STORE_SIZES,
+    },
+    ios: {
+        id: 'ios',
+        label: 'App Store',
+        dir: IOS_ASSET_DIR,
+        pinPath: path.join(IOS_ASSET_DIR, 'capture-pin.json'),
+        assets: IOS_ASSETS,
+        capture: 'packages/mobile/scripts/screenshots.sh',
+        sizes: APP_STORE_SIZES,
     },
 };
 
@@ -544,7 +627,8 @@ depicts.
   --how <how>     with --write, capture (default) or derived.
   --json          machine-readable result on stdout.
   --set <id>      which listing to check: 'extension' (Chrome Web Store, the
-                  default) or 'mas' (Mac App Store, the desktop shell).
+                  default), 'mas' (Mac App Store, the desktop shell) or
+                  'ios' (App Store, both iPhone and iPad idioms).
 
 Exit codes: 0 clean, 1 stale (a hash disagrees or a depicted surface moved),
 2 inconclusive (no pin, or the history needed is not in this checkout).

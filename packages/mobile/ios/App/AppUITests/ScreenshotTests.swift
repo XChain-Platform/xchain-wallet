@@ -274,6 +274,129 @@ final class ScreenshotTests: XCTestCase {
         }
     }
 
+    /// Move the demo wallet onto the MAIN networks before anything is shot.
+    ///
+    /// WHY THIS EXISTS (,  frontier row 63 / dq-7). Demo mode
+    /// registers all nine chains and lands on `activeNetwork: 'regtest'`,
+    /// which was invisible in a screenshot until a shared-UI change started
+    /// rendering a network suffix for any non-mainnet chain. Every coin row
+    /// then reads "BTC - regtest" - a network the STORE build hides behind
+    /// Settings, Developer mode - so the listing would depict a state no
+    /// ordinary user can reach. That is the same accurate-metadata exposure
+    /// (Apple 2.3.3) as a stale screenshot, arriving from the other side.
+    ///
+    /// Done in the CAPTURE rather than by changing where demo mode lands,
+    /// because that is where it belongs: a user trying demo mode still gets
+    /// the experience they always got. The mainnet fixtures already exist and
+    /// are the richer set (0.12345678 BTC, EXAMPLE, XCP, RAREPEPE), which is
+    /// also what the Chrome Web Store listing images show.
+    ///
+    /// The control is a real `<select aria-label="Active network">` in the
+    /// WebView, and WebKit hands a select to UIKit differently per idiom: a
+    /// picker wheel on iPhone, a popover list on iPad. Both are tried, and a
+    /// miss is RECORDED rather than ignored - shooting the listing on the
+    /// wrong network is the defect this exists to prevent, so it must not
+    /// pass quietly.
+    /// Land on the real Settings SCREEN, on both idioms.
+    ///
+    /// `openFromNav(["Settings", "More"])` was not that, and the listing paid
+    /// for it: on iPhone there is no Settings tab, so the fallback matched the
+    /// bottom bar's "More", which opens a SHEET of links over whatever screen
+    /// was underneath. The 04-settings image shot on 2026-08-08 is that sheet
+    /// half-covering the Send form - two screens in one picture, uploaded as a
+    /// listing image of the settings screen. Settings is one row INSIDE that
+    /// sheet, so the sheet is a step on the way, never the destination.
+    @discardableResult
+    private func openSettings(scene: String) -> Bool {
+        if let direct = button(anyOf: ["Settings"]), tap(direct, "Settings") {
+            return reach(app.staticTexts.firstMatch, "settings content", timeout: 20)
+        }
+        guard let more = button(anyOf: ["More"]), tap(more, "More (sheet)") else {
+            missed.append("\(scene): no Settings and no More")
+            print("MISSED: \(scene) - neither a Settings control nor a More sheet")
+            return false
+        }
+        guard let row = button(anyOf: ["Settings"]), tap(row, "Settings (from the More sheet)") else {
+            missed.append("\(scene): the More sheet carries no Settings row")
+            print("MISSED: \(scene) - the More sheet opened but had no Settings row")
+            return false
+        }
+        return reach(app.staticTexts.firstMatch, "settings content", timeout: 20)
+    }
+
+    private func switchToMainnet() {
+        guard openSettings(scene: "network-switch (settings)") else { return }
+
+        // The select surfaces under its aria-label, but as different element
+        // types depending on iOS version and idiom, so ask by name across the
+        // types it has actually appeared as rather than betting on one.
+        //
+        // AND SCROLL WHILE ASKING. A WKWebView publishes accessibility nodes
+        // for what it has RENDERED, so a settings row below the fold does not
+        // merely fail to be hittable, it does not exist in the tree at all.
+        // Measured 2026-08-08: identical code found the control immediately on
+        // iPad, where Settings is a sidebar screen showing the whole list, and
+        // reported "nothing named 'Active network'" on iPhone, where the same
+        // section sits several screens down.
+        // HITTABLE, not merely existing. A WKWebView publishes a node as soon
+        // as it renders, which can be while it is still below the fold, so
+        // stopping the scroll at `exists` finds the control and then fails to
+        // tap it - measured, as `MISSED: Active network select - hittable=false
+        // enabled=true`, which reads like a disabled control rather than an
+        // off-screen one.
+        func networkSelect() -> XCUIElement? {
+            let byName = [app.buttons["Active network"], app.otherElements["Active network"],
+                          app.popUpButtons["Active network"], app.staticTexts["Active network"]]
+            return byName.first(where: { $0.exists && $0.isHittable })
+        }
+        var control = networkSelect()
+        var scrolls = 0
+        while control == nil && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+            control = networkSelect()
+        }
+        guard let control else {
+            missed.append("network select (no element named 'Active network' after \(scrolls) scrolls)")
+            print("MISSED: network select - nothing named 'Active network' after \(scrolls) scrolls")
+            return
+        }
+        if scrolls > 0 { print("NETWORK: found the select after \(scrolls) scroll(s)") }
+        guard tap(control, "Active network select") else { return }
+
+        // iPhone: a picker wheel plus a Done button. iPad: a popover of
+        // buttons. Whichever appeared, land on Mainnet.
+        var switched = false
+        let wheel = app.pickerWheels.firstMatch
+        if wheel.waitForExistence(timeout: 5) {
+            wheel.adjust(toPickerWheelValue: "Mainnet")
+            let done = app.buttons["Done"]
+            if done.exists { switched = tap(done, "picker Done") }
+            // Some iOS builds dismiss the wheel by tapping outside it rather
+            // than with a Done button; the adjust above has already taken.
+            if !switched { switched = true }
+        } else {
+            let option = app.buttons["Mainnet"].exists
+                ? app.buttons["Mainnet"] : app.staticTexts["Mainnet"]
+            if option.waitForExistence(timeout: 5) {
+                switched = tap(option, "Mainnet option")
+            }
+        }
+        if !switched {
+            missed.append("network switch to Mainnet")
+            print("MISSED: network switch - neither a picker wheel nor a 'Mainnet' option appeared")
+            return
+        }
+
+        // Switching reloads the WebView (NetworkSection calls
+        // window.location.reload once the host route has re-derived addresses)
+        // and the demo wallet silently re-unlocks with its stored password. A
+        // screenshot taken before that settles catches a loading screen.
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        Thread.sleep(forTimeInterval: 3)
+        print("NETWORK: switched the demo wallet to Mainnet before capture")
+    }
+
     private func openFromNav(_ labels: [String], scene: String) -> Bool {
         guard let control = button(anyOf: labels) else {
             missed.append("\(scene) nav entry")
@@ -291,6 +414,16 @@ final class ScreenshotTests: XCTestCase {
         acceptTerms()
         advanceIntroCarousel()
         enterDemoMode()
+        // Before ANY capture: the listing must not depict a developer-only
+        // network. See switchToMainnet().
+        switchToMainnet()
+
+        // The switch reloads the WebView, which boots back to Home on its own,
+        // so this is a nudge rather than a requirement: a miss here is NOT
+        // recorded, because recording it would fail a run whose screenshots
+        // are all correct. The captures below assert what they need.
+        if let home = button(anyOf: ["Home", "Balances"]) { _ = tap(home, "home after network switch") }
+        _ = reach(app.staticTexts.firstMatch, "home content", timeout: 20)
 
         // 1. Balances. This is the app's home and the listing's lead image.
         capture("01-balances")
@@ -316,8 +449,7 @@ final class ScreenshotTests: XCTestCase {
         // 4. Settings, where the Face ID unlock control lives. §2.1 leans on
         //    biometric unlock as a native-integration defence, so the listing
         //    should show it.
-        if openFromNav(["Settings", "More"], scene: "settings") {
-            _ = reach(app.staticTexts.firstMatch, "settings content", timeout: 20)
+        if openSettings(scene: "settings") {
             capture("04-settings")
         } else {
             capture("04-settings-FAILED")

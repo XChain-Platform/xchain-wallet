@@ -154,6 +154,20 @@ echo
 echo "screenshots: wrote $outdir"
 echo "Before these go in a listing: no real recovery phrase, no mainnet address holding real funds."
 
+# Record WHICH BUILD these depict, in the same run that produced them.
+#
+# Until 2026-08-08 the images this script writes were `.gitignore`d and
+# unpinned, so the eight live on the App Store listing existed on one disk, in
+# no history, with nothing recording the tree they were shot from - and they
+# turned out to depict a build 18 shared-UI commits older than the binary Apple
+# holds, three of those commits changing what these very scenes render. Apple's
+# 2.3.3 accurate-metadata rule makes that a rejection class. The pin is written
+# HERE, rather than by hand afterwards, because a pin that was not written by a
+# capture is a claim about a capture nobody watched (,  row 63).
+echo
+echo "screenshots: pinning the set to $(git -C "$repo" rev-parse --short HEAD)"
+node "$repo/tools/release/verify-listing-assets.mjs" --set ios --write --how capture
+
 # Put the tree back the way it was found.
 #
 # This script stages a `store` bundle. Leaving it there means the next person

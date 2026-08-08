@@ -13,10 +13,13 @@
 # second copy of the SPA that could drift from the one the web shell ships.
 /packages/mobile/www
 
-# Generated App Store listing screenshots . Regenerate with
-# packages/mobile/scripts/screenshots.sh; they are build output, not source,
-# and they carry a per-run simulator clock so committing them is pure churn.
-/packages/mobile/screenshots
+# App Store listing screenshots  are TRACKED, and the rule that used
+# to sit here is what let the store listing depict a build 18 shared-UI commits
+# older than the binary Apple holds with nothing able to say so (,
+#  frontier row 63). They stopped being build output the day they were
+# uploaded: they are published collateral, and published collateral belongs in
+# history like the Chrome and Mac App Store sets. The harness's own per-run
+# xcodebuild log is still excluded, by the repo-wide *.log rule above.
 # Playwright output dirs carry a per-run suffix (test-results-s40d and
 # friends), so match the prefix rather than listing each one as it appears.
 /test/e2e/test-results*/
