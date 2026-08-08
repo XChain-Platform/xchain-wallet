@@ -421,6 +421,36 @@ export function captureVsTarget(pinSha, targetSha, opts = {}) {
 /**
  * The read-only whole: the pin half above, plus the drift half that needs git.
  */
+/**
+ * The commits in `from..to` that touched any path an asset depicts.
+ */
+function commitsTouching(from, to, depends, opts = {}) {
+    const log = git(['log', '--oneline', '--no-decorate', `${from}..${to}`, '--', ...depends], opts);
+    return log ? log.split('\n') : [];
+}
+
+/**
+ * The FILES those commits changed, restricted to the paths the asset depicts.
+ *
+ * The commit list alone cannot answer the question the operator is actually
+ * asking, and measured 2026-08-08 it actively misleads: `ddc94971`, subject
+ * "fix(desktop): the wallet's settings screen was dead", flagged all three
+ * Chrome screenshots. Read as a subject line it looks like a desktop change
+ * that could not reach the extension; read as a file list it is one CSS
+ * module, `packages/core/src/shared/routes/Home.module.css`, which the popup
+ * does render. Neither reading is available from `--oneline` output, so the
+ * step told the operator to judge a diff it had declined to show them.
+ *
+ * `depends` is directory-granular on purpose (a whole `packages/core/src/ui`
+ * rather than a file list nobody would maintain), so this scan over-reports
+ * by design. The files are what make an over-report cheap to dismiss instead
+ * of a reason to re-shoot the listing.
+ */
+export function filesTouching(from, to, depends, opts = {}) {
+    const out = git(['diff', '--name-only', `${from}..${to}`, '--', ...depends], opts);
+    return out ? out.split('\n') : [];
+}
+
 export function verifyListingAssets({ since, set } = {}) {
     const assetSet = resolveSet(set);
     const pinned = verifyPin({ set: assetSet });
@@ -445,13 +475,15 @@ export function verifyListingAssets({ since, set } = {}) {
 
     const drift = [];
     for (const asset of assetSet.assets) {
-        const log = git([
-            'log', '--oneline', '--no-decorate',
-            `${pin.capturedFrom.commit}..${targetSha}`,
-            '--', ...asset.depends,
-        ]);
-        const commits = log ? log.split('\n') : [];
-        if (commits.length > 0) drift.push({ asset: asset.name, shows: asset.shows, commits });
+        const commits = commitsTouching(pin.capturedFrom.commit, targetSha, asset.depends);
+        if (commits.length > 0) {
+            drift.push({
+                asset: asset.name,
+                shows: asset.shows,
+                commits,
+                files: filesTouching(pin.capturedFrom.commit, targetSha, asset.depends),
+            });
+        }
     }
 
     // The other direction. Reported per asset the same way, over the reversed
@@ -461,13 +493,15 @@ export function verifyListingAssets({ since, set } = {}) {
     const ahead = [];
     if (direction === 'ahead' || direction === 'divergent') {
         for (const asset of assetSet.assets) {
-            const log = git([
-                'log', '--oneline', '--no-decorate',
-                `${targetSha}..${pin.capturedFrom.commit}`,
-                '--', ...asset.depends,
-            ]);
-            const commits = log ? log.split('\n') : [];
-            if (commits.length > 0) ahead.push({ asset: asset.name, shows: asset.shows, commits });
+            const commits = commitsTouching(targetSha, pin.capturedFrom.commit, asset.depends);
+            if (commits.length > 0) {
+                ahead.push({
+                    asset: asset.name,
+                    shows: asset.shows,
+                    commits,
+                    files: filesTouching(targetSha, pin.capturedFrom.commit, asset.depends),
+                });
+            }
         }
     }
 
@@ -517,6 +551,18 @@ Exit codes: 0 clean, 1 stale (a hash disagrees or a depicted surface moved),
 
 Read-only unless --write is passed.`;
 
+/**
+ * The depicted files those commits changed. Printed under the commits rather
+ * than instead of them: the commit says who and why, the file says whether it
+ * can reach these pixels at all, and the operator needs both to take way (2).
+ */
+function printFiles(files) {
+    if (!files || files.length === 0) return;
+    console.error(`    files it changed under this asset's depicted paths (${files.length}):`);
+    for (const f of files.slice(0, 12)) console.error(`      ${f}`);
+    if (files.length > 12) console.error(`      ... and ${files.length - 12} more`);
+}
+
 function main(argv) {
     if (argv.some((a) => a === '--help' || a === '-h')) {
         console.log(HELP);
@@ -561,12 +607,14 @@ function main(argv) {
                 + `${d.commits.length} commit(s) to what it depicts since it was captured:`);
             for (const c of d.commits.slice(0, 5)) console.error(`    ${c}`);
             if (d.commits.length > 5) console.error(`    ... and ${d.commits.length - 5} more`);
+            printFiles(d.files);
         }
         for (const a of result.ahead || []) {
             console.error(`[verify-listing-assets] AHEAD: ${a.asset} (${a.shows}) - depicts `
                 + `${a.commits.length} commit(s) that ${target.ref} does NOT contain:`);
             for (const c of a.commits.slice(0, 5)) console.error(`    ${c}`);
             if (a.commits.length > 5) console.error(`    ... and ${a.commits.length - 5} more`);
+            printFiles(a.files);
         }
         if ((result.ahead || []).length > 0) {
             console.error('[verify-listing-assets] the capture is '
@@ -594,8 +642,11 @@ function main(argv) {
             console.error('[verify-listing-assets] STALE. Two honest ways out, and uploading anyway '
                 + 'is neither: (1) rebuild the shell at the ref you are submitting and re-run '
                 + `${SETS[result.set || 'extension'].capture}, which re-pins as it `
-                + 'goes; or (2) read the commits above and record in the release record why none of '
-                + 'them can change these pixels. This tool deliberately cannot tell a cosmetic '
+                + 'goes; or (2) read the commits AND the files listed under each one above, and '
+                + 'record in the release record why none of them can change these pixels. Judge it '
+                + 'on the files: a subject line describes a change\'s purpose, not its reach, and '
+                + 'one that names another shell can still carry a shared stylesheet this asset '
+                + 'renders. This tool deliberately cannot tell a cosmetic '
                 + 'commit from a visible one, so it names them rather than guessing. A reviewer '
                 + 'compares these screenshots against the product they are sent, and the Chrome Web '
                 + 'Store additionally assigns a permanent extension ID to the first upload.');
