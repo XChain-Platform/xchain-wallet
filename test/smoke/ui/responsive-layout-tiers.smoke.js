@@ -84,6 +84,27 @@ assert.ok(
 assert.ok(/export const THRESHOLD_PX = TIER_RAIL_MIN_PX;/.test(devVariantSrc),
     'web variant threshold IS the shared rail breakpoint, not a second copy');
 
+// --- 2b. no persisted variant override  ------------------------
+//
+// The dev-preview frames pin a fixed 360/375px column. A copy of the
+// chosen variant used to live in localStorage, which is how the live web
+// wallet came to render at extension-popup width on a 1489px desktop and
+// stay that way across a hard reload. The URL is the whole persistence
+// mechanism now: visible, per-navigation, and escapable by opening the
+// bare origin. test/unit/web/devVariant.test.js asserts the behaviour;
+// this asserts the write is gone, since a re-added `setItem` would restore
+// the trap for anyone who touches the badge once.
+
+assert.ok(!/localStorage\.setItem/.test(devVariantSrc),
+    'web devVariant never persists a variant override');
+assert.ok(/export function purgeStoredVariantOverride\b/.test(devVariantSrc),
+    'web devVariant exports the sweeper that heals an already-trapped browser');
+assert.ok(/export function resolveVariant\(\)\s*\{\s*purgeStoredVariantOverride\(\);/
+    .test(devVariantSrc),
+'resolveVariant sweeps a stored override on every resolve');
+assert.ok(!/source: 'storage'/.test(devVariantSrc),
+    'stored state is not a variant source');
+
 // --- 3. useLayoutTier measures the container ----------------------------
 
 const hookPath = join(stylesDir, 'useLayoutTier.js');
@@ -158,5 +179,5 @@ for (const [label, appPath] of [
 }
 
 console.log(
-    'OK: responsive-layout-tiers smoke ( slice 1: shared/styles/breakpoints.js owns the 640/900 tier boundaries + tierForWidth/showsSidebar/showsBottomBar; useLayoutTier measures the container via getBoundingClientRect + ResizeObserver with a viewport fallback; FullLayoutWithNav publishes data-xc-tier and mounts exactly one nav surface; LeftNav CSS is tier-keyed with no viewport media query and clips rail labels instead of removing them; web + desktop hand both slots to the layout)',
+    'OK: responsive-layout-tiers smoke ( slice 1: shared/styles/breakpoints.js owns the 640/900 tier boundaries + tierForWidth/showsSidebar/showsBottomBar; useLayoutTier measures the container via getBoundingClientRect + ResizeObserver with a viewport fallback; FullLayoutWithNav publishes data-xc-tier and mounts exactly one nav surface; LeftNav CSS is tier-keyed with no viewport media query and clips rail labels instead of removing them; web + desktop hand both slots to the layout; : no persisted variant override, and resolveVariant sweeps a legacy one)',
 );

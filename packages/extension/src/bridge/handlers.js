@@ -40,7 +40,9 @@ import { createSignPasswordCache } from './signPasswordCache.js';
 import {
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
-    SIGN_IN_CHALLENGE_PREFIX,
+    SIGN_IN_CHALLENGE_SEPARATOR,
+    SIGN_IN_CHALLENGE_VERSION,
+    formatSignInChallenge,
     isBridgeVersionSupported,
 } from '@xchain-wallet/bridge-spec';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
@@ -617,6 +619,17 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertNotThrottled(signThrottle, req);
+        // Reject a separator-poisoned appId/nonce BEFORE prompting. Both arrive
+        // from the page, and " | " is the challenge's reserved field delimiter,
+        // so an injected pipe would smuggle pseudo-fields ahead of the
+        // wallet-stamped origin. formatSignInChallenge below refuses these too;
+        // checking here means the user is never asked to approve a request the
+        // signer will refuse anyway ().
+        for (const [field, value] of [['appId', req.appId], ['nonce', req.nonce]]) {
+            if (typeof value === 'string' && value.includes(SIGN_IN_CHALLENGE_SEPARATOR)) {
+                throw bridgeError('INVALID_PARAMS', `${field} contains the reserved separator`);
+            }
+        }
         const decision = await approvals.signIn({
             origin: req.origin,
             kind: 'signIn',
@@ -645,19 +658,34 @@ export function registerBridgeHandlers(host, opts = {}) {
         // the user was actually on: relying backends verify the origin
         // field, so a look-alike site passing a legitimate appId can no
         // longer obtain a signature indistinguishable from the real app's.
-        const challenge = [
-            SIGN_IN_CHALLENGE_PREFIX,
-            req.appId,
-            req.origin,
-            decision.address,
+        //
+        // The wire format is assembled by the shared formatter, never inline.
+        // The inline copy this replaced had drifted twice off the one contract:
+        // it skipped the reserved-separator guard, and it wrote the two
+        // timestamps as ISO strings where the spec declares epoch milliseconds,
+        // so parseSignInChallenge returned null for every challenge this wallet
+        // has ever emitted while the mock provider's formatted output parsed
+        // fine ().
+        const challengeParts = {
+            version: SIGN_IN_CHALLENGE_VERSION,
+            appId: req.appId,
+            origin: req.origin,
+            address: decision.address,
             nonce,
-            new Date(now).toISOString(),
-            new Date(now + expiresInMs).toISOString(),
-        ].join(' | ');
+            timestamp: now,
+            expiresAt: now + expiresInMs,
+        };
+        let challenge;
+        try {
+            challenge = formatSignInChallenge(challengeParts);
+        } catch (err) {
+            throw bridgeError('INVALID_PARAMS', err?.message ?? 'malformed sign-in challenge');
+        }
 
         const addr = await findAddressByString(deps.vault, decision.address, req.chainId, deps.chainRegistry);
         if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', decision.address);
         const walletId = decision.walletId ?? await walletIdForAddress(deps.vault, decision.address);
+        const chainId = req.chainId ?? chainIdForAddr(deps.chainRegistry, addr);
         const { signature } = await signMessageFlow({
             vault: deps.vault,
             walletId,
@@ -665,12 +693,15 @@ export function registerBridgeHandlers(host, opts = {}) {
             bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
-            chainId: req.chainId ?? chainIdForAddr(deps.chainRegistry, addr),
+            chainId,
             path: addr.derivationPath ?? undefined,
             addressId: addr.derivationPath ? undefined : addr.id,
             message: challenge,
         });
-        return { address: decision.address, signature, challenge };
+        // chainId and challengeParts are declared on SignInSuccess and were
+        // being dropped, so a dApp had to re-parse the string to recover fields
+        // the wallet already held ().
+        return { address: decision.address, chainId, signature, challenge, challengeParts };
     });
 }
 

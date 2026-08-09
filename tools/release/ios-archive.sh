@@ -166,4 +166,23 @@ if [ ! -d "$app" ]; then
     exit 1
 fi
 
+# And what is INSIDE it . Until this, the only fact this script
+# established about the thing it built was that a directory of the right name
+# existed: not the bundle id, not the version pair, not the Universal Link
+# entitlement the signature actually carries. That is the state the Android
+# bundle was in until.
+#
+# It runs here rather than only before export so a defect is attributed to the
+# archive that carries it. ios-export.sh checks the archive again before
+# exporting, because by then the answer decides whether an artifact exists at
+# all, and checks the ipa afterwards for the facts only a signed export has.
+verify_args=(--stage archive)
+if [ -n "$unsigned" ]; then
+    verify_args+=(--unsigned)
+fi
+if ! node "$here/tools/release/verify-ios-artifact.mjs" "$app" "${verify_args[@]}"; then
+    echo "ios-archive: the archive does not carry what the project pins; it is not exportable" >&2
+    exit 1
+fi
+
 echo "ios-archive: wrote $archive"

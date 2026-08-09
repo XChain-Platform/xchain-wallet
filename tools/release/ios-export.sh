@@ -74,6 +74,22 @@ if [ ! -d "$archive" ]; then
     exit 1
 fi
 
+# REFUSE TO EXPORT AN ARCHIVE THAT DOES NOT CARRY WHAT THE PROJECT PINS
+# . The archive on disk need not be the one this tag's ios-archive.sh
+# wrote: it is whatever is at that path, and the path is stable across runs. So
+# the version pair is checked against the TAG here rather than only against
+# Version.xcconfig, which is what catches yesterday's archive being exported
+# under today's tag - a case where the archive is internally consistent and
+# every file in the repo is correct.
+#
+# Before the key file is written, so an archive that fails is refused without
+# the App Store Connect credential ever materialising on disk.
+if ! node "$here/tools/release/verify-ios-artifact.mjs" \
+        "$archive/Products/Applications/App.app" --stage archive --tag "$tag"; then
+    echo "ios-export: the archive does not carry what the project pins; nothing was exported" >&2
+    exit 1
+fi
+
 keydir="$(mktemp -d)"
 trap 'rm -rf "$keydir"' EXIT
 keyfile="$keydir/AuthKey_${APPLE_API_KEY_ID}.p8"
@@ -143,6 +159,26 @@ fi
 
 target="$builddir/xchain-wallet-ios-${tag}.ipa"
 mv "$exported" "$target"
+
+# The export re-signs, so three facts exist only here and could not have been
+# checked on the archive: whether the identity Xcode chose is a DISTRIBUTION one
+# (a development profile carries a device list and installs on those UDIDs and
+# nowhere else), whether `get-task-allow` survived into the shipped binary, and
+# whether the zip holds exactly one app. Cloud signing chooses the identity, so
+# these are not decisions any file in this repo records.
+#
+# A failure RENAMES rather than deletes. The bytes are the evidence for
+# whatever went wrong, and cloud signing means reproducing them costs another
+# round trip to Apple; but a signed ipa left under its declared name is a file
+# somebody later finds on a disk and trusts, and it is the name that
+# expected-artifacts.txt and sign.sh match on. The suffix takes it out of every
+# glob that would pick it up.
+if ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export --tag "$tag"; then
+    mv "$target" "$target.rejected"
+    echo "ios-export: the exported ipa is not distributable; kept as $(basename "$target").rejected" >&2
+    exit 1
+fi
+
 echo "ios-export: wrote $(basename "$target")"
 
 # Printed so the release machine's operator can match it against the

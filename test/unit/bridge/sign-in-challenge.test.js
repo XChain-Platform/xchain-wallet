@@ -115,11 +115,60 @@ describe('SIWX challenge origin binding (§43.6 v2)', () => {
     });
 
     it('bridge.signIn embeds the content-script-stamped req.origin in the signed challenge', () => {
-        // The challenge array must carry req.origin (wallet-stamped)
-        // immediately after req.appId (page-supplied), under the
-        // versioned prefix constant.
+        // The parts object handed to the shared formatter must carry req.origin
+        // (wallet-stamped) immediately after req.appId (page-supplied); the
+        // formatter fixes the field order from there.
         expect(handlersSource).toMatch(
-            /SIGN_IN_CHALLENGE_PREFIX,\s*req\.appId,\s*req\.origin,\s*decision\.address,/,
+            /appId:\s*req\.appId,\s*origin:\s*req\.origin,\s*address:\s*decision\.address,/,
         );
+    });
+
+    // . bridge.signIn used to re-implement the wire format inline with
+    // an array join, which drifted off the contract in two directions at once:
+    // no reserved-separator guard (a page-supplied appId could inject
+    // pseudo-fields ahead of the wallet-stamped origin) and ISO-string
+    // timestamps where the spec declares epoch milliseconds, which made every
+    // challenge the wallet emitted unparseable by the spec's own parser. The
+    // pin above was a source regex, so it locked the inline form in rather than
+    // catching the drift. These three assert the guarded path instead.
+    it('bridge.signIn builds the challenge with the shared formatter, not an inline join', () => {
+        expect(handlersSource).toMatch(/challenge\s*=\s*formatSignInChallenge\(challengeParts\)/);
+        expect(handlersSource).not.toMatch(/\]\.join\(' \| '\)/);
+    });
+
+    it('bridge.signIn rejects a separator-poisoned appId or nonce before prompting', () => {
+        // The guard must sit above the approvals.signIn call: a request the
+        // formatter will refuse must never reach the user as a prompt.
+        const guardAt = handlersSource.indexOf('contains the reserved separator');
+        const promptAt = handlersSource.indexOf('await approvals.signIn(');
+        expect(guardAt).toBeGreaterThan(-1);
+        expect(promptAt).toBeGreaterThan(-1);
+        expect(guardAt).toBeLessThan(promptAt);
+    });
+
+    it('a challenge built the way bridge.signIn builds one parses back', () => {
+        // The exact parts shape the handler assembles, with epoch-ms timestamps.
+        // The old ISO form failed this: Number('2026-...Z') is NaN, so
+        // parseSignInChallenge returned null for every real sign-in.
+        const parts = makeParts({ timestamp: NOW, expiresAt: NOW + 5 * 60 * 1000 });
+        const reparsed = parseSignInChallenge(formatSignInChallenge(parts));
+        expect(reparsed).not.toBeNull();
+        expect(reparsed.timestamp).toBe(NOW);
+
+        const isoStyle = [
+            SIGN_IN_CHALLENGE_PREFIX,
+            parts.appId,
+            parts.origin,
+            parts.address,
+            parts.nonce,
+            new Date(parts.timestamp).toISOString(),
+            new Date(parts.expiresAt).toISOString(),
+        ].join(SIGN_IN_CHALLENGE_SEPARATOR);
+        expect(parseSignInChallenge(isoStyle)).toBeNull();
+    });
+
+    it('formatSignInChallenge refuses a separator-poisoned appId', () => {
+        expect(() => formatSignInChallenge(makeParts({ appId: 'legit | injected' })))
+            .toThrow(/reserved separator/);
     });
 });

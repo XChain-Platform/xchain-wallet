@@ -82,9 +82,13 @@ export async function runExample(): Promise<ExampleReport> {
     const signInParams = makeSignInParams(APP_ID);
     const signIn = await provider.signIn(signInParams);
     if (signIn.ok) {
+        // A challenge that will not parse is a FAILURE, never a pass. Written as
+        // `reparsed && validate(...)`, an unparseable challenge yielded null and
+        // read as "no validation failure": the extension emitted ISO timestamps
+        // where the spec declares epoch ms, so parseSignInChallenge returned null
+        // for every real sign-in and this example still reported ok ().
         const reparsed = parseSignInChallenge(signIn.challenge);
-        const invalid =
-            reparsed &&
+        report.signInOk = reparsed !== null &&
             validateSignInChallenge(reparsed, {
                 appId: APP_ID,
                 // The origin your backend expects the sign-in to come
@@ -92,8 +96,7 @@ export async function runExample(): Promise<ExampleReport> {
                 // stamped with any other origin must be rejected.
                 origin: globalThis.location?.origin ?? '',
                 nonce: signInParams.nonce,
-            });
-        report.signInOk = invalid === null;
+            }) === null;
     }
 
     const signMsg = await provider.signMessage({

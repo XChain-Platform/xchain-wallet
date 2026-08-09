@@ -33,8 +33,9 @@
 #   pnpm test:integration:regtest -- --headed  # extra args pass through
 #
 # Environment (consumed by wait-ready.sh):
-#   XCHAIN_REGTEST_BASE_URL    Default http://localhost
-#   XCHAIN_REGTEST_TIMEOUT_MS  Default 60000
+#   XCHAIN_REGTEST_BASE_URL         Default http://localhost
+#   XCHAIN_REGTEST_TIMEOUT_MS       Default 60000
+#   XCHAIN_REGTEST_PROBE_TIMEOUT_MS Default 3000, per-probe bound
 
 set -euo pipefail
 

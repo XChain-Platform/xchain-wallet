@@ -57,7 +57,10 @@ for (const heading of [
     assert.ok(readme.includes(heading),
         `README has heading: ${heading}`);
 }
-for (const envVar of ['XCHAIN_REGTEST_BASE_URL', 'XCHAIN_REGTEST_TIMEOUT_MS', 'XCHAIN_REGTEST_VERBOSE']) {
+for (const envVar of [
+    'XCHAIN_REGTEST_BASE_URL', 'XCHAIN_REGTEST_TIMEOUT_MS',
+    'XCHAIN_REGTEST_PROBE_TIMEOUT_MS', 'XCHAIN_REGTEST_VERBOSE',
+]) {
     assert.ok(readme.includes(envVar),
         `README documents ${envVar}`);
 }
@@ -71,6 +74,10 @@ assert.ok(/^#!\/usr\/bin\/env bash/.test(bootstrap), 'bootstrap.sh has bash sheb
 assert.ok(/set -euo pipefail/.test(bootstrap), 'bootstrap.sh has strict-mode guard');
 assert.ok(/XCHAIN_REGTEST_BASE_URL/.test(bootstrap),
     'bootstrap.sh reads the canonical base-URL env var');
+assert.ok(/XCHAIN_REGTEST_PROBE_TIMEOUT_MS/.test(bootstrap),
+    'bootstrap.sh honours the per-probe timeout env var ');
+assert.ok(!/--max-time [0-9]/.test(bootstrap),
+    'every bootstrap.sh probe bound derives from the env var, none is hard-coded');
 // The service classes the wallet SDK actually talks to appear in the
 // probe: one explorer, one encoder per chain, one hub. The wallet does
 // NOT hit the nodes/decoders/indexers directly (they sit upstream of the
@@ -108,39 +115,61 @@ assert.ok(/xchain-node\.sh.*stop/.test(down),
 assert.ok(/XCHAIN_PLATFORM_DIR/.test(down),
     'down.sh honours the platform-dir override env var');
 
+// Both runtime cases below aim at an address that black-holes packets,
+// so their cost is the probe bound times the number of probes, not the
+// speed of a refusal. Left at the default that cost ~84s of a serial,
+// silent pre-push gate and got the gate killed as hung ; the
+// short override buys the same failure path in about two seconds. The
+// elapsed assertions are the regression guard: they fail long before
+// spawnSync's own timeout, and they name the cause when they do.
+const PROBE_TIMEOUT_MS = '150';
+const UNROUTABLE = 'http://192.0.2.1';  // TEST-NET-1, guaranteed unroutable
+const budgetMs = 15_000;
+
 // 4. Runtime: bootstrap.sh against a deliberately unreachable base
 //    URL exits 1 with the documented diagnostic. Picked an
 //    RFC-5737-reserved IP so we never accidentally hit a real host.
+const probeStart = Date.now();
 const probe = spawnSync('bash', [join(root, 'tools/regtest/bootstrap.sh')], {
     encoding: 'utf8',
     env: {
         ...process.env,
-        XCHAIN_REGTEST_BASE_URL: 'http://192.0.2.1',  // TEST-NET-1, guaranteed unroutable
+        XCHAIN_REGTEST_BASE_URL: UNROUTABLE,
+        XCHAIN_REGTEST_PROBE_TIMEOUT_MS: PROBE_TIMEOUT_MS,
     },
     timeout: 90_000,
 });
+const probeMs = Date.now() - probeStart;
 assert.equal(probe.status, 1,
     `bootstrap.sh against TEST-NET-1 exits 1 (got ${probe.status})`);
 assert.ok(/service\(s\) not responding/.test(probe.stderr),
     'bootstrap.sh diagnostic mentions the count of failing services');
 assert.ok(/xchain-node\.sh start/.test(probe.stderr),
     'bootstrap.sh diagnostic surfaces the start command');
+assert.ok(probeMs < budgetMs,
+    `bootstrap.sh honoured the short probe bound (took ${probeMs}ms, budget ${budgetMs}ms)`);
 
 // 5. wait-ready.sh with a tiny timeout against an unreachable base
-//    URL should fail with the timeout diagnostic.
+//    URL should fail with the timeout diagnostic. The probe bound is
+//    inherited by the bootstrap.sh child it polls with.
+const wrStart = Date.now();
 const wr = spawnSync('bash', [join(root, 'tools/regtest/wait-ready.sh')], {
     encoding: 'utf8',
     env: {
         ...process.env,
-        XCHAIN_REGTEST_BASE_URL: 'http://192.0.2.1',
+        XCHAIN_REGTEST_BASE_URL: UNROUTABLE,
         XCHAIN_REGTEST_TIMEOUT_MS: '1000',
+        XCHAIN_REGTEST_PROBE_TIMEOUT_MS: PROBE_TIMEOUT_MS,
     },
     timeout: 90_000,
 });
+const wrMs = Date.now() - wrStart;
 assert.equal(wr.status, 1,
     `wait-ready.sh against TEST-NET-1 with 1s timeout exits 1 (got ${wr.status})`);
 assert.ok(/stack not ready after/.test(wr.stderr),
     'wait-ready.sh diagnostic mentions the timeout');
+assert.ok(wrMs < budgetMs,
+    `wait-ready.sh passed the short probe bound to bootstrap.sh (took ${wrMs}ms, budget ${budgetMs}ms)`);
 
 // 6. test/e2e/README.md still references the regtest stack location
 //    so a developer following the docs reaches these scripts.

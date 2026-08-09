@@ -29,13 +29,34 @@
 #   bash tools/regtest/bootstrap.sh
 #
 # Environment:
-#   XCHAIN_REGTEST_BASE_URL    Default http://localhost
-#   XCHAIN_REGTEST_VERBOSE     Set to log every probe
+#   XCHAIN_REGTEST_BASE_URL         Default http://localhost
+#   XCHAIN_REGTEST_PROBE_TIMEOUT_MS Default 3000, per-probe curl bound
+#   XCHAIN_REGTEST_VERBOSE          Set to log every probe
 
 set -euo pipefail
 
 BASE="${XCHAIN_REGTEST_BASE_URL:-http://localhost}"
 VERBOSE="${XCHAIN_REGTEST_VERBOSE:-}"
+
+# Per-probe curl bound. A refused connection answers instantly, but a
+# base URL that black-holes packets (an unreachable host, a stale SSH
+# tunnel, the TEST-NET-1 address the smoke probes) costs the full
+# timeout on every probe with nothing printed meanwhile, which reads as
+# a hang rather than a slow check . Callers that only want the
+# failure path, tests above all, shorten it.
+PROBE_TIMEOUT_MS="${XCHAIN_REGTEST_PROBE_TIMEOUT_MS:-3000}"
+
+# The explorer probe reads a body instead of discarding it, so it gets a
+# third more time than the rest (4s at the 3s default).
+EXPLORER_TIMEOUT_MS=$((PROBE_TIMEOUT_MS + PROBE_TIMEOUT_MS / 3))
+
+# curl --max-time takes seconds, and sub-second overrides have to survive
+# the conversion, so format the millisecond budget as a decimal.
+ms_to_seconds() {
+    printf '%d.%03d' "$(($1 / 1000))" "$(($1 % 1000))"
+}
+PROBE_MAX_TIME="$(ms_to_seconds "$PROBE_TIMEOUT_MS")"
+EXPLORER_MAX_TIME="$(ms_to_seconds "$EXPLORER_TIMEOUT_MS")"
 
 # (label, url) pairs the wallet's tests rely on. Ports mirror the
 # regtest chain descriptors: explorer 18080, encoders BTC 3023 /
@@ -61,8 +82,8 @@ failures=0
 # status. Bounded per probe with --max-time.
 reachable() {
     local url="$1"
-    curl -fsS --max-time 3 -o /dev/null "$url" 2>/dev/null \
-        || curl -sS --max-time 3 -o /dev/null -w "%{http_code}" "$url" 2>/dev/null \
+    curl -fsS --max-time "$PROBE_MAX_TIME" -o /dev/null "$url" 2>/dev/null \
+        || curl -sS --max-time "$PROBE_MAX_TIME" -o /dev/null -w "%{http_code}" "$url" 2>/dev/null \
             | grep -qE '^(200|401|404|405)$'
 }
 
@@ -73,7 +94,7 @@ reachable() {
 if [[ -n "$VERBOSE" ]]; then
     echo "bootstrap.sh: probing xchain-explorer at $EXPLORER_STATUS_URL ..." >&2
 fi
-explorer_body="$(curl -fsS --max-time 4 "$EXPLORER_STATUS_URL" 2>/dev/null || true)"
+explorer_body="$(curl -fsS --max-time "$EXPLORER_MAX_TIME" "$EXPLORER_STATUS_URL" 2>/dev/null || true)"
 if [[ -z "$explorer_body" ]]; then
     printf '  \xe2\x9c\x97  %-22s %s (no response)\n' "xchain-explorer" "$EXPLORER_STATUS_URL" >&2
     failures=$((failures + 1))

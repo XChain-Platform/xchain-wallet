@@ -50,12 +50,15 @@ function clampToViewport(p, el) {
  *   sidebar    : Chrome MV3 side panel (right-docked 375 column; full viewport height)
  *   extension  : Chrome extension toolbar popup (360x600 fixed; no bottom tab bar, drawer only)
  *
+ * A forced variant lives in the `variant` query parameter and nowhere
+ * else, so it lasts exactly as long as the URL does .
+ *
  * Drag the grip (⠿) on the left to reposition; the chosen position
  * persists in localStorage and survives reload. Default position is
  * the bottom-left corner.
  *
  * @param {object} props
- * @param {{ variant: 'small' | 'full' | 'sidebar' | 'extension', source: 'url' | 'storage' | 'auto', viewportPx: number }} props.state
+ * @param {{ variant: 'small' | 'full' | 'sidebar' | 'extension', source: 'url' | 'auto', viewportPx: number }} props.state
  */
 export function DevVariantBadge({ state }) {
     const { variant, source, viewportPx } = state;

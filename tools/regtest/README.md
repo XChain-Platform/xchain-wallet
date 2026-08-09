@@ -120,6 +120,7 @@ have run `xchain-node start` first."
 |---|---|---|
 | `XCHAIN_REGTEST_BASE_URL` | Hostname (with optional port) where every regtest service lives. The scripts append the canonical paths. | `http://localhost` |
 | `XCHAIN_REGTEST_TIMEOUT_MS` | How long `wait-ready.sh` polls before failing. | `60000` |
+| `XCHAIN_REGTEST_PROBE_TIMEOUT_MS` | How long each `bootstrap.sh` probe waits before calling a service down; the explorer probe gets a third more, since it reads a body. Only bites when the base URL black-holes packets (an unreachable host, a dead SSH tunnel) rather than refusing the connection: then it is the whole cost of the run. Shorten it when only the failure path is wanted, as the smoke does. | `3000` |
 | `XCHAIN_REGTEST_VERBOSE` | When set, scripts emit one log line per probe. | unset |
 
 ## Per-test-suite procedure

@@ -21,8 +21,13 @@
 #   bash tools/regtest/wait-ready.sh
 #
 # Environment:
-#   XCHAIN_REGTEST_BASE_URL    Default http://localhost
-#   XCHAIN_REGTEST_TIMEOUT_MS  Default 60000
+#   XCHAIN_REGTEST_BASE_URL         Default http://localhost
+#   XCHAIN_REGTEST_TIMEOUT_MS       Default 60000
+#   XCHAIN_REGTEST_PROBE_TIMEOUT_MS Default 3000, inherited by the
+#                                   bootstrap.sh child this polls with;
+#                                   one attempt costs it per probe when
+#                                   the base URL black-holes packets, so
+#                                   a budget below that cannot be met.
 
 set -euo pipefail
 

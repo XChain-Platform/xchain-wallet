@@ -8,13 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Every master commit must be able to REACH a verdict.
+// Every master commit must be able to REACH a verdict, and every red must be
+// able to SAY what it found.
 //
-// The release gate (tools/release/verify-validated-commit.mjs,  §6 step 1)
-// requires a run of ci.yml on the EXACT tag commit that is both `completed` and
-// `success`. It has no skip switch, by design. A cancelled run is therefore not
-// a neutral outcome: it leaves that commit permanently unreleasable, because a
-// tag names bytes and the bytes cannot be re-validated later under a new run.
+// Part 1 (the policy). The release gate
+// (tools/release/verify-validated-commit.mjs,  §6 step 1) requires a run
+// of ci.yml on the EXACT tag commit that is both `completed` and `success`. It
+// has no skip switch, by design. A cancelled run is therefore not a neutral
+// outcome: it leaves that commit permanently unreleasable, because a tag names
+// bytes and the bytes cannot be re-validated later under a new run.
 //
 // ci.yml used to carry a blanket `cancel-in-progress: true`, which applies to
 // master pushes exactly as it applies to pull requests. Several sessions push to
@@ -27,16 +29,44 @@
 // Cancellation is still correct off master, where only the newest push matters
 // and runner minutes are the only thing at stake.
 //
-// This gate is deliberately about the POLICY, not about any one run's colour.
+// Part 2 (the reading, ). Fixing the policy did not fix the reading. A
+// run's `conclusion` aggregates its jobs, so a job that never reached a runner
+// still paints the run `failure` in the same shade a broken test does:
+//
+//   - run 31122248576 (a07ad0a4): four jobs passed, `build` and `test`
+//     concluded `cancelled` with EMPTY steps arrays and identical 15m02s
+//     durations. Read as two failing jobs; it was one cancellation signal.
+//   - run 31267045090 (9f9f1f5a): all six jobs `failure` in two seconds, every
+//     steps array empty, no logs, the whole finding in a check-run annotation
+//     about an account spending limit.
+//
+// Neither red named an assertion. That is the reading that costs most in the
+// wrong direction, because once a genuine red and an infrastructural red look
+// alike, every red gets assumed spurious.
+//
+// So this gate now covers both: the policy that lets a run finish, and the
+// `verdict` job plus classifier that make what it found legible. The
+// classifier is exercised against the two real runs above, captured verbatim
+// under test/fixtures/ci-runs/, so "a cancelled job is reported as cancelled"
+// is evaluated here rather than asserted.
+//
+// This gate is deliberately about the POLICY and the REPORTING, not about any
+// one run's colour.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classifyRun, JOB_STATE, VERDICT } from '../../../tools/release/run-verdict.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const workflows = join(here, '..', '..', '..', '.github', 'workflows');
+const repoRoot = join(here, '..', '..', '..');
+const workflows = join(repoRoot, '.github', 'workflows');
 const ci = readFileSync(join(workflows, 'ci.yml'), 'utf8');
+
+// ---------------------------------------------------------------------------
+// Part 1: the concurrency policy that lets a master run finish at all.
+// ---------------------------------------------------------------------------
 
 // Read the concurrency block rather than grepping the whole file, so an
 // unrelated `cancel-in-progress` elsewhere can never satisfy or break this.
@@ -145,5 +175,189 @@ assert.match(ci, /on:\n(?:.*\n)*?\s*push:\n\s*branches:\s*\[\s*master\s*\]/,
     'ci.yml no longer runs on pushes to master. The release gate reads a ci.yml run on the tag '
     + 'commit, and tags are cut from master, so without this trigger no commit is ever releasable.');
 
+// ---------------------------------------------------------------------------
+// Part 2a: ci.yml declares a `verdict` job, and nothing can escape it.
+// ---------------------------------------------------------------------------
+
+// Split the `jobs:` mapping into per-job source blocks. Regex rather than a
+// YAML parser on purpose: this repo has no YAML dependency it is willing to
+// make a test-gate load-bearing, and every assertion below is about text a
+// human wrote at a known indent.
+function jobBlocks(source) {
+    const jobsSection = source.match(/^jobs:\n([\s\S]*)$/m);
+    assert.ok(jobsSection, 'ci.yml has no top-level `jobs:` mapping.');
+    const out = new Map();
+    const re = /^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm;
+    const starts = [...jobsSection[1].matchAll(re)];
+    starts.forEach((m, i) => {
+        const from = m.index + m[0].length;
+        const to = i + 1 < starts.length ? starts[i + 1].index : jobsSection[1].length;
+        out.set(m[1], jobsSection[1].slice(from, to));
+    });
+    return out;
+}
+
+const jobs = jobBlocks(ci);
+const verdict = jobs.get('verdict');
+
+assert.ok(verdict,
+    'ci.yml has no `verdict` job. Without it a red run says only "failure", which is the same word '
+    + 'for a broken assertion and for a job the runner never started (measured on runs 31122248576 '
+    + 'and 31267045090, neither of which named a single failing step). The job reads its own run '
+    + 'and classifies each job from its steps; see tools/release/run-verdict.mjs.');
+
+assert.match(verdict, /run:\s*node tools\/release\/run-verdict\.mjs\b/,
+    'the `verdict` job no longer runs tools/release/run-verdict.mjs. That module is the only thing '
+    + 'in this repo that distinguishes a cancelled job from a failed one; a hand-rolled substitute '
+    + 'in YAML would not be testable here.');
+
+assert.match(verdict, /--run \$\{\{ github\.run_id \}\}/,
+    'the `verdict` job does not pass `--run ${{ github.run_id }}`, so it is not classifying the run '
+    + 'it belongs to.');
+
+assert.match(verdict, /--exclude verdict\b/,
+    'the `verdict` job does not exclude ITSELF from the classification. It is still in progress '
+    + 'while it reads, so including itself makes every run classify as PENDING and the job reports '
+    + 'nothing, forever.');
+
+assert.match(verdict, /^\s*if:\s*\$\{\{\s*always\(\)\s*\}\}\s*$/m,
+    'the `verdict` job is not `if: ${{ always() }}`. Gating it on the other jobs succeeding '
+    + 'silences it in exactly the case it exists for: a run that went red without saying why.');
+
+assert.match(verdict, /^\s*actions: read\s*$/m,
+    'the `verdict` job does not grant itself `actions: read`. Listing any permission drops the '
+    + 'rest, so a job that lists `contents: read` alone cannot list its own run\'s jobs and the '
+    + 'classifier exits 2 on a 403 rather than reporting anything.');
+
+assert.match(verdict, /^\s*checks: read\s*$/m,
+    'the `verdict` job does not grant itself `checks: read`. A job that never started keeps its '
+    + 'whole finding in a check-run annotation - "the job was not started because ... your '
+    + 'spending limit needs to be increased" - and without this permission the verdict can say '
+    + 'that the job did not start but never why.');
+
+// The `needs:` list is what makes the verdict LAST. A job missing from it can
+// still be running when the verdict is read, and a run whose verdict was taken
+// early is worse than one with no verdict at all.
+const needs = verdict.match(/^\s*needs:\s*\[([^\]]*)\]/m);
+assert.ok(needs, 'the `verdict` job has no inline `needs: [...]` list, so this gate cannot check '
+    + 'that it waits for every other job. Keep the inline-array form.');
+
+const needed = new Set(needs[1].split(',').map((s) => s.trim()).filter(Boolean));
+const others = [...jobs.keys()].filter((n) => n !== 'verdict');
+const missing = others.filter((n) => !needed.has(n));
+
+assert.deepEqual(missing, [],
+    `the \`verdict\` job does not wait for: ${missing.join(', ')}. Every job in ci.yml has to be in `
+    + 'its `needs:` list, or the verdict is taken while that job is still running and reports a '
+    + 'partial run as if it were the whole one. Add the job there in the same change that adds it '
+    + 'to the workflow.');
+
+// ---------------------------------------------------------------------------
+// Part 2b: the classifier, against the real runs that motivated it.
+// ---------------------------------------------------------------------------
+
+const fixture = (name) => JSON.parse(
+    readFileSync(join(repoRoot, 'test', 'fixtures', 'ci-runs', name), 'utf8'));
+
+const stateOf = (result, jobName) => {
+    const job = result.jobs.find((j) => j.name === jobName);
+    assert.ok(job, `run classification has no job named \`${jobName}\``);
+    return job.state;
+};
+
+// Run 31122248576: the run this item was raised on. `build` and `test`
+// concluded `cancelled` with empty steps arrays; everything else passed.
+const cancelledRun = classifyRun(fixture('31122248576-cancelled-jobs.json'));
+
+assert.equal(stateOf(cancelledRun, 'build'), JOB_STATE.CANCELLED,
+    'run 31122248576\'s `build` job concluded `cancelled` with an EMPTY steps array and must be '
+    + 'reported as cancelled. Reporting it as a failure is the whole defect: it invents a finding '
+    + 'in a job where no step ever ran.');
+
+assert.equal(stateOf(cancelledRun, 'test'), JOB_STATE.CANCELLED,
+    'run 31122248576\'s `test` job concluded `cancelled` with an EMPTY steps array and must be '
+    + 'reported as cancelled, not as a failed assertion.');
+
+assert.equal(stateOf(cancelledRun, 'e2e'), JOB_STATE.PASSED,
+    'run 31122248576\'s `e2e` job passed 11 steps; a classifier that cannot still see the green '
+    + 'jobs on a red run is no more use than the colour it replaces.');
+
+assert.deepEqual(cancelledRun.assertions, [],
+    'run 31122248576 is classified as carrying stated assertions. It carries none: every step that '
+    + 'ran in it passed. That is precisely why its red was unreadable.');
+
+assert.equal(cancelledRun.verdict, VERDICT.NO_VERDICT,
+    'run 31122248576 must classify as NO VERDICT. GitHub calls it `failure`; no assertion produced '
+    + 'that, so the honest answer is that the run reached no finding and wants re-running.');
+
+// Run 31267045090: red in two seconds, no job ever assigned a runner, the
+// finding entirely in an account-level check-run annotation.
+const notStartedRun = classifyRun(fixture('31267045090-never-started.json'));
+
+for (const name of ['test', 'build', 'e2e', 'audit', 'coverage', 'drift-guards']) {
+    assert.equal(stateOf(notStartedRun, name), JOB_STATE.NOT_STARTED,
+        `run 31267045090's \`${name}\` job concluded \`failure\` in two seconds with no steps and `
+        + 'no runner. It must be reported as not-started: nothing in it ran, so nothing in this '
+        + 'repo can be what broke.');
+}
+
+assert.deepEqual(notStartedRun.assertions, [],
+    'run 31267045090 is classified as carrying stated assertions. Six jobs concluded `failure` and '
+    + 'not one of them executed a step.');
+
+assert.equal(notStartedRun.verdict, VERDICT.NO_VERDICT,
+    'run 31267045090 must classify as NO VERDICT, not RED. Every job was refused a runner over an '
+    + 'account spending limit; reading that as a test failure sends someone to debug code that '
+    + 'never ran.');
+
+assert.match(notStartedRun.jobs[0].detail, /spending limit/,
+    'the not-started detail no longer carries the check-run annotation. The annotation IS the '
+    + 'finding for this class of red - it names the billing condition - and dropping it leaves the '
+    + 'verdict correct but unactionable.');
+
+// The inverse, and the assertion that keeps this gate honest: a run with a
+// genuinely failing step must still be RED, and must name the step.
+const redRun = classifyRun(fixture('31059553709-stated-assertion.json'));
+
+assert.equal(redRun.verdict, VERDICT.RED,
+    'run 31059553709 has a `test` job whose `Run test gate` step concluded `failure`. A classifier '
+    + 'that softens that into NO VERDICT would be worse than the colour it replaces: it would hide '
+    + 'real findings behind an infrastructure excuse.');
+
+assert.equal(stateOf(redRun, 'test'), JOB_STATE.FAILED,
+    'run 31059553709\'s `test` job has a failing step and must be reported as failed.');
+
+assert.deepEqual(redRun.assertions, ['test / Run test gate'],
+    'a RED verdict must NAME the assertion that produced it. "Something failed" is the reading this '
+    + 'whole gate exists to replace.');
+
+// And a green run stays green, with no infrastructure asterisk.
+const greenRun = classifyRun(fixture('31152887714-green.json'));
+
+assert.equal(greenRun.verdict, VERDICT.GREEN,
+    'run 31152887714 passed every job and must classify as GREEN.');
+
+// A job still running is not an outcome. Taken from the verdict job's own
+// position: it reads its run while it is itself in progress, which is why it
+// passes `--exclude verdict`.
+const selfReading = [
+    {
+        name: 'test',
+        status: 'completed',
+        conclusion: 'success',
+        steps: [{ name: 'Run test gate', status: 'completed', conclusion: 'success' }],
+    },
+    { name: 'verdict', status: 'in_progress', conclusion: null, steps: [] },
+];
+
+assert.equal(classifyRun({ id: 0, jobs: selfReading }).verdict, VERDICT.PENDING,
+    'a run with a job still in progress must classify as PENDING, never as a finished verdict.');
+
+assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] }).verdict, VERDICT.GREEN,
+    'excluding the reading job by name must leave the rest classifiable. Without this the `verdict` '
+    + 'job can only ever report PENDING, because it is always mid-run when it looks.');
+
 console.log('OK: ci master-verdict smoke (concurrency exempts refs/heads/master from '
-    + 'cancel-in-progress, evaluated both ways; push-to-master trigger intact)');
+    + 'cancel-in-progress, evaluated both ways; push-to-master trigger intact; `verdict` job waits '
+    + `on all ${others.length} jobs and classifies from steps; cancelled/not-started jobs report as `
+    + 'themselves on runs 31122248576 and 31267045090, a real step failure still reports RED)');

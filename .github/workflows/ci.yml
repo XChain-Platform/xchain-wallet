@@ -286,3 +286,51 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
+
+  # Says what this run actually FOUND, which the run's colour does not .
+  #
+  # A run's conclusion aggregates its jobs, so one job that never reached a
+  # runner paints the whole run `failure` in the same shade a broken test does.
+  # Measured twice: run 31122248576 was red because `build` and `test` were
+  # cancelled while still queued (empty steps arrays, identical 15m02s
+  # durations); run 31267045090 was red because every job was refused a runner
+  # over an account spending limit, the finding living only in a check-run
+  # annotation. Neither red named a single failing assertion, and a red that
+  # names nothing trains everyone to assume the next one is spurious too.
+  #
+  # So this job reads the run's own jobs and classifies each one from its STEPS
+  # rather than its colour: a step that concluded `failure` is a stated
+  # assertion, and a job with no steps at all is reported as cancelled or
+  # not-started, never as a failure. It writes the classification to the run
+  # summary, which is where someone asking "is master red?" actually looks.
+  #
+  # Read it as: `verdict` red means a real finding, named. `verdict` green on a
+  # red run means the red is infrastructure and the run wants re-running, not
+  # debugging. `verdict` missing means it could not start either, which is
+  # itself the account-level answer.
+  verdict:
+    runs-on: ubuntu-latest
+    needs: [test, drift-guards, build, coverage, e2e, audit]
+    # Runs whatever the others did. Gating it on success would silence it in
+    # exactly the case it exists for.
+    if: ${{ always() }}
+    permissions:
+      # Listing any permission drops the rest, so `actions: read` (list a run's
+      # jobs) and `checks: read` (the annotation naming a billing refusal) are
+      # both spelled out. `contents: read` is the checkout.
+      contents: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No pnpm install: the classifier is plain Node with no dependencies, so
+      # this job stays readable even when the dependency install is what broke.
+      - name: Classify this run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node tools/release/run-verdict.mjs --run ${{ github.run_id }} --exclude verdict
