@@ -119,17 +119,85 @@ function statesFingerprint(md, value) {
 }
 
 /** Rewrite what xchain.io/security/ publishes. */
+/* The page's own words for "no release exists yet". Named once because
+ * three things now depend on the exact string: the two state-specific
+ * guards in release-key-channels.test.js, and the fixtures below. */
+const NO_RELEASE_SENTENCE = 'No XChain Wallet release has been signed or published yet';
+
+/* The per-lane version of the same protection, for the state the project is
+ * actually in: one signed release covering Android alone, and three lanes that
+ * a reader must still be told nothing has been signed for. Written out rather
+ * than derived, because the page names the lanes in its own words and the
+ * websites guard builds the same sentence from data-release-coverage; two
+ * independent constructions that must agree is the property worth having here.
+ * It has a scheduled end: see mode ES5c. */
+const UNSIGNED_LANES_SENTENCE = 'No desktop, extension or iOS release has been signed or published yet';
+
+/* Sets the fingerprint AND the release-state attribute that has to agree with
+ * it, because the page carries both and the guards read both.
+ *
+ * The attribute half was added 2026-08-08. Until then this rewrote only the
+ * <code> block, which was coherent for as long as the live page said
+ * data-release-state="none" - and it stopped being coherent the moment a real
+ * release was published (xchain-websites `47c2247`). Every base here is DERIVED
+ * from the live page, so an "unpublished" fixture then meant a page whose
+ * fingerprint said "not yet published" while its own attribute said a release
+ * was out: exactly the contradiction the guard `a published key is not by
+ * itself a published release` exists to catch, arriving from the fixture rather
+ * than from a defect. Three modes went red for the venue rather than the tree.
+ *
+ * This file's own header says a harness whose meaning depends on which side of
+ * the ceremony the repo is on is not a harness on either side. Deriving one of
+ * the two coupled values and inheriting the other was that dependency, hiding
+ * in a helper. */
 function pagePublishes(html, value) {
     if (!html) return html;            // sibling absent: the wallet half still runs
     const re = /(<code id="release-key-fingerprint">)[^<]*(<\/code>)/;
     assert.match(html, re, 'the security page has no <code id="release-key-fingerprint"> to mutate.');
-    return html.replace(re, `$1${value}$2`);
+
+    const stateRe = /(data-release-state=")[^"]*(")/;
+    assert.match(html, stateRe, 'the security page has no data-release-state to keep in step with the '
+        + 'fingerprint. The guards read both, so a fixture that sets one and inherits the other is '
+        + 'self-contradictory the moment the live page changes state.');
+
+    // The page's own vocabulary for "no release yet", matched rather than
+    // guessed at: anything that is not that phrase is a real fingerprint.
+    const state = /not yet published/i.test(value) ? 'none' : 'published';
+    let out = html.replace(re, `$1${value}$2`).replace(stateRe, `$1${state}$2`);
+
+    /* The THIRD coupled value. A page in the `none` state must carry the
+     * sentence, and a page in the `published` state must not - those are two
+     * guards in release-key-channels.test.js, one per state. The live page is
+     * `published` and therefore no longer contains the sentence, so a `none`
+     * fixture derived from it is missing something its own state requires.
+     * Setting it here is what lets both states be built from whichever page
+     * happens to be live, which is the property this helper exists for. */
+    const has = out.includes(NO_RELEASE_SENTENCE);
+    if (state === 'none' && !has) {
+        out = out.replace('</body>', `<p>${NO_RELEASE_SENTENCE}</p></body>`);
+    } else if (state === 'published' && has) {
+        out = out.split(NO_RELEASE_SENTENCE).join('');
+    }
+    return out;
 }
 
 /* Deletes EVERY occurrence. A first-occurrence-only delete left the security
  * page still naming the other channel further down, the mode came back green,
  * and the harness read that as the guard failing to fire: a mutation that does
  * not fully mutate accuses the wrong file. */
+/* The mirror of drop(), for a guard that forbids a sentence rather than
+ * requiring one. It refuses for the same reason drop() does, from the other
+ * side: if the needle is ALREADY there, adding it changes nothing and the mode
+ * would report the guard firing on the base rather than on the mutation. */
+const readd = (text, needle) => {
+    if (!text) return text;            // sibling absent: the wallet half still runs
+    assert.ok(!text.includes(needle), `fixture source ALREADY contains ${JSON.stringify(needle)}, `
+        + 'so this mode would add nothing and prove nothing.');
+    const anchor = '</body>';
+    assert.ok(text.includes(anchor), `the security page has no ${anchor} to insert before.`);
+    return text.replace(anchor, `<p>${needle}</p>${anchor}`);
+};
+
 const drop = (text, needle) => {
     if (!text) return text;            // sibling absent: the wallet half still runs
     assert.ok(text.includes(needle), `fixture source no longer contains ${JSON.stringify(needle)}, `
@@ -326,15 +394,71 @@ const MODES = [
         mutate: (f) => ({ ...f, page: pagePublishes(f.page, '') }),
     },
     {
+        /* This mode used to DELETE `No XChain Wallet release has been signed or
+         * published yet` and require the sites guard to demand it back. That
+         * sentence is gone from the live page on purpose as of 2026-08-08
+         * (xchain-websites `47c2247`, "the trust root told every visitor the
+         * real release was a forgery"): a release IS signed and published now,
+         * so the page was telling readers that a genuine release was fake.
+         *
+         * The mode broke loudly rather than quietly, which is the design - both
+         * bases are DERIVED from the live files, so a moved constant lands
+         * here - and `drop()` refused rather than deleting nothing and passing.
+         *
+         * The property worth guarding did not disappear, it INVERTED, and the
+         * websites guard inverted with it: `once a release is signed, the page
+         * stops saying none is`. So this mode now adds the sentence back to a
+         * page whose own `data-release-state` says published, which is exactly
+         * the state `47c2247` found and fixed. Retiring the mode instead would
+         * have left that guard with nothing proving it bites, in a file whose
+         * whole doctrine is that an unexercised guard is not known to work. */
         name: 'ES5 the page stops saying that nothing has been signed yet',
-        /* Deliberately run from the PUBLISHED base: this mode is the one the
-         * ceremony silently disarmed, and the state that disarmed it is the
-         * state we are now in. */
-        why: 'during this window that sentence is the whole protection against a fake "signed release"',
-        base: PUBLISHED_BASE,
+        why: 'while no release exists that sentence is the whole protection against a fake "signed release"',
+        base: UNPUBLISHED_BASE,
         wallet: 'green',
         sites: /must state plainly that nothing is signed yet/,
-        mutate: (f) => ({ ...f, page: drop(f.page, 'No XChain Wallet release has been signed or published yet') }),
+        mutate: (f) => ({ ...f, page: drop(f.page, NO_RELEASE_SENTENCE) }),
+    },
+    {
+        /* The other side of the same property, and the side the project is on
+         * today. `47c2247` in xchain-websites found the page telling every
+         * visitor that a genuine, signed release was a forgery, which is the
+         * costlier direction: ES5's failure makes a reader trust something they
+         * should not, this one makes them REFUSE something they should trust.
+         * The guard for it existed with nothing exercising it, because this
+         * harness only ever drove the unpublished window. */
+        name: 'ES5b the page claims nothing is signed while a release IS published',
+        why: 'a reader who believes that sentence refuses a genuine release, which is the forgery reading in reverse',
+        base: PUBLISHED_BASE,
+        wallet: 'green',
+        sites: /still tells readers nothing has been signed/,
+        mutate: (f) => ({ ...f, page: readd(f.page, NO_RELEASE_SENTENCE) }),
+    },
+    {
+        /* THE SENTENCE THAT IS PROTECTIVE NOW, which is neither of the two
+         * above . ES5 and ES5b drive the global claim in each of its
+         * states, and between them they leave a gap the project is standing in:
+         * a release IS signed, so the global sentence is rightly gone, and yet
+         * three of the four lanes are exactly as unsigned as they were the day
+         * before. What protects a reader looking for a desktop build today is
+         * the page naming those lanes, and until this mode existed nothing
+         * exercised the guard that requires it.
+         *
+         * IT EXPIRES BY DESIGN, and that is the whole reason to write it down
+         * here rather than trust it. The sentence names the extension, so
+         * publishing the Chrome Web Store listing ( Phase 8) makes it
+         * false, as do the desktop and iOS lanes. Each of those adds its lane
+         * to the page's data-release-coverage, the websites guard then demands
+         * a sentence naming the lanes that are LEFT, and this mode goes red
+         * until the needle below is repointed at it. Repoint it; retiring it
+         * would leave the last unsigned lane unguarded on the day it matters
+         * most, which is the failure ES5 already made once. */
+        name: 'ES5c the page stops saying which lanes are still unsigned',
+        why: 'a reader told a signed release exists reads it as covering the download in front of them unless the page says otherwise',
+        base: PUBLISHED_BASE,
+        wallet: 'green',
+        sites: /must name every lane no signed release covers/,
+        mutate: (f) => ({ ...f, page: drop(f.page, UNSIGNED_LANES_SENTENCE) }),
     },
     {
         /* This mode used to delete the page's link to SECURITY.md and expect
