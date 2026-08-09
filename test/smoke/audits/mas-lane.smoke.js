@@ -175,9 +175,10 @@ assert.equal(config.mac.hardenedRuntime, true, 'the direct-download channel keep
 
 // --- 4b. The identity, which is the instance of the trap that shipped --
 //
-// . `mac.identity` is null on any machine without CSC_IDENTITY_NAME,
-// and app-builder-lib's `macPackager.sign` returns on a null identity BEFORE
-// `createMasInstaller`, the only thing that emits a .pkg. It logs, exits 0,
+// . `mac.identity` is null on any machine that was handed no signing
+// certificate, and app-builder-lib's `macPackager.sign` returns on a null
+// identity BEFORE `createMasInstaller`, the only thing that emits a .pkg.
+// The store build must not inherit that null. It logs, exits 0,
 // and produces nothing. Two separate things have to hold, so both are
 // asserted separately: the store config must never resolve to null, and it
 // must not be a full certificate NAME, because the same string is used to

@@ -194,20 +194,19 @@ for (const [name, block] of jobs) {
 
 // --- 6b. A macOS build step must name a signing identity ---------------
 //
-// : `mac.identity` is `process.env.CSC_IDENTITY_NAME || null`, and
-// app-builder-lib reads an explicit null as "do not sign", checked BEFORE
-// it looks at CSC_LINK. So a mac step holding the Developer ID cert and
-// the notarization credentials, and nothing else, signs nothing, notarizes
-// nothing, exits 0 and says so in one info line. That is how the direct
-// download channel shipped unsigned while reading as fully configured.
+// : app-builder-lib reads an explicit null identity as "do not
+// sign", checked BEFORE it looks at CSC_LINK. So a mac step holding the
+// Developer ID cert and the notarization credentials, and nothing else,
+// signed nothing, notarized nothing, exited 0 and said so in one info
+// line. That is how the direct download channel shipped unsigned while
+// reading as fully configured.
 //
-// The fix was one env line per step, and one env line is exactly what a
-// later edit drops without noticing - the config still validates, the
-// build still succeeds, the artifacts still upload, and the only
-// difference is that Gatekeeper now blocks every user. The MAS lane got a
-// guard (mas-lane.smoke.js) because the identity lives in the config
-// there; this lane's identity lives only in the workflow, so it needs its
-// guard here.
+// The identity now defaults from the builder config whenever a certificate
+// was supplied (MAC_IDENTITY, pinned by desktop-packaging.smoke.js), so
+// dropping the env line no longer restores that defect. This check is the
+// second layer and stays: it keeps each step naming the signer it intends
+// rather than inheriting one, and it is where the notarization credentials
+// are asserted to travel beside the certificate.
 //
 // A `--mac mas` step is exempt: `mas.identity` has its own non-null
 // default in the builder config, which mas-lane.smoke.js pins.
@@ -237,8 +236,8 @@ for (const [name, block] of jobs) {
         const stepName = step.match(/- name: (.*)/)?.[1]?.trim() ?? run.trim();
         assert.ok(/^\s*CSC_IDENTITY_NAME:\s*\S/m.test(step),
             `job '${name}' step '${stepName}' builds the macOS Developer ID channel `
-            + 'and sets no CSC_IDENTITY_NAME, so mac.identity resolves to null and '
-            + 'app-builder-lib skips signing and notarization silently ');
+            + 'and names no CSC_IDENTITY_NAME, so which certificate it signs with is '
+            + 'left to the builder config default rather than stated here ');
         // Signing without notarizing is its own quiet failure: Gatekeeper
         // rejects an un-notarized signed app on first launch just as hard.
         assert.ok(/APPLE_API_KEY_ID:/.test(step),

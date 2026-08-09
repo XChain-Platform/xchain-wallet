@@ -494,12 +494,15 @@ jobs:
           # environment, never repo-level.
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          # WITHOUT THIS THE STEP SIGNS NOTHING AND SAYS SO ONLY IN AN INFO
-          # LINE . `mac.identity` is `CSC_IDENTITY_NAME || null`,
-          # and app-builder-lib treats an explicit null as "do not sign",
-          # checked BEFORE it ever looks at CSC_LINK - so this step shipped
-          # unsigned, unnotarized artifacts while reading as configured.
-          # The value is a qualifier matched by substring, not a cert name.
+          # Names the signer explicitly . This step once shipped
+          # unsigned, unnotarized artifacts while reading as configured:
+          # `mac.identity` was `CSC_IDENTITY_NAME || null`, and
+          # app-builder-lib treats an explicit null as "do not sign",
+          # checked BEFORE it ever looks at CSC_LINK. The builder config now
+          # defaults the qualifier from the presence of the certificate, so
+          # this line states WHICH signer rather than being the only thing
+          # between this lane and an unsigned release. The value is a
+          # qualifier matched by substring, not a cert name.
           CSC_IDENTITY_NAME: Dankest, LLC
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}

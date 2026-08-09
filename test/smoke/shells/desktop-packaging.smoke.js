@@ -26,8 +26,9 @@
 //      - asar true; npmRebuild false; buildDependenciesFromSource false
 //        (all reproducibility-critical flags).
 //      - mac / win / linux targets present with expected shape.
-//      - Signing fields are env-var-driven (identity = null when
-//        CSC_IDENTITY_NAME unset).
+//      - Signing fields are env-var-driven: mac.identity is the team
+//        qualifier whenever a certificate was supplied, and null only
+//        when one was not .
 //      - publish is electron-updater generic provider pointing at
 //        downloads.xchain.io.
 //
@@ -105,7 +106,33 @@ for (const rel of [
 
 // --- 2. electron-builder config ---------------------------------------
 
-const config = requireCjs(join(desktop, 'electron-builder.config.cjs'));
+const configPath = join(desktop, 'electron-builder.config.cjs');
+
+// The signing fields are computed at module load from the environment, so a
+// cached copy tests whatever the shell happened to export. Every identity
+// assertion below names the environment it is asserting about.
+function loadConfig(env = {}) {
+    const saved = {};
+    for (const [k, v] of Object.entries(env)) {
+        saved[k] = process.env[k];
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+    }
+    delete requireCjs.cache[requireCjs.resolve(configPath)];
+    try {
+        return requireCjs(configPath);
+    } finally {
+        for (const [k, v] of Object.entries(saved)) {
+            if (v === undefined) delete process.env[k];
+            else process.env[k] = v;
+        }
+        delete requireCjs.cache[requireCjs.resolve(configPath)];
+    }
+}
+
+const NO_SIGNING_ENV = { CSC_IDENTITY_NAME: undefined, CSC_LINK: undefined, CSC_KEYCHAIN: undefined };
+
+const config = requireCjs(configPath);
 
 assert.equal(config.appId, 'io.xchain.wallet.desktop', 'appId is io.xchain.wallet.desktop');
 assert.equal(config.productName, 'XChain Wallet', 'productName is XChain Wallet');
@@ -131,10 +158,39 @@ assert.equal(
     'build/entitlements.mac.plist',
     'macOS entitlements point at build/entitlements.mac.plist',
 );
+// --- The direct-download signing identity  -------------------
+//
+// `mac.identity` was `CSC_IDENTITY_NAME || null`, and the only non-null
+// source of it anywhere was one env line in each of release.yml's two
+// Developer-ID steps. app-builder-lib's `macPackager.sign` tests
+// `qualifier === null` and returns BEFORE it looks at CSC_LINK and before
+// `notarizeIfProvided`, so deleting either line signed nothing, notarized
+// nothing, exited 0, and shipped correctly named installers that Gatekeeper
+// blocks on every user's machine.  guards the workflow lines; these
+// assert the config no longer depends on them.
 assert.equal(
-    config.mac.identity,
+    loadConfig(NO_SIGNING_ENV).mac.identity,
     null,
-    'mac.identity is null when CSC_IDENTITY_NAME unset: unsigned dev builds work without certs',
+    'mac.identity is null when no certificate was supplied: unsigned dev builds stay quiet',
+);
+assert.equal(
+    loadConfig({ ...NO_SIGNING_ENV, CSC_LINK: 'base64-p12' }).mac.identity,
+    'Dankest, LLC',
+    'a build handed a certificate via CSC_LINK signs under the team qualifier with no CSC_IDENTITY_NAME set at all',
+);
+assert.equal(
+    loadConfig({ ...NO_SIGNING_ENV, CSC_KEYCHAIN: '/tmp/xchain-devid.keychain' }).mac.identity,
+    'Dankest, LLC',
+    'a certificate pre-imported into a keychain resolves the same qualifier, for a local Developer-ID rehearsal',
+);
+assert.equal(
+    loadConfig({ ...NO_SIGNING_ENV, CSC_LINK: 'base64-p12', CSC_IDENTITY_NAME: 'Some Other Org' }).mac.identity,
+    'Some Other Org',
+    'CSC_IDENTITY_NAME still overrides the default for a differently-named signer',
+);
+assert.ok(
+    !/^Developer ID/.test(loadConfig({ ...NO_SIGNING_ENV, CSC_LINK: 'base64-p12' }).mac.identity),
+    'mac.identity is a qualifier, not a certificate name: `_findIdentity` matches it with line.includes()',
 );
 assert.ok(
     Array.isArray(config.mac.target) && config.mac.target.some((t) => t.target === 'dmg'),

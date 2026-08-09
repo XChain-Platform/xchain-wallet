@@ -102,10 +102,39 @@ const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 // value that matches both is the part they share, which is the team.
 //
 // It must also never be `null` or absent. `mas` config is
-// `deepAssign(mac, mas)`, `mac.identity` is null on any machine without
-// CSC_IDENTITY_NAME, and `macPackager.sign` returns on a null identity
-// BEFORE the step that builds the .pkg - silently, exit 0, no artifact.
-const MAS_IDENTITY = process.env.MAS_IDENTITY_NAME || process.env.CSC_IDENTITY_NAME || 'Dankest, LLC';
+// `deepAssign(mac, mas)`, `mac.identity` is null on any machine that was
+// handed no signing certificate, and `macPackager.sign` returns on a null
+// identity BEFORE the step that builds the .pkg - silently, exit 0, no
+// artifact. The store lane never inherits it, and defaults non-null even
+// with no signing environment at all, because a store build is never a
+// legitimately unsigned one.
+//
+// The team is one constant for both macOS channels: `Developer ID
+// Application: Dankest, LLC (829JG9YLH3)` and the two store certificates
+// share exactly this substring, and that shared part is the only value
+// `line.includes(qualifier)` matches across all of them.
+const TEAM_QUALIFIER = 'Dankest, LLC';
+const MAS_IDENTITY = process.env.MAS_IDENTITY_NAME || process.env.CSC_IDENTITY_NAME || TEAM_QUALIFIER;
+
+// Whether this build was handed a Developer ID certificate to sign with.
+// CSC_LINK is how release.yml supplies one; CSC_KEYCHAIN is how a local
+// Developer-ID rehearsal supplies one already imported into a keychain.
+const macSigningCertSupplied = Boolean(process.env.CSC_LINK || process.env.CSC_KEYCHAIN);
+
+// The direct-download qualifier, defaulted HERE rather than in the
+// workflow . This was `CSC_IDENTITY_NAME || null`, and the only
+// non-null source of it anywhere was one env line in each of release.yml's
+// two Developer-ID steps: `macPackager.sign` tests `qualifier === null`
+// before it looks at CSC_LINK and before notarization, so deleting either
+// line signed nothing, notarized nothing, exited 0, and shipped correctly
+// named installers that Gatekeeper blocks on every user's machine.
+//
+// Null stays the answer when no certificate was supplied, because that is
+// the dev-machine case and it must stay quiet: a non-null qualifier with no
+// matching certificate makes app-builder-lib shell out to `security
+// find-identity` and warn on every build. So the certificate itself is the
+// trigger, which is a thing the lane cannot lose without failing loudly.
+const MAC_IDENTITY = process.env.CSC_IDENTITY_NAME || (macSigningCertSupplied ? TEAM_QUALIFIER : null);
 
 // The Microsoft Store lane ( §15), opt-in for the same three
 // reasons as MAS. It needs a Partner-Center-assigned publisher identity
@@ -455,11 +484,11 @@ const config = {
             // gives the store no way to offer them anything.
             ...(buildMas ? [{ target: 'mas', arch: ['universal'] }] : []),
         ],
-        // Signing identity comes from CSC_LINK / CSC_KEY_PASSWORD
-        // (electron-builder picks these up automatically). If unset,
-        // build produces an unsigned .app: fine for dev, rejected on
-        // Gatekeeper-strict configs on user machines.
-        identity: process.env.CSC_IDENTITY_NAME || null,
+        // Signing identity, resolved at MAC_IDENTITY above: the team
+        // qualifier whenever a certificate was supplied, null only when one
+        // was not. A build with no certificate produces an unsigned .app,
+        // which is fine for dev and rejected by Gatekeeper on user machines.
+        identity: MAC_IDENTITY,
         // Notarization only runs when the Apple credentials are present.
         //
         // v26 changed this from an object to a BOOLEAN: the team id and
@@ -527,8 +556,8 @@ const config = {
         hardenedRuntime: false,
         // THE THIRD INSTANCE OF THE INHERITANCE TRAP, and the one that made
         // this lane produce nothing at all . Without this line the
-        // store build inherits `mac.identity`, which is null unless
-        // CSC_IDENTITY_NAME is set, and a null identity short-circuits
+        // store build inherits `mac.identity`, which is null on any machine
+        // holding no certificate, and a null identity short-circuits
         // signing before `createMasInstaller` - the only thing that emits a
         // .pkg. It does not fail: it logs "skipped macOS code signing" and
         // exits 0 with no artifact, which is why six days of "the lane is
