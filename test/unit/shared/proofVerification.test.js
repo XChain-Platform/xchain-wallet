@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     collectBalanceJobs,
+    reduceBalanceTrust,
     reduceBalanceVerdict,
 } from '../../../packages/core/src/shared/hooks/useProofVerification.js';
 
@@ -58,5 +59,19 @@ describe('reduceBalanceVerdict', () => {
 
     it('is unavailable when all are done but not all verified', () => {
         expect(reduceBalanceVerdict({ total: 2, done: 2, failed: 0, verified: 1 })).toBe('unavailable');
+    });
+});
+
+describe('reduceBalanceTrust', () => {
+    it('claims the pinned root only when every settled address used one', () => {
+        expect(reduceBalanceTrust({ done: 2, pinned: 2 })).toBe('pinned');
+    });
+
+    it('drops to the explorer tier if a single address fell through to it', () => {
+        expect(reduceBalanceTrust({ done: 2, pinned: 1 })).toBe('explorer');
+    });
+
+    it('is the explorer tier before anything has settled (never claim a root you have not used)', () => {
+        expect(reduceBalanceTrust({ done: 0, pinned: 0 })).toBe('explorer');
     });
 });

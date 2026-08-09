@@ -22,7 +22,7 @@ import {
 // surface. `lightImpl` is the verifyBalance/verifyAction stub; `explorer`
 // overrides baseUrl/port/coin. Passing `light: null` simulates an SDK that
 // cannot do SPV.
-function makeRegistry({ light, verifyBalance, verifyAction, explorer } = {}) {
+function makeRegistry({ light, verifyBalance, verifyAction, explorer, getPinnedCheckpoint } = {}) {
     const calls = [];
     const lightClient = light === null ? undefined : {
         verifyBalance: verifyBalance
@@ -31,6 +31,9 @@ function makeRegistry({ light, verifyBalance, verifyAction, explorer } = {}) {
         verifyAction: verifyAction
             ? async (opts) => { calls.push(['action', opts]); return verifyAction(opts); }
             : undefined,
+        // Present only when a test opts in, so the default registry models an
+        // SDK old enough to predate the accessor: the explorer tier.
+        ...(getPinnedCheckpoint ? { getPinnedCheckpoint } : {}),
     };
     const sdk = {
         light: lightClient,
@@ -52,7 +55,7 @@ describe('verifyAddressBalance (§7/§8)', () => {
             verifyBalance: () => ({ verified: true, amount: '5.5', height: 120, reason: null }),
         });
         const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
-        expect(res).toEqual({ status: 'verified', amount: '5.5', height: 120, reason: null });
+        expect(res).toEqual({ status: 'verified', amount: '5.5', height: 120, reason: null, trust: 'explorer' });
     });
 
     it('maps a proof-vs-amount contradiction to status=failed (the security alarm)', async () => {
@@ -103,7 +106,7 @@ describe('verifyAddressBalance (§7/§8)', () => {
     it('reports SPV_UNSUPPORTED when the SDK has no light client', async () => {
         const { registry } = makeRegistry({ light: null });
         const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
-        expect(res).toEqual({ status: 'unavailable', amount: null, height: null, reason: 'SPV_UNSUPPORTED' });
+        expect(res).toEqual({ status: 'unavailable', amount: null, height: null, reason: 'SPV_UNSUPPORTED', trust: 'explorer' });
     });
 
     it('passes the SDK explorer URL + coin through to the light client', async () => {
@@ -159,5 +162,121 @@ describe('verifyAddressAction (§7/§8)', () => {
         const { registry } = makeRegistry({ verifyBalance: () => ({ verified: true }) });
         const res = await verifyAddressAction({ sdkRegistry: registry, chainId: REQ.chainId, actionIndex: 42 });
         expect(res.reason).toBe('SPV_UNSUPPORTED');
+    });
+});
+
+// The pinned launch trust root (SPV spec D4). The tier is what makes a quorum
+// failure legible: with no pin the explorer picked the validator set and a miss
+// is ordinary degraded service, while with a pin the explorer served a
+// checkpoint outside the root we brought ourselves.
+describe('pinned trust root (SPV D4)', () => {
+    const PIN = { checkpoint: { block_index: 961000, state_root: 'ab'.repeat(32) }, validators: [{ pubkey: 'aa', weight: '100', source: 'aa' }] };
+
+    it('reports trust=explorer when nothing is pinned for the coin', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: true, amount: '1', height: 10 }),
+            getPinnedCheckpoint: () => null,
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.trust).toBe('explorer');
+    });
+
+    it('reports trust=pinned when the SDK registry pins this coin', async () => {
+        const seen = [];
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: true, amount: '1', height: 10 }),
+            getPinnedCheckpoint: (coin) => { seen.push(coin); return PIN; },
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.trust).toBe('pinned');
+        expect(seen).toEqual(['RBTC']);
+    });
+
+    it('escalates a quorum failure to failed on the pinned tier (checkpoint outside our root)', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: false, reason: 'CHECKPOINT_QUORUM_FAILED', height: 10 }),
+            getPinnedCheckpoint: () => PIN,
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.status).toBe('failed');
+        expect(res.reason).toBe('CHECKPOINT_QUORUM_FAILED');
+        expect(res.trust).toBe('pinned');
+    });
+
+    it('leaves the same quorum failure at unavailable on the explorer tier', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: false, reason: 'CHECKPOINT_QUORUM_FAILED', height: 10 }),
+            getPinnedCheckpoint: () => null,
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.status).toBe('unavailable');
+    });
+
+    it('does not escalate a pre-commitment checkpoint even when pinned', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: false, reason: 'CHECKPOINT_PRE_COMMITMENT' }),
+            getPinnedCheckpoint: () => PIN,
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.status).toBe('unavailable');
+        expect(res.trust).toBe('pinned');
+    });
+
+    it('escalates the pinned quorum failure on the action path too', async () => {
+        const { registry } = makeRegistry({
+            verifyAction: () => ({ verified: false, reason: 'CHECKPOINT_QUORUM_FAILED' }),
+            getPinnedCheckpoint: () => PIN,
+        });
+        const res = await verifyAddressAction({ sdkRegistry: registry, chainId: REQ.chainId, actionIndex: 7 });
+        expect(res.status).toBe('failed');
+        expect(res.trust).toBe('pinned');
+    });
+
+    it('forwards a caller-supplied resolver to the light client and trusts its answer', async () => {
+        const { registry, calls } = makeRegistry({
+            verifyBalance: () => ({ verified: true, amount: '1', height: 10 }),
+            getPinnedCheckpoint: () => null,
+        });
+        const mine = () => PIN;
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ, pinnedResolver: mine });
+        expect(res.trust).toBe('pinned');
+        expect(calls[0][1].pinnedResolver).toBe(mine);
+    });
+
+    it('does not forward a resolver when relying on the SDK registry (one copy, no drift)', async () => {
+        const { registry, calls } = makeRegistry({
+            verifyBalance: () => ({ verified: true, amount: '1', height: 10 }),
+            getPinnedCheckpoint: () => PIN,
+        });
+        await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(calls[0][1].pinnedResolver).toBeUndefined();
+    });
+
+    it('falls back to the explorer tier when a resolver throws (a broken pin is not a trust root)', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: false, reason: 'CHECKPOINT_QUORUM_FAILED' }),
+            getPinnedCheckpoint: () => { throw new Error('registry blew up'); },
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.trust).toBe('explorer');
+        expect(res.status).toBe('unavailable');
+    });
+
+    it('reports the explorer tier against an SDK too old to expose the registry', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: true, amount: '1', height: 10 }),
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.trust).toBe('explorer');
+    });
+
+    it('carries the tier on a transport failure so a caller never sees trust undefined', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => { throw new Error('LightClient: explorer returned HTTP 503'); },
+            getPinnedCheckpoint: () => PIN,
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.trust).toBe('pinned');
+        expect(res.status).toBe('unavailable');
     });
 });

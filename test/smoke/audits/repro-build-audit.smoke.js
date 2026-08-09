@@ -25,5 +25,5 @@ assert.equal(failed.length, 0,
     }`);
 
 console.log(
-    `OK: repro-build audit smoke (${results.length} rules pass: digest-pinned base + Node pin + locale pins + SOURCE_DATE_EPOCH wiring + frozen-lockfile + sha256 manifest + worktree isolation + asar + xz compression + Level-2 docs)`,
+    `OK: repro-build audit smoke (${results.length} rules pass: digest-pinned base + Node pin + locale pins + SOURCE_DATE_EPOCH wiring + frozen-lockfile + sha256 manifest + worktree isolation + the release lane cutting Linux in that same image with no host install + asar + xz compression + Level-2 docs)`,
 );

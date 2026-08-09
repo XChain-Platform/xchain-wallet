@@ -369,4 +369,121 @@ for (const pkg of ['extension', 'web']) {
     }
 }
 
+// --------------- home 5: the RELEASE LANE builds where the verifier does
+//
+// Everything above pinned Node for both sides, and the reproduction still
+// could not match a compiled file. Nothing pinned the C compiler.
+// `desktop-linux` was `runs-on: ubuntu-latest` with no container while the
+// reproduction builds in debian:bookworm-slim at a fixed digest, so
+// node-gyp compiled tiny-secp256k1 against a different gcc and glibc on
+// each side. Measured on the real v0.334.0 deb : 186 of 188 files
+// reproduced, and the two that did not were `secp256k1.node` and the asar
+// whose header embeds its hash.
+//
+// That is the same failure mode this whole file exists for, one layer down:
+// the protocol tells a verifier to read a mismatch as tampering, so an
+// unpinned toolchain does not make reproduction unavailable, it makes
+// reproduction accuse us. The generalisation the extension block already
+// learned applies again here - a pin is only worth the number of sides it
+// binds, and toolchain.json bound the lane's Node while the lane itself ran
+// outside the container entirely.
+//
+// The lane now calls reproduce.sh, so there is one container invocation
+// rather than two that can drift. These assertions are about the three ways
+// that can be undone while every other check in this file stays green.
+
+/**
+ * The block of `release.yml` belonging to one job, by indentation, with
+ * comment lines dropped.
+ *
+ * Comment-blind on purpose, the same way the extension block above is: the
+ * steps below explain the defect by naming it ("no host `pnpm install`"),
+ * and a naive substring search reads that documentation as the defect.
+ */
+function jobBlock(name) {
+    const lines = workflow.split('\n');
+    const start = lines.indexOf(`  ${name}:`);
+    assert.notEqual(start, -1, `release.yml defines a ${name} job`);
+    const out = [];
+    for (const line of lines.slice(start + 1)) {
+        if (/^ {2}\S/.test(line)) break;
+        if (/^\s*#/.test(line)) continue;
+        out.push(line);
+    }
+    return out.join('\n');
+}
+
+{
+    const linuxJob = jobBlock('desktop-linux');
+
+    // 1. The lane builds through the verifier's script, in the verifier's
+    //    image. Both halves are asserted: the call alone would pass if the
+    //    in-place switch were dropped, and reproduce.sh without it builds a
+    //    throwaway worktree it deletes, leaving the lane with no artifacts.
+    assert.match(linuxJob, /bash packages\/desktop\/scripts\/reproduce\.sh\b/,
+        'the desktop-linux job must cut its Linux artifacts through '
+        + 'packages/desktop/scripts/reproduce.sh, which builds inside the digest-pinned '
+        + 'image. A build on the bare runner compiles tiny-secp256k1 against the runner\'s '
+        + 'gcc and glibc, and secp256k1.node plus the asar carrying its hash then reproduce '
+        + 'to a diff the published protocol tells the verifier to read as tampering.');
+    assert.match(linuxJob, /XCHAIN_REPRODUCE_IN_PLACE:\s*'1'/,
+        'and it must pass XCHAIN_REPRODUCE_IN_PLACE=1. Without it reproduce.sh builds a '
+        + 'detached worktree and deletes it on exit, so the lane would upload nothing.');
+
+    assert.match(reproduceSh, /XCHAIN_REPRODUCE_IN_PLACE/,
+        'packages/desktop/scripts/reproduce.sh must implement the in-place mode the release '
+        + 'lane runs it in; the lane and the verifier share this file precisely so there is '
+        + 'no second copy of the container invocation to go stale.');
+
+    // 2. In-place drops the worktree, so it must re-earn what the worktree
+    //    guaranteed. A mode that will happily build a dirty tree is not a
+    //    reproduction of any commit, and it would be the release lane using
+    //    it.
+    for (const [guard, re] of [
+        ['refuse a ref that is not the checked-out HEAD',
+            /\$\{COMMIT_SHA\}"\s*!=\s*"\$\{HEAD_SHA\}"/],
+        ['refuse a checkout with uncommitted changes', /git status --porcelain/],
+    ]) {
+        assert.match(reproduceSh, re,
+            `reproduce.sh's in-place mode must ${guard}. It builds the checkout instead of a `
+            + 'detached worktree, so the two properties the worktree provided for free are '
+            + 'now assertions this file has to make itself.');
+    }
+
+    // 3. THE COMPILE IS AT INSTALL TIME. `npmRebuild: false` and
+    //    `buildDependenciesFromSource: false` mean electron-builder never
+    //    calls node-gyp - `pnpm install` does. So a host install anywhere in
+    //    this job hands the container host-compiled addons to package, and
+    //    the whole fix is undone with every other gate still green. This is
+    //    the most plausible way it gets reverted: adding one innocuous
+    //    install step back.
+    assert.doesNotMatch(linuxJob, /pnpm install/,
+        'the desktop-linux job runs `pnpm install` on the runner. The native addon is '
+        + 'compiled by node-gyp during INSTALL, not during packaging, so a host install '
+        + 'leaves host-compiled bytes for the container to package and the reproduction '
+        + 'fails on exactly the files it failed on before. The only install in this job is '
+        + 'the one build.sh runs inside the image.');
+
+    // 4. And nothing may repackage the reproduced artifacts on the host
+    //    afterwards. The Snap lane is the live example: snapcraft cannot run
+    //    in the image, so it runs here, and a full `--linux` build would
+    //    rewrite the AppImage and the deb in place with host bytes.
+    //    Narrowing it to the snap target is what keeps that from happening
+    //    the day the Snap credential lands.
+    const hostBuilds = linuxJob.split(/\n(?= {6}- )/)
+        .filter((step) => /dist --linux/.test(step));
+    for (const step of hostBuilds) {
+        const name = (/name: (.+)/.exec(step) || [, step.trim().split('\n')[0]])[1];
+        const targetsSnapOnly = /dist --linux snap\b/.test(step);
+        const isRehearsal = /STAGING_FEED|dist-staging/.test(step);
+        assert.ok(targetsSnapOnly || isRehearsal,
+            `the desktop-linux step "${name}" runs a full electron-builder Linux build on the `
+            + 'runner. It would rewrite the AppImage and the deb that the container just '
+            + 'produced, with bytes compiled against the runner\'s toolchain, and nothing '
+            + 'downstream can tell. A host build in this job is allowed only for the snap '
+            + '(snapcraft cannot run in the image, and the snap is outside the reproduce set) '
+            + 'or for the rehearsal variant, which writes to dist-staging and is never signed.');
+    }
+}
+
 console.log('reproducible-toolchain smoke: ok');

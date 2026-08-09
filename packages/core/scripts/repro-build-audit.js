@@ -22,11 +22,21 @@
 //   5. build.sh uses --frozen-lockfile on pnpm install.
 //   6. build.sh emits a SHA256 manifest (RELEASE_HASHES.txt).
 //   7. reproduce.sh derives SOURCE_DATE_EPOCH from the commit date.
-//   8. reproduce.sh uses a worktree (no in-place builds).
+//   8. reproduce.sh builds from a worktree, so a verifier's local edits are
+//      not an input. XCHAIN_REPRODUCE_IN_PLACE=1 is the one exception and it
+//      belongs to the release lane alone (rule 12); it re-earns what the
+//      worktree gave by refusing a dirty tree and any ref but HEAD.
 //   9. electron-builder.config.cjs sets `asar: true` (deterministic packing).
 //  10. electron-builder.config.cjs documents SOURCE_DATE_EPOCH usage.
 //  11. electron-builder.config.cjs pins AppImage compression + reproducible flags.
-//  12. The reproducible-builds doc documents the verification protocol.
+//  12. The release lane cuts its Linux artifacts through that same script and
+//      therefore that same image, and installs nothing on the runner first.
+//      Node was pinned for both sides and the C compiler was not, so the
+//      native addon and the asar embedding its hash could never reproduce
+//      (, measured as : 186 of 188 files matched). The compile
+//      happens during `pnpm install`, not during packaging, which is why a
+//      host install in that job is a rule here rather than a style note.
+//  13. The reproducible-builds doc documents the verification protocol.
 //      That doc left this repo in  and now lives in the sibling
 //      xchain-documentation checkout, published at
 //      https://docs.xchain.io/components/wallet/reproducible-builds. When the
@@ -42,6 +52,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const corePkg = join(here, '..');
 const wsRoot = join(corePkg, '..', '..');
 const desktop = join(wsRoot, 'packages', 'desktop');
+const releaseWorkflow = join(wsRoot, '.github', 'workflows', 'release.yml');
 // Overridable so a checkout with the sibling somewhere else can still gate.
 const docsRoot = process.env.XCHAIN_DOCS_ROOT || join(wsRoot, '..', 'xchain-documentation');
 const reproDocPath = join(docsRoot, 'components', 'wallet', 'reproducible-builds.md');
@@ -126,6 +137,24 @@ export function runReproBuildAudit() {
         ebCfg !== null && /compression:\s*['"]xz['"]/.test(ebCfg),
         'electron-builder config must pin AppImage compression to a deterministic algorithm'));
 
+    // The lane that CUTS the release, which was the side nothing checked.
+    // Comment lines are dropped first: the job documents this rule at
+    // length, and a substring search over its own explanation is a green
+    // that means nothing.
+    const linuxLane = desktopLinuxJob(readIfExists(releaseWorkflow));
+    out.push(rule('release-lane-builds-in-container',
+        linuxLane !== null && /bash packages\/desktop\/scripts\/reproduce\.sh/.test(linuxLane)
+            && /XCHAIN_REPRODUCE_IN_PLACE:\s*'1'/.test(linuxLane),
+        'the release workflow\'s desktop-linux job must build through '
+        + 'packages/desktop/scripts/reproduce.sh with XCHAIN_REPRODUCE_IN_PLACE=1, so the '
+        + 'release and the reproduction share one C toolchain and not merely one Node'));
+    out.push(rule('release-lane-installs-only-in-container',
+        linuxLane !== null && !/pnpm install/.test(linuxLane),
+        'the release workflow\'s desktop-linux job must not run pnpm install on the runner: '
+        + 'node-gyp compiles the native addon during INSTALL, so a host install hands the '
+        + 'container host-compiled bytes to package and the reproduction fails on exactly '
+        + 'the files it failed on before'));
+
     if (docs !== null) {
         out.push(rule('docs-mentions-level-2',
             /Level-2/i.test(docs),
@@ -140,6 +169,27 @@ export function runReproBuildAudit() {
 
 function rule(name, ok, detail) {
     return { rule: name, ok, detail };
+}
+
+/**
+ * The `desktop-linux` job of release.yml, comment lines removed.
+ *
+ * @param {string|null} workflow
+ * @returns {string|null} null when the workflow or the job is absent, which
+ *   the rules above report as a failure rather than skipping.
+ */
+function desktopLinuxJob(workflow) {
+    if (workflow === null) return null;
+    const lines = workflow.split('\n');
+    const start = lines.indexOf('  desktop-linux:');
+    if (start === -1) return null;
+    const out = [];
+    for (const line of lines.slice(start + 1)) {
+        if (/^ {2}\S/.test(line)) break;
+        if (/^\s*#/.test(line)) continue;
+        out.push(line);
+    }
+    return out.join('\n');
 }
 
 function readIfExists(path) {

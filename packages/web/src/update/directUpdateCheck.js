@@ -184,6 +184,11 @@ export function isUpdateCheckEnabled(storage = safeStorage()) {
 
 export const UPDATE_FEED_URL = FEED_URL;
 export const UPDATE_CHECK_INTERVAL_MS = CHECK_INTERVAL_MS;
+// Exported for the §7.5 direct-lane rehearsal . An oversized feed
+// makes this module return null, which a phone cannot tell apart from being
+// offline; the rehearsal has to be able to, so it needs the cap rather than
+// a second copy of the number.
+export const UPDATE_FEED_MAX_BYTES = MAX_FEED_BYTES;
 
 function safeStorage() {
     try {

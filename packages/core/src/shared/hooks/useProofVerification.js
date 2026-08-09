@@ -21,6 +21,12 @@
 // number); otherwise `unavailable` (thin replica / pre-commitment), and
 // `pending` while proofs are still in flight.
 //
+// Each verdict also carries the `trust` tier the proof was checked under
+// (`pinned` = an out-of-band launch trust root, `explorer` = the explorer
+// chose the validator set; see flows/verifyBalances.js). It rides along so a
+// badge can say WHICH root a green check rests on without a second round
+// trip; it is weakest-wins across the addresses on a row.
+//
 // The pure pieces (job collection, verdict reduction) are exported and
 // unit-tested directly; the hook just wires them to React state + the
 // concurrency pool.
@@ -55,6 +61,21 @@ export function collectBalanceJobs(balances) {
 }
 
 /**
+ * Reduce a per-row trust tier. A row spans several addresses, so it may only
+ * claim the pinned trust root if EVERY settled address verified against one;
+ * one address that fell through to the explorer's validator set decides the
+ * whole row. Addresses on a row share a chain and therefore a coin, so in
+ * practice they agree; the weakest-wins rule is what makes that an assumption
+ * the badge does not depend on.
+ *
+ * @param {{ done: number, pinned: number }} a
+ * @returns {'pinned' | 'explorer'}
+ */
+export function reduceBalanceTrust(a) {
+    return a.done > 0 && a.pinned === a.done ? 'pinned' : 'explorer';
+}
+
+/**
  * Reduce a per-row tally into a single verdict. Any failed address fails the
  * row; while proofs are still outstanding it is pending; otherwise it is
  * verified only when every address verified, else unavailable.
@@ -70,10 +91,10 @@ export function reduceBalanceVerdict(a) {
 
 /**
  * @param {object} params
- * @param {{ verifyBalance?: (req: { chainId: string, address: string, tick: string }) => Promise<{ status: string, reason: string | null }> }} params.messaging
+ * @param {{ verifyBalance?: (req: { chainId: string, address: string, tick: string }) => Promise<{ status: string, reason: string | null, trust?: string }> }} params.messaging
  * @param {Record<string, Array<{ address: string, balances?: { tokens?: Array<{ tick?: string }> } }>> | null} params.balances
  * @param {boolean} params.enabled
- * @returns {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }>}
+ * @returns {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null, trust: 'pinned' | 'explorer' }>}
  */
 export function useProofVerification({ messaging, balances, enabled }) {
     const [verifyMap, setVerifyMap] = useState(/** @type {Record<string, any>} */ ({}));
@@ -91,13 +112,13 @@ export function useProofVerification({ messaging, balances, enabled }) {
 
         let cancelled = false;
         // Seed every row as pending; tally per key as verdicts arrive.
-        const agg = new Map(); // key -> { total, done, failed, verified, lastReason }
+        const agg = new Map(); // key -> { total, done, failed, verified, pinned, lastReason }
         const seed = {};
         for (const j of jobs) {
-            const a = agg.get(j.key) || { total: 0, done: 0, failed: 0, verified: 0, lastReason: null };
+            const a = agg.get(j.key) || { total: 0, done: 0, failed: 0, verified: 0, pinned: 0, lastReason: null };
             a.total += 1;
             agg.set(j.key, a);
-            seed[j.key] = { status: 'pending', reason: null };
+            seed[j.key] = { status: 'pending', reason: null, trust: 'explorer' };
         }
         setVerifyMap(seed);
 
@@ -114,13 +135,18 @@ export function useProofVerification({ messaging, balances, enabled }) {
                 if (cancelled) return;
                 const a = agg.get(j.key);
                 a.done += 1;
+                if (res && res.trust === 'pinned') a.pinned += 1;
                 if (res && res.status === 'failed') a.failed += 1;
                 else if (res && res.status === 'verified') a.verified += 1;
                 else if (res && res.reason) a.lastReason = res.reason;
                 const status = reduceBalanceVerdict(a);
                 setVerifyMap((prev) => ({
                     ...prev,
-                    [j.key]: { status, reason: status === 'verified' || status === 'pending' ? null : a.lastReason },
+                    [j.key]: {
+                        status,
+                        reason: status === 'verified' || status === 'pending' ? null : a.lastReason,
+                        trust: reduceBalanceTrust(a),
+                    },
                 }));
             }
         };
@@ -143,10 +169,10 @@ export function useProofVerification({ messaging, balances, enabled }) {
  * checkpointed resolves to `unavailable` (reason `NOT_YET_CHECKPOINTED`).
  *
  * @param {object} params
- * @param {{ verifyAction?: (req: { chainId: string, actionIndex: string | number }) => Promise<{ status: string, reason: string | null }> }} params.messaging
+ * @param {{ verifyAction?: (req: { chainId: string, actionIndex: string | number }) => Promise<{ status: string, reason: string | null, trust?: string }> }} params.messaging
  * @param {Array<{ key: string, chainId: string, actionIndex: string | number }>} params.items
  * @param {boolean} params.enabled
- * @returns {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }>}
+ * @returns {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null, trust: 'pinned' | 'explorer' }>}
  */
 export function useActionProofVerification({ messaging, items, enabled }) {
     const [verifyMap, setVerifyMap] = useState(/** @type {Record<string, any>} */ ({}));
@@ -160,7 +186,7 @@ export function useActionProofVerification({ messaging, items, enabled }) {
         }
         let cancelled = false;
         const seed = {};
-        for (const it of list) seed[it.key] = { status: 'pending', reason: null };
+        for (const it of list) seed[it.key] = { status: 'pending', reason: null, trust: 'explorer' };
         setVerifyMap(seed);
 
         let cursor = 0;
@@ -177,7 +203,11 @@ export function useActionProofVerification({ messaging, items, enabled }) {
                 const status = res && res.status ? res.status : 'unavailable';
                 setVerifyMap((prev) => ({
                     ...prev,
-                    [it.key]: { status, reason: status === 'verified' ? null : (res && res.reason) || null },
+                    [it.key]: {
+                        status,
+                        reason: status === 'verified' ? null : (res && res.reason) || null,
+                        trust: res && res.trust === 'pinned' ? 'pinned' : 'explorer',
+                    },
                 }));
             }
         };

@@ -45,6 +45,35 @@
 // FAIL CLOSED, ALWAYS. Every path that cannot prove the update is
 // authentic returns { ok: false }. There is no "could not check, carry
 // on" branch, because that branch is the vulnerability restated.
+//
+// THE CHANNEL POINTER IS THE SECOND UNAUTHENTICATED INPUT .
+// Everything above authenticates the BYTES that were downloaded. Nothing
+// authenticated the file that decided which bytes to download: the
+// channel pointer (`stable-linux.yml` and friends) is fetched over TLS
+// Cloudflare terminates, and every value inside it is internally
+// consistent by construction, because whoever serves the binary serves
+// its sha512 too.  §7.2 accepted that residual for launch; this is
+// the deferred half.
+//
+// COVERED, NOT SIGNED-IN-PLACE, AND THE DIFFERENCE IS DELIBERATE. The
+// pointer is excluded from the K1-signed manifest on purpose
+// (`tools/release/lib.sh`): a §7.4 rollback re-points it to a PREVIOUS
+// release, so a manifest covering the pointer's own bytes would make
+// every legitimate rollback look like tampering. A pointer is anchored
+// instead by what it NAMES: every file it lists must appear in the
+// K1-signed manifest for the version it declares, and the file this
+// install actually downloaded must be one of them, at the sha512 the
+// pointer claims. That is the same test `tools/release/feed-sweep.mjs`
+// applies on the host as POINTER-UNCOVERED, moved to the one place that
+// can refuse an install rather than write a log line.
+//
+// WHAT IT BUYS, STATED HONESTLY. It does not remove the feed from the
+// TCB, and §7.2 never claimed a verifier would. It removes the pointer
+// from the set of inputs an attacker can author freely: a validly-hashed
+// pointer naming anything K1 did not sign for that version is refused
+// before install, so a feed-level attacker is confined to artifacts K1
+// signed. Version FREEZE (replaying an older genuinely-signed pointer)
+// is outside what any per-release signature can answer and stays open.
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -85,6 +114,7 @@ export const UPDATE_PINNED_PUBKEY_ARMORED = '-----BEGIN PGP PUBLIC KEY BLOCK----
 export const UPDATE_PINNED_FINGERPRINT = '1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7';
 
 const HEX64 = /^[0-9a-f]{64}$/;
+const HEX128 = /^[0-9a-f]{128}$/;
 const MANIFEST_LINE = /^([0-9a-f]{64}) {2}(.+)$/i;
 
 /**
@@ -198,6 +228,191 @@ function normalizeName(name) {
 }
 
 /**
+ * The channel pointer THIS build fetches, by electron-builder's rule.
+ *
+ * `<channel><osSuffix><archSuffix>.yml`, where osSuffix is empty on
+ * Windows, `-mac` on macOS and `-linux` on Linux, and archSuffix appears
+ * only on non-x64 Linux ( §7.1, pinned upstream by
+ * `tools/release/update-info.mjs`). The name is DERIVED rather than read
+ * off the feed on purpose: the whole point is to fetch the same pointer
+ * electron-updater fetched, and a name taken from anything the feed says
+ * would let the feed choose which pointer gets checked.
+ *
+ * Node spells armv7 `arm`, which is also upstream's suffix for it, so no
+ * special case is needed here; if that ever diverges the smoke test over
+ * the installed app-builder-lib is what says so.
+ *
+ * @param {Object} params
+ * @param {string} params.channel   e.g. 'stable'
+ * @param {string} params.platform  a `process.platform` value
+ * @param {string} params.arch      a `process.arch` value
+ * @returns {string|null} the pointer filename, or null if it cannot be named
+ */
+export function channelPointerName({ channel, platform, arch }) {
+    const ch = String(channel ?? '').trim();
+    // A channel with a slash or a dot segment would escape the feed
+    // directory when pasted into a URL. Refuse rather than sanitize.
+    if (!ch || !/^[A-Za-z0-9._-]+$/.test(ch) || ch.includes('..')) return null;
+
+    if (platform === 'win32') return `${ch}.yml`;
+    if (platform === 'darwin') return `${ch}-mac.yml`;
+    if (platform !== 'linux') return null;
+    if (arch === 'x64') return `${ch}-linux.yml`;
+    if (!arch || !/^[a-z0-9]+$/.test(String(arch))) return null;
+    return `${ch}-linux-${arch}.yml`;
+}
+
+/**
+ * Parse an electron-updater channel pointer into the claims that decide
+ * what gets installed.
+ *
+ * Ported from `tools/release/feed-sweep.mjs`'s `parseUpdateInfo` so the
+ * host-side sweep and the client-side gate read a pointer the same way;
+ * they are two applications of one rule, and a pointer that means
+ * different things to them is a hole in whichever reads it more loosely.
+ *
+ * The top-level `path:`/`sha512:` pair is recorded as another file entry
+ * when `files:` did not already name it, so editing the legacy pair alone
+ * cannot slip past a check that only walks `files:`.
+ *
+ * @param {string} pointerText
+ * @returns {{ ok: boolean, reason?: string, version?: string,
+ *             files?: Array<{ url: string, sha512: string }> }}
+ */
+export function parseChannelPointer(pointerText) {
+    if (typeof pointerText !== 'string' || !pointerText.trim()) {
+        return { ok: false, reason: 'empty channel pointer' };
+    }
+    const unquote = (v) => v.trim().replace(/^['"]|['"]$/g, '');
+    const files = [];
+    let version = '';
+    let current = null;
+
+    for (const rawLine of pointerText.split('\n')) {
+        const line = rawLine.replace(/\r$/, '');
+
+        const versionMatch = /^version:\s*(.+)$/.exec(line);
+        if (versionMatch) { version = unquote(versionMatch[1]); continue; }
+
+        const urlMatch = /^\s+-\s+url:\s*(.+)$/.exec(line);
+        if (urlMatch) {
+            current = { url: unquote(urlMatch[1]), sha512: '' };
+            files.push(current);
+            continue;
+        }
+        const nestedSha = /^\s+sha512:\s*(.+)$/.exec(line);
+        if (nestedSha && current) { current.sha512 = unquote(nestedSha[1]); continue; }
+
+        const pathMatch = /^path:\s*(.+)$/.exec(line);
+        if (pathMatch) {
+            current = null;
+            const name = unquote(pathMatch[1]);
+            if (!files.some((f) => f.url === name)) files.push({ url: name, sha512: '' });
+            continue;
+        }
+        const topSha = /^sha512:\s*(.+)$/.exec(line);
+        if (topSha) {
+            const last = files[files.length - 1];
+            if (last && !last.sha512) last.sha512 = unquote(topSha[1]);
+        }
+    }
+
+    if (!version) return { ok: false, reason: 'channel pointer declares no version' };
+    if (files.length === 0) return { ok: false, reason: 'channel pointer names no files' };
+    return { ok: true, version, files };
+}
+
+/**
+ * Anchor the channel pointer to the K1-signed manifest.
+ *
+ * Three questions, and a no to any one of them refuses the install:
+ *
+ *   1. Does this pointer describe the update in hand? Its `version` must
+ *      be the version being installed. This is what makes re-fetching the
+ *      pointer safe: a feed that serves the verifier a different pointer
+ *      than it served the checker gets a refusal, not a second opinion.
+ *   2. Does it name the file we downloaded, at the hash it claims? The
+ *      sha512 is recomputed from the bytes on disk rather than taken from
+ *      electron-updater, so this is a check and not a restatement.
+ *   3. Is EVERY file it names covered by the signed manifest? Not just
+ *      the one downloaded: a pointer listing an uncovered artifact
+ *      alongside a covered one has already been tampered with, and the
+ *      lane that would fetch the other entry is somebody else's install.
+ *
+ * @param {Object} params
+ * @param {string} params.pointerText     the pointer exactly as served
+ * @param {string} params.expectedVersion the version being installed, no leading `v`
+ * @param {string} params.artifactName    basename of the downloaded file
+ * @param {string} params.artifactSha512  its SHA-512, lowercase hex
+ * @param {Map<string,string>} params.entries  the signed manifest's entries
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export function verifyChannelPointer({
+    pointerText,
+    expectedVersion,
+    artifactName,
+    artifactSha512,
+    entries,
+}) {
+    const parsed = parseChannelPointer(pointerText);
+    if (!parsed.ok) return parsed;
+
+    const want = String(expectedVersion ?? '').trim().replace(/^v/, '');
+    if (!want) return { ok: false, reason: 'no version to check the channel pointer against' };
+    if (parsed.version !== want) {
+        return {
+            ok: false,
+            reason: `channel pointer describes ${parsed.version}, not ${want}`,
+        };
+    }
+
+    const name = normalizeName(artifactName);
+    const entry = parsed.files.find((f) => normalizeName(f.url) === name);
+    if (!entry) {
+        return { ok: false, reason: `channel pointer does not name ${name}` };
+    }
+    const actual = String(artifactSha512 ?? '').toLowerCase();
+    if (!HEX128.test(actual)) {
+        return { ok: false, reason: 'downloaded artifact hash is malformed' };
+    }
+    // Base64 is electron-updater's spelling for the pointer's sha512, and
+    // hex is everyone else's. Normalize to hex rather than accepting
+    // whichever form happens to compare equal.
+    const claimed = normalizeSha512(entry.sha512);
+    if (!claimed) return { ok: false, reason: `channel pointer carries no sha512 for ${name}` };
+    if (claimed !== actual) {
+        return { ok: false, reason: `channel pointer's sha512 for ${name} is not the file that arrived` };
+    }
+
+    for (const file of parsed.files) {
+        const listed = normalizeName(file.url);
+        if (!entries?.has?.(listed)) {
+            return {
+                ok: false,
+                reason: `channel pointer names ${listed}, which the signed manifest does not cover`,
+            };
+        }
+    }
+
+    return { ok: true };
+}
+
+/**
+ * A pointer's sha512 in lowercase hex, whatever form it was written in.
+ * Returns '' when it is neither of the two shapes, which the caller
+ * treats as absent rather than guessing.
+ */
+function normalizeSha512(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (HEX128.test(raw.toLowerCase())) return raw.toLowerCase();
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) return '';
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length !== 64) return '';
+    return decoded.toString('hex');
+}
+
+/**
  * The whole gate: is this downloaded file the artifact the maintainer
  * signed for this exact version?
  *
@@ -207,10 +422,58 @@ function normalizeName(name) {
  * @param {string} params.expectedTag     the version about to be installed, e.g. 'v0.334.0'
  * @param {string} params.artifactPath    path of the file electron-updater downloaded
  * @param {string} params.artifactSha256  its SHA-256, lowercase hex
+ * @param {string} params.artifactSha512  its SHA-512, lowercase hex (the pointer's spelling)
+ * @param {string} params.pointerText     the channel pointer exactly as served
  * @param {Object} [params.pinned]        { armoredKey, fingerprint } override, for tests
  * @returns {Promise<{ ok: boolean, reason?: string }>}
  */
 export async function verifyDownloadedUpdate({
+    manifestBytes,
+    armoredSignature,
+    expectedTag,
+    artifactPath,
+    artifactSha256,
+    artifactSha512,
+    pointerText,
+    pinned,
+}) {
+    const artifact = await verifyDownloadedArtifact({
+        manifestBytes, armoredSignature, expectedTag, artifactPath, artifactSha256, pinned,
+    });
+    if (!artifact.ok) return { ok: false, reason: artifact.reason };
+
+    // And last, the file that chose all of the above . Required,
+    // not optional: an absent pointer is the one an attacker serves, so
+    // treating "none supplied" as "nothing to check" would hand them the
+    // branch this whole file exists to remove.
+    return verifyChannelPointer({
+        pointerText,
+        expectedVersion: artifact.tag,
+        artifactName: artifact.artifactName,
+        artifactSha512,
+        entries: artifact.entries,
+    });
+}
+
+/**
+ * The artifact half, for the one update lane that has no channel pointer.
+ *
+ * ANDROID IS THAT LANE, and this export exists so its exemption is a
+ * named decision rather than an argument someone forgot. The direct APK
+ * lane is not electron-updater: there is no `<channel>*.yml` directing
+ * it, the signed manifest names the APK itself, and the OS re-checks the
+ * package signature at install. `verifyDownloadedUpdate` above is the
+ * desktop path and demands a pointer, so a desktop caller cannot reach
+ * this weaker gate by omission - it has to ask for it by name.
+ *
+ * Returns the parsed manifest alongside the verdict so the caller that
+ * DOES have a pointer is not parsing a verified manifest twice.
+ *
+ * @param {Object} params  as `verifyDownloadedUpdate`, minus the pointer
+ * @returns {Promise<{ ok: boolean, reason?: string, tag?: string,
+ *                     artifactName?: string, entries?: Map<string,string> }>}
+ */
+export async function verifyDownloadedArtifact({
     manifestBytes,
     armoredSignature,
     expectedTag,
@@ -262,13 +525,63 @@ export async function verifyDownloadedUpdate({
     if (!HEX64.test(actual)) return { ok: false, reason: 'artifact hash is malformed' };
     if (actual !== expected) return { ok: false, reason: `${name} does not match the signed hash` };
 
-    return { ok: true };
+    return { ok: true, tag, artifactName: name, entries: parsed.entries };
 }
 
 /** SHA-256 of a file on disk, lowercase hex. */
 export async function sha256File(path) {
     const buf = await readFile(path);
     return createHash('sha256').update(buf).digest('hex');
+}
+
+/** SHA-512 of a file on disk, lowercase hex. The pointer's spelling. */
+export async function sha512File(path) {
+    const buf = await readFile(path);
+    return createHash('sha512').update(buf).digest('hex');
+}
+
+/**
+ * Fetch the channel pointer this build follows.
+ *
+ * Same host, same lack of trust, same answer as `fetchReleaseManifest`:
+ * where the bytes came from decides nothing, what covers them decides
+ * everything. The URL is built from the derived pointer NAME rather than
+ * from anything the feed returned, so the feed cannot pick which pointer
+ * is examined.
+ *
+ * `cache: 'no-store'` because the feed serves pointers `no-store` (§7.3)
+ * and a cached copy here would be a second answer to a question that must
+ * have one. Passed as a plain option so a `fetch` stand-in that ignores
+ * it still behaves.
+ *
+ * @param {Object} params
+ * @param {string} params.feedBaseUrl  e.g. 'https://downloads.xchain.io/wallet/'
+ * @param {string} params.pointerName  e.g. 'stable-linux.yml'
+ * @param {typeof fetch} [params.fetch]
+ * @returns {Promise<{ ok: boolean, reason?: string, pointerText?: string }>}
+ */
+export async function fetchChannelPointer({ feedBaseUrl, pointerName, fetch: fetchImpl }) {
+    const doFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+    if (!doFetch) return { ok: false, reason: 'no fetch implementation available' };
+
+    const name = String(pointerName ?? '').trim();
+    if (!name || !/^[A-Za-z0-9._-]+\.yml$/.test(name) || name.includes('..')) {
+        return { ok: false, reason: 'this build cannot name its own channel pointer' };
+    }
+    const base = String(feedBaseUrl ?? '').replace(/\/*$/, '/');
+    if (!base.startsWith('https://')) {
+        return { ok: false, reason: 'update feed must be https' };
+    }
+
+    try {
+        const res = await doFetch(`${base}desktop/${name}`, { cache: 'no-store' });
+        if (!res?.ok) {
+            return { ok: false, reason: `channel pointer fetch failed (${res?.status ?? 'no response'})` };
+        }
+        return { ok: true, pointerText: await res.text() };
+    } catch (err) {
+        return { ok: false, reason: `channel pointer unreachable: ${String(err?.message || err)}` };
+    }
 }
 
 /**

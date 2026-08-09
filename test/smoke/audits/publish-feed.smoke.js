@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
-import { LANES } from '../../../tools/release/rehearsal-matrix.mjs';
+import { LANES, DIRECT_LANES } from '../../../tools/release/rehearsal-matrix.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -204,6 +204,12 @@ function writeRehearsalRecord(releaseDir, { manifestFrom = releaseDir, ...over }
         'requirement-reason': 'smoke fixture',
         'pinned-key-override': null,
         lanes: LANES.map((l) => ({ id: l.id, ok: true })),
+        // The direct lanes are demanded of any release carrying their
+        // artifact , and the Android case below carries one. Set
+        // unconditionally: a record naming them on a desktop-only release
+        // is never consulted for them, so there is nothing to condition on
+        // and one fixture shape fewer to get wrong.
+        'direct-lanes': DIRECT_LANES.map((l) => ({ id: l.id, ok: true })),
         swaps: [{ lane: 'mac-arm64', device: 'Mac Studio', from: '0.333.0' }],
         ...over,
     }, null, 2)}\n`);

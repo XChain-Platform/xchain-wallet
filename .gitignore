@@ -34,6 +34,15 @@
 .vscode/
 .idea/
 
+# Reproducible-build scratch. `.reproduce-home` is the container's HOME (the
+# pnpm store and the electron cache), which reproduce.sh points inside the
+# build tree so the run owns what it writes; `reproduce-out` is its default
+# manifest directory. Both used to land only in a throwaway worktree; in-place
+# mode  puts them in the checkout, which is where the release lane
+# now builds.
+/.reproduce-home/
+/reproduce-out/
+
 # Coverage output (c8/nyc) - generated, not source
 coverage/
 .nyc_output/

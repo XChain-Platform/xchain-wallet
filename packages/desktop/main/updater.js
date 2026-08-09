@@ -60,6 +60,16 @@
 // up later, because there is no second path at all. The UI can only ask
 // for the checked one.
 //
+// The channel pointer is verified there too (, the  §7.2
+// fast-follow). Proving the downloaded bytes were signed said nothing
+// about the file that CHOSE those bytes, and that file is authored by
+// whoever controls the feed. `downloadAndInstall()` re-fetches this
+// build's own pointer and refuses unless every artifact it names appears
+// in the K1-signed manifest for the version being installed, which is
+// `feed-sweep.mjs`'s POINTER-UNCOVERED check moved to the one place that
+// can stop an install. See `updateVerify.js` for what that does and does
+// not buy.
+//
 // Dev mode: if running from `electron .` against source (not a packaged
 // app), electron-updater's `isUpdaterActive()` returns false and we
 // no-op. That's the correct posture; we don't want dev builds
@@ -70,8 +80,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+    channelPointerName,
+    fetchChannelPointer,
     fetchReleaseManifest,
     sha256File,
+    sha512File,
     verifyDownloadedUpdate,
 } from './updateVerify.js';
 
@@ -181,6 +194,57 @@ export function resolveFeedBaseUrl({
     } catch {
         return UPDATE_FEED_BASE_URL;
     }
+}
+
+/** The channel baked into this build, per electron-builder's default. */
+export const UPDATE_DEFAULT_CHANNEL = 'stable';
+
+/**
+ * Which channel this BUILD follows, read from the same baked
+ * `app-update.yml` the feed URL comes from.
+ *
+ * Read rather than assumed for the reason `resolveFeedBaseUrl` is: a §7.5
+ * rehearsal variant carries `channel: staging`, and a verifier that
+ * hardcoded `stable` would fetch the production pointer to check a
+ * staging update against, then refuse every rehearsal for a reason that
+ * looks like a broken updater.
+ *
+ * @param {Object} [opts]
+ * @param {string} [opts.resourcesPath]
+ * @param {(p: string, enc: string) => string} [opts.readFile]
+ * @returns {string}
+ */
+export function resolveChannel({
+    resourcesPath = process.resourcesPath,
+    readFile = readFileSync,
+} = {}) {
+    if (!resourcesPath) return UPDATE_DEFAULT_CHANNEL;
+    try {
+        const text = readFile(join(resourcesPath, 'app-update.yml'), 'utf8');
+        const match = /^channel:[ \t]*([^\n]*)$/m.exec(text);
+        if (!match) return UPDATE_DEFAULT_CHANNEL;
+        const channel = match[1].trim().replace(/^['"]|['"]$/g, '');
+        return channel || UPDATE_DEFAULT_CHANNEL;
+    } catch {
+        return UPDATE_DEFAULT_CHANNEL;
+    }
+}
+
+/**
+ * The channel pointer this running install fetches its updates from.
+ *
+ * Derived from the baked channel plus the platform and arch the process
+ * IS, never from anything the feed returned. See `channelPointerName`.
+ *
+ * @param {Object} [opts]
+ * @returns {string|null}
+ */
+export function resolvePointerName({
+    channel = resolveChannel(),
+    platform = process.platform,
+    arch = process.arch,
+} = {}) {
+    return channelPointerName({ channel, platform, arch });
 }
 
 /**
@@ -312,6 +376,7 @@ export function selectUpdater(mod, {
  * @param {() => Promise<any>} [opts.loader]  dynamic-import `electron-updater`; injectable for tests
  * @param {(event: UpdaterEvent) => void} opts.onEvent   forwards updater events (the caller typically relays to the renderer)
  * @param {Object} [opts.select]  overrides for `selectUpdater` (platform/env/resourcesPath/readFile); tests only
+ * @param {string|null} [opts.pointerName]  the channel pointer to anchor against; tests only
  * @returns {Promise<{ checkForUpdates: () => Promise<void>, isActive: boolean }>}
  */
 export async function attachUpdater({
@@ -321,6 +386,7 @@ export async function attachUpdater({
     fetchImpl,
     pinned,
     select,
+    pointerName = resolvePointerName(),
 }) {
     if (typeof onEvent !== 'function') {
         throw new Error('attachUpdater: onEvent must be a function');
@@ -526,13 +592,28 @@ export async function attachUpdater({
                 });
                 if (!fetched.ok) return reject(fetched.reason);
 
+                // The pointer that chose this download, re-fetched so it
+                // can be anchored to the signed manifest . Fetched
+                // rather than remembered because electron-updater keeps its
+                // parsed UpdateInfo and not the bytes, and a paraphrase is
+                // not the thing that was served. A feed that answers with a
+                // DIFFERENT pointer here does not get a second opinion: the
+                // version check inside the gate refuses the mismatch.
+                const pointer = await fetchChannelPointer({
+                    feedBaseUrl, pointerName, fetch: fetchImpl,
+                });
+                if (!pointer.ok) return reject(pointer.reason);
+
                 const artifactSha256 = await sha256File(artifactPath);
+                const artifactSha512 = await sha512File(artifactPath);
                 const verdict = await verifyDownloadedUpdate({
                     manifestBytes: fetched.manifestBytes,
                     armoredSignature: fetched.armoredSignature,
                     expectedTag: tag,
                     artifactPath,
                     artifactSha256,
+                    artifactSha512,
+                    pointerText: pointer.pointerText,
                     ...(pinned === undefined ? {} : { pinned }),
                 });
                 if (!verdict.ok) return reject(verdict.reason);

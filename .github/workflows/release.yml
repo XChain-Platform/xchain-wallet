@@ -315,15 +315,49 @@ jobs:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
         run: corepack enable
+      # No `cache: pnpm` and no host `pnpm install` in this job, and both
+      # absences are load-bearing - see the build step below. Host Node is
+      # still installed because the gates further down (update-info.mjs) run
+      # on the runner, and it is the same pin for the same reason.
       - uses: actions/setup-node@v4
         with:
           node-version: 22.23.2
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
-      - name: Build desktop (linux x64 + arm64)
-        run: pnpm -C packages/desktop dist --linux --x64 --arm64
+      # THE LINUX ARTIFACTS ARE BUILT IN THE VERIFIER'S OWN CONTAINER, BY THE
+      # VERIFIER'S OWN SCRIPT , so the two sides share one C
+      # toolchain and not merely one Node.
+      #
+      # This job used to build straight on ubuntu-latest.
+      # tools/release/toolchain.json pinned Node 22.23.2 for both sides and
+      # both really used it, but nothing pinned the C compiler: the
+      # reproduction builds in debian:bookworm-slim at a fixed digest, so
+      # node-gyp compiled tiny-secp256k1 against a different gcc and glibc
+      # here than there. Measured at v0.334.0 : 186 of the deb's 188
+      # files reproduced, and the two that did not were `secp256k1.node` and
+      # the asar whose header embeds its hash. The published protocol tells a
+      # verifier to read a mismatch as possible supply-chain tampering, so the
+      # cost of that gap was our own release accusing us, for every compiled
+      # file, at every tag.
+      #
+      # WHY A SCRIPT AND NOT `container:` ON THE JOB. A job-level container
+      # would still have to install the toolchain in YAML (the apt set, the
+      # Node tarball, its sha256), which is a second copy of the Dockerfile of
+      # exactly the kind this repo's release tooling keeps finding stale.
+      # Calling reproduce.sh means the release is cut by the same code path a
+      # third party runs, and there is nothing left to keep in sync.
+      #
+      # THE COMPILE HAPPENS AT INSTALL TIME, NOT AT PACKAGE TIME.
+      # electron-builder is configured `npmRebuild: false` /
+      # `buildDependenciesFromSource: false`, so it never invokes node-gyp;
+      # `pnpm install` does. A host install before this step would leave
+      # host-compiled addons for the container to package, and the fix would
+      # be undone silently with every gate still green. That is why the
+      # in-container install is the only install in this job.
+      - name: Build desktop (linux x64 + arm64) in the pinned container
+        env:
+          XCHAIN_REPRODUCE_IN_PLACE: '1'
+        run: bash packages/desktop/scripts/reproduce.sh HEAD "${RUNNER_TEMP}/desktop-linux-repro"
       # The Snap Store package (§16), the THIRD Linux channel and a
       # committed goal since 2026-08-03 . Same gap this workflow
       # closed for MAS and AppX: the target exists behind XCHAIN_BUILD_SNAP=1
@@ -387,11 +421,22 @@ jobs:
             sudo iptables -I DOCKER-USER -i lxdbr0 -j ACCEPT
             sudo iptables -I DOCKER-USER -o lxdbr0 -j ACCEPT
           fi
+      #
+      # `--linux snap` NARROWS THE TARGET, AND THAT IS NOT TIDINESS
+      # . This step runs on the host, because snapcraft and LXD
+      # cannot run inside the reproduce image, and it runs AFTER the
+      # container build that produced the AppImage and the deb. Left as a
+      # full `--linux` build it would repackage those two on the host and
+      # overwrite the container's bytes in place - re-opening the exact gap
+      # the step above closes, with no gate anywhere able to see it, the
+      # moment the Snap credential lands. The snap itself is outside the
+      # reproduce set (§6 step 3 reproduces the AppImage and the deb), so
+      # building it on the host costs nothing that is claimed of it.
       - name: Build the Snap Store package (opt-in, §16)
         if: env.SNAP_CSC_LINK != ''
         env:
           XCHAIN_BUILD_SNAP: '1'
-        run: pnpm -C packages/desktop dist --linux --x64 --arm64
+        run: pnpm -C packages/desktop dist --linux snap --x64 --arm64
       - name: Dev-mock gate
         run: bash tools/build-reproduce/check-no-dev-mock.sh
       # Blockmaps are delta-update metadata and differential updates are a
@@ -435,6 +480,11 @@ jobs:
       #
       # Uploaded under its own artifact name and NEVER into the release
       # staging directory, so it cannot reach RELEASE_HASHES or the feed.
+      #
+      # Host-built on purpose, unlike the release artifacts above .
+      # Nothing publishes a pre-signing hash for a rehearsal build, so there
+      # is no reproduction for its C toolchain to break; and it writes to
+      # dist-staging, so it cannot touch what the container produced.
       - name: Build the rehearsal variant (staging feed)
         if: env.STAGING_FEED != ''
         env:

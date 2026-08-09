@@ -41,6 +41,9 @@ import {
     UPDATE_FEED_BASE_URL,
     manifestBaseFromFeedUrl,
     resolveFeedBaseUrl,
+    resolveChannel,
+    resolvePointerName,
+    UPDATE_DEFAULT_CHANNEL,
 } from '../../../packages/desktop/main/updater.js';
 
 const PROD_FEED = 'https://downloads.xchain.io/wallet/desktop/';
@@ -136,5 +139,60 @@ describe('resolveFeedBaseUrl', () => {
         const readFile = bundleWith('provider: generic\n  url: https://evil.test/\nchannel: stable\n');
         expect(resolveFeedBaseUrl({ resourcesPath: '/app/Resources', readFile }))
             .toBe(UPDATE_FEED_BASE_URL);
+    });
+});
+
+// : the same question one file over. Which channel POINTER does an
+// installed build anchor its update against? Read from the same baked
+// `app-update.yml` and for the same reason: a §7.5 rehearsal build follows
+// `channel: staging`, and a verifier that assumed `stable` would fetch the
+// production pointer to check a staging update against, then refuse every
+// rehearsal in a way that reads as a broken updater.
+
+describe('resolveChannel', () => {
+    it('reads the channel the build was packaged with', () => {
+        const readFile = bundleWith(`provider: generic\nurl: ${STAGING_FEED}\nchannel: staging\n`);
+        expect(resolveChannel({ resourcesPath: '/app/Resources', readFile })).toBe('staging');
+    });
+
+    it('falls back to stable when there is no packaged app-update.yml', () => {
+        expect(resolveChannel({ resourcesPath: undefined, readFile: () => '' }))
+            .toBe(UPDATE_DEFAULT_CHANNEL);
+        expect(resolveChannel({
+            resourcesPath: '/app/Resources',
+            readFile: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+        })).toBe(UPDATE_DEFAULT_CHANNEL);
+    });
+
+    it('falls back on a missing or empty channel line rather than returning empty', () => {
+        expect(resolveChannel({
+            resourcesPath: '/app/Resources',
+            readFile: bundleWith(`provider: generic\nurl: ${PROD_FEED}\n`),
+        })).toBe(UPDATE_DEFAULT_CHANNEL);
+        expect(resolveChannel({
+            resourcesPath: '/app/Resources',
+            readFile: bundleWith('channel:   \n'),
+        })).toBe(UPDATE_DEFAULT_CHANNEL);
+    });
+
+    it('is not fooled by an indented channel key', () => {
+        expect(resolveChannel({
+            resourcesPath: '/app/Resources',
+            readFile: bundleWith('provider: generic\n  channel: beta\n'),
+        })).toBe(UPDATE_DEFAULT_CHANNEL);
+    });
+});
+
+describe('resolvePointerName', () => {
+    it('names this lane\'s pointer from the baked channel and the running arch', () => {
+        expect(resolvePointerName({ channel: 'stable', platform: 'linux', arch: 'x64' }))
+            .toBe('stable-linux.yml');
+        expect(resolvePointerName({ channel: 'staging', platform: 'linux', arch: 'arm64' }))
+            .toBe('staging-linux-arm64.yml');
+    });
+
+    it('returns null on a platform with no pointer, so the gate refuses rather than guesses', () => {
+        expect(resolvePointerName({ channel: 'stable', platform: 'freebsd', arch: 'x64' }))
+            .toBeNull();
     });
 });

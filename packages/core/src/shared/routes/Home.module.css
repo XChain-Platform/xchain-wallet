@@ -123,14 +123,18 @@
 }
 
 /* Quick-actions row sits between the total-balance hero and the
-   tab strip. Send / Receive / Swap / Buy. Always 4 equal columns
-   regardless of shell. The HomeTabs wrap is a flex column with
-   `gap: var(--xc-space-3)`; negative top-margin shrinks the hero→
-   actions gap to match the inter-button gap so the row reads as a
-   single visual unit attached to the hero. */
+   tab strip. Send / Receive / Exchange / More, one equal column each.
+   Sized by child count rather than a fixed 4, because a store build
+   drops Exchange  and can drop More too , and a
+   fixed 4-column track left the row hanging off the leading edge.
+   The HomeTabs wrap is a flex column with `gap: var(--xc-space-3)`;
+   negative top-margin shrinks the hero→actions gap to match the
+   inter-button gap so the row reads as a single visual unit attached
+   to the hero. */
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: var(--xc-space-2);
     margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
 }

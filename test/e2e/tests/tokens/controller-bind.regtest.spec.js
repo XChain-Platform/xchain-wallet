@@ -678,18 +678,21 @@ async function bindAddressController(page, source, contractIndex) {
     expect(String(bound.action), 'an address controller bind rides as an ADDRESS v1').toBe('ADDRESS');
     expect(String(bound.source), 'the chain credits the bind to a different address').toBe(source);
 
-    // NO STATUS ASSERTION HERE, and that is D-154 rather than an omission: an
-    // ADDRESS v1 has no readable verdict. The explorer's ADDRESS action detail
-    // INNER JOINs the `addresses` preferences table, which a v1 deliberately
-    // never writes (xchain-indexer address.js: "format 1 writes
-    // address_controllers and must NOT touch the preferences row"), so the
-    // endpoint serves a stub with no `status` and none of the binding's own
-    // fields. Worse, an INVALID v1 persists nothing at all - the verdict exists
-    // only in a log line - so a refused bind is indistinguishable from one still
-    // being processed.
-    // The EFFECT is observable, so that is what this asserts: the binding
-    // appearing on the address is the only proof of acceptance a client can get
-    // today, and a refusal shows up here as this wait timing out.
+    // NO STATUS ASSERTION HERE, and that is D-154 rather than an omission: on this
+    // venue an ADDRESS v1 has no readable verdict. The explorer's ADDRESS action
+    // detail INNER JOINed the `addresses` preferences table, which a v1 never
+    // wrote, so the endpoint served a stub with no `status` and none of the
+    // binding's own fields; worse, an INVALID v1 persisted nothing at all, so a
+    // refused bind was indistinguishable from one still being processed.
+    // FIXED IN CODE under : the handler is format-aware and reads
+    // address_controllers, and the indexer writes an audit row for every ADDRESS
+    // action, refused ones included. This venue still runs the pre-fix images
+    // over a pre-fix index, so the assertion turns on only once the regtest
+    // explorer and indexer are rebuilt and replayed.
+    // The EFFECT is observable either way, so that is what this asserts: the
+    // binding appearing on the address is the only proof of acceptance a client
+    // gets on this venue today, and a refusal shows up here as this wait
+    // timing out.
     const live = await waitForAddressBindings(
         source,
         (rows) => rows.some((r) => r.action_class === 'transfer'),

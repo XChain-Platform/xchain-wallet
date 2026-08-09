@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -185,6 +185,23 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             window.removeEventListener('keydown', onKey);
         };
     }, [homeMoreOpen]);
+    // : the overflow menu's entries as data, so an empty list can
+    // drop the "More" button itself. Every entry it holds today is
+    // DEX-gated, so a store build  wires none and used to open
+    // the menu onto a dead "No additional actions" row. A future non-DEX
+    // entry appends here and keeps More alive on its own.
+    const homeMoreActions = useMemo(() => {
+        const out = [];
+        if (onSwap) {
+            out.push({
+                id: 'swap',
+                label: 'Swap',
+                icon: <Icon.SwapIcon />,
+                onSelect: onSwap,
+            });
+        }
+        return out;
+    }, [onSwap]);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -873,44 +890,44 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                         <span>Exchange</span>
                                     </button>
                                 ) : null}
-                                <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
-                                    <button
-                                        type="button"
-                                        className={styles.quickAction}
-                                        aria-haspopup="menu"
-                                        aria-expanded={homeMoreOpen}
-                                        onClick={() => setHomeMoreOpen((o) => !o)}
-                                    >
-                                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                        <span>More</span>
-                                    </button>
-                                    {homeMoreOpen ? (
-                                        <div className={styles.quickActionMoreMenu} role="menu">
-                                            {onSwap ? (
-                                                <button
-                                                    type="button"
-                                                    role="menuitem"
-                                                    className={styles.quickActionMoreItem}
-                                                    onClick={() => { setHomeMoreOpen(false); onSwap(); }}
-                                                >
-                                                    <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                        <Icon.SwapIcon />
-                                                    </span>
-                                                    <span>Swap</span>
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    role="menuitem"
-                                                    className={styles.quickActionMoreItem}
-                                                    disabled
-                                                >
-                                                    <span>No additional actions</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                    ) : null}
-                                </div>
+                                {/* Absent, not greyed and not empty, when the
+                                    list is empty: a "More" that opens onto
+                                    nothing is a dead control on the primary
+                                    surface . */}
+                                {homeMoreActions.length > 0 ? (
+                                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                                        <button
+                                            type="button"
+                                            className={styles.quickAction}
+                                            aria-haspopup="menu"
+                                            aria-expanded={homeMoreOpen}
+                                            onClick={() => setHomeMoreOpen((o) => !o)}
+                                        >
+                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                                            <span>More</span>
+                                        </button>
+                                        {homeMoreOpen ? (
+                                            <div className={styles.quickActionMoreMenu} role="menu">
+                                                {homeMoreActions.map((action) => (
+                                                    <button
+                                                        key={action.id}
+                                                        type="button"
+                                                        role="menuitem"
+                                                        className={styles.quickActionMoreItem}
+                                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
+                                                    >
+                                                        {action.icon ? (
+                                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                                                {action.icon}
+                                                            </span>
+                                                        ) : null}
+                                                        <span>{action.label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ) : null}
                             </div>
                         )}
                     />

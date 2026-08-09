@@ -181,6 +181,94 @@ export const LANES = [
 ];
 
 /**
+ * @typedef {Object} DirectLane
+ * @property {string} id        stable identifier, used in records
+ * @property {string} os        'android' (the only such lane today)
+ * @property {string} arch      'universal': one APK serves every ABI
+ * @property {string} format    the artifact a user installs by hand
+ * @property {string} feed      the feed path, relative to the feed base
+ * @property {string} client    the shipped module that reads that feed
+ * @property {string|null} device  named smoke hardware (DD-A), or null
+ * @property {string} [note]
+ */
+
+/**
+ * The DIRECT lanes: install channels that receive update INFORMATION and
+ * no installer .
+ *
+ * WHY THESE ARE NOT IN `LANES`. Everything above is an electron-updater
+ * lane, and `probeLane` is written to that shape: a yml pointer, a
+ * filename-matching selection rule, a download the app performs, a swap
+ * the app performs. The direct APK has none of those. Its feed is a
+ * one-field JSON document, it names no artifact, and nothing is ever
+ * downloaded by the app. Folding it into `LANES` would either make every
+ * desktop consumer special-case it or make `assertRecord` demand an
+ * Android result of every desktop release, so it is a separate set with
+ * its own probe (`probeDirectLane`) and its own gate.
+ *
+ * THAT SEPARATION IS EXACTLY HOW IT WENT UNREHEARSED. §7.5 was written
+ * around electron-updater, so "the update lanes" meant `LANES`, and the
+ * one shipped channel with a hand-rolled feed was not in the list that
+ * the word "every" ranged over. `publish.sh` demanded a rehearsal record
+ * of every production publish, which read as coverage; it was a desktop
+ * gate standing in front of an Android feed it could not have probed.
+ *
+ * WHAT A DIRECT-LANE REHEARSAL IS, and it has three halves rather than
+ * the desktop two:
+ *
+ *   feed + client      Does the published `latest.json` parse under the
+ *                      SHIPPED parser, name this release, and drive the
+ *                      SHIPPED client to the right answer in both
+ *                      directions - silence for an install already on
+ *                      this version, a notice naming it for an install
+ *                      on the previous one? A property of the feed plus
+ *                      the client bytes, so no device is needed.
+ *
+ *   destination        The notice tells a user to go and download the
+ *                      APK. That APK has to exist beside the feed and be
+ *                      covered by the K1-signed manifest for this tag,
+ *                      or the notice is an instruction to nowhere. Also
+ *                      feed-side.
+ *
+ *   install over       Whether the downloaded APK installs OVER the one
+ *                      already on the device. This is the half that
+ *                      needs hardware, and it is not the desktop swap
+ *                      wearing a different hat: Android refuses an
+ *                      update signed by a different key
+ *                      (INSTALL_FAILED_UPDATE_INCOMPATIBLE), and the
+ *                      only way out is an uninstall, which destroys the
+ *                      vault. A key discontinuity is invisible to every
+ *                      feed-side check here and is unrecoverable for the
+ *                      user, which is why the hardware half is not
+ *                      optional once a device exists to run it on.
+ *
+ * `device: null` means DD-A - which machine watches the install-over -
+ * is unanswered, the Android analogue of DD4. `attest` refuses the lane
+ * while it is null rather than accepting an unlocated claim, and
+ * `assertRecord` says the swap half is unrehearsed IN THOSE WORDS rather
+ * than passing quietly. Naming a device here is what arms the
+ * requirement; nothing else has to change.
+ */
+/** @type {DirectLane[]} */
+export const DIRECT_LANES = [
+    {
+        id: 'android-direct',
+        os: 'android',
+        arch: 'universal',
+        format: 'apk',
+        feed: 'android/latest.json',
+        client: 'packages/web/src/update/directUpdateCheck.js',
+        device: null,
+        note: 'The sideloaded APK from downloads.xchain.io. A Play install of the same '
+            + 'bytes updates itself and is deliberately NOT a lane: it is told nothing, '
+            + 'which is what test/unit/mobile/directUpdateLane.test.js holds in place.',
+    },
+];
+
+/** Every lane that receives updates, in either shape. */
+export const ALL_LANES = [...LANES, ...DIRECT_LANES];
+
+/**
  * The Linux artifact formats we ship, mapped to whether electron-updater
  * has an updater for them.
  *
@@ -231,7 +319,12 @@ export const ALL_OS_TRIGGER_PATHS = [
 
 /** @param {string} id */
 export function laneById(id) {
-    return LANES.find((l) => l.id === id) ?? null;
+    return ALL_LANES.find((l) => l.id === id) ?? null;
+}
+
+/** Is this lane one of the hand-rolled-feed lanes rather than an electron-updater one? */
+export function isDirectLane(id) {
+    return DIRECT_LANES.some((l) => l.id === id);
 }
 
 /** Lanes grouped by OS, for the "at least one OS" requirement. */
@@ -254,8 +347,8 @@ export function lanesByOs() {
 // So direct invocation says what the module is and prints the matrix, which is
 // the useful thing to see when you are deciding which lanes a release has to
 // rehearse. It is read-only: no argument makes this file do work.
-const USAGE = `rehearsal-matrix.mjs - the shipped desktop update lanes, and what each one
-is smoked on ( §2, §7.5, DD4).
+const USAGE = `rehearsal-matrix.mjs - the shipped update lanes, and what each one is
+smoked on ( §2, §7.5, DD4;  for the direct lane).
 
 Usage:
   node tools/release/rehearsal-matrix.mjs           # print the lane table
@@ -267,12 +360,20 @@ imported by rehearse.mjs, by drills/deb-update-swap.mjs and by the smokes
 that hold the table to what electron-updater actually exports. Printing is
 the only thing it does when run.
 
-A "lane" is an OS/arch pair that RECEIVES updates, plus one artifact format
-electron-updater can swap in place. The dmg and the Windows zip are shipped
-install formats with no auto-update path, so they are not lanes.
+Two kinds of lane, and they are rehearsed by different probes:
 
-Exports: LANES, LINUX_FORMAT_UPDATE_SUPPORT, ALL_OS_TRIGGER_PATHS,
-laneById(id), lanesByOs().
+  LANES         an OS/arch pair that receives updates, plus one artifact
+                format electron-updater can swap in place. The dmg and the
+                Windows zip are shipped install formats with no auto-update
+                path, so they are not lanes.
+
+  DIRECT_LANES  an install channel that receives update INFORMATION and no
+                installer: the sideloaded Android APK, whose latest.json
+                feed the shipped client reads and whose install-over the
+                user performs by hand.
+
+Exports: LANES, DIRECT_LANES, ALL_LANES, LINUX_FORMAT_UPDATE_SUPPORT,
+ALL_OS_TRIGGER_PATHS, laneById(id), isDirectLane(id), lanesByOs().
 `;
 
 if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
@@ -281,17 +382,26 @@ if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
         process.stdout.write(USAGE);
     } else if (argv.includes('--json')) {
         process.stdout.write(`${JSON.stringify(
-            { lanes: LANES, linuxFormats: LINUX_FORMAT_UPDATE_SUPPORT, allOsTriggerPaths: ALL_OS_TRIGGER_PATHS },
+            {
+                lanes: LANES,
+                directLanes: DIRECT_LANES,
+                linuxFormats: LINUX_FORMAT_UPDATE_SUPPORT,
+                allOsTriggerPaths: ALL_OS_TRIGGER_PATHS,
+            },
             null,
             2,
         )}\n`);
     } else {
-        process.stdout.write(`${LANES.length} shipped update lanes ( §2)\n\n`);
-        const w = Math.max(...LANES.map((l) => l.id.length));
-        for (const lane of LANES) {
-            process.stdout.write(`  ${lane.id.padEnd(w)}  ${lane.os}/${lane.arch} `
-                + `${lane.format}  device: ${lane.device ?? 'none'}\n`);
-        }
+        const w = Math.max(...ALL_LANES.map((l) => l.id.length));
+        const row = (lane) => process.stdout.write(
+            `  ${lane.id.padEnd(w)}  ${lane.os}/${lane.arch} `
+            + `${lane.format}  device: ${lane.device ?? 'none'}\n`,
+        );
+        process.stdout.write(`${LANES.length} electron-updater lanes ( §2)\n\n`);
+        for (const lane of LANES) row(lane);
+        process.stdout.write(`\n${DIRECT_LANES.length} direct lane(s), `
+            + 'notice-only feed, install by hand \n\n');
+        for (const lane of DIRECT_LANES) row(lane);
         process.stdout.write('\nRun with --help for what a lane is and what imports this.\n');
     }
 }

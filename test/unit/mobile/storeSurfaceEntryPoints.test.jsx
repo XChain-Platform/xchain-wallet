@@ -25,10 +25,11 @@
 // working one does, and answers it worse - it says the app has an exchange and
 // is hiding it.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MenuRoute } from '../../../packages/core/src/shared/routes/MenuRoute.jsx';
+import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 
@@ -99,5 +100,63 @@ describe('the command palette', () => {
     it('keeps the DEX when a shell says nothing, rather than losing it silently', () => {
         // Every shell but a surface-stripped store build passes no flag at all.
         expect(ids({ hasDexSurface: undefined })).toContain('nav-markets');
+    });
+});
+
+// : the same failure one level down. Home's quick-action row hides
+// Exchange on a store build, but kept its "More" button, whose only entry is
+// the DEX-gated Swap. The button survived into a build with nothing behind it,
+// so tapping it opened a menu whose single row read "No additional actions".
+describe("Home's quick-action overflow menu", () => {
+    const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
+    const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
+
+    function homeMessaging() {
+        return {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([ACCOUNT]),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, activeNetwork: 'regtest' }),
+        };
+    }
+
+    function drawHome(props) {
+        return render(
+            <MessagingProvider shell="web" messaging={homeMessaging()}>
+                <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} {...props} />
+            </MessagingProvider>,
+        );
+    }
+
+    // Scoped to the quick-action row itself: Home carries other "Send" and
+    // "More" affordances, and an unscoped query answers about the wrong one.
+    const quickActions = () => screen.findByRole('group', { name: 'Quick actions' });
+
+    it('offers More, and Swap inside it, when the shell wires Swap', async () => {
+        const onSwap = vi.fn();
+        drawHome({ onSend: () => {}, onReceive: () => {}, onSwap });
+
+        const row = within(await quickActions());
+        fireEvent.click(row.getByRole('button', { name: /More/ }));
+        fireEvent.click(row.getByRole('menuitem', { name: /Swap/ }));
+        expect(onSwap).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders no More button at all when nothing is behind it', async () => {
+        // The store build wires no Swap handler, because SwapForm is not in
+        // the bundle. Absent beats disabled and both beat an empty menu: a
+        // control that opens onto "No additional actions" is a dead affordance
+        // sitting in the quick-action row on the wallet's primary screen.
+        drawHome({ onSend: () => {}, onReceive: () => {} });
+
+        const row = within(await quickActions());
+        // Send and Receive prove the row itself rendered, so a missing More is
+        // evidence rather than an unrendered quick-action row.
+        expect(row.getByRole('button', { name: /Send/ })).toBeTruthy();
+        expect(row.getByRole('button', { name: /Receive/ })).toBeTruthy();
+        expect(row.queryByRole('button', { name: /More/ })).toBeNull();
+        expect(screen.queryByText('No additional actions')).toBeNull();
     });
 });

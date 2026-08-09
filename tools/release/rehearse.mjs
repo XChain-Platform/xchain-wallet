@@ -48,6 +48,15 @@
 // close that; this re-checks the property on the PUBLISHED feed, which is
 // the only place it matters.
 //
+// THE DIRECT ANDROID LANE IS REHEARSED HERE TOO, by a different probe
+// . Its feed is a one-field `latest.json`, nothing is downloaded
+// by the app, and the install is performed by the user, so `probeLane`
+// above describes none of it. `probeDirectLane` drives the SHIPPED client
+// against the feed in both directions and proves the APK the resulting
+// notice sends a user to is the one K1 signed. Its third half, whether an
+// APK installs OVER its predecessor, is hardware-bound like the desktop
+// swap and blocked on the same kind of open question (DD-A).
+//
 // WHY NOT DRIVE electron-updater ITSELF. It needs a running Electron app
 // (it reads `app.getVersion()`, the userData dir, and the packaged
 // `app-update.yml`), so a headless harness cannot call it without faking
@@ -64,13 +73,16 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 import { pointerNameFor } from './update-info.mjs';
-import { LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS } from './rehearsal-matrix.mjs';
+import {
+    LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS,
+} from './rehearsal-matrix.mjs';
 
 // fileURLToPath, not `new URL(...).pathname`: the latter leaves a path
 // percent-encoded, so a checkout under a directory with a space in it
 // resolves to a file that does not exist.
 const HERE = dirname(fileURLToPath(import.meta.url));
 const UPDATE_VERIFY = resolvePath(HERE, '../../packages/desktop/main/updateVerify.js');
+const WALLET_ROOT = resolvePath(HERE, '../..');
 
 export const RECORD_VERSION = 1;
 
@@ -236,11 +248,18 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
     };
 
     // --- 1. the pointer exists and parses -------------------------------
+    //
+    // The raw text is kept, not just the parse. The shipped gate anchors
+    // the pointer against the signed manifest , and handing it a
+    // re-serialisation of our own parse would rehearse this harness
+    // instead of the wallet.
     let info;
+    let pointerText;
     try {
         const res = await doFetch(`${base}desktop/${encodeURIComponent(pointer)}`);
         if (!res?.ok) return fail('pointer', `HTTP ${res?.status ?? 'no response'} for ${pointer}`);
-        info = parseUpdateInfo(await res.text());
+        pointerText = await res.text();
+        info = parseUpdateInfo(pointerText);
     } catch (err) {
         return fail('pointer', String(err?.message || err));
     }
@@ -311,6 +330,8 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
         expectedTag: tag,
         artifactPath: file.url,
         artifactSha256: createHash('sha256').update(bytes).digest('hex'),
+        artifactSha512: createHash('sha512').update(bytes).digest('hex'),
+        pointerText,
         ...(pinned === undefined ? {} : { pinned }),
     });
     if (!verdict.ok) return fail('verify', verdict.reason);
@@ -318,6 +339,264 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
 
     entry.ok = true;
     return entry;
+}
+
+// -------------------------------------------------- the direct-lane probe
+
+/**
+ * An in-memory stand-in for the client's `localStorage`.
+ *
+ * A fresh one per direction, so the prefs one check writes cannot decide
+ * the next one's answer. `force` skips the interval but not the opt-out,
+ * and sharing a store would make the ORDER of the directions below
+ * load-bearing, which is the kind of coupling a rehearsal must not have.
+ */
+function memoryStorage() {
+    const map = new Map();
+    return {
+        getItem: (k) => (map.has(k) ? map.get(k) : null),
+        setItem: (k, v) => map.set(k, String(v)),
+        removeItem: (k) => map.delete(k),
+        clear: () => map.clear(),
+    };
+}
+
+/**
+ * Run the feed-side halves of a rehearsal for one DIRECT lane .
+ *
+ * The desktop probe re-implements electron-updater's selection rule
+ * because upstream cannot be driven headlessly. The direct lane has the
+ * opposite property and this takes advantage of it: the client is our
+ * own module, it takes its `fetch` and its `storage` as arguments, and
+ * it is the same file that ships inside the APK. So nothing here is a
+ * re-implementation. The shipped `checkForDirectUpdate` is imported and
+ * RUN, against the real published feed, and what is recorded is what a
+ * phone would have been told.
+ *
+ * The client hard-codes its production feed URL, deliberately (a wallet
+ * that takes its update endpoint from configuration has a remote
+ * kill-switch). That is turned into a check rather than an obstacle: the
+ * injected fetch REFUSES any URL but the one the client asks for, and
+ * only then maps it onto the feed being rehearsed. A release that
+ * publishes `latest.json` somewhere the shipped client does not read
+ * fails here, which is the one defect no amount of looking at the feed
+ * by hand would catch.
+ *
+ * @param {Object} params
+ * @param {import('./rehearsal-matrix.mjs').DirectLane} params.lane
+ * @param {string} params.feedBase          e.g. https://downloads.xchain.io/wallet/
+ * @param {string} params.tag               vX.Y.Z
+ * @param {string|null} [params.previousVersion]  the version an old install reports
+ * @param {typeof fetch} [params.fetch]
+ * @param {Object} [params.pinned]          { armoredKey, fingerprint } override
+ * @returns {Promise<Object>} the lane's record entry
+ */
+export async function probeDirectLane({
+    lane, feedBase, tag, previousVersion = null, fetch: fetchImpl, pinned,
+}) {
+    const doFetch = fetchImpl || globalThis.fetch;
+    const base = String(feedBase).replace(/\/*$/, '/');
+    const entry = {
+        id: lane.id,
+        os: lane.os,
+        arch: lane.arch,
+        feed: lane.feed,
+        ok: false,
+        checks: {},
+    };
+    const fail = (step, reason) => {
+        entry.ok = false;
+        entry.failed = step;
+        entry.reason = reason;
+        return entry;
+    };
+
+    const client = await import(
+        pathToFileURL(resolvePath(WALLET_ROOT, lane.client)).href
+    );
+
+    const feedUrl = String(client.UPDATE_FEED_URL || '');
+    let feedPath;
+    try {
+        feedPath = new URL(feedUrl).pathname.replace(/^\/+/, '');
+    } catch {
+        return fail('client-feed-url', `${lane.client} exports no usable UPDATE_FEED_URL`);
+    }
+    if (!feedPath.endsWith(lane.feed)) {
+        return fail(
+            'client-feed-url',
+            `the shipped client reads ${feedUrl}, but this lane publishes ${lane.feed}. `
+            + 'One of the two moved and the other did not, and every direct install would '
+            + 'read the wrong path (or a 404) forever.',
+        );
+    }
+    entry.checks.clientFeedUrl = feedUrl;
+
+    // The URL the client asks for is checked here, not assumed: this is the
+    // only place the shipped constant and the published path are compared
+    // against each other rather than against a memory of each other.
+    let requested = 0;
+    const clientFetch = async (url, init) => {
+        requested += 1;
+        if (String(url) !== feedUrl) {
+            throw new Error(`the client asked for ${String(url)}, not its own feed URL`);
+        }
+        return doFetch(`${base}${lane.feed}`, init);
+    };
+
+    let published;
+    try {
+        const res = await doFetch(`${base}${lane.feed}`);
+        if (!res?.ok) return fail('feed', `HTTP ${res?.status ?? 'no response'} for ${lane.feed}`);
+        const text = await res.text();
+        // The client refuses a body over its own cap and returns null, which
+        // is indistinguishable from being offline. Checked separately so an
+        // oversized feed reads as "the feed is wrong", not "no notice today".
+        if (text.length > client.UPDATE_FEED_MAX_BYTES) {
+            return fail('feed', `${lane.feed} is ${text.length} bytes; the shipped client `
+                + `reads at most ${client.UPDATE_FEED_MAX_BYTES} and would ignore it silently`);
+        }
+        published = client.parseUpdateFeed(JSON.parse(text));
+    } catch (err) {
+        return fail('feed', String(err?.message || err));
+    }
+    entry.checks.feed = 'ok';
+
+    const want = tag.replace(/^v/, '');
+    if (published !== want) {
+        return fail('version', `${lane.feed} says ${published}, rehearsing ${want}`);
+    }
+    entry.checks.version = published;
+
+    // Direction 1: an install already on this release must be told NOTHING.
+    // A notice here would be a wallet nagging every user on the current
+    // version to go and re-download it, which is both useless and exactly
+    // the shape a download-something-now phishing prompt takes.
+    try {
+        const same = await client.checkForDirectUpdate({
+            currentVersion: want, fetchImpl: clientFetch, storage: memoryStorage(), force: true,
+        });
+        if (same !== null) {
+            return fail('direction-current', `an install on ${want} was offered `
+                + `${JSON.stringify(same)}; a current install must get null`);
+        }
+    } catch (err) {
+        return fail('direction-current', String(err?.message || err));
+    }
+    entry.checks.currentInstall = 'silent';
+
+    // Direction 2: an install on the previous release must be told about
+    // this one, by name, in text this process composed.
+    if (previousVersion) {
+        try {
+            const older = await client.checkForDirectUpdate({
+                currentVersion: previousVersion,
+                fetchImpl: clientFetch,
+                storage: memoryStorage(),
+                force: true,
+            });
+            if (!older) {
+                return fail('direction-previous', `an install on ${previousVersion} was `
+                    + `offered nothing, with ${want} on the feed`);
+            }
+            if (older.version !== want) {
+                return fail('direction-previous', `the notice names ${older.version}, not ${want}`);
+            }
+            // Byte-for-byte against the local composer. The feed is untrusted
+            // input into a wallet UI, and "no feed bytes are rendered" is the
+            // property that keeps an update notice from becoming a phishing
+            // surface. It is worth re-checking against the LIVE feed and not
+            // only in a unit test with a fixture body.
+            if (older.notice !== client.updateNoticeText(want)) {
+                return fail('direction-previous', 'the notice text is not the one composed '
+                    + 'locally from the version number, so something from the feed reached it');
+            }
+            entry.checks.previousInstall = older.version;
+            entry.checks.notice = older.notice;
+        } catch (err) {
+            return fail('direction-previous', String(err?.message || err));
+        }
+    } else {
+        entry.checks.previousInstall = 'skipped: no previous release to notify';
+    }
+
+    // Direction 3: an install AHEAD of the feed is told nothing either. A
+    // wallet that announces an older version as "available" is telling its
+    // user to downgrade past a fix, and the comparison that prevents it is
+    // numeric per field, which is exactly the comparison a string compare
+    // gets wrong at 0.9.0 -> 0.10.0.
+    try {
+        const ahead = bumpMinor(want);
+        const newer = await client.checkForDirectUpdate({
+            currentVersion: ahead, fetchImpl: clientFetch, storage: memoryStorage(), force: true,
+        });
+        if (newer !== null) {
+            return fail('direction-newer', `an install on ${ahead} was offered ${want}`);
+        }
+        entry.checks.aheadInstall = 'silent';
+    } catch (err) {
+        return fail('direction-newer', String(err?.message || err));
+    }
+
+    entry.checks.feedRequests = requested;
+
+    // The notice sends a user to download the APK by hand. If that file is
+    // not there, or is not the one K1 signed for this tag, the notice is an
+    // instruction to nowhere and the fingerprint step it tells them to do
+    // cannot succeed. Same shipped gate the desktop lanes run, over the
+    // artifact a person would fetch rather than one an updater would.
+    //
+    // The ARTIFACT half by name, because this lane has no channel pointer
+    // to anchor : the direct APK lane is not electron-updater,
+    // nothing emits a `<channel>*.yml` for it, and Android re-checks the
+    // package signature at install. Asking for the weaker gate explicitly
+    // is the point - the desktop entry point demands a pointer, so no
+    // desktop caller can land here by leaving an argument out.
+    const { fetchReleaseManifest, parseManifest, verifyDownloadedArtifact } = await import(
+        pathToFileURL(UPDATE_VERIFY).href
+    );
+    const fetched = await fetchReleaseManifest({ feedBaseUrl: base, tag, fetch: doFetch });
+    if (!fetched.ok) return fail('manifest', fetched.reason);
+
+    const parsed = parseManifest(Buffer.from(fetched.manifestBytes).toString('utf8'));
+    if (!parsed.ok) return fail('manifest', parsed.reason);
+    const apks = [...parsed.entries.keys()].filter((n) => n.toLowerCase().endsWith('.apk'));
+    if (apks.length !== 1) {
+        return fail('artifact', `the signed manifest for ${tag} covers ${apks.length} .apk `
+            + 'files; the direct lane is exactly one universal APK');
+    }
+    const apk = apks[0];
+    entry.selected = apk;
+
+    let bytes;
+    try {
+        const res = await doFetch(`${base}android/${encodeURIComponent(apk)}`);
+        if (!res?.ok) return fail('download', `HTTP ${res?.status ?? 'no response'} for ${apk}`);
+        bytes = Buffer.from(await res.arrayBuffer());
+    } catch (err) {
+        return fail('download', String(err?.message || err));
+    }
+    entry.checks.bytes = bytes.length;
+
+    const verdict = await verifyDownloadedArtifact({
+        manifestBytes: fetched.manifestBytes,
+        armoredSignature: fetched.armoredSignature,
+        expectedTag: tag,
+        artifactPath: apk,
+        artifactSha256: createHash('sha256').update(bytes).digest('hex'),
+        ...(pinned === undefined ? {} : { pinned }),
+    });
+    if (!verdict.ok) return fail('verify', verdict.reason);
+    entry.checks.signedManifest = 'ok';
+
+    entry.ok = true;
+    return entry;
+}
+
+/** The next minor of a strict MAJOR.MINOR.PATCH, for the downgrade direction. */
+function bumpMinor(version) {
+    const [major, minor] = String(version).split('.');
+    return `${major}.${Number(minor) + 1}.0`;
 }
 
 // ------------------------------------------------- per-release requirement
@@ -378,17 +657,30 @@ function gitRun(repo, args) {
  * exists to stop one specific way a record can be true of something
  * other than this release.
  *
+ * `releaseArtifacts` is the artifact basenames the release actually
+ * contains, and it decides WHICH lane sets have to be answered for
+ * . Omitting it keeps the historical behaviour: every desktop
+ * lane is demanded and the direct lane is not considered. Passing it can
+ * only add requirements, with one deliberate exception - a release that
+ * positively carries an APK and no electron-updater artifact is not
+ * asked for desktop evidence, because there is no desktop lane in it.
+ * An empty or unrecognised listing takes the strict branch rather than
+ * the permissive one: "I could not tell what this release is" must never
+ * be the sentence that waives a gate.
+ *
  * @param {Object} params
  * @param {Object} params.record
  * @param {string} params.tag
  * @param {string} params.prodManifestSha256
- * @returns {{ok: boolean, problems: string[]}}
+ * @param {string[]} [params.releaseArtifacts]
+ * @returns {{ok: boolean, problems: string[], notes: string[]}}
  */
-export function assertRecord({ record, tag, prodManifestSha256 }) {
+export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts }) {
     const problems = [];
+    const notes = [];
 
     if (!record || record['record-version'] !== RECORD_VERSION) {
-        return { ok: false, problems: [`record-version is not ${RECORD_VERSION}`] };
+        return { ok: false, problems: [`record-version is not ${RECORD_VERSION}`], notes };
     }
     if (record.tag !== tag) {
         problems.push(`record is for ${record.tag}, publishing ${tag}`);
@@ -416,10 +708,14 @@ export function assertRecord({ record, tag, prodManifestSha256 }) {
         );
     }
 
+    const { desktop: desktopInRelease, direct: directInRelease } = lanesInRelease(releaseArtifacts);
+
     const lanes = Array.isArray(record.lanes) ? record.lanes : [];
-    const missing = LANES.filter((l) => !lanes.some((r) => r.id === l.id));
-    if (missing.length) {
-        problems.push(`no result for lane(s): ${missing.map((l) => l.id).join(', ')}`);
+    if (desktopInRelease) {
+        const missing = LANES.filter((l) => !lanes.some((r) => r.id === l.id));
+        if (missing.length) {
+            problems.push(`no result for lane(s): ${missing.map((l) => l.id).join(', ')}`);
+        }
     }
     for (const lane of lanes) {
         if (!lane.ok) problems.push(`lane ${lane.id} failed at ${lane.failed}: ${lane.reason}`);
@@ -431,7 +727,17 @@ export function assertRecord({ record, tag, prodManifestSha256 }) {
         swaps.map((s) => laneById(s.lane)?.os).filter(Boolean),
     );
     const requirement = record['swap-requirement'];
-    if (requirement === 'all-os') {
+    // Checked whatever the release contains: this is the record's SHAPE,
+    // not a claim about a lane, and an unrecognised value must not become
+    // readable by being on a release that has no desktop half.
+    if (!['all-os', 'one-os', 'bootstrap'].includes(requirement)) {
+        problems.push(`unknown swap-requirement "${requirement}"`);
+    }
+    if (!desktopInRelease) {
+        // Nothing in this release resolves out of a channel pointer, so
+        // the one-OS / all-OS calculus has no lane to range over. The
+        // direct lane below answers for it instead.
+    } else if (requirement === 'all-os') {
         for (const os of lanesByOs().keys()) {
             if (!swappedOs.has(os)) {
                 problems.push(
@@ -444,11 +750,83 @@ export function assertRecord({ record, tag, prodManifestSha256 }) {
         if (swappedOs.size === 0) {
             problems.push('no observed swap on any OS; §7.5 requires at least one per release');
         }
-    } else if (requirement !== 'bootstrap') {
-        problems.push(`unknown swap-requirement "${requirement}"`);
     }
 
-    return { ok: problems.length === 0, problems };
+    // The direct lanes , demanded only of a release that ships
+    // the artifact they distribute.
+    if (directInRelease) {
+        const direct = Array.isArray(record['direct-lanes']) ? record['direct-lanes'] : [];
+        for (const lane of DIRECT_LANES) {
+            const result = direct.find((r) => r.id === lane.id);
+            if (!result) {
+                problems.push(
+                    `this release ships a .${lane.format} and the record has no result for lane `
+                    + `${lane.id}. Its feed is not rehearsed by the desktop probe: run `
+                    + `rehearse.mjs run --lane ${lane.id}.`,
+                );
+                continue;
+            }
+            if (!result.ok) {
+                problems.push(`lane ${result.id} failed at ${result.failed}: ${result.reason}`);
+                continue;
+            }
+            const observed = swaps.find((s) => s.lane === lane.id);
+            if (observed && !lane.device) {
+                // `attest` refuses this, so it can only arrive by hand. An
+                // install-over that names no device is a claim about
+                // nothing, and it would otherwise silence the note below.
+                problems.push(
+                    `the record claims an install-over on ${lane.id}, which the matrix names `
+                    + 'no device for. Name the device before recording what watched it.',
+                );
+            } else if (lane.device && !observed) {
+                problems.push(
+                    `${lane.id} names ${lane.device} and has no observed install-over for this `
+                    + 'release. An APK signed by a different key cannot install over the one on '
+                    + 'the device, and the only way out of that is an uninstall that destroys '
+                    + 'the vault; no feed-side check can see it.',
+                );
+            } else if (!lane.device) {
+                // The waiver is keyed to the matrix naming no device, not to
+                // a flag, so it disappears the day one is named. It is said
+                // out loud on every publish for the same reason publish.sh
+                // says it on a partial release: a quiet waiver turns "not
+                // built yet" into "rehearsed", which is the substitution
+                // §7.5 exists to prevent.
+                notes.push(
+                    `${lane.id}: the feed and the shipped client are rehearsed, the install-over `
+                    + 'is NOT. rehearsal-matrix.mjs names no device for it (DD-A), so no one '
+                    + 'watched an APK install over its predecessor. That half is unrehearsed, '
+                    + 'not proven.',
+                );
+            }
+        }
+    }
+
+    return { ok: problems.length === 0, problems, notes };
+}
+
+/**
+ * Which lane sets a release contains, from its artifact basenames.
+ *
+ * Both answers default to the demanding side when the listing is absent
+ * or says nothing recognisable, because this function's output waives
+ * gates and the failure mode of guessing wrong is a silent one.
+ *
+ * @param {string[]|undefined} releaseArtifacts
+ * @returns {{desktop: boolean, direct: boolean}}
+ */
+export function lanesInRelease(releaseArtifacts) {
+    if (!Array.isArray(releaseArtifacts)) return { desktop: true, direct: false };
+    const names = releaseArtifacts.map((n) => String(n).split('/').pop().toLowerCase());
+    const formats = new Set(LANES.map((l) => l.format.toLowerCase()));
+    const desktop = names.some((n) => formats.has(n.slice(n.lastIndexOf('.') + 1)));
+    const direct = DIRECT_LANES.some(
+        (l) => names.some((n) => n.endsWith(`.${l.format.toLowerCase()}`)),
+    );
+    // A release with an APK and no update-capable desktop artifact is the
+    // only shape that gets to skip the desktop half.
+    return { desktop: desktop || !direct, direct };
 }
 
 function short(v) {
@@ -463,7 +841,9 @@ const USAGE = `usage: rehearse.mjs <command> [args]
       [--repo <dir>] [--previous-tag <vX.Y.Z>] [--out <file>]
       [--pinned-key <file> --pinned-fingerprint <hex>] [--lane <id>]...
       Probe every shipped lane against the staging feed and write the
-      rehearsal record. Exits 1 if any lane fails.
+      rehearsal record. Exits 1 if any lane fails. The direct lanes
+      (android-direct) are probed when the release contains their
+      artifact, or when named with --lane.
 
   attest --record <file> --lane <id> --from <version> --by <name>
       Record that a human watched the update install and swap on that
@@ -471,7 +851,9 @@ const USAGE = `usage: rehearse.mjs <command> [args]
 
   assert --record <file> --tag <vX.Y.Z> --prod-input <dir>
       Check a record covers the release in hand. This is the gate
-      publish.sh runs; exits 1 with the reasons.
+      publish.sh runs; exits 1 with the reasons. Which lane sets it
+      demands is read from the release directory, so an APK-only release
+      is asked for the direct lane and not for eight desktop ones.
 
   requirement --repo <dir> --tag <vX.Y.Z> [--previous-tag <vX.Y.Z>]
       Print whether this release needs a swap on one OS or on all of
@@ -516,6 +898,20 @@ function manifestSha(prodInput) {
             + '  be one. Order is sign prod -> sign staging -> rehearse -> publish prod.');
     }
     return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+/**
+ * The artifact basenames of the release directory in hand.
+ *
+ * Read from the DIRECTORY rather than from the manifest header, because
+ * `manifestSha` has already established that the manifest is the thing
+ * being published and this only has to say what shape the release is.
+ * The manifest and its signature are not artifacts and would otherwise
+ * count as "unrecognised", which is the strict branch either way.
+ */
+function releaseArtifactsIn(prodInput) {
+    if (!existsSync(prodInput)) return [];
+    return readdirSync(prodInput).filter((n) => !/^RELEASE_HASHES\.txt(\.asc)?$/.test(n));
 }
 
 async function main(argv) {
@@ -570,6 +966,24 @@ async function main(argv) {
             process.stderr.write(entry.ok ? 'ok\n' : `FAIL (${entry.failed}: ${entry.reason})\n`);
         }
 
+        // The direct lanes are probed when the release CONTAINS the artifact
+        // they distribute, not on request. Making it a flag would mean an
+        // Android release is rehearsed only by whoever remembers the flag,
+        // which is the same reliance on memory that left the lane
+        // unrehearsed for its first release .
+        const shipping = lanesInRelease(releaseArtifactsIn(prodInput));
+        const previousVersion = previousTag ? String(previousTag).replace(/^v/, '') : null;
+        const directLanes = [];
+        for (const lane of DIRECT_LANES) {
+            if (only.length ? !only.includes(lane.id) : !shipping.direct) continue;
+            process.stderr.write(`rehearse.mjs: ${lane.id} ... `);
+            const entry = await probeDirectLane({
+                lane, feedBase: feed, tag, previousVersion, pinned,
+            });
+            directLanes.push(entry);
+            process.stderr.write(entry.ok ? 'ok\n' : `FAIL (${entry.failed}: ${entry.reason})\n`);
+        }
+
         const record = {
             'record-version': RECORD_VERSION,
             tag,
@@ -583,12 +997,13 @@ async function main(argv) {
             'pinned-key-override': pinned ? { fingerprint: pinned.fingerprint } : null,
             'generated-at': new Date().toISOString(),
             lanes,
+            'direct-lanes': directLanes,
             swaps: [],
         };
         await writeFile(out, `${JSON.stringify(record, null, 2)}\n`);
         process.stderr.write(`rehearse.mjs: record written to ${out}\n`);
 
-        const bad = lanes.filter((l) => !l.ok);
+        const bad = [...lanes, ...directLanes].filter((l) => !l.ok);
         if (bad.length) {
             process.stderr.write(`rehearse.mjs: ${bad.length} lane(s) failed; nothing may be published.\n`);
             return 1;
@@ -599,6 +1014,13 @@ async function main(argv) {
                 + `${requirement.requirement === 'all-os' ? 'EVERY OS' : 'at least one OS'} `
                 + `(${requirement.reason}).\n  Record each with: rehearse.mjs attest --record ${out} --lane <id> ...\n`,
             );
+        }
+        for (const lane of DIRECT_LANES.filter((l) => directLanes.some((r) => r.id === l.id))) {
+            process.stderr.write(lane.device
+                ? `rehearse.mjs: ${lane.id} still needs an observed install-over on ${lane.device}.\n`
+                : `rehearse.mjs: ${lane.id}'s feed and client are rehearsed; its INSTALL-OVER is\n`
+                  + '  not, because rehearsal-matrix.mjs names no device for it (DD-A). That\n'
+                  + '  half is unrehearsed, not proven.\n');
         }
         return 0;
     }
@@ -652,17 +1074,26 @@ async function main(argv) {
         } catch (err) {
             fail(`${file} is not readable JSON: ${String(err?.message || err)}`);
         }
-        const { ok, problems } = assertRecord({
-            record, tag, prodManifestSha256: manifestSha(prodInput),
+        const { ok, problems, notes } = assertRecord({
+            record,
+            tag,
+            prodManifestSha256: manifestSha(prodInput),
+            releaseArtifacts: releaseArtifactsIn(prodInput),
         });
         if (!ok) {
             process.stderr.write(`rehearse.mjs: the rehearsal record does not cover this release.\n`);
             for (const p of problems) process.stderr.write(`  - ${p}\n`);
             return 1;
         }
+        // Printed BEFORE the ok line, and to stderr, so a passing publish
+        // cannot be read as a fully proven one just because the last line
+        // said ok.
+        for (const n of notes) process.stderr.write(`rehearse.mjs: NOT PROVEN - ${n}\n`);
         const swaps = record.swaps.map((s) => `${s.lane} on ${s.device}`).join(', ');
+        const direct = Array.isArray(record['direct-lanes']) ? record['direct-lanes'] : [];
         process.stdout.write(
-            `ok   rehearsal ${record.tag}: ${record.lanes.length} lane(s) probed, `
+            `ok   rehearsal ${record.tag}: ${record.lanes.length} lane(s) probed`
+            + `${direct.length ? ` + ${direct.length} direct` : ''}, `
             + `requirement ${record['swap-requirement']}`
             + `${swaps ? `, swap observed: ${swaps}` : ''}\n`,
         );
@@ -683,13 +1114,19 @@ async function main(argv) {
             }
         }
         let blocked = 0;
-        for (const lane of LANES) {
+        // The direct lane is listed alongside the desktop ones, with its
+        // own open question named. Leaving it off this table is how it
+        // stayed invisible: a coverage report that ranges over exactly the
+        // lanes someone thought of is a report about that person.
+        for (const lane of [...LANES, ...DIRECT_LANES]) {
             const hit = seen.get(lane.id);
+            const dd = DIRECT_LANES.includes(lane) ? 'DD-A' : 'DD4';
+            const verb = DIRECT_LANES.includes(lane) ? 'installed over' : 'swapped';
             if (hit) {
-                process.stdout.write(`✅ ${lane.id.padEnd(22)} swapped at ${hit.tag} on ${hit.device}\n`);
+                process.stdout.write(`✅ ${lane.id.padEnd(22)} ${verb} at ${hit.tag} on ${hit.device}\n`);
             } else {
                 blocked += 1;
-                const why = lane.device ? `device ${lane.device}, never rehearsed` : 'NO DEVICE NAMED (DD4)';
+                const why = lane.device ? `device ${lane.device}, never rehearsed` : `NO DEVICE NAMED (${dd})`;
                 process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}\n`);
             }
         }

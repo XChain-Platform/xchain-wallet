@@ -39,6 +39,11 @@ REF="${1:-HEAD}"
 OUT_DIR="${2:-./reproduce-out}"
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")/../../.." rev-parse --show-toplevel)"
 
+# In-place mode: build THIS checkout instead of a throwaway worktree, and
+# leave packages/desktop/dist behind. Off by default; see step 2 for the one
+# caller that sets it and why the release lane is not a verifier.
+IN_PLACE="${XCHAIN_REPRODUCE_IN_PLACE:-0}"
+
 cd "${REPO_ROOT}"
 
 # --- 1. Ref resolution + SOURCE_DATE_EPOCH ------------------------------
@@ -97,18 +102,75 @@ else
 fi
 
 # --- 2. Worktree checkout (isolates reproduction from local changes) ---
-WORKTREE_DIR="$(mktemp -d -t xchain-reproduce.XXXXXX)"
+#
+# THE RELEASE LANE RUNS THIS SCRIPT TOO, AND THAT IS THE POINT .
+#
+# toolchain.json pinned Node for both sides and nothing pinned the C
+# compiler. `.github/workflows/release.yml`'s desktop-linux job was
+# `runs-on: ubuntu-latest` with no container, while everything below builds
+# in debian:bookworm-slim at a fixed digest, so node-gyp compiled
+# tiny-secp256k1 against a different gcc and glibc on each side.
+# `secp256k1.node` therefore came out different, and so did the asar whose
+# header embeds its hash: measured at v0.334.0, 186 of the deb's 188 files
+# reproduced and those two did not . Neither build was wrong. They
+# were deterministic against different toolchains, which no amount of
+# determinism on either side can reconcile, so the published promise that a
+# zero-byte diff means our bytes are what this source produces could not be
+# met for any compiled file.
+#
+# The lane now builds through this file, because the container it names is
+# the artifact a verifier is told to trust. Sharing the script rather than
+# copying the docker invocation is deliberate: this repo's release tooling
+# has been bitten repeatedly by a second copy of a pin going stale, and a
+# lane with its own container invocation is that same defect with a longer
+# fuse.
+#
+# What in-place changes, and nothing else: the source is the checkout
+# instead of a detached worktree, and dist/ survives the run so the lane can
+# upload it. Everything that decides BYTES - the image, the platform flag,
+# the Node pin, SOURCE_DATE_EPOCH, the in-container install - is the same
+# code path a third party runs. It is refused unless the checkout is clean
+# and already at the requested ref, because those are exactly what the
+# worktree was guaranteeing.
 SDK_WORKTREE_DIR=""
-cleanup() {
-    git -C "${REPO_ROOT}" worktree remove --force "${WORKTREE_DIR}" 2>/dev/null || rm -rf "${WORKTREE_DIR}"
-    if [ -n "${SDK_WORKTREE_DIR}" ]; then
-        git -C "${SDK_DIR}" worktree remove --force "${SDK_WORKTREE_DIR}" 2>/dev/null || rm -rf "${SDK_WORKTREE_DIR}"
+if [ "${IN_PLACE}" = "1" ]; then
+    HEAD_SHA="$(git rev-parse --verify HEAD)"
+    if [ "${COMMIT_SHA}" != "${HEAD_SHA}" ]; then
+        echo "[reproduce] FATAL: in-place builds the checkout as it stands, so it can only" >&2
+        echo "[reproduce]        reproduce HEAD (${HEAD_SHA}); you asked for ${REF} (${COMMIT_SHA})." >&2
+        exit 1
     fi
-}
-trap cleanup EXIT
+    # Tracked changes only. node_modules, dist/ and the container's HOME are
+    # all gitignored and are this script's own output, so counting untracked
+    # files would make a second run refuse on the first run's leftovers.
+    DIRTY="$(git status --porcelain --untracked-files=no)"
+    if [ -n "${DIRTY}" ]; then
+        echo "[reproduce] FATAL: the checkout carries uncommitted changes, so an in-place" >&2
+        echo "[reproduce]        build reproduces no commit at all:" >&2
+        echo "${DIRTY}" >&2
+        exit 1
+    fi
+    WORKTREE_DIR="${REPO_ROOT}"
+    cleanup() {
+        if [ -n "${SDK_WORKTREE_DIR}" ]; then
+            git -C "${SDK_DIR}" worktree remove --force "${SDK_WORKTREE_DIR}" 2>/dev/null || rm -rf "${SDK_WORKTREE_DIR}"
+        fi
+    }
+    trap cleanup EXIT
+    echo "[reproduce] in-place at ${REPO_ROOT} (no worktree; dist/ is kept)"
+else
+    WORKTREE_DIR="$(mktemp -d -t xchain-reproduce.XXXXXX)"
+    cleanup() {
+        git -C "${REPO_ROOT}" worktree remove --force "${WORKTREE_DIR}" 2>/dev/null || rm -rf "${WORKTREE_DIR}"
+        if [ -n "${SDK_WORKTREE_DIR}" ]; then
+            git -C "${SDK_DIR}" worktree remove --force "${SDK_WORKTREE_DIR}" 2>/dev/null || rm -rf "${SDK_WORKTREE_DIR}"
+        fi
+    }
+    trap cleanup EXIT
 
-git worktree add --detach "${WORKTREE_DIR}" "${COMMIT_SHA}"
-echo "[reproduce] worktree at ${WORKTREE_DIR}"
+    git worktree add --detach "${WORKTREE_DIR}" "${COMMIT_SHA}"
+    echo "[reproduce] worktree at ${WORKTREE_DIR}"
+fi
 
 # Only when a sibling SDK exists, and still from its COMMITTED state rather
 # than its working tree: a build whose second input is whatever a neighbour
@@ -209,6 +271,12 @@ docker run --rm \
 echo "[reproduce] done. Packaged manifest:"
 cat "${OUT_DIR_ABS}/RELEASE_HASHES.txt"
 echo
+# In-place leaves the artifacts themselves behind, which is the only reason
+# the mode exists: the release lane uploads them from here.
+if [ "${IN_PLACE}" = "1" ]; then
+    echo "[reproduce] artifacts: ${REPO_ROOT}/packages/desktop/dist"
+    echo
+fi
 cat <<'MSG'
 [reproduce] These are the PACKAGED Linux artifacts, under the same
 [reproduce] filenames the release publishes, so this manifest compares

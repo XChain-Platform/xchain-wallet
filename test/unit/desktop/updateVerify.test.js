@@ -44,9 +44,14 @@ import { join } from 'node:path';
 import * as openpgp from 'openpgp';
 
 import {
+    channelPointerName,
+    fetchChannelPointer,
     fetchReleaseManifest,
+    parseChannelPointer,
     parseManifest,
     sha256File,
+    sha512File,
+    verifyChannelPointer,
     verifyDownloadedUpdate,
     verifyManifestSignature,
     UPDATE_PINNED_PUBKEY_ARMORED,
@@ -58,6 +63,35 @@ import {
 const ARTIFACT = 'xchain-wallet-9.9.9-x86_64.AppImage';
 const ARTIFACT_BYTES = Buffer.from('the real release\n');
 const ARTIFACT_SHA = createHash('sha256').update(ARTIFACT_BYTES).digest('hex');
+const ARTIFACT_SHA512 = createHash('sha512').update(ARTIFACT_BYTES).digest('hex');
+
+// The other lane's artifact. Genuinely built, genuinely signed, and not
+// for this install: the case the artifact gate alone cannot see.
+const DEB = 'xchain-wallet_9.9.9_amd64.deb';
+const DEB_BYTES = Buffer.from('the real deb\n');
+const DEB_SHA = createHash('sha256').update(DEB_BYTES).digest('hex');
+const DEB_SHA512 = createHash('sha512').update(DEB_BYTES).digest('hex');
+
+/**
+ * A channel pointer in electron-builder's shape. sha512 is emitted in
+ * base64, which is the spelling a real `stable-linux.yml` carries, so a
+ * gate that only understood hex would pass every test and refuse every
+ * real update.
+ */
+function pointerFor({
+    version = '9.9.9',
+    files = [[ARTIFACT, ARTIFACT_SHA512]],
+    topLevel = true,
+} = {}) {
+    const b64 = (hex) => Buffer.from(hex, 'hex').toString('base64');
+    const lines = [`version: ${version}`, 'files:'];
+    for (const [name, hex] of files) {
+        lines.push(`  - url: ${name}`, `    sha512: ${b64(hex)}`, '    size: 17');
+    }
+    if (topLevel) lines.push(`path: ${files[0][0]}`, `sha512: ${b64(files[0][1])}`);
+    lines.push("releaseDate: '2026-07-31T18:02:11.000Z'");
+    return `${lines.join('\n')}\n`;
+}
 
 let signingKey;
 let PINNED;          // { armoredKey, fingerprint }
@@ -127,6 +161,8 @@ async function good(overrides = {}) {
         expectedTag: 'v9.9.9',
         artifactPath: `/tmp/whatever/${ARTIFACT}`,
         artifactSha256: ARTIFACT_SHA,
+        artifactSha512: ARTIFACT_SHA512,
+        pointerText: pointerFor(),
         pinned: PINNED,
         ...overrides,
     };
@@ -359,6 +395,166 @@ describe('verifyDownloadedUpdate', () => {
     });
 });
 
+// --- the channel pointer  -------------------------------------
+//
+// Everything above authenticates the BYTES. Nothing above authenticated
+// the file that chose them.  §7.2 accepted that residual in
+// writing for launch; these are the tests for the deferred half.
+
+describe('channelPointerName', () => {
+    it('names the pointer electron-builder actually emits, per lane', () => {
+        const at = (platform, arch) => channelPointerName({ channel: 'stable', platform, arch });
+        // The §7.1 matrix, confirmed against a real build 2026-07-31.
+        expect(at('win32', 'x64')).toBe('stable.yml');
+        expect(at('win32', 'arm64')).toBe('stable.yml');
+        expect(at('darwin', 'arm64')).toBe('stable-mac.yml');
+        expect(at('linux', 'x64')).toBe('stable-linux.yml');
+        expect(at('linux', 'arm64')).toBe('stable-linux-arm64.yml');
+        // armv7l is `-arm`, NOT `-armv7l`, and Node spells it `arm` too.
+        expect(at('linux', 'arm')).toBe('stable-linux-arm.yml');
+    });
+
+    it('follows the baked channel, so a staging rehearsal checks staging', () => {
+        expect(channelPointerName({ channel: 'staging', platform: 'linux', arch: 'x64' }))
+            .toBe('staging-linux.yml');
+    });
+
+    it('refuses to build a name out of a channel that could escape the feed dir', () => {
+        for (const channel of ['', '../stable', 'sta/ble', '..']) {
+            expect(channelPointerName({ channel, platform: 'linux', arch: 'x64' })).toBeNull();
+        }
+    });
+});
+
+describe('parseChannelPointer', () => {
+    it('reads the version and every file the pointer names', () => {
+        const parsed = parseChannelPointer(pointerFor({
+            files: [[ARTIFACT, ARTIFACT_SHA512], [DEB, DEB_SHA512]],
+        }));
+        expect(parsed.ok).toBe(true);
+        expect(parsed.version).toBe('9.9.9');
+        expect(parsed.files.map((f) => f.url)).toEqual([ARTIFACT, DEB]);
+    });
+
+    it('records a top-level path: that files: did not already name', () => {
+        // Editing only the legacy pair is the cheapest tamper available,
+        // and a walk over `files:` alone would never look at it.
+        const text = `${pointerFor({ topLevel: false })}path: ${DEB}\nsha512: ${
+            Buffer.from(DEB_SHA512, 'hex').toString('base64')}\n`;
+        const parsed = parseChannelPointer(text);
+        expect(parsed.files.map((f) => f.url)).toContain(DEB);
+    });
+
+    it('refuses a pointer with no version or no files rather than reading it as empty', () => {
+        expect(parseChannelPointer('files:\n  - url: x\n').ok).toBe(false);
+        expect(parseChannelPointer('version: 9.9.9\n').ok).toBe(false);
+        expect(parseChannelPointer('').ok).toBe(false);
+        expect(parseChannelPointer(null).ok).toBe(false);
+    });
+
+    it('reads a CRLF pointer the same as an LF one', () => {
+        const crlf = pointerFor().replace(/\n/g, '\r\n');
+        expect(parseChannelPointer(crlf).files[0].url).toBe(ARTIFACT);
+    });
+});
+
+describe('verifyChannelPointer', () => {
+    const entries = () => new Map([[ARTIFACT, ARTIFACT_SHA], [DEB, DEB_SHA]]);
+    const args = (o = {}) => ({
+        pointerText: pointerFor(),
+        expectedVersion: '9.9.9',
+        artifactName: ARTIFACT,
+        artifactSha512: ARTIFACT_SHA512,
+        entries: entries(),
+        ...o,
+    });
+
+    it('accepts the pointer the release actually published', () => {
+        expect(verifyChannelPointer(args())).toEqual({ ok: true });
+    });
+
+    it('accepts a tag with its leading v, since that is how the manifest spells it', () => {
+        expect(verifyChannelPointer(args({ expectedVersion: 'v9.9.9' }))).toEqual({ ok: true });
+    });
+
+    it('reads the sha512 as base64, which is how a real pointer writes it', () => {
+        // Guard against a gate that only compared hex: it would pass every
+        // fixture written in hex and refuse every real update.
+        expect(pointerFor()).toContain(Buffer.from(ARTIFACT_SHA512, 'hex').toString('base64'));
+        expect(verifyChannelPointer(args())).toEqual({ ok: true });
+    });
+
+    it('REFUSES A VALIDLY-HASHED POINTER NAMING ANYTHING K1 DID NOT SIGN', () => {
+        // The whole item. The attacker owns the feed, so their pointer is
+        // internally perfect: it names their AppImage and carries its real
+        // sha512. What they cannot do is get that name into a manifest K1
+        // signed, and this is the line that notices.
+        const evilBytes = Buffer.from('attacker code\n');
+        const evilSha512 = createHash('sha512').update(evilBytes).digest('hex');
+        const result = verifyChannelPointer(args({
+            pointerText: pointerFor({ files: [['evil.AppImage', evilSha512]] }),
+            artifactName: 'evil.AppImage',
+            artifactSha512: evilSha512,
+        }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/evil\.AppImage, which the signed manifest does not cover/);
+    });
+
+    it('refuses an uncovered file listed BESIDE a covered one', () => {
+        // Only the covered entry is downloaded, so a check that looked at
+        // the downloaded file alone would pass. The other entry is another
+        // lane's install, being handed an artifact nothing signed.
+        const evilSha512 = createHash('sha512').update('other lane').digest('hex');
+        const result = verifyChannelPointer(args({
+            pointerText: pointerFor({
+                files: [[ARTIFACT, ARTIFACT_SHA512], ['evil.deb', evilSha512]],
+            }),
+        }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/evil\.deb/);
+    });
+
+    it('refuses a pointer for a different version than the one being installed', () => {
+        // This is what makes re-fetching the pointer safe. A feed that
+        // serves the checker one pointer and the verifier another gets a
+        // refusal rather than a second opinion.
+        const result = verifyChannelPointer(args({ pointerText: pointerFor({ version: '9.9.8' }) }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/describes 9\.9\.8, not 9\.9\.9/);
+    });
+
+    it('refuses a pointer that does not name the file that arrived', () => {
+        const result = verifyChannelPointer(args({
+            pointerText: pointerFor({ files: [[DEB, DEB_SHA512]] }),
+        }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/does not name xchain-wallet-9\.9\.9-x86_64\.AppImage/);
+    });
+
+    it('refuses when the pointer sha512 is not the bytes that arrived', () => {
+        const result = verifyChannelPointer(args({ artifactSha512: DEB_SHA512 }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/is not the file that arrived/);
+    });
+
+    it('refuses a pointer carrying no usable sha512 at all', () => {
+        for (const junk of ['', 'not-a-hash!!', 'aGk=']) {
+            const text = pointerFor().replace(/sha512: .*/g, `sha512: ${junk}`);
+            expect(verifyChannelPointer(args({ pointerText: text })).ok).toBe(false);
+        }
+    });
+
+    it('refuses a malformed downloaded-artifact hash instead of comparing junk', () => {
+        expect(verifyChannelPointer(args({ artifactSha512: 'deadbeef' })).ok).toBe(false);
+    });
+
+    it('has no missing-pointer branch to fall through', () => {
+        for (const pointerText of ['', null, undefined]) {
+            expect(verifyChannelPointer(args({ pointerText })).ok).toBe(false);
+        }
+    });
+});
+
 // --- the end-to-end shape ----------------------------------------------
 
 describe('a compromised update feed', () => {
@@ -382,6 +578,39 @@ describe('a compromised update feed', () => {
         expect(result.reason).toMatch(/signature does not verify/);
     });
 
+    it('cannot smuggle an uncovered artifact through a pointer that is otherwise honest', async () => {
+        // The residual  names. Every check the artifact gate owns
+        // says yes: the downloaded file is the genuine AppImage, K1
+        // signed its hash, the tag matches. The tampering is in the
+        // pointer's OTHER entry, which hands a different lane a file
+        // nothing signed, and which nothing read before this change.
+        const manifestBytes = manifestFor({
+            entries: [[ARTIFACT, ARTIFACT_SHA], [DEB, DEB_SHA]],
+        });
+        const evilSha512 = createHash('sha512').update('attacker code\n').digest('hex');
+        const result = await verifyDownloadedUpdate({
+            manifestBytes,
+            armoredSignature: await signWith(manifestBytes),
+            expectedTag: 'v9.9.9',
+            artifactPath: `/tmp/${ARTIFACT}`,
+            artifactSha256: ARTIFACT_SHA,
+            artifactSha512: ARTIFACT_SHA512,
+            pointerText: pointerFor({
+                files: [[ARTIFACT, ARTIFACT_SHA512], ['evil.AppImage', evilSha512]],
+            }),
+            pinned: PINNED,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/evil\.AppImage, which the signed manifest does not cover/);
+    });
+
+    it('cannot strip the pointer to fall back to an unchecked path', async () => {
+        for (const pointerText of ['', null, undefined]) {
+            const r = await verifyDownloadedUpdate(await good({ pointerText }));
+            expect(r.ok).toBe(false);
+        }
+    });
+
     it('cannot strip the signature to fall back to an unchecked path', async () => {
         for (const sig of ['', null, undefined]) {
             const r = await verifyDownloadedUpdate(await good({ armoredSignature: sig }));
@@ -401,16 +630,75 @@ describe('a compromised update feed', () => {
 
 // --- hashing + fetching -------------------------------------------------
 
-describe('sha256File', () => {
+describe('sha256File / sha512File', () => {
     it('hashes the bytes on disk', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'xc-upd-'));
         try {
             const p = join(dir, ARTIFACT);
             writeFileSync(p, ARTIFACT_BYTES);
             expect(await sha256File(p)).toBe(ARTIFACT_SHA);
+            // The pointer speaks sha512, the manifest speaks sha256, and
+            // both must be taken from the file rather than from the feed.
+            expect(await sha512File(p)).toBe(ARTIFACT_SHA512);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('fetchChannelPointer', () => {
+    const okRes = (body) => ({ ok: true, status: 200, text: async () => body });
+
+    it('fetches this build\'s pointer from the desktop feed', async () => {
+        const seen = [];
+        const result = await fetchChannelPointer({
+            feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+            pointerName: 'stable-linux.yml',
+            fetch: async (url, opts) => { seen.push([url, opts]); return okRes('version: 9.9.9\n'); },
+        });
+        expect(result.ok).toBe(true);
+        expect(seen[0][0]).toBe('https://downloads.xchain.io/wallet/desktop/stable-linux.yml');
+        // The feed serves pointers no-store (§7.3); a cached copy here
+        // would be a second answer to a question that must have one.
+        expect(seen[0][1]).toMatchObject({ cache: 'no-store' });
+    });
+
+    it('refuses a non-https feed, exactly as the manifest fetch does', async () => {
+        const r = await fetchChannelPointer({
+            feedBaseUrl: 'http://downloads.xchain.io/wallet/',
+            pointerName: 'stable-linux.yml',
+            fetch: async () => okRes(''),
+        });
+        expect(r).toEqual({ ok: false, reason: 'update feed must be https' });
+    });
+
+    it('refuses a pointer name that could walk out of the feed directory', async () => {
+        for (const pointerName of ['../RELEASE_HASHES/v1.txt', 'a/b.yml', 'stable.txt', '', null]) {
+            const r = await fetchChannelPointer({
+                feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+                pointerName,
+                fetch: async () => okRes(''),
+            });
+            expect(r.ok).toBe(false);
+        }
+    });
+
+    it('fails closed when the pointer is missing or the fetch throws', async () => {
+        const missing = await fetchChannelPointer({
+            feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+            pointerName: 'stable-linux.yml',
+            fetch: async () => ({ ok: false, status: 404 }),
+        });
+        expect(missing).toMatchObject({ ok: false });
+        expect(missing.reason).toMatch(/404/);
+
+        const thrown = await fetchChannelPointer({
+            feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+            pointerName: 'stable-linux.yml',
+            fetch: async () => { throw new Error('ECONNRESET'); },
+        });
+        expect(thrown).toMatchObject({ ok: false });
+        expect(thrown.reason).toMatch(/ECONNRESET/);
     });
 });
 
