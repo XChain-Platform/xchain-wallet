@@ -83,9 +83,9 @@
 //   APPLE_API_KEY_ID   the key's id
 //   APPLE_API_ISSUER   the issuer id
 
-import { createSign } from 'node:crypto';
+import { createSign, createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { storeVersionFromTag } from '../../packages/mobile/scripts/version.js';
@@ -123,6 +123,75 @@ export const REQUIRED_SCREENSHOT_TYPES = Object.freeze([
     'APP_IPHONE_67',
     'APP_IPAD_PRO_3GEN_129',
 ]);
+
+/**
+ * Which capture directory feeds each of Apple's display types.
+ *
+ * packages/mobile/scripts/screenshots.sh shoots the two idioms into their own
+ * directories and an operator uploads each into Apple's matching set. Until
+ * 2026-08-09 nothing connected the two halves, which is the defect the block
+ * below exists for.
+ */
+export const SCREENSHOT_DIR_BY_TYPE = Object.freeze({
+    APP_IPHONE_67: 'iphone-17-pro-max',
+    APP_IPAD_PRO_3GEN_129: 'ipad-pro-13-inch-m5',
+});
+
+/**
+ * The capture pin, plus an MD5 per pinned image, keyed by Apple's display type.
+ *
+ * WHY THIS EXISTS. verify-listing-assets.mjs answers "do the images ON DISK
+ * depict the build being submitted", and this gate answered "does Apple hold
+ * four COMPLETE images per idiom". Neither asks the question a reviewer's
+ * experience actually turns on: are the images APPLE HOLDS the ones we pinned?
+ * Measured 2026-08-09, both were green while App Store Connect held a set shot
+ * from a build 18 shared-UI commits old, labelling every coin with a
+ * developer-only network - a listing nobody could see was wrong from a
+ * terminal. That is the same shape as the build that was uploaded, VALID, and
+ * never attached to the version: an instrument pointed at Apple, green, and
+ * measuring the wrong relationship.
+ *
+ * WHY MD5 AND NOT THE PIN'S OWN SHA-256: the pin records sha256 because that
+ * is what the local tooling compares; App Store Connect reports
+ * `sourceFileChecksum`, which is an MD5 of the bytes it received. Asking Apple
+ * the question means speaking Apple's digest.
+ *
+ * Returns null when there is no pin or an image it names is missing, and the
+ * caller must report that as inconclusive rather than as a pass: an
+ * unanswered question and a good answer are different things, which is the
+ * lesson this whole file is built out of.
+ */
+export function pinnedListingDigests(wsRoot = WS_ROOT) {
+    const dir = join(wsRoot, 'packages', 'mobile', 'screenshots');
+    const pinPath = join(dir, 'capture-pin.json');
+    if (!existsSync(pinPath)) return null;
+    let pin;
+    try {
+        pin = JSON.parse(readFileSync(pinPath, 'utf8'));
+    } catch {
+        return null;
+    }
+    const byType = {};
+    for (const [type, sub] of Object.entries(SCREENSHOT_DIR_BY_TYPE)) {
+        const entries = [];
+        for (const rel of Object.keys(pin.assets ?? {})) {
+            if (!rel.startsWith(`${sub}/`)) continue;
+            const file = join(dir, rel);
+            if (!existsSync(file)) return null;
+            entries.push({
+                name: basename(rel),
+                md5: createHash('md5').update(readFileSync(file)).digest('hex'),
+            });
+        }
+        if (entries.length) byType[type] = entries;
+    }
+    if (!Object.keys(byType).length) return null;
+    return {
+        commit: pin.capturedFrom?.commit ?? null,
+        version: pin.capturedFrom?.version ?? null,
+        byType,
+    };
+}
 
 /**
  * The bundle id, read from the Xcode project rather than restated.
@@ -205,7 +274,7 @@ const dunno = (id, detail) => ({ id, state: 'inconclusive', detail });
  * @param {{messaging: boolean, betting: boolean}} ships
  * @returns {{exit: number, checks: Array<{id: string, state: string, detail: string}>}}
  */
-export function classifyVersionRecord(record, ships) {
+export function classifyVersionRecord(record, ships, pinned = null) {
     const checks = [];
     const v = record.version ?? {};
     const build = record.build ?? null;
@@ -325,6 +394,57 @@ export function classifyVersionRecord(record, ships) {
             ));
         } else {
             checks.push(ok('screenshots', `${want}: ${set.count}, all COMPLETE`));
+        }
+    }
+
+    // --- and whether Apple holds the images we PINNED ----------------------
+    //
+    // Present and COMPLETE says an upload finished, not that it uploaded the
+    // right pictures. See pinnedListingDigests() for what this cost.
+    if (!pinned) {
+        checks.push(dunno(
+            'screenshots-pinned',
+            'no capture pin (or an image it names is missing), so what Apple holds cannot be compared to'
+            + ' anything. Re-run packages/mobile/scripts/screenshots.sh, which writes the pin as it captures.',
+        ));
+    } else {
+        for (const want of REQUIRED_SCREENSHOT_TYPES) {
+            const set = sets.find((s) => s.displayType === want);
+            const expect = pinned.byType[want];
+            if (!set || !set.count || !expect) continue; // already reported above
+            const theirs = set.checksums ?? [];
+            if (theirs.some((c) => !c)) {
+                checks.push(dunno(
+                    'screenshots-pinned',
+                    `${want}: App Store Connect reports no checksum for at least one image, so this set cannot be`
+                    + ' compared to the pin. Treat it as unverified, not as matching.',
+                ));
+                continue;
+            }
+            const have = new Set(theirs);
+            const missing = expect.filter((e) => !have.has(e.md5));
+            if (missing.length) {
+                checks.push(bad(
+                    'screenshots-pinned',
+                    `${want}: App Store Connect holds ${set.count} image(s), and ${missing.length} of the`
+                    + ` ${expect.length} pinned to ${pinned.commit?.slice(0, 8) ?? 'the capture'}`
+                    + ` (${pinned.version ?? '?'}) are not among them: ${missing.map((m) => m.name).join(', ')}.`
+                    + ' The listing shows a build other than the one on disk, which is the accurate-metadata'
+                    + ' rejection this pin exists to prevent. Upload the pinned set.',
+                ));
+            } else if (theirs.length !== expect.length) {
+                checks.push(bad(
+                    'screenshots-pinned',
+                    `${want}: every pinned image is present, but Apple holds ${theirs.length} where the pin`
+                    + ` names ${expect.length}, so the set carries an image nothing recorded.`,
+                ));
+            } else {
+                checks.push(ok(
+                    'screenshots-pinned',
+                    `${want}: the ${expect.length} images Apple holds are the set pinned to`
+                    + ` ${pinned.commit?.slice(0, 8) ?? '?'} (${pinned.version ?? '?'})`,
+                ));
+            }
         }
     }
 
@@ -508,6 +628,9 @@ export async function fetchVersionRecord({ token, bundleId, fetchImpl = fetch })
                 displayType: set.attributes.screenshotDisplayType,
                 count: (shots.body.data ?? []).length,
                 states: (shots.body.data ?? []).map((s) => s.attributes.assetDeliveryState?.state),
+                // Apple's MD5 of the bytes it received, which is the only
+                // handle there is on WHICH images the console actually holds.
+                checksums: (shots.body.data ?? []).map((s) => s.attributes.sourceFileChecksum ?? null),
             });
         }
     }
@@ -582,7 +705,7 @@ export async function checkAppStoreVersion({ env = process.env, fetchImpl = fetc
         return { exit: config ? EXIT.CONFIG : EXIT.INCONCLUSIVE, reason: fetched.error, checks: [] };
     }
 
-    const outcome = classifyVersionRecord(fetched.record, ships);
+    const outcome = classifyVersionRecord(fetched.record, ships, pinnedListingDigests(wsRoot));
     return { ...outcome, record: fetched.record, ships, bundleId };
 }
 

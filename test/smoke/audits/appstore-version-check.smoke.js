@@ -39,13 +39,35 @@
 //    inconclusive - the same rule the other two gates carry.
 
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 import {
     classifyVersionRecord, credentialsFromEnv, bundleIdFromProject, shippedCapabilities,
     ascToken, EXIT, CANONICAL_PRIVACY_URL, SEED_PLACEHOLDER, REQUIRED_SCREENSHOT_TYPES,
+    SCREENSHOT_DIR_BY_TYPE, pinnedListingDigests,
 } from '../../../tools/release/verify-appstore-version.mjs';
 
 const SHIPS_BOTH = { messaging: true, betting: true };
+
+/**
+ * The MD5s Apple would report per idiom, and a pin that claims them.
+ *
+ * The digests are arbitrary strings on purpose: what these cases pin is the
+ * COMPARISON, and a real digest would only make the fixture look authoritative
+ * about bytes this file does not have. The real bytes are compared by the
+ * gate itself against live App Store Connect, which is where this check was
+ * first driven and where it first went red.
+ */
+const UPLOADED = Object.fromEntries(REQUIRED_SCREENSHOT_TYPES.map((t, i) => [
+    t, [1, 2, 3, 4].map((n) => `${i}${n}`.padStart(32, 'a')),
+]));
+
+function pinFor(byTypeOverride = null) {
+    const byType = byTypeOverride ?? Object.fromEntries(REQUIRED_SCREENSHOT_TYPES.map((t) => [
+        t, UPLOADED[t].map((md5, i) => ({ name: `0${i + 1}-scene.png`, md5 })),
+    ]));
+    return { commit: '2731745ecf35a41c093abba6004778afee2cdf87', version: '0.336.0', byType };
+}
 
 /** A record in the state Apple actually held once everything was correct. */
 function healthyRecord(overrides = {}) {
@@ -63,7 +85,10 @@ function healthyRecord(overrides = {}) {
                 + '3. Confirm the balance loads.\nDEMO SEED: correct horse battery staple',
         },
         screenshotSets: REQUIRED_SCREENSHOT_TYPES.map((displayType) => ({
-            displayType, count: 4, states: ['COMPLETE', 'COMPLETE', 'COMPLETE', 'COMPLETE'],
+            displayType,
+            count: 4,
+            states: ['COMPLETE', 'COMPLETE', 'COMPLETE', 'COMPLETE'],
+            checksums: [...UPLOADED[displayType]],
         })),
         appInfo: { privacyPolicyUrl: CANONICAL_PRIVACY_URL, ageRating: 'FOUR_PLUS' },
         ageRating: { messagingAndChat: true, gambling: false, gamblingSimulated: 'NONE' },
@@ -76,7 +101,7 @@ const state = (out, id) => find(out, id).map((c) => c.state);
 
 // --- 1. The healthy record is ready, and the deferral does not block it -----
 
-const healthy = classifyVersionRecord(healthyRecord(), SHIPS_BOTH);
+const healthy = classifyVersionRecord(healthyRecord(), SHIPS_BOTH, pinFor());
 assert.equal(healthy.exit, EXIT.READY, 'a complete record must be READY');
 assert.deepEqual(state(healthy, 'build-attached'), ['ok']);
 assert.deepEqual(state(healthy, 'age-gambling'), ['deferred'],
@@ -235,7 +260,7 @@ assert.deepEqual(state(messagingHidden, 'age-messaging'), ['ok'],
 
 // Gambling: LOUD while it ships undeclared, plain OK once compiled out, and
 // plain OK if it is ever declared. Never fatal in any of the three.
-const bettingHidden = classifyVersionRecord(healthyRecord(), { messaging: true, betting: false });
+const bettingHidden = classifyVersionRecord(healthyRecord(), { messaging: true, betting: false }, pinFor());
 assert.deepEqual(state(bettingHidden, 'age-gambling'), ['ok']);
 assert.equal(bettingHidden.exit, EXIT.READY);
 
@@ -280,6 +305,119 @@ const bothStates = classifyVersionRecord(healthyRecord({
     version: { id: 'v1', versionString: 'not-a-version', state: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' },
 }), SHIPS_BOTH);
 assert.equal(bothStates.exit, EXIT.FAILURE, 'a failure must outrank an inconclusive');
+
+// --- 10b. Whether Apple holds the images we PINNED --------------------------
+//
+// "Present and COMPLETE" says an upload finished, not that it uploaded the
+// right pictures, and the two are not the same question. Measured against live
+// App Store Connect on 2026-08-09: both screenshot sets were 4-of-4 COMPLETE
+// while every one of the 8 images Apple held was a different file from the
+// pinned set on disk - a listing showing one build while the binary is
+// another, which is the accurate-metadata rejection the pin exists to prevent
+// and which nothing could see from a terminal.
+
+const wrongUpload = classifyVersionRecord(healthyRecord({
+    screenshotSets: REQUIRED_SCREENSHOT_TYPES.map((displayType) => ({
+        displayType,
+        count: 4,
+        states: ['COMPLETE', 'COMPLETE', 'COMPLETE', 'COMPLETE'],
+        checksums: ['d0', 'd1', 'd2', 'd3'].map((d) => d.padStart(32, 'f')),
+    })),
+}), SHIPS_BOTH, pinFor());
+assert.equal(wrongUpload.exit, EXIT.FAILURE, 'images Apple holds that nothing pinned must FAIL');
+assert.deepEqual(state(wrongUpload, 'screenshots-pinned'), ['failure', 'failure']);
+assert.deepEqual(state(wrongUpload, 'screenshots'), ['ok', 'ok'],
+    'the old check must still pass here, or this case is not reproducing the trap');
+
+// One stale image among three current ones is the likelier real shape, and it
+// must be as fatal as eight: a listing is judged as a set.
+const oneStale = classifyVersionRecord(healthyRecord({
+    screenshotSets: REQUIRED_SCREENSHOT_TYPES.map((displayType) => ({
+        displayType,
+        count: 4,
+        states: ['COMPLETE', 'COMPLETE', 'COMPLETE', 'COMPLETE'],
+        checksums: [...UPLOADED[displayType].slice(0, 3), 'e'.repeat(32)],
+    })),
+}), SHIPS_BOTH, pinFor());
+assert.equal(oneStale.exit, EXIT.FAILURE, 'one unpinned image must fail the set');
+assert.ok(
+    find(oneStale, 'screenshots-pinned')[0].detail.includes('04-scene.png'),
+    'the failure must name WHICH image is missing, or it cannot be acted on',
+);
+
+// Every pinned image present AND an extra one beside them. This is the case a
+// count check exists for: set membership alone says yes, and the listing still
+// carries an image nothing recorded.
+const extraImage = classifyVersionRecord(healthyRecord({
+    screenshotSets: REQUIRED_SCREENSHOT_TYPES.map((displayType) => ({
+        displayType,
+        count: 5,
+        states: Array(5).fill('COMPLETE'),
+        checksums: [...UPLOADED[displayType], 'b'.repeat(32)],
+    })),
+}), SHIPS_BOTH, pinFor());
+assert.equal(extraImage.exit, EXIT.FAILURE, 'an unpinned extra image must fail even when all pinned ones are there');
+assert.ok(
+    find(extraImage, 'screenshots-pinned')[0].detail.includes('nothing recorded'),
+    'the extra-image failure must say what is wrong, not repeat the missing-image wording',
+);
+
+// No pin at all is an unanswered question, not a pass. This is the branch that
+// makes the check honest: a gate with nothing to compare against must not
+// report a listing as verified.
+const noPin = classifyVersionRecord(healthyRecord(), SHIPS_BOTH, null);
+assert.equal(noPin.exit, EXIT.INCONCLUSIVE, 'no capture pin must be INCONCLUSIVE, never READY');
+assert.deepEqual(state(noPin, 'screenshots-pinned'), ['inconclusive']);
+
+// Apple withholding a checksum is the same unanswered question, per set.
+const noChecksum = classifyVersionRecord(healthyRecord({
+    screenshotSets: REQUIRED_SCREENSHOT_TYPES.map((displayType) => ({
+        displayType,
+        count: 4,
+        states: ['COMPLETE', 'COMPLETE', 'COMPLETE', 'COMPLETE'],
+        checksums: [UPLOADED[displayType][0], null, null, null],
+    })),
+}), SHIPS_BOTH, pinFor());
+assert.equal(noChecksum.exit, EXIT.INCONCLUSIVE, 'an uncomparable set must not read as verified');
+
+// The idiom-to-directory map is what joins the two halves, and asserting only
+// its KEYS is not enough: pointing both types at one directory would compare
+// the iPad set against iPhone images and pass, which is worse than no check.
+// So the values are asserted DISTINCT and asserted against the directories the
+// capture script actually writes, derived from its own device list rather than
+// restated here.
+assert.deepEqual(
+    Object.keys(SCREENSHOT_DIR_BY_TYPE).sort(),
+    [...REQUIRED_SCREENSHOT_TYPES].sort(),
+    'every required display type needs a capture directory, or its set goes unchecked',
+);
+const dirs = Object.values(SCREENSHOT_DIR_BY_TYPE);
+assert.equal(new Set(dirs).size, dirs.length, 'two display types sharing a directory compares a set against the wrong idiom');
+const captureScript = readFileSync(
+    new URL('../../../packages/mobile/scripts/screenshots.sh', import.meta.url), 'utf8',
+);
+// The script slugs each device name the same way: lowercase, spaces to
+// hyphens, everything else dropped.
+// Read the devices= line whole rather than balancing parentheses: a device
+// name contains them ("iPad Pro 13-inch (M5)"), and a lazy bracket match stops
+// inside the name and silently yields half a list.
+const slugs = captureScript.split('\n')
+    .filter((line) => /^\s*devices=\(\s*"/.test(line))
+    .flatMap((line) => [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1]))
+    .filter((name) => !name.includes('$'))
+    .map((name) => name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, ''));
+assert.equal(slugs.length, REQUIRED_SCREENSHOT_TYPES.length,
+    `expected one default capture device per display type, read ${JSON.stringify(slugs)}`);
+for (const dir of dirs) {
+    assert.ok(
+        slugs.includes(dir),
+        `${dir} is not a directory ${'packages/mobile/scripts/screenshots.sh'} writes (it writes ${slugs.join(', ')})`,
+    );
+}
+
+// And the reader must survive a repository with no capture at all rather than
+// throwing, since that is the state of any fresh clone.
+assert.equal(pinnedListingDigests('/nonexistent-worktree'), null);
 
 // --- 11. The two inputs that must be derived, never restated ----------------
 

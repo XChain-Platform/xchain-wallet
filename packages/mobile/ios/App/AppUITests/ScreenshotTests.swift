@@ -395,6 +395,73 @@ final class ScreenshotTests: XCTestCase {
         _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
         Thread.sleep(forTimeInterval: 3)
         print("NETWORK: switched the demo wallet to Mainnet before capture")
+        resetViewport(scene: "network-switch")
+    }
+
+    /// Put the WebView back to fit-width before anything is captured.
+    ///
+    /// Focusing the network `<select>` makes iOS auto-zoom the WKWebView, and
+    /// the zoom SURVIVES the reload the switch triggers - the page reloads,
+    /// the scale does not. Measured 2026-08-08: the iPhone lead image came
+    /// back clipped at the right edge (a balance rendered `0.1234` where the
+    /// value is `0.12345678`) with no bottom bar in frame, and every step
+    /// after it reported `hittable=false enabled=true`, which reads like a
+    /// disabled control and is an off-screen one. The iPad set from the same
+    /// run was clean, because its popover needs no focus zoom - so this is an
+    /// idiom-specific defect that a run on one idiom cannot see.
+    ///
+    /// Pinching out is the reset rather than a guess at a scale: the page's
+    /// own minimum scale clamps it at fit, so over-pinching cannot
+    /// under-zoom. VERIFIED BY A CONTROL, never by gesture count - a gesture
+    /// that did nothing and a gesture that was not needed look identical from
+    /// the outside, and the whole cost of this defect was a set that looked
+    /// like it had been taken correctly.
+    @discardableResult
+    private func resetViewport(scene: String) -> Bool {
+        // RELAUNCH, UNCONDITIONALLY, and both of those words were paid for.
+        //
+        // Not a gesture: three pinch-to-zoom-out gestures at the WebView were
+        // tried first and measured to do nothing at all - the run reached the
+        // relaunch fallback behind them every time. A launch is what works,
+        // because a WKWebView cannot carry a zoom scale across a process. The
+        // app persists its onboarding and its demo wallet (that is the whole
+        // reason the driver script uninstalls before a run), so it comes back
+        // to the same screen, on the same network, at fit-width and scrolled
+        // to the top.
+        //
+        // Not conditional, and this is the part a first cut got wrong. The
+        // switch leaves TWO marks and they do not arrive together: a zoom,
+        // which is loud (the lead image is clipped at the right edge and
+        // every nav entry afterwards reports hittable=false), and a scroll
+        // offset, which is quiet (a black band under the status bar in an
+        // otherwise correct-looking image). Measured 2026-08-09: a run with
+        // the reset gated on "is the nav hittable" skipped it entirely,
+        // passed every assertion, and produced the banded image - the quiet
+        // half is invisible to the only condition worth gating on, so there
+        // is nothing to gate on. One relaunch, always.
+        app.terminate()
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        Thread.sleep(forTimeInterval: 3)
+
+        // The net under the reset, for the loud half, and it asks THE BOTTOM
+        // NAV and nothing else. The home screen offers Send and Receive twice
+        // - once in a quick-action row near the top of the page, once in the
+        // bottom nav - and a zoomed page keeps the quick-action row in frame
+        // while pushing the nav off the bottom, so a check that accepts
+        // Receive is satisfied by the broken state. Measured: a first cut
+        // that did accept it returned immediately, printed nothing, and the
+        // run then missed every nav entry after it. An idiom with no bottom
+        // nav (iPad drives from a sidebar) has nothing to be pushed off
+        // screen and nothing to check.
+        guard let home = button(anyOf: ["Home", "Balances"]) else { return true }
+        if home.isHittable {
+            print("VIEWPORT: relaunched after the network switch")
+            return true
+        }
+        missed.append("\(scene): the bottom nav is not hittable even after a relaunch")
+        print("MISSED: \(scene) viewport - the bottom nav is not hittable even after a relaunch")
+        return false
     }
 
     private func openFromNav(_ labels: [String], scene: String) -> Bool {
