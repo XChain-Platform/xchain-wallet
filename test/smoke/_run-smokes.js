@@ -23,6 +23,7 @@ import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { noteWorkspaceLinkage } from './_workspace-linkage.js';
 
 const here = dirname(fileURLToPath(import.meta.url));        // .../test/smoke
 const wsRoot = join(here, '..', '..');                        // .../xchain-wallet
@@ -107,6 +108,16 @@ function* walkSmokes(dir) {
 }
 
 const smokes = [...walkSmokes(here)];
+
+// Name the node_modules tree the workspace specifiers resolve through when it
+// belongs to a different checkout . A borrowed node_modules makes a
+// run a hybrid of two trees, which is how a correct signer bridge was measured
+// red at an origin/master worktree and filed as a regression. Said here because
+// the smokes are separate processes and cannot see each other's notice; the
+// flag tells them so. The sibling docs-tree notice this used to sit beside now
+// happens inline above, so only the linkage half is announced here.
+noteWorkspaceLinkage();
+process.env.XCHAIN_WORKSPACE_LINKAGE_NOTED = '1';
 
 let failures = 0;
 for (const fullPath of smokes) {

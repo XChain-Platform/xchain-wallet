@@ -27,8 +27,29 @@
 
 import { strict as assert } from 'node:assert';
 
+// OBSERVE THE REGISTRY THROUGH THE SUBJECT'S OWN SPECIFIER .
+//
+// The signerBridge registry is a process-wide singleton, so this smoke proves
+// nothing unless it reads the exact module instance the listener writes to.
+// `signerBridgeListener.js` reaches it as `@xchain-wallet/extension/...` (a
+// declared workspace dep of packages/desktop), so this import must use the
+// same specifier and not a relative path to the same file. The two agree on
+// realpath in a normally installed checkout and diverge wherever node_modules
+// belongs to a DIFFERENT checkout, which a borrowed-node_modules git worktree
+// does routinely: the listener then registers into the primary checkout's
+// copy while a relative import here reads this worktree's copy, and every
+// registration assertion below fails as if the bridge were unwired.
+//
+// That is not hypothetical. It is what produced : measured 2026-08-06
+// at a throwaway origin/master worktree, this suite and
+// desktop-security-hardening.smoke.js were the two reds in a 431-suite run,
+// and the bridge was correct the whole time. Re-measured 2026-08-09, the same
+// commit is green in a worktree holding its own node_modules and red in one
+// borrowing another's. The runner names that venue up front
+// (`noteWorkspaceLinkage`), and importing by specifier here is what keeps the
+// verdict about the bridge instead of about the install.
 import * as bgSignerBridge from
-    '../../../packages/extension/src/background/signerBridge.js';
+    '@xchain-wallet/extension/src/background/signerBridge.js';
 import { attachSignerBridgeListener } from
     '../../../packages/desktop/main/signerBridgeListener.js';
 

@@ -47,7 +47,14 @@ import {
     attachSignerBridgeListener,
     MAX_SIGNER_IDS_PER_MESSAGE,
 } from '../../../packages/desktop/main/signerBridgeListener.js';
-import * as bgSignerBridge from '../../../packages/extension/src/background/signerBridge.js';
+// Imported by the SAME specifier `signerBridgeListener.js` uses, never by a
+// relative path to the same file . The registry is a process-wide
+// singleton, so the ownership assertions in section 4 are only about the
+// bridge while both sides resolve to one module instance; a relative import
+// here splits into two copies wherever node_modules belongs to another
+// checkout, and section 4 goes red as if the guard were broken. Full account
+// in the header of desktop-signer-bridge.smoke.js.
+import * as bgSignerBridge from '@xchain-wallet/extension/src/background/signerBridge.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..', '..', '..', 'packages', 'desktop');
