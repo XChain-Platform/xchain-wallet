@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    ChainPicker,
-    AddressText,
-    FeeSelector,
-    AddressField,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -465,7 +455,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -819,7 +809,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onChange={(e) => setExpInput(e.target.value)}
                 />
             ) : null}
-            {expError ? <div role="alert" className={styles.error}>{expError}</div> : null}
+            {expError ? <StatusMessage variant="error" className={styles.error}>{expError}</StatusMessage> : null}
 
             <button
                 type="button"

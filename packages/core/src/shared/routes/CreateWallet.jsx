@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Screen, Button, Input, Icon, InfoTip } from '@xchain-wallet/core/ui';
+import { Button, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -247,7 +247,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <li>No donation line on sign screens; runs invisibly after setup</li>
                 </ul>
                 {adsError ? (
-                    <div role="alert" className={styles.error}>{adsError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{adsError}</StatusMessage>
                 ) : null}
                 <div className={actionsClass}>
                     <Button
@@ -315,10 +315,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         ))}
                     </ol>
                     {quizError ? (
-                        <div role="alert" className={styles.error}>{quizError}</div>
+                        <StatusMessage variant="error" className={styles.error}>{quizError}</StatusMessage>
                     ) : null}
                     {persistError ? (
-                        <div role="alert" className={styles.error}>{persistError}</div>
+                        <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
                     ) : null}
                     <div className={actionsClass}>
                         <Button
@@ -394,7 +394,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </span>
                 </label>
                 {persistError ? (
-                    <div role="alert" className={styles.error}>{persistError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
                 ) : null}
                 <div className={actionsClass}>
                     <Button

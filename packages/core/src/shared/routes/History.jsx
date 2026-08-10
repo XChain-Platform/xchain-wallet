@@ -9,8 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen,
-    PageHeader, Button, Icon, Skeleton, VerifiedBadge } from '@xchain-wallet/core/ui';
+import { Button, Icon, PageHeader, Screen, Skeleton, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -664,7 +663,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     );
 
     if (loadError) {
-        return wrap(<p role="alert" className={styles.error}>{loadError}</p>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(
@@ -1290,7 +1289,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 and the tab strip so the user sees the result without
                 scrolling, mirroring the inline save-contact form. */}
             {rbfError ? (
-                <p className={styles.rbfError} role="alert">{rbfError}</p>
+                <StatusMessage variant="error" className={styles.rbfError}>{rbfError}</StatusMessage>
             ) : null}
             {rbfDone ? (
                 <p className={styles.rbfDone} role="status">{rbfDone}</p>
@@ -1316,7 +1315,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         />
                     </label>
                     {contactSaveError ? (
-                        <p className={styles.saveContactError} role="alert">{contactSaveError}</p>
+                        <StatusMessage variant="error" className={styles.saveContactError}>{contactSaveError}</StatusMessage>
                     ) : null}
                     <div className={styles.saveContactActions}>
                         <Button

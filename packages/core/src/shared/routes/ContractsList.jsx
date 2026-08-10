@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
@@ -284,7 +277,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     );
 
     if (addressesError) {
-        return wrap(<div role="alert" className={styles.entryDescription}>{addressesError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
@@ -427,9 +420,9 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
             {state.loading ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : state.error && state.rows.length === 0 ? (
-                <p role="alert" className={styles.entryDescription}>
+                <StatusMessage variant="error" className={styles.entryDescription}>
                     Couldn't load contracts: {state.error}
-                </p>
+                </StatusMessage>
             ) : state.rows.length === 0 ? (
                 <p className={styles.entryDescription}>{emptyText}</p>
             ) : (

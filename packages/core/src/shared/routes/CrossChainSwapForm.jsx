@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ChainPicker,
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-    AddressField,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -434,7 +424,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -548,7 +538,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -768,11 +758,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />
 
             {validationError ? (
-                <p role="alert" className={styles.error}>{validationError}</p>
+                <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
             ) : null}
 
             {formError ? (
-                <p role="alert" className={styles.error}>{formError}</p>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
 
             <div className={styles.actions}>

@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Select,
-    ChainBadge,
-    AddressText,
-    NetworkField,
-    FeeSelector,
-    AddressField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -396,7 +386,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -494,7 +484,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (<div role="alert" className={styles.error}>{submitError}</div>) : null}
+                {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
                         Back
@@ -576,7 +566,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>No address on this chain. Use Receive to generate one first.</div>
+                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
             )}
 
             <Select
@@ -698,7 +688,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
             </p>
 
-            {formError ? (<div role="alert" className={styles.error}>{formError}</div>) : null}
+            {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
             <div className={styles.actions}>
                 <Button
                     type="submit"
@@ -772,7 +762,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         </Screen>
     );
 
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
         return wrap(<p className={styles.hint}>No matching contact addresses on this chain.</p>);

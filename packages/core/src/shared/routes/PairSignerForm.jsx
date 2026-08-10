@@ -289,7 +289,7 @@ export function PairSignerForm({
                 maxLength={40}
             />
             {error ? (
-                <div role="alert" className={styles.error}>{error}</div>
+                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button
@@ -311,7 +311,7 @@ function FirmwareBanner({ verdict }) {
         ? styles.errorBanner
         : styles.warningBanner;
     return (
-        <div role="alert" className={variantClass}>
+        <StatusMessage variant="error" className={variantClass}>
             <p className={styles.bannerDetail}>{verdict.detail}</p>
             {verdict.updateUrl ? (
                 <a
@@ -323,7 +323,7 @@ function FirmwareBanner({ verdict }) {
                     Open vendor update tool →
                 </a>
             ) : null}
-        </div>
+        </StatusMessage>
     );
 }
 

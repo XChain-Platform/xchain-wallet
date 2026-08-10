@@ -9,15 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    ChainPicker,
-    AddressText,
- Icon, FeeSelector,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -374,7 +366,7 @@ export function LinkForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -593,9 +585,9 @@ export function LinkForm({ walletId, onBack }) {
             </div>
 
             {validationError ? (
-                <p role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     {validationError}
-                </p>
+                </StatusMessage>
             ) : null}
 
             {fromAddress && submitChainId ? (
@@ -632,7 +624,7 @@ export function LinkForm({ walletId, onBack }) {
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker || ''} />
 
             {formError ? (
-                <p role="alert" className={styles.error}>{formError}</p>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
 
             <div className={styles.actions}>

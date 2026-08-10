@@ -20,15 +20,7 @@
 // decoded-action modal cannot carry (same reasoning as OracleForm/PC-30).
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -245,7 +237,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         </Screen>
     );
 
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId || !fromAddress) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (stage === 'done') {
@@ -333,7 +325,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -358,7 +350,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 and are visible to the whole network once written.
             </p>
             {currentError ? (
-                <div role="alert" className={styles.error}>{currentError}</div>
+                <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
             ) : null}
             {current ? (
                 <dl className={styles.detailsList}>
@@ -438,7 +430,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button type="submit" variant="primary">Review</Button>

@@ -9,12 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    AddressText,
-    Icon,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -223,7 +218,7 @@ export function StakeDetail({
     );
 
     if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
 
     const tabs = kind === 'validator'
         ? [

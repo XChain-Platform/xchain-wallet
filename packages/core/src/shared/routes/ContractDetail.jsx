@@ -9,13 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { extractSingle, contractBalanceRows } from './contractResponseShape.js';
@@ -166,7 +160,7 @@ export function ContractDetail({
     if (contractError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" className={styles.entryDescription}>{contractError}</div>
+                <StatusMessage variant="error" className={styles.entryDescription}>{contractError}</StatusMessage>
             </Screen>
         );
     }
@@ -210,9 +204,9 @@ export function ContractDetail({
                         ) : null}
                     </dl>
                     {deployError ? (
-                        <p role="alert" className={styles.entryDescription}>
+                        <StatusMessage variant="error" className={styles.entryDescription}>
                             Couldn't load deploy details: {deployError}
-                        </p>
+                        </StatusMessage>
                     ) : null}
                 </section>
 
@@ -231,9 +225,9 @@ export function ContractDetail({
                     }
                 >
                     {stateError ? (
-                        <p role="alert" className={styles.entryDescription}>
+                        <StatusMessage variant="error" className={styles.entryDescription}>
                             Couldn't load contract state: {stateError}
-                        </p>
+                        </StatusMessage>
                     ) : state === null ? (
                         <p className={styles.entryDescription}>Loading state…</p>
                     ) : stateExpanded ? (
@@ -247,9 +241,9 @@ export function ContractDetail({
 
                 <Section title="Balances (tokens held by the contract)">
                     {balancesError ? (
-                        <p role="alert" className={styles.entryDescription}>
+                        <StatusMessage variant="error" className={styles.entryDescription}>
                             Couldn't load balances: {balancesError}
-                        </p>
+                        </StatusMessage>
                     ) : balances === null ? (
                         <p className={styles.entryDescription}>Loading balances…</p>
                     ) : (
@@ -259,9 +253,9 @@ export function ContractDetail({
 
                 <Section title="Execution history">
                     {executionsError && executions.length === 0 ? (
-                        <p role="alert" className={styles.entryDescription}>
+                        <StatusMessage variant="error" className={styles.entryDescription}>
                             Couldn't load executions: {executionsError}
-                        </p>
+                        </StatusMessage>
                     ) : executions.length === 0 ? (
                         <p className={styles.entryDescription}>
                             No contract calls recorded against this contract yet.

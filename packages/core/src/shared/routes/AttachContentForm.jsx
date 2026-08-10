@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -653,7 +646,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -791,7 +784,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {hw && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
@@ -845,7 +838,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {hw && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
@@ -925,7 +918,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {hw && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
@@ -990,7 +983,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {hw && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -1108,7 +1101,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

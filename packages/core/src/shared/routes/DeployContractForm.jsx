@@ -9,15 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    NetworkField,
-    AddressText,
- Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -647,7 +639,7 @@ export function DeployContractForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -777,7 +769,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 {/* A chunked run lives entirely in `submitting`, which renders THIS
                     screen - so the explanation has to be here. It used to sit in the
@@ -876,9 +868,9 @@ export function DeployContractForm({ walletId, onBack }) {
                     iconLabel="Choose source address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     No address on this chain yet. Use Receive to generate one first.
-                </div>
+                </StatusMessage>
             )}
 
             <Input
@@ -1023,7 +1015,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             {/* PC-38: how many transactions this deploy actually costs. */}
             {planError ? (
-                <p role="alert" className={styles.error}>{planError}</p>
+                <StatusMessage variant="error" className={styles.error}>{planError}</StatusMessage>
             ) : plan ? (
                 <p className={plan.single ? styles.summary : styles.warning}>
                     {plan.single
@@ -1119,7 +1111,7 @@ export function DeployContractForm({ walletId, onBack }) {
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
 
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

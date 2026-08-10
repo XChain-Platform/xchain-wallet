@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    Textarea,
-    IconSelect,
-    FeeSelector,
-    ChainBadge,
-    AddressText,
- Icon, AddressField,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
@@ -568,7 +558,7 @@ export function ComposeMessage({
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,

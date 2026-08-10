@@ -9,8 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Screen,
-    PageHeader, Button , Icon} from '@xchain-wallet/core/ui';
+import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -131,7 +130,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
 
     if (loadError) {
         return wrap(
-            <p role="alert" className={styles.entryDescription}>{loadError}</p>,
+            <StatusMessage variant="error" className={styles.entryDescription}>{loadError}</StatusMessage>,
         );
     }
 

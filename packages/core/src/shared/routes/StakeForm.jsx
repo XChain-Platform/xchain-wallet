@@ -9,15 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    NetworkField,
-    AddressText,
- Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -451,7 +443,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -546,7 +538,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -753,7 +745,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             ) : null}
 
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

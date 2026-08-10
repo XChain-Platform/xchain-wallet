@@ -9,16 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    NetworkField,
-    AddressText,
-    FeeSelector,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -328,7 +319,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -407,7 +398,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
 
                 <div className={styles.actions}>

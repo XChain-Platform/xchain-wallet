@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    ChainPicker,
- Icon,} from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, ChainPicker, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -246,7 +239,7 @@ export function MultisigCreate({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -374,10 +367,10 @@ export function MultisigCreate({ walletId, onBack }) {
             </dl>
 
             {composeError ? (
-                <p role="alert" className={styles.error}>{composeError}</p>
+                <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
             ) : null}
             {submitError ? (
-                <p role="alert" className={styles.error}>{submitError}</p>
+                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
             ) : null}
 
             <div className={styles.actions}>

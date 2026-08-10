@@ -9,12 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    NetworkField,
-} from '@xchain-wallet/core/ui';
+import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { GOVERNANCE_CHAIN_IDS } from '../hooks/useGovernanceAddressesPresent.js';
@@ -129,7 +124,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 <Button variant="ghost" onClick={() => onDelegate(chainId)}>Delegate votes</Button>
             </div>
 
-            {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {chainId && !rows && !error ? <p>Loading polls…</p> : null}
             {rows && rows.length === 0 ? (
                 <p className={styles.hint}>No polls on this chain yet. Create the first one.</p>

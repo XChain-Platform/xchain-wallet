@@ -9,19 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    Select,
-    Textarea,
-    ChainBadge,
-    NetworkField,
-    AddressText,
-    FeeSelector,
-    AddressField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -432,7 +420,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -533,7 +521,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (<div role="alert" className={styles.error}>{submitError}</div>) : null}
+                {(isWatcherMode || isHwSource) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
                 <div className={styles.actions}>
                     <Button type="submit" variant="primary" loading={stage === 'submitting'}
                         disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
@@ -738,7 +726,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 />
             ) : null}
 
-            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             <div className={styles.actions}>
                 <Button
                     type="submit"

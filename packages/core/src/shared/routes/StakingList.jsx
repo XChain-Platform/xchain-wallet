@@ -9,12 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Icon,
-    Button,
-} from '@xchain-wallet/core/ui';
+import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -357,7 +352,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     );
 
     if (addressesError) {
-        return wrap(<div role="alert" className={styles.entryDescription}>{addressesError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
@@ -407,9 +402,9 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             ) : null}
             {loadErrors.length > 0 ? (
-                <p role="alert" className={styles.entryDescription}>
+                <StatusMessage variant="error" className={styles.entryDescription}>
                     Couldn't load some staking data. {loadErrors.join('; ')}
-                </p>
+                </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>

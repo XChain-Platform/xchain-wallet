@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Button, ChainBadge, AddressText } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -79,7 +79,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!data) {
         return wrap(<p className={styles.hint}>Loading…</p>);

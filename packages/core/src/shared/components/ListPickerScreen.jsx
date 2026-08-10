@@ -20,7 +20,7 @@
 // carries before binding it to a token.
 
 import { useEffect, useState } from 'react';
-import { Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 
 function extractListRows(resp) {
@@ -112,7 +112,7 @@ export function ListPickerScreen({
     const header = <PageHeader onBack={onBack} title={title} />;
 
     if (loadError) {
-        return <Screen variant={variant} header={header}><div className={styles.abEmpty} role="alert">{loadError}</div></Screen>;
+        return <Screen variant={variant} header={header}><StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage></Screen>;
     }
     if (!rows) {
         return <Screen variant={variant} header={header}><div className={styles.abEmpty}>Loading lists…</div></Screen>;

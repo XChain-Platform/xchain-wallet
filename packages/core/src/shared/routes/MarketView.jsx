@@ -9,12 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
- Icon,} from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
@@ -199,7 +194,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     return wrap(
         <>
             {summaryError ? (
-                <div role="alert" className={styles.error}>{summaryError}</div>
+                <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
             ) : null}
             {headerCard}
 

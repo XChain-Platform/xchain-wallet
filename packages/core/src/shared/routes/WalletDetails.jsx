@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, Button, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
@@ -110,7 +110,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     if (error) {
         return (
             <Screen variant={variant} header={header}>
-                <div className={styles.entryDescription} role="alert">{error}</div>
+                <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
             </Screen>
         );
     }

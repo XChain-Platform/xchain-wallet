@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -75,7 +75,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>
                 {error ? (
-                    <div className={styles.entryDescription} role="alert">{error}</div>
+                    <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
                 ) : accounts === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : accounts.length === 0 ? (

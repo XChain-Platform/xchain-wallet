@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    Icon,
-    FeeSelector,
-    AddressField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -446,7 +436,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -548,7 +538,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <Input
                     label="Type CALLBACK to confirm"
@@ -665,9 +655,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     iconLabel="Choose source address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
-                </div>
+                </StatusMessage>
             )}
 
             {previewBlock}
@@ -709,7 +699,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

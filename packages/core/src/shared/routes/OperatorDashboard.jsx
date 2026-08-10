@@ -9,16 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    Icon,
-    PageHeader,
-    FeeSelector,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -257,7 +248,7 @@ function Section({ title, loading, error, children }) {
             {loading ? (
                 <p className={dashStyles.entryDescription}>Loading…</p>
             ) : error ? (
-                <p role="alert" className={dashStyles.entryDescription}>Couldn't load: {error}</p>
+                <StatusMessage variant="error" className={dashStyles.entryDescription}>Couldn't load: {error}</StatusMessage>
             ) : (
                 children
             )}
@@ -450,7 +441,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    {error ? <div role="alert" className={formStyles.error}>{error}</div> : null}
+                    {error ? <StatusMessage variant="error" className={formStyles.error}>{error}</StatusMessage> : null}
                     {lastTxid ? (
                         <p className={dashStyles.entryDescription}>
                             Last published: txid {String(lastTxid).slice(0, 16)}…

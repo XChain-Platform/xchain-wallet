@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    AddressText,
-    MultisigBadge,
-    Skeleton,
-    Input,
-    Icon,
-    ChainPicker,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, Icon, Input, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -647,7 +637,7 @@ export function AddressList({
                             <span>I understand this key is not backed up by my recovery phrase.</span>
                         </label>
                         {wifError ? (
-                            <div role="alert" className={wifStyles.wifErrorBox}>{wifError}</div>
+                            <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
                         ) : null}
                         <div className={wifStyles.wifActions}>
                             <Button
@@ -732,7 +722,7 @@ export function AddressList({
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,

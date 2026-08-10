@@ -511,7 +511,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -749,9 +749,9 @@ export function IssueTokenForm({ walletId, onBack }) {
                     iconLabel="Choose source address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
-                </div>
+                </StatusMessage>
             )}
 
             <Input

@@ -25,14 +25,7 @@
 // users assembling several metadata actions atomically.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -289,7 +282,7 @@ export function BatchComposerForm({ walletId, onBack }) {
         </Screen>
     );
 
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading wallet…</p>);
 
     if (stage === 'done') {
@@ -334,7 +327,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
                 </dl>
 
-                {buildError ? <p role="alert" className={styles.error}>{buildError}</p> : null}
+                {buildError ? <StatusMessage variant="error" className={styles.error}>{buildError}</StatusMessage> : null}
                 {!composed && !buildError ? <p className={styles.hint}>Composing…</p> : null}
                 {composed ? (
                     <>
@@ -374,7 +367,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 ) : null}
-                {submitError && (hw || isWatcherMode) ? <div role="alert" className={styles.error}>{submitError}</div> : null}
+                {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
 
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
@@ -479,7 +472,7 @@ export function BatchComposerForm({ walletId, onBack }) {
             <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
                 <Button type="button" variant="secondary" onClick={addRow}>+ Add action</Button>
             </div>
-            {composeError ? <p role="alert" className={styles.error}>{composeError}</p> : null}
+            {composeError ? <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage> : null}
             <div className={styles.actions}>
                 <Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>
             </div>

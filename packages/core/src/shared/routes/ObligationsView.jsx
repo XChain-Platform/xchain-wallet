@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
-    Icon,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useCoinpayObligations } from '../hooks/useCoinpayObligations.js';
@@ -138,11 +131,11 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     </p>
                 ) : null}
                 {autopayDisarmed ? (
-                    <p role="alert" className={styles.hint}>
+                    <StatusMessage variant="error" className={styles.hint}>
                         Auto-pay is disarmed: this wallet has auto-pay orders but cannot sign
                         right now. Unlock the wallet with your password to re-arm it, or pay
                         matches manually from this queue.
-                    </p>
+                    </StatusMessage>
                 ) : null}
                 {scanning && obligations.length === 0 ? (
                     <p className={styles.hint}>Scanning for payments due…</p>

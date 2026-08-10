@@ -10,13 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    AddressText,
-    Icon,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ViewPrivateKey.module.css';
 
@@ -185,7 +179,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     )}
                 </ul>
                 {submitError ? (
-                    <p className={styles.errorText} role="alert">{submitError}</p>
+                    <StatusMessage variant="error" className={styles.errorText}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button

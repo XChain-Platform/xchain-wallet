@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Screen, Button, Input } from '@xchain-wallet/core/ui';
+import { Button, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     getLockoutState,
@@ -355,7 +355,7 @@ export function Locked({ onUnlocked }) {
                         Wipe wallet data &amp; start over
                     </Button>
                     {demoWipeError ? (
-                        <p role="alert" className={styles.demoExitError}>{demoWipeError}</p>
+                        <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
                     ) : null}
                 </div>
             ) : (
@@ -412,7 +412,7 @@ export function Locked({ onUnlocked }) {
                                 Cancel
                             </Button>
                             {wipeError ? (
-                                <p role="alert" className={styles.wipeError}>{wipeError}</p>
+                                <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
                             ) : null}
                         </div>
                     )}

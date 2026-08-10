@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Icon, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -357,7 +357,7 @@ export function TokenPicker({
     const body = (
         <>
             {loadError ? (
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             ) : null}
             <div className={styles.toolbar}>
                 <input

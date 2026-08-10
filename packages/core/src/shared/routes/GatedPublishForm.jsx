@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -318,7 +311,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
 
     if (stage === 'done') {
@@ -425,7 +418,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
 
                 <div className={styles.actions}>
@@ -461,11 +454,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             </p>
 
             {ownerMissing ? (
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     This wallet does not hold the owner address
                     (<AddressText address={issuerAddress} />) for {tick}. Only the
                     token owner can publish gated files.
-                </div>
+                </StatusMessage>
             ) : null}
 
             <label className={styles.pickerLabel}>
@@ -575,7 +568,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 and the gate cannot be removed later.
             </label>
 
-            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
 
             <div className={styles.actions}>
                 <Button type="submit" variant="primary" disabled={ownerMissing || !fileMeta}>

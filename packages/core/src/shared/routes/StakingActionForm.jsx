@@ -9,16 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    Select,
-    ChainBadge,
-    NetworkField,
-    AddressText,
- Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -539,7 +530,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -645,7 +636,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -794,7 +785,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             ) : null}
 
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

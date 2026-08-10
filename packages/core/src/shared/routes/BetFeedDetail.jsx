@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, Input } from '@xchain-wallet/core/ui';
+import { Button, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -375,7 +375,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     if (error) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{error}</div>
+                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
             </>,
         );
     }
@@ -594,7 +594,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 nothing at all, unable to tell a wallet that refused from a bet that
                 was broadcast and paid for. By this point the money is spent either
                 way, so the txid is owed whatever the market's status has become. */}
-            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.card} data-testid="bet-result">
                     <p className={styles.summary}>

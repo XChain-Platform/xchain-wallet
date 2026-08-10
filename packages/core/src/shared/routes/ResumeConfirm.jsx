@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Screen, Button } from '@xchain-wallet/core/ui';
+import { Button, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -177,7 +177,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
 
     return (
         <Screen variant={variant} title={result ? 'Sent' : 'Unfinished transaction'}>
-            {error ? <p role="alert">{error}</p> : null}
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             {result ? (
                 <p data-testid="resume-confirm-sent">
                     Sent.{result.txid || result.broadcast?.txid

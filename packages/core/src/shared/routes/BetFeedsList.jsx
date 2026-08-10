@@ -9,12 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    NetworkField,
-} from '@xchain-wallet/core/ui';
+import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -185,7 +180,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 </div>
             ) : null}
 
-            {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {chainId && !rows && !error ? <p>Loading markets…</p> : null}
             {rows && rows.length === 0 ? (
                 <p className={styles.hint}>

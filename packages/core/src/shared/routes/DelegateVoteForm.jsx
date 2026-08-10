@@ -9,17 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    NetworkField,
-    AddressText,
-    FeeSelector,
-    AddressField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -315,7 +305,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -394,7 +384,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -527,7 +517,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                 />
             ) : null}
 
-            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             <div className={styles.actions}>
                 <Button type="submit" variant="primary" block loading={actionConfirm.composing} disabled={!fromAddress || !tick.trim() || (!isClear && !delegateTo.trim()) || actionConfirm.composing}>
                     {singleEncode ? verb : 'Preview'}

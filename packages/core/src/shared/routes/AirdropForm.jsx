@@ -9,15 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    Select,
-    ChainBadge,
-    AddressText,
- NetworkField,  Icon, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1114,7 +1106,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -1282,7 +1274,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     />
                 )}
                 {(hw || singleEncode) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -1417,7 +1409,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     />
                 )}
                 {(hw || singleEncode) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
@@ -1550,9 +1542,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     No address on this chain. Use Receive to generate one first.
-                </div>
+                </StatusMessage>
             )}
 
             <Select
@@ -1800,7 +1792,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button
@@ -1901,7 +1893,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         </Screen>
     );
 
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!rows) return wrap(<p className={styles.hint}>Loading lists…</p>);
     if (rows.length === 0) {
         return wrap(

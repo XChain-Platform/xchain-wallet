@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, ChainBadge, Icon, Button, Input } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -1437,7 +1437,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     }, [addresses, addressesLoading, messaging, walletId, chainId]);
 
     if (loading) return <p className={styles.muted}>Loading gated content…</p>;
-    if (error) return <p role="alert" className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (!groups || groups.length === 0) {
         return (
             <div className={styles.infoCard}>
@@ -1830,7 +1830,7 @@ function GatedGroupCard({
                     {addressesLoading ? (
                         <p className={styles.muted}>Loading addresses…</p>
                     ) : addressesError ? (
-                        <p role="alert" className={styles.error}>{addressesError}</p>
+                        <StatusMessage variant="error" className={styles.error}>{addressesError}</StatusMessage>
                     ) : null}
                     <Input
                         ref={passwordRef}
@@ -1919,7 +1919,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
 
 function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
-    if (holdersError) return <p role="alert" className={styles.error}>{holdersError}</p>;
+    if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
     if (!holders || holders.length === 0) return null;
     return (
         <>

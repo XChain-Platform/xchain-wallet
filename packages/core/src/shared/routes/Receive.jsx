@@ -10,19 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import {
-    Screen,
-    PageHeader,
-    ChainBadge,
-    AddressText,
-    AddressField,
-    Button,
-    CopyButton,
-    MultisigBadge,
-    FeeSelector,
-    StatusMessage,
-    Icon,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, Icon, MultisigBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -570,7 +558,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const body = (
         <>
             {loadError ? (
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             ) : null}
 
             {noAddresses ? (
@@ -694,12 +682,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                     ✅ Confirmed on your {hwDeviceLabel}. Safe to share.
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
-                                <div role="alert" className={styles.error}>
+                                <StatusMessage variant="error" className={styles.error}>
                                     Your {hwDeviceLabel} showed a different address. Do not deposit here.
                                     Disconnect and re-pair the device.
-                                </div>
+                                </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
-                                <div role="alert" className={styles.error}>{hwVerify.message}</div>
+                                <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
                                     Verify this address on your {hwDeviceLabel} before depositing, so a

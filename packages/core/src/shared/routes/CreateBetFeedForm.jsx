@@ -9,16 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    Select,
-    Textarea,
-    NetworkField,
-    AddressField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, Button, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -510,7 +501,7 @@ export function CreateBetFeedForm({
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -805,7 +796,7 @@ export function CreateBetFeedForm({
                 />
             ) : null}
 
-            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             <div className={styles.actions}>
                 <Button
                     type="submit"

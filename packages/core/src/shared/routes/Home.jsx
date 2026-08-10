@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Button, Icon, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -692,7 +692,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <Screen variant={variant}>
                 <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
                     {loadError ? (
-                        <div role="alert" className={styles.error}>{loadError}</div>
+                        <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                     ) : null}
                     {/* §25.2 / Cluster J FOLLOWUP 2: banner gated to popup
                         shells. Web + desktop mount the same banner inside
@@ -718,7 +718,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         <Screen variant={variant}>
             <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
                 {loadError ? (
-                    <div role="alert" className={styles.error}>{loadError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 ) : null}
 
                 {balances === null && !loadError ? (

@@ -21,14 +21,7 @@
 // EXPIRATION vs wall clock. Cancel/edit are offered only while open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -171,7 +164,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     }
 
     if (items === null) return wrap(<p className={L.hint}>Loading your swaps…</p>);
-    if (loadError) return wrap(<p role="alert" className={L.hint}>{loadError}</p>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
     if (items.length === 0) {
         return wrap(
             <div className={L.empty}>
@@ -418,7 +411,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                 disabled={submitting}
                 getSignerStatus={messaging.getSignerStatus}
             />
-            {error && hw ? <div role="alert" className={F.error}>{error}</div> : null}
+            {error && hw ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
 
             <div className={F.actions}>
                 <Button

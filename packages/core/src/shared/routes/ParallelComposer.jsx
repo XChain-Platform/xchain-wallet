@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
- Icon, FeeSelector,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -301,7 +294,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -381,7 +374,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 ) : null}
 
                 {activeRow.status === 'failed' && activeRow.error ? (
-                    <p role="alert" className={styles.error}>{activeRow.error}</p>
+                    <StatusMessage variant="error" className={styles.error}>{activeRow.error}</StatusMessage>
                 ) : null}
 
                 <div className={styles.actions}>
@@ -494,7 +487,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 </Button>
             </div>
             {composeError ? (
-                <p role="alert" className={styles.error}>{composeError}</p>
+                <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

@@ -9,11 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Icon,
-} from '@xchain-wallet/core/ui';
+import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
@@ -309,7 +305,7 @@ export function MarketsList({
             ) : null}
 
             {loadError ? (
-                <p className={styles.hint} role="alert">{loadError}</p>
+                <StatusMessage variant="error" className={styles.hint}>{loadError}</StatusMessage>
             ) : null}
 
             {!selectedAsset ? (

@@ -9,16 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-    AddressField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -483,7 +474,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             </>,
         );
     }
@@ -493,11 +484,11 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
     if (!contractMeta.valid) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     Contract #{contractActionIndex} is not stakeable. Its deploy
                     transaction did not set a cooldown duration. Staking is only
                     available on contracts that explicitly opted in at deploy time.
-                </div>
+                </StatusMessage>
             </>,
         );
     }
@@ -623,7 +614,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -729,9 +720,9 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                     iconLabel="Choose source address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>
+                <StatusMessage variant="error" className={styles.error}>
                     No address on this chain yet. Use Receive to generate one first.
-                </div>
+                </StatusMessage>
             )}
 
             <fieldset style={{ border: 'none', padding: 0, marginBottom: '0.75rem' }}>
@@ -826,7 +817,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             ) : null}
 
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

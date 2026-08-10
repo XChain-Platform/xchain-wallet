@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -353,7 +346,7 @@ export function CoinpayForm({
     if (loadError) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{loadError}</div>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -457,7 +450,7 @@ export function CoinpayForm({
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
 
                 <div className={styles.actions}>
@@ -601,7 +594,7 @@ export function CoinpayForm({
                     ) : null}
 
                     {submitError ? (
-                        <div role="alert" className={styles.error}>{submitError}</div>
+                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                     ) : null}
 
                     <div className={styles.actions}>

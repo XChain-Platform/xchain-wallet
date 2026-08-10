@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -404,7 +397,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         </Screen>
     );
 
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (stage === 'repoint') {
@@ -515,7 +508,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (<div role="alert" className={styles.error}>{submitError}</div>) : null}
+                {hw && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
@@ -593,7 +586,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (<div role="alert" className={styles.error}>{submitError}</div>) : null}
+                {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={submitting}>Back</Button>
                     <Button
@@ -672,7 +665,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
-            {formError ? (<div role="alert" className={styles.error}>{formError}</div>) : null}
+            {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
             <div className={styles.actions}>
                 <Button type="submit" variant="primary" block disabled={!needsAdd && !needsRemove}>
                     Review

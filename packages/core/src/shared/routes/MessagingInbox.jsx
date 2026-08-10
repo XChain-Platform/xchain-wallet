@@ -9,13 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -436,7 +430,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
 
     if (!addressesByChain) {

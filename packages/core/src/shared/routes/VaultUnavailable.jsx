@@ -44,7 +44,7 @@
 // to put a one-tap destructive button under their thumb.
 
 import { useState } from 'react';
-import { Screen, Button, Input } from '@xchain-wallet/core/ui';
+import { Button, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import styles from './VaultUnavailable.module.css';
@@ -192,7 +192,7 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                             Cancel
                         </Button>
                         {wipeError ? (
-                            <p role="alert" className={styles.wipeError}>{wipeError}</p>
+                            <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
                         ) : null}
                     </div>
                 ) : null}

@@ -24,6 +24,7 @@
 
 import { useEffect, useState } from 'react';
 import S from './MarketLifecycleTimeline.module.css';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 
 const LABEL = {
     created: 'Created',
@@ -105,7 +106,7 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
     }, [messaging, kind, chainId, address, actionIndex, createdBlock]);
 
     if (state.loading) return <div className={S.status}>Loading timeline…</div>;
-    if (state.error) return <div className={S.status} role="alert">{state.error}</div>;
+    if (state.error) return <StatusMessage variant="error" className={S.status}>{state.error}</StatusMessage>;
     if (!state.events || state.events.length === 0) return <div className={S.status}>No lifecycle events yet.</div>;
 
     return (

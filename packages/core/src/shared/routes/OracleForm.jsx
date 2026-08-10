@@ -9,18 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    Select,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
-    AddressField,
-    NetworkField,
-} from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -358,7 +347,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         </Screen>
     );
 
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (stage === 'done') {
@@ -488,7 +477,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? <div role="alert" className={styles.error}>{submitError}</div> : null}
+                {(isWatcherMode || isHwSource) && submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
 
                 {needsTypedConfirm ? (
                     <Input
@@ -575,7 +564,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <div role="alert" className={styles.error}>No address on this chain. Use Receive to generate one first.</div>
+                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
             )}
 
             <p className={styles.successLabel}>My published prices</p>
@@ -673,7 +662,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? <div role="alert" className={styles.error}>{formError}</div> : null}
+            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             <div className={styles.actions}>
                 <Button
                     type="submit"

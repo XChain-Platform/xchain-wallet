@@ -23,18 +23,7 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    ChainPicker,
-    CopyButton,
-    Icon,
-    StatusMessage,
-    PageHeader,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -411,7 +400,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 for it twice. Errors still surface here: the page is gone by the
                 time we render them. */}
             {error ? (
-                <p role="alert" className={styles.error}>{error}</p>
+                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
             ) : null}
             <Button
                 type="submit"

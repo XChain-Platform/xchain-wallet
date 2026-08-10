@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -104,7 +104,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     if (error) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{error}</div>
+                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
             </>,
         );
     }

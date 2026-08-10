@@ -9,15 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
-    FeeSelector,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -973,7 +965,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     );
 
     if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
-    if (loadError) return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
 
     if (cancelStage === 'done') {
         const txid = cancelResult?.txid || cancelResult?.broadcast?.txid;
@@ -1034,9 +1026,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                   * transaction the chain always rejects.
                   */}
                 {refillCount.remaining <= 0 && refillCount.exact ? (
-                    <div role="alert" className={styles.error}>
+                    <StatusMessage variant="error" className={styles.error}>
                         {refillCeilingMessage(refillCount)}
-                    </div>
+                    </StatusMessage>
                 ) : (
                     <p className={styles.hint}>{refillCeilingMessage(refillCount)}</p>
                 )}
@@ -1082,7 +1074,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {cancelHw && refillError ? (
-                    <div role="alert" className={styles.error}>{refillError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -1196,7 +1188,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {cancelHw && editError ? (
-                    <div role="alert" className={styles.error}>{editError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -1296,7 +1288,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {buyHw && buyError ? (
-                    <div role="alert" className={styles.error}>{buyError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -1360,7 +1352,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     getSignerStatus={messaging.getSignerStatus}
                 />
                 {cancelHw && cancelError ? (
-                    <div role="alert" className={styles.error}>{cancelError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{cancelError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Screen } from '@xchain-wallet/core/ui';
+import { Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Loading.module.css';
 
@@ -24,7 +24,7 @@ export function Loading({ error }) {
         <Screen variant={variant}>
             <div className={centerClass}>
                 {error ? (
-                    <div role="alert" className={styles.error}>{error}</div>
+                    <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
                 ) : (
                     <div aria-live="polite" className={styles.dots}>
                         <span /> <span /> <span />

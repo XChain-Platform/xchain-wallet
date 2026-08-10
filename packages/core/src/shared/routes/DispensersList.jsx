@@ -9,11 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Icon,
-} from '@xchain-wallet/core/ui';
+import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -238,7 +234,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
 
     if (addressesError) {
-        return wrap(<div role="alert" className={styles.entryDescription}>{addressesError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
@@ -268,9 +264,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </div>
             {loadErrors.length > 0 ? (
-                <p role="alert" className={styles.entryDescription}>
+                <StatusMessage variant="error" className={styles.entryDescription}>
                     Couldn't load some dispensers. {loadErrors.join('; ')}
-                </p>
+                </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>

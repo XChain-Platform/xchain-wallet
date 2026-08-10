@@ -31,7 +31,7 @@
 // device round-trip.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainPicker, Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
+import { Button, ChainPicker, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -273,7 +273,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 disabled={busy}
                             />
                         </label>
-                        {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+                        {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
                         {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         <div className={styles.actions}>
                             {/* The label carries a count ("Generate 3"), so matching it by

@@ -9,16 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    ChainPicker,
-    AddressText,
-    FeeSelector,
-} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -414,7 +405,7 @@ export function PublishFileForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -514,7 +505,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="secondary" type="button" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
@@ -721,7 +712,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
 
                     {formError ? (
-                        <div role="alert" className={styles.error}>{formError}</div>
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
                     ) : null}
                     <div className={styles.actions}>
                         <Button type="submit" variant="primary" disabled={!fileMeta || !fromAddress}>

@@ -9,14 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Screen,
-    PageHeader,
-    Button,
-    Input,
-    ChainBadge,
-    AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -234,7 +227,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
     // invalid token regex). That uses the sentinel "_error" key.
     const overall = rowsByChain._error;
     if (overall && overall.error) {
-        return <p role="alert" className={styles.entryDescription}>{overall.error}</p>;
+        return <StatusMessage variant="error" className={styles.entryDescription}>{overall.error}</StatusMessage>;
     }
     let anyRow = false;
     let anyError = false;
@@ -265,9 +258,9 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
                                 : <span>{cid}</span>}
                         </header>
                         {state.error ? (
-                            <p role="alert" className={styles.entryDescription}>
+                            <StatusMessage variant="error" className={styles.entryDescription}>
                                 Couldn't search: {state.error}
-                            </p>
+                            </StatusMessage>
                         ) : (
                             state.rows.map((row) => (
                                 <ResultRow

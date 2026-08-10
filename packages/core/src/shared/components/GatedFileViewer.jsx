@@ -32,7 +32,7 @@
 //     through a wallet-origin document either.
 
 import { useEffect, useMemo } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { sniffContent } from '../utils/sniffContent.js';
 import styles from './GatedFileViewer.module.css';
 
@@ -202,11 +202,11 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
                     {declared ? ` · published as: ${declared}` : ''}
                 </p>
                 {mismatch ? (
-                    <p className={styles.mismatch} role="alert">
+                    <StatusMessage variant="error" className={styles.mismatch}>
                         The published file type ({declared}) doesn&apos;t match the
                         actual content ({kindLabel(sniffed.kind, sniffed.mime)}).
                         Treat this file with caution.
-                    </p>
+                    </StatusMessage>
                 ) : null}
                 <div className={styles.body}>{body}</div>
                 <div className={styles.actions}>

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -464,7 +464,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         </Button>
                     ) : null}
                     {gradError ? (
-                        <p role="alert" className={styles.demoError}>{gradError}</p>
+                        <StatusMessage variant="error" className={styles.demoError}>{gradError}</StatusMessage>
                     ) : null}
                 </div>
             </Screen>
@@ -559,7 +559,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     </Button>
                 ) : null}
                 {demoError ? (
-                    <p role="alert" className={styles.demoError}>{demoError}</p>
+                    <StatusMessage variant="error" className={styles.demoError}>{demoError}</StatusMessage>
                 ) : null}
             </div>
         </Screen>
