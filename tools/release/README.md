@@ -107,7 +107,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `verify-privacy-url.mjs` |  §5/D5 pre-submission check: is the public privacy-policy URL live, answering directly (no redirect hop), and serving the current [privacy policy](https://docs.xchain.io/components/wallet/privacy/privacy-policy) word for word. Compares prose, not bytes, since the hosted page is rendered Markdown. Exits 0 live / 1 not live, redirecting, or stale / 2 config error / 3 inconclusive (403, timeout, network - never folded into live) / 4 live and current but a contact address the policy publishes is JavaScript-gated at the edge (submittable; the store validates that the URL resolves and serves the policy, and it does). **Do not use `curl` for this instead: Cloudflare answers plain tooling with 403 on every path of this domain, live page or not.** (Correction 2026-08-02: that stopped being true when turned Super Bot Fight Mode off; plain clients now get 200 zone-wide. The inconclusive-on-403 treatment stays, because the block can come back and this script must not report a false outage when it does. `verify-demo-endpoints.mjs` below deliberately takes the opposite view of a 403 on the API hosts, for a reason stated there.) Exit 4 exists because the script DECODES the edge's email obfuscation for its text comparison, which is right (the deployed bytes are innocent) but silent, and silence left the property unmeasured: the addresses are derived from the policy itself, and every run says whether each one is readable without JavaScript rather than only complaining when it is not. | Live, and green as of 2026-08-01: the apex flip landed and the URL serves the merged all-shells policy, confirmed through the edge in a browser and against the origin via `--html`. Takes operator-supplied bytes with `--html <file>` when Cloudflare 403s the host, the same way `verify-store.sh` takes a real store unpack rather than scraping |
 | `verify-demo-endpoints.mjs` |  §2.1 pre-submission gate: can a store REVIEWER reach the endpoints the scripted demo sends them to, from a plain client on no allowlist? Probe list is derived from `packages/core/src/registry/descriptors/`, never restated, and deduplicated by URL. A 200 is not a pass on its own: the hub's chain-registry Ed25519 signature is verified against the pinned federation key, the explorer must name the demo's coin in its `available` map, and the encoder's UTXO tracker must be reachable AND synced. Exits 0 live / 1 failure / 2 config error / 3 inconclusive (timeout, network - never folded into live). **403 is a FAILURE here, not inconclusive**: on these hosts it means the edge block is back, which is the regression this gate exists to catch. `--network mainnet`, `--json`, and `--burst N` for the bounded rate-limit probe (; one request per host cannot see a 0.5 req/sec limit). No custom User-Agent, ever: looking like a browser defeats the point. **Every probe carries an `Origin` header and the reply's `Access-Control-Allow-Origin` is checked against it**, defaulting to `capacitor://localhost` (what the iOS store build sends) and re-pointable with `--origin`: the shipped app is a WebView with no native-HTTP bypass, so a service that answers this gate 200 and serves no ACAO is, to the app, down. A blocked origin is a FAILURE reported as `UNREACHABLE FROM THE APP`. The hub is probed twice for this reason - its chain-registry route is the one annotated cross-origin exception, so probing only that route hides a closed JSON-RPC surface. | **RED as of 2026-08-07, correctly, and this is what the CORS half was added for**: every probe was OK on 2026-08-02 and the demo still could not be performed. `encoder.xchain.io` serves no `Access-Control-Allow-Origin` on any path and neither does the hub's JSON-RPC surface, so the reviewer can read a balance and cannot send (). Service health itself is green: registry signed, TBTC indexer current, all three encoder trackers synced at lag 0 |
 | `verify-appstore-version.mjs` |  pre-submission gate for the half of the lane that lives on Apple's servers: would App Store Connect actually accept a submission? Reads the version record and writes nothing. Checks the version has a build ATTACHED (not merely uploaded), that it is VALID and unexpired, and that its store integer is what `packages/mobile/scripts/version.js` derives from the version string; `releaseType` is MANUAL per §5; all four App Review contact fields are filled, since those are a write lock on the whole page rather than a checklist item; the review notes Apple HOLDS carry the network-switch step and not the claim it replaced (§17's guard pointed at the console instead of the document); the per-submission demo seed is filled; both required screenshot sets are present and `COMPLETE`; the privacy URL is the canonical one the App Privacy form is published against; and the age rating accounts for what the binary ships, keyed on the same `HIDDEN_SURFACES` that `mobile-ios-shell.smoke.js` §16 reads so the two cannot drift. Exits 0 ready / 1 failure / 2 config / 3 inconclusive; failure outranks inconclusive. **The gambling answer reports LOUDLY and never fails**: it is a standing operator decision () re-read at submit, and a gate that vetoes a decision is a gate an operator routes around. **The unfilled demo seed is the one expected failure**, and when it is the only one the script says so rather than saying do-not-submit. Takes `APPLE_API_KEY` (or `APPLE_API_KEY_PATH`), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`. | Live, and driven against the real record 2026-08-06: exit 1 on the demo-seed placeholder alone, every other check green. Built because the uploaded build was NOT attached to the version and two consecutive runs had described the console as complete |
-| `store-version-monitor.mjs` |  §2 publish monitor: compares each configured item's live Chrome Web Store version against `packages/extension/docs/publish-log.md`; a live version with no matching log row is the rogue-publish (compromised-publisher) signal. Exits 0 clean / 1 alert / 2 config error (item id unset or log unreadable) / 3 inconclusive (fetch failure or unrecognized page shape - never folded into clean). Run `node tools/release/store-version-monitor.mjs --help` for flags and the origin-host cron line. | Script built; NOT installed anywhere yet (see the [manual QA checklist](https://docs.xchain.io/components/wallet/release/qa-checklist) "Chrome Web Store release provenance") |
+| `store-version-monitor.mjs` |  §2 publish monitor: compares each configured item's live Chrome Web Store version against `packages/extension/docs/publish-log.md`; a live version with no matching log row is the rogue-publish (compromised-publisher) signal. Exits 0 clean / 1 alert / 2 config error (item id unset or log unreadable) / 3 inconclusive (fetch failure or unrecognized page shape - never folded into clean). **TWO lanes since**, not one: `--no-chrome` / `--no-play` select them, and a whole-run config error (no item id) stops both. The Play lane watches the Android listing for PRESENCE rather than version, latching the first sighting, so it needs a writable `PLAY_STATE_PATH` and no id. Run `node tools/release/store-version-monitor.mjs --help` for flags and the origin-host cron line. | **Installed on origin-host 2026-08-01; the PLAY lane is ARMED (2026-08-10, `--no-chrome`) and the CHROME lane is still staged-and-commented**, waiting on the extension id the first upload assigns (see the [manual QA checklist](https://docs.xchain.io/components/wallet/release/qa-checklist) "Chrome Web Store release provenance"). Provenance of the deployed copy is recorded on the host in `/opt/xchain/.store-version-monitor.provenance` |
 | `verify-signatures.mjs` | 's signature gate, run by `sign.sh` BEFORE the manifest is written: does each staged artifact actually carry the OS code signature its row says it should? The ordering is the point, because K1 attests the bytes and not the publisher, so a manifest written over unsigned installers verifies perfectly forever and every downstream check agrees with it. | Live, and refusing: it is what stops `v0.336.0` being signed, on two unsigned macOS zips and two unsigned Windows installers () |
 | `verify-validated-commit.mjs` |  §6 step 1 as a gate instead of a sentence: is this commit one that green CI already validated? Written as procedure and enforced by nothing until, which is how the first release this project ever cut was tagged on a commit whose CI had not passed. Refuses a short SHA and a missing token rather than guessing. | Live |
 | `verify-release-key.sh` | Proves the release signing key (K1) by DRIVING the real pipeline end to end rather than by listing commands in a runbook, and records what it saw in `docs/release-key-pin.json`: a key that signed a manifest, a signature that verified, a manifest that anchors to its tag. Only a real run can write that note, which is what ceremony Phase 4b reads. | Live; K1 generated and proved 2026-08-05 |
@@ -137,6 +137,15 @@ release provenance"). It is disarmed rather than absent on purpose: with
 `CWS_MAIN_ITEM_ID` unset the script exits 2 and writes to stderr, so an
 armed cron would mail a config error every six hours and train everyone
 to ignore the one alert that matters.
+
+**Arming means REPLACING the staged line with step 3's, not uncommenting
+it.** The commented entry on the host is a third home for this line, and
+nothing in this repository can see it or check it: it predates the Play
+lane added, so it carries neither `PLAY_STATE_PATH` nor
+`--no-play`. Uncommenting it and pasting the item ID in is therefore the
+one arming gesture that reproduces the fault step 3 exists to avoid, and
+it stays silent until the first sighting of a live listing. Paste over
+it; do not edit around it.
 
 Everything else was verified running on origin-host: the log refresh, the
 parse, and a real request to the Chrome Web Store (exit 3, inconclusive,
@@ -184,8 +193,19 @@ The original steps follow, still accurate for what they cover.
            live for store correspondence>
    0 */6 * * * CWS_MAIN_ITEM_ID=<recorded extension id> \
      CWS_BETA_ITEM_ID=<recorded beta extension id, once that item exists> \
+     PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \
      /usr/bin/node /opt/xchain/store-version-monitor.mjs >/dev/null
    ```
+   `PLAY_STATE_PATH` is here because this line runs BOTH lanes, and the
+   Play one keeps a latch (see the Play section below). Without it the
+   latch defaults beside the script in `/opt/xchain`, which is root-owned:
+   measured on the host 2026-08-10, `jdog` cannot create a file there. A
+   404 still exits 0, so the fault stays invisible until the first sighting
+   of a live listing, which is the exact day the latch is supposed to arm
+   itself - and from then on this line mails a config error every six hours,
+   which is the alarm fatigue the disarm above exists to prevent. The
+   armed Play-only line on origin-host already carries this variable; a
+   combined line without it is a step BACKWARDS from what is deployed.
    Item IDs are not secrets (they are already public in every installed
    user's `chrome-extension://<id>/` URL and in the store listing link),
    so they can sit in the crontab in plain text like any other config
@@ -213,8 +233,15 @@ ahead of Chrome in this programme. A whole-run config error (no
 install the Play-only form and move to the combined line later:
 
 ```
-0 */6 * * * /usr/bin/node /opt/xchain/store-version-monitor.mjs --no-chrome >/dev/null
+0 */6 * * * PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \
+  /usr/bin/node /opt/xchain/store-version-monitor.mjs --no-chrome >/dev/null
 ```
+
+`PLAY_STATE_PATH` is not optional on this host, which is why it is in the
+line rather than in the prose underneath it: the default sits beside the
+script in root-owned `/opt/xchain`, and the failure it produces is silent
+until the day it matters (see the latch note below). This is what is
+actually deployed and armed on origin-host.
 
 **It keeps state, which the Chrome lane does not.** The Play lane checks that
 the listing is PRESENT and is ours, not what version it is, because a Play

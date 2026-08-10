@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const VERIFIER = join(root, 'tools/release/verify-ios-artifact.mjs');
 
-const { readExpectations, runChecks } = await import(VERIFIER);
+const { readExpectations, runChecks, resolveVersionExpectations } = await import(VERIFIER);
 
 const repoExpectations = readExpectations(root);
 
@@ -195,6 +195,41 @@ mustFail('a stale Version.xcconfig that the artifact agrees with',
 mustFail('a build with no Version.xcconfig behind it at all',
     { expected: { ...expected, marketingVersion: undefined, buildNumber: undefined } },
     /Version\.xcconfig was missing/);
+
+//  S46. The line above is why the CLI half of this smoke was RED on
+// every fresh checkout and green in a checkout that had built iOS: the file is
+// generated and git-ignored, the CLI read its expectation from it regardless,
+// and `--marketing-version` / `--build-number` fed only the TAG side, so the
+// documented standalone use ("looking at an artifact you already have") was
+// refused no matter what it was told. The resolution rule is one-directional
+// and both directions are asserted here, because the permissive half is the
+// one that could quietly turn this tool into something a caller can satisfy by
+// asserting.
+{
+    const withFile = { marketingVersion: '0.336.0', buildNumber: '3360050', bundleId: 'x' };
+    const absent = { marketingVersion: undefined, buildNumber: undefined, bundleId: 'x' };
+
+    const supplied = resolveVersionExpectations(absent, '0.337.0', '3370050');
+    assert.equal(supplied.versionSource, 'flags',
+        'a supplied pair must stand in for an absent Version.xcconfig, or every fresh checkout '
+        + 'refuses the standalone run this tool advertises');
+    assert.equal(supplied.expected.marketingVersion, '0.337.0');
+    assert.equal(supplied.expected.buildNumber, '3370050');
+
+    const present = resolveVersionExpectations(withFile, '0.337.0', '3370050');
+    assert.equal(present.versionSource, 'xcconfig',
+        'FAIL: a supplied version pair overrode a Version.xcconfig that was present. That turns '
+        + 'the stale-xcconfig failure above into something the caller can switch off from the '
+        + 'command line, which is the one thing this rule may never do.');
+    assert.equal(present.expected.marketingVersion, '0.336.0',
+        'the file must win while it exists');
+
+    const half = resolveVersionExpectations(absent, '0.337.0', undefined);
+    assert.equal(half.versionSource, 'xcconfig',
+        'half a pair is not a pair: a supplied marketing version with no build number must fall '
+        + 'through to the missing-xcconfig failure rather than checking one number and skipping '
+        + 'the other in silence');
+}
 
 // Transport security, the twin of usesCleartextTraffic="false".
 for (const [key, label] of [

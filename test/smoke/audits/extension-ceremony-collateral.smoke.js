@@ -1165,6 +1165,43 @@ assert.ok(monitorSteps.length >= 2,
     + 'one) and they are easy to collapse into one. Row 31 exists because only the first was ever '
     + `asked. Found ${monitorSteps.length} step(s).`);
 
+//  S45, row 79. There is now a THIRD question, and it arrived from
+// another lane rather than from this one. Since c1779605  the same
+// script carries a Play lane, and that lane is ARMED on the monitoring host
+// with `--no-chrome`, so a crontab listing shows `store-version-monitor.mjs`
+// scheduled and firing while no Chrome item is being watched at all. The
+// "is the JOB running" box is a §4 public-flip exit criterion, and its own
+// wording ("confirm its scheduled job is actually installed and has fired at
+// least once") is satisfied by that entry. Ticking it on that evidence flips
+// the extension public with no rogue-publish monitoring, which is the one
+// outcome the box exists to prevent. So the box must name what distinguishes
+// the Chrome job, and the distinguishing thing is the item id.
+const liveStep = monitorSteps.find((l) => /store-version monitor is live/i.test(l));
+assert.ok(liveStep, 'FAIL: no "the store-version monitor is live" step on the ceremony page');
+assert.ok(/CWS_MAIN_ITEM_ID/.test(liveStep) && /--no-chrome/.test(liveStep),
+    'FAIL: the monitor-is-live box does not say which scheduled job satisfies it. Since the Play '
+    + 'lane arms the SAME script with --no-chrome, a job matching this script can be installed and '
+    + 'firing while nothing watches the Chrome item, and this box is a §4 public-flip exit '
+    + 'criterion. It must identify the Chrome job by CWS_MAIN_ITEM_ID and say that a --no-chrome '
+    + 'entry is the Play lane and does not count.');
+
+// The same exit criterion is written down TWICE, and both copies are ticked
+// by the same person. `release/qa-checklist.md` carries the mirror under
+// "Chrome Web Store release provenance", and the ceremony's own install step
+// cites that section by name. Fixing one of two mirrored checklists is S22's
+// finding exactly: a repair scoped to where the problem WAS rather than to
+// where it travels. So the discriminator is required in both.
+const qaProvenance = readDoc('release', 'qa-checklist.md')
+    .split('\n').find((l) => /Store-version monitor is live/i.test(l));
+assert.ok(qaProvenance,
+    'FAIL: release/qa-checklist.md no longer carries the "Store-version monitor is live" row that '
+    + 'the ceremony cites as the one-time setup steps for this box.');
+assert.ok(/CWS_MAIN_ITEM_ID/.test(qaProvenance) && /--no-chrome/.test(qaProvenance),
+    'FAIL: the QA checklist mirror of the monitor-is-live exit criterion does not distinguish the '
+    + 'Chrome job from the Play lane, which arms the SAME script with --no-chrome. The ceremony '
+    + 'page carries that distinction and this copy does not, so whichever list the operator ticks '
+    + 'from decides whether the trap is visible.');
+
 const identityStep = monitorSteps.find((l) => /sha256/i.test(l));
 assert.ok(identityStep,
     'FAIL: no step tells the operator to compare the INSTALLED monitor against the reviewed one by '

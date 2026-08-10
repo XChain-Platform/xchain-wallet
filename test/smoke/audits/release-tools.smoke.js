@@ -103,6 +103,97 @@ assert.ok(/xchain-wallet-android-vX\.Y\.Z\.aab/.test(readme),
 assert.ok(/xchain-wallet-ios-vX\.Y\.Z\.ipa/.test(readme),
     'README pins the iOS artifact name');
 
+// --- A documented cron line must not arm a lane into a directory it cannot write ---
+//
+//  S45. `store-version-monitor.mjs` grew a second lane in c1779605
+// , and that lane keeps a latch file which defaults to sitting
+// BESIDE the script. On origin-host the script lives in `/opt/xchain`, which
+// is root-owned: measured 2026-08-10, the cron user cannot create a file
+// there. The resulting fault has the worst available shape, because it is
+// invisible for exactly as long as nothing is wrong: while the listing is
+// absent the lane 404s and exits 0, and the EACCES only arrives on the FIRST
+// SIGHTING of a live listing, which is the day the latch was supposed to arm
+// itself. From then on the entry mails a config error every six hours, which
+// is the alarm fatigue the Chrome disarm note says it exists to prevent.
+//
+// The deployed crontab already carries `PLAY_STATE_PATH`; neither README
+// recipe did, so the documented install was a step BEHIND the host. That is
+// this spec's usual drift running backwards, and prose warning about it is
+// not a fix: the operator copies the LINE, not the paragraph under it. So the
+// invariant is on the line itself.
+// BOTH homes are checked, and the second one is the point. The README's own
+// inventory row says to run `--help` "for flags and the origin-host cron
+// line", so `--help` is where an operator actually copies from and the README
+// is the deferring copy. A check that read only the README would go green on
+// a fixed document while the line the operator pastes stayed broken, which is
+// §13's degrade-quietly defect and precisely the class this assertion closes.
+const cronSources = [['tools/release/README.md', readme]];
+{
+    const help = spawnSync(process.execPath,
+        [join(root, 'tools/release/store-version-monitor.mjs'), '--help'],
+        { encoding: 'utf8' });
+    assert.equal(help.status, 0, `store-version-monitor.mjs --help exits 0 (got ${help.status})`);
+    cronSources.push(['store-version-monitor.mjs --help', `${help.stdout}${help.stderr}`]);
+}
+
+const monitorCronLines = cronSources.flatMap(([origin, text]) => text
+    .replace(/\\\n\s*/g, ' ')
+    .split('\n')
+    .filter((l) => /store-version-monitor\.mjs/.test(l))
+    // a crontab entry, not prose or an scp: five schedule fields first
+    .filter((l) => /^\s*[\d*][^ ]*( +[^ ]+){4} /.test(l))
+    .map((l) => ({ origin, line: l })));
+assert.ok(monitorCronLines.length >= 4,
+    'FAIL: expected the Play-only and combined monitor cron lines in BOTH the README and '
+    + `--help; found ${monitorCronLines.length} across ${cronSources.length} sources. If a `
+    + 'recipe moved, move this check with it rather than deleting it.');
+for (const { origin, line } of monitorCronLines) {
+    if (/--no-play\b/.test(line)) continue;   // Play disabled: no latch, no state file
+    assert.ok(/PLAY_STATE_PATH=|--state[ =]/.test(line),
+        'FAIL: a documented monitor cron line runs the Play lane without giving its latch a '
+        + 'writable home, so it inherits the default beside the script in root-owned '
+        + '/opt/xchain. It exits 0 while the listing is absent and dies EACCES exit 2 on the '
+        + 'first sighting of a live one, then mails that error every six hours. Add '
+        + 'PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json (what is actually '
+        + `deployed) or --no-play. Offending line, from ${origin}: ${line.trim()}`);
+}
+
+//  S46. The two lines above are the only homes this repository can
+// reach, and there is a third one it cannot: the commented entry already
+// sitting in the crontab on the host, staged there in 2026-08 and therefore
+// predating the Play lane entirely. Measured over SSH 2026-08-10, it carries
+// neither variable. The install section is written for a reader who will arm
+// this by hand, and "the crontab entry is staged and commented out" invites
+// the one gesture that reproduces the fault: uncomment it, paste the item ID
+// in, done. Fixing the recipe cannot reach that operator, so the section has
+// to say outright that arming means replacing the staged line rather than
+// uncommenting it. The assertion is on the instruction, not on its wording,
+// so rewriting the paragraph is free and deleting the rule is not.
+{
+    const installSection = readme.slice(readme.indexOf('### Installing the store-version monitor'))
+        .split(/\n### /)[0];
+    assert.ok(installSection.length > 0, 'README carries the monitor install section');
+    assert.ok(/replac/i.test(installSection) && /uncomment/i.test(installSection),
+        'FAIL: the monitor install section does not tell the operator that arming means '
+        + 'REPLACING the staged crontab line rather than uncommenting it. The line already on '
+        + 'the host predates the Play lane and carries no PLAY_STATE_PATH, so uncommenting it '
+        + 'arms the latch into root-owned /opt/xchain - the exact fault the recipe in this '
+        + 'section was fixed to avoid. That copy is a third home and nothing in this repo can '
+        + 'see it, so this sentence is the only thing standing between the operator and it.');
+}
+
+// The inventory table and the install section describe the same deployment,
+// and for nine days they disagreed: the table said "NOT installed anywhere
+// yet" while the section 17 lines below it was headed DEPLOYED 2026-08-01.
+// A reader checking whether a monitor exists reads the table.
+const monitorInventoryRow = readme.split('\n')
+    .find((l) => /^\|\s*`store-version-monitor\.mjs`/.test(l));
+assert.ok(monitorInventoryRow, 'README inventory has a store-version-monitor.mjs row');
+assert.ok(!/NOT installed anywhere/i.test(monitorInventoryRow),
+    'FAIL: the inventory row calls the monitor uninstalled while this same file documents '
+    + 'its origin-host install, and the host has been running it since 2026-08-01. The '
+    + 'inventory is what a reader consults to answer "does this exist yet".');
+
 const signSrc = read('tools/release/sign.sh');
 const verifySrc = read('tools/release/verify.sh');
 const libSrc = read('tools/release/lib.sh');

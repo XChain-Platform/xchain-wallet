@@ -518,16 +518,26 @@ unreadable, or both lanes disabled - the monitor did NOT run a full
 check), 3 inconclusive (could not determine state this run - NOT the
 same as clean).
 
-Intended install, origin-host cron (see the manual QA checklist at
+Install, origin-host cron (see the manual QA checklist at
 https://docs.xchain.io/components/wallet/release/qa-checklist for the
-one-time setup steps; not yet installed):
+one-time setup steps). Installed 2026-08-01; the Play lane is ARMED and
+the Chrome lane is staged-and-commented until the first upload assigns
+an item id.
+
+PLAY_STATE_PATH is in both lines on purpose. Its default sits beside
+this script, and on origin-host that is root-owned /opt/xchain, which the
+cron user cannot write. That failure is silent while the listing is
+absent (a 404 exits 0) and arrives as EACCES exit 2 on the FIRST
+SIGHTING of a live listing, then repeats every six hours.
 
   0 */6 * * * CWS_MAIN_ITEM_ID=<id> CWS_BETA_ITEM_ID=<id> \\
+    PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \\
     /usr/bin/node /opt/xchain/store-version-monitor.mjs >/dev/null
 
 Before a Chrome item exists, the Play lane can run on its own:
 
-  0 */6 * * * /usr/bin/node /opt/xchain/store-version-monitor.mjs \\
+  0 */6 * * * PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \\
+    /usr/bin/node /opt/xchain/store-version-monitor.mjs \\
     --no-chrome >/dev/null
 `;
 
