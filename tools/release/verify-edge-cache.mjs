@@ -46,6 +46,18 @@
 // names from update-info.mjs's own rule so it cannot drift from what the
 // build emits.
 //
+// DESKTOP IS NOT THE ONLY LANE WITH A POINTER, and until  run 20 it
+// was the only lane this tool knew about. The direct-APK lane has a
+// channel pointer of its own - `android/latest.json`, read by
+// `directUpdateCheck.js` - and it is the ONLY pointer in this project that
+// has ever actually been published: every desktop name above still 404s.
+// So the tool built to verify the pointer contract against a real name had
+// never once been pointed at the only real name there is, which is the
+// same shape as the `latest*` defect one level up. The Android pointer is
+// derived from the app's own `UPDATE_FEED_URL` rather than written here,
+// for exactly the reason the desktop names are derived: a probe aimed at a
+// name no client fetches produces a green result and protects nothing.
+//
 // Usage:
 //   node tools/release/verify-edge-cache.mjs \
 //       --base https://downloads.xchain.io/wallet [--channel stable]
@@ -54,8 +66,33 @@
 // Exit 0 only if every probe met the contract AND every probe was real.
 
 import { pointerNameFor } from './update-info.mjs';
+import { UPDATE_FEED_URL } from '../../packages/web/src/update/directUpdateCheck.js';
 
 const BAD_NAME = /^latest/;
+
+/**
+ * The direct-APK pointer's path, relative to the feed root, taken from the
+ * URL the app itself fetches.
+ *
+ * Fails shut rather than guessing. If the app's feed ever moves out from
+ * under `/wallet/`, the lazy read of this would silently yield an absolute
+ * path and probe a URL nobody serves - which is the `latest*` failure
+ * wearing different clothes, and it would report UNPROVEN (a 404) rather
+ * than admitting the tool no longer knows where the pointer lives.
+ *
+ * @param {string} feedUrl
+ * @returns {string} e.g. "android/latest.json"
+ */
+export function androidPointerPath(feedUrl) {
+    const { pathname } = new URL(feedUrl);
+    const m = /\/wallet\/(.+)$/.exec(pathname);
+    if (!m) {
+        throw new Error(`cannot derive the Android pointer path from "${feedUrl}": it is `
+            + 'no longer under a /wallet/ feed root, so this tool does not know what to '
+            + 'probe. Fix the derivation rather than hardcoding a name.');
+    }
+    return m[1];
+}
 
 function arg(name, fallback) {
     const i = process.argv.indexOf(`--${name}`);
@@ -79,14 +116,19 @@ Usage:
 Options:
   --base <url>       feed root, default https://downloads.xchain.io/wallet
   --channel <name>   update channel, default stable
-  --artifact <name>  also probe one artifact under <base>/desktop/
+  --artifact <name>  also probe one artifact. A bare name is read as a
+                     desktop name; pass a lane to probe another, e.g.
+                     --artifact android/xchain-wallet-v0.336.0.apk
   -h, --help         print this and exit 0
 
-The pointer names are NEVER latest*.yml: electron-builder names update-info
-files after the CHANNEL, and desktop's channel is stable. A cache rule
-written against latest* matches nothing and fails silently in the direction
-that looks like working, so this takes the names from update-info.mjs's own
-rule and cannot drift from what the build emits.
+Probes FIVE pointers: desktop's four, plus the direct-APK lane's
+android/latest.json, which is the only one that resolves to a real file
+today. The desktop names are NEVER latest*.yml (electron-builder names
+update-info files after the CHANNEL, and desktop's channel is stable) and
+the Android name comes from the app's own UPDATE_FEED_URL. Both are derived
+rather than written here: a cache rule written against a name no client
+fetches matches nothing and fails silently in the direction that looks like
+working.
 
 PROBES A LIVE CDN, which is why --help is answered before the probes rather
 than after them : unhandled, the flag was dropped by the argument
@@ -121,6 +163,14 @@ const LANES = [
 ];
 const pointers = LANES.map((lane) => pointerNameFor({ channel, ...lane }));
 
+// Every pointer this project publishes, as a path under `base`. Desktop's
+// four live under `desktop/`; the direct-APK lane's lives under `android/`
+// and is the only one that resolves to a real file today.
+const pointerPaths = [
+    ...pointers.map((name) => `desktop/${name}`),
+    androidPointerPath(UPDATE_FEED_URL),
+];
+
 for (const p of pointers) {
     if (BAD_NAME.test(p)) {
         process.stderr.write(`refusing to probe "${p}": the pointers are named after the `
@@ -130,15 +180,31 @@ for (const p of pointers) {
     }
 }
 
-async function probe(url) {
+/**
+ * The user-agent a real client of this path sends.
+ *
+ * Not decoration. The zone's managed bot ruleset blocked every non-browser
+ * client until the §3 skip rule, so a probe wearing the wrong agent
+ * measures a path nobody takes - and on this zone that is not theoretical:
+ * `wallet.xchain.io` and `mcp.xchain.io` still answer 403 to every
+ * non-browser client today, while `downloads.xchain.io` answers 200.
+ * Desktop's updater sends the literal `electron-builder`; the Android
+ * pointer is fetched by the app's WebView, which sends a Chrome agent.
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+function agentFor(path) {
+    return path.startsWith('android/')
+        ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36'
+        : 'electron-builder';
+}
+
+async function probe(url, userAgent = 'electron-builder') {
     try {
         const res = await fetch(url, {
             redirect: 'manual',
-            // Every real client of this feed is a non-browser: electron-updater
-            // sends the literal `electron-builder`. The zone's managed bot
-            // ruleset blocked all of them until the §3 skip rule, so probing
-            // as a browser would measure a path no client takes.
-            headers: { 'user-agent': 'electron-builder' },
+            headers: { 'user-agent': userAgent },
         });
         return {
             status: res.status,
@@ -214,10 +280,33 @@ export function judgeArtifact(r) {
     if (r.status !== 200) {
         return { verdict: 'UNPROVEN', detail: `HTTP ${r.status} - not published` };
     }
-    if (!/max-age|immutable/.test(r.cacheControl || '')) {
+    const cc = r.cacheControl || '';
+    if (!/max-age|immutable/.test(cc)) {
         return {
             verdict: 'FAIL',
             detail: `binaries must cache freely; cache-control is "${r.cacheControl}"`,
+        };
+    }
+
+    // Cached is not the same as cached BY RULE, and until  run 22 this
+    // function could not tell the difference.  §3's binary half is
+    // written at the origin as `public, max-age=31536000, immutable`, and
+    // `immutable` is the one word in it a CDN fallback never supplies:
+    // Cloudflare's default is a bare four-hour `max-age`. Measured 2026-08-10
+    // by probing the origin with Cloudflare bypassed, the published APK reads
+    // `max-age=14400` at the edge and NO cache-control at all at the origin,
+    // because no LocationMatch covers the android lane in either direction.
+    // A bare max-age scored PASS here, so the tool certified a platform
+    // default as the contract for as long as the lane has been live.
+    // Asserting the positive contract is deliberate: fingerprinting the
+    // default value instead (14400) would be a literal a zone setting retunes.
+    if (!/immutable/.test(cc)) {
+        return {
+            verdict: 'FAIL',
+            detail: `cache-control is "${r.cacheControl}": cached, but by a platform default `
+                + 'rather than by an origin rule. The contract says `immutable`, which no CDN '
+                + 'fallback adds, so a name reading max-age alone has nothing written down '
+                + 'about it and loses its caching the day the zone default changes',
         };
     }
     return { verdict: 'PASS', detail: `cache-control=${r.cacheControl}` };
@@ -240,11 +329,17 @@ if (!isMain) {
         else if (verdict === 'UNPROVEN') unproven++;
     };
 
-    for (const name of pointers) {
-        tally(name, judgePointer(await probe(`${base}/desktop/${name}`)));
+    for (const path of pointerPaths) {
+        tally(path, judgePointer(await probe(`${base}/${path}`, agentFor(path))));
     }
     if (artifact) {
-        tally(artifact, judgeArtifact(await probe(`${base}/desktop/${artifact}`)));
+        // A bare name stays a desktop name, which is what every existing
+        // invocation passes. A name carrying a lane (`android/x.apk`) is
+        // taken as given, so the direct-APK binary can be probed too - its
+        // half of the contract is the opposite one, and it was equally
+        // unreachable from here.
+        const artifactPath = artifact.includes('/') ? artifact : `desktop/${artifact}`;
+        tally(artifactPath, judgeArtifact(await probe(`${base}/${artifactPath}`, agentFor(artifactPath))));
     }
 
     const width = Math.max(...results.map(([n]) => n.length));
