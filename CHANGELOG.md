@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The lint rule's trivial-string bullet describes the real whitespace/digits/punctuation class instead of implying a letter allowance ().
+- USER_FACING_ATTRS covers the heading, emptyText and actionLabel component props that ship user-visible copy ().
+- The App Links comment states that the manifest lists Google's app-signing certificate, not both signing certs ().
 - The `no-jsx-literal-strings` rule now flags a literal held in a JSX expression container, which its own docs and helper already claimed it caught ().
 - The rule header lists all ten user-facing attributes and states the real technical-attribute exemption, instead of six and a false one ().
 - The `en` locale header no longer calls the interpreter a lightweight ICU subset: `t()` renders through formatjs with the full ICU grammar ().

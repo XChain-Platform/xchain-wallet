@@ -43,13 +43,21 @@ assert.ok(isTrivialString('  '),     'whitespace is trivial');
 assert.ok(isTrivialString('•'),      'single punctuation is trivial');
 assert.ok(isTrivialString('—'),      'em-dash is trivial');
 assert.ok(isTrivialString('123'),    'all-digits is trivial');
+// The filter admits no letters at all. The header used to advertise a
+// one-ASCII-letter allowance naming these exact tokens, so pin them.
+assert.ok(!isTrivialString('0x'),    '"0x" carries a letter, so it is non-trivial');
+assert.ok(!isTrivialString('1d'),    '"1d" carries a letter, so it is non-trivial');
+assert.ok(!isTrivialString('v2'),    '"v2" carries a letter, so it is non-trivial');
 assert.ok(isTrivialString('—', ['—']), 'allowlisted is trivial (redundant but safe)');
 assert.ok(!isTrivialString('Hello'), 'word is non-trivial');
 assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-for (const attr of ['aria-label', 'alt', 'title', 'placeholder', 'label', 'hint', 'caption', 'tooltip']) {
+// The last three are component props: copy shipped through them escaped
+// the translator index while the set held DOM attribute names only.
+for (const attr of ['aria-label', 'alt', 'title', 'placeholder', 'label', 'hint', 'caption', 'tooltip',
+    'heading', 'emptyText', 'actionLabel']) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
 }
 

@@ -24,8 +24,11 @@
 //   - JSXAttribute "literal"   <input placeholder="x" />   → flagged for
 //     attributes whose names are user-visible: aria-label,
 //     aria-description, aria-roledescription, alt, title, placeholder,
-//     label, hint, caption, tooltip (the USER_FACING_ATTRS set below is
-//     the authority; keep this list in step with it).
+//     label, hint, caption, tooltip, heading, emptyText, actionLabel
+//     (the USER_FACING_ATTRS set below is the authority; keep this list
+//     in step with it). The last three are component props rather than
+//     DOM attributes: shipping components render copy through them, so
+//     a DOM-only set left that copy out of the translator index.
 //   - JSXExpressionContainer holding a Literal, in JSX content:
 //                              <span>{'literal'}</span>    → flagged.
 //     An attribute's container is covered by the JSXAttribute case, so
@@ -36,9 +39,11 @@
 //   - Empty / whitespace-only strings.
 //   - Strings shorter than `minLength` (default 2), abbreviations like
 //     "&" or ":" are punctuation.
-//   - Strings made up entirely of digits / punctuation / one ASCII
-//     letter (e.g. "•", "-", "0x", "1d"). Catches version chips,
-//     status dots, etc.
+//   - Strings made up entirely of whitespace / digits / punctuation /
+//     symbols (e.g. "•", "-", "123"). Catches separator glyphs and
+//     status dots. The filter has NO letter allowance, so a technical
+//     token carrying one ("0x", "1d", "v2") is non-trivial and IS
+//     flagged; the smoke test pins those three.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
 //   - Technical attributes that never render to humans: `className`,
 //     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
@@ -69,6 +74,12 @@ const USER_FACING_ATTRS = new Set([
     'hint',
     'caption',
     'tooltip',
+    // Component props, not DOM attributes. Shipping components render copy
+    // through these (SideEditor heading, ChainGroup emptyText, the settings
+    // and empty-state rows' actionLabel), and a DOM-only set let it escape.
+    'heading',
+    'emptyText',
+    'actionLabel',
 ]);
 
 const TECHNICAL_ATTR_PREFIXES = ['data-', 'on'];

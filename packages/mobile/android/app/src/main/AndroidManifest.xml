@@ -41,12 +41,15 @@
             <!--
               App Links ( §1, S3). autoVerify makes Android fetch
               https://xchain.io/.well-known/assetlinks.json at install and
-              route these links to us without a chooser. That file must list
-              the SHA-256 fingerprints of BOTH signing certs - K9 (Play) and
-              K10 (direct APK) - under this one applicationId, which is what
-              D3(a) buys: one id, two signers. A fingerprint missing from it
-              does not error anywhere; verification simply fails and the link
-              opens in the browser instead, silently.
+              route these links to us without a chooser. That file must list,
+              under this one applicationId, the SHA-256 fingerprints of every
+              certificate either lane may be signed by: on the Play lane
+              GOOGLE's app-signing certificate(s), which is a rotating LIST and
+              is NOT K9 (K9 is only our upload key, it signs the AAB we hand to
+              Google and never reaches a device), plus K10 for the direct APK.
+              That is what D3(a) buys: one id, all of its current signers. A
+              fingerprint missing from it does not error anywhere; verification
+              simply fails and the link opens in the browser instead, silently.
 
               The template and the publishing owner:
               packages/mobile/assetlinks.template.json.
