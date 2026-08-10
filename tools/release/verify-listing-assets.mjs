@@ -295,6 +295,81 @@ export const IOS_ASSETS = IOS_IDIOMS.flatMap((idiom) => IOS_SCENES.map((scene) =
     depends: [...IOS_SHELL, ...(scene.extra ?? [])],
 })));
 
+const PLAY_ASSET_DIR = path.join(REPO_ROOT, 'packages/mobile/store-assets/play');
+
+const PLAY_SHELL = [
+    'packages/core/src/shared',
+    'packages/core/src/ui',
+    'packages/core/src/flows',
+    'packages/web/src',
+    'packages/mobile/capacitor.config.json',
+    'packages/mobile/android/app/src/main/res',
+];
+
+// The canvases Play accepts for this listing: 1080x1920 for the phone
+// screenshots (9:16, as captured off the API 36 emulator), and the two exact
+// sizes Play demands for the icon and the feature graphic. Anything else is
+// refused at upload, so it is refused here.
+export const PLAY_SIZES = [
+    { width: 1080, height: 1920 },
+    { width: 512, height: 512 },
+    { width: 1024, height: 500 },
+];
+
+/**
+ * Sub-paths of PLAY_SHELL are deliberately not repeated per asset:
+ * `git log -- <dir>` already covers them, and a redundant entry reads as
+ * differentiation that is not there. Each asset's extras are the surfaces
+ * OUTSIDE the shared shell that change what that particular image says.
+ */
+export const PLAY_ASSETS = [
+    {
+        name: 'screenshots/01-balances.png',
+        shows: 'Phone: balances/Home over a regtest wallet, store profile',
+        // The fiat total is on screen (as $0.00, regtest carrying no price
+        // feed), so the market layer is part of what this one depicts.
+        depends: [...PLAY_SHELL, 'packages/core/src/market'],
+    },
+    {
+        name: 'screenshots/02-receive.png',
+        shows: 'Phone: Receive, address plus QR',
+        // The QR encodes a payment URI, so the URI builder changes what the
+        // code on screen resolves to even when nothing else moves.
+        depends: [...PLAY_SHELL, 'packages/core/src/uri'],
+    },
+    {
+        name: 'screenshots/03-confirm.png',
+        shows: 'Phone: the Approve/Reject signing screen',
+        // What a confirm screen SAYS it is signing comes out of the decoder and
+        // the signer surface, which is the half of this image a reviewer reads.
+        depends: [...PLAY_SHELL, 'packages/core/src/decoder', 'packages/core/src/signers'],
+    },
+    {
+        name: 'screenshots/04-biometric.png',
+        shows: 'Phone: Safety settings - biometric unlock, panic mode, duress passphrase',
+        depends: [...PLAY_SHELL, 'packages/core/src/schemas/settings.js', 'packages/core/src/storage'],
+    },
+    {
+        name: 'icon-512.png',
+        shows: 'Store icon, cropped to the shipped launcher icon composition',
+        // The launcher icon is a real dependency and not a stylistic one: the
+        // set's README pins this image's composition to
+        // mipmap-xxxhdpi/ic_launcher.png (the mark spans 149/192 of the canvas)
+        // because a store icon that does not match the launcher icon looks like
+        // a different app.
+        depends: [
+            'packages/core/src/branding',
+            'packages/mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png',
+        ],
+    },
+    {
+        name: 'feature-graphic-1024x500.png',
+        shows: 'Feature graphic: white lockup on the brand gradient',
+        // No wallet UI at all, so UI churn legitimately does not stale it.
+        depends: ['packages/core/src/branding'],
+    },
+];
+
 /**
  * The sets this tool knows about. `extension` is the default everywhere, so
  * every caller that predates the Mac App Store lane keeps its behaviour.
@@ -328,6 +403,24 @@ export const SETS = {
         assets: IOS_ASSETS,
         capture: 'packages/mobile/scripts/screenshots.sh',
         sizes: APP_STORE_SIZES,
+    },
+    play: {
+        id: 'play',
+        label: 'Google Play',
+        dir: PLAY_ASSET_DIR,
+        pinPath: path.join(PLAY_ASSET_DIR, 'capture-pin.json'),
+        assets: PLAY_ASSETS,
+        // No Android capture harness exists. packages/mobile/scripts/
+        // screenshots.sh is the iOS XCUITest driver and writes to
+        // packages/mobile/screenshots/, which is build output, not these
+        // checked-in listing images. Stated as null rather than pointed at the
+        // iOS script, because a wrong pointer here would make the capture gate
+        // pass on a script that cannot produce these files.
+        capture: null,
+        recapture: 'reshoot the set on the API 36 emulator against a store-profile build, per '
+            + 'packages/mobile/store-assets/play/README.md, then re-pin with '
+            + '`node tools/release/verify-listing-assets.mjs --write --set play`',
+        sizes: PLAY_SIZES,
     },
 };
 
@@ -389,9 +482,12 @@ export function writePin({ commit, how = 'capture', version, set } = {}) {
         };
     }
 
+    const writtenBy = target.capture
+        ? `normally from the end of a successful ${target.capture} run. `
+        : 'this set has no capture harness, so its pin is bootstrapped with --how derived. ';
     const pin = {
-        _comment: 'Written by tools/release/verify-listing-assets.mjs (--write), normally from the '
-            + `end of a successful ${target.capture} run. `
+        _comment: `Written by tools/release/verify-listing-assets.mjs (--write --set ${target.id}), `
+            + writtenBy
             + 'Records WHICH BUILD the store listing images depict, which their pixel dimensions '
             + 'cannot say. Do not hand-edit: a pin that was not written by a capture is a claim '
             + 'about a capture nobody watched.',
@@ -628,7 +724,8 @@ depicts.
   --json          machine-readable result on stdout.
   --set <id>      which listing to check: 'extension' (Chrome Web Store, the
                   default), 'mas' (Mac App Store, the desktop shell) or
-                  'ios' (App Store, both iPhone and iPad idioms).
+                  'ios' (App Store, both iPhone and iPad idioms),
+                  or 'play' (Google Play, pin-only: no capture harness).
 
 Exit codes: 0 clean, 1 stale (a hash disagrees or a depicted surface moved),
 2 inconclusive (no pin, or the history needed is not in this checkout).
@@ -724,9 +821,11 @@ function main(argv) {
                 + 'depicts has changed since it was captured');
         } else {
             console.error('[verify-listing-assets] STALE. Two honest ways out, and uploading anyway '
-                + 'is neither: (1) rebuild the shell at the ref you are submitting and re-run '
-                + `${SETS[result.set || 'extension'].capture}, which re-pins as it `
-                + 'goes; or (2) read the commits AND the files listed under each one above, and '
+                + 'is neither: (1) '
+                + (SETS[result.set || 'extension'].recapture
+                    || `rebuild the shell at the ref you are submitting and re-run `
+                    + `${SETS[result.set || 'extension'].capture}, which re-pins as it goes`)
+                + '; or (2) read the commits AND the files listed under each one above, and '
                 + 'record in the release record why none of them can change these pixels. Judge it '
                 + 'on the files: a subject line describes a change\'s purpose, not its reach, and '
                 + 'one that names another shell can still carry a shared stylesheet this asset '

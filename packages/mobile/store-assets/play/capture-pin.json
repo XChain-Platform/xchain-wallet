@@ -1,0 +1,49 @@
+{
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set play), this set has no capture harness, so its pin is bootstrapped with --how derived. Records WHICH BUILD the Google Play listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "set": "play",
+    "store": "Google Play",
+    "capturedFrom": {
+        "commit": "7110d2e14b76a92b6851cddbe51752191ceb787c",
+        "version": "0.334.0",
+        "how": "derived"
+    },
+    "observedAt": "2026-08-10T03:26:24.243Z",
+    "assets": {
+        "screenshots/01-balances.png": {
+            "sha256": "5abc48b419ea1bd52ac0031fce35f772579207db1ca9ca918fbb46f0654c9b52",
+            "width": 1080,
+            "height": 1920,
+            "shows": "Phone: balances/Home over a regtest wallet, store profile"
+        },
+        "screenshots/02-receive.png": {
+            "sha256": "42f919a7fa8f3c6fcf78a3b53c8c35bc26791fe6c004445e0f31319dba16ccef",
+            "width": 1080,
+            "height": 1920,
+            "shows": "Phone: Receive, address plus QR"
+        },
+        "screenshots/03-confirm.png": {
+            "sha256": "9a0246de2cfeac2a44bb1ffeed460ff18f16b202f8ea0263f4b0862903dce559",
+            "width": 1080,
+            "height": 1920,
+            "shows": "Phone: the Approve/Reject signing screen"
+        },
+        "screenshots/04-biometric.png": {
+            "sha256": "3389315c922c4a732cc46ab076e3731f56ae03e871ec1dbeaa05d3ee4b1e14e4",
+            "width": 1080,
+            "height": 1920,
+            "shows": "Phone: Safety settings - biometric unlock, panic mode, duress passphrase"
+        },
+        "icon-512.png": {
+            "sha256": "d912ea8f8612edb2d2d7eb6f35b12795386471a2f6a04951a34b45455e769f72",
+            "width": 512,
+            "height": 512,
+            "shows": "Store icon, cropped to the shipped launcher icon composition"
+        },
+        "feature-graphic-1024x500.png": {
+            "sha256": "7ae825b4fd6493d2d9a3da4865750d0591e9b5fab79c9b0f6f7c4c2948f29595",
+            "width": 1024,
+            "height": 500,
+            "shows": "Feature graphic: white lockup on the brand gradient"
+        }
+    }
+}
