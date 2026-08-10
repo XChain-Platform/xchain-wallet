@@ -18,11 +18,14 @@
 //   '{count, plural, one {# address} other {# addresses}}'
 //   '{kind, select, mainnet {Live} testnet {Testnet} other {Other}}'
 //
-// `t()` in `i18n/index.js` runs a lightweight ICU subset interpreter
-// over the matched template. The interpreter only handles plural and
-// select (no nested patterns, no offset, no ordinal); that's the
-// subset the wallet actually uses today. The formatjs ICU library
-// can be swapped in later without changing the dictionary shape.
+// `t()` in `i18n/index.js` renders the matched template through
+// formatjs (`IntlMessageFormat` from `intl-messageformat`), so the full
+// ICU grammar is available: plural, select, selectordinal, number and
+// date skeletons, nested patterns and offset. Templates here use only
+// plural and select today, which is a choice about the copy, not a
+// limit of the runtime. The plural/select-only subset the wallet
+// shipped before v0.334 survives as `legacyFormat()` in `i18n/index.js`
+// and is reached only when formatjs refuses to parse a template.
 //
 // Adding a new locale: copy this directory to `locales/<bcp47>/index.js`,
 // translate every value, then call

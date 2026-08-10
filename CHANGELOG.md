@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The `no-jsx-literal-strings` rule now flags a literal held in a JSX expression container, which its own docs and helper already claimed it caught ().
+- The rule header lists all ten user-facing attributes and states the real technical-attribute exemption, instead of six and a false one ().
+- The `en` locale header no longer calls the interpreter a lightweight ICU subset: `t()` renders through formatjs with the full ICU grammar ().
 - Multisig signing no longer leaks internal crypto jargon into user-facing copy: the raw session status enum, the Schnorr aggregation hint and nonce round labels all read in plain language ().
 
 ## [0.337.0] - 2026-08-07

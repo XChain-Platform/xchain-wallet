@@ -124,6 +124,25 @@ const visitors = pluginRule.create(fakeContext);
 visitors.JSXText({ type: 'JSXText', value: 'Hello translator' });
 assert.strictEqual(reports.length, 1, 'create() returns visitors that wire context.report');
 
+// The shipping visitor, not just findViolations (test 7), must flag a
+// JSX-content {'literal'}; create() carried no such visitor once, so the
+// documented case escaped real ESLint while the helper smoke read green.
+visitors.JSXExpressionContainer({
+    ...jsxExpr(literal('Real user copy')),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 2, 'create() flags {literal} in JSX content');
+
+// An attribute's container is the JSXAttribute visitor's job; reporting
+// it here too would double-count placeholder={'x'} and newly flag
+// technical attrs like className={'btn'}.
+visitors.JSXExpressionContainer({
+    ...jsxExpr(literal('Real user copy')),
+    parent: { type: 'JSXAttribute' },
+});
+assert.strictEqual(reports.length, 2,
+    'create() leaves attribute containers to the JSXAttribute visitor');
+
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {
     options: [],

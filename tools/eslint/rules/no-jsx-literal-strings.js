@@ -22,10 +22,14 @@
 //
 //   - JSXText nodes:           <span>Hello</span>          → flagged
 //   - JSXAttribute "literal"   <input placeholder="x" />   → flagged for
-//     attributes whose names are user-visible: aria-label, alt, title,
-//     placeholder, label, hint.
-//   - JSXExpressionContainer holding a Literal:
-//                              <span>{'literal'}</span>    → flagged
+//     attributes whose names are user-visible: aria-label,
+//     aria-description, aria-roledescription, alt, title, placeholder,
+//     label, hint, caption, tooltip (the USER_FACING_ATTRS set below is
+//     the authority; keep this list in step with it).
+//   - JSXExpressionContainer holding a Literal, in JSX content:
+//                              <span>{'literal'}</span>    → flagged.
+//     An attribute's container is covered by the JSXAttribute case, so
+//     the content visitor skips it rather than reporting twice.
 //
 // What the rule allows:
 //
@@ -38,7 +42,9 @@
 //   - Specific allow-listed values via the rule option `allow: [...]`.
 //   - Technical attributes that never render to humans: `className`,
 //     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
-//     `aria-*` (other than `aria-label`).
+//     `on*`, and every `aria-*` outside USER_FACING_ATTRS (so
+//     `aria-label`, `aria-description` and `aria-roledescription` stay
+//     checked while `aria-labelledby`, `aria-hidden` and the rest do not).
 //   - Files matching `ignoreFiles` glob list (defaults exclude
 //     `*.smoke.js`, `test/**`, `*.test.js`, `*.test.jsx`,
 //     `tools/**`, `claude/**`).
@@ -280,6 +286,19 @@ function create(context) {
                 && typeof v.expression.value === 'string'
                 && !isTrivialString(v.expression.value, allow, minLength)) {
                 context.report({ node: v.expression, message: `Inline ${attrName} string should use t('key')` });
+            }
+        },
+        JSXExpressionContainer(node) {
+            // Only JSX *content* containers: an attribute's container is
+            // already handled by JSXAttribute above, so an unguarded
+            // handler would double-report user-facing attrs and would
+            // newly flag technical ones like className={'btn'}.
+            const parentType = node.parent?.type;
+            if (parentType !== 'JSXElement' && parentType !== 'JSXFragment') return;
+            const expr = node.expression;
+            if (expr?.type === 'Literal' && typeof expr.value === 'string'
+                && !isTrivialString(expr.value, allow, minLength)) {
+                context.report({ node: expr, message: 'Inline JSX expression string should be moved to the i18n dictionary' });
             }
         },
     };
