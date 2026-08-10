@@ -1788,6 +1788,82 @@ for (const script of ['release:sign', 'release:verify']) {
     }
 }
 
+// --- 24. The spec's own prescriptive half may not record a value the code
+//         contradicts -----------------------------------------------------
+//
+// S44, and it is §10 turned on the file that owns §10.
+//
+// §10 exists because Phase 3 sourced the canonical policy URL from a page
+// that had never carried it, and its own comment names the consequence: an
+// operator with nothing to transcribe "retypes from memory, which is how the
+// slashless form gets pasted". S27 wrote that sentence, and the slashless
+// form was already sitting in this spec's §8 decision register - the place a
+// reader goes to look up what was decided - where it stayed through
+// seventeen stages. Every check aimed at the value looked at the ceremony
+// page or at the tool. Nothing looked here.
+//
+// Measured 2026-08-09 by driving it, because "it is only a trailing slash"
+// is precisely the claim this spec keeps finding to be false: the form D5
+// recorded, `https://xchain.io/wallet/privacy`, answers 301 to the form
+// everything else carries. That is a redirect hop on the one field the
+// Chrome Web Store submission form validates, two paragraphs after the
+// ceremony warns that a redirect hop is a rejection cause. 1 of 34
+// occurrences of this URL across five repos was the wrong one, and it was
+// the one in the decision register.
+//
+// Scoped to the PRESCRIPTIVE half deliberately, and the boundary has TWO
+// edges rather than the one it looked like it needed. Everything above
+// `## 1.` - the status paragraphs and the frontier block - is the record of
+// what happened, and defect prose there has to be able to quote the wrong
+// form in order to describe it. §9 is the same thing wearing a section
+// number: it is the stage-history table, it just happens to sit below the
+// boundary. The first cut of this section had only the upper edge and it
+// fired on its own stage row, which quotes the slashless form to say what
+// S44 found. That is a check firing on correct writing, which is the thing
+// §10's own first cut did and which this file's S14 lesson says people
+// delete rather than obey - so the boundary moved instead of the prose. What
+// is left between the two edges is §1 to §8: what exists, the credential
+// part, the review-risk register, the rollout model, the listing pack, CI,
+// the non-goals and the decision register. That is what somebody transcribes
+// from, and it is the only half that has to carry the canonical value.
+//
+// Derived, never restated: the canonical form is DEFAULT_URL, imported from
+// the tool at §10. If the hosted URL ever moves, this section moves with it
+// for free, and the spec is held to the new value the same day.
+if (existsSync(specPath)) {
+    const spec = readFileSync(specPath, 'utf8');
+
+    const bodyStart = spec.indexOf('\n## 1. ');
+    const bodyEnd = spec.indexOf('\n## 9. ');
+    assert.ok(bodyStart > 0 && bodyEnd > bodyStart,
+        `${specPath} no longer opens its prescriptive half at "## 1." and close it at "## 9.", so this `
+        + 'check cannot tell the spec\'s historical halves from its prescriptive one and has silently '
+        + 'stopped checking anything. That is the failure mode §13 was rewritten to prevent: a check '
+        + 'that degrades quietly still prints a verdict. Re-derive both edges against the new structure '
+        + 'rather than widening this to the whole file, which is how it starts firing on the stage '
+        + 'table\'s own account of the defect.');
+
+    const base = DEFAULT_URL.replace(/\/+$/, '');
+    const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const body = spec.slice(bodyStart, bodyEnd);
+
+    const wrong = [];
+    for (const m of body.matchAll(new RegExp(`${escaped}[^\\s\`)\\]<>,;]*`, 'g'))) {
+        if (m[0] === DEFAULT_URL) continue;
+        const line = spec.slice(0, bodyStart + m.index).split('\n').length;
+        wrong.push(`${specPath}:${line} records "${m[0]}", not "${DEFAULT_URL}"`);
+    }
+
+    assert.equal(wrong.length, 0,
+        `the spec's prescriptive half records a non-canonical form of the one field the Chrome Web `
+        + `Store submission form validates:\n  ${wrong.join('\n  ')}\n`
+        + `Measured 2026-08-09: the slashless form answers 301 to ${DEFAULT_URL}. The ceremony warns `
+        + 'two paragraphs before that step that a redirect hop is a rejection cause, and §10 of this '
+        + 'file already says in prose that retyping from memory is how the slashless form gets '
+        + 'pasted. Record the canonical form here, or if the hosted URL really moved, move '
+        + 'DEFAULT_URL in verify-privacy-url.mjs and let this section follow it.');
+}
+
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
     + `${steps} checkable steps + ${commandBlocks} fenced blocks on the ceremony page, `
     + `${disclosureSteps} on the disclosure, ${PUBLISHED.length} identity values traced to `
@@ -1797,5 +1873,6 @@ console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03
     + `the published policy matches the canonical one, ${monitorSteps.length} monitor steps `
     + `including a checksum identity check, Phase 4's key-ceremony state anchored to `
     + `${existsSync(keyPinPath) ? 'an observed signing run' : 'its absent-note branch'}, `
-    + `and ${driftNote}; the release shorthand reaches the ceremony's own staging path, and Phase 5 `
-    + 'asks what the listing assets DEPICT, not only what size they are)');
+    + `and ${driftNote}; the release shorthand reaches the ceremony's own staging path, Phase 5 `
+    + 'asks what the listing assets DEPICT, not only what size they are, and the spec\'s '
+    + `prescriptive half records ${DEFAULT_URL} rather than a form that redirects)`);
