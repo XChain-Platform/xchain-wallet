@@ -17,43 +17,50 @@
 // unlock-threshold field appended to FILE format 0's tail, plus a SEND
 // rule change (the paired key-handoff MESSAGE is required only when the
 // destination's post-send balance of the gate tick meets the threshold;
-// below it a plain SEND is valid and carries no key). The indexer /
-// encoder / SDK legs ride the  coordinated flag-day train, which
-// has NOT been assembled: no chain has an activation height yet, so
-// every entry below is null and every consumer of this module treats
-// the extension as inactive.
+// below it a plain SEND is valid and carries no key).
 //
-// When the  train is assembled and pins heights, fill this map
-// (and ONLY then): forms start offering the threshold field, the
-// publish flow starts emitting the ninth FILE field, and the send
-// guard starts honoring the below-threshold plain-SEND lane, each
-// strictly at/after the height on its chain. This map is the ONLY
-// protection on the publish side: the wire format is trailing-tolerant
-// end to end (verified 2026-07-25: the SDK validator drops unknown
-// positional fields and the indexer's setActionParams iterates only
-// the format's fields), so a pre-activation ninth field would NOT be
-// rejected - it would publish successfully with the threshold silently
-// dropped, PERMANENTLY, since a FILE is immutable. On the send side,
-// honoring the lane early composes plain SENDs the pre-activation
-// indexer rejects (it requires the handoff unconditionally). A smoke
-// test pins this map to all-null so a height cannot land here outside
-// the train assembly.
+// TESTNET is active from genesis (operator, 2026-08-10): the fresh
+// testnet genesis reseeds all three testnet chains from a new XChain
+// start height with every feature live from block 0, so there is no
+// pre-extension testnet history for a flag-day to protect and the
+// indexer/encoder/SDK legs it round-trips against all ship PC-29
+// ungated at HEAD. Height 0 is the active-from-genesis idiom already
+// used across xchain-indexer/src/stateHash.js. That decision retires
+// the  coordinated train for testnet only.
+//
+// MAINNET and REGTEST stay null. Mainnet has real pre-extension history
+// and still needs a pinned coordinated height. Regtest stays null
+// because the live regtest stack runs pre-train services, so early
+// emission breaks round-trips there exactly like on mainnet.
+//
+// Filling a mainnet height is what turns the extension on for that
+// chain: forms start offering the threshold field, the publish flow
+// starts emitting the ninth FILE field, and the send guard starts
+// honoring the below-threshold plain-SEND lane, each strictly at/after
+// the height on its chain. This map is the ONLY protection on the
+// publish side: the wire format is trailing-tolerant end to end
+// (verified 2026-07-25: the SDK validator drops unknown positional
+// fields and the indexer's setActionParams iterates only the format's
+// fields), so a premature ninth field would NOT be rejected - it would
+// publish successfully with the threshold silently dropped,
+// PERMANENTLY, since a FILE is immutable. On the send side, honoring
+// the lane early composes plain SENDs an unupgraded indexer rejects.
+// A smoke test pins the mainnet and regtest entries null so a height
+// cannot land on them outside a real activation decision.
 
 /**
- * chainId -> GATE_MIN_AMOUNT activation block height, or null while the
- *  train is unassembled. Regtest stays null too: the live regtest
- * stack runs pre-train services, so early emission breaks round-trips
- * there exactly like on mainnet.
+ * chainId -> GATE_MIN_AMOUNT activation block height. 0 means active
+ * from genesis; null means unscheduled and the extension stays inert.
  */
 export const GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS = Object.freeze({
     'bitcoin-mainnet': null,
-    'bitcoin-testnet': null,
+    'bitcoin-testnet': 0,
     'bitcoin-regtest': null,
     'litecoin-mainnet': null,
-    'litecoin-testnet': null,
+    'litecoin-testnet': 0,
     'litecoin-regtest': null,
     'dogecoin-mainnet': null,
-    'dogecoin-testnet': null,
+    'dogecoin-testnet': 0,
     'dogecoin-regtest': null,
 });
 

@@ -25,10 +25,24 @@ import {
     isVoteCallbackTimelockActive,
 } from '../../../packages/core/src/flows/protocolActivations.js';
 
-describe('shipped GATE_MIN_AMOUNT map (pre--train state)', () => {
-    it('covers all nine chains and schedules NONE of them', () => {
-        const ids = Object.keys(GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS);
-        expect(ids).toHaveLength(9);
+describe('shipped GATE_MIN_AMOUNT map (testnet genesis-active, mainnet unscheduled)', () => {
+    const TESTNET = ['bitcoin-testnet', 'litecoin-testnet', 'dogecoin-testnet'];
+
+    it('covers all nine chains', () => {
+        expect(Object.keys(GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS)).toHaveLength(9);
+    });
+
+    it('activates the three testnets from block 0', () => {
+        for (const id of TESTNET) {
+            expect(GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS[id]).toBe(0);
+            expect(gateMinAmountScheduledHeight(id)).toBe(0);
+            expect(isGateMinAmountActive({ chainId: id, blockHeight: 0 })).toBe(true);
+        }
+    });
+
+    it('leaves every mainnet and regtest chain unscheduled', () => {
+        const ids = Object.keys(GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS).filter((id) => !TESTNET.includes(id));
+        expect(ids).toHaveLength(6);
         for (const id of ids) {
             expect(GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS[id]).toBeNull();
             expect(gateMinAmountScheduledHeight(id)).toBeNull();

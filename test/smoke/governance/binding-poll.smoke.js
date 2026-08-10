@@ -116,11 +116,17 @@ assert.ok(
     /VOTE_BINDING_MINIMUMS_TIMES/.test(activationsSrc) && /VOTE_CALLBACK_TIMELOCK_TIMES/.test(activationsSrc),
     'both VOTE flag-days are named separately (they are independent protocol changes)',
 );
-// PC-29's map must stay all-null: these new entries are a different lane.
-assert.ok(
-    !/GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS = Object\.freeze\(\{[^}]*: *[0-9]/.test(activationsSrc),
-    'the PC-29 height map is still all-null (unchanged by PC-42)',
-);
+// PC-29 is a different lane, so PC-42 must not have moved anything in its
+// map. Only the mainnet and regtest entries are asserted here: the three
+// testnets are genesis-active by the 2026-08-10 fresh-testnet decision, and
+// gated-threshold.smoke.js owns that invariant.
+const gateMapBody = activationsSrc
+    .split('GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS = Object.freeze({')[1].split('})')[0];
+for (const line of gateMapBody.split('\n').map((l) => l.trim())) {
+    if (!/^'[a-z]+-(mainnet|regtest)':/.test(line)) continue;
+    assert.match(line, /: null,?$/,
+        `PC-42 must not schedule a PC-29 height: ${line}`);
+}
 
 // 5: chainTipBlockTime plumbing.
 assert.equal(typeof flows.chainTipBlockTime, 'function', 'chainTipBlockTime is exported from the flows barrel');

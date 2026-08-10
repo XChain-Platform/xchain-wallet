@@ -10,15 +10,17 @@
 
 // Smoke for PC-29 (unlock threshold, GATE_MIN_AMOUNT). Two properties:
 //
-// 1. THE MAP IS ALL-NULL. The engine leg (indexer/encoder/SDK) rides
-//    the  coordinated flag-day train, which is NOT assembled: a
-//    height landing in protocolActivations.js outside that train makes
-//    the wallet emit a ninth FILE field the pre-train network silently
+// 1. THE MAP IS TESTNET-0 AND NULL EVERYWHERE ELSE. A height landing on
+//    a mainnet or regtest entry outside a real activation decision makes
+//    the wallet emit a ninth FILE field an unupgraded network silently
 //    DROPS (the wire is trailing-tolerant; verified 2026-07-25 against
 //    the real SDK validator + indexer setActionParams), publishing an
-//    immutable file whose threshold is unenforced forever. This file
-//    pins the pre-train state; when the train pins real heights, update
-//    this assertion IN THE SAME CHANGE.
+//    immutable file whose threshold is unenforced forever. The three
+//    testnets are exempt because the 2026-08-10 fresh testnet genesis
+//    reseeds them from block 0 against services that ship PC-29 ungated,
+//    so there is no pre-extension history left there to protect. When a
+//    mainnet height is finally pinned, update this assertion IN THE SAME
+//    CHANGE.
 // 2. The wallet leg is fully wired behind the gate: publish flow
 //    emission + form field, send-guard below-threshold plain-SEND lane,
 //    readiness mirroring, and the TokenDetail display leg.
@@ -32,16 +34,22 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 
-// ---- 1. Activation map: present, frozen, all-null ----------------------
+// ---- 1. Activation map: present, frozen, testnet-0, rest null ---------
 const activations = read('packages', 'core', 'src', 'flows', 'protocolActivations.js');
 assert.match(activations, /export const GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS = Object\.freeze\(/,
     'activation map exists and is frozen');
 const mapBody = activations.split('Object.freeze({')[1].split('})')[0];
 const entries = mapBody.split('\n').map((l) => l.trim()).filter((l) => /^'[a-z-]+':/.test(l));
 assert.equal(entries.length, 9, 'all nine chain ids enumerated');
-for (const line of entries) {
+const testnetEntries = entries.filter((l) => /^'[a-z]+-testnet':/.test(l));
+assert.equal(testnetEntries.length, 3, 'three testnet chain ids enumerated');
+for (const line of testnetEntries) {
+    assert.match(line, /: 0,?$/,
+        `TESTNET GENESIS INVARIANT VIOLATED: ${line} is not active from block 0`);
+}
+for (const line of entries.filter((l) => !/^'[a-z]+-testnet':/.test(l))) {
     assert.match(line, /: null,?$/,
-        `PRE-TRAIN INVARIANT VIOLATED: ${line} pins a height outside the  train assembly`);
+        `ACTIVATION INVARIANT VIOLATED: ${line} pins a height outside a real activation decision`);
 }
 assert.match(activations, /export async function resolveGateMinAmountActive/, 'async resolver exported');
 
