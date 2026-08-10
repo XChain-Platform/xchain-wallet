@@ -1016,9 +1016,9 @@ const toolNote = `${releaseScripts.length} release scripts answer --help with us
 const pointerNote = existsSync(specPath)
     ? `${pointers} §4a private pointers resolved, ${frontierRows.length} live frontier rows verified, `
         + `${mapEntries} translation-map pages resolved, ${toolNote}`
-    : `${toolNote}; the §4a map, the frontier rows, the translation map and the §9 stage table all `
-        + 'SKIPPED (platform checkout absent, as on every CI run: it is this repo\'s parent, not a '
-        + 'sibling)';
+    : `${toolNote}; the §4a map, the frontier rows, the translation map, the §9 stage table and `
+        + '§24\'s URL-canonicalisation check all SKIPPED (platform checkout absent, as on every CI '
+        + 'run: it is this repo\'s parent, not a sibling)';
 
 // --- 14. The policy the store validates is PUBLISHED, not merely written ---
 //
@@ -1830,6 +1830,13 @@ for (const script of ['release:sign', 'release:verify']) {
 // Derived, never restated: the canonical form is DEFAULT_URL, imported from
 // the tool at §10. If the hosted URL ever moves, this section moves with it
 // for free, and the spec is held to the new value the same day.
+// The note is assigned in BOTH branches for the reason row 26 exists: a summary
+// line that claims this section's coverage on a run where the section never
+// opened the file is §13's degrade-quietly defect, and it is the defect this
+// very commit added a boundary guard against. Driven with
+// XCHAIN_PLATFORM_ROOT=/nonexistent, the first cut exited 0 while printing that
+// the spec records the canonical URL, beside a SKIPPED list that did not name it.
+let urlNote;
 if (existsSync(specPath)) {
     const spec = readFileSync(specPath, 'utf8');
 
@@ -1862,6 +1869,10 @@ if (existsSync(specPath)) {
         + 'file already says in prose that retyping from memory is how the slashless form gets '
         + 'pasted. Record the canonical form here, or if the hosted URL really moved, move '
         + 'DEFAULT_URL in verify-privacy-url.mjs and let this section follow it.');
+
+    urlNote = `the spec's prescriptive half records ${DEFAULT_URL} rather than a form that redirects`;
+} else {
+    urlNote = 'the spec\'s URL canonicalisation was NOT checked on this run';
 }
 
 console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03, one home: `
@@ -1874,5 +1885,4 @@ console.log(`OK: extension ceremony-collateral smoke (operator ruling 2026-08-03
     + `including a checksum identity check, Phase 4's key-ceremony state anchored to `
     + `${existsSync(keyPinPath) ? 'an observed signing run' : 'its absent-note branch'}, `
     + `and ${driftNote}; the release shorthand reaches the ceremony's own staging path, Phase 5 `
-    + 'asks what the listing assets DEPICT, not only what size they are, and the spec\'s '
-    + `prescriptive half records ${DEFAULT_URL} rather than a form that redirects)`);
+    + `asks what the listing assets DEPICT, not only what size they are, and ${urlNote})`);
