@@ -23,6 +23,7 @@ import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { noteDocsTreeState } from './_docs-repo.js';
 import { noteWorkspaceLinkage } from './_workspace-linkage.js';
 
 const here = dirname(fileURLToPath(import.meta.url));        // .../test/smoke
@@ -109,13 +110,22 @@ function* walkSmokes(dir) {
 
 const smokes = [...walkSmokes(here)];
 
+// Name the docs checkout these smokes are about to read, once, before any of
+// them runs . Two dozen of them assert on the sibling's CONTENT, and
+// it is a shared long-lived tree, so its ordinary uncommitted-and-behind state
+// silently moves verdicts in both directions. The venue notes above describe
+// the same hazard for THIS process; the flag is what keeps every child smoke
+// from re-announcing it, since they are separate processes and cannot see
+// each other's notice.
+noteDocsTreeState();
+process.env.XCHAIN_DOCS_TREE_NOTED = '1';
+
 // Name the node_modules tree the workspace specifiers resolve through when it
 // belongs to a different checkout . A borrowed node_modules makes a
 // run a hybrid of two trees, which is how a correct signer bridge was measured
 // red at an origin/master worktree and filed as a regression. Said here because
 // the smokes are separate processes and cannot see each other's notice; the
-// flag tells them so. The sibling docs-tree notice this used to sit beside now
-// happens inline above, so only the linkage half is announced here.
+// flag tells them so.
 noteWorkspaceLinkage();
 process.env.XCHAIN_WORKSPACE_LINKAGE_NOTED = '1';
 
