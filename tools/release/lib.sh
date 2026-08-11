@@ -208,6 +208,25 @@ XR_SETS=(release staging)
 # own purpose. Operator answer that day: scope it per OS, properly.
 XR_STAGING_OSES=(linux mac windows)
 
+# The update channel a lane's users actually receive versions through,
+# declared per lane in shipped-lanes.txt (, dq-11 answer 2026-08-11).
+#
+# `store-only` is every lane that ships through a store: Play, the App
+# Stores, Snap, Chrome. The store IS their update channel, so a release
+# covering only such lanes carries no electron-updater pointer and has no
+# desktop update path to rehearse - which is why publish.sh waives both
+# checks for them .
+#
+# `updater` is the three desktop lanes, whose users update through OUR
+# feed: a channel pointer we publish, walked by electron-updater, proven
+# on real hardware by the §7.5 rehearsal. Keying those waivers on "is this
+# release partial" was safe only while every partial release was a store
+# release. The moment a partial DESKTOP release became cuttable, that
+# inference would have published to real users with the rehearsal gate
+# silently skipped, so the question publish.sh asks is now this column
+# rather than the shape of the directory.
+XR_LANE_FEEDS=(updater store-only)
+
 # Echo the release set a status token belongs to, or nothing if the token
 # is not a status at all. The empty answer is what makes an unknown
 # status a hard failure at the call site rather than a silently skipped
@@ -268,6 +287,49 @@ xr_is_profile() {
     for p in "${XR_PROFILES[@]}"; do
         [[ "$candidate" == "$p" ]] && return 0
     done
+    return 1
+}
+
+# True if $1 is a declared lane-feed name.
+xr_is_lane_feed() {
+    local candidate="$1" f
+    for f in "${XR_LANE_FEEDS[@]}"; do
+        [[ "$candidate" == "$f" ]] && return 0
+    done
+    return 1
+}
+
+# True if ANY of the named lanes updates through our own feed.
+#
+# Deliberately ANY rather than ALL: a release covering one updater lane
+# and three store lanes still publishes a channel pointer that real
+# installs will fetch, so it still needs the pointer assertion and the
+# §7.5 rehearsal. ALL would waive both the moment a store lane joined a
+# desktop release, which is the same silent-waiver shape this column
+# exists to end.
+#
+# Fails SHUT on an unreadable list (return 0, "treat as updater"): the
+# consequence of a false positive is a rehearsal being demanded of a
+# release that did not need one, and of a false negative is a desktop
+# release published unrehearsed.
+xr_lanes_have_updater_feed() {
+    local lanes="$1"
+    shift
+    local -a want=("$@")
+    local lane lstatus feed rest w
+
+    if [[ ! -f "$lanes" ]] || [[ ${#want[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    while read -r lane lstatus feed rest || [[ -n "$lane" ]]; do
+        case "$lane" in ''|'#'*) continue ;; esac
+        for w in "${want[@]}"; do
+            [[ "$w" == "$lane" ]] || continue
+            [[ "$feed" == "updater" ]] && return 0
+        done
+    done < "$lanes"
+
     return 1
 }
 
@@ -1443,10 +1505,10 @@ xr_check_shipped_lanes() {
         [[ -n "$line" ]] && artifacts+=("${line#./}")
     done < <(xr_list_artifacts "$dir")
 
-    local failures=0 lane lstatus rest pat p name matched claimed
+    local failures=0 lane lstatus feed rest pat p name matched claimed
     local -a claimed_pats=()
 
-    while read -r lane lstatus rest || [[ -n "$lane" ]]; do
+    while read -r lane lstatus feed rest || [[ -n "$lane" ]]; do
         case "$lane" in ''|'#'*) continue ;; esac
 
         if [[ "$lstatus" != "SHIPPED" && "$lstatus" != "NOT-SHIPPED" ]]; then
@@ -1454,6 +1516,11 @@ xr_check_shipped_lanes() {
                  "'${lstatus:-<missing>}'; expected SHIPPED or NOT-SHIPPED." >&2
             echo "  Not defaulted to the permissive one on purpose: a typo must" >&2
             echo "  not quietly disarm the parity requirement it was editing." >&2
+            return 1
+        fi
+        if ! xr_is_lane_feed "$feed"; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares feed" \
+                 "'${feed:-<missing>}'; expected ${XR_LANE_FEEDS[*]}." >&2
             return 1
         fi
         if [[ -z "$rest" ]]; then
@@ -1599,9 +1666,9 @@ xr_lane_scope() {
     fi
 
     local -a known=() scoped=() lane_globs=()
-    local lane lstatus rest w
+    local lane lstatus feed rest w
 
-    while read -r lane lstatus rest || [[ -n "$lane" ]]; do
+    while read -r lane lstatus feed rest || [[ -n "$lane" ]]; do
         case "$lane" in ''|'#'*) continue ;; esac
 
         # The same fail-shut parse as xr_check_shipped_lanes, for the same
@@ -1611,6 +1678,15 @@ xr_lane_scope() {
         if [[ "$lstatus" != "SHIPPED" && "$lstatus" != "NOT-SHIPPED" ]]; then
             echo "release/lib.sh: $lanes: lane '$lane' declares status" \
                  "'${lstatus:-<missing>}'; expected SHIPPED or NOT-SHIPPED." >&2
+            return 1
+        fi
+        # Same argument one column over: the feed word decides whether
+        # publish.sh demands a channel pointer and a §7.5 rehearsal of a
+        # partial release, so an unreadable one must not reach the
+        # permissive branch either.
+        if ! xr_is_lane_feed "$feed"; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares feed" \
+                 "'${feed:-<missing>}'; expected ${XR_LANE_FEEDS[*]}." >&2
             return 1
         fi
         known+=("$lane")

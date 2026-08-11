@@ -8,9 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `shipped-lanes.txt` declares the three desktop lanes and the update feed each lane ships through, so `sign.sh --lane mac,linux` can cut a release the Windows signing identity does not gate .
 - `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session .
 
 ### Fixed
+- `publish.sh` keys its partial-release waivers on a lane`s declared feed rather than on the release being partial, so a desktop partial is no longer published with the channel-pointer assertion and the §7.5 rehearsal silently skipped .
 - The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see .
 - The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up" .
 - A Linux `.deb` whose payload carries no compiled native addon is refused before signing, so a rehearsal built where the addon never compiled cannot stand in for a release .

@@ -1030,9 +1030,16 @@ const shippedLanes = readFileSync(
 );
 assert.match(
     shippedLanes,
-    /^android\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
+    /^android\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
     'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
 );
+// The feed column () is asserted, not merely tolerated. Play is its
+// own update channel, so this lane carries no electron-updater pointer and
+// publish.sh waives the channel-pointer and §7.5 rehearsal checks for a
+// partial release covering it. That waiver is safe only while the lane really
+// is store-only: a mobile row that ever claimed `updater` would take the
+// waiver with a feed nobody rehearsed, which is the substitution §7.5 exists
+// to prevent.
 // The full-feature direct APK  is its OWN lane, and this pins that
 // separation rather than merely that the lane exists. Hanging its glob off the
 // android row above would arm the parity requirement for an artifact no
@@ -1041,7 +1048,7 @@ assert.match(
 // declaration and the ceremony land together instead of in a forced order.
 assert.match(
     shippedLanes,
-    /^android-full\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-v\*-full\.apk\s*$/m,
+    /^android-full\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-v\*-full\.apk\s*$/m,
     'the full-feature APK is declared as its own lane, not as a third android glob',
 );
 // The two assertions that used to sit here pinned the runbook's own mention

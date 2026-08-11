@@ -131,17 +131,17 @@ function gate(dir, lanesPath = lanesFile, expectedPath = expected) {
 // expected-artifacts.txt must be claimed here too, or the fixture fails
 // the same claimed-by-no-lane check the real file would.
 const BASE = [
-    'android   NOT-SHIPPED   xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
-    'ios       NOT-SHIPPED   xchain-wallet-ios-v*.ipa',
-    'mas       NOT-SHIPPED   *-mas.pkg',
-    'msstore   NOT-SHIPPED   *-appx.appx',
-    'snap      NOT-SHIPPED   *.snap',
+    'android   NOT-SHIPPED  store-only  xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
+    'ios       NOT-SHIPPED  store-only  xchain-wallet-ios-v*.ipa',
+    'mas       NOT-SHIPPED  store-only  *-mas.pkg',
+    'msstore   NOT-SHIPPED  store-only  *-appx.appx',
+    'snap      NOT-SHIPPED  store-only  *.snap',
     //  declared a second direct APK as an `optional` row, and every
     // optional row must be claimed by SOME lane or the gate refuses. Its own
     // NOT-SHIPPED lane is what lets the declaration exist before the artifact
     // does; without this line the fixture fails that check rather than the
     // property each case is about.
-    'android-full NOT-SHIPPED xchain-wallet-v*-full.apk',
+    'android-full NOT-SHIPPED store-only  xchain-wallet-v*-full.apk',
 ];
 const withAndroid = (status) => lanes(
     [BASE[0].replace('NOT-SHIPPED', status), ...BASE.slice(1)].join('\n') + '\n',
@@ -211,7 +211,7 @@ try {
     //    list has never heard of.
     {
         const r = gate(stage(), lanes(
-            [...BASE, 'invented   NOT-SHIPPED   xchain-wallet-v*.sideload'].join('\n') + '\n',
+            [...BASE, 'invented   NOT-SHIPPED  store-only  xchain-wallet-v*.sideload'].join('\n') + '\n',
         ));
         check('a glob no expected-artifacts row declares is refused',
             !r.ok && /which no row of/.test(r.out), r.out);
@@ -300,6 +300,74 @@ try {
         check('the committed file now demands the Android pair of every release',
             !r.ok && /LANE-REGRESSION/.test(r.out)
             && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
+    }
+
+    // 8. THE FEED COLUMN (, operator answer to dq-11 2026-08-11).
+    //
+    //    publish.sh waives the channel-pointer assertion and the §7.5
+    //    rehearsal for a partial release. That was safe only while every
+    //    nameable lane was a store lane, because a store lane ships no
+    //    electron-updater pointer and has no desktop update path to
+    //    rehearse. The desktop lanes are nameable now, so "is this
+    //    partial" stopped being the right question and "does this release
+    //    carry an updater feed" became it. These cases hold that line.
+    {
+        const r = gate(stage(), lanes(
+            [...BASE, 'mac       NOT-SHIPPED  *.dmg *mac*.zip'].join('\n') + '\n',
+        ));
+        check('a lane row with no feed column is refused, not defaulted',
+            !r.ok && /declares feed/.test(r.out), r.out);
+    }
+    {
+        const r = gate(stage(), lanes(
+            [...BASE, 'mac       NOT-SHIPPED  usually     *.dmg *mac*.zip'].join('\n') + '\n',
+        ));
+        check('an unknown feed word is refused rather than read as store-only',
+            !r.ok && /declares feed 'usually'/.test(r.out), r.out);
+    }
+    {
+        // ANY, not ALL: one updater lane in a mixed release still publishes
+        // a pointer real installs will fetch, so the checks still apply.
+        const feeds = (...want) => {
+            const script = `source ${JSON.stringify(lib)}; `
+                + `xr_lanes_have_updater_feed ${JSON.stringify(lanesFile)} `
+                + want.map((w) => JSON.stringify(w)).join(' ')
+                + ` && echo updater || echo store-only`;
+            return execFileSync('bash', ['-c', script], { encoding: 'utf8' }).trim();
+        };
+        check('the desktop lanes report an updater feed',
+            feeds('mac', 'linux') === 'updater', feeds('mac', 'linux'));
+        check('the store lanes do not',
+            feeds('android', 'extension') === 'store-only', feeds('android', 'extension'));
+        check('one updater lane among store lanes still counts as updater',
+            feeds('android', 'mac') === 'updater', feeds('android', 'mac'));
+        // Fail SHUT: the cost of a false positive is a rehearsal demanded of
+        // a release that did not need one; of a false negative, a desktop
+        // release published unrehearsed.
+        const missing = (() => {
+            const script = `source ${JSON.stringify(lib)}; `
+                + `xr_lanes_have_updater_feed /nonexistent/lanes.txt mac `
+                + `&& echo updater || echo store-only`;
+            return execFileSync('bash', ['-c', script], { encoding: 'utf8' }).trim();
+        })();
+        check('an unreadable lane list fails SHUT, demanding the checks',
+            missing === 'updater', missing);
+    }
+    {
+        // The committed file, not a fixture: these three rows are what make
+        // a mac-plus-Linux release cuttable at all, and their feed word is
+        // what stops publish.sh waiving the rehearsal on it.
+        const committed = readFileSync(lanesFile, 'utf8');
+        for (const lane of ['mac', 'linux', 'windows']) {
+            check(`the committed file declares '${lane}' as an updater lane`,
+                new RegExp(`^${lane}\\s+(SHIPPED|NOT-SHIPPED)\\s+updater\\s`, 'm').test(committed),
+                committed);
+        }
+        for (const lane of ['android', 'ios', 'mas', 'msstore', 'snap', 'extension']) {
+            check(`the committed file declares '${lane}' as store-only`,
+                new RegExp(`^${lane}\\s+(SHIPPED|NOT-SHIPPED)\\s+store-only\\s`, 'm').test(committed),
+                committed);
+        }
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

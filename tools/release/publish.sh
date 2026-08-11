@@ -317,15 +317,43 @@ if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
     exit 2
 fi
 
+# WHICH PARTIAL RELEASE IS THIS? Until 2026-08-11 the question did not
+# exist, because every lane `sign.sh --lane` could name was a store lane
+# and every store lane ships without a channel pointer. So "partial"
+# implied "no pointer" and the three waivers below keyed on partiality.
+#
+# The desktop lanes are nameable now , and a partial release
+# covering them carries pointers that real installs will fetch. Keying on
+# partiality would waive the pointer assertion and the §7.5 rehearsal for
+# exactly the release that most needs both. The lane's own feed column
+# answers it instead, read from the committed list and matched against the
+# lanes the SIGNED manifest names - so a directory still cannot talk its
+# way out of either check by what it does or does not contain.
+LANES="$HERE/shipped-lanes.txt"
+COVERAGE_HAS_UPDATER=0
+if [[ -n "$COVERAGE_LANES" ]]; then
+    # Unquoted on purpose: `# lanes:` is a space-separated list and each
+    # name is a separate argument. The helper fails SHUT, so a list this
+    # cannot read demands the checks rather than waiving them.
+    # shellcheck disable=SC2086
+    if xr_lanes_have_updater_feed "$LANES" $COVERAGE_LANES; then
+        COVERAGE_HAS_UPDATER=1
+    fi
+fi
+
 # Are these the bytes for the feed we are about to write to? The
 # installers cannot answer that (identical names either way), the
 # pointers can.
-if [[ -n "$COVERAGE_LANES" ]]; then
+if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
     echo "publish.sh: PARTIAL release - the signed manifest covers lane(s):" \
          "$COVERAGE_LANES" >&2
     echo "  These lanes ship no channel pointer, so the '$EXPECT_CHANNEL' check" >&2
     echo "  is answered by the signed header instead of by the pointers." >&2
 else
+    if [[ -n "$COVERAGE_LANES" ]]; then
+        echo "publish.sh: PARTIAL release covering lane(s) $COVERAGE_LANES," \
+             "which update through our own feed - checking the pointers." >&2
+    fi
     echo "publish.sh: checking the input is a '$EXPECT_CHANNEL' build ..." >&2
     node "$HERE/update-info.mjs" assert-channel "$INPUT_DIR" --channel "$EXPECT_CHANNEL" >&2
 fi
@@ -383,7 +411,7 @@ if [[ "$STAGING" -eq 0 ]]; then
     # rehearses it. Waiving quietly here would turn "we have not built that
     # rehearsal yet" into "this release was rehearsed", which is the exact
     # substitution §7.5 exists to prevent.
-    if [[ -n "$COVERAGE_LANES" ]]; then
+    if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
         echo "publish.sh: §7.5 rehearsal NOT REQUIRED for lane(s) $COVERAGE_LANES," \
              "and NOT PERFORMED." >&2
         echo "  The rehearsal matrix declares desktop lanes only, so there is no" >&2
@@ -479,7 +507,7 @@ while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
 # Kept anyway: it is the guard that would still hold if the channel
 # assertion were ever narrowed, and its message names the build problem
 # where the other names the feed problem. Not counted as coverage.
-if [[ ${#YMLS[@]} -eq 0 && -n "$COVERAGE_LANES" ]]; then
+if [[ ${#YMLS[@]} -eq 0 && -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
     echo "publish.sh: no channel pointers, and none is expected: this release" \
          "covers lane(s) $COVERAGE_LANES, which ship no electron-updater feed." >&2
 elif [[ ${#YMLS[@]} -eq 0 ]]; then
