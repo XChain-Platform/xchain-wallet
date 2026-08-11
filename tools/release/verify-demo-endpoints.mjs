@@ -320,6 +320,32 @@ export const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 export const MAX_INDEXER_LAG_BLOCKS = 1000;
 
 /**
+ * The DEMO coin's own lag ceiling, which is tight where the two above are loose.
+ *
+ * Both thresholds above measure a RATE, and the failure they missed is not a
+ * rate: on 2026-08-10 an indexer migration moved every source's consensus hash
+ * and each replica fail-closed on the divergence, so TBTC's replica froze at
+ * block 147814 while its source ran on to 147854. That reads as `lag 40, newest
+ * block 4h old` - inside a 1,000-block allowance and inside a six-hour window -
+ * so the gate called the demo chain current for the whole time it was already
+ * never going to apply another block.
+ *
+ * A halt is terminal, not slow, and on a chain minting every ten minutes it
+ * hides behind loose rate thresholds for most of a day. What the demo actually
+ * needs is stricter and simpler to state: the reviewer's funding transaction
+ * lands at the SOURCE's tip, so the demo chain's replica has to BE at that tip,
+ * not merely near it. Every healthy chain measured at the same moment sat at
+ * lag 0 (BTC, LTC and DOGE mainnet, and TLTC); only the two halted replicas
+ * carried a gap. Two blocks is therefore slack for a sample taken mid-apply,
+ * not tolerance for a chain that is behind.
+ *
+ * This catches a frozen replica once its gap opens; it cannot catch a halt
+ * whose gap is still inside the slack, which is the residue the sync client's
+ * own halt state would answer and this gate cannot see from a public URL.
+ */
+export const MAX_DEMO_LAG_BLOCKS = 2;
+
+/**
  * How current is one coin's indexed view, per the explorer's own status body.
  *
  * Two independent signals, because they fail apart: `last_block_time` catches a
@@ -331,9 +357,12 @@ export const MAX_INDEXER_LAG_BLOCKS = 1000;
  * @param {any} json      the explorer's /{COIN}/api/status body
  * @param {string} coin
  * @param {number} nowMs
+ * @param {number} maxLagBlocks  ceiling on the indexer's distance behind the
+ *                               decoder; the demo coin passes the tighter
+ *                               MAX_DEMO_LAG_BLOCKS, everything else the loose one
  * @returns {{ state: 'fresh'|'stale'|'unknown', detail: string }}
  */
-export function indexerFreshness(json, coin, nowMs = Date.now()) {
+export function indexerFreshness(json, coin, nowMs = Date.now(), maxLagBlocks = MAX_INDEXER_LAG_BLOCKS) {
     const blockTimeSec = json?.last_block_time?.[coin];
     const lagBlocks = json?.decoder_lag_blocks?.[coin];
     const haveTime = typeof blockTimeSec === 'number' && Number.isFinite(blockTimeSec);
@@ -354,8 +383,9 @@ export function indexerFreshness(json, coin, nowMs = Date.now()) {
             reasons.push(`its newest indexed block is ${describeAge(ageMs)} old`);
         }
     }
-    if (haveLag && lagBlocks > MAX_INDEXER_LAG_BLOCKS) {
-        reasons.push(`its indexer trails the decoder by ${lagBlocks.toLocaleString('en-US')} blocks`);
+    if (haveLag && lagBlocks > maxLagBlocks) {
+        reasons.push(`its indexer trails the decoder by ${lagBlocks.toLocaleString('en-US')} blocks`
+            + ` (ceiling ${maxLagBlocks.toLocaleString('en-US')})`);
     }
 
     if (reasons.length > 0) {
@@ -605,7 +635,8 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
         // chain, so a stale chain nobody funds is a fact worth printing rather
         // than a reason to hold a submission.
         const served = `serving ${probe.coin} (${Object.keys(available).length} networks)`;
-        const fresh = indexerFreshness(json, probe.coin, nowMs);
+        const fresh = indexerFreshness(json, probe.coin, nowMs,
+            probe.isDemoCoin ? MAX_DEMO_LAG_BLOCKS : MAX_INDEXER_LAG_BLOCKS);
         if (probe.isDemoCoin) {
             if (fresh.state === 'unknown') {
                 return {

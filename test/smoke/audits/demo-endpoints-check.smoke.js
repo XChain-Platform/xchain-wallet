@@ -34,7 +34,7 @@ import { strict as assert } from 'node:assert';
 
 import {
     demoProbesFor, classifyProbe, checkDemoEndpoints, burstProbe, EXIT,
-    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS, preflightVerdict,
+    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS, MAX_DEMO_LAG_BLOCKS, preflightVerdict,
 } from '../../../tools/release/verify-demo-endpoints.mjs';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 
@@ -232,8 +232,26 @@ assert.match(behindDemo.detail, /trails the decoder by 756,703 blocks/);
 // widen them past the state actually found in production.
 assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(STALE_AFTER_MS - 60_000), lag: 0 })).state, 'live');
 assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(STALE_AFTER_MS + 60_000), lag: 0 })).state, 'failure');
-assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS })).state, 'live');
-assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS + 1 })).state, 'failure');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_DEMO_LAG_BLOCKS })).state, 'live');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_DEMO_LAG_BLOCKS + 1 })).state, 'failure');
+
+// The loose ceiling still governs every OTHER chain, so tightening the demo coin
+// did not quietly re-tune the rest of the board.
+assert.doesNotMatch(
+    at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS })).detail,
+    /NOT FUNDABLE/);
+assert.match(
+    at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS + 1 })).detail,
+    /NOT FUNDABLE/);
+
+// The exact production shape of 2026-08-10, which both loose thresholds passed:
+// a replica fail-closed on a consensus divergence at block 147814 while its
+// source ran on, reported as `lag 41, newest block 5h old` and certified "demo
+// chain current" for hours. A halt is terminal, so no rate threshold sized for
+// ordinary churn can see it; only the tight demo ceiling does.
+const haltedDemo = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(5 * 60 * 60_000), lag: 41 }));
+assert.equal(haltedDemo.state, 'failure', 'a frozen demo replica must not read as current');
+assert.match(haltedDemo.detail, /trails the decoder by 41 blocks \(ceiling 2\)/);
 
 // A body with no clock at all cannot answer the question, and this script's
 // standing rule is that a check which cannot tell says so instead of passing.
