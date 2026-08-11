@@ -264,6 +264,19 @@ xr_is_staging_os() {
     return 1
 }
 
+# True if an OS is inside a rehearsal's declared scope (dq-13). The scope is
+# a list, so this is membership rather than equality; an EMPTY scope matches
+# nothing, deliberately - "no OS was named" must never read as "every OS is
+# in scope" inside a gate whose whole job is to demand artifacts.
+xr_os_in_scope() {
+    local candidate="$1" o
+    shift
+    for o in "$@"; do
+        [[ "$candidate" == "$o" ]] && return 0
+    done
+    return 1
+}
+
 # True if a status token DEMANDS its artifact, as opposed to allowing it.
 xr_status_is_required() {
     case "$1" in
@@ -475,7 +488,9 @@ xr_write_manifest() {
         # this for a day. Coverage stays whole WITHIN the OS it names, so
         # this is not `coverage: partial`.
         if [[ -n "$staging_os" ]]; then
-            echo "# rehearsal-os: $staging_os"
+            # Normalised to space-separated, matching `# lanes:` above, so
+            # the scope reads the same whichever way it was typed (dq-13).
+            echo "# rehearsal-os: $(echo "$staging_os" | tr ',' ' ' | tr -s ' ')"
         fi
         # AN UNATTENDED SIGNATURE SAYS SO, IN THE THING IT SIGNS.
         #
@@ -1274,15 +1289,42 @@ xr_check_expected() {
         return 1
     fi
 
+    # The OS scope is a LIST (dq-13, operator 2026-08-11). A rehearsal used
+    # to be scoped to exactly one OS, and each OS's rehearsal of one tag
+    # signs a manifest that lands on the SAME RELEASE_HASHES/<tag>.txt on the
+    # shared staging feed - so rehearsing mac after Linux overwrote the
+    # manifest the Linux lanes verify against, and only one OS could be
+    # rehearsed per tag. Naming the file per OS was the other candidate and
+    # was rejected: that path is resolved by the SHIPPED updateVerify.js from
+    # the bundle's own feed base and version, so it must not be varied for a
+    # rehearsal-only reason. One signature over every rehearsed artifact.
+    local -a want_oses=()
     if [[ -n "$want_os" ]]; then
         if [[ "$want_set" != staging ]]; then
             echo "release/lib.sh: OS scope '$want_os' given for release set" \
                  "'$want_set'; only a staging run is per-OS (§7.5)." >&2
             return 1
         fi
-        if ! xr_is_staging_os "$want_os"; then
-            echo "release/lib.sh: unknown rehearsal OS '$want_os'" \
-                 "(expected one of: ${XR_STAGING_OSES[*]})" >&2
+        local _o _dupes
+        # Split on commas AND whitespace, so `--os mac,linux` and the same
+        # scope read back out of a manifest header are one input shape.
+        IFS=', ' read -r -a want_oses <<< "$want_os"
+        if [[ ${#want_oses[@]} -eq 0 ]]; then
+            echo "release/lib.sh: OS scope '$want_os' names no OS" >&2
+            return 1
+        fi
+        for _o in "${want_oses[@]}"; do
+            if ! xr_is_staging_os "$_o"; then
+                echo "release/lib.sh: unknown rehearsal OS '$_o'" \
+                     "(expected one of: ${XR_STAGING_OSES[*]})" >&2
+                return 1
+            fi
+        done
+        # A repeated OS would add its required rows to the tally twice,
+        # which is a gate that is silently wrong rather than loudly wrong.
+        _dupes="$(printf '%s\n' "${want_oses[@]}" | sort | uniq -d | tr '\n' ' ')"
+        if [[ -n "${_dupes// /}" ]]; then
+            echo "release/lib.sh: OS scope '$want_os' names ${_dupes}more than once" >&2
             return 1
         fi
     fi
@@ -1317,7 +1359,7 @@ xr_check_expected() {
         # so a stray Windows installer in a Linux rehearsal directory is
         # still undeclared rather than quietly permitted.
         if [[ "$row_set" == "$want_set" ]] \
-           && { [[ -z "$want_os" ]] || [[ "$(xr_os_for_status "$status")" == "$want_os" ]]; }; then
+           && { [[ -z "$want_os" ]] || xr_os_in_scope "$(xr_os_for_status "$status")" "${want_oses[@]}"; }; then
             seen_rows=$((seen_rows + 1))
             if xr_status_is_required "$status"; then
                 req_pats+=("$pattern"); req_arch+=("$arches")
