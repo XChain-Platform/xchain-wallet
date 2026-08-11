@@ -277,6 +277,29 @@ function cmdPin(argv) {
     return 0;
 }
 
+// DIRECTION MATTERS, and getting it wrong makes this gate a nuisance rather
+// than a signal. "The bytes differ from the pin" has two opposite meanings:
+//
+//   the tree moved PAST the pin  - somebody changed the signing path after the
+//                                  last rehearsal. The rehearsal is stale and
+//                                  somebody has to re-drive it. RED.
+//   the tree is BEHIND the pin   - this checkout has not pulled yet, and the
+//                                  rehearsal describes NEWER tooling than the
+//                                  one on disk. Nothing is wrong with the
+//                                  rehearsal; `git pull` fixes the tree.
+//
+// Only the first is this gate's business. Measured, not theorised: the very
+// first shared checkout this landed in was eleven commits behind origin, so
+// the second reading fired there instantly, and this spec's own standing
+// warning is that a check which fires on correct work is one people delete.
+// The CI venue always tests the pushed commit, where the distinction cannot
+// arise, so a behind-tree report would have been noise on every stale
+// checkout and signal on none.
+function isAncestor(root, a, b) {
+    const r = spawnSync('git', ['-C', root, 'merge-base', '--is-ancestor', a, b], { stdio: 'ignore' });
+    return r.status === 0;
+}
+
 export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
     if (!existsSync(pinFile)) return { ok: false, missing: true, moved: [] };
     const pin = JSON.parse(readFileSync(pinFile, 'utf8'));
@@ -286,7 +309,21 @@ export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
         const then = pin.scriptPath?.[p] ?? null;
         if (then !== now[p]) moved.push({ path: p, pinned: then, now: now[p] });
     }
-    return { ok: moved.length === 0, missing: false, moved, pin };
+
+    // A tree that does not CONTAIN the pinned commit is behind it (or on an
+    // unrelated branch), so its differing bytes are the old ones rather than
+    // new ones. Reported as `behind` and not as drift. When the pinned ref
+    // cannot be resolved at all - a shallow clone, or a pin from a commit that
+    // never landed - we cannot tell the directions apart, and the honest
+    // answer is the conservative one: report drift rather than assume behind,
+    // because assuming behind is the reading that hides a real staleness.
+    const resolvable = pin.scriptRef
+        && spawnSync('git', ['-C', WALLET_ROOT, 'cat-file', '-e', `${pin.scriptRef}^{commit}`],
+            { stdio: 'ignore' }).status === 0;
+    const behind = moved.length > 0 && resolvable
+        && !isAncestor(WALLET_ROOT, pin.scriptRef, against);
+
+    return { ok: moved.length === 0 || behind, missing: false, moved, behind, pin };
 }
 
 function cmdCheck(argv) {
@@ -298,6 +335,12 @@ function cmdCheck(argv) {
             + '\n  Nothing records where Phase 4 was last rehearsed, which is the state that let'
             + '\n  the anchor rot three times. Run `pin` after driving a rehearsal.');
         return 3;
+    }
+    if (d.behind) {
+        console.log(`[phase4-rehearsal] BEHIND: this checkout does not contain ${String(d.pin.scriptRef).slice(0, 8)}, the commit the rehearsal was observed at, so its `
+            + `signing path is the OLDER one rather than a changed one. Not a stale rehearsal; pull `
+            + `and this resolves. Differing: ${d.moved.map((m) => m.path).join(', ')}.`);
+        return 0;
     }
     if (d.ok) {
         console.log(`[phase4-rehearsal] OK: the signing path at ${against} is byte-identical to the `
