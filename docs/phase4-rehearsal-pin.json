@@ -1,20 +1,20 @@
 {
     "_comment": "Written by tools/release/phase4-rehearsal.mjs from a run it just watched. Records how deep a ceremony Phase 4 rehearsal got and against which two trees. Do not hand-edit: the value of this file is that only an observation can set it. A `reached` short of \"signature\" is the NORMAL case, not a defect - the signature needs K1 at a pinentry and no automated run can supply it.",
-    "tag": "v0.336.0",
-    "lane": "extension",
-    "reached": "dev-mock-gate",
-    "reachedSignature": false,
-    "blocker": "release/lib.sh: 'extension' is not a lane declared in <repo>/tools/release/shipped-lanes.txt.",
-    "scriptRef": "e5996510ec2d8da1bc58bda5396a2a43f06e3f79",
-    "repoRef": "2731745ecf35a41c093abba6004778afee2cdf87",
+    "tag": "v0.338.0",
+    "lane": "mac,linux",
+    "reached": "signature",
+    "reachedSignature": true,
+    "blocker": null,
+    "scriptRef": "6d08bfdbe2eac0e5cf22391d813ef93d94100159",
+    "repoRef": "1c22998a6fb38d98f5c2d054a4564b1dc10335c4",
     "scriptPath": {
         "tools/release/sign.sh": "f7212995f1e1737d16d6386677506706967ec95480d439a18420a778441b1d78",
         "tools/release/verify.sh": "4a2b9c5425c6bf712ea34d4eb3bef64d55258a7f853dd0dd6fb529dfe4dc07c6",
-        "tools/release/lib.sh": "8a912bdcd5b615ada8a05a6d55abec666e4c0c54a79f0b03201deea30d091b19"
+        "tools/release/lib.sh": "8ae49710231f2a3c47e0fabf8ddfec67190355c9ccd1e5fd03d990cfdfda3cc6"
     },
     "repoPath": {
-        "tools/release/shipped-lanes.txt": "c017e4c3adbf9e82cc93f0899f8642262b3098f313c07c8bcd1b06bac77eedb0",
-        "tools/build-reproduce/check-no-dev-mock.sh": "54f0c28ec17038fc160836bb60485620828b583122aeb635a5e82da04a0806e4"
+        "tools/release/shipped-lanes.txt": "db4d3089681a031b141f54c4f2b50dad91b554979c00aca0ef6e6783a226bfb4",
+        "tools/build-reproduce/check-no-dev-mock.sh": "eae85dea44d3941c5c38995a7a0e52cbf49424ba8aa288fedaab82d8c880e99a"
     },
-    "observedAt": "2026-08-11T14:20:16.385Z"
+    "observedAt": "2026-08-11T21:24:07.038Z"
 }
