@@ -131,7 +131,28 @@ pnpm --filter @xchain-wallet/desktop run dist --linux ${ARCH_FLAGS}
 # different artifact. Two manifests can only be compared meaningfully if
 # these lines agree. `#` lines are ignored by `sha256sum -c`, the same way
 # tools/release/lib.sh writes its own manifest headers.
-cd /workspace/packages/desktop/dist
+#
+# WHICH DIRECTORY IS NOT A CONSTANT, AND THE OLD CONSTANT FAILED IN THE ONE
+# PLACE IT MATTERED (, spec §7.5). electron-builder.config.cjs sets
+# `directories.output` to `dist-staging` when XCHAIN_STAGING_FEED_URL is set
+# and `dist` otherwise, so a rehearsal packages somewhere this script did not
+# look. In a fresh worktree the fixed `cd .../dist` failed loudly under
+# `set -e`, which was harmless. Under XCHAIN_REPRODUCE_IN_PLACE=1 on the
+# release runner it SUCCEEDED, because dist/ is already there from the
+# production container run earlier in the same job - so the rehearsal's
+# manifest would have hashed the PRODUCTION artifacts while the rehearsal set
+# sat unhashed beside it, and a rehearsal reporting on bytes nobody rehearsed
+# is worse than one that cannot run. Mirror the config's own expression here
+# rather than inventing a second rule that can drift from it.
+if [ -n "${XCHAIN_STAGING_FEED_URL:-}" ]; then
+    DIST_DIR='dist-staging'
+    BUILD_VARIANT='staging'
+else
+    DIST_DIR='dist'
+    BUILD_VARIANT='production'
+fi
+echo "[xchain-wallet] variant: ${BUILD_VARIANT} - output: packages/desktop/${DIST_DIR}"
+cd "/workspace/packages/desktop/${DIST_DIR}"
 
 # The comparable manifest: the PACKAGED artifacts, named exactly as the
 # release publishes them, at the top level of dist/. `-maxdepth 1` is what
@@ -158,6 +179,7 @@ cd /workspace/packages/desktop/dist
     echo "# a worktree it deletes on exit, so these hashes are what survives the"
     echo "# run, and a hash comparison is the same check."
     echo "#"
+    echo "# variant:       ${BUILD_VARIANT}"
     echo "# wallet-commit: ${XCHAIN_WALLET_COMMIT:-unknown}"
     echo "# sdk-commit:    ${XCHAIN_SDK_COMMIT:-unknown}"
     echo "# sdk-pinned:    ${XCHAIN_SDK_PINNED:-unknown}"
@@ -205,6 +227,7 @@ cd /workspace/packages/desktop/dist
     echo "# inside the artifact and are compiled, so they are the first"
     echo "# place to look when a packaged hash disagrees."
     echo "#"
+    echo "# variant:       ${BUILD_VARIANT}"
     echo "# wallet-commit: ${XCHAIN_WALLET_COMMIT:-unknown}"
     echo "# source-date-epoch: ${SOURCE_DATE_EPOCH}"
     find . -mindepth 2 -type f -print0 \
