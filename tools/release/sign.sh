@@ -41,6 +41,10 @@
 #                       Chrome ceremony's only signing path is
 #                       `--lane extension`.
 #   --os <name>         rehearse ONE OS (linux|mac|windows). --staging only.
+#   --passphrase-file <path>
+#                       read K1's passphrase from <path> instead of a
+#                       pinentry. --staging only, and refused on a
+#                       production run (operator ruling `dq-9`, 2026-08-10).
 #   --force, -f         overwrite an existing manifest
 #
 # PARTIAL RELEASES, and why the flag is narrower than it looks. Without
@@ -108,6 +112,14 @@ RELEASE_SET=release
 STAGING_OS=""
 LANE_NAMES=()
 
+# Where a rehearsal reads K1's passphrase (operator ruling `dq-9`,
+# 2026-08-10). Empty means a pinentry, which is what a production run
+# always gets. The asymmetry is deliberate: a rehearsal only a human can
+# start happens as often as a human remembers, and §7.5 has been caught
+# five times shipping a step nothing ever ran; a production manifest is
+# the one signature whose worth IS that a person chose to make it.
+PASSPHRASE_FILE=""
+
 # Split one --lane value on commas so `--lane android,ios` and two flags
 # mean the same thing. Empty words are dropped rather than becoming an
 # unnamed lane, which xr_lane_scope would then have to refuse by accident.
@@ -152,6 +164,13 @@ while [[ $# -gt 0 ]]; do
         # elsewhere rather than ignored - see the check below.
         --os)
             STAGING_OS="$2"
+            shift 2
+            ;;
+        # A rehearsal's passphrase source (`dq-9`). Takes a PATH and never
+        # a value, so the passphrase cannot reach a process listing, a
+        # shell history or this script's own output.
+        --passphrase-file)
+            PASSPHRASE_FILE="$2"
             shift 2
             ;;
         --help|-h)
@@ -526,6 +545,57 @@ if [[ -n "$STAGING_OS" && "$RELEASE_SET" != "staging" ]]; then
     exit 2
 fi
 
+# The passphrase file is a REHEARSAL affordance and refusing it on a
+# production run is the whole of the operator's ruling, so it is refused
+# here rather than quietly ignored: a run that believed it was signing
+# non-interactively and instead blocked on a pinentry is recoverable,
+# while a production manifest signed from a file is a ceremony that
+# silently stopped being one.
+if [[ -n "$PASSPHRASE_FILE" && "$RELEASE_SET" != "staging" ]]; then
+    echo "sign.sh: --passphrase-file is only allowed with --staging." >&2
+    echo "  A production manifest keeps a human at the pinentry (dq-9," >&2
+    echo "  2026-08-10). That signature's worth is that a person chose to" >&2
+    echo "  make it; reading it from a file makes the ceremony a cron job" >&2
+    echo "  that nobody decided to run." >&2
+    exit 2
+fi
+
+# A missing or over-readable passphrase file fails BEFORE any hashing,
+# per the fail-fast posture the rest of this script keeps: the mode check
+# is here because the file is the whole secret, and 0600 is what the
+# release store's own K1 material already carries.
+if [[ -n "$PASSPHRASE_FILE" ]]; then
+    if [[ ! -r "$PASSPHRASE_FILE" ]]; then
+        echo "sign.sh: --passphrase-file '$PASSPHRASE_FILE' is not readable." >&2
+        exit 2
+    fi
+    # GNU stat FIRST, BSD second, and the order is load-bearing rather
+    # than arbitrary. `stat -f` is `--file-system` on GNU, so the BSD form
+    # does not fail inertly there: it prints a filesystem status block to
+    # stdout and exits non-zero, and the fallback then appends the real
+    # mode to that block (measured on a Linux host: `pf_mode` came back as
+    # six lines of filesystem dump followed by `644`). The reverse is inert
+    # as intended, because macOS `stat -c` exits 1 with empty stdout.
+    pf_mode="$(stat -c '%a' "$PASSPHRASE_FILE" 2>/dev/null \
+        || stat -f '%Lp' "$PASSPHRASE_FILE" 2>/dev/null || true)"
+    # An unreadable mode FAILS CLOSED rather than skipping the check. A
+    # garbled read must never decide a secret's permissions, and "we could
+    # not tell" resolving to "carry on" is how the BSD-first ordering above
+    # would have gone unnoticed on a venue.
+    if ! [[ "$pf_mode" =~ ^[0-7]{3,4}$ ]]; then
+        echo "sign.sh: could not read the mode of --passphrase-file" >&2
+        echo "  '$PASSPHRASE_FILE'. It holds K1's passphrase and this run" >&2
+        echo "  cannot confirm who can read it, so it refuses to use it." >&2
+        exit 2
+    fi
+    if [[ "${pf_mode: -2}" != "00" ]]; then
+        echo "sign.sh: --passphrase-file '$PASSPHRASE_FILE' is mode $pf_mode." >&2
+        echo "  It holds K1's passphrase and is readable by group or other." >&2
+        echo "  chmod 600 it before signing anything with it." >&2
+        exit 2
+    fi
+fi
+
 if [[ ${#LANE_NAMES[@]} -gt 0 && "$RELEASE_SET" == "staging" ]]; then
     echo "sign.sh: --staging cannot be combined with --lane." >&2
     echo "  The rehearsal set is defined by which formats can auto-update," >&2
@@ -626,7 +696,16 @@ xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE
     "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
+# Loopback pinentry ONLY when a rehearsal supplied a passphrase file. The
+# array stays empty on every other path, so a production run reaches gpg
+# with exactly the arguments it always had and still meets a pinentry.
+GPG_PASSPHRASE_ARGS=()
+if [[ -n "$PASSPHRASE_FILE" ]]; then
+    GPG_PASSPHRASE_ARGS=(--pinentry-mode loopback --passphrase-file "$PASSPHRASE_FILE")
+    echo "sign.sh: passphrase from $PASSPHRASE_FILE (staging only, dq-9)" >&2
+fi
 gpg --batch --yes \
+    "${GPG_PASSPHRASE_ARGS[@]+"${GPG_PASSPHRASE_ARGS[@]}"}" \
     --local-user "$XCHAIN_RELEASE_GPG_KEY" \
     --armor \
     --detach-sign \
