@@ -44,6 +44,19 @@ REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")/../../.." rev-parse --show-t
 # caller that sets it and why the release lane is not a verifier.
 IN_PLACE="${XCHAIN_REPRODUCE_IN_PLACE:-0}"
 
+# §7.5 rehearsal selector, forwarded to the container only when it is set
+# (). electron-builder.config.cjs reads XCHAIN_STAGING_FEED_URL at
+# build time and switches output to dist-staging, so the variable has to
+# reach the container or a rehearsal can only ever be built outside it - and
+# a build outside it carries no compiled tiny-secp256k1, which
+# xr_check_payload_native in tools/release/lib.sh now refuses.
+#
+# Read into a local here, unset-safe, so `set -u` never sees a bare
+# reference and the conditional expansion at the docker run below has one
+# name to test. Empty is the production case and must stay indistinguishable
+# from "never mentioned": see the comment on that expansion.
+STAGING_FEED_URL="${XCHAIN_STAGING_FEED_URL:-}"
+
 cd "${REPO_ROOT}"
 
 # --- 1. Ref resolution + SOURCE_DATE_EPOCH ------------------------------
@@ -242,6 +255,14 @@ docker build \
 # checkout comes from building a detached worktree of the commit (step 2),
 # which is created and destroyed around this run - not from the flag.
 echo "[reproduce] running build"
+# Said out loud, because a rehearsal build is NOT comparable with the
+# published manifest: it bakes a different feed and lands in dist-staging.
+# A run that silently produced other bytes would read as a failed
+# reproduction to the one reader this script is written for.
+if [ -n "${STAGING_FEED_URL}" ]; then
+    echo "[reproduce] STAGING REHEARSAL variant (§7.5): output is dist-staging, not"
+    echo "[reproduce] comparable with the published production manifest"
+fi
 docker run --rm \
     --platform "${BUILD_PLATFORM}" \
     --user "$(id -u):$(id -g)" \
@@ -257,6 +278,18 @@ docker run --rm \
     -e "XCHAIN_WALLET_COMMIT=${COMMIT_SHA}" \
     -e "XCHAIN_SDK_COMMIT=${SDK_COMMIT}" \
     -e "XCHAIN_SDK_PINNED=${SDK_PINNED}" \
+    `# THE REHEARSAL SELECTOR, AND ONLY WHEN ONE WAS ASKED FOR ().
+     # Conditional, in the same shape as the SDK mount below, because an
+     # -e that is always present is not neutral: it would put the variable
+     # in the container's environment (empty, but declared) for every
+     # production reproduction, and Level-2 reproducibility is the one
+     # thing this script exists to hold. Unset, this expands to zero words
+     # and the argv is byte-for-byte the run it was before.
+     #
+     # Both modes reach this line: in-place changes only WORKTREE_DIR and
+     # the cleanup, so there is exactly one docker run and the passthrough
+     # serves the verifier and the release lane alike.` \
+    ${STAGING_FEED_URL:+-e "XCHAIN_STAGING_FEED_URL=${STAGING_FEED_URL}"} \
     -v "${WORKTREE_DIR}:/workspace" \
     `# The SDK mount is now conditional. It is only meaningful when the
      # dependency is a link: - under the pinned registry dependency the

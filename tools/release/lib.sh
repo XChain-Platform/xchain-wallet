@@ -812,7 +812,116 @@ xr_check_foreign_triplets() {
     echo "$problems"
 }
 
-# Run the payload check over every Linux artifact in a directory.
+# Does a Linux artifact's payload carry the compiled native addon that a
+# Linux install of this app produces?
+#
+# MEASURED ON REAL ARTIFACTS, NOT REASONED (). The §7.5 rehearsal
+# `.deb` built on the release Mac parses to 93 payload entries with zero
+# `.node` files in them;'s CI artifact for the same app carries 188
+# and includes
+# `resources/app.asar.unpacked/node_modules/tiny-secp256k1/build/Release/secp256k1.node`.
+# The rehearsal therefore rehearses a bundle no release ever publishes, which
+# is the one thing a rehearsal must not do.
+#
+# THE DIVERGENCE SHIPS IN SILENCE, which is why a gate has to ask.
+# tiny-secp256k1@1.1.7's index.js is `try { require('./native') } catch
+# { require('./js') }`, so a payload with no addon quietly runs that
+# package's JS fallback: the build exits 0, the app starts, and nothing
+# anywhere names the difference. Only the payload itself can answer.
+#
+# Args: dir name. Prints problems on stderr, count on stdout.
+xr_check_payload_native() {
+    local dir="$1" name="$2"
+    local f="$dir/${name#./}" problems=0 listing="" tmp="" data="" cand offset found
+
+    case "${name#./}" in
+        *.deb)
+            # `tar`, not `dpkg-deb`, because of where signing happens: sign.sh
+            # runs on the RELEASE MACHINE (§8), a Mac with no dpkg at all, and
+            # macOS tar is libarchive, which reads a `.deb`'s ar container
+            # directly. A check enforceable only on the host that does not
+            # sign is the "mechanism nothing ran" family this lane keeps
+            # rediscovering.
+            tmp="$(mktemp -d "${TMPDIR:-/tmp}/xr-native.XXXXXX")"
+            if tar -x -f "$f" -C "$tmp" >/dev/null 2>&1; then
+                for cand in "$tmp"/data.tar.*; do
+                    if [[ -f "$cand" ]]; then data="$cand"; fi
+                done
+                if [[ -n "$data" ]]; then
+                    listing="$(tar -t -f "$data" 2>/dev/null || true)"
+                fi
+            elif command -v dpkg-deb >/dev/null 2>&1; then
+                # GNU tar does not read an ar archive, so a Linux venue needs
+                # the other reader. Not a substitute for the branch above: the
+                # signing host has only that one.
+                listing="$(dpkg-deb -c "$f" 2>/dev/null || true)"
+            fi
+            if [[ -z "$listing" ]]; then
+                echo "PAYLOAD-NATIVE  '${name#./}' could not be unpacked as a Debian package," >&2
+                echo "              so nothing has read its payload. An artifact whose" >&2
+                echo "              contents cannot be read is not an artifact whose contents" >&2
+                echo "              have been checked." >&2
+                problems=$((problems + 1))
+            fi
+            rm -rf "$tmp"
+            ;;
+        *.AppImage)
+            if ! command -v unsquashfs >/dev/null 2>&1; then
+                # NOT a failure, for the reason the *.snap branch above gives
+                # at length: the release Mac has no squashfs-tools, and
+                # refusing here would block the only path a release has in
+                # order to enforce a check that is one brew command away. It
+                # names what it did not check instead of going quiet.
+                echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: unsquashfs is" >&2
+                echo "              not on this host, and an AppImage's payload is a squashfs" >&2
+                echo "              image nothing else here can read (). Install it" >&2
+                echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
+                echo "              have this artifact checked." >&2
+                echo 0
+                return 0
+            fi
+            # An AppImage is an ELF runtime with the squashfs appended, so the
+            # extractor needs the offset that image starts at; 'hsqs' is the
+            # image's own magic, and finding it costs one scan.
+            offset="$(grep -a -b -o -m1 hsqs "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
+            if [[ -z "$offset" ]] || ! listing="$(unsquashfs -o "$offset" -l "$f" 2>/dev/null)"; then
+                echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: its squashfs" >&2
+                echo "              image could not be located or listed here. The .deb in the" >&2
+                echo "              same set carries the same payload and IS checked, so" >&2
+                echo "              refusing would fail a release over this check's own" >&2
+                echo "              limitation rather than over the artifact." >&2
+                echo 0
+                return 0
+            fi
+            ;;
+        *)
+            # Every other format is out of scope. measured the Linux
+            # lane's divergence; what a .dmg or an .exe ought to carry is a
+            # rule nobody has driven, and guessing it here would gate a
+            # release on an assumption.
+            echo 0
+            return 0
+            ;;
+    esac
+
+    # One listing, one question: is a compiled addon in the unpacked tree?
+    if [[ -n "$listing" ]]; then
+        found="$(printf '%s\n' "$listing" | grep -c 'resources/app\.asar\.unpacked/.*\.node' || true)"
+        if [[ "${found:-0}" -eq 0 ]]; then
+            echo "PAYLOAD-NATIVE  '${name#./}' carries no compiled addon: nothing under" >&2
+            echo "              resources/app.asar.unpacked/ ends in .node. A Linux install" >&2
+            echo "              compiles tiny-secp256k1 and the release lane's own artifact" >&2
+            echo "              ships secp256k1.node (), so a payload without one" >&2
+            echo "              was built where that addon never compiled and is running" >&2
+            echo "              the package's JS fallback ()." >&2
+            problems=$((problems + 1))
+        fi
+    fi
+
+    echo "$problems"
+}
+
+# Run the payload checks over every Linux artifact in a directory.
 #
 # Deliberately NOT folded into xr_check_expected. That function answers "is
 # the set complete and correctly named", which it can do against placeholder
@@ -820,7 +929,7 @@ xr_check_foreign_triplets() {
 # of a different thing, and keeping them apart is what lets each be driven
 # honestly. sign.sh calls both, in that order, before it signs anything.
 xr_check_payload_arches() {
-    local dir="$1" name arch problems=0 n
+    local dir="$1" name arch problems=0 native=0 n
 
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
@@ -834,6 +943,12 @@ xr_check_payload_arches() {
         [[ -n "$arch" ]] || continue
         n="$(xr_check_payload_arch "$dir" "$name" "$arch")"
         problems=$((problems + n))
+        # The same set answers a second question, and the §7.5 rehearsal got
+        # it wrong (): does the payload carry the addon a Linux
+        # install compiles? Tallied apart from the arch count so each gate
+        # reports the defect it actually found.
+        n="$(xr_check_payload_native "$dir" "$name")"
+        native=$((native + n))
     done < <(xr_list_artifacts "$dir")
 
     if [[ "$problems" -gt 0 ]]; then
@@ -842,10 +957,23 @@ xr_check_payload_arches() {
         echo "  An artifact's name, its metadata and its contents all have to" >&2
         echo "  agree. Publishing one that does not gives a user a download that" >&2
         echo "  installs, verifies against the signed manifest, and cannot run." >&2
+    fi
+
+    if [[ "$native" -gt 0 ]]; then
+        echo >&2
+        echo "release/lib.sh: payload-native gate FAILED ($native problem(s))." >&2
+        echo "  A Linux payload with no compiled addon was built where that" >&2
+        echo "  addon never compiled, and tiny-secp256k1 falls back to JS with" >&2
+        echo "  nothing said (). Build the set the release lane builds" >&2
+        echo "  it in, rather than publishing a rehearsal of a different bundle." >&2
+    fi
+
+    if [[ "$problems" -gt 0 || "$native" -gt 0 ]]; then
         return 1
     fi
 
     echo "release/lib.sh: payload-architecture gate ok." >&2
+    echo "release/lib.sh: payload-native gate ok." >&2
 }
 
 # Check one declared row's per-architecture coverage.

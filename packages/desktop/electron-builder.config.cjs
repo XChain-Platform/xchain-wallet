@@ -382,9 +382,15 @@ const config = {
     // so it lives in packages/desktop/package.json; see the comment there.
 
     // Explicit asar: reduces startup I/O + lets electron-builder
-    // write deterministic archive entries. Native modules (none right
-    // now: WebHID + Trezor Connect are pure JS) would need
-    // asarUnpack; revisit if node-HID is ever added.
+    // write deterministic archive entries. THERE IS ONE NATIVE MODULE,
+    // and asar already unpacks it: a Linux install compiles
+    // tiny-secp256k1 (root package.json's pnpm onlyBuiltDependencies),
+    // and the Linux artifacts ship
+    // resources/app.asar.unpacked/node_modules/tiny-secp256k1/build/Release/secp256k1.node
+    // ( counted it in the release lane's own .deb). It needs no
+    // asarUnpack entry because *.node is unpacked by default; a macOS
+    // build compiles nothing, which is why this read as "none right
+    // now" for as long as it did .
     asar: true,
 
     // Resources we ship alongside the app bundle. The renderer build
@@ -402,9 +408,14 @@ const config = {
     ],
 
     // `npmRebuild: false` skips electron-builder's post-install
-    // rebuild step; we have no native deps, so the step is
-    // unnecessary noise and a source of non-determinism (it invokes
-    // node-gyp which touches timestamps).
+    // rebuild step, and NOT because there are no native deps: there is
+    // one, and the INSTALL is what compiles it. The Linux artifacts are
+    // built by `pnpm install` inside the verifier's pinned container,
+    // so electron-builder invoking node-gyp afterwards would recompile
+    // that addon outside the pinned toolchain, against timestamps
+    // nothing controls. See the `desktop-linux` job in
+    // .github/workflows/release.yml ("THE COMPILE HAPPENS AT INSTALL
+    // TIME, NOT AT PACKAGE TIME").
     npmRebuild: false,
 
     // `buildDependenciesFromSource: false` opts out of building

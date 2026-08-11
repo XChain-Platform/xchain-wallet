@@ -387,20 +387,25 @@ try {
             'Package: xchain-wallet\nVersion: 9.9.9\n'
             + `Architecture: ${arch}\nMaintainer: XChain <releases@dankest.llc>\n`
             + 'Description: fixture\n']]);
-        // Two payload files, and the second is not decoration. The
-        // multiarch library is what sign.sh's payload-architecture gate
-        // reads (). `resources/app.asar` is what the pre-sign
-        // dev-mock gate reads now that it opens desktop installers
-        // : a `.deb` with no app bundle inside fails that gate's
-        // positive check - "does not contain the real xchain-sdk" - and
-        // every case in this file would then fail for a reason that is not
-        // the one it is testing. Same lesson as realArchive() below and as
-        // the ELF header above: a fixture has to be real enough for the
-        // gates that have learned to read it.
+        // Three payload files, and none is decoration. The multiarch
+        // library is what sign.sh's payload-architecture gate reads
+        // (). `resources/app.asar` is what the pre-sign dev-mock
+        // gate reads now that it opens desktop installers : a
+        // `.deb` with no app bundle inside fails that gate's positive
+        // check - "does not contain the real xchain-sdk" - and every case
+        // in this file would then fail for a reason that is not the one it
+        // is testing. The unpacked `.node` is the payload-native gate's
+        // (), which refuses a Linux package built where the addon
+        // never compiled. Same lesson three times: a fixture has to be
+        // real enough for the gates that have learned to read it.
+        // Keep that path under 100 bytes or tarGz truncates the ustar name
+        // field and the entry silently stops ending in `.node`.
         const data = tarGz([
             [`./usr/lib/${triplet}/libfixture.so`, 'fixture\n'],
             ['./opt/XChain Wallet/resources/app.asar',
                 '{"files":{}}throw new Error("SDKWalletError");\n'],
+            ['./opt/XChain Wallet/resources/app.asar.unpacked/tiny-secp256k1/secp256k1.node',
+                'fixture addon\n'],
         ]);
         const member = (memberName, body) => {
             const h = Buffer.alloc(60, 0x20);
