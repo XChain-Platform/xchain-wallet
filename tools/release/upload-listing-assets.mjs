@@ -70,6 +70,9 @@ const API = 'https://api.appstoreconnect.apple.com';
 export const USAGE = `upload-listing-assets.mjs - upload the pinned iOS listing
 screenshots to App Store Connect ( row 63).
 
+Usage:
+  node tools/release/upload-listing-assets.mjs [--dry-run] [--locale <code>]
+
 Uploads exactly the images named by packages/mobile/screenshots/capture-pin.json,
 replacing whatever the version's localization currently holds, then sets their
 order and waits for Apple to report each one COMPLETE.

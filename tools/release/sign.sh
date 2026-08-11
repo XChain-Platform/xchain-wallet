@@ -470,6 +470,54 @@ if [[ -n "$VERSION_MISMATCH" ]]; then
     exit 1
 fi
 
+# THE CHECK ABOVE READS THE NAME, AND A NAME IS CHOSEN BY WHOEVER STAGED THE
+# FILE ( S46). Driven rather than argued: the real CI-built
+# xchain-wallet-extension-v0.336.0.zip from release run 31072271075, copied to
+# xchain-wallet-extension-v0.337.0.zip, passes every gate above and every gate
+# below and is hashed into the manifest. One `cp` defeats the guard whose own
+# message says it exists to stop a manifest naming one version over another
+# version's bytes.
+#
+# That matters most for the extension, which is why this check is scoped to it
+# rather than pretended to be general. The zip's manifest.json version is not
+# our bookkeeping: it is the version the Chrome Web Store itself reads,
+# displays and enforces monotonically, and it is what the store-version
+# monitor compares the publish log against. A stale zip signed and uploaded
+# under a new tag therefore produces a live store version no publish-log row
+# matches, which is the rogue-publish signal, raised by the release that was
+# supposed to be legitimate.
+#
+# The other lanes are NOT covered here and the limit is stated rather than
+# dressed up: the mobile artifacts have their own verifiers
+# (verify-android-manifest.mjs, verify-ios-artifact.mjs) which read their
+# internal version pairs, and the desktop and web bundles declare no internal
+# version this script can read without unpacking an installer format per OS.
+INTERNAL_MISMATCH=""
+while IFS= read -r artifact; do
+    name="$(basename "$artifact")"
+    case "$name" in xchain-wallet-extension-v*.zip) ;; *) continue ;; esac
+    # No node_modules in a pristine clone (row 50), so this stays dependency
+    # free: unzip to stdout, and a regex over the one field.
+    inner="$(unzip -p "$artifact" manifest.json 2>/dev/null \
+        | grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' \
+        | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+    if [[ -z "$inner" ]]; then
+        INTERNAL_MISMATCH+="    $name: no readable manifest.json version inside the zip"$'\n'
+    elif [[ "$inner" != "$TAG_VERSION" ]]; then
+        INTERNAL_MISMATCH+="    $name: manifest.json says $inner, the tag says $TAG_VERSION"$'\n'
+    fi
+done < <(find "$INPUT_DIR" -maxdepth 1 -type f | sort)
+
+if [[ -n "$INTERNAL_MISMATCH" ]]; then
+    echo "sign.sh: a staged extension zip does not CONTAIN the version its name claims." >&2
+    printf '%s' "$INTERNAL_MISMATCH" >&2
+    echo "  Refusing to sign. The filename check above passes on a renamed copy;" >&2
+    echo "  this one reads the manifest.json the Chrome Web Store itself reads." >&2
+    echo "  Stage the zip built by the release run for THIS tag rather than" >&2
+    echo "  renaming one you already had." >&2
+    exit 1
+fi
+
 MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
 SIG="$MANIFEST.asc"
 

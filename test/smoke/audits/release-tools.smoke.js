@@ -489,6 +489,16 @@ try {
     const realArchive = (dir, name) => {
         const src = mkdtempSync(join(work, 'bundle-'));
         writeFileSync(join(src, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
+        // The extension zip also carries the manifest.json sign.sh reads since
+        //  S46, and its version is DERIVED FROM THE NAME rather than
+        // typed here, so the fixture cannot drift from the tag the cases sign
+        // with. Same lesson as the comment above and one gate later: a fixture
+        // has to be real enough for the gates that have learned to read it.
+        if (/^xchain-wallet-extension-v.*\.zip$/.test(name)) {
+            const v = /(\d+\.\d+\.\d+)/.exec(name)[1];
+            writeFileSync(join(src, 'manifest.json'),
+                `${JSON.stringify({ manifest_version: 3, name: 'XChain Wallet', version: v }, null, 2)}\n`);
+        }
         const r = name.endsWith('.zip')
             ? spawnSync('zip', ['-qr', join(dir, name), '.'], { cwd: src, encoding: 'utf8' })
             : spawnSync('tar', ['czf', join(dir, name), '.'], { cwd: src, encoding: 'utf8' });
@@ -681,6 +691,45 @@ try {
         const ok = sh(signArgs(stage()), { env: gateEnv });
         check('sign.sh does NOT refuse the matching tag on that account',
             !/does not match the staged artifacts/.test(ok.stderr), ok.stderr);
+    }
+
+    // 7b. THE CHECK ABOVE READS THE NAME, AND A NAME IS A `cp` AWAY FROM
+    //     BEING ANYTHING ( S46). Driven on the real thing rather than
+    //     reasoned about: the CI-built xchain-wallet-extension-v0.336.0.zip
+    //     from release run 31072271075, copied to a v0.337.0 filename, passed
+    //     every gate in this pipeline and was hashed into the manifest.
+    //
+    //     The extension is the lane where that costs the most. Its
+    //     manifest.json version is not our bookkeeping: the Chrome Web Store
+    //     reads it, displays it, and enforces it monotonically, and the
+    //     store-version monitor compares the LIVE store version against the
+    //     publish log. So a stale zip signed under a new tag surfaces later as
+    //     a live version no publish-log row matches, which is the
+    //     rogue-publish signal - raised by the release that was legitimate.
+    {
+        const dir = stage();
+        const zip = readdirSync(dir).find((n) => /^xchain-wallet-extension-v.*\.zip$/.test(n));
+        assert.ok(zip, 'the staging fixture no longer contains an extension zip to rewrite');
+        const src = mkdtempSync(join(work, 'stalezip-'));
+        writeFileSync(join(src, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
+        // Same bytes as a healthy bundle in every respect but the one number.
+        writeFileSync(join(src, 'manifest.json'),
+            `${JSON.stringify({ manifest_version: 3, name: 'XChain Wallet', version: '9.9.8' }, null, 2)}\n`);
+        rmSync(join(dir, zip), { force: true });
+        const z = spawnSync('zip', ['-qr', join(dir, zip), '.'], { cwd: src, encoding: 'utf8' });
+        assert.equal(z.status, 0, `restaged a stale-content extension zip: ${z.stderr}`);
+
+        const stale = sh(signArgs(dir), { env: gateEnv });
+        check('sign.sh refuses an extension zip whose manifest.json is a different release',
+            stale.status === 1, `exit ${stale.status}: ${stale.stderr}`);
+        check('sign.sh names both numbers rather than only refusing',
+            /does not CONTAIN the version its name claims/.test(stale.stderr)
+            && /manifest\.json says 9\.9\.8, the tag says 9\.9\.9/.test(stale.stderr), stale.stderr);
+        // Without this, "always refuse" satisfies the two checks above and the
+        // whole release lane is dead in a way nothing here would notice.
+        const good = sh(signArgs(stage()), { env: gateEnv });
+        check('sign.sh does NOT refuse a zip that really contains the tagged version',
+            !/does not CONTAIN the version its name claims/.test(good.stderr), good.stderr);
     }
 
     // 8. --help prints the usage block, not the licence header.
