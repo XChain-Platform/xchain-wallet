@@ -76,13 +76,21 @@ export function listSpecs() {
 export const CITED = new RegExp(
     '`((?:packages|tools|test|\\.github|claude|xchain-[a-z0-9-]+)/[A-Za-z0-9_./-]+)`', 'g');
 
-// Not every backticked path is a path. Three shapes are deliberately not one:
+// Not every backticked path is a path. Four shapes are deliberately not one:
 // a version placeholder (`vX.Y.Z`), a token the reader substitutes (`<id>`, a
-// glob), and an ELIDED path (`xchain-documentation/.../android-play.md`), the
-// specs' shorthand for a home too long to sit inside a table cell. Elisions
-// are counted and reported rather than silently dropped, because a citation
-// that cannot be resolved is also a citation that cannot rot loudly.
-const PLACEHOLDER = /vX\.Y\.Z|<|\*|\/\.\.\.\//;
+// glob), an ELIDED path (`xchain-documentation/.../android-play.md`), the
+// specs' shorthand for a home too long to sit inside a table cell, and BRACE
+// shorthand (`tools/release/credential-expiry.{mjs,json}`), which names two
+// files at once. Elisions are counted and reported rather than silently
+// dropped, because a citation that cannot be resolved is also a citation that
+// cannot rot loudly.
+//
+// The brace case was added with the acceptance-block reader below, and it is a
+// measurement rather than a precaution: reading paths out of COMMANDS turns
+// that shorthand into the truncated stem `tools/release/credential-expiry`,
+// which resolves nowhere and would have reported the desktop lane's correct
+// writing as rot.
+const PLACEHOLDER = /vX\.Y\.Z|<|\*|\/\.\.\.\/|[{}]/;
 
 /**
  * Citations on one line of markdown.
@@ -199,4 +207,78 @@ export function frontierRowsOf(text) {
         rows.push({ id, item, state, line });
     }
     return { found: true, rows };
+}
+
+// A repo path sitting INSIDE a backticked command, rather than backticked on
+// its own. The boundary before it is what keeps this honest: a path must start
+// the span or follow whitespace, `=`, a quote, or an opening paren, so the
+// `xchain-wallet` in `gh run list --repo XChain-Platform/xchain-wallet` is not
+// mistaken for a checkout-relative path - it follows a `/`, which is not a
+// boundary. The trailing class refuses a captured `.` or `,` from the end of a
+// sentence.
+const IN_COMMAND = new RegExp(
+    '(?:^|[\\s=\'"(])'
+    + '((?:packages|tools|test|\\.github|claude|xchain-[a-z0-9-]+)/[A-Za-z0-9_./-]*[A-Za-z0-9_-])',
+    'g');
+
+/**
+ * The MILESTONE ACCEPTANCE lines of a spec's frontier block.
+ *
+ * These are the block's completion criterion - the tests that decide REACHED -
+ * and they live in a bullet list ABOVE the table, so the row parser above has
+ * never seen them.
+ *
+ * @returns {{ found: boolean, lines: Array<{ n: number, line: string }> }}
+ */
+export function acceptanceLinesOf(text) {
+    const open = text.indexOf('<!-- BUILD-SPEC:FRONTIER');
+    const close = text.indexOf('<!-- /BUILD-SPEC:FRONTIER', open + 1);
+    if (open === -1 || close < open) return { found: false, lines: [] };
+
+    const lines = [];
+    let inList = false;
+    let n = 0;
+    for (const line of text.slice(open, close).split('\n')) {
+        if (/^\*\*Milestone acceptance\*\*/.test(line)) { inList = true; continue; }
+        if (!inList) continue;
+        if (/^\s*[-*]\s*(⬜|✅)/.test(line)) { n += 1; lines.push({ n, line }); continue; }
+        if (line.trim() === '') continue;
+        break;                                  // the list ended; the block goes on
+    }
+    return { found: lines.length > 0, lines };
+}
+
+/**
+ * Citations on one acceptance line, from BOTH shapes it uses.
+ *
+ * An acceptance test is written as a command the operator pastes, so its paths
+ * are usually inside the backticks rather than alone in them - which is
+ * precisely the shape `citationsIn` cannot see, and precisely how this spec
+ * came to name a script that does not exist.
+ *
+ * @returns {{ paths: string[], placeholders: string[] }}
+ */
+export function acceptanceCitationsIn(line) {
+    const inline = new Set([...line.matchAll(CITED)].map((m) => m[1]));
+    const inCommand = new Set();
+    for (const [, span] of line.matchAll(/`([^`]*)`/g)) {
+        for (const m of span.matchAll(IN_COMMAND)) {
+            if (!inline.has(m[1])) inCommand.add(m[1]);
+        }
+    }
+    const all = [...inline, ...inCommand];
+    const live = (p) => !PLACEHOLDER.test(p);
+    return {
+        paths: all.filter(live),
+        placeholders: all.filter((p) => !live(p)),
+        // Reported separately so a caller can floor on it. The in-command
+        // reader is the whole mechanism here - the inline regex structurally
+        // cannot see a path inside a pasted command - and a floor on the
+        // COMBINED count is satisfied by the inline half alone. Measured, not
+        // theorised: S47's third falsification disabled this loop and
+        // the gate stayed GREEN, because one sibling spec backticks two of its
+        // acceptance paths on their own. A floor that survives the deletion of
+        // what it guards is not a floor.
+        inCommand: [...inCommand].filter(live),
+    };
 }
