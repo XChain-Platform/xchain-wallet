@@ -896,10 +896,33 @@ xr_check_payload_native() {
                 return 0
             fi
             # An AppImage is an ELF runtime with the squashfs appended, so the
-            # extractor needs the offset that image starts at; 'hsqs' is the
-            # image's own magic, and finding it costs one scan.
-            offset="$(grep -a -b -o -m1 hsqs "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
-            if [[ -z "$offset" ]] || ! listing="$(unsquashfs -o "$offset" -l "$f" 2>/dev/null)"; then
+            # extractor needs the offset that image starts at, and 'hsqs' is
+            # the image's own magic.
+            #
+            # THE MAGIC OCCURS MORE THAN ONCE AND THE FIRST ONE IS NOT THE
+            # IMAGE. This took the first textual match, and the first real
+            # AppImage ever put through it proved that wrong: on the v0.336.0
+            # x86_64 build, 'hsqs' appears at byte 32609 inside the ELF
+            # runtime and the actual superblock is at 188392. unsquashfs at
+            # 32609 lists nothing, so the branch fell through to UNCHECKED and
+            # returned 0 - meaning this gate has never once read an AppImage,
+            # and it failed in the one way nothing notices, by declining to
+            # judge rather than by judging wrong ( frontier row 132).
+            #
+            # Try the candidates in order and keep the first that actually
+            # lists. The extractor reading the image is the only honest test of
+            # where the image is; a magic string is a guess at it. Bounded at
+            # 32 candidates so a pathological file cannot turn a release gate
+            # into a full-file rescan loop.
+            listing=""
+            while IFS= read -r offset; do
+                [[ -n "$offset" ]] || continue
+                if listing="$(unsquashfs -o "$offset" -l "$f" 2>/dev/null)" && [[ -n "$listing" ]]; then
+                    break
+                fi
+                listing=""
+            done < <(grep -a -b -o hsqs "$f" 2>/dev/null | cut -d: -f1 | head -32)
+            if [[ -z "$listing" ]]; then
                 echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: its squashfs" >&2
                 echo "              image could not be located or listed here. The .deb in the" >&2
                 echo "              same set carries the same payload and IS checked, so" >&2
@@ -952,18 +975,25 @@ xr_check_payload_arches() {
             *.AppImage|*.snap|*.deb) ;;
             *) continue ;;
         esac
+        # The same set answers a second question, and the §7.5 rehearsal got
+        # it wrong (): does the payload carry the addon a Linux
+        # install compiles? Tallied apart from the arch count so each gate
+        # reports the defect it actually found.
+        #
+        # ASKED FIRST, BECAUSE IT NEEDS NO ARCH AND WAS BEING SKIPPED AS
+        # THOUGH IT DID. The `continue` below is written for the arch check
+        # and silently took this one with it, so a Linux package that lost
+        # its arch suffix passed BOTH payload gates without a word - the
+        # artifact shape most likely to have been renamed or hand-assembled,
+        # checked least. Nobody chose that; it fell out of the ordering.
+        n="$(xr_check_payload_native "$dir" "$name")"
+        native=$((native + n))
         arch="$(xr_artifact_arch "$name")"
         # An unattributable name is xr_check_expected's finding to report,
         # not this one's; reporting it twice would double-count one defect.
         [[ -n "$arch" ]] || continue
         n="$(xr_check_payload_arch "$dir" "$name" "$arch")"
         problems=$((problems + n))
-        # The same set answers a second question, and the §7.5 rehearsal got
-        # it wrong (): does the payload carry the addon a Linux
-        # install compiles? Tallied apart from the arch count so each gate
-        # reports the defect it actually found.
-        n="$(xr_check_payload_native "$dir" "$name")"
-        native=$((native + n))
     done < <(xr_list_artifacts "$dir")
 
     if [[ "$problems" -gt 0 ]]; then

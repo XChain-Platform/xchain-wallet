@@ -471,20 +471,62 @@ function jobBlock(name) {
     //    rewrite the AppImage and the deb in place with host bytes.
     //    Narrowing it to the snap target is what keeps that from happening
     //    the day the Snap credential lands.
+    //    THE REHEARSAL VARIANT USED TO BE EXEMPT HERE AND IS NOT ANY MORE
+    //    ( row 136). The exemption reasoned about reproducibility -
+    //    nothing publishes a pre-signing hash for a rehearsal, so it has no
+    //    reproduction for a host toolchain to break - and that was true and
+    //    beside the point. measured what a host build omits: the
+    //    runner install never compiles tiny-secp256k1 into the packaged tree,
+    //    so a host-built rehearsal ships the JS elliptic-curve fallback where
+    //    a release ships the addon, and xr_check_payload_native refuses that
+    //    shape. A rehearsal that could not pass the release's own payload
+    //    gate is not a rehearsal of the release. The snap stays exempt for
+    //    the reason it always had: snapcraft cannot run in the image.
     const hostBuilds = linuxJob.split(/\n(?= {6}- )/)
         .filter((step) => /dist --linux/.test(step));
     for (const step of hostBuilds) {
         const name = (/name: (.+)/.exec(step) || [, step.trim().split('\n')[0]])[1];
-        const targetsSnapOnly = /dist --linux snap\b/.test(step);
-        const isRehearsal = /STAGING_FEED|dist-staging/.test(step);
-        assert.ok(targetsSnapOnly || isRehearsal,
+        assert.ok(/dist --linux snap\b/.test(step),
             `the desktop-linux step "${name}" runs a full electron-builder Linux build on the `
             + 'runner. It would rewrite the AppImage and the deb that the container just '
             + 'produced, with bytes compiled against the runner\'s toolchain, and nothing '
             + 'downstream can tell. A host build in this job is allowed only for the snap '
-            + '(snapcraft cannot run in the image, and the snap is outside the reproduce set) '
-            + 'or for the rehearsal variant, which writes to dist-staging and is never signed.');
+            + '(snapcraft cannot run in the image, and the snap is outside the reproduce set). '
+            + 'The rehearsal variant goes through reproduce.sh like everything else.');
     }
+
+    // 5. The rehearsal goes through the container, in its OWN out dir.
+    //
+    //    Two separate failures, and the second is the quiet one. Routing the
+    //    rehearsal back onto the host re-creates a bundle the payload gate
+    //    refuses; pointing it at the production run's out dir overwrites
+    //    RELEASE_HASHES.txt for the artifacts this release actually
+    //    publishes, with the rehearsal's, and nothing downstream would say so.
+    const reproSteps = linuxJob.split(/\n(?= {6}- )/)
+        .filter((step) => /reproduce\.sh/.test(step));
+    assert.equal(reproSteps.length, 2,
+        `the desktop-linux job calls reproduce.sh ${reproSteps.length} time(s); it must call it `
+        + 'exactly twice - once for the release set and once for the §7.5 rehearsal variant, '
+        + 'so both are cut by the same code path a third party runs.');
+
+    const rehearsal = reproSteps.filter((s) => /XCHAIN_STAGING_FEED_URL/.test(s));
+    assert.equal(rehearsal.length, 1,
+        'exactly one of the desktop-linux reproduce.sh steps must carry '
+        + 'XCHAIN_STAGING_FEED_URL. That variable is what selects the rehearsal variant at '
+        + 'build time; without it the step reproduces a second production set.');
+    assert.match(rehearsal[0], /XCHAIN_REPRODUCE_IN_PLACE: '1'/,
+        'the rehearsal reproduce.sh step does not set XCHAIN_REPRODUCE_IN_PLACE, so it builds '
+        + 'a detached worktree whose dist-staging is deleted on exit and the upload finds '
+        + 'nothing.');
+
+    const outDirs = reproSteps.map((s) => (/reproduce\.sh HEAD "([^"]+)"/.exec(s) || [, null])[1]);
+    assert.ok(outDirs.every(Boolean),
+        `a reproduce.sh step in desktop-linux passes no quoted out dir: ${JSON.stringify(outDirs)}`);
+    assert.notEqual(outDirs[0], outDirs[1],
+        `both desktop-linux reproduce.sh steps write to ${outDirs[0]}. reproduce.sh emits `
+        + "RELEASE_HASHES.txt into that directory, so the rehearsal would overwrite the "
+        + 'release set\'s own manifest and the published hashes would describe bytes nobody '
+        + 'shipped.');
 }
 
 // ------- home 6: the §7.5 rehearsal selector has to reach the container

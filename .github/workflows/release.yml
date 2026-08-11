@@ -481,15 +481,28 @@ jobs:
       # Uploaded under its own artifact name and NEVER into the release
       # staging directory, so it cannot reach RELEASE_HASHES or the feed.
       #
-      # Host-built on purpose, unlike the release artifacts above .
-      # Nothing publishes a pre-signing hash for a rehearsal build, so there
-      # is no reproduction for its C toolchain to break; and it writes to
-      # dist-staging, so it cannot touch what the container produced.
-      - name: Build the rehearsal variant (staging feed)
+      # BUILT IN THE PINNED CONTAINER, exactly like the release artifacts
+      # above, and it used to be host-built on purpose. That justification -
+      # nothing publishes a pre-signing hash for a rehearsal, so it has no
+      # reproduction for a host C toolchain to break - was true about
+      # REPRODUCIBILITY and wrong about the artifact. measured what
+      # a host build omits: `pnpm install` on the runner never compiles
+      # tiny-secp256k1 for the packaged tree, so the rehearsal shipped the JS
+      # elliptic-curve fallback while a release ships secp256k1.node. A
+      # rehearsal of a structurally different bundle exercises the tooling and
+      # not the artifact, which is the one thing §7.5 exists to do, and
+      # xr_check_payload_native now refuses that shape outright.
+      #
+      # ITS OWN OUT DIR, and that is load-bearing rather than tidy:
+      # reproduce.sh writes RELEASE_HASHES.txt into the directory it is given,
+      # so sharing the production run's would overwrite the manifest of the
+      # artifacts this release actually publishes with the rehearsal's.
+      - name: Build the rehearsal variant (staging feed) in the pinned container
         if: env.STAGING_FEED != ''
         env:
+          XCHAIN_REPRODUCE_IN_PLACE: '1'
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
-        run: pnpm -C packages/desktop dist --linux --x64 --arm64
+        run: bash packages/desktop/scripts/reproduce.sh HEAD "${RUNNER_TEMP}/desktop-linux-rehearsal-repro"
       - name: Assert the rehearsal variant points at STAGING
         if: env.STAGING_FEED != ''
         env:

@@ -61,6 +61,31 @@ function check(label, cond, detail) {
     console.error(`FAIL ${label}${detail ? `\n     ${detail.trim().split('\n').join('\n     ')}` : ''}`);
 }
 
+/**
+ * Run the real directory gate over a staged dir; `{ code, out }`.
+ *
+ * The whole gate rather than the one function, because what row 131 broke was
+ * the ORDER in which xr_check_payload_arches asks its two questions, and only
+ * the loop can show that.
+ */
+function gate(dir) {
+    const script = `source ${JSON.stringify(lib)}; xr_check_payload_arches ${JSON.stringify(dir)} 2>&1`;
+    try {
+        return {
+            code: 0,
+            out: execFileSync('bash', ['-c', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+        };
+    } catch (err) {
+        return { code: err.status, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
+    }
+}
+
+/** lib.sh's own arch attribution, so the fixture's premise is measured not assumed. */
+function xrArtifactArch(name) {
+    const script = `source ${JSON.stringify(lib)}; xr_artifact_arch ${JSON.stringify(name)}`;
+    return execFileSync('bash', ['-c', script], { encoding: 'utf8' }).trim();
+}
+
 /** A gzipped ustar archive of [path, body] pairs, deterministic (mtime 0). */
 function tarGz(entries) {
     const blocks = [];
@@ -306,6 +331,63 @@ try {
         }
     }
 
+    // --- 4c. The FIRST 'hsqs' is not the image -------------------------
+    //
+    // Case 4b proves the branch draws the right verdict from a listing. It
+    // cannot prove the branch ever GETS one, because its fixture carries a
+    // single magic and any offset scan finds it. A real AppImage carries more
+    // than one, and taking the first was measured wrong on genuine bytes: in
+    // the v0.336.0 x86_64 build, 'hsqs' sits at 32609 inside the ELF runtime
+    // and the actual superblock is at 188392 (driven on devhost, the one
+    // host here with unsquashfs). unsquashfs at 32609 lists nothing, so every
+    // real AppImage fell through to UNCHECKED and returned 0: the gate had
+    // never once read an AppImage, and it failed by declining to judge rather
+    // than by judging wrong, which is the shape nothing notices (
+    // frontier row 132).
+    //
+    // The stub here answers ONLY at the true offset and exits non-zero at any
+    // other, which is what a real extractor does at a decoy. So a scan that
+    // stops at the first candidate cannot pass this case, and one that walks
+    // them can.
+    {
+        const name = 'xchain-wallet-9.9.9-x86_64.AppImage';
+        const head = Buffer.concat([Buffer.from('\x7fELF', 'binary'), Buffer.alloc(60)]);
+        const decoy = Buffer.concat([head, Buffer.from('hsqs')]);
+        const image = Buffer.concat([decoy, Buffer.alloc(120), Buffer.from('hsqs'),
+            Buffer.from('payload\n')]);
+        const decoyAt = head.length;
+        const realAt = decoy.length + 120;
+        check('the fixture really carries two magics, decoy first',
+            image.indexOf('hsqs') === decoyAt && image.indexOf('hsqs', decoyAt + 1) === realAt,
+            `decoy=${decoyAt} real=${realAt} first=${image.indexOf('hsqs')}`);
+
+        const listing = 'squashfs-root/resources/app.asar\n';
+        const mkBin = (answersAt) => {
+            const bin = mkdtempSync(join(work, 'sqfs-multi-'));
+            for (const tool of ['grep', 'head', 'cut']) {
+                const found = execFileSync('bash', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).trim();
+                symlinkSync(found, join(bin, tool));
+            }
+            writeFileSync(join(bin, 'unsquashfs'),
+                `#!/bin/sh\n[ "$2" = "${answersAt}" ] || exit 1\nprintf '%s' ${JSON.stringify(listing)}\n`,
+                { mode: 0o755 });
+            return bin;
+        };
+
+        const r = native(stage(name, image), name, mkBin(realAt));
+        check('the scan walks past a decoy magic and reads the real image',
+            !/PAYLOAD-NATIVE-UNCHECKED/.test(r.out) && r.problems === 1, r.out);
+        check('and the verdict is the payload one, not a could-not-read one',
+            /carries no compiled addon/.test(r.out), r.out);
+
+        // The fail-safe half: when NO candidate lists, it must still decline
+        // rather than refuse. A release must not fail over this check's own
+        // limitation, which is the posture the UNCHECKED branch exists for.
+        const none = native(stage(name, image), name, mkBin('999999'));
+        check('when no candidate offset lists, it is UNCHECKED and not refused',
+            /PAYLOAD-NATIVE-UNCHECKED/.test(none.out) && none.problems === 0, none.out);
+    }
+
     // --- 5. Every other format is out of scope, silently ---------------
     //
     // measured the Linux lane. What a .dmg or an .exe ought to
@@ -360,6 +442,43 @@ try {
         }
         check('the directory gate passes a .deb built the way the lane builds it',
             code === 0 && /payload-native gate ok/.test(out), `exit ${code}\n${out}`);
+    }
+
+    // --- 6c. An unsuffixed package is still opened ----------------------
+    //
+    // The hole this closes was an ORDERING accident, not a design (
+    // frontier row 131). xr_check_payload_arches skipped the whole iteration
+    // when a name carried no arch token, deliberately, so that the missing
+    // suffix stayed xr_check_expected's finding to report rather than being
+    // double-counted here. The native check does not need an arch and was
+    // taken along by that `continue`, so a `.deb` that lost its suffix passed
+    // BOTH payload gates in silence - the shape most likely to have been
+    // renamed or hand-assembled, checked least.
+    //
+    // Driven through the real gate on real bytes rather than asserted off the
+    // source, and both directions are here: an unsuffixed package with no
+    // addon must now be REFUSED, and an unsuffixed package that is fine must
+    // still pass, or the fix would just be a new way to fail a good release.
+    {
+        const unsuffixed = 'xchain-wallet_9.9.9.deb';
+        check('the fixture name really is unattributable to an arch',
+            xrArtifactArch(unsuffixed) === '',
+            `xr_artifact_arch('${unsuffixed}') = '${xrArtifactArch(unsuffixed)}', so this case `
+            + 'no longer exercises the path it was written for.');
+
+        const bad = mkdtempSync(join(work, 'gate-nosuffix-'));
+        writeFileSync(join(bad, unsuffixed), deb({ withAddon: false }));
+        const r = gate(bad);
+        check('an unsuffixed .deb with no addon is refused rather than skipped',
+            r.code === 1 && /payload-native gate FAILED/.test(r.out), `exit ${r.code}\n${r.out}`);
+        check('and the refusal names the artifact by its unsuffixed name',
+            r.out.includes(unsuffixed), r.out);
+
+        const good = mkdtempSync(join(work, 'gate-nosuffix-ok-'));
+        writeFileSync(join(good, unsuffixed), deb({ withAddon: true }));
+        const g = gate(good);
+        check('an unsuffixed .deb that carries the addon still passes',
+            g.code === 0 && /payload-native gate ok/.test(g.out), `exit ${g.code}\n${g.out}`);
     }
 
     // --- 7. The gate is wired, uncommented -----------------------------
