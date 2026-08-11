@@ -177,6 +177,22 @@ extension NOT-SHIPPED  store-only  xchain-wallet-extension-v*.zip
 # rehearsal gate skipped. The column makes the real question - does this
 # release carry an updater feed - a declared fact rather than an inference
 # from whether a yml happens to be sitting in the directory.
-mac       NOT-SHIPPED  updater     *.dmg *mac*.zip
-linux     NOT-SHIPPED  updater     *.AppImage *.deb
+# mac and linux SHIPPED in v0.338.0, published 2026-08-11 to
+# downloads.xchain.io/wallet/desktop/ - the first desktop release this
+# project has cut. Eight artifacts, `coverage: partial`, attested by the
+# K1-signed manifest at RELEASE_HASHES/v0.338.0.txt. Verified after upload
+# the way the runbook asks: the three channel pointers answer 200 to
+# electron-builder's own user-agent and name 0.338.0, and the .AppImage and
+# .deb were re-downloaded from the public URL and hash to what that signed
+# manifest claims.
+#
+# So from here a release that omits either lane fails by name, which is the
+# whole point of the flip: those users now have an update feed pointing at
+# them, and a lane left behind is no longer a smaller release.
+#
+# windows stays NOT-SHIPPED: its signing identity does not exist (rails row
+# 13, deferred by operator priority 2026-08-11), and nothing here demands
+# anything of a NOT-SHIPPED lane.
+mac       SHIPPED      updater     *.dmg *mac*.zip
+linux     SHIPPED      updater     *.AppImage *.deb
 windows   NOT-SHIPPED  updater     *.exe *win*.zip
