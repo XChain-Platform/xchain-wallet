@@ -324,6 +324,82 @@ final class ScreenshotTests: XCTestCase {
         return reach(app.staticTexts.firstMatch, "settings content", timeout: 20)
     }
 
+    /// Drill from the Settings root into the Safety panel, because that is
+    /// where the biometric unlock control actually lives.
+    ///
+    /// Landing on the real Settings screen (above) was necessary and is not
+    /// sufficient. The 2026-08-09 capture is the correct screen, and it shows
+    /// This Wallet, Appearance, Language & Region and Privacy - no biometrics
+    /// anywhere. §2.1 leans on biometric unlock as the native-integration
+    /// defence, so a listing image captioned "settings" that cannot show it is
+    /// a scene which is right about its screen and silent about its subject.
+    ///
+    /// IT IS NOT BELOW THE FOLD, WHICH IS WHY SCROLLING FOR IT FAILED. The
+    /// first cut of this simply swiped the Settings root looking for
+    /// `Biometric unlock` and reported `MISSED: settings - no 'Biometric
+    /// unlock' row after 10 scrolls`, because Settings is a menu of drill-down
+    /// panels (`kind: 'internal-drill'` in Settings.jsx) and Safety is one of
+    /// them. No amount of scrolling a menu reveals a row on a screen the menu
+    /// links to. So the reveal is a TAP, and the scroll only exists to bring
+    /// the Safety row itself into reach.
+    ///
+    /// A miss here is RECORDED rather than swallowed, same rule as every other
+    /// scene: a listing image that quietly lost its subject is exactly the
+    /// defect this harness keeps being fixed for.
+    @discardableResult
+    private func revealBiometricRow(scene: String) -> Bool {
+        func biometricRow() -> XCUIElement? {
+            let byName = [app.staticTexts["Biometric unlock"],
+                          app.otherElements["Biometric unlock"],
+                          app.buttons["Biometric unlock"]]
+            return byName.first(where: { $0.exists && $0.isHittable })
+        }
+
+        var safety = button(anyOf: ["Safety"])
+        var scrolls = 0
+        while (safety == nil || !(safety?.isHittable ?? false)) && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+            safety = button(anyOf: ["Safety"])
+        }
+        guard let safety, tap(safety, "Safety (settings drill)") else {
+            missed.append("\(scene): the Settings root has no reachable Safety panel after \(scrolls) scrolls")
+            print("MISSED: \(scene) - no Safety panel after \(scrolls) scrolls")
+            return false
+        }
+        _ = reach(app.staticTexts.firstMatch, "safety panel", timeout: 20)
+        print("SETTINGS: opened the Safety panel after \(scrolls) scroll(s)")
+
+        // The panel is the destination, but the row is the SUBJECT, so its
+        // presence is asserted rather than assumed: the panel could render
+        // without it (no enrolled biometry on the host, a future reshuffle)
+        // and the capture would look perfectly fine while showing nothing.
+        guard biometricRow() != nil else {
+            missed.append("\(scene): the Safety panel opened but carries no 'Biometric unlock' row")
+            print("MISSED: \(scene) - Safety panel has no 'Biometric unlock' row")
+            return false
+        }
+
+        // PRESENT IS NOT THE SAME AS SHOWING THE FEATURE. On a simulator with
+        // no enrolled biometry the row renders "Not available. No fingerprint
+        // or face is set up on this device yet", and an in-frame check passes
+        // over it - which is what happened on 2026-08-10: green run, and a
+        // listing image telling App Store readers the security feature does
+        // not work. The driver enrols a face before booting the app; this
+        // asserts the enrolment actually took, because the whole point of the
+        // scene is the ENABLED control and nothing else here can see the
+        // difference.
+        let unavailable = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "No fingerprint or face is set up"))
+        if unavailable.count > 0 {
+            missed.append("\(scene): the biometric row reads 'not available' - the simulator has no enrolled biometry, so this image would advertise the feature as absent")
+            print("MISSED: \(scene) - biometric row is in its NOT-AVAILABLE state; enrol biometry before capturing")
+            return false
+        }
+        print("SETTINGS: biometric unlock row is in frame and enrolled")
+        return true
+    }
+
     private func switchToMainnet() {
         guard openSettings(scene: "network-switch (settings)") else { return }
 
@@ -517,6 +593,7 @@ final class ScreenshotTests: XCTestCase {
         //    biometric unlock as a native-integration defence, so the listing
         //    should show it.
         if openSettings(scene: "settings") {
+            revealBiometricRow(scene: "settings")
             capture("04-settings")
         } else {
             capture("04-settings-FAILED")
