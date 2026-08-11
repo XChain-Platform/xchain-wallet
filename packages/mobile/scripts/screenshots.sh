@@ -96,6 +96,20 @@ for device in "${devices[@]}"; do
 
     xcrun simctl boot "$udid" >/dev/null 2>&1 || true
     xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1 || true
+
+    # ENROL A FACE BEFORE SHOOTING, or scene 4 advertises the opposite of what
+    # it exists to say. A fresh simulator has no biometry enrolled, so the
+    # wallet's Safety panel renders "Biometric unlock - Not available. No
+    # fingerprint or face is set up on this device yet", and that sentence is
+    # what lands on the App Store listing under a screenshot meant to show
+    # biometric unlock. Measured 2026-08-10: the harness reached the row,
+    # asserted it was in frame, passed, and produced exactly that image - a
+    # green run over a picture that undercuts §2.1's native-integration
+    # defence. Enrolment is a simulator state, not app state, so it belongs
+    # here beside the uninstall rather than in the test.
+    xcrun simctl spawn "$udid" notifyutil -s com.apple.BiometricKit.enrollmentChanged 1 >/dev/null 2>&1 || true
+    xcrun simctl spawn "$udid" notifyutil -p com.apple.BiometricKit.enrollmentChanged >/dev/null 2>&1 || true
+
     # The line this whole script exists for.
     xcrun simctl uninstall "$udid" "$bundle_id" >/dev/null 2>&1 || true
 

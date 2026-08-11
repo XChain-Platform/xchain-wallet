@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session .
+
 ### Fixed
+- The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see .
+- The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up" .
 - The lint rule's trivial-string bullet describes the real whitespace/digits/punctuation class instead of implying a letter allowance ().
 - USER_FACING_ATTRS covers the heading, emptyText and actionLabel component props that ship user-visible copy ().
 - The App Links comment states that the manifest lists Google's app-signing certificate, not both signing certs ().
