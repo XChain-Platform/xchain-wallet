@@ -10,8 +10,18 @@
 
 // Smoke for `sign.sh --passphrase-file`, the operator ruling recorded as
 // `dq-9` (2026-08-10): a STAGING rehearsal may read K1's passphrase from a
-// file so a run can drive itself end to end, and a PRODUCTION signature keeps
+// file so a run can drive itself end to end, and a PRODUCTION signature kept
 // a human at the pinentry.
+//
+// AMENDED THE SAME DAY, by the same operator: a production run MAY sign
+// unattended, behind an explicit `--unattended`. What that gave up is the
+// property the original ruling existed to protect - that a K1 signature on a
+// production manifest meant a person chose to make it - and the amendment
+// buys back what it can in two places rather than pretending nothing changed.
+// The flag must be typed by every run that wants it, so the affordance can
+// never be inherited from a copied staging command or an env default; and the
+// manifest declares `# signing: unattended` in the bytes K1 signs over, so a
+// reader weighing that signature can see how it was made.
 //
 // The ruling is an ASYMMETRY, and an asymmetry is the shape of rule that
 // decays quietly. Both halves fail silently in opposite directions: a
@@ -22,8 +32,16 @@
 // source text.
 //
 // WHAT IS PINNED:
-//   1. --passphrase-file on a production run (no --staging) is REFUSED,
-//      exit 2, and the message states the ruling rather than a syntax error.
+//   1. --passphrase-file on a production run WITHOUT --unattended is
+//      REFUSED, exit 2, and the message states the ruling rather than a
+//      syntax error. This is no longer a blanket refusal: what it pins is
+//      that the affordance cannot be reached by accident.
+//   1b. --unattended WITHOUT --passphrase-file is refused too. A flag that
+//      reads as an authorisation while changing nothing is worse than no
+//      flag, because the next reader believes a control exists.
+//   1c. --unattended with --staging is refused: a rehearsal already reads a
+//      file, and decoration on a security control is how the control comes
+//      to be believed where it does not apply.
 //   2. --staging with an unreadable passphrase file is refused, exit 2.
 //   3. --staging with a passphrase file readable by group or other is
 //      refused, exit 2, NAMING the mode.
@@ -33,6 +51,10 @@
 //   4. The gpg invocation itself, in BOTH directions: the loopback pair is
 //      prepended when a rehearsal supplies a file, and the argument list is
 //      otherwise the one it always was.
+//   4b-ii. The provenance declaration, driven through xr_write_manifest: an
+//      unattended manifest carries `# signing: unattended` and an attended
+//      one carries no such field at all, so every already-published manifest
+//      stays byte-shaped as it was and the field distinguishes something.
 //
 // NO PASSPHRASE, REAL OR OTHERWISE, IS EVER HANDLED HERE. The fixture file
 // holds an obviously-fake string this smoke writes itself, and nothing reads
@@ -260,24 +282,64 @@ try {
         check(`${label}: gpg was never reached`, !existsSync(log),
             'the run got as far as invoking gpg, so it was not refused');
 
-    // --- 1. Production plus --passphrase-file is refused ------------------
+    // --- 1. Production plus --passphrase-file, WITHOUT --unattended -------
     //
-    // The half of the ruling that can fail successfully. Exit 2 alone would
-    // also be produced by "unknown argument", by a missing --tag, and by the
-    // --os guard six lines above it, so the message is asserted too: what has
-    // to be true is that this run was refused BECAUSE it was production, and a
-    // run refused for the wrong reason still exits 2.
+    // The ruling was amended on 2026-08-10: an unattended production
+    // signature is allowed, behind a flag that must be typed. So this case
+    // no longer asserts a blanket refusal - it asserts that the affordance
+    // cannot be reached by ACCIDENT, which is the whole of what the flag
+    // buys. A staging command someone copied, an env default, a passphrase
+    // file lying next to the key: none of them may sign production.
+    //
+    // Exit 2 alone would also be produced by "unknown argument", by a
+    // missing --tag, and by the --os guard six lines above it, so the
+    // message is asserted too: a run refused for the wrong reason still
+    // exits 2.
     {
         const pf = passphraseFile('prod-refusal.pass', 0o600);
         const log = join(work, 'argv-prod.txt');
         const r = run(['--input', stage(), '--passphrase-file', pf], { argvLog: log });
-        check('a production run with --passphrase-file exits 2',
+        check('a production run with --passphrase-file but no --unattended exits 2',
             r.status === 2, `exit ${r.status}: ${r.stderr}`);
-        check('and is refused for being production, not for bad syntax',
-            /--passphrase-file is only allowed with --staging/.test(r.stderr), r.stderr);
+        check('and is refused for lacking the flag, not for bad syntax',
+            /--passphrase-file on a production run needs --unattended/.test(r.stderr), r.stderr);
         check('and states the ruling rather than only the rule',
-            /dq-9/.test(r.stderr) && /pinentry/.test(r.stderr), r.stderr);
-        neverSigned('production + --passphrase-file', log);
+            /dq-9/.test(r.stderr), r.stderr);
+        neverSigned('production + --passphrase-file, no --unattended', log);
+    }
+
+    // --- 1b. --unattended that authorises nothing is refused --------------
+    //
+    // The inverse mistake, and the more dangerous one. A flag that reads as
+    // an authorisation while changing nothing gets taken for one: the next
+    // reader believes a control exists, and the run it describes would
+    // still have blocked on a pinentry. Refusing is what keeps the flag's
+    // presence in a runbook meaningful.
+    {
+        const log = join(work, 'argv-unattended-alone.txt');
+        const r = run(['--input', stage(), '--unattended'], { argvLog: log });
+        check('--unattended without --passphrase-file exits 2',
+            r.status === 2, `exit ${r.status}: ${r.stderr}`);
+        check('and says the flag would have changed nothing',
+            /--unattended without --passphrase-file does nothing/.test(r.stderr), r.stderr);
+        neverSigned('--unattended alone', log);
+    }
+
+    // --- 1c. --unattended on a rehearsal is refused -----------------------
+    //
+    // A rehearsal already reads its passphrase from a file, so the flag
+    // would be decoration there - and decoration on a security control is
+    // how the control comes to be believed in places it does not apply.
+    {
+        const pf = passphraseFile('staging-unattended.pass', 0o600);
+        const log = join(work, 'argv-staging-unattended.txt');
+        const r = run(['--input', stage(), '--staging', '--passphrase-file', pf, '--unattended'],
+            { argvLog: log });
+        check('--unattended combined with --staging exits 2',
+            r.status === 2, `exit ${r.status}: ${r.stderr}`);
+        check('and says it is meaningless there rather than silently allowing it',
+            /--unattended is meaningless with --staging/.test(r.stderr), r.stderr);
+        neverSigned('--staging + --unattended', log);
     }
 
     // --- 2. A staging run whose passphrase file cannot be read ------------
@@ -441,6 +503,47 @@ try {
             ]),
             JSON.stringify(argvWith, null, 1));
 
+        // 4b-ii. THE AMENDMENT'S DECLARATION, driven through lib.sh itself.
+        //
+        //        An unattended production signature is allowed now, and the
+        //        only thing left carrying what the original ruling protected
+        //        is the manifest saying so: a reader weighing a signature can
+        //        see whether a person made it. That header is therefore the
+        //        property under test, and it is driven by calling
+        //        xr_write_manifest the way sign.sh calls it rather than by
+        //        reading sign.sh's source.
+        //
+        //        NOT driven through a full sign.sh production run, and the
+        //        reason is worth stating rather than leaving as a gap: a
+        //        production run must satisfy the whole artifact-set gate, so
+        //        the fixture would be a synthesised dmg, mac zip, win zip,
+        //        AppImage, deb, web tarball and extension zip - each one a
+        //        guess at a format this file does not otherwise model, and a
+        //        gate satisfied by seven guesses proves less than the three
+        //        refusals above. The accept path is driven by the real
+        //        release instead, where the bytes are real.
+        {
+            const declDir = mkdtempSync(join(work, 'manifest-'));
+            writeFileSync(join(declDir, `xchain-wallet-setup-${VERSION}-x64.exe`), signedPe());
+            const call = (signing) => {
+                const script = `source ${JSON.stringify(join(repo, 'tools', 'release', 'lib.sh'))}\n`
+                    + `xr_write_manifest ${JSON.stringify(declDir)} v0.0.0 ${'0'.repeat(40)} `
+                    + `2026-01-01T00:00:00Z enforced "" "" "" ${JSON.stringify(signing)} >/dev/null 2>&1`;
+                spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+                return readFileSync(join(declDir, 'RELEASE_HASHES.txt'), 'utf8');
+            };
+            check('an unattended manifest declares its own provenance',
+                /^# signing: unattended$/m.test(call('unattended')),
+                call('unattended').split('\n').filter((l) => l.startsWith('#')).join('\n'));
+            // The negative half, and the one that keeps the declaration
+            // meaningful: an attended manifest must stay byte-shaped exactly
+            // as every already-published one, or the field appears where
+            // nothing changed and stops distinguishing anything.
+            check('an attended manifest gains no signing field at all',
+                !/^# signing:/m.test(call('')),
+                call('').split('\n').filter((l) => l.startsWith('#')).join('\n'));
+        }
+
         // 4c. The two lists differ by exactly those four entries and nothing
         //     else. Asserted as a subtraction rather than by eye: the two runs
         //     write to different directories, so the --output and manifest
@@ -469,10 +572,13 @@ if (failures > 0) {
 }
 
 console.log(
-    'OK: release passphrase-source smoke (`dq-9`, 2026-08-10: --passphrase-file is refused on a'
-    + ' production run with the ruling stated, refused on a staging run when the file is unreadable'
-    + ' or readable by group or other with the mode named, refused fail-closed when the mode itself'
-    + ' cannot be read, and accepted at 0600 - where gpg is'
-    + ' invoked with the loopback pair prepended and, without the flag, with the byte-identical'
-    + ' argument list it always had and no empty argument from the empty-array expansion)',
+    'OK: release passphrase-source smoke (`dq-9` and its same-day amendment, 2026-08-10:'
+    + ' --passphrase-file on a production run is refused WITHOUT --unattended and the message'
+    + ' states the ruling, --unattended alone is refused for authorising nothing, --unattended'
+    + ' with --staging is refused as decoration, a staging run is refused when the file is'
+    + ' unreadable or readable by group or other with the mode named and fail-closed when the'
+    + ' mode itself cannot be read, accepted at 0600 - where gpg is invoked with the loopback'
+    + ' pair prepended and, without the flag, with the byte-identical argument list it always'
+    + ' had and no empty argument from the empty-array expansion - and an unattended manifest'
+    + ' declares `# signing: unattended` where an attended one carries no such field)',
 );

@@ -352,7 +352,7 @@ xr_assert_store_profile_buildable() {
 # that omits the one thing v2 exists for.
 xr_write_manifest() {
     local dir="$1" tag="$2" commit="$3" built="$4" gate="$5" expected="${6:-}"
-    local lanes="${7:-}" staging_os="${8:-}"
+    local lanes="${7:-}" staging_os="${8:-}" signing="${9:-}"
     local sha
     sha="$(xr_sha256_cmd)" || return 2
 
@@ -414,6 +414,25 @@ xr_write_manifest() {
         # this is not `coverage: partial`.
         if [[ -n "$staging_os" ]]; then
             echo "# rehearsal-os: $staging_os"
+        fi
+        # AN UNATTENDED SIGNATURE SAYS SO, IN THE THING IT SIGNS.
+        #
+        # `dq-9` originally kept a human at the pinentry for production and
+        # allowed a passphrase file for rehearsals only; the operator amended
+        # it on 2026-08-10 to permit an unattended production signature
+        # behind an explicit `--unattended`. What that amendment costs is the
+        # property the original ruling was protecting: that a K1 signature on
+        # a production manifest meant a person chose to make it. That cost
+        # cannot be undone, but it CAN be made visible, and a reader deciding
+        # how much a signature is worth is exactly who needs to know.
+        #
+        # So the manifest declares its own provenance. Emitted ONLY on the
+        # unattended path, so every attended manifest stays byte-identical to
+        # the ones already published and no verifier sees a new field where
+        # nothing changed. A `#` line is ignored by `sha256sum -c` like every
+        # other header here.
+        if [[ -n "$signing" ]]; then
+            echo "# signing: $signing"
         fi
         [[ ${#profile_lines[@]} -gt 0 ]] && printf '%s\n' "${profile_lines[@]}"
     } > "$dir/RELEASE_HASHES.txt"
