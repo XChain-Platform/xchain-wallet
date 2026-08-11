@@ -35,7 +35,8 @@
 import assert from 'node:assert/strict';
 
 import {
-    citationsIn, frontierRowsOf, listSpecs, resolveCitation, skipUnlessSpecs, SPECS_DIR,
+    acceptanceCitationsIn, acceptanceLinesOf, citationsIn, frontierRowsOf, listSpecs,
+    resolveCitation, skipUnlessSpecs, SPECS_DIR,
 } from '../_spec-frontier.js';
 
 skipUnlessSpecs('spec frontier-citations smoke');
@@ -43,9 +44,14 @@ skipUnlessSpecs('spec frontier-citations smoke');
 const specs = listSpecs();
 const withFrontier = [];
 const dead = [];
+const deadTests = [];
 let liveRows = 0;
 let citations = 0;
 let elided = 0;
+let withAcceptance = 0;
+let acceptanceLines = 0;
+let acceptanceCitations = 0;
+let inCommandCitations = 0;
 const owners = new Map();
 
 for (const { name, text } of specs) {
@@ -65,6 +71,26 @@ for (const { name, text } of specs) {
             owners.set(owner, (owners.get(owner) || 0) + 1);
         }
     }
+
+    // The block's ACCEPTANCE TESTS, which are not rows and were checked by
+    // nothing until S47 drove one and found it naming a script that
+    // has never been at that path.
+    const acceptance = acceptanceLinesOf(text);
+    if (!acceptance.found) continue;
+    withAcceptance += 1;
+    for (const { n, line } of acceptance.lines) {
+        acceptanceLines += 1;
+        const { paths, placeholders, inCommand } = acceptanceCitationsIn(line);
+        elided += placeholders.length;
+        inCommandCitations += inCommand.length;
+        for (const cited of paths) {
+            acceptanceCitations += 1;
+            const { ok, where, ref } = resolveCitation(cited);
+            if (!ok) { deadTests.push(`${name} acceptance test ${n} cites ${cited}`); continue; }
+            const owner = where.split('/').pop() + (ref ? ` @${ref}` : '');
+            owners.set(owner, (owners.get(owner) || 0) + 1);
+        }
+    }
 }
 
 assert.equal(dead.length, 0,
@@ -74,6 +100,28 @@ assert.equal(dead.length, 0,
     + '(the  migration moved most of them to xchain-documentation/components/wallet/). If the '
     + 'row is narrating something that is SUPPOSED to be gone, that is prose rather than a pointer: '
     + 'drop the backticks and say it is deleted, the way the superseded rows do.');
+
+// An acceptance test that cites a dead path is worse than a dead row, and it
+// is worth being explicit about why rather than folding it into the assertion
+// above. A row sends the next reader to nothing and costs a stage. An
+// acceptance test IS the milestone's completion criterion: if its command
+// cannot run as written, the milestone it gates cannot be reached by anyone
+// following the block, however finished the work underneath is. It fails
+// silently in the one direction nobody checks, because a test nobody can run
+// is indistinguishable from a test nobody has got to yet.
+//
+// Measured, not theorised. S47 drove this spec's fifth acceptance
+// test and found it reading `node tools/release/remote-code-audit.mjs`; the
+// script has always lived at packages/extension/scripts/. The mechanism was
+// fine - exit 0 on the real CI zip - so nothing but running it could have told
+// anyone. S46 had corrected the SECOND test of the same block for the same
+// class of defect, by hand, without gating it, which is how the fifth survived.
+assert.equal(deadTests.length, 0,
+    `milestone acceptance tests cite paths that do not exist in any checkout:\n  ${deadTests.join('\n  ')}\n`
+    + 'An acceptance test is the completion criterion for its milestone, so one naming a path that is '
+    + 'not there is unpassable by construction and the milestone cannot be reached by following the '
+    + 'block. Repoint it at the real artifact and re-drive it: a test corrected by reading is how the '
+    + 'previous one of these survived a stage.');
 
 // --- The three ways this gate could pass without checking anything ------
 //
@@ -112,6 +160,39 @@ assert.ok(citations > 0,
     + 'checking anything. Frontier rows name the files they are about on purpose - that naming is what '
     + 'lets the next reader check rather than trust.');
 
+// The acceptance check has the same three ways of passing on an empty set, and
+// one more of its own: the parser looks for a `**Milestone acceptance**`
+// heading, so a block that renamed that heading would drop out of the check
+// while still carrying tests.
+assert.ok(withAcceptance >= 5,
+    `only ${withAcceptance} of ${withFrontier.length} frontier blocks carry a Milestone acceptance list, `
+    + 'fewer than the 5 standing when this floor was written (the four wallet publishing lanes plus the '
+    + 'release rails). Those tests are what make "am I done" a measurement rather than an opinion, so a '
+    + 'block that lost its list has no completion criterion at all. If a spec legitimately retired its '
+    + 'list, lower this floor in the same change and say why.');
+
+assert.ok(acceptanceCitations > 0,
+    'no cited paths were found in any milestone acceptance test, so the acceptance check above passed '
+    + 'without checking anything. These tests are written as commands the operator pastes, and the paths '
+    + 'live INSIDE the backticks rather than alone in them; if the reader stopped matching, fix it '
+    + 'rather than accepting the green.');
+
+// This floor is the one that cost a falsification to get right, and the note
+// is here so nobody re-weakens it. Flooring on acceptanceCitations above is
+// NOT enough: that count includes paths backticked on their own, which the
+// inline regex has always caught, and one sibling spec writes two of its
+// acceptance paths that way. So deleting the in-command reader entirely - the
+// only thing that can see a path inside `node <script> <args>`, and the only
+// reason this gate catches anything in THIS spec - left the suite green.
+// Flooring on the in-command subset specifically is what makes the mechanism
+// undeletable-in-silence.
+assert.ok(inCommandCitations > 0,
+    'no acceptance-test path was found INSIDE a backticked command, so the reader that exists for '
+    + 'exactly that shape is no longer matching anything and the acceptance check is running on the '
+    + 'inline citations alone. An acceptance test is written as a command the operator pastes '
+    + '(`node packages/.../audit.mjs <zip>`), so that shape is the normal one and its absence means the '
+    + 'extractor broke, not that the specs changed style.');
+
 const byOwner = [...owners.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([owner, n]) => `${owner}:${n}`)
@@ -119,4 +200,6 @@ const byOwner = [...owners.entries()]
 
 console.log(`OK: spec frontier-citations smoke (${withFrontier.length} specs with a frontier block, `
     + `${liveRows} live rows, ${citations} cited paths resolved across checkouts - ${byOwner}; `
+    + `${withAcceptance} blocks with acceptance tests, ${acceptanceLines} tests, `
+    + `${acceptanceCitations} cited path(s) in them; `
     + `${elided} elided or placeholder path(s) unchecked)`);
