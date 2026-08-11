@@ -112,8 +112,81 @@ assert.equal(
 );
 const wrongChain = classifyProbe(explorerProbe, { status: 200, body: JSON.stringify({ available: { BTC: 'BTC (mainnet)' } }) });
 assert.equal(wrongChain.state, 'failure', 'an explorer that no longer serves TBTC leaves the demo on an empty screen');
-assert.match(wrongChain.detail, /TBTC is not among/);
 assert.equal(classifyProbe(explorerProbe, { status: 200, body: '{}' }).state, 'failure');
+
+// --- 1a. An absence is reported with its CAUSE, or with none ----------------
+//
+// The message this replaces said "TBTC is not among the networks it serves",
+// which reads as deconfiguration and is a diagnosis the gate had no evidence
+// for. On 2026-08-10 that sentence sent a run looking for explorer config that
+// had never been touched: the explorer still listed all nine networks in
+// `supported` and builds `available` by DELETING the coins it has marked
+// stale, so the chain had been WITHDRAWN, not deconfigured. Three branches,
+// because the payload can distinguish three situations and the old message
+// collapsed them into the most alarming one.
+
+// Withdrawn: configured, but dropped from service, and the reason is named.
+const withdrawn = classifyProbe(explorerProbe, {
+    status: 200,
+    body: JSON.stringify({
+        available: { BTC: 'BTC (mainnet)' },
+        supported: { BTC: 'BTC (mainnet)', TBTC: 'BTC (testnet)' },
+        stale: { TBTC: true },
+        last_block_time: { TBTC: Math.floor(Date.now() / 1000) - 40 * 86400 },
+    }),
+});
+assert.equal(withdrawn.state, 'failure', 'a withdrawn chain is still fatal for the demo coin');
+assert.match(withdrawn.detail, /CONFIGURED for TBTC/, 'it says the explorer IS configured for the coin');
+assert.match(withdrawn.detail, /withdrawn from service/, 'and that the coin was withdrawn rather than removed');
+assert.ok(
+    !/not in its configured set/.test(withdrawn.detail),
+    'a withdrawn chain is never described as deconfigured, which is the defect this branch exists for',
+);
+
+// Withdrawn, but the body carries no reason: the gate must NOT supply one.
+// This case exists because the first draft of the branch above hardcoded "the
+// explorer marked it stale" as its fallback, and driving the live payload
+// printed that sentence for a coin whose own stale flag was false - the same
+// invented-cause defect, one level down from the one being fixed.
+const withdrawnNoReason = classifyProbe(explorerProbe, {
+    status: 200,
+    body: JSON.stringify({
+        available: { BTC: 'BTC (mainnet)' },
+        supported: { BTC: 'BTC (mainnet)', TBTC: 'BTC (testnet)' },
+        stale: { TBTC: false },
+        last_block_time: { TBTC: Math.floor(Date.now() / 1000) - 60 },
+        decoder_lag_blocks: { TBTC: 1 },
+    }),
+});
+assert.equal(withdrawnNoReason.state, 'failure');
+assert.match(withdrawnNoReason.detail, /gives no reason/, 'an unexplained withdrawal is reported as unexplained');
+assert.ok(
+    !/stale/.test(withdrawnNoReason.detail),
+    'staleness is never asserted for a coin the body does not flag as stale',
+);
+
+// Genuinely deconfigured: absent from `supported` too.
+const deconfigured = classifyProbe(explorerProbe, {
+    status: 200,
+    body: JSON.stringify({
+        available: { BTC: 'BTC (mainnet)' },
+        supported: { BTC: 'BTC (mainnet)' },
+    }),
+});
+assert.equal(deconfigured.state, 'failure');
+assert.match(deconfigured.detail, /not in its configured set/, 'a truly absent chain is named as such');
+
+// No `supported` map: no evidence, so no cause is claimed either way.
+const noEvidence = classifyProbe(explorerProbe, {
+    status: 200,
+    body: JSON.stringify({ available: { BTC: 'BTC (mainnet)' } }),
+});
+assert.equal(noEvidence.state, 'failure');
+assert.match(noEvidence.detail, /absent from the networks it currently serves/);
+assert.ok(
+    !/not in its configured set/.test(noEvidence.detail) && !/CONFIGURED for/.test(noEvidence.detail),
+    'with nothing to consult, the gate reports the absence and asserts no cause',
+);
 
 // --- 2a. Indexer freshness (2026-08-06) ---------------------------------
 //

@@ -39,6 +39,7 @@
 // file exists to prevent recurring.
 
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -484,6 +485,138 @@ function jobBlock(name) {
             + '(snapcraft cannot run in the image, and the snap is outside the reproduce set) '
             + 'or for the rehearsal variant, which writes to dist-staging and is never signed.');
     }
+}
+
+// ------- home 6: the §7.5 rehearsal selector has to reach the container
+//
+// The lane above made the container the only place a shippable Linux bundle
+// is cut, and that closed the rehearsal off. A §7.5 rehearsal variant is
+// selected purely by XCHAIN_STAGING_FEED_URL, which
+// electron-builder.config.cjs reads at build time; `docker run` passed a
+// FIXED `-e` list that did not carry it, so the container could only ever
+// produce a production set. Meanwhile a rehearsal built OUTSIDE the
+// container carries no compiled tiny-secp256k1, and xr_check_payload_native
+// in tools/release/lib.sh now refuses exactly that (). So the only
+// rehearsal a maintainer could build was correctly refused, and the only
+// build path that satisfies the gate could not bake the staging feed: §7.5
+// was unreachable, with every check in this file green.
+//
+// TWO WAYS THIS BREAKS, AND ONLY ONE OF THEM LOOKS LIKE A REGRESSION.
+// Dropping the passthrough re-closes §7.5, loudly. The other one is worse
+// and would be done as tidying: making the `-e` unconditional. An env var
+// that is always declared, empty or not, is a change to the build
+// environment of every PRODUCTION reproduction, which is the one property
+// this whole file defends. Both are driven below rather than pattern
+// matched, because the difference between them lives in shell expansion and
+// not in the text.
+{
+    // Taken from the file, not restated, so the harness drives reproduce.sh's
+    // own derivation. The `:-` form is what keeps `set -u` off the unset case.
+    const derive = /^STAGING_FEED_URL="\$\{XCHAIN_STAGING_FEED_URL:-\}"$/m.exec(reproduceSh);
+    assert.ok(derive,
+        'reproduce.sh must read XCHAIN_STAGING_FEED_URL into STAGING_FEED_URL via the '
+        + 'unset-safe `${XCHAIN_STAGING_FEED_URL:-}` form. The script runs under `set -u`, '
+        + 'so a bare reference aborts every production reproduction, which is a worse '
+        + 'failure than the one being fixed.');
+
+    // The `docker run` invocation, verbatim, from the file under test.
+    const runStart = reproduceSh.indexOf('docker run --rm');
+    assert.notEqual(runStart, -1, 'reproduce.sh must invoke `docker run --rm`');
+    const tail = '"${IMAGE_TAG}"';
+    const runEnd = reproduceSh.indexOf(tail, runStart);
+    assert.notEqual(runEnd, -1, 'reproduce.sh\'s `docker run` must end with the image tag');
+    const dockerRun = reproduceSh.slice(runStart, runEnd + tail.length);
+
+    /**
+     * The argv `docker run` would receive, with `docker` stubbed and every
+     * variable the invocation reads supplied. Nothing is built and no
+     * container starts; this is the shell doing its expansion and printing
+     * the result. `null` means the variable is absent from the environment
+     * entirely, which is the production case.
+     */
+    function dockerRunArgv(staging) {
+        const script = [
+            'set -euo pipefail',
+            'docker() { printf "%s\\n" "$@"; }',
+            'BUILD_PLATFORM=linux/amd64',
+            'SOURCE_DATE_EPOCH=1700000000',
+            `NODE_VERSION=${toolchain.node.version}`,
+            `COMMIT_SHA=${'0'.repeat(40)}`,
+            'SDK_COMMIT=',
+            'SDK_PINNED=npm:@dankest-llc/xchain-sdk@0.0.0',
+            'SDK_WORKTREE_DIR=',
+            'WORKTREE_DIR=/guard/worktree',
+            'OUT_DIR_ABS=/guard/out',
+            'IMAGE_TAG=xchain-wallet-desktop:guard',
+            derive[0],
+            dockerRun,
+        ].join('\n');
+
+        const env = { ...process.env };
+        if (staging === null) delete env.XCHAIN_STAGING_FEED_URL;
+        else env.XCHAIN_STAGING_FEED_URL = staging;
+
+        const r = spawnSync('bash', ['-c', script], { encoding: 'utf8', env });
+        assert.equal(r.status, 0,
+            `reproduce.sh's docker invocation does not evaluate cleanly: ${r.stderr}`);
+        return r.stdout.split('\n').filter((l) => l !== '');
+    }
+
+    const STAGING = 'https://downloads.xchain.io/wallet/_rehearsal-7f3a91c2/desktop/';
+    const bare = dockerRunArgv(null);
+    const empty = dockerRunArgv('');
+    const set = dockerRunArgv(STAGING);
+
+    // 1. THE PRODUCTION RUN IS UNCHANGED. Absent and empty must both give
+    //    the argv the script had before the passthrough existed - not an
+    //    `-e` with an empty value, not a declared-but-blank variable.
+    assert.deepEqual(empty, bare,
+        'reproduce.sh builds a different `docker run` for XCHAIN_STAGING_FEED_URL="" than '
+        + 'for the variable being absent. An empty rehearsal selector IS a production '
+        + 'build, and the release lane sets the variable from a secret that may be unset.');
+    for (const argv of [bare, empty]) {
+        assert.equal(argv.filter((a) => a.includes('XCHAIN_STAGING_FEED_URL')).length, 0,
+            'a production reproduction passes XCHAIN_STAGING_FEED_URL into the container. '
+            + 'Even empty, that declares a variable in the build environment that was not '
+            + 'there before, and Level-2 reproducibility is a claim about that environment. '
+            + 'Keep the `${STAGING_FEED_URL:+-e ...}` conditional; do not flatten it.');
+    }
+
+    // 2. AND THE REHEARSAL RUN CARRIES IT. Positional, so a passthrough that
+    //    loses its `-e` (one word, silently making the value a stray arg) is
+    //    caught too.
+    const idx = set.findIndex((a) => a === `XCHAIN_STAGING_FEED_URL=${STAGING}`);
+    assert.notEqual(idx, -1,
+        'reproduce.sh does not forward XCHAIN_STAGING_FEED_URL to the container. '
+        + 'electron-builder.config.cjs selects the §7.5 rehearsal variant off that variable '
+        + 'at build time, so without it the container can only produce a production set - '
+        + 'and a rehearsal built outside the container has no compiled tiny-secp256k1, which '
+        + 'xr_check_payload_native in tools/release/lib.sh refuses (). Between the '
+        + 'two, §7.5 has no build path at all.');
+    assert.equal(set[idx - 1], '-e',
+        'the forwarded XCHAIN_STAGING_FEED_URL is not preceded by `-e`, so docker reads it '
+        + 'as a positional argument rather than an environment variable.');
+
+    // 3. The delta is EXACTLY those two words. Anything else the rehearsal
+    //    path changes about the invocation is a second variable between the
+    //    two builds, and nothing downstream would name it.
+    const withoutStaging = [...set];
+    withoutStaging.splice(idx - 1, 2);
+    assert.deepEqual(withoutStaging, bare,
+        'a rehearsal `docker run` differs from the production one by more than the single '
+        + '`-e XCHAIN_STAGING_FEED_URL=...` pair. The two builds already differ in the bytes '
+        + 'they produce; any further difference in HOW they are built makes a rehearsal stop '
+        + 'exercising the release path it exists to rehearse.');
+
+    // 4. One invocation, both modes. In-place changes WORKTREE_DIR and the
+    //    cleanup and nothing else, so a second `docker run` added for the
+    //    lane would be a second copy of the pin set - the defect home 5
+    //    exists to prevent, and it would take the passthrough out of sync
+    //    with it too.
+    assert.equal((reproduceSh.match(/^docker run /gm) || []).length, 1,
+        'reproduce.sh has more than one `docker run`. The in-place mode the release lane '
+        + 'uses and the worktree mode a verifier uses must share ONE container invocation, '
+        + 'or the lane and the verification drift apart exactly as they did before .');
 }
 
 console.log('reproducible-toolchain smoke: ok');
