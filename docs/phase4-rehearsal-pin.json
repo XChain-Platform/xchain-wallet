@@ -5,10 +5,10 @@
     "reached": "dev-mock-gate",
     "reachedSignature": false,
     "blocker": "release/lib.sh: 'extension' is not a lane declared in <repo>/tools/release/shipped-lanes.txt.",
-    "scriptRef": "5657ff4e43fa358d40c8428ad3f40ac7dcf44fa0",
+    "scriptRef": "e5996510ec2d8da1bc58bda5396a2a43f06e3f79",
     "repoRef": "2731745ecf35a41c093abba6004778afee2cdf87",
     "scriptPath": {
-        "tools/release/sign.sh": "480c1577262ab184ef84bcdc435cfe2b79db31bdcfbbba84430657f01de7f54f",
+        "tools/release/sign.sh": "f7212995f1e1737d16d6386677506706967ec95480d439a18420a778441b1d78",
         "tools/release/verify.sh": "4a2b9c5425c6bf712ea34d4eb3bef64d55258a7f853dd0dd6fb529dfe4dc07c6",
         "tools/release/lib.sh": "8a912bdcd5b615ada8a05a6d55abec666e4c0c54a79f0b03201deea30d091b19"
     },
@@ -16,5 +16,5 @@
         "tools/release/shipped-lanes.txt": "c017e4c3adbf9e82cc93f0899f8642262b3098f313c07c8bcd1b06bac77eedb0",
         "tools/build-reproduce/check-no-dev-mock.sh": "54f0c28ec17038fc160836bb60485620828b583122aeb635a5e82da04a0806e4"
     },
-    "observedAt": "2026-08-11T02:30:57.370Z"
+    "observedAt": "2026-08-11T14:20:16.385Z"
 }

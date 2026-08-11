@@ -163,6 +163,15 @@ exists to arm itself on, with no human step. The install therefore points
 `PLAY_STATE_PATH` at `/opt/xchain/state/`, a `jdog`-owned directory beside the
 script, proven writable by driving the same first-sighting into it.
 
+**Arming means REPLACING the staged line with step 3's, not uncommenting
+it.** The commented entry on the host is a third home for this line, and
+nothing in this repository can see it or check it: it predates the Play
+lane added, so it carries neither `PLAY_STATE_PATH` nor
+`--no-play`. Uncommenting it and pasting the item ID in is therefore the
+one arming gesture that reproduces the fault step 3 exists to avoid, and
+it stays silent until the first sighting of a live listing. Paste over
+it; do not edit around it.
+
 Everything else was verified running on origin-host: the log refresh, the
 parse, and a real request to the Chrome Web Store (exit 3, inconclusive,
 which is the correct answer for an item ID that does not exist).
@@ -209,8 +218,19 @@ The original steps follow, still accurate for what they cover.
            live for store correspondence>
    0 */6 * * * CWS_MAIN_ITEM_ID=<recorded extension id> \
      CWS_BETA_ITEM_ID=<recorded beta extension id, once that item exists> \
+     PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \
      /usr/bin/node /opt/xchain/store-version-monitor.mjs >/dev/null
    ```
+   `PLAY_STATE_PATH` is here because this line runs BOTH lanes, and the
+   Play one keeps a latch (see the Play section below). Without it the
+   latch defaults beside the script in `/opt/xchain`, which is root-owned:
+   measured on the host 2026-08-10, `jdog` cannot create a file there. A
+   404 still exits 0, so the fault stays invisible until the first sighting
+   of a live listing, which is the exact day the latch is supposed to arm
+   itself - and from then on this line mails a config error every six hours,
+   which is the alarm fatigue the disarm above exists to prevent. The
+   armed Play-only line on origin-host already carries this variable; a
+   combined line without it is a step BACKWARDS from what is deployed.
    Item IDs are not secrets (they are already public in every installed
    user's `chrome-extension://<id>/` URL and in the store listing link),
    so they can sit in the crontab in plain text like any other config
@@ -241,6 +261,12 @@ install the Play-only form and move to the combined line later:
 0 */6 * * * PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \
   /usr/bin/node /opt/xchain/store-version-monitor.mjs --no-chrome >/dev/null
 ```
+
+`PLAY_STATE_PATH` is not optional on this host, which is why it is in the
+line rather than in the prose underneath it: the default sits beside the
+script in root-owned `/opt/xchain`, and the failure it produces is silent
+until the day it matters (see the latch note below). This is what is
+actually deployed and armed on origin-host.
 
 **It keeps state, which the Chrome lane does not.** The Play lane checks that
 the listing is PRESENT and is ours, not what version it is, because a Play
