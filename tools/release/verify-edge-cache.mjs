@@ -58,6 +58,38 @@
 // for exactly the reason the desktop names are derived: a probe aimed at a
 // name no client fetches produces a green result and protects nothing.
 //
+// AND THE EDGE HALF CANNOT BE READ FROM `cf-cache-status` AT ALL, which is
+// the same trap one layer deeper ( row 35, measured 2026-08-11). The
+// warning above says a 404 is indistinguishable from a pass. The sharper
+// version is that a LIVE pointer behind a PROVEN-MATCHING bypass rule is
+// equally indistinguishable from one behind no rule. Four probes taken in
+// the same minute against this zone, whose pointer bypass rule had been
+// verified by Cloudflare Trace:
+//
+//   android/latest.json     rule MATCHES  no-store             DYNAMIC
+//   desktop/stable.yml      rule MATCHES  (404)                DYNAMIC
+//   RELEASE_HASHES/*.txt    NO rule       public, max-age=300  DYNAMIC
+//   android/*.apk           NO rule       ...immutable         HIT
+//
+// The third line is the control that settles it: a resource that ASKS to
+// be cached, with no rule bypassing it, still reads DYNAMIC - because none
+// of `.yml`, `.json` or `.txt` is in Cloudflare's default cacheable-
+// extension set, and DYNAMIC means "not eligible for cache", not "bypassed
+// by a rule". So DYNAMIC is a function of the file EXTENSION and carries
+// zero information about the rule. `BYPASS` would carry it; this zone does
+// not emit it on these paths.
+//
+// This tool scored DYNAMIC as PASS for as long as it has existed, so its
+// pointer verdict rested on a property its own inputs cannot observe -
+// the same class of defect as accepting a bare `max-age` below, arriving
+// on the pointer side. DYNAMIC now scores UNMEASURED: the origin half is
+// real and is reported, and the edge half is declared unreadable rather
+// than assumed good. The honest instrument for the edge half is
+// Cloudflare's Trace API (`POST /client/v4/accounts/<id>/request-tracer/
+// tracer`), which returns which rules match a URL independently of any
+// origin response - and which needs a token scoped for it, which the
+// release purge token (K15) deliberately is not.
+//
 // Usage:
 //   node tools/release/verify-edge-cache.mjs \
 //       --base https://downloads.xchain.io/wallet [--channel stable]
@@ -139,6 +171,8 @@ Exit codes:
   1  a probe FAILED the contract
   2  UNPROVEN: the names are right and nothing is published at them. This
      is NOT a pass.
+  3  UNMEASURED: published, and the origin half holds, but the edge half
+     cannot be read from cf-cache-status on these paths. Also NOT a pass.
 `;
 
 if (isMain && process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
@@ -220,8 +254,16 @@ async function probe(url, userAgent = 'electron-builder') {
 // A pointer must not be cached at the edge. HIT is a hard fail; MISS and
 // EXPIRED mean the path is CACHEABLE and merely was not cached this
 // second, which is the same defect one request later.
-const POINTER_OK = new Set(['BYPASS', 'DYNAMIC']);
 const POINTER_CACHED = new Set(['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATING']);
+
+// The only status that PROVES a bypass rule is in force from a header
+// alone. See the DYNAMIC finding at the top of this file.
+const POINTER_PROVEN = new Set(['BYPASS']);
+
+// Not cached, and not evidence either: DYNAMIC is what a path whose
+// extension is outside Cloudflare's default cacheable set returns whether
+// or not any rule touches it, so it can neither pass nor fail a pointer.
+const POINTER_UNREADABLE = new Set(['DYNAMIC']);
 
 /**
  * Score one pointer response. Exported and pure so the verdicts can be
@@ -230,7 +272,7 @@ const POINTER_CACHED = new Set(['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE'
  * a live feed, since it only appears when nothing is published.
  *
  * @param {{status?: number, cacheControl?: string, cfCache?: string, error?: string}} r
- * @returns {{verdict: 'PASS'|'FAIL'|'UNPROVEN'|'ERROR', detail: string}}
+ * @returns {{verdict: 'PASS'|'FAIL'|'UNPROVEN'|'UNMEASURED'|'ERROR', detail: string}}
  */
 export function judgePointer(r) {
     if (r.error) return { verdict: 'ERROR', detail: r.error };
@@ -254,16 +296,31 @@ export function judgePointer(r) {
     if (POINTER_CACHED.has(cf)) {
         problems.push(`cf-cache-status=${r.cfCache}: the edge treats this path as `
             + 'CACHEABLE. A rollback would be invisible downstream for the whole TTL');
-    } else if (!POINTER_OK.has(cf)) {
+    } else if (!POINTER_PROVEN.has(cf) && !POINTER_UNREADABLE.has(cf)) {
         problems.push(`cf-cache-status=${r.cfCache}: unrecognised, not scoring it as a pass`);
     }
 
-    return problems.length
-        ? { verdict: 'FAIL', detail: problems.join('; ') }
-        : {
-            verdict: 'PASS',
-            detail: `cache-control=${r.cacheControl} cf-cache-status=${r.cfCache}`,
+    if (problems.length) return { verdict: 'FAIL', detail: problems.join('; ') };
+
+    // The origin half held and the edge is not caching, but on these paths
+    // that is not the same as a bypass rule existing - and this function
+    // called it a pass for as long as it has existed. Report what was
+    // actually observed and name what was not.
+    if (POINTER_UNREADABLE.has(cf)) {
+        return {
+            verdict: 'UNMEASURED',
+            detail: `origin half holds (cache-control=${r.cacheControl}), but `
+                + `cf-cache-status=${r.cfCache} cannot show whether a bypass rule covers this `
+                + 'path: DYNAMIC is what this extension returns with or without one (a .txt '
+                + 'served max-age=300 under NO rule reads DYNAMIC too). Only BYPASS proves the '
+                + 'rule from a header; otherwise read the configuration with Cloudflare Trace',
         };
+    }
+
+    return {
+        verdict: 'PASS',
+        detail: `cache-control=${r.cacheControl} cf-cache-status=${r.cfCache}`,
+    };
 }
 
 /**
@@ -322,11 +379,13 @@ if (!isMain) {
     const results = [];
     let failures = 0;
     let unproven = 0;
+    let unmeasured = 0;
 
     const tally = (name, { verdict, detail }) => {
         results.push([name, verdict, detail]);
         if (verdict === 'FAIL' || verdict === 'ERROR') failures++;
         else if (verdict === 'UNPROVEN') unproven++;
+        else if (verdict === 'UNMEASURED') unmeasured++;
     };
 
     for (const path of pointerPaths) {
@@ -345,7 +404,7 @@ if (!isMain) {
     const width = Math.max(...results.map(([n]) => n.length));
     process.stdout.write(`\nEdge cache contract - ${base} (channel ${channel})\n\n`);
     for (const [name, verdict, detail] of results) {
-        process.stdout.write(`  ${name.padEnd(width)}  ${verdict.padEnd(8)}  ${detail}\n`);
+        process.stdout.write(`  ${name.padEnd(width)}  ${verdict.padEnd(10)}  ${detail}\n`);
     }
     process.stdout.write('\n');
 
@@ -360,6 +419,16 @@ if (!isMain) {
             + 'the first release publishes real pointers - that is the only moment the rule\n'
             + 'can be checked against a real name, which is what §3 asks for.\n');
         process.exit(2);
+    }
+    if (unmeasured) {
+        process.stdout.write(
+            `${unmeasured} probe(s) UNMEASURED: published, and the origin half of the contract\n`
+            + 'holds on each, but the edge half cannot be read from cf-cache-status on these\n'
+            + 'paths - DYNAMIC is what they return with or without a bypass rule. This is NOT\n'
+            + 'a pass. Read the rule itself with Cloudflare Trace (POST /client/v4/accounts/\n'
+            + '<id>/request-tracer/tracer), which reports which rules match a URL regardless\n'
+            + 'of what the origin answers.\n');
+        process.exit(3);
     }
     process.stdout.write('Edge cache contract holds on every real pointer.\n');
 }

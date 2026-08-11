@@ -44,11 +44,44 @@ import { UPDATE_FEED_URL } from '../../../packages/web/src/update/directUpdateCh
 }
 
 // --- the good case ------------------------------------------------------
+//
+// BYPASS is the only status that proves a bypass rule from a header alone.
 
-for (const cfCache of ['BYPASS', 'DYNAMIC', 'bypass']) {
+for (const cfCache of ['BYPASS', 'bypass']) {
     assert.equal(
         judgePointer({ status: 200, cacheControl: 'no-store', cfCache }).verdict, 'PASS',
         `cf-cache-status=${cfCache} on a published pointer with no-store is the contract`);
+}
+
+// --- DYNAMIC is not the good case, and used to be ( row 35) -------
+//
+// The 404 trap above, one layer deeper. A LIVE pointer behind a bypass
+// rule PROVEN to match it by Cloudflare Trace reads DYNAMIC - and so does
+// a path with no rule at all. Measured in one minute on 2026-08-11:
+// `android/latest.json` (rule matches) DYNAMIC; `desktop/stable.yml` (rule
+// matches, 404) DYNAMIC; and the control that settles it,
+// `RELEASE_HASHES/v0.336.0.txt`, which NO rule touches and which asks to
+// be cached with `public, max-age=300`, ALSO DYNAMIC. None of `.yml`,
+// `.json` or `.txt` is in Cloudflare's default cacheable-extension set, so
+// DYNAMIC tracks the file extension, not the rule. (The APK beside them,
+// an extension that IS in the set, reads HIT under no rule at all.)
+//
+// So this judge scored PASS on a property its inputs cannot observe, for
+// as long as the tool has existed - the bare-`max-age` defect below,
+// arriving on the pointer side.
+{
+    const v = judgePointer({ status: 200, cacheControl: 'no-store', cfCache: 'DYNAMIC' });
+    assert.equal(v.verdict, 'UNMEASURED',
+        'DYNAMIC reads identically with and without a bypass rule, so it can neither pass '
+        + 'nor fail a pointer; scoring it PASS certified a rule the header cannot see');
+    assert.match(v.detail, /cannot show whether a bypass rule/);
+    // The origin half IS observable and must still be reported, or this
+    // verdict degrades into "we learned nothing" when half of it is solid.
+    assert.match(v.detail, /origin half holds/);
+    // An UNMEASURED pointer is not a FAIL either: nothing is wrong with it.
+    // Collapsing the two would make the tool cry defect at a correct feed.
+    assert.notEqual(v.verdict, 'FAIL',
+        'an unreadable edge half is an absence of evidence, not a defect');
 }
 
 // --- the edge is caching a pointer: the defect the rule exists to stop --
@@ -179,4 +212,5 @@ for (const cfCache of ['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATI
 
 console.log('OK: edge cache contract smoke ( §3 / : a 404 is UNPROVEN, never a pass; '
     + 'MISS and EXPIRED are as fatal as HIT; the origin and the edge are both required; '
-    + ' run 20: the Android pointer is derived from the app\'s own feed URL)');
+    + ' run 20: the Android pointer is derived from the app\'s own feed URL; '
+    + ' row 35: DYNAMIC is UNMEASURED, never a pass - only BYPASS proves the rule)');
