@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.338.0] - 2026-08-11
+
 ### Added
 - `shipped-lanes.txt` declares the three desktop lanes and the update feed each lane ships through, so `sign.sh --lane mac,linux` can cut a release the Windows signing identity does not gate .
 - `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session .
