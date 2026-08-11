@@ -340,8 +340,9 @@ export const MAX_INDEXER_LAG_BLOCKS = 1000;
  * not tolerance for a chain that is behind.
  *
  * This catches a frozen replica once its gap opens; it cannot catch a halt
- * whose gap is still inside the slack, which is the residue the sync client's
- * own halt state would answer and this gate cannot see from a public URL.
+ * whose gap is still inside the slack. That residue is now closed by
+ * replicaHaltVerdict() below, which reads the explorer's own replica_halted
+ * signal instead of inferring one from a rate.
  */
 export const MAX_DEMO_LAG_BLOCKS = 2;
 
@@ -445,6 +446,35 @@ export function absenceCause(json, coin) {
             + ` (serving ${served})`;
     }
     return `up, and ${coin} is not in its configured set at all (serving ${served})`;
+}
+
+/**
+ * Read the explorer's fail-closed-halt signal for one coin, the fact a lag
+ * ceiling can only ever proxy: a replica halted AT its source's tip has no
+ * gap to measure until the source mints its next block, and this asks the
+ * source of truth instead of inferring one from a rate.
+ *
+ * @param {any} json    the explorer's /{COIN}/api/status body
+ * @param {string} coin
+ * @returns {{ state: 'halted'|'ok'|'unknown', detail: string }}
+ */
+export function replicaHaltVerdict(json, coin) {
+    const halted = json?.replica_halted?.[coin];
+    if (halted === true) {
+        return {
+            state: 'halted',
+            detail: 'its replica has an active consensus-divergence HALT: it applies no further'
+                + ' blocks until an operator intervenes',
+        };
+    }
+    if (halted === false) {
+        return { state: 'ok', detail: 'no active replica halt' };
+    }
+    return {
+        state: 'unknown',
+        detail: `the status body carries no readable replica_halted signal for ${coin}`
+            + ' (absent field, null, or an explorer deployment that predates it)',
+    };
 }
 
 function describeAge(ms) {
@@ -635,9 +665,28 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
         // chain, so a stale chain nobody funds is a fact worth printing rather
         // than a reason to hold a submission.
         const served = `serving ${probe.coin} (${Object.keys(available).length} networks)`;
+        // Checked before, and independent of, freshness below: a halt is the
+        // fact a lag ceiling can only proxy, and a replica halted AT its
+        // source's tip passes every lag check for as long as the source sits
+        // idle (row 84's residue - measured 2026-08-10, twice, 22 minutes
+        // apart, over a provably halted demo chain).
+        const halt = replicaHaltVerdict(json, probe.coin);
         const fresh = indexerFreshness(json, probe.coin, nowMs,
             probe.isDemoCoin ? MAX_DEMO_LAG_BLOCKS : MAX_INDEXER_LAG_BLOCKS);
         if (probe.isDemoCoin) {
+            if (halt.state === 'halted') {
+                return {
+                    state: 'failure',
+                    detail: `${served}, but ${halt.detail}: the demo wallet's funding transaction`
+                        + ' would never appear on the balance screen the reviewer is looking at',
+                };
+            }
+            if (halt.state === 'unknown') {
+                return {
+                    state: 'inconclusive',
+                    detail: `${served}, but ${halt.detail}, so its halt state cannot be checked`,
+                };
+            }
             if (fresh.state === 'unknown') {
                 return {
                     state: 'inconclusive',
@@ -652,6 +701,12 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
                 };
             }
             return { state: 'live', detail: `${served}, demo chain current (${fresh.detail})` };
+        }
+        if (halt.state === 'halted') {
+            return {
+                state: 'live',
+                detail: `${served} - NOT FUNDABLE: ${halt.detail}. Fund the demo wallet on ${DEMO_COIN}.`,
+            };
         }
         if (fresh.state === 'stale') {
             return {
