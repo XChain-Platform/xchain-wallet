@@ -465,13 +465,37 @@ if [[ "$STAGING" -eq 0 && "$TARGET_IS_STAGING" -eq 1 ]]; then
     exit 1
 fi
 
-# Immutability check.
+# Immutability check - PRODUCTION ONLY (dq-14, operator 2026-08-11).
+#
+# The rule it enforces is about PUBLISHED releases: two signed manifests
+# for one version make tampering indistinguishable from housekeeping, and
+# people have installed the first one. None of that is true of the staging
+# feed. §7.5 says the opposite about it in as many words - failed-rehearsal
+# artifacts are DELETED as the last rehearsal step, and only the last
+# PASSED set is retained - so a rehearsal set is transient by design and
+# nobody has ever installed from it.
+#
+# Applying the production rule there made a CORRECTED rehearsal
+# unpublishable, which is exactly backwards: it protected the superseded
+# set and blocked the good one. Measured on this project's first desktop
+# release - a Linux-only rehearsal was published, the mac lane was then
+# built, and the combined rehearsal the release actually needed could not
+# be published under its own tag.
+#
+# The narrowing is deliberate and is NOT "staging is unchecked": a staging
+# publish still passes verify.sh, still asserts the channel of what it is
+# handed, and still refuses a target that carries no .staging-feed marker.
+# What it may now do is replace a rehearsal that has been superseded.
 if target_exists "RELEASE_HASHES/$TAG.txt"; then
-    echo "publish.sh: $TAG is already published." >&2
-    echo "  Published versions and their manifests are never modified in" >&2
-    echo "  place (§3): two signed manifests for one version make tampering" >&2
-    echo "  indistinguishable from housekeeping. Cut a new version." >&2
-    exit 1
+    if [[ "$STAGING" == 1 ]]; then
+        echo "publish.sh: replacing the superseded $TAG rehearsal on the staging feed (§7.5)." >&2
+    else
+        echo "publish.sh: $TAG is already published." >&2
+        echo "  Published versions and their manifests are never modified in" >&2
+        echo "  place (§3): two signed manifests for one version make tampering" >&2
+        echo "  indistinguishable from housekeeping. Cut a new version." >&2
+        exit 1
+    fi
 fi
 
 # Split the upload into ordered phases. Everything a yml could point at
