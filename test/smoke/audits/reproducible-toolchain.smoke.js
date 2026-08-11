@@ -619,4 +619,93 @@ function jobBlock(name) {
         + 'or the lane and the verification drift apart exactly as they did before .');
 }
 
+// ------- home 7: the rehearsal has to be MANIFESTED from its own directory
+//
+// Home 6 got the staging selector into the container. What it could not see
+// is that build.sh then hashed a hard-coded `dist/`, while
+// electron-builder.config.cjs writes a staging build to `dist-staging`. In a
+// fresh worktree that mismatch failed loudly under `set -e` and cost nothing.
+// Under XCHAIN_REPRODUCE_IN_PLACE=1 - the mode the release lane itself uses -
+// it SUCCEEDED, because dist/ is already on disk from the production
+// container run earlier in the same job, so a rehearsal would have emitted a
+// manifest of the PRODUCTION artifacts and the rehearsal set would have gone
+// unhashed beside it. That is the §7.5 seam finding one level up: a rehearsal
+// and its proof must ride the same bytes, and a rehearsal that reports on the
+// wrong ones is worse than a rehearsal that cannot run.
+//
+// Driven, and pinned to the config, because there are two ways to break it
+// and neither is a typo. The selection can invert or go stale (a rename in
+// the config that nothing propagates here re-creates the exact defect), and
+// the empty-string case can drift apart between the two files - the release
+// lane feeds this variable from a secret that may be unset, and `-n ""` and
+// JavaScript's `"" || null` have to keep agreeing that an empty selector is a
+// PRODUCTION build.
+{
+    const selector = /\nif \[ -n "\$\{XCHAIN_STAGING_FEED_URL:-\}" \]; then\n(?:.*\n)*?fi\n/
+        .exec(buildSh);
+    assert.ok(selector,
+        'build.sh must choose its manifest directory from `${XCHAIN_STAGING_FEED_URL:-}` in '
+        + 'an if/fi block. The `:-` form is what keeps `set -u` off the production case, '
+        + 'where the variable is absent entirely.');
+
+    assert.ok(!/^cd \/workspace\/packages\/desktop\/dist$/m.test(buildSh),
+        'build.sh still cds to a hard-coded packages/desktop/dist. Under '
+        + 'XCHAIN_REPRODUCE_IN_PLACE=1 that path exists from the production build in the '
+        + 'same job, so a rehearsal silently manifests the production artifacts instead of '
+        + 'failing ().');
+    assert.ok(/^cd "\/workspace\/packages\/desktop\/\$\{DIST_DIR\}"$/m.test(buildSh),
+        'build.sh does not cd into the directory its own selector chose, so the selector '
+        + 'decides nothing.');
+
+    /**
+     * DIST_DIR and BUILD_VARIANT as build.sh's own block computes them, run
+     * under the same `set -euo pipefail` the script uses. `null` means the
+     * variable is absent from the environment, which is the production case.
+     */
+    function select(staging) {
+        const script = ['set -euo pipefail', selector[0], 'printf "%s\\n%s\\n" "${DIST_DIR}" "${BUILD_VARIANT}"'].join('\n');
+        const env = { ...process.env };
+        if (staging === null) delete env.XCHAIN_STAGING_FEED_URL;
+        else env.XCHAIN_STAGING_FEED_URL = staging;
+        const r = spawnSync('bash', ['-c', script], { encoding: 'utf8', env });
+        assert.equal(r.status, 0,
+            `build.sh's output-directory selector does not evaluate cleanly: ${r.stderr}`);
+        const [dir, variant] = r.stdout.split('\n');
+        return { dir, variant };
+    }
+
+    // The config is the authority on both names; build.sh mirrors it, and this
+    // is the assertion that fails when only one of the two is renamed.
+    const config = read('packages/desktop/electron-builder.config.cjs');
+    const outputs = /output:\s*isStaging \? '([^']+)' : '([^']+)'/.exec(config);
+    assert.ok(outputs,
+        "electron-builder.config.cjs no longer sets `directories.output` as "
+        + "`isStaging ? '<staging>' : '<production>'`. build.sh mirrors that expression to "
+        + 'find the artifacts it hashes; re-point this guard at whatever replaced it rather '
+        + 'than deleting it.');
+    const [, stagingDir, productionDir] = outputs;
+
+    const STAGING = 'https://downloads.xchain.io/wallet/_rehearsal-7f3a91c2/desktop/';
+    assert.deepEqual(select(STAGING), { dir: stagingDir, variant: 'staging' },
+        `a rehearsal build does not manifest ${stagingDir}/, which is where `
+        + 'electron-builder.config.cjs puts it. The manifest would cover whatever else is '
+        + 'on disk.');
+    for (const absent of [null, '']) {
+        assert.deepEqual(select(absent), { dir: productionDir, variant: 'production' },
+            'a production build does not manifest ' + productionDir + '/ when '
+            + `XCHAIN_STAGING_FEED_URL is ${absent === null ? 'absent' : 'empty'}. The config `
+            + 'reads that variable as `process.env.X || null`, so an empty selector is a '
+            + 'production build there; the two files must not disagree about which build '
+            + 'the release lane just made.');
+    }
+
+    // The variant reaches the reader, not just the shell. Both manifests carry
+    // it, so a file on its own says which build it describes - the question a
+    // maintainer holding two RELEASE_HASHES.txt files actually has.
+    assert.equal((buildSh.match(/^ {4}echo "# variant: +\$\{BUILD_VARIANT\}"$/gm) || []).length, 2,
+        'build.sh does not stamp `# variant:` into BOTH manifests. Without it the packaged '
+        + 'and diagnostic manifests of a rehearsal are byte-shaped exactly like a release\'s '
+        + 'and nothing in the file says otherwise.');
+}
+
 console.log('reproducible-toolchain smoke: ok');
