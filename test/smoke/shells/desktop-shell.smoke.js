@@ -91,6 +91,37 @@ assert.ok(
     /ipcRenderer\.invoke\(/.test(preload),
     'preload uses ipcRenderer.invoke: not .send (we need a Promise reply)',
 );
+// --- The update bridge, both halves ( row 142) -------------------
+//
+// THE ABSENCE THIS PINS SHIPPED. main broadcast `xchain:updater` for weeks
+// into a channel no renderer could subscribe to under contextIsolation,
+// and `downloadAndInstall()` - the only path that verifies a download
+// against the K1-signed manifest and then calls `quitAndInstall` - had no
+// caller anywhere in the repo. Nothing failed: the app checked on launch,
+// said nothing, installed nothing, and the spec described a toast that did
+// not exist. A channel with one writer and no possible reader is exactly
+// the shape no existing test looked for, so both ends are asserted here.
+assert.ok(
+    /contextBridge\.exposeInMainWorld\('xchainWalletUpdater'/.test(preload),
+    'preload exposes the xchainWalletUpdater namespace: without it the renderer '
+    + 'cannot receive an update offer at all',
+);
+assert.ok(
+    /ipcRenderer\.on\('xchain:updater'/.test(preload) || /ipcRenderer\.on\(UPDATER_EVENT_CHANNEL/.test(preload),
+    'preload subscribes to the updater event channel main broadcasts on',
+);
+{
+    const mainIndex = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
+    assert.ok(
+        /ipcMain\.handle\('xchain:updater-install'/.test(mainIndex),
+        'main handles the install request the preload sends',
+    );
+    assert.ok(
+        /downloadAndInstall\(\)/.test(mainIndex),
+        'main actually calls downloadAndInstall(): the update path is reachable, not merely wired',
+    );
+}
+
 // Negative: preload must NOT import Node fs / path modules (which
 // would smuggle Node capabilities into the contextBridge surface).
 // Prose mentions of "process" / "Node" are fine.
