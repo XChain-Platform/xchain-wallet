@@ -356,9 +356,17 @@ const config = {
     // The name cannot be used to do this: createMasInstaller runs the
     // artifactName template through `path.basename`, on purpose, so a
     // `../` in it is stripped rather than honoured.
+    // IT ALSO NOTARIZES THE DISK IMAGE ( row 140), which is a second
+    // job in one hook because this is the only seam that sees a FINISHED
+    // dmg. `mac.notarize` runs during afterSign, on the .app, and the dmg
+    // is built from that bundle afterwards - so the container itself has
+    // no other point at which anything can staple a ticket to it.
+    // scripts/notarize-dmg.cjs carries the measurements and the
+    // fail-closed reasoning.
     afterAllArtifactBuild: async (buildResult) => {
         const { renameSync } = require('node:fs');
         const { basename, dirname, join, resolve } = require('node:path');
+        const { notarizeDmgArtifacts } = require('./scripts/notarize-dmg.cjs');
 
         const distRoot = resolve(buildResult.outDir);
         const relocated = [];
@@ -369,9 +377,17 @@ const config = {
             renameSync(file, destination);
             relocated.push(destination);
         }
+
+        await notarizeDmgArtifacts({
+            artifactPaths: buildResult.artifactPaths,
+            identity: MAC_IDENTITY,
+        });
+
         // Returned so electron-builder's own artifact list names where the
         // file actually is; the build itself never publishes (§8), so this
-        // is bookkeeping rather than an upload.
+        // is bookkeeping rather than an upload. The dmgs are NOT returned:
+        // they are already in the artifact list and stapling edits them in
+        // place rather than producing a new file.
         return relocated;
     },
 
@@ -514,6 +530,22 @@ const config = {
     },
     dmg: {
         artifactName: DMG_ARTIFACT,
+        // TRUE, and it was FALSE by default for every release before
+        // v0.339.0 ( row 140). dmg-builder signs the disk image only
+        // on `this.options.sign === true` (`out/dmg.js`), so the default
+        // shipped a signed, notarized, stapled .app inside a container that
+        // `codesign` reported as "not signed at all". Measured on the
+        // published v0.338.0 bytes: the bundle assessed as `accepted,
+        // source=Notarized Developer ID` and the dmg around it as
+        // `rejected: no usable signature`, which is precisely the
+        // unidentified-developer warning §14 promises users will not see.
+        //
+        // Signing alone does not clear Gatekeeper for a downloaded image;
+        // the ticket does. `afterAllArtifactBuild` notarizes and staples
+        // each dmg and then re-reads the assessment. Null identity stays
+        // the unsigned dev case: dmg-builder returns early on it, and the
+        // notarize hook makes the same decision from the same value.
+        sign: Boolean(MAC_IDENTITY),
         // FALSE by operator decision, 2026-08-03 ().
         //
         // At `true` the .dmg was listed in `stable-mac.yml` beside the .zip,
