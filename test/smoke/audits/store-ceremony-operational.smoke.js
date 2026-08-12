@@ -350,6 +350,15 @@ const CEREMONY_TOOLCHAINS = {
         note: 'reader-facing verification, documented on release/verify-release.md as commands rather '
             + 'than as a machine to set up',
     },
+    'prepare-resign-tag.sh': {
+        enforce: false,
+        note: ': cuts the tag a published release is RE-SIGNED from. Its only requirement is '
+            + 'git, on a machine that is already a checkout of this repo - the script reads its own '
+            + 'location to find the source tree, so an operator cannot reach it without git. '
+            + 'Documented in tools/release/README.md ("Re-signing a release that was already '
+            + 'published") beside the sign.sh invocation it hands over to, rather than on an operator '
+            + 'page: it is a maintainer repair, not a store ceremony step',
+    },
     'verify-release-key.sh': {
         enforce: false,
         note: 'maintainer key-ceremony verification. Its only requirement is gpg, which is the whole '

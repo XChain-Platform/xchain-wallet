@@ -112,7 +112,10 @@ describe('bridge.connect: Developer-Mode auto-approve grants a concrete scope', 
 
         // Accounts: the primary account only. A dApp must not be able to
         // enumerate the user's other accounts by asking for nothing.
-        expect(res.result.accounts).toEqual(['acct-primary']);
+        // ConnectSuccess.accounts is `Account[]`, and `permissions.accounts`
+        // is the id list the grant stores ().
+        expect(res.result.accounts).toEqual([{ id: 'acct-primary', name: 'Account 1' }]);
+        expect(res.result.permissions.accounts).toEqual(['acct-primary']);
 
         const [site] = [...vault._sites.values()];
         expect(site.permissions.chains).toEqual(res.result.chains);
@@ -134,7 +137,8 @@ describe('bridge.connect: Developer-Mode auto-approve grants a concrete scope', 
         // Off-network and unknown chains are dropped; only the real intersection survives.
         expect(res.result.chains).toEqual(['bitcoin-regtest']);
         // A non-existent account id cannot conjure a grant.
-        expect(res.result.accounts).toEqual(['acct-second']);
+        expect(res.result.permissions.accounts).toEqual(['acct-second']);
+        expect(res.result.accounts).toEqual([{ id: 'acct-second', name: 'Account 2' }]);
     });
 
     it('falls back to the approval prompt when no concrete scope resolves', async () => {
@@ -218,7 +222,7 @@ describe('bridge.connect: an auto-approved grant cannot outlive the setting', ()
 
         const second = await connect(vault, { approvals, req: {} });
         expect(second.ok).toBe(true);
-        expect(second.result.accounts).toEqual(['acct-second']);
+        expect(second.result.permissions.accounts).toEqual(['acct-second']);
         // Still exactly one prompt: the second connect reused the stored grant.
         expect(approvals.calls.length).toBe(1);
         expect(vault._sites.size).toBe(1);

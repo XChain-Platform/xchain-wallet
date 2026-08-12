@@ -286,9 +286,20 @@ function makePE({ certAddr = 0, certSize = 0, numRva = 16, magic = 0x20b } = {})
     // against correct code, because the comment explaining the ordering
     // names `xr_write_manifest` six lines above the gate call. A test that
     // can be broken by a comment is not testing the wiring.
-    const signLines = readFileSync(join(root, 'tools/release/sign.sh'), 'utf8').split('\n');
+    const signSrc = readFileSync(join(root, 'tools/release/sign.sh'), 'utf8');
+    const signLines = signSrc.split('\n');
     const lineOf = (rx) => signLines.findIndex((l) => rx.test(l));
-    const gateAt = lineOf(/^\s*node .*verify-signatures\.mjs/);
+    // The gate is RESOLVED into a variable and then run, since : a
+    // release predating an executable check gets this checkout's copy,
+    // announced, rather than a MODULE_NOT_FOUND stack trace from a tag that
+    // never carried it. Both halves are asserted, because either one alone
+    // would pass while the wiring was broken - a resolution nothing runs, or
+    // a run of a variable nothing set.
+    assert.match(signSrc,
+        /SIGNATURE_GATE="\$\(gate_script tools\/release\/verify-signatures\.mjs\)" \|\| exit 1/,
+        'sign.sh must resolve the signature gate through gate_script, which prefers the '
+        + 'tag tree and falls back to this checkout only when the tag predates the check');
+    const gateAt = lineOf(/^\s*node "\$SIGNATURE_GATE"/);
     const manifestAt = lineOf(/^\s*xr_write_manifest\s/);
 
     assert.ok(gateAt !== -1, 'sign.sh must invoke the signature gate');

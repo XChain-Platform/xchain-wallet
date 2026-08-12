@@ -530,6 +530,58 @@ if [[ -e "$SIG" && "$FORCE" -ne 1 ]]; then
     exit 1
 fi
 
+# --- Which copy of an executable gate runs  ---------------------
+#
+# A CHECK THE RELEASE PREDATES USED TO CRASH THE CEREMONY, and the crash
+# was a node stack trace rather than a refusal.
+#
+# `verify-signatures.mjs` and `launch-probe.mjs` are resolved from
+# $REPO_ROOT, the tree at the tag. Driven 2026-08-12 while preparing the
+# v0.336.0 re-sign: every gate passed - dev-mock, artifact set, arches,
+# lanes, signatures - and then `node` died with MODULE_NOT_FOUND, because
+# `launch-probe.mjs` landed after that tag was cut. So the current signing
+# path cannot sign ANY tag older than its newest check, and it says so in
+# a language nobody reading a ceremony runbook can act on.
+#
+# The rule below distinguishes DATA from CODE, which the two-tree design
+# had never had to. `expected-artifacts.txt` and `shipped-lanes.txt` stay
+# tag-side unconditionally: they are what that release DECLARED it ships,
+# and a newer list could excuse a lane the tag never built. A probe is not
+# a declaration - it opens the staged bytes and reports what it found - so
+# where a release predates one, the alternative to running this checkout's
+# copy is running NO check at all, and this file's own doctrine is that a
+# gate which could not run has not passed. The tag's copy still WINS
+# wherever it exists, so no release that carries a check is ever judged by
+# a different one, and the fallback is announced rather than silent.
+#
+# The dev-mock gate is deliberately NOT given this fallback: it is the one
+# gate whose answer is a word in the signed header, and requiring the
+# TAG's copy to produce that word is what  S38 closed. A tag that
+# cannot run it is refused, and `prepare-resign-tag.sh` exists to cut one
+# that can.
+TOOL_ROOT_FOR_GATES="$(cd "$HERE/../.." && pwd)"
+gate_script() {
+    local rel="$1"
+    if [[ -f "$REPO_ROOT/$rel" ]]; then
+        printf '%s' "$REPO_ROOT/$rel"
+        return 0
+    fi
+    if [[ -f "$TOOL_ROOT_FOR_GATES/$rel" ]]; then
+        echo "sign.sh: $TAG predates $rel - running this checkout's copy." >&2
+        echo "  tag tree:  $REPO_ROOT (does not carry it)" >&2
+        echo "  tool tree: $TOOL_ROOT_FOR_GATES/$rel" >&2
+        echo "  A check the release predates is run, not skipped: the only" >&2
+        echo "  alternative is no check, and the artifacts are the subject" >&2
+        echo "  either way." >&2
+        printf '%s' "$TOOL_ROOT_FOR_GATES/$rel"
+        return 0
+    fi
+    echo "sign.sh: $rel is in neither tree. Refusing to sign." >&2
+    echo "  tag tree:  $REPO_ROOT" >&2
+    echo "  tool tree: $TOOL_ROOT_FOR_GATES" >&2
+    return 1
+}
+
 # --- Artifact-set gate --------------------------------------------------
 EXPECTED="$REPO_ROOT/tools/release/expected-artifacts.txt"
 LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
@@ -736,7 +788,11 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 # and every downstream check - verify.sh, the feed sweep, the updater's own
 # hash check - agrees with it. Once signed, nothing left in the pipeline
 # can tell the difference.
-node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
+# Resolved into a variable rather than inlined: a command substitution
+# used as an argument throws its exit status away, so `node "$(...)"`
+# would run node with an empty path on the refusal branch.
+SIGNATURE_GATE="$(gate_script tools/release/verify-signatures.mjs)" || exit 1
+node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
 
 # --- Launch probe ( row 144) --------------------------------------
 # EVERY GATE ABOVE THIS LINE READS THE ARTIFACTS. NONE OF THEM RUNS ONE.
@@ -768,7 +824,8 @@ node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECT
 # It opens a real window on the operator's desktop for a few seconds, and
 # over SSH (no Aqua session) it reports NOT PROBED by name rather than
 # failing the ceremony.
-node "$REPO_ROOT/tools/release/launch-probe.mjs" "$INPUT_DIR" "$RELEASE_SET"
+LAUNCH_PROBE="$(gate_script tools/release/launch-probe.mjs)" || exit 1
+node "$LAUNCH_PROBE" "$INPUT_DIR" "$RELEASE_SET"
 
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

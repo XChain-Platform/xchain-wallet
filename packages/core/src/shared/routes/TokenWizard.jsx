@@ -703,18 +703,24 @@ export function TokenWizard({ walletId, onBack }) {
  * Template semantics (§40.1):
  *
  * - **meme**: fire-and-forget: MAX_SUPPLY + MINT_SUPPLY + non-divisible
- *               + LOCK_MAX_SUPPLY + LOCK_MINT in one ISSUE transaction.
- *               (The spec describes a BATCH but the protocol's ISSUE v0
- *               composes all three atomically via `MINT_SUPPLY` +
- *               `LOCK_*` fields, simpler and one fewer signature.)
+ *               + LOCK_MAX_SUPPLY + LOCK_MINT + LOCK_MINT_SUPPLY in one
+ *               ISSUE transaction. (The spec describes a BATCH but the
+ *               protocol's ISSUE v0 composes all three atomically via
+ *               `MINT_SUPPLY` + `LOCK_*` fields, simpler and one fewer
+ *               signature.) All three locks are needed for "fixed
+ *               supply" to be true; see collectible.
  * - **utility**: mintable, adjustable: MAX_SUPPLY + MAX_MINT, no lock
  *               flags. Description encouraged for discovery.
  * - **community**: dividend-capable + mintable: same shape as utility;
  *               dividends are a later DIVIDEND action on the TICK, not
  *               a flag on ISSUE.
  * - **collectible**: single-edition: MAX_SUPPLY=1 + MINT_SUPPLY=1 +
- *               non-divisible + LOCK_MAX_SUPPLY + LOCK_MINT. Image URL
- *               goes into DESCRIPTION (the JDOG protocol example). Full
+ *               non-divisible + LOCK_MAX_SUPPLY + LOCK_MINT +
+ *               LOCK_MINT_SUPPLY. The third lock is what makes the 1-of-1
+ *               the token's own promise rather than a protocol flag day's
+ *               : a re-ISSUE carrying MINT_SUPPLY is refused
+ *               `MINT_SUPPLY (locked)` on every chain, at every block.
+ *               Image URL goes into DESCRIPTION (the JDOG protocol example). Full
  *               FILE + BATCH path is deferred past Phase 2 (BATCH bans
  *               FILE per protocol §BATCH; the FILE-action pipeline is
  *               its own feature).
@@ -748,6 +754,10 @@ const TEMPLATE_COMPOSERS = {
         seedSupply(p, form);
         p.LOCK_MAX_SUPPLY = '1';
         p.LOCK_MINT = '1';
+        // : the third inflation path. See the collectible composer
+        // below for why LOCK_MAX_SUPPLY + LOCK_MINT alone do not make a
+        // supply fixed, and why this template writes the third lock.
+        p.LOCK_MINT_SUPPLY = '1';
         maybeDescription(p, form);
         return p;
     },
@@ -775,6 +785,18 @@ const TEMPLATE_COMPOSERS = {
         p.MINT_SUPPLY = '1';
         p.LOCK_MAX_SUPPLY = '1';
         p.LOCK_MINT = '1';
+        // . LOCK_MAX_SUPPLY freezes the cap and LOCK_MINT closes the
+        // MINT action, but MINT_SUPPLY is credited on EVERY valid ISSUE, not
+        // only the first, and a re-ISSUE that restates the cap unchanged
+        // never trips the locked-cap check. Without this third lock the
+        // owner can keep minting fresh supply onto a "1 of 1", and the only
+        // thing refusing it is the indexer's ISSUE_MINT_SUPPLY_CUMULATIVE_CAP
+        // protocol change, which is gated: at genesis on testnet/regtest but
+        // on a flag day on mainnet. A token-level lock costs nothing (one
+        // more field in the same ISSUE, same fee) and holds on every chain
+        // from the moment the token exists, so the promise is the token's
+        // rather than the network's.
+        p.LOCK_MINT_SUPPLY = '1';
         // The image URL lives in DESCRIPTION (the TIS IMAGE format);
         // the lightweight path. For fully ON-CHAIN artwork + metadata,
         // create the token here, then use Manage Token → Artwork with

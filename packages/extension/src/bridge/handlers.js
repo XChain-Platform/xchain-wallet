@@ -47,6 +47,7 @@ import {
 } from '@xchain-wallet/bridge-spec';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
 import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
+import { bridgeErrorCodeFor, bridgeErrorResult } from './errorCodes.js';
 
 const {
     walletBalances,
@@ -164,13 +165,20 @@ export function registerBridgeHandlers(host, opts = {}) {
                 });
                 return result;
             } catch (err) {
-                const code = err?.code ?? err?.name ?? 'Error';
+                const code = err?.internalCode ?? err?.code ?? err?.name ?? 'Error';
                 logConsole.record({
                     source: `bridge:${name}`,
                     level: 'warn',
                     message: `← ${code}`,
                 });
-                throw err;
+                // The last point at which this value is still ours. Past here
+                // the error is serialized onto the wire and read by a page, so
+                // whatever `code` says it must be a code bridge-spec publishes;
+                // a page cannot act on CHAIN_NOT_PERMITTED or
+                // PanicModeActiveError (). The internal name survives
+                // in `message` and in the log line above, so no diagnosis is
+                // lost - only the page's view is narrowed to the contract.
+                throw asBridgeSpecError(err);
             }
         });
     };
@@ -215,15 +223,10 @@ export function registerBridgeHandlers(host, opts = {}) {
                 await deps.vault.connectedSites.delete(existing.id);
             } else {
                 await touchLastUsed(deps.vault, existing);
-                return {
-                    // The wallet's own bridge version, never the request's:
-                    // requiredBridgeVersion is a semver RANGE (e.g. '^0.1.0'),
-                    // so echoing it back would report a range as a version.
-                    version: BRIDGE_SPEC_VERSION,
-                    supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
-                    chains: existing.permissions.chains,
-                    accounts: existing.permissions.accounts,
-                };
+                return connectSuccess(
+                    await accountRecordsFor(deps.vault, existing.permissions.accounts),
+                    existing.permissions,
+                );
             }
         }
 
@@ -303,15 +306,17 @@ export function registerBridgeHandlers(host, opts = {}) {
             autoApproved,
         });
         await deps.vault.connectedSites.put(site);
-        return {
-            // The wallet's own bridge version; see the existing-site return.
-            version: BRIDGE_SPEC_VERSION,
-            supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
-            chains: permissions.chains,
-            accounts: permissions.accounts,
-        };
+        return connectSuccess(
+            await accountRecordsFor(deps.vault, permissions.accounts),
+            permissions,
+        );
     });
 
+    // bridge-spec declares `disconnect(): Promise<void>`, so this is the one
+    // bridge method with no result to shape. The `{ disconnected }` flag is
+    // additive: a page that follows the type ignores it, and the extension's
+    // own Connected Sites view uses it to tell "there was a session and it is
+    // gone" from "there was never one".
     register('bridge.disconnect', async (req, deps) => {
         assertOrigin(req);
         const site = await findConnectedSite(deps.vault, req.origin);
@@ -324,15 +329,15 @@ export function registerBridgeHandlers(host, opts = {}) {
         return { disconnected: true };
     });
 
+    // The five read methods return BARE ARRAYS, not an `{ ok }` envelope:
+    // bridge-spec declares them as `Promise<Account[]>` / `Promise<Address[]>`
+    // / `Promise<Balance[]>` / `Promise<ChainDescriptor[]>` /
+    // `Promise<ChainId[]>` (index.ts XChainProvider). A failure on these is a
+    // rejected promise, which is why the page shim can NOT blanket-wrap every
+    // method in the result envelope.
     register('bridge.getAccounts', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
-        const allAccounts = await deps.vault.accounts.list();
-        const ids = new Set(site.permissions.accounts);
-        const accounts = (ids.size > 0
-            ? allAccounts.filter((a) => ids.has(a.id))
-            : allAccounts
-        ).map((a) => ({ id: a.id, name: a.name }));
-        return accounts;
+        return accountRecordsFor(deps.vault, site.permissions.accounts);
     });
 
     register('bridge.getAddresses', async (req, deps) => {
@@ -366,12 +371,17 @@ export function registerBridgeHandlers(host, opts = {}) {
         // Ensure the requested address is one the site is permitted to see.
         const ok = await siteHasAddress(deps.vault, site, req.chainId, req.address, deps.chainRegistry);
         if (!ok) throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
-        return addressBalances({
+        // bridge-spec declares `Balance[]`; addressBalances answers the
+        // WALLET-INTERNAL `{ native, tokens }` shape its UI consumers want.
+        // Passing that straight through handed dApps an object where the
+        // published type says array, with none of the seven Balance fields
+        // under the names the type gives them ().
+        return balanceRecordsFrom(await addressBalances({
             sdkRegistry: deps.sdkRegistry,
             chainRegistry: deps.chainRegistry,
             chainId: req.chainId,
             address: req.address,
-        });
+        }));
     });
 
     register('bridge.getSupportedChains', async (_req, deps) => {
@@ -433,12 +443,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (autoSign && walletId) {
             const cached = signPasswordCache.recall(walletId);
             if (cached) {
-                return invokeSignMessage(deps, {
+                return signMessageSuccess(req, await invokeSignMessage(deps, {
                     ...req,
                     walletId,
                     password: cached.password,
                     bip39Passphrase: cached.bip39Passphrase,
-                });
+                }));
             }
         }
 
@@ -469,7 +479,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!site.permissions.canSignMessage && decision.savePermanent) {
             await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
         }
-        return result;
+        return signMessageSuccess(req, result);
     });
 
     register('bridge.signAction', async (req, deps) => {
@@ -506,7 +516,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        return signPsbtFlow({
+        const signed = await signPsbtFlow({
             vault: deps.vault,
             walletId: decision.walletId,
             password: decision.password,
@@ -517,6 +527,16 @@ export function registerBridgeHandlers(host, opts = {}) {
             psbtHex: req.psbtHex,
             signingPaths: req.signingPaths,
         });
+        // SignPsbtSuccess: signedPsbtHex always, txHex only when the wallet
+        // finalized, txid only when it broadcast. Copied field by field rather
+        // than spread so an internal field the signer grows later cannot leak
+        // to a page by default.
+        return {
+            ok: true,
+            signedPsbtHex: signed?.signedPsbtHex,
+            ...(signed?.txHex ? { txHex: signed.txHex } : {}),
+            ...(signed?.txid ? { txid: signed.txid } : {}),
+        };
     });
 
     // §22 / P4: the wallet as passive MuSig2 co-signer. An agent sends the
@@ -554,7 +574,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('coSign');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        return passiveCoSignForAccount({
+        const outcome = await passiveCoSignForAccount({
             vault: deps.vault,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
@@ -568,6 +588,16 @@ export function registerBridgeHandlers(host, opts = {}) {
                 inputs: req.inputs,
             },
         });
+        // Both CoSignApprovedSuccess and CoSignRefused are `ok: true`: a policy
+        // refusal is a well-formed answer to a well-formed request, distinct
+        // from a BridgeErrorResult, so the flow's own `approved` flag carries
+        // through unchanged and only the missing `ok` is added.
+        return {
+            ok: true,
+            ...(outcome && typeof outcome === 'object'
+                ? outcome
+                : { approved: false, reason: 'INTERNAL_ERROR' }),
+        };
     });
 
     // §43.2 / §42.8.2 parallel(): the cross-chain composer batches N actions
@@ -625,21 +655,22 @@ export function registerBridgeHandlers(host, opts = {}) {
                 params: action?.params,
             };
             try {
-                const raw = await executeSignAction(actionReq, deps, {
+                // executeSignAction already answers in the SignActionResult
+                // envelope, so a batch entry is that value verbatim: one shape
+                // for signAction and for every slot of parallel.
+                results.push(await executeSignAction(actionReq, deps, {
                     approvals,
                     events,
                     site,
                     // With a grouped decision, reuse it for every action so the
                     // user is not prompted N more times after approving once.
                     decision: groupDecision,
-                });
-                results.push(normalizeParallelResult(raw));
+                }));
             } catch (err) {
-                results.push({
-                    ok: false,
-                    error: err?.code ?? err?.name ?? 'INTERNAL_ERROR',
-                    message: err?.message,
-                });
+                // Same translation the register() wrapper applies to a
+                // single-action throw, applied per slot: a batch entry must
+                // carry a published BridgeErrorCode too ().
+                results.push(bridgeErrorResult(err));
             }
         }
         return results;
@@ -731,7 +762,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // chainId and challengeParts are declared on SignInSuccess and were
         // being dropped, so a dApp had to re-parse the string to recover fields
         // the wallet already held ().
-        return { address: decision.address, chainId, signature, challenge, challengeParts };
+        return { ok: true, address: decision.address, chainId, signature, challenge, challengeParts };
     });
 }
 
@@ -744,11 +775,11 @@ export function registerBridgeHandlers(host, opts = {}) {
 // once). `ctx.decision`, when present, is a pre-captured approval (the grouped
 // parallel modal) and skips the per-action prompt.
 //
-// Returns the flow result on success, or a structured
-// `{ error: 'UNSUPPORTED_ACTION', ... }` for an action kind this wallet does
-// not sign. Throws BridgeError / UserRejectedError on a policy refusal so the
-// single-action caller propagates it and the batch caller folds it into a
-// per-action result.
+// Returns a bridge-spec SignActionResult: `{ ok: true, txid, chainId }` on a
+// signed action, or the structured `{ ok: false, error: 'UNSUPPORTED_ACTION',
+// supportedActions }` for an action kind this wallet does not sign. Throws
+// BridgeError / UserRejectedError on a policy refusal so the single-action
+// caller propagates it and the batch caller folds it into a per-action result.
 async function executeSignAction(req, deps, ctx) {
     const {
         approvals,
@@ -762,9 +793,13 @@ async function executeSignAction(req, deps, ctx) {
     assertChainPermitted(site, req.chainId);
     const actionName = req.action;
     if (!SUPPORTED_BRIDGE_ACTIONS.includes(actionName)) {
-        // §43.2: unsupported actions return structured shape, not throw
+        // §43.2 / UnsupportedActionResult: unsupported actions resolve with a
+        // structured refusal rather than throwing, so the dApp can read the
+        // wallet's current action list and say something useful.
         return {
+            ok: false,
             error: 'UNSUPPORTED_ACTION',
+            message: `this wallet does not sign ${String(actionName)}`,
             supportedActions: SUPPORTED_BRIDGE_ACTIONS.slice(),
         };
     }
@@ -936,7 +971,7 @@ async function executeSignAction(req, deps, ctx) {
     // test/unit/bridge/parallel.test.js.
     fromSource = fromSource ?? await requireSourceRecord(deps, req.chainId, spendFromAddress);
     if (actionName === 'SEND') {
-        return sendToken({
+        const submitted = await sendToken({
             ...params,
             from: fromSource,
             to: toAddress,
@@ -951,13 +986,14 @@ async function executeSignAction(req, deps, ctx) {
             chainId: req.chainId,
             trackPendingTx: true,
         });
+        return signActionSuccess(req.chainId, submitted);
     }
     if (actionName === 'SWEEP') {
         // SweepActionParams' optional single-asset `asset` has no consumer:
         // sweepToken empties by category flags (balances / ownerships / ...),
         // not per-asset. Mapping from/to restores the action; per-asset sweep
         // needs a core change and is deliberately left unwired here.
-        return sweepToken({
+        const submitted = await sweepToken({
             ...params,
             from: fromSource,
             to: toAddress,
@@ -970,6 +1006,7 @@ async function executeSignAction(req, deps, ctx) {
             trackPendingTx: true,
             chainId: req.chainId,
         });
+        return signActionSuccess(req.chainId, submitted);
     }
     throw bridgeError('UNREACHABLE', 'supported action fell through');
 }
@@ -1081,16 +1118,127 @@ function approvalPayload(actionName, { params, toAddress, tick, amount, spendFro
     return { ...common, TICK: tick, AMOUNT: amount };
 }
 
-// Normalize one executeSignAction return into a SignActionResult carrying an
-// explicit `ok` flag, so a parallel() caller can branch per entry without
-// re-deriving success from the presence of a txid. A structured
-// `{ error }` shape (e.g. UNSUPPORTED_ACTION) becomes `ok: false`; anything
-// else is a completed flow result and becomes `ok: true`.
-function normalizeParallelResult(raw) {
-    if (raw && typeof raw === 'object' && raw.error && raw.ok === undefined) {
-        return { ok: false, ...raw };
+// ---------------------------------------------------------------------------
+// bridge-spec result builders
+//
+// Every `bridge.*` success answer is assembled here rather than by handing a
+// flow's return value to the page. The flows answer in the wallet's internal
+// vocabulary (SubmitResult carries actionString / encoding / signed / indexed;
+// addressBalances carries { native, tokens }), and forwarding that made the
+// bridge's ACTUAL contract "whatever core happened to return today" while its
+// PUBLISHED contract said something else entirely (). Building the
+// published shape explicitly also means a field core adds later cannot reach a
+// dApp until someone decides it should.
+// ---------------------------------------------------------------------------
+
+/** ConnectSuccess (§43.2). */
+function connectSuccess(accounts, permissions) {
+    return {
+        ok: true,
+        // The wallet's own bridge version, never the request's:
+        // requiredBridgeVersion is a semver RANGE (e.g. '^0.1.0'), so echoing
+        // it back would report a range as a version.
+        version: BRIDGE_SPEC_VERSION,
+        supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
+        // Account RECORDS, not the id strings the grant stores. ConnectSuccess
+        // declares `accounts: Account[]`, and a dApp handed bare ids had no
+        // name to show the user and had to call getAccounts to get the shape
+        // connect already promised it.
+        accounts,
+        chains: permissions.chains,
+        // The whole SitePermissions record connect was silently omitting: what
+        // the user actually granted, which is the one thing a dApp needs to
+        // know before it offers an action the wallet will refuse.
+        permissions: {
+            chains: permissions.chains,
+            accounts: permissions.accounts,
+            canSignMessage: permissions.canSignMessage === true,
+            canSignAction: permissions.canSignAction ?? {},
+        },
+    };
+}
+
+/** SignMessageSuccess (§43.2). `signedMessage` is the exact bytes signed. */
+function signMessageSuccess(req, result) {
+    return {
+        ok: true,
+        address: req.address,
+        signature: result?.signature,
+        // No canonicalization happens between the request and the signer, so
+        // the signed bytes are the requested message. Stated explicitly rather
+        // than left for the dApp to assume.
+        signedMessage: req.message,
+    };
+}
+
+/**
+ * SignActionSuccess (§43.2) from a submit result.
+ *
+ * `actionIndex` is emitted only when the wallet genuinely knows it. The index
+ * is assigned by the INDEXER once a block carries the transaction, and this
+ * result resolves at broadcast, so for a freshly signed action there is no
+ * number to send and inventing one (0, -1) would be worse than omitting it -
+ * bridge-spec now declares the field optional for this reason.
+ */
+function signActionSuccess(chainId, submitted) {
+    const raw = submitted?.actionIndex ?? submitted?.action_index;
+    const actionIndex = Number(raw);
+    return {
+        ok: true,
+        txid: submitted?.txid,
+        chainId,
+        ...(raw !== undefined && raw !== null && Number.isFinite(actionIndex)
+            ? { actionIndex }
+            : {}),
+    };
+}
+
+/**
+ * The dApp-visible `Balance[]` for one address, from the wallet-internal
+ * `{ native, tokens }` shape.
+ *
+ * `unconfirmedRaw` / `unconfirmed` are reported as zero, not omitted: the
+ * fields are required by the published type, and the explorer reads this
+ * wallet uses (`/address/` + `/balances/`) carry only a confirmed figure. A
+ * dApp that treats them as authoritative sees "nothing pending", which is what
+ * the wallet's own UI shows for the same address from the same data.
+ */
+function balanceRecordsFrom(shape) {
+    const rows = [];
+    const push = (row, assetType) => {
+        if (!row || typeof row !== 'object') return;
+        const asset = typeof row.tick === 'string' ? row.tick : '';
+        if (!asset) return;
+        const divisibility = Number.isFinite(Number(row.divisibility))
+            ? Number(row.divisibility)
+            : 0;
+        const confirmedRaw = String(row.quantity ?? '0');
+        rows.push({
+            asset,
+            assetType,
+            divisibility,
+            confirmedRaw,
+            unconfirmedRaw: '0',
+            confirmed: decimalFromBaseUnits(confirmedRaw, divisibility) ?? '0',
+            unconfirmed: decimalFromBaseUnits('0', divisibility) ?? '0',
+        });
+    };
+    push(shape?.native, 'native');
+    if (Array.isArray(shape?.tokens)) {
+        for (const token of shape.tokens) push(token, 'token');
     }
-    return { ok: true, ...(raw && typeof raw === 'object' ? raw : { value: raw }) };
+    return rows;
+}
+
+/**
+ * The dApp-visible `Account[]` for a grant. An EMPTY id list is §43.3's
+ * wildcard ("every account"), which is why this cannot be a plain filter.
+ */
+async function accountRecordsFor(vault, accountIds) {
+    const all = await vault.accounts.list();
+    const ids = new Set(Array.isArray(accountIds) ? accountIds : []);
+    return (ids.size > 0 ? all.filter((a) => ids.has(a.id)) : all)
+        .map((a) => ({ id: a.id, name: a.name }));
 }
 
 function assertOrigin(req) {
@@ -1270,14 +1418,38 @@ function randomNonce() {
     return hex;
 }
 
+// A refusal raised by a bridge handler.
+//
+// Carries TWO codes on purpose. `internalCode` is the wallet's own precise
+// name (CHAIN_NOT_PERMITTED, NO_PASSWORD, ...) and is what the Developer-Mode
+// log and the human-readable message show. `code` is the published
+// BridgeErrorCode the page is allowed to see and branch on; the internal names
+// are not in bridge-spec's union, and shipping them meant every dApp following
+// the spec hit its default case ().
 class BridgeError extends Error {
     constructor(code, detail) {
         super(`bridge: ${code}${detail ? ` (${detail})` : ''}`);
         this.name = 'BridgeError';
-        this.code = code;
+        this.internalCode = code;
+        this.code = bridgeErrorCodeFor({ code });
     }
 }
 
 function bridgeError(code, detail) {
     return new BridgeError(code, detail);
+}
+
+// Narrow any thrown value to something whose `code` is a published
+// BridgeErrorCode. Mutates rather than re-wraps so `name`, `stack` and any
+// class-specific fields (BroadcastFailedError's signedTxHex, the throttle
+// hints) survive to the envelope; only the page-visible code is rewritten.
+function asBridgeSpecError(err) {
+    if (!err || typeof err !== 'object') {
+        const wrapped = /** @type {any} */ (new Error(String(err)));
+        wrapped.code = 'INTERNAL_ERROR';
+        return wrapped;
+    }
+    const code = bridgeErrorCodeFor(err);
+    if (/** @type {any} */ (err).code !== code) /** @type {any} */ (err).code = code;
+    return err;
 }

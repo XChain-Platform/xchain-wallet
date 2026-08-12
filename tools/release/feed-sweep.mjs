@@ -106,6 +106,20 @@ function hashFile(path, algorithm, encoding) {
  * @param {string} path
  * @returns {{tag: string, entries: Map<string,string>}}
  */
+/**
+ * Which RELEASE a manifest tag names, with any re-sign suffix stripped.
+ *
+ * The bash half of this rule is `xr_release_tag_of` in lib.sh, and
+ * `test/smoke/audits/release-resign-tag.smoke.js` drives both spellings
+ * over one table so they cannot drift apart.
+ *
+ * @param {string} tag
+ * @returns {string}
+ */
+export function releaseTagOf(tag) {
+    return String(tag).replace(/-resign\d+$/, '');
+}
+
 export function parseManifest(path) {
     const text = readFileSync(path, 'utf8');
     const entries = new Map();
@@ -257,7 +271,19 @@ export function sweep(root, options = {}) {
 
             manifestCount += 1;
             const { tag, entries } = parseManifest(full);
+            // The RELEASE, not the signature . A re-sign tag
+            // (`v0.336.0-resign1`) is the release tag's tree with the release
+            // tooling corrected and nothing else, cut because the dev-mock gate
+            // that stamps the manifest header comes from the tag and so cannot
+            // be fixed for a release already published. Its manifest is
+            // republished under the release's own name, and a channel pointer
+            // still names the plain version - so recording the header verbatim
+            // here would make the corrected manifest read as NO manifest and
+            // raise POINTER-NO-MANIFEST against the release that was just
+            // repaired. Both spellings are kept: the pointer check asks for the
+            // release, and nothing else reads this set.
             tagsSeen.add(tag);
+            tagsSeen.add(releaseTagOf(tag));
             for (const [file, hash] of entries) {
                 if (!union.has(file)) union.set(file, new Set());
                 union.get(file).add(hash);

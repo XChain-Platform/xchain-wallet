@@ -339,9 +339,24 @@ assert.ok(
     /response\.ok/.test(bridgeSrc) && /response\.error/.test(bridgeSrc),
     'bridgeMessaging branches on response.ok / response.error to convert to resolve/reject',
 );
+// : the rebuild moved into MessageHost's own hydrateEnvelopeError, so
+// the typed NAME and the structured fields (`code` and the THROTTLED hints)
+// survive the IPC hop together, in every shell, instead of the desktop copy
+// drifting from the extension's.
 assert.ok(
-    /err\.name = response\.error\?\.name/.test(bridgeSrc),
+    /hydrateEnvelopeError\(response\.error\)/.test(bridgeSrc),
     'bridgeMessaging preserves the typed error name so callers can branch on InvalidPasswordError etc.',
+);
+assert.ok(
+    /from '@xchain-wallet\/extension\/src\/background\/MessageHost\.js'/.test(bridgeSrc),
+    'bridgeMessaging rebuilds the error with the host\'s own helper, not a hand-rolled copy',
+);
+const hostSrc = readFileSync(
+    join(desktop, '..', 'extension', 'src', 'background', 'MessageHost.js'), 'utf8',
+);
+assert.ok(
+    /err\.name = payload\?\.name \|\| 'Error'/.test(hostSrc),
+    'hydrateEnvelopeError restores the typed error name',
 );
 
 console.log(

@@ -231,8 +231,13 @@ async function autoApprove(host, fakeWindows, result) {
         canSignAction: {},
     });
     const conn = await connectPromise;
+    // The bridge-spec ConnectSuccess envelope (): an `ok` flag,
+    // Account RECORDS under `accounts`, and the granted SitePermissions.
+    assert.equal(conn.ok, true, 'connect answers the ConnectSuccess envelope');
     assert.equal(conn.chains[0], 'bitcoin-regtest');
-    assert.deepEqual(conn.accounts, [account.id]);
+    assert.deepEqual(conn.accounts, [{ id: account.id, name: account.name }]);
+    assert.deepEqual(conn.permissions.accounts, [account.id]);
+    assert.equal(conn.permissions.canSignMessage, false);
 
     const sites = await vault.connectedSites.list();
     assert.equal(sites.length, 1);
@@ -292,10 +297,11 @@ async function autoApprove(host, fakeWindows, result) {
         action: 'ISSUE',
         params: { tick: 'NEWCOIN', quantity: '1000000' },
     });
-    assert.deepEqual(issueResp, {
-        error: 'UNSUPPORTED_ACTION',
-        supportedActions: ['SEND', 'SWEEP'],
-    });
+    // bridge-spec's UnsupportedActionResult: an `ok: false` envelope carrying
+    // the wallet's current action list ().
+    assert.equal(issueResp.ok, false);
+    assert.equal(issueResp.error, 'UNSUPPORTED_ACTION');
+    assert.deepEqual(issueResp.supportedActions, ['SEND', 'SWEEP']);
     assert.equal(
         fakeWindows._opened().length,
         0,

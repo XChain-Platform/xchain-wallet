@@ -478,6 +478,17 @@ export {
     BackupSeedPasswordError,
     BACKUP_PAYLOAD_VERSION,
 } from './backupFile.js';
+// : shells render the restore screen's copy, so they need the same
+// labels and the same failure classification core throws against.
+export {
+    RESTORE_PASSWORD_INTRO,
+    RESTORE_PASSWORD_LABELS,
+    RESTORE_PASSWORD_HINTS,
+    restoreDeviceHint,
+    restoreDeviceLabel,
+    restoreFailureMessage,
+    restorePasswordRequiredMessage,
+} from './restorePasswordCopy.js';
 export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';
 export {
     buildLabelSyncPayload,

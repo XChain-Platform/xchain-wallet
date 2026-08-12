@@ -32,6 +32,30 @@ import {
  * @property {() => void} disable  forget the choice, revert to in-page wallet
  */
 
+// Plain-English line for a refused connect. Branches on `error`, the
+// BridgeErrorCode, exactly as bridge-spec tells dApps to; the wallet's own
+// `message` is diagnostic text and is not shown to the user.
+function errorMessageFor(result) {
+    switch (result?.error) {
+        case 'USER_REJECTED':
+            return 'Connection declined in the wallet.';
+        case 'BLOCKED_BY_USER':
+            return 'This site is blocked. Un-block it in the wallet settings.';
+        case 'WALLET_LOCKED':
+            return 'Unlock the extension wallet, then try again.';
+        case 'BRIDGE_VERSION_MISMATCH':
+            return 'The extension wallet is too old for this app. Update it and try again.';
+        case 'THROTTLED': {
+            const seconds = Math.ceil((result.retryAfterMs ?? 0) / 1000);
+            return seconds > 0
+                ? `Too many requests. Try again in ${seconds}s.`
+                : 'Too many requests. Try again shortly.';
+        }
+        default:
+            return 'Could not connect to the extension.';
+    }
+}
+
 /**
  * Track the extension provider and the user's routing preference.
  *
@@ -68,13 +92,20 @@ export function useExtensionWallet() {
         setConnecting(true);
         setError(null);
         try {
-            await connectExtensionWallet();
+            // bridge-spec's ConnectResult is a union: a user-rejected connect,
+            // a blocked origin and a version mismatch all RESOLVE with
+            // `ok: false` rather than throwing (). Reading "did not
+            // throw" as success switched the app into extension-wallet mode on
+            // a refusal, and the banner reported no error at all.
+            const result = await connectExtensionWallet();
+            if (result?.ok !== true) {
+                setError(errorMessageFor(result));
+                return false;
+            }
             setEnabled(true);
             return true;
         } catch (err) {
-            // A user-rejected connect or a version mismatch lands here.
-            // Leave `enabled` false and surface a short message; nothing
-            // is persisted on failure.
+            // The provider being absent (or a transport fault) still throws.
             setError(err?.message || 'Could not connect to the extension.');
             return false;
         } finally {

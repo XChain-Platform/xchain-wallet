@@ -52,7 +52,7 @@ export class InvalidMessageError extends Error {
  */
 
 /**
- * @typedef {{ ok: true, result: unknown } | { ok: false, error: { name: string, message: string } }} MessageResponse
+ * @typedef {{ ok: true, result: unknown } | { ok: false, error: { name: string, message: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number } }} MessageResponse
  */
 
 export class MessageHost {
@@ -116,8 +116,52 @@ export class MessageHost {
     }
 }
 
-function serializeError(err) {
-    const name = err && err.name ? String(err.name) : 'Error';
-    const message = err && err.message ? String(err.message) : String(err);
-    return { ok: false, error: { name, message } };
+// Structured fields an error may carry that the wire envelope must preserve.
+// `code` is the machine-readable outcome every dApp is told to branch on
+// (bridge-spec's BridgeErrorCode); the three numbers are the THROTTLED hints
+// bridge-spec's BridgeErrorResult declares. Serializing only { name, message }
+// dropped all four at the transport, so a rate-limited dApp had no
+// `retryAfterMs` to wait on and a spec-following dApp had no `error` code to
+// switch on - it could only regex the human-readable message ().
+const NUMERIC_ERROR_FIELDS = ['retryAfterMs', 'burst', 'windowMs'];
+
+/**
+ * Flatten an Error into the wire envelope's `error` payload.
+ *
+ * @param {unknown} err
+ * @returns {{ ok: false, error: { name: string, message: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number } }}
+ */
+export function serializeError(err) {
+    const any = /** @type {any} */ (err);
+    const name = any && any.name ? String(any.name) : 'Error';
+    const message = any && any.message ? String(any.message) : String(any);
+    /** @type {any} */
+    const error = { name, message };
+    if (any && typeof any.code === 'string' && any.code) error.code = any.code;
+    for (const field of NUMERIC_ERROR_FIELDS) {
+        const value = any ? any[field] : undefined;
+        if (typeof value === 'number' && Number.isFinite(value)) error[field] = value;
+    }
+    return { ok: false, error };
+}
+
+/**
+ * Rebuild a throwable Error from an envelope's `error` payload, keeping the
+ * structured fields serializeError preserved. Every shell that unwraps the
+ * envelope uses this, so `code` survives the round trip in all of them rather
+ * than in whichever one was patched last.
+ *
+ * @param {{ name?: string, message?: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number } | undefined} payload
+ * @param {string} [fallbackMessage]
+ * @returns {Error}
+ */
+export function hydrateEnvelopeError(payload, fallbackMessage = 'unknown error') {
+    const err = /** @type {any} */ (new Error(payload?.message || fallbackMessage));
+    err.name = payload?.name || 'Error';
+    if (typeof payload?.code === 'string' && payload.code) err.code = payload.code;
+    for (const field of NUMERIC_ERROR_FIELDS) {
+        const value = payload ? /** @type {any} */ (payload)[field] : undefined;
+        if (typeof value === 'number' && Number.isFinite(value)) err[field] = value;
+    }
+    return err;
 }

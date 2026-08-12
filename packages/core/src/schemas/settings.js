@@ -75,9 +75,16 @@ export function resolvePreflightPrivacy(settings) {
     return v === 'local' || v === 'full' ? v : PREFLIGHT_PRIVACY_DEFAULT;
 }
 
-// §17.7.1 / G028: clipboard auto-clear bounds. The Settings Privacy
-// panel exposes this as a number input; ViewPrivateKey reads it via
-// useSettings to pick the timer. 0 disables auto-clear.
+// §17.7.1 / G028: clipboard auto-clear bounds. 0 disables auto-clear.
+//
+// DORMANT since  (operator ruling a, 2026-08-11). ViewPrivateKey
+// was the only reader and  made key material uncopyable, so the
+// Settings Privacy control that wrote this value was removed rather than
+// left standing as a promise nothing kept. The field and these bounds
+// stay: stored settings already carry the key, so deleting it would be a
+// migration with no user-visible gain, and a copy path that earns the
+// protection back can read it again without a schema bump. Nothing in
+// the app reads `privacy.clipboardAutoClearSeconds` today.
 export const CLIPBOARD_AUTO_CLEAR_MIN = 0;
 export const CLIPBOARD_AUTO_CLEAR_MAX = 600;
 export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;

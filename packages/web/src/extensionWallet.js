@@ -124,21 +124,30 @@ export function isExtensionWalletEnabled() {
 /**
  * Perform the §43.2 connect handshake and, on success, persist the
  * preference so the choice survives a reload. Throws if the provider is
- * absent or the user rejects the connect prompt (the caller surfaces
- * that on the banner without persisting anything).
+ * absent; a refusal by the wallet comes back as a `ConnectResult` with
+ * `ok: false` and nothing is persisted.
+ *
+ * A REFUSED connect must not be recorded as an accepted one. This function
+ * used to persist on any resolve, which was right only while the provider
+ * signalled every failure by rejecting. bridge-spec declares connect as
+ * returning `ConnectSuccess | BridgeErrorResult`, so a rejected prompt, a
+ * blocked origin and a version mismatch all RESOLVE () - and each
+ * one flipped the web app into extension-wallet mode against a session that
+ * does not exist, leaving every forwarded call to fail until the user found
+ * "switch back". The `ok` flag is the gate now.
  *
  * @param {object} [opts] connect options forwarded to the provider, named as
  *   bridge-spec's ConnectOpts declares them: `{ requestedChains,
  *   requiredBridgeVersion, appName, appIcon }`. This doc said `{ chains,
  *   accounts }`, which documented the handler's mistake rather than the
  *   contract (); the handler still accepts the legacy names.
- * @returns {Promise<any>} the provider's connect result
+ * @returns {Promise<any>} the provider's ConnectResult, success or failure
  */
 export async function connectExtensionWallet(opts = {}) {
     const provider = getExtensionProvider();
     if (!provider) throw new ExtensionUnavailableError('connect');
     const result = await provider.connect(opts);
-    writeExtensionWalletPreference(true);
+    if (result?.ok === true) writeExtensionWalletPreference(true);
     return result;
 }
 

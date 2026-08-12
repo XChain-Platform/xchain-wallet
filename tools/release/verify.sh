@@ -262,13 +262,36 @@ if xr_has_header "$MANIFEST"; then
     fi
 
     if [[ -n "$EXPECT_TAG" ]]; then
-        if [[ "$M_TAG" != "$EXPECT_TAG" ]]; then
+        # A RE-SIGNATURE OF THE SAME RELEASE ANCHORS TO IT , and
+        # the direction is the whole of the accommodation. `v0.336.0-resign1`
+        # is `v0.336.0`'s tree with the release tooling corrected and nothing
+        # else, cut because the gate that writes `dev-mock-gate: enforced`
+        # comes from the TAG and so could not be fixed for a release already
+        # tagged. Its manifest is republished as RELEASE_HASHES/v0.336.0.txt,
+        # the name every existing link already has, so the filename anchor
+        # has to accept it or the correction cannot be published at all.
+        #
+        # ONE WAY ONLY: a re-signature satisfies a request for the release,
+        # and the superseded original does NOT satisfy a request for the
+        # re-signature - otherwise fetching the corrected manifest by name
+        # and being handed the false one would verify.
+        RESIGN_OF=""
+        if [[ "$M_TAG" != "$EXPECT_TAG" && "$(xr_release_tag_of "$M_TAG")" == "$EXPECT_TAG" ]]; then
+            RESIGN_OF="$EXPECT_TAG"
+        elif [[ "$M_TAG" != "$EXPECT_TAG" ]]; then
             echo "verify.sh: manifest describes '$M_TAG' but you expected '$EXPECT_TAG'." >&2
             echo "  A manifest from another release will hash-check and" >&2
             echo "  signature-check perfectly. That is what this test is for." >&2
             exit 1
         fi
-        echo "verify.sh: header anchor ok - manifest describes $M_TAG ($M_COMMIT)" >&2
+        if [[ -n "$RESIGN_OF" ]]; then
+            echo "verify.sh: header anchor ok - manifest describes $M_TAG ($M_COMMIT)," >&2
+            echo "  a RE-SIGNATURE of $RESIGN_OF: the same artifacts, signed again from a" >&2
+            echo "  tag whose release tooling was corrected. It supersedes the manifest" >&2
+            echo "  originally published under this name." >&2
+        else
+            echo "verify.sh: header anchor ok - manifest describes $M_TAG ($M_COMMIT)" >&2
+        fi
     elif [[ "$NO_SIG" -eq 1 ]]; then
         echo "verify.sh: WARNING - manifest describes '$M_TAG' and nothing anchors it." >&2
         echo "  Fetch it as RELEASE_HASHES/<tag>.txt, or pass --tag." >&2

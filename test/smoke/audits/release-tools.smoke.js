@@ -568,6 +568,28 @@ try {
         rmSync(src, { recursive: true, force: true });
     };
 
+    // An android container the dev-mock gate can open, for the third time
+    // this fixture has had to become more real . An `.aab` and an
+    // `.apk` are zips, and the Capacitor shell's web bundle sits inside at
+    // `assets/public/` in an APK and `base/assets/public/` in a bundle, so
+    // that is where the real-SDK literal goes. A file merely NAMED `.apk`
+    // now reads to that gate as an artifact it could not open - which is
+    // the right answer for a release and the wrong reason for a test to
+    // fail.
+    const realAndroid = (dir, name) => {
+        const src = mkdtempSync(join(work, 'android-'));
+        const payload = join(src, name.endsWith('.aab') ? join('base', 'assets', 'public')
+            : join('assets', 'public'));
+        mkdirSync(payload, { recursive: true });
+        writeFileSync(join(payload, 'index.js'),
+            'throw new Error("CONTRACT_LINT_FAILED");\n');
+        const r = spawnSync('zip', ['-qr', join(dir, name), '.'], { cwd: src, encoding: 'utf8' });
+        assert.ok(!r.error, `staged a real ${name}: ${r.error?.code === 'ENOENT'
+            ? "the 'zip' command is not installed on this machine" : r.error?.message}`);
+        assert.equal(r.status, 0, `staged a real ${name}: ${r.stderr}`);
+        rmSync(src, { recursive: true, force: true });
+    };
+
     const stage = (extra = [], omit = []) => {
         const dir = mkdtempSync(join(work, 'stage-'));
         for (const name of ARTIFACTS) {
@@ -579,6 +601,10 @@ try {
             }
             if (/mac.*\.zip$/.test(name)) {
                 realMacZip(dir, name);
+                continue;
+            }
+            if (/\.(aab|apk)$/.test(name)) {
+                realAndroid(dir, name);
                 continue;
             }
             writeFileSync(join(dir, name), signedBytes(name));

@@ -74,11 +74,26 @@ const sendTokenSrc = read('packages', 'core', 'src', 'flows', 'sendToken.js');
 assert.match(sendTokenSrc, /prebuiltPsbt:\s*opts\.prebuiltPsbt/, 'sendToken forwards prebuiltPsbt');
 const submitActionSrc = read('packages', 'core', 'src', 'flows', 'submitAction.js');
 assert.match(submitActionSrc, /prebuiltPsbt,/, 'submitAction forwards prebuiltPsbt to submitWithSigner');
-// §5.3.4: permanence must ride in the error NAME - the messaging envelope
-// carries only { name, message }, so a custom field would be dropped.
+// §5.3.4: permanence must ride in the error NAME. The messaging envelope
+// carries { name, message } plus a CLOSED allow-list of structured fields
+// (`code` and the three THROTTLED hints bridge-spec declares, ), so
+// anything outside that list - permanence included - is still dropped at the
+// boundary. Pinned as the allow-list rather than as "name+message only",
+// because the second form would go red the next time a declared field lands
+// while saying nothing about whether permanence still survives.
 assert.match(submitActionSrc, /err\.name\s*=\s*permanence === 'permanent'/, 'submitAction stamps permanence into the error name');
 const hostEnvelopeSrc = read('packages', 'extension', 'src', 'background', 'MessageHost.js');
-assert.match(hostEnvelopeSrc, /return \{ ok: false, error: \{ name, message \} \}/, 'boundary envelope is still name+message only (permanence must not rely on custom fields)');
+assert.match(
+    hostEnvelopeSrc,
+    /const NUMERIC_ERROR_FIELDS = \['retryAfterMs', 'burst', 'windowMs'\];/,
+    'the envelope\'s structured fields are a closed, named list',
+);
+assert.match(hostEnvelopeSrc, /const error = \{ name, message \};/, 'the envelope starts from name+message');
+assert.doesNotMatch(
+    hostEnvelopeSrc,
+    /permanence/,
+    'permanence is NOT an envelope field (it must keep riding in the error name)',
+);
 const permanenceSrc = read('packages', 'core', 'src', 'flows', 'broadcastPermanence.js');
 assert.match(permanenceSrc, /export function broadcastFailureKindFromError/, 'permanence is recoverable from a boundary-crossed error');
 

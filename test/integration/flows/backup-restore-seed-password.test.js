@@ -53,6 +53,10 @@ import {
     BackupSeedPasswordError,
 } from '../../../packages/core/src/flows/backupFile.js';
 import {
+    RESTORE_PASSWORD_LABELS,
+    restoreFailureMessage,
+} from '../../../packages/core/src/flows/restorePasswordCopy.js';
+import {
     encryptWalletSeed,
     decryptWalletSeed,
 } from '../../../packages/core/src/crypto/walletBlob.js';
@@ -297,6 +301,11 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
     it('refuses to restore key material with no device password to re-seal under', async () => {
         // Omitting it is how a caller silently reintroduces the defect, so it is
         // an error rather than a skip.
+        //
+        // : the refusal names the FIELD, not the parameter. This used to
+        // assert `/devicePassword is required/`, which is a string that only
+        // means something to whoever wrote the call site; the user is looking
+        // at three password boxes and needs to know which one is empty.
         const target = makeVault();
         await expect(importBackupFile({
             vault: target,
@@ -304,8 +313,54 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
             password: BACKUP_PASSWORD,
             walletPassword: ORIGINAL_PASSWORD,
             mode: 'add',
-        })).rejects.toThrow(/devicePassword is required/);
+        })).rejects.toThrow(new RegExp(`"${RESTORE_PASSWORD_LABELS.device.fresh}" field is required`));
         expect(await target.wallets.list()).toHaveLength(0);
+    });
+
+    it('a password typed into the WRONG BOX is told which box wants it ', async () => {
+        // The reported failure, exactly: the user puts THIS DEVICE's password
+        // into the backup-file field. It is a password they really do use, so
+        // "wrong password" reads as the app being broken rather than as a
+        // mix-up, and the mix-up is the likely one on a screen with three
+        // password boxes.
+        const caught = await importBackupFile({
+            vault: makeVault(),
+            fileContent: exported,
+            password: DEVICE_PASSWORD,          // the wrong ROLE, not a typo
+            walletPassword: ORIGINAL_PASSWORD,
+            devicePassword: DEVICE_PASSWORD,
+            mode: 'add',
+        }).then(() => null, (e) => e);
+
+        expect(caught, 'the wrong file password restored anyway').toBeTruthy();
+        expect(caught.message,
+            'the restore rejected a correct-but-misfiled password without naming which of the '
+            + 'three passwords it wanted, which is the whole of ')
+            .toContain('backup file');
+        expect(restoreFailureMessage(caught, { mode: 'add' }))
+            .toContain(RESTORE_PASSWORD_LABELS.file);
+        // And it does NOT blame the field that was right.
+        expect(restoreFailureMessage(caught, { mode: 'add' }))
+            .not.toContain(`The "${RESTORE_PASSWORD_LABELS.wallet}" field wants`);
+    });
+
+    it('a wrong WALLET password blames the wallet field, not the file one', async () => {
+        // The near-miss that makes ordering matter: this failure mentions the
+        // backup file too (it says the file opened), so a classifier that looks
+        // for "backup file" first sends the user to retype a password that was
+        // correct.
+        const caught = await importBackupFile({
+            vault: makeVault(),
+            fileContent: exported,
+            password: BACKUP_PASSWORD,
+            walletPassword: 'not-the-wallets-password',
+            devicePassword: DEVICE_PASSWORD,
+            mode: 'add',
+        }).then(() => null, (e) => e);
+
+        const copy = restoreFailureMessage(caught, { mode: 'add' });
+        expect(copy).toContain(RESTORE_PASSWORD_LABELS.wallet);
+        expect(copy).not.toContain(`The "${RESTORE_PASSWORD_LABELS.file}" field wants`);
     });
 
     it('the backup-file password never opens the seed either', async () => {

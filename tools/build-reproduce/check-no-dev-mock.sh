@@ -106,10 +106,12 @@ Usage:
 
 Options:
   --artifacts <dir>  Scan the shipped bundles inside a release staging
-                     directory (the web tarball and the extension zip)
-                     instead of the repo's dist/ trees. This is what
-                     sign.sh uses: the signing tree is a pristine clone
-                     and has no dist/ to scan.
+                     directory instead of the repo's dist/ trees: the web
+                     tarball, the extension zip, a desktop .deb or mac
+                     zip, and the Android .aab/.apk (their Capacitor web
+                     payload). This is what sign.sh uses: the signing tree
+                     is a pristine clone and has no dist/ to scan, and a
+                     lane-scoped staging set holds only one lane's files.
   --help             Show this text.
 
 Exits 0 only if at least one bundle was actually scanned and was clean.
@@ -333,6 +335,85 @@ if [ -n "$ARTIFACT_DIR" ]; then
         SCAN_TARGETS+=("$UNPACK_ROOT/desktop-mac|SDKWalletError,MULTISIG_DERIVE_FAILED|$(basename "$mac_zip")|positive-only")
     fi
 
+    # THE ANDROID LANE, WHICH THIS GATE COULD NOT READ AT ALL .
+    #
+    # Measured 2026-08-07 with the real `.aab`/`.apk` staged alone: the
+    # loop above collected zero targets, `scanned` stayed 0, and the gate
+    # refused with "it scanned NOTHING ... holds no
+    # xchain-wallet-web-v*.tar.gz and no xchain-wallet-extension-v*.zip".
+    # `sign.sh` treats that as fatal, correctly - so per-lane signing and
+    # this gate were not compatible for the one lane that has actually
+    # shipped, and the escape (`SIGN_SKIP_DEV_MOCK_CHECK=1`, header
+    # `SKIPPED`) is refused by the desktop updater by design. Two correct
+    # pieces with no seam between them, which is the shape of defect that
+    # ends with a gate being switched off.
+    #
+    # An `.aab` and an `.apk` are both ZIP containers, and the Capacitor
+    # shell's executable web bundle sits inside one as ORDINARY FILES:
+    # `assets/public/` in an APK, `base/assets/public/` in an app bundle
+    # (`packages/mobile/capacitor.config.json` declares `webDir: www`, and
+    # `cap sync` copies that tree into the Android project's assets). So
+    # this lane gets the FULL marker scan rather than the installer's
+    # positive-only treatment: that payload is the same tree-shaken web
+    # build `packages/web/dist` produces, where the mock IS eliminated, so
+    # a marker found in it is proof of a leak exactly as it is for the web
+    # tarball. That is the whole reason the android lane is worth scanning
+    # at all rather than waved through.
+    #
+    # ONLY THE WEB PAYLOAD IS EXTRACTED, deliberately: `classes.dex` and
+    # `resources.arsc` are compiled Java and compiled resources, they are
+    # not a bundle this gate has any marker set for, and unpacking them
+    # buys nothing but minutes and false-positive surface.
+    #
+    # EVERY android artifact in the set is opened, not one of them. The
+    # ceremony derives the universal APK from the AAB it signs, so those
+    # two carry one build - but `xchain-wallet-v*-full.apk` is a SECOND
+    # build at the `default` profile , and "derived from" is a
+    # claim about a build, while the staged bytes are here to be read.
+    while IFS= read -r android_artifact; do
+        [ -n "$android_artifact" ] || continue
+        android_name="$(basename "$android_artifact")"
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo "FAIL cannot read $android_name: 'unzip' is not installed"
+            echo "  This is an ENVIRONMENT failure, not an artifact failure. The"
+            echo "  archive was never opened, so nothing is known about it either"
+            echo "  way. Install unzip (Debian/Ubuntu: apt-get install unzip),"
+            echo "  then run this again."
+            echo
+            echo "Pre-release gate FAILED - a required tool is missing."
+            exit 1
+        fi
+        android_dest="$UNPACK_ROOT/android/$android_name"
+        mkdir -p "$android_dest"
+        # Readability and content are two different verdicts and the
+        # operator acts differently on each, so they are asked separately:
+        # a container that will not open at all is a broken artifact, while
+        # one that opens and holds no web payload is an artifact built by
+        # something other than the Capacitor shell. Both are hard failures;
+        # neither may read as a clean scan.
+        if ! unzip -qq -l "$android_artifact" >/dev/null 2>&1; then
+            echo "FAIL $android_name is not a readable zip archive (an .aab and an"
+            echo "     .apk are both zip containers)"
+            echo
+            echo "Pre-release gate FAILED - a staged release artifact could not be unpacked."
+            exit 1
+        fi
+        # `|| true`: unzip exits 11 when no member matches, which is the
+        # empty-payload case judged by result on the next line.
+        unzip -q "$android_artifact" 'assets/public/*' 'base/assets/public/*' \
+            -d "$android_dest" >/dev/null 2>&1 || true
+        if [ -z "$(find "$android_dest" -type f -print -quit 2>/dev/null)" ]; then
+            echo "FAIL $android_name opened, but holds no Capacitor web payload"
+            echo "     (no assets/public/ in the APK, no base/assets/public/ in the"
+            echo "     bundle). The shipped web bundle is what this gate reads on"
+            echo "     this lane, so there is nothing here to say anything about."
+            echo
+            echo "Pre-release gate FAILED - a staged release artifact carries no scannable bundle."
+            exit 1
+        fi
+        SCAN_TARGETS+=("$android_dest|CONTRACT_LINT_FAILED,ENCODER_NOT_CONFIGURED|$android_name")
+    done < <(find "$ARTIFACT_DIR" -maxdepth 1 \( -name '*.aab' -o -name '*.apk' \) | sort)
+
     # The Windows half is a stated gap rather than a silent one. An NSIS
     # `.exe` is an installer archive that needs 7-Zip to open, which the
     # release machine does not have, so a windows-only staging set still
@@ -471,8 +552,10 @@ if [ "$scanned" -eq 0 ]; then
     echo "A gate that could not run has not passed; sign.sh states that rule about"
     echo "a missing script and it holds identically for an empty scan."
     if [ -n "$ARTIFACT_DIR" ]; then
-        echo "Fix: '$ARTIFACT_DIR' holds no xchain-wallet-web-v*.tar.gz and no"
-        echo "xchain-wallet-extension-v*.zip. Stage the release artifacts first."
+        echo "Fix: '$ARTIFACT_DIR' holds nothing this gate can open - no"
+        echo "xchain-wallet-web-v*.tar.gz, no xchain-wallet-extension-v*.zip, no"
+        echo ".deb and no *-mac.zip, and no .aab or .apk. Stage the release"
+        echo "artifacts first."
     else
         echo "Fix: build the shells first, or pass --artifacts <release staging dir>"
         echo "to scan the shipped bundles instead. A pristine clone has no dist/,"

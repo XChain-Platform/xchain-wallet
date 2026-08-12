@@ -165,6 +165,42 @@ assert.strictEqual(v.length, 1, 'flags an aria-valuetext literal');
 v = findViolations(jsxElement([jsxAttr('title', jsxExpr(template('Send to ', '')))]));
 assert.strictEqual(v.length, 1, 'attribute template reported once, not twice');
 
+// 15. A *literal* attribute container is the case that actually tripled:
+// the JSXAttribute branch reported it, re-entering the container let the
+// JSX-content branch report it again, and the generic recursion made a
+// third. One user-visible string is one violation.
+v = findViolations(jsxElement([jsxAttr('title', jsxExpr(literal('Send to Alice')))]));
+assert.strictEqual(v.length, 1, 'attribute literal container reported once, not three times');
+assert.match(v[0].message, /title/, 'the surviving report is the attribute-shaped one');
+
+// 16. Same shape on a technical attribute stays silent. Re-entering the
+// container used to route className={'btn'} through the JSX-content
+// branch, which never consults the attribute name, so the helper flagged
+// copy the shipping create() correctly ignores.
+v = findViolations(jsxElement([jsxAttr('className', jsxExpr(literal('btn btn--primary')))]));
+assert.strictEqual(v.length, 0, 'technical attribute container is not flagged');
+
+// 17. Skipping the container level must not blind the walk to JSX nested
+// inside an attribute value, e.g. a render prop.
+v = findViolations(jsxElement([
+    jsxAttr('renderFooter', jsxExpr(jsxElement([jsxText('Nested copy')]))),
+]));
+assert.strictEqual(v.length, 1, 'still descends into JSX inside an attribute expression');
+assert.match(v[0].message, /Nested copy/);
+
+// ─── Export surface ───────────────────────────────────────────────
+//
+// The rule once exported isTechnicalAttr plus a TECHNICAL_ATTR_NAMES
+// deny-list that nothing called: both sides of the rule decide by
+// USER_FACING_ATTRS membership, so the second list could only drift.
+// Pin the surface so a dead export has to be justified here first.
+const EXPECTED_EXPORTS = [
+    'USER_FACING_ATTRS', 'create', 'default', 'findViolations',
+    'isTrivialString', 'meta', 'shouldSkipFile', 'templateCopy',
+];
+assert.deepStrictEqual(Object.keys(rule).sort(), [...EXPECTED_EXPORTS].sort(),
+    'rule exports exactly the symbols that have callers');
+
 // ─── Plugin export shape ──────────────────────────────────────────
 
 assert.ok(plugin && typeof plugin === 'object', 'plugin default export is an object');

@@ -59,6 +59,23 @@ assert.ok(torGate > 0 && torRow > torGate && torRow - torGate < 600,
 assert.ok(!/Route SDK requests through a local Tor SOCKS5 proxy when available/.test(src),
     'the old hint is gone: it promised routing that did not exist');
 
+//  (operator ruling a): the shells that cannot route do not simply
+// lose the row, they carry an explicit not-available state. Both halves
+// are asserted here because dropping either one is a regression in a
+// different direction: without the negative branch the feature reads as
+// absent, and without `disabled`/`checked={false}` the row would be an
+// operable switch again on a shell that proxies nothing.
+assert.match(src, /\{!shellCapabilities\(\)\.socksProxy && \(/,
+    'the non-proxying shells render an explicit unavailable row');
+const unavailGate = src.indexOf('!shellCapabilities().socksProxy && (');
+const unavailBlock = src.slice(unavailGate, unavailGate + 700);
+assert.match(unavailBlock, /Not available on this platform/,
+    'the unavailable row names the platform limit in the hint');
+assert.match(unavailBlock, /checked=\{false\}/,
+    'the unavailable row never draws a switch in the on position');
+assert.match(unavailBlock, /\bdisabled\b/,
+    'the unavailable row cannot be toggled');
+
 // Primitives module exports what the section consumes.
 const primSrc = readFileSync(primitivesPath, 'utf8');
 for (const name of ['ROW', 'STACK', 'ROW_HINT', 'ToggleRow', 'Status']) {

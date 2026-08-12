@@ -33,6 +33,8 @@ export {
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
     isBridgeVersionSupported,
+    BRIDGE_ERROR_CODES,
+    isBridgeErrorCode,
     SIGN_IN_CHALLENGE_VERSION,
     SIGN_IN_DEFAULT_EXPIRY_MS,
     SIGN_IN_CHALLENGE_PREFIX,
@@ -134,6 +136,11 @@ export interface SitePermissions {
 
 // Stable string codes returned in failure results. Wallets MAY include a
 // human-readable `message`; dApps SHOULD branch on `error` only.
+//
+// This union and the `BRIDGE_ERROR_CODES` runtime array in runtime.js are one
+// contract in two syntaxes. Edit them together: a wallet can only check what
+// it puts on the wire against the runtime copy, and for a while it checked
+// nothing at all and shipped twelve codes that are not here ().
 export type BridgeErrorCode =
     | 'USER_REJECTED'
     | 'NOT_CONNECTED'
@@ -254,8 +261,16 @@ export interface SignActionParams<TParams = Record<string, unknown>> {
 export interface SignActionSuccess {
     ok: true;
     txid: string;
-    actionIndex: number;
     chainId: ChainId;
+    // The action's index in the XChain ledger. OPTIONAL, because a wallet
+    // resolves this result the moment the transaction is BROADCAST and the
+    // index is assigned later, by the indexer, once a block carries the
+    // transaction. Declared required, it forced every wallet into one of two
+    // lies: block the call until a confirmation arrives, or invent a number
+    // (). dApps that need the index look it up from `txid` against an
+    // explorer once the transaction confirms; a wallet that already knows it
+    // (a resubmission of an indexed action, say) still sends it.
+    actionIndex?: number;
 }
 
 // Specific UNSUPPORTED_ACTION shape - includes the current supported-action

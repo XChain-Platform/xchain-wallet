@@ -49,6 +49,7 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // at build time. Candidate for a lower-level package extraction once a
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
@@ -1122,9 +1123,9 @@ export async function sendMessage(type, request) {
     }
     const response = await host.handle({ type, request });
     if (response.ok) return response.result;
-    throw Object.assign(new Error(response.error.message), {
-        name: response.error.name,
-    });
+    // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding
+    // with name+message alone dropped them ().
+    throw hydrateEnvelopeError(response.error);
 }
 
 /** Test hook: expose module state without touching real IDB/localStorage. */

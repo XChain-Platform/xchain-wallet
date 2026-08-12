@@ -167,6 +167,16 @@ jobs:
         env:
           XCHAIN_REQUIRE_SIBLINGS: "1"
         run: pnpm exec vitest run --config test/vitest/integration.config.js test/integration/hd/wallet-sdk-derivation-parity.test.js
+      # Wallet<->hub chain-registry guard . No hub checkout here, and
+      # that is the point: --check compares bin/chain-registry.sync.json against
+      # the bundled descriptors, so a descriptor fix that was never mirrored into
+      # xchain-hub/src/chain-registry.json fails on THIS repo's push. Before this,
+      # the only comparison lived in a hub test that skips without the wallet
+      # sibling, and a corrected encoder port sat superseded on origin for both
+      # repos with every gate green. test/unit/chainRegistrySync.test.js holds the
+      # same assertion inside the `test` job; this step names it in the output.
+      - name: Wallet<->hub chain-registry snapshot guard
+        run: node bin/sync-chain-registry.mjs --check
 
   # Build the shipped shells, then run the gates that can ONLY be checked against a
   # real build artifact. None of this can live in the `test` job: it has no dist/.

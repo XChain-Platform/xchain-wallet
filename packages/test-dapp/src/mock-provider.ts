@@ -263,11 +263,14 @@ export class MockXChainProvider implements XChainProvider {
                 message: `Action ${params.action} not yet surfaced`,
             };
         }
+        // No actionIndex: a real wallet resolves signAction at BROADCAST and
+        // the index is assigned later by the indexer, so the field is optional
+        // and a mock that always sends one teaches dApp authors to depend on
+        // something the production bridge cannot give them ().
         return {
             ok: true,
             chainId: params.chainId,
             txid: `mock-txid-${Date.now().toString(16)}`,
-            actionIndex: 0,
         };
     }
 

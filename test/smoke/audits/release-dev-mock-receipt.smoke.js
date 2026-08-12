@@ -54,6 +54,7 @@ const git = (repo, args) => execFileSync('git', ['-C', repo, ...args],
 // script is a stub, because what is under test is sign.sh's reading of the
 // gate's answer rather than the real gate's own behaviour (release-gates
 // .smoke.js owns that).
+const REAL_GATE = 'the real one';
 const makeRepo = (gateBody) => {
     const repo = mkdtempSync(join(work, 'repo-'));
     mkdirSync(join(repo, 'tools', 'release'), { recursive: true });
@@ -64,7 +65,11 @@ const makeRepo = (gateBody) => {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     const gate = join(repo, 'tools/build-reproduce/check-no-dev-mock.sh');
-    writeFileSync(gate, gateBody);
+    if (gateBody === REAL_GATE) {
+        cpSync(join(root, 'tools/build-reproduce/check-no-dev-mock.sh'), gate);
+    } else {
+        writeFileSync(gate, gateBody);
+    }
     chmodSync(gate, 0o755);
     git(repo, ['init', '-q', '.']);
     git(repo, ['add', '-A']);
@@ -93,10 +98,10 @@ const stage = () => {
 // refusal comes BEFORE the dev-mock gate: without it every case here would
 // stop for the wrong reason and assert nothing. Nothing is ever signed - a
 // run that gets that far fails at gpg, later than anything asserted below.
-const runSign = (repo, extraEnv = {}) => {
+const runSign = (repo, extraEnv = {}, { input = null, args = [] } = {}) => {
     try {
         const out = execFileSync('bash', [SIGN, '--tag', TAG,
-            '--repo', repo, '--input', stage()], {
+            '--repo', repo, '--input', input || stage(), ...args], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'pipe'],
             env: {
@@ -237,7 +242,44 @@ const RECEIPT_REFUSAL = 'exited 0 without saying it read anything';
         + 'can satisfy sign.sh and no release can be signed at all.');
 }
 
+// --- 7. The lane that HAS shipped can produce a receipt at all -----------
+//
+// . Cases 1-6 hold sign.sh to the receipt; this one holds the pair
+// together for the android lane, driving the REAL gate out of the repo
+// fixture against an android-only staging set - the only shape
+// `sign.sh --lane android` can ever be given, because inside a lane scope
+// the artifact-set gate calls every other lane's file undeclared.
+//
+// Measured 2026-08-07, before the gate learned to open an `.aab`/`.apk`:
+// it collected no targets from that set, refused with "it scanned
+// NOTHING", and sign.sh stopped there. So the receipt requirement and the
+// lane scope were jointly unsatisfiable for the one lane that has
+// shipped, and the documented way out (SIGN_SKIP_DEV_MOCK_CHECK=1, header
+// `SKIPPED`) is refused by the desktop updater by design. A gate nobody
+// can satisfy is a gate somebody switches off.
+{
+    const repo = makeRepo(REAL_GATE);
+    const androidStage = mkdtempSync(join(work, 'android-stage-'));
+    const mk = join(androidStage, 'mk');
+    mkdirSync(join(mk, 'assets', 'public'), { recursive: true });
+    writeFileSync(join(mk, 'assets', 'public', 'index.js'),
+        'const e = "CONTRACT_LINT_FAILED";\n');
+    execFileSync('zip', ['-qr', join(androidStage, `xchain-wallet-${TAG}.apk`), '.'],
+        { cwd: mk, stdio: ['ignore', 'pipe', 'pipe'] });
+    rmSync(mk, { recursive: true, force: true });
+
+    const r = runSign(repo, {}, { input: androidStage, args: ['--lane', 'android'] });
+    assert.doesNotMatch(r.out, new RegExp(RECEIPT_REFUSAL),
+        'sign.sh refused an android-only staging set at the receipt check. The gate can '
+        + 'open an .apk now; if this fires, either it stopped or the receipt line moved, '
+        + 'and either way the SHIPPED lane cannot be signed:\n' + r.out);
+    assert.match(r.out, /OK - 1 bundle\(s\) scanned/,
+        'the receipt has to come from the real gate reading the real container, not from '
+        + `a skip:\n${r.out}`);
+}
+
 rmSync(work, { recursive: true, force: true });
 
 console.log('OK  release dev-mock receipt: sign.sh writes `enforced` only for a gate that read '
-    + 'the staged bundles (6 cases, --repo and the invoking checkout being different trees)');
+    + 'the staged bundles (7 cases, --repo and the invoking checkout being different trees, '
+    + 'including an android-only lane scope end to end)');

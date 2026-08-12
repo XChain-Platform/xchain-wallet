@@ -98,13 +98,20 @@ assert.doesNotMatch(
     /isBridgeVersionSupported\(req\.bridgeVersion\)/,
     'the legacy-only version read is gone',
 );
-// connect's two return statements both include supportedVersions, and both
-// report the WALLET's version: requiredBridgeVersion is a range, so echoing the
+// connect's two return paths (existing grant + fresh grant) now build their
+// answer through ONE ConnectSuccess builder, so version + supportedVersions
+// cannot diverge between them by construction (). Both still report
+// the WALLET's version: requiredBridgeVersion is a range, so echoing the
 // request back would report a range where a version is declared.
-const connectReturns = handlersSrc.match(/version: BRIDGE_SPEC_VERSION,\s*\n\s*supportedVersions:/g) || [];
+const connectReturns = handlersSrc.match(/return connectSuccess\(/g) || [];
 assert.equal(
     connectReturns.length, 2,
-    'both connect return paths (existing + new) carry supportedVersions',
+    'both connect return paths (existing + new) build the ConnectSuccess',
+);
+assert.match(
+    handlersSrc,
+    /function connectSuccess\([\s\S]+?version: BRIDGE_SPEC_VERSION,\s*\n\s*supportedVersions: \[\.\.\.BRIDGE_SUPPORTED_VERSIONS\],/,
+    'the shared builder carries the wallet version and supportedVersions',
 );
 // Old hardcoded '0.1.0' literal in version field should be gone.
 assert.doesNotMatch(

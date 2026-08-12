@@ -14,11 +14,27 @@ import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
+// : the three password fields, their hints, and the copy for every way
+// a restore can fail, all from one place so a message can never name a field
+// this screen does not show.
+import {
+    RESTORE_PASSWORD_INTRO,
+    RESTORE_PASSWORD_LABELS,
+    RESTORE_PASSWORD_HINTS,
+    restoreDeviceHint,
+    restoreDeviceLabel,
+    restoreFailureMessage,
+    restorePasswordRequiredMessage,
+} from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
+
+// The one restore error that IS about the file rather than a password, and so
+// the only one the Browse affordance belongs on.
+const NO_BACKUP_CONTENT_MESSAGE = 'Pick a backup file, paste its contents, or scan a backup pointer.';
 
 /**
  * Import an existing wallet via mnemonic. Accepts BIP39 (12/15/18/21/24
@@ -162,23 +178,22 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         if (busy) return;
         const usingPointer = backupPointer !== null;
         if (!usingPointer && backupContent.trim().length === 0) {
-            setError('Pick a backup file, paste its contents, or scan a backup pointer.');
+            setError(NO_BACKUP_CONTENT_MESSAGE);
             return;
         }
+        //  / . Checked here rather than only in core so the user
+        // is told which field is empty, BY THE NAME ON THAT FIELD, instead of
+        // reading a flow-level throw about a parameter they cannot see.
         if (backupPassword.length === 0) {
-            setError('Backup password is required.');
+            setError(restorePasswordRequiredMessage('file', mode));
             return;
         }
-        // . Both are checked here rather than only in core so the user
-        // is told which field is empty instead of reading a flow-level throw.
         if (backupWalletPassword.length === 0) {
-            setError("The backed-up wallet's own password is required.");
+            setError(restorePasswordRequiredMessage('wallet', mode));
             return;
         }
         if (backupDevicePassword.length === 0) {
-            setError(mode === 'add'
-                ? 'Your wallet-unlock password for this device is required.'
-                : 'Choose the password this device will unlock with.');
+            setError(restorePasswordRequiredMessage('device', mode));
             return;
         }
         const conflictArg = backupOverwrite ? 'overwrite' : 'error';
@@ -244,7 +259,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             }
             onImported();
         } catch (err) {
-            setError(err?.message || 'Failed to restore backup.');
+            // : a restore has three passwords in play, so "wrong
+            // password" is never an answer. Whatever came back, the screen
+            // says which of the three boxes it is talking about.
+            setError(restoreFailureMessage(err, { mode }));
             setBusy(false);
         }
     }
@@ -406,10 +424,13 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             ? (isFull
                                 ? (mode === 'add'
                                     ? 'Restore an encrypted backup as a new wallet alongside your existing one(s). The wallet record gets a fresh id at decode time so the two wallets don\'t collide.'
-                                    : 'Pick a `.xchain-wallet` file you exported from this app and enter the password you set when you created the backup.')
+                                    // : it used to say "the password",
+                                    // singular, one line above three password
+                                    // boxes.
+                                    : 'Pick a `.xchain-wallet` file you exported from this app, then fill in the three passwords a restore needs.')
                                 : (mode === 'add'
                                     ? 'Restore as a new wallet (won\'t replace your existing one).'
-                                    : 'Pick a backup file and enter its password.'))
+                                    : 'Pick a backup file, then fill in the three passwords below.'))
                             : (isFull
                                 ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
                                 : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
@@ -420,7 +441,12 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 <StatusMessage
                     variant="error"
                     recovery={
-                        lane === 'backup' && /backup file|paste/i.test(error)
+                        // : anchored on the "no file yet" message
+                        // itself. It used to fire on any error mentioning
+                        // "backup file", which now includes the wrong-password
+                        // copy - offering Browse to a user whose file is fine
+                        // sends them to fix the wrong thing.
+                        lane === 'backup' && error === NO_BACKUP_CONTENT_MESSAGE
                             ? { label: 'Browse', onAction: backupDrop.openFilePicker }
                             : undefined
                     }
@@ -505,10 +531,20 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     />
                         </>
                     )}
+                    {/*  / . The copy has to earn each of these:
+                        three password fields on one screen is exactly where
+                        users give up, and the reason they are all here is that
+                        the backup carries a sealed wallet, not a plain one. So
+                        the screen says that out loud BEFORE the three boxes: a
+                        user who does not know there are three roles reads the
+                        second and third fields as the app asking twice. */}
+                    <p className={styles.backupHint}>
+                        {RESTORE_PASSWORD_INTRO}
+                    </p>
                     <Input
                         type="password"
-                        label="Backup password"
-                        hint="The password you chose when you exported this backup (not your wallet-unlock password)."
+                        label={RESTORE_PASSWORD_LABELS.file}
+                        hint={RESTORE_PASSWORD_HINTS.file}
                         value={backupPassword}
                         onChange={(e) => {
                             setBackupPassword(e.target.value);
@@ -517,14 +553,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         autoComplete="off"
                         disabled={busy}
                     />
-                    {/* . The copy has to earn each of these: three
-                        password fields on one screen is exactly where users
-                        give up, and the reason they are all here is that the
-                        backup carries a sealed wallet, not a plain one. */}
                     <Input
                         type="password"
-                        label="Password of the wallet in this backup"
-                        hint="What you unlocked this wallet with on the device you backed it up from. The backup file holds the wallet still locked, and this is the only thing that opens it."
+                        label={RESTORE_PASSWORD_LABELS.wallet}
+                        hint={RESTORE_PASSWORD_HINTS.wallet}
                         value={backupWalletPassword}
                         onChange={(e) => {
                             setBackupWalletPassword(e.target.value);
@@ -535,10 +567,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     />
                     <Input
                         type="password"
-                        label={mode === 'add' ? 'Your password on this device' : 'Password for this device'}
-                        hint={mode === 'add'
-                            ? 'The password you already unlock this app with. The restored wallet is re-locked with it, so one password opens everything here.'
-                            : 'Pick the password this app will unlock with from now on. The restored wallet is re-locked with it.'}
+                        label={restoreDeviceLabel(mode)}
+                        hint={restoreDeviceHint(mode)}
                         value={backupDevicePassword}
                         onChange={(e) => {
                             setBackupDevicePassword(e.target.value);

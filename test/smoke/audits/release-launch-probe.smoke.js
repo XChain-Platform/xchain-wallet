@@ -583,10 +583,20 @@ if (process.platform === 'darwin') {
     // the call names xr_write_manifest, and an indexOf on the raw text
     // would fail against correct code (the same trap release-signature-
     // gate.smoke.js documents).
-    const lines = readFileSync(join(root, 'tools/release/sign.sh'), 'utf8').split('\n');
+    const signSrc = readFileSync(join(root, 'tools/release/sign.sh'), 'utf8');
+    const lines = signSrc.split('\n');
     const lineOf = (rx) => lines.findIndex((l) => rx.test(l));
-    const sigAt = lineOf(/^\s*node .*verify-signatures\.mjs/);
-    const probeAt = lineOf(/^\s*node .*launch-probe\.mjs/);
+    // Both gates are resolved into a variable before they run , so
+    // a release older than a check runs this checkout's copy with the
+    // substitution named, instead of dying on `node` with MODULE_NOT_FOUND
+    // from a tag that never carried the file. The resolution is asserted
+    // beside the ordering: a `node "$LAUNCH_PROBE"` line whose variable
+    // nothing sets would satisfy the ordering checks and probe nothing.
+    assert.match(signSrc,
+        /LAUNCH_PROBE="\$\(gate_script tools\/release\/launch-probe\.mjs\)" \|\| exit 1/,
+        'sign.sh must resolve the launch probe through gate_script');
+    const sigAt = lineOf(/^\s*node "\$SIGNATURE_GATE"/);
+    const probeAt = lineOf(/^\s*node "\$LAUNCH_PROBE"/);
     const manifestAt = lineOf(/^\s*xr_write_manifest\s/);
 
     assert.ok(probeAt !== -1, 'sign.sh must invoke the launch probe');

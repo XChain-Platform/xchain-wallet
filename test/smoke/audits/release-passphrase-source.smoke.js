@@ -123,8 +123,16 @@ try {
     // before writing a manifest, and the two declaration files the gates read.
     const repo = join(work, 'repo');
     mkdirSync(join(repo, 'tools', 'release'), { recursive: true });
+    // `launch-probe.mjs` rides along for the same reason as
+    // `verify-signatures.mjs`: sign.sh runs it before writing a manifest,
+    // unconditionally. It was missing here, and this file was RED at HEAD
+    // because of it (measured 2026-08-12) - the probe landed in sign.sh
+    // without this list learning about it, and a fixture repo that cannot
+    // supply a gate fails every case in the file for a reason none of them
+    // is about.
     for (const f of ['lib.sh', 'sign.sh', 'expected-artifacts.txt', 'shipped-lanes.txt',
-        'update-info.mjs', 'verify-signatures.mjs', 'store-profile-status.txt']) {
+        'update-info.mjs', 'verify-signatures.mjs', 'launch-probe.mjs',
+        'store-profile-status.txt']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     git(repo, ['init', '-q', '.']);

@@ -424,7 +424,127 @@ try {
     rmSync(debStaged, { recursive: true, force: true });
 }
 
+// --- 6. An ANDROID-ONLY artifact set is scanned, not refused ----------
+//
+// , and it is the lane that has actually shipped. `sign.sh --lane
+// android` stages the `.aab` and the `.apk` and nothing else, because the
+// artifact-set gate calls every other lane's file undeclared inside a
+// lane scope. Measured 2026-08-07 against the real pair: artifact mode
+// collected zero targets, the gate refused with "it scanned NOTHING ...
+// holds no xchain-wallet-web-v*.tar.gz and no
+// xchain-wallet-extension-v*.zip", and sign.sh treats that as fatal - so
+// per-lane signing and this gate were not compatible for that lane at
+// all, while the only escape (SIGN_SKIP_DEV_MOCK_CHECK=1, header
+// `SKIPPED`) is refused by the desktop updater by design.
+//
+// Both containers are zips and the Capacitor shell's web bundle sits
+// inside as ordinary files - `assets/public/` in an APK,
+// `base/assets/public/` in an app bundle - so the fixtures are built at
+// those two paths deliberately: reading only one of them would leave
+// half the pair unscanned on the day someone stages both, which is every
+// day (the ceremony derives the APK from the AAB it signs).
+//
+// This lane gets the FULL marker scan rather than the installer's
+// positive-only treatment, and the leak case below is what holds that:
+// the payload is the same tree-shaken web build, where the mock IS
+// eliminated, so a marker in it is proof of a leak exactly as it is in
+// the web tarball.
+const androidZip = (dir, name, payloadPath, contents) => {
+    const stagingRoot = join(dir, 'mk');
+    const full = join(stagingRoot, payloadPath);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, contents);
+    const zipped = spawnSync('zip', ['-qr', join(dir, name), '.'],
+        { cwd: stagingRoot, encoding: 'utf8' });
+    assert.ok(!zipped.error && zipped.status === 0,
+        `staged ${name}: ${zipped.error?.code === 'ENOENT'
+            ? "the 'zip' command is not installed on this machine" : zipped.stderr}`);
+    rmSync(stagingRoot, { recursive: true, force: true });
+};
+
+const androidStaged = mkdtempSync(join(tmpdir(), 'xchain-devmock-android-'));
+try {
+    androidZip(androidStaged, 'xchain-wallet-v0.0.0.apk',
+        'assets/public/index.js', 'const e = "CONTRACT_LINT_FAILED";\n');
+    androidZip(androidStaged, 'xchain-wallet-android-v0.0.0.aab',
+        'base/assets/public/index.js', 'const e = "ENCODER_NOT_CONFIGURED";\n');
+
+    const androidScan = spawnSync('bash', [checkScript, '--artifacts', androidStaged], {
+        cwd: wsRoot,
+        encoding: 'utf8',
+    });
+    assert.equal(androidScan.status, 0,
+        'check-no-dev-mock.sh reads an android-only staging set instead of refusing it '
+        + 'for having nothing to scan. While it refused, the SHIPPED lane could not be '
+        + `signed at all; stdout: ${androidScan.stdout}\nstderr: ${androidScan.stderr}`);
+    assert.match(androidScan.stdout, /OK - 2 bundle\(s\) scanned/,
+        'BOTH android artifacts are opened and counted. The APK is derived from the AAB, '
+        + 'but "derived from" is a claim about a build and these are the staged bytes; '
+        + `xchain-wallet-v*-full.apk is a second build outright; stdout: ${androidScan.stdout}`);
+    assert.doesNotMatch(androidScan.stdout, /scanned NOTHING/,
+        'an android-only set is a scannable set');
+
+    // The marker half, which is why scanning this lane is worth anything.
+    const androidLeak = mkdtempSync(join(tmpdir(), 'xchain-devmock-android-leak-'));
+    try {
+        androidZip(androidLeak, 'xchain-wallet-v0.0.0.apk', 'assets/public/index.js',
+            'const e = "CONTRACT_LINT_FAILED"; // ... falling back to dev-mock SDK ...\n');
+        const leak = spawnSync('bash', [checkScript, '--artifacts', androidLeak], {
+            cwd: wsRoot, encoding: 'utf8',
+        });
+        assert.equal(leak.status, 1,
+            `an APK whose web payload carries a dev-mock marker must fail; stdout: ${leak.stdout}`);
+        assert.match(leak.stdout, /contains dev-SDK marker/,
+            'and name the marker rather than the unpack directory');
+        assert.match(leak.stdout, /xchain-wallet-v0\.0\.0\.apk/,
+            'and name the ARTIFACT: mid-ceremony, a path under $TMPDIR tells an operator '
+            + 'nothing about which file to rebuild');
+    } finally {
+        rmSync(androidLeak, { recursive: true, force: true });
+    }
+
+    // Opened, and empty of the one thing this gate reads. That is a
+    // different diagnosis from "will not open" and an operator acts
+    // differently on each, so they are two messages rather than one.
+    const androidHollow = mkdtempSync(join(tmpdir(), 'xchain-devmock-android-hollow-'));
+    try {
+        androidZip(androidHollow, 'xchain-wallet-v0.0.0.apk',
+            'lib/arm64-v8a/libfoo.so', 'not a web bundle\n');
+        const hollow = spawnSync('bash', [checkScript, '--artifacts', androidHollow], {
+            cwd: wsRoot, encoding: 'utf8',
+        });
+        assert.equal(hollow.status, 1,
+            'an APK with no Capacitor web payload must fail rather than count as a scan; '
+            + `stdout: ${hollow.stdout}`);
+        assert.match(hollow.stdout, /holds no Capacitor web payload/,
+            'and say what was missing, not that the archive was broken');
+        assert.doesNotMatch(hollow.stdout, /OK - /,
+            'and never print a receipt for it: sign.sh writes `enforced` on that line');
+    } finally {
+        rmSync(androidHollow, { recursive: true, force: true });
+    }
+
+    // A container that will not open at all is a hard failure, never an
+    // empty pass - the same rule the `.deb` case above holds.
+    const androidBad = mkdtempSync(join(tmpdir(), 'xchain-devmock-android-bad-'));
+    try {
+        writeFileSync(join(androidBad, 'xchain-wallet-android-v0.0.0.aab'), 'not a zip\n');
+        const bad = spawnSync('bash', [checkScript, '--artifacts', androidBad], {
+            cwd: wsRoot, encoding: 'utf8',
+        });
+        assert.equal(bad.status, 1,
+            `an unreadable .aab must fail the gate; stdout: ${bad.stdout}`);
+        assert.match(bad.stdout, /is not a readable zip archive/,
+            'and say the container could not be opened');
+    } finally {
+        rmSync(androidBad, { recursive: true, force: true });
+    }
+} finally {
+    rmSync(androidStaged, { recursive: true, force: true });
+}
+
 console.log(
     'OK: release-gates smoke (threat model §1–§7, reproducible-build README + check script, dry-run exit 0, '
-    + 'artifact mode reads a desktop-only staging set - .deb and mac zip - judges an installer on the real-SDK half and says so, and refuses one that will not open)',
+    + 'artifact mode reads a desktop-only staging set - .deb and mac zip - judges an installer on the real-SDK half and says so, '
+    + 'refuses one that will not open, and reads an android-only set: both containers, marker scan, empty payload, bad zip)',
 );

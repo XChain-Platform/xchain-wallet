@@ -58,6 +58,10 @@ import {
 import { randomUUID } from '../util/uuid.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import {
+    RESTORE_PASSWORD_LABELS,
+    restorePasswordRequiredMessage,
+} from './restorePasswordCopy.js';
 
 export const BACKUP_PAYLOAD_VERSION = 1;
 
@@ -82,10 +86,15 @@ export class BackupConflictError extends Error {
 export class BackupSeedPasswordError extends Error {
     /** @param {string} what   'seed' | 'imported key' */
     constructor(what) {
+        // : the copy names the field, not the function. The user is
+        // looking at three password boxes, and this one is about the middle
+        // one; a message that opens with `importBackupFile:` tells them which
+        // function failed and nothing about which box to fix.
         super(
-            `importBackupFile: the backup file opened, but the backed-up wallet's password did not `
-            + `open its ${what}. That is the password the wallet used on the device it was backed `
-            + `up from, not the password you set on this file.`,
+            `The backup file opened, but that is not the password of the wallet inside it (its `
+            + `${what} stayed locked). The "${RESTORE_PASSWORD_LABELS.wallet}" field wants the `
+            + `password you unlocked that wallet with on the device you backed it up from, not `
+            + `this file's password and not the password for this device.`,
         );
         this.name = 'BackupSeedPasswordError';
         this.what = what;
@@ -587,22 +596,22 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     );
     if (!hasSeed && sealedKeys.length === 0) return false;
 
+    // : each of these says which BOX on the restore screen is empty.
+    // They used to name the parameter (`walletPassword is required`), which is
+    // the one thing on screen the user cannot see.
     if (typeof walletPassword !== 'string' || walletPassword.length === 0) {
-        throw new Error(
-            'importBackupFile: walletPassword is required - the backed-up wallet carries sealed key '
-            + 'material and nothing can be restored without the password it was sealed under',
-        );
+        throw new Error(restorePasswordRequiredMessage('wallet'));
     }
     if (typeof devicePassword !== 'string' || devicePassword.length === 0) {
-        throw new Error(
-            'importBackupFile: devicePassword is required - the restored wallet has to be re-sealed '
-            + 'under the password this device unlocks with, or it will restore unsignable',
-        );
+        // Core does not know which shell mode is restoring, so it names the
+        // fresh-install label; the screen re-labels for 'add' when it renders
+        // the message (see `restoreFailureMessage`).
+        throw new Error(restorePasswordRequiredMessage('device'));
     }
     if (!wallet.kdfParams || typeof wallet.kdfParams !== 'object') {
         throw new Error(
-            'importBackupFile: the backed-up wallet record has no kdfParams, so its seal cannot be '
-            + 'opened at all',
+            'The wallet inside this backup file is missing the details needed to unlock it, so no '
+            + 'password can open it. Restore from a different backup file.',
         );
     }
 

@@ -243,7 +243,12 @@ describe('integration/shells/pre-host fresh-install backup restore ', () => {
     });
 
     it('a wrong wallet password leaves the install fresh and retryable', async () => {
-        await expect(restore({ walletPassword: 'wrong' })).rejects.toThrow(/backed-up wallet's password/);
+        // : the refusal names the FIELD on the restore screen ("Password
+        // of the wallet in this backup"), where it used to describe the role in
+        // prose ("the backed-up wallet's password"). Same claim, worded so the
+        // user can find the box.
+        await expect(restore({ walletPassword: 'wrong' }))
+            .rejects.toThrow(/Password of the wallet in this backup/);
 
         expect(metaBackend.peek(), 'meta was written despite the refusal, so the device now looks onboarded').toBeNull();
         expect(storageBackend.peek(), 'a vault blob was persisted despite the refusal').toBeNull();

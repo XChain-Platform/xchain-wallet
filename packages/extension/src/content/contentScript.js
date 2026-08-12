@@ -65,10 +65,16 @@
                 source: RESPONSE_SOURCE,
                 id: data.id,
                 ok: false,
+                // `code` is a published BridgeErrorCode, like every other
+                // failure the page can see. The relay's own refusals used to
+                // invent their own names (FORBIDDEN / RUNTIME_UNAVAILABLE /
+                // NO_RESPONSE), which a dApp branching on bridge-spec's union
+                // could not match (). The precise reason stays in
+                // `message`, which is where the spec puts human detail.
                 error: {
                     name: 'BridgeError',
-                    message: 'message type is not available to web pages',
-                    code: 'FORBIDDEN',
+                    message: 'FORBIDDEN: message type is not available to web pages',
+                    code: 'INVALID_PARAMS',
                 },
             }, window.location.origin);
             return;
@@ -90,7 +96,11 @@
                     source: RESPONSE_SOURCE,
                     id: data.id,
                     ok: false,
-                    error: { name: 'BridgeError', message: err.message, code: 'RUNTIME_UNAVAILABLE' },
+                    error: {
+                        name: 'BridgeError',
+                        message: `RUNTIME_UNAVAILABLE: ${err.message}`,
+                        code: 'INTERNAL_ERROR',
+                    },
                 }, window.location.origin);
                 return;
             }
@@ -99,7 +109,11 @@
                     source: RESPONSE_SOURCE,
                     id: data.id,
                     ok: false,
-                    error: { name: 'BridgeError', message: 'no response from background', code: 'NO_RESPONSE' },
+                    error: {
+                        name: 'BridgeError',
+                        message: 'NO_RESPONSE: no response from background',
+                        code: 'INTERNAL_ERROR',
+                    },
                 }, window.location.origin);
                 return;
             }

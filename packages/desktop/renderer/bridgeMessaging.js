@@ -23,6 +23,7 @@
 // the extension does for the same reason.
 
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
+import { hydrateEnvelopeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
 
 /**
  * @param {string} type
@@ -47,7 +48,11 @@ export async function sendMessage(type, request) {
         }
         return response.result;
     }
-    const err = new Error(response.error?.message || 'unknown error');
-    err.name = response.error?.name || 'Error';
-    throw err;
+    // : the MAIN process runs the SAME bridge handlers the extension
+    // service worker does (createDesktopMessageHost wraps createBackgroundHost,
+    // which loads bridge/handlers.js out of app.asar), so its envelope now
+    // carries `code` and the THROTTLED hints. Rebuilding the Error by hand here
+    // dropped all four on the desktop shell only - the one shell where the
+    // handlers and their consumer are in different processes and drift silently.
+    throw hydrateEnvelopeError(response.error);
 }

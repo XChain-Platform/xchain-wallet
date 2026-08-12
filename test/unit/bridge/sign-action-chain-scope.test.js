@@ -24,9 +24,14 @@ import { describe, it, expect } from 'vitest';
 import handlersSource from '../../../packages/extension/src/bridge/handlers.js?raw';
 
 // Capture each flow call's argument object and assert key order inside it.
+//
+// Anchored on the CALL, not on `return <flow>(`: the flow result is now shaped
+// into the bridge-spec SignActionResult before it leaves the handler
+// (), so the call site is `const submitted = await sendToken({…})`.
+// The guard is on the argument object's key order either way.
 function flowCallBody(flowName) {
     const m = handlersSource.match(
-        new RegExp(`return ${flowName}\\(\\{([\\s\\S]*?)\\}\\);`),
+        new RegExp(`\\b${flowName}\\(\\{([\\s\\S]*?)\\}\\);`),
     );
     expect(m, `${flowName}({...}) call site found`).not.toBeNull();
     return m[1];

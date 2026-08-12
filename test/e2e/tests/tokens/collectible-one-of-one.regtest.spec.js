@@ -13,39 +13,50 @@
 // chain has to keep rather than a field the chain merely records.
 //
 // WHAT THE TEMPLATE CLAIMS. `TEMPLATE_COMPOSERS.collectible` hard-wires
-// DECIMALS 0, MAX_SUPPLY 1, MINT_SUPPLY 1, LOCK_MAX_SUPPLY 1 and LOCK_MINT 1,
-// and puts the image URL in DESCRIPTION (the TIS IMAGE format). The user picks
-// a name and a picture; every number is the template's. So the claim is not
-// "a token exists" - it is "exactly one of these will ever exist, permanently".
+// DECIMALS 0, MAX_SUPPLY 1, MINT_SUPPLY 1, LOCK_MAX_SUPPLY 1, LOCK_MINT 1 and
+// LOCK_MINT_SUPPLY 1, and puts the image URL in DESCRIPTION (the TIS IMAGE
+// format). The user picks a name and a picture; every number is the
+// template's. So the claim is not "a token exists" - it is "exactly one of
+// these will ever exist, permanently".
 //
 // WHY A SUPPLY READ WOULD PROVE NOTHING. A token reading `max_supply: 1` with
-// `locks: {max_supply: true, mint: true}` proves the wallet WROTE five fields,
+// `locks: {max_supply: true, mint: true}` proves the wallet WROTE six fields,
 // not that anything is frozen - the exact mistake Session 39's genesis-locks
 // pair was built to avoid. Uniqueness here is enforced by THREE independent
 // rules in two different handlers, so the test asks the chain to refuse three
 // different attacks and reads WHICH rule refused each, at the same block:
 //
-//   ISSUE  MAX_SUPPLY=2   -> invalid: MAX_SUPPLY (locked)         issue.js line ~400
-//   MINT   AMOUNT=1       -> invalid: LOCK_MINT                   mint.js
-//   ISSUE  MINT_SUPPLY=1  -> invalid: MINT_SUPPLY exceeds MAX_SUPPLY   issue.js line ~388
+//   ISSUE  MAX_SUPPLY=2   -> invalid: MAX_SUPPLY (locked)     issue.js line ~400
+//   MINT   AMOUNT=1       -> invalid: LOCK_MINT               mint.js
+//   ISSUE  MINT_SUPPLY=1  -> invalid: MINT_SUPPLY (locked)    issue.js line ~367
 //
 // ...against a POSITIVE CONTROL in the same run: an edit to the DESCRIPTION,
 // which this template does NOT lock, must be `valid`. Without it, a token that
 // could not be edited at all - or a venue refusing everything for an unrelated
 // reason - would pass a test that only looked for refusals.
 //
-// ⚠️ THE THIRD REFUSAL IS THE ONE WORTH READING, AND IT NAMES A FLAG DAY RATHER
-// THAN A LOCK. The template does NOT set LOCK_MINT_SUPPLY, so nothing on the
-// token itself stops its owner re-ISSUEing the same tick with MINT_SUPPLY=1:
-// MINT_SUPPLY is credited on EVERY valid ISSUE, not just the first, and a
-// re-ISSUE that simply omits MAX_SUPPLY never trips the locked-cap check. What
-// stops it is `ISSUE_MINT_SUPPLY_CUMULATIVE_CAP`, a gated protocol change whose
-// own comment says it closes inflation "past a locked NFT edition size".
-// `protocol_changes.js` activates it on testnet/regtest AT GENESIS - which is
-// why this spec can assert it - and on MAINNET at 1786060800, i.e. 2026-08-07.
-// So on regtest this refusal is real today, and the mainnet window is read off
-// the config rather than driven here (this venue cannot turn the gate off).
-// Filed as .
+// ⚠️ THE THIRD REFUSAL IS THE ONE WORTH READING, AND WHICH RULE SPEAKS IS THE
+// WHOLE POINT. MINT_SUPPLY is credited on EVERY valid ISSUE, not just the
+// first, and a re-ISSUE that restates MAX_SUPPLY unchanged never trips the
+// locked-cap check, so LOCK_MAX_SUPPLY + LOCK_MINT leave the tick re-issuable.
+// TWO different rules refuse it, and they are not interchangeable:
+//
+//   `MINT_SUPPLY (locked)`             the TOKEN's own lock (LOCK_MINT_SUPPLY),
+//                                      checked at issue.js ~367, ungated, true
+//                                      on every chain from the moment the token
+//                                      exists.
+//   `MINT_SUPPLY exceeds MAX_SUPPLY`   `ISSUE_MINT_SUPPLY_CUMULATIVE_CAP`, a
+//                                      GATED protocol change at ~383: active at
+//                                      genesis on testnet/regtest, but on
+//                                      mainnet only from 1786924800
+//                                      (2026-08-17 00:00:00 UTC).
+//
+// Before  the template wrote no LOCK_MINT_SUPPLY and this venue answered
+// with the second message, which meant a MAINNET collectible minted before that
+// date was not actually a 1-of-1. The composer now writes the flag, the
+// token-level check runs FIRST, and this step asserts the first message
+// specifically: reading a bare refusal here would pass just as happily on a
+// chain where the only thing saying no is a calendar. Closed under .
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
@@ -260,6 +271,10 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(action.decimals), 'a collectible is divisible').toBe('0');
             expect(action.lock_max_supply, 'LOCK_MAX_SUPPLY was not written').toBeTruthy();
             expect(action.lock_mint, 'LOCK_MINT was not written').toBeTruthy();
+            expect(action.lock_mint_supply,
+                'LOCK_MINT_SUPPLY was not written, so the 1-of-1 is back to depending on the '
+                + 'cumulative-cap flag day ')
+                .toBeTruthy();
             expect(String(action.description),
                 'the image URL did not land in DESCRIPTION (the TIS IMAGE format)')
                 .toBe(IMAGE_URL);
@@ -284,36 +299,38 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toMatch(/LOCK_MINT/i);
         });
 
-        await test.step('and the re-ISSUE inflation path is closed - by the protocol GATE, not by the token', async () => {
-            // MINT_SUPPLY is credited on every valid ISSUE, and this re-ISSUE
-            // omits MAX_SUPPLY so the locked-cap check never fires. The
-            // template does not set LOCK_MINT_SUPPLY, so nothing on the token
-            // itself refuses this: `ISSUE_MINT_SUPPLY_CUMULATIVE_CAP` does.
+        await test.step('and the re-ISSUE inflation path is closed BY THE TOKEN, not by a flag day', async () => {
+            // MINT_SUPPLY is credited on every valid ISSUE, so this re-ISSUE
+            // mints a second copy of a "1 of 1" unless something refuses it.
             //
-            // Asserting the VERDICT rather than just the refusal is the point.
-            // "MINT_SUPPLY exceeds MAX_SUPPLY" is the gate (issue.js ~388);
-            // "MINT_SUPPLY (locked)" would be a token-level lock this template
-            // has never written. If this assertion ever starts failing because
-            // the message became the latter, the wallet-side fix under 
-            // has landed and this comment is what says so.
             // MAX_SUPPLY is restated at its CURRENT value on purpose, and this
             // is the whole shape of the attack. Omitting it leaves
             // `data['MAX_SUPPLY']` null - it is never backfilled from
             // `tokenInfo` (only line ~337's lockCap does a local fallback) - so
             // the older single-shot `MINT_SUPPLY > MAX_SUPPLY` guard at ~371
-            // catches it first and the gate is never reached. Restating it as 1
-            // passes the locked-cap check at ~400 (equal, so not a change) and
-            // passes ~371 (1 > 1 is false), which leaves the cumulative gate as
-            // the only thing standing between a 1-of-1 and a 2-of-1.
+            // catches it first and neither of the two rules that matter is ever
+            // reached. Restating it as 1 passes the locked-cap check at ~400
+            // (equal, so not a change) and passes ~371 (1 > 1 is false).
+            //
+            // Asserting the VERDICT rather than just the refusal is the point,
+            // and the two candidate verdicts are NOT equivalent (see the ⚠️
+            // note at the top). `MINT_SUPPLY (locked)` is the token's own lock
+            // and holds everywhere; `MINT_SUPPLY exceeds MAX_SUPPLY` is the
+            // gated cumulative cap, which on mainnet says nothing at all until
+            // 2026-08-17. This venue runs with the gate ON, so a test that only
+            // looked for "some refusal" would read green while a mainnet
+            // collectible stayed inflatable. Matching the lock's message is
+            // what proves the composer wrote LOCK_MINT_SUPPLY .
             const q = await quote(
                 'ISSUE',
                 issueParams({ VERSION: 0, TICK, MAX_SUPPLY: 1, MINT_SUPPLY: 1 }),
                 owner,
             );
             expect(String(q.error || q.status),
-                'the owner can re-ISSUE fresh supply onto a 1-of-1 collectible: neither the token '
-                + 'nor the venue stopped it')
-                .toMatch(/MINT_SUPPLY exceeds MAX_SUPPLY/i);
+                'the re-ISSUE was not refused by LOCK_MINT_SUPPLY. If this reads "MINT_SUPPLY '
+                + 'exceeds MAX_SUPPLY" the composer stopped writing the flag and the 1-of-1 is '
+                + 'only a 1-of-1 where the cumulative-cap flag day has already passed ')
+                .toMatch(/MINT_SUPPLY \(locked\)/i);
         });
 
         await test.step('POSITIVE CONTROL: an unlocked field is still editable, so the refusals mean something', async () => {
@@ -321,6 +338,13 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             // venue refusing every ISSUE for an unrelated reason - would pass
             // all three steps above. This template locks the cap and minting
             // and deliberately leaves DESCRIPTION open.
+            //
+            // It also proves LOCK_MINT_SUPPLY refuses the MINT_SUPPLY path and
+            // nothing else. issue.js backfills blank params from `tokenInfo`
+            // (~241), and `getTokenInfo` selects no mint_supply column, so an
+            // edit that leaves the field blank stays blank and never reaches
+            // the lock. Were that not so, the flag added under  would
+            // have quietly frozen the artwork too.
             const q = await quote(
                 'ISSUE',
                 issueParams({ VERSION: 0, TICK, DESCRIPTION: `${IMAGE_URL}?v=2` }),

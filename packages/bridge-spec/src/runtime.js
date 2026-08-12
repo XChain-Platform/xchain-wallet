@@ -129,6 +129,47 @@ function satisfiesTerm(target, term) {
     return target[0] === 0 && target[1] === 0 && target[2] === bound[2];
 }
 
+// The published BridgeErrorCode union (§43), as a RUNTIME value.
+//
+// `index.ts` declares the same codes as a TypeScript union. A union erases at
+// build time, so nothing could consult it at run time and nothing did: the
+// wallet emitted twelve internal codes the union never contained
+// (CHAIN_NOT_PERMITTED, ADDRESS_NOT_PERMITTED, MISSING_ORIGIN, ...) and a dApp
+// branching on `error` the way the spec tells it to fell through every case
+// (). The wallet now maps its internal vocabulary onto this list
+// before anything reaches the page, and a dApp written in plain JS can use it
+// to validate a code it was handed.
+//
+// This array and the `BridgeErrorCode` union in index.ts are one contract in
+// two syntaxes and must be edited together; test/unit/bridge/bridge-error-codes
+// pins them to each other so a code added to one and not the other fails.
+/** @type {readonly string[]} */
+export const BRIDGE_ERROR_CODES = Object.freeze([
+    'USER_REJECTED',
+    'NOT_CONNECTED',
+    'WALLET_LOCKED',
+    'CHAIN_NOT_SUPPORTED',
+    'ACCOUNT_NOT_AUTHORIZED',
+    'ADDRESS_NOT_AUTHORIZED',
+    'UNSUPPORTED_ACTION',
+    'INVALID_PARAMS',
+    'CHALLENGE_EXPIRED',
+    'BROADCAST_FAILED',
+    'PANIC_MODE',
+    'THROTTLED',
+    'BLOCKED_BY_USER',
+    'BRIDGE_VERSION_MISMATCH',
+    'INTERNAL_ERROR',
+]);
+
+/**
+ * @param {unknown} value
+ * @returns {boolean} true when `value` is one of the published codes.
+ */
+export function isBridgeErrorCode(value) {
+    return typeof value === 'string' && BRIDGE_ERROR_CODES.includes(value);
+}
+
 // Version of the Sign-in with XChain challenge format (§43.6).
 //
 // v2 (breaking): the wallet-stamped page origin is embedded in the

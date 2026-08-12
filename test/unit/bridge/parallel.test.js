@@ -117,7 +117,11 @@ describe('bridge.parallel: per-action results carry their own ok flag', () => {
         expect(results[0].supportedActions).toEqual(['SEND', 'SWEEP']);
 
         expect(results[1].ok).toBe(false);
-        expect(results[1].error).toBe('CHAIN_NOT_PERMITTED');
+        // The published code, not the wallet's internal CHAIN_NOT_PERMITTED: a
+        // batch entry is read by the page and must carry a BridgeErrorCode
+        // (). The internal name survives in the message.
+        expect(results[1].error).toBe('CHAIN_NOT_SUPPORTED');
+        expect(results[1].message).toMatch(/CHAIN_NOT_PERMITTED/);
 
         expect(results[2].ok).toBe(false);
         expect(results[2].error).toBe('USER_REJECTED');
@@ -200,7 +204,7 @@ describe('bridge.parallel: grouped approval modal', () => {
         ]);
         expect(resp.ok).toBe(true);
         expect(resp.result[0].error).toBe('UNSUPPORTED_ACTION');
-        expect(resp.result[1].error).toBe('CHAIN_NOT_PERMITTED');
+        expect(resp.result[1].error).toBe('CHAIN_NOT_SUPPORTED');
         expect(calls.parallel).toHaveLength(1);
         expect(calls.signAction).toHaveLength(0);
     });

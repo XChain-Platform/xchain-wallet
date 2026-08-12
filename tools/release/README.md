@@ -91,8 +91,9 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | Script | Purpose | Status |
 |---|---|---|
 | `lib.sh` | Shared manifest routines: which files a manifest covers, in what order, and what its header says. Sourced by the other scripts so they cannot drift apart. | Live |
-| `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. `--lane <name>` signs a PARTIAL release covering only the named lanes . | Live; needs `XCHAIN_RELEASE_GPG_KEY` (the key exists, G180's remaining half is publication) |
-| `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). | Live |
+| `sign.sh` | Run the release gates, compute the SHA-256 manifest, and GPG-sign it. `--lane <name>` signs a PARTIAL release covering only the named lanes . Gate DATA (`expected-artifacts.txt`, `shipped-lanes.txt`) and the dev-mock gate come from `--repo`, the tree at the tag; an executable check the release predates (`launch-probe.mjs`, `verify-signatures.mjs`) is run from THIS checkout instead, announced, because the alternative is no check at all ( - before that, signing any tag older than the newest check died on a `MODULE_NOT_FOUND` stack trace). | Live; needs `XCHAIN_RELEASE_GPG_KEY` (the key exists, G180's remaining half is publication) |
+| `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). A manifest whose tag is `<release>-resign<N>` anchors to `<release>` and is reported as a re-signature superseding what was published under that name (); the reverse does not hold, so the superseded original cannot answer a request for the correction. | Live |
+| `prepare-resign-tag.sh` |: cut a tag a published release can be RE-SIGNED from, when the defect was in the gate the tag itself supplies. Clones the release tag into a throwaway directory, replaces `tools/build-reproduce/check-no-dev-mock.sh` with the committed copy from this checkout (one file, and it refuses if the diff is wider), tags `<release>-resign<N>`, and PROVES it by running the new tag's own gate against the staged artifacts and requiring the receipt `sign.sh` requires. Refuses a source whose gate cannot read a staged bundle - measured behaviourally, since the gate that shipped with v0.336.0 does not reject `--artifacts`, it ignores it - and refuses a name whose X.Y.Z core is not the release's. Exits 0 cut and proved / 1 refused / 2 caller error / 3 nothing to prepare. Never pushes, never signs, never touches the checkout it runs from. | Live; driven end to end against the real v0.336.0 android set 2026-08-12 |
 | `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. | Live (host pending) |
 | `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
 | `rehearse.mjs` |  §7.5: probes every shipped update lane against the staging feed (pointer, per-arch selection, download, sha512, signed manifest), records human-attested swaps, and gates the production publish on the result. Covers the direct Android lane too (), by a second probe that drives the SHIPPED `directUpdateCheck.js` against the published `latest.json` in both directions and proves the APK its notice sends a user to is the one K1 signed. | Live (host pending) |
@@ -300,6 +301,60 @@ key and different answers on this machine, which holds three by design.
 It was found by rehearsing the Chrome ceremony's Phase 4 against the real
 release zip: the manifest had been signed with the tag-signing key and
 the check said `ok`.
+
+### Re-signing a release that was already published 
+
+**A signing run reads TWO trees, and this is what to do when the wrong
+one was right.** The scripts come from whichever checkout invokes
+`sign.sh`; `check-no-dev-mock.sh`, `shipped-lanes.txt` and
+`expected-artifacts.txt` come from `--repo`, the pristine clone at the
+release tag. So a defect fixed in the gate cannot reach a release that is
+already tagged.
+
+That is not hypothetical. `RELEASE_HASHES/v0.336.0.txt`, the only signed
+manifest this project has published, says `# dev-mock-gate: enforced` for
+a gate that read zero bytes: the tag's copy predates `--artifacts`, so it
+ignored the flag, scanned a pristine clone's absent `dist/` trees, printed
+three SKIP lines and `OK`, and exited 0. `sign.sh` now refuses that
+combination - it requires the gate's own receipt, `OK - N bundle(s)
+scanned` - which stops it recurring and does nothing for a record already
+published.
+
+Correcting the record means re-signing from a tag whose own gate runs:
+
+```bash
+bash tools/release/prepare-resign-tag.sh --tag v0.336.0 \
+    --work-dir ~/xchain-resign/v0.336.0 \
+    --input ~/xchain-release-artifacts/0.336.0/
+```
+
+That cuts `v0.336.0-resign1` in a throwaway clone: the release tag's tree
+with `tools/build-reproduce/check-no-dev-mock.sh` replaced by the
+committed copy from this checkout, and nothing else changed, so the
+artifacts it re-signs are still the artifacts the release built. It then
+PROVES the tag by running its own gate against the staged artifacts and
+requiring the same receipt `sign.sh` requires. It never pushes and never
+signs: K1's passphrase belongs at a pinentry in front of a person.
+
+Then sign it, from a CURRENT checkout, with the new tag in `--repo`:
+
+```bash
+XCHAIN_RELEASE_GPG_KEY=<K1 fingerprint> \
+  bash tools/release/sign.sh --tag v0.336.0-resign1 \
+    --repo ~/xchain-resign/v0.336.0 --lane android \
+    --input ~/xchain-release-artifacts/0.336.0/
+```
+
+**The corrected manifest is republished under the RELEASE's name**,
+`RELEASE_HASHES/v0.336.0.txt`, which is where every existing link points.
+`verify.sh` anchors `v0.336.0-resign1` to `v0.336.0` and says out loud
+that it is a re-signature superseding what was published there; the
+relation is one-way, so being handed the superseded original when asking
+for the correction still fails. `feed-sweep.mjs` reads the same rule, so a
+channel pointer naming the plain version still finds its manifest.
+
+Two things the operator owns and these tools do not: K1's passphrase, and
+pushing the new tag so a verifier can obtain the tree it names.
 
 ### One signature, checked three ways
 

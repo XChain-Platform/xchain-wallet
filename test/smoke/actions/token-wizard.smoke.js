@@ -120,6 +120,13 @@ assert.ok(
     memeBlock[0].includes("DECIMALS = '0'"),
     'meme composer is non-divisible',
 );
+// : the third lock. LOCK_MAX_SUPPLY + LOCK_MINT leave MINT_SUPPLY
+// re-issuable, so without this the template's "fixed supply" rests on the
+// indexer's ISSUE_MINT_SUPPLY_CUMULATIVE_CAP flag day rather than on the token.
+assert.ok(
+    memeBlock[0].includes("LOCK_MINT_SUPPLY = '1'"),
+    'meme composer sets LOCK_MINT_SUPPLY (fixed supply must be the token\'s own promise)',
+);
 // Collectible hard-wires supply=1 and locks.
 const collBlock = src.match(/collectible\(form\)\s*\{[\s\S]*?\n\s*\},/);
 assert.ok(collBlock, 'collectible composer block found');
@@ -127,6 +134,14 @@ assert.ok(
     /MAX_SUPPLY\s*=\s*'1'/.test(collBlock[0]),
     'collectible composer pins MAX_SUPPLY=1',
 );
+// : all three locks, or the 1-of-1 is only a 1-of-1 on a chain whose
+// cumulative-cap flag day has already passed.
+for (const flag of ['LOCK_MAX_SUPPLY', 'LOCK_MINT', 'LOCK_MINT_SUPPLY']) {
+    assert.ok(
+        collBlock[0].includes(`${flag} = '1'`),
+        `collectible composer sets ${flag}`,
+    );
+}
 // Edition is the fair-mint pattern (mirrors sdk.nft.edition({mint})):
 // declared cap locked at issuance, public MINT window left open.
 const edBlock = src.match(/edition\(form\)\s*\{[\s\S]*?\n\s*\},/);

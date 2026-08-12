@@ -166,7 +166,7 @@ describe(': connect never persists a wildcard account grant', () => {
         });
 
         expect(resp.ok).toBe(true);
-        expect(resp.result.accounts).toEqual(['acct-primary']);
+        expect(resp.result.permissions.accounts).toEqual(['acct-primary']);
         const [site] = await vault.connectedSites.list();
         expect(site.permissions.accounts, 'stored grant is concrete, not a wildcard')
             .toEqual(['acct-primary']);
@@ -202,7 +202,7 @@ describe(': connect never persists a wildcard account grant', () => {
             type: 'bridge.connect',
             request: { origin: ORIGIN, appName: 'dApp', requestedChains: [CHAIN] },
         });
-        expect(resp.result.accounts).toEqual(['acct-primary', 'acct-second']);
+        expect(resp.result.permissions.accounts).toEqual(['acct-primary', 'acct-second']);
     });
 });
 
@@ -240,8 +240,7 @@ describe(': connect reads the option names ConnectOpts publishes', () => {
             request: { origin: 'https://other.example', appName: 'dApp', requiredBridgeVersion: '^1.2.0' },
         });
         expect(unsatisfied.ok).toBe(false);
-        // Asserted through the message, because the transport drops
-        // BridgeError.code on the way out (, still open).
+        expect(unsatisfied.error.code).toBe('BRIDGE_VERSION_MISMATCH');
         expect(unsatisfied.error.message).toMatch(/^bridge: BRIDGE_VERSION_MISMATCH/);
     });
 

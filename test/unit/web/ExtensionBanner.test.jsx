@@ -23,7 +23,15 @@ import { EXT_WALLET_PREF_KEY } from '../../../packages/web/src/extensionWallet.j
 function makeProvider(overrides = {}) {
     return {
         isXChainWallet: true,
-        connect: vi.fn().mockResolvedValue({ accounts: [] }),
+        // A bridge-spec ConnectSuccess. The banner reads the `ok` flag now,
+        // because a refusal resolves rather than throws ().
+        connect: vi.fn().mockResolvedValue({
+            ok: true,
+            version: '0.1.0',
+            accounts: [],
+            chains: [],
+            permissions: { chains: [], accounts: [], canSignMessage: false, canSignAction: {} },
+        }),
         ...overrides,
     };
 }
@@ -91,6 +99,26 @@ describe('<ExtensionBanner>', () => {
         );
         expect(localStorage.getItem(EXT_WALLET_PREF_KEY)).toBeNull();
         // Still on the offer state, not active.
+        expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        expect(screen.queryByText(/Using your extension wallet/i)).toBeNull();
+    });
+
+    // The shape a real refusal actually arrives in (): the promise
+    // RESOLVES with `ok: false`. Read as "did not throw", this flipped the
+    // banner into its active state with no session behind it.
+    it('shows an error and stays on the web app when the connect RESOLVES ok:false', async () => {
+        const provider = makeProvider({
+            connect: vi.fn().mockResolvedValue({ ok: false, error: 'USER_REJECTED' }),
+        });
+        window.xchain = provider;
+        render(<ExtensionBanner />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Use extension wallet' }));
+
+        await waitFor(() =>
+            expect(screen.getByRole('alert').textContent).toMatch(/declined/i),
+        );
+        expect(localStorage.getItem(EXT_WALLET_PREF_KEY)).toBeNull();
         expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
         expect(screen.queryByText(/Using your extension wallet/i)).toBeNull();
     });

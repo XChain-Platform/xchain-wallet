@@ -51,9 +51,27 @@ export class BackupFormatError extends Error {
     }
 }
 
+/**
+ * The envelope did not open under the password it was handed.
+ *
+ * : the message names WHICH password that is. A restore screen asks for
+ * three of them (the file's, the backed-up wallet's, this device's), and this
+ * one is only ever the file's. "Wrong password" on its own, which is what this
+ * said until , leaves a user who typed a correct password into the
+ * wrong field with nothing to act on. The message carries the naming rather
+ * than the class, because the error crosses the shell messaging boundary as a
+ * bare string.
+ *
+ * Tampering produces the same AEAD failure and so the same error, which is why
+ * the copy ends by naming that case too.
+ */
 export class BackupPasswordError extends Error {
     constructor() {
-        super('backup: wrong password or tampered file');
+        super(
+            'That password did not open the backup file. This is the password you set when you '
+            + 'exported the file, not the password of the wallet inside it and not the password '
+            + 'this device unlocks with. If all three are right, the file itself has been changed.',
+        );
         this.name = 'BackupPasswordError';
     }
 }

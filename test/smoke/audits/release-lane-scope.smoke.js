@@ -299,8 +299,15 @@ try {
             /xr_lane_scope/.test(sign), 'xr_lane_scope not called');
         check('...gates the artifact set against the SCOPED list',
             /xr_check_expected "\$INPUT_DIR" "\$GATE_EXPECTED"/.test(sign), 'wrong list');
+        // The signature gate is resolved into a variable before it runs
+        // (: a release predating an executable check gets this
+        // checkout's copy, announced, instead of a MODULE_NOT_FOUND stack
+        // trace), so the path and the arguments are on two lines now. What
+        // this case is about is unchanged and still checked: the SCOPED
+        // list is what the signature gate is pointed at.
         check('...checks signatures against the scoped list too',
-            /verify-signatures\.mjs" "\$INPUT_DIR" "\$GATE_EXPECTED"/.test(sign), 'wrong list');
+            /verify-signatures\.mjs[\s\S]{0,400}?node "\$SIGNATURE_GATE" "\$INPUT_DIR" "\$GATE_EXPECTED"/
+                .test(sign), 'wrong list');
         check('...passes the FULL list to the shipped-lane gate, whose drift'
             + ' checks are about the two committed files rather than this release',
             /xr_check_shipped_lanes "\$INPUT_DIR" "\$LANES" "\$EXPECTED"/.test(sign), 'wrong list');

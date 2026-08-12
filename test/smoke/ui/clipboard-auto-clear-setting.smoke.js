@@ -8,10 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7.1 / G028: clipboard auto-clear configurable 0-600s.
-// The default lives in the settings schema, the Privacy panel exposes
-// it as a number input, and ViewPrivateKey reads the chosen value to
-// time its post-copy clipboard wipe (0 disables). Cluster E Step 5 of 5.
+// Smoke for §17.7.1 / G028 as it stands after .
+//
+// The setting was born with two halves: a schema field with bounds, and a
+// Privacy-panel number input that ViewPrivateKey read to time its post-copy
+// clipboard wipe.  removed the Copy button, killing the only reader;
+//  (operator ruling a, 2026-08-11) then removed the control, because a
+// privacy switch that governs nothing misinforms the user who trusts it.
+//
+// What this smoke guards is therefore the SPLIT: the schema half survives for
+// compatibility, and the UI half must stay gone. Both directions matter. A
+// re-added input would resurrect the lie; a deleted schema field would turn
+// stored settings into a migration.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -42,39 +50,38 @@ assert.ok(/clipboardAutoClearSeconds === undefined/.test(settingsSchema),
 assert.ok(/Number\.isInteger\(\s*r\.privacy\.clipboardAutoClearSeconds\s*\)/.test(settingsSchema),
     'validateSettings requires integer when present');
 
-// --- 2. PrivacySection renders a number input bound to the setting -------
+// --- 2. PrivacySection offers NO clipboard control  -------------
+//
+// Asserted by absence of every trace the control left behind, not just the
+// label: a reworded row ("Clear clipboard after…") would slip past a
+// label-only check while making exactly the same false promise.
 
 const ps = readFileSync(join(components, 'settings', 'PrivacySection.jsx'), 'utf8');
-assert.ok(/Clipboard auto-clear/.test(ps),
-    'PrivacySection labels the new row "Clipboard auto-clear …"');
-assert.ok(/type="number"/.test(ps),
-    'PrivacySection renders a number input');
-assert.ok(/onClipboardSecondsChange/.test(ps),
-    'PrivacySection has an onClipboardSecondsChange handler');
-assert.ok(/clipboardAutoClearSeconds/.test(ps),
-    'PrivacySection patches settings.privacy.clipboardAutoClearSeconds');
-// Handler clamps to [MIN, MAX].
-assert.ok(/Math\.max\(\s*CLIPBOARD_AUTO_CLEAR_MIN/.test(ps),
-    'PrivacySection clamps user input down to the MIN bound');
-assert.ok(/Math\.min\(\s*CLIPBOARD_AUTO_CLEAR_MAX/.test(ps),
-    'PrivacySection clamps user input up to the MAX bound');
+const psBody = ps.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+assert.ok(!/Clipboard auto-clear/.test(psBody),
+    'PrivacySection no longer renders a "Clipboard auto-clear" row ');
+assert.ok(!/onClipboardSecondsChange/.test(psBody),
+    'PrivacySection has no clipboard-seconds change handler');
+assert.ok(!/clipboardAutoClearSeconds/.test(psBody),
+    'PrivacySection neither reads nor writes settings.privacy.clipboardAutoClearSeconds');
+assert.ok(!/CLIPBOARD_AUTO_CLEAR_/.test(psBody),
+    'PrivacySection imports none of the clipboard bounds any more');
+// The rest of the panel is untouched: this was a removal, not a rewrite.
+assert.ok(/Change-address rotation/.test(psBody) && /Form draft retention/.test(psBody),
+    'the surrounding Privacy rows survive the removal');
 
-// --- 3. The consumer, which no longer exists ---------------------------
+// --- 3. The consumer is gone too, and stays gone ------------------------
 //
 // ViewPrivateKey used to read this setting and clear the clipboard on its
 // timer. (operator decision, 2026-08-01) made key material
 // uncopyable on every shell, so the Copy button that timer served is gone and
-// with it the only reader of this value.
-//
-// The setting is therefore ORPHANED: the control below still writes
-// `settings.privacy.clipboardAutoClearSeconds` and nothing reads it. That is
-// tracked as, and it is deliberately asserted here rather than left
-// implicit - a smoke that still demanded a consumer would be a reason not to
-// fix the gap, and one that said nothing would let the gap go quiet.
+// with it the only reader of this value. If a copy path ever returns here,
+// this assertion fires and whoever adds it has to decide, deliberately,
+// whether the setting comes back with it.
 const vpk = readFileSync(join(routes, 'ViewPrivateKey.jsx'), 'utf8');
 assert.ok(!/clipboardAutoClearSeconds/.test(vpk),
     'ViewPrivateKey no longer reads the setting ( removed its Copy button)');
 assert.ok(!/navigator\.clipboard/.test(vpk),
     'ViewPrivateKey writes no clipboard at all');
 
-console.log('clipboard-auto-clear-setting smoke OK (schema + control guarded; the consumer is gone by  and the orphaned setting is )');
+console.log('clipboard-auto-clear-setting smoke OK (schema field retained for compatibility; the control is gone by  and its consumer by )');

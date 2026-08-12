@@ -11,7 +11,10 @@
 // Shared `chrome.runtime.sendMessage` wrapper used by every extension
 // page (popup, approval window). Mirrors the MessageHost response
 // envelope: resolves with `result`, rejects with an Error whose `name`
-// matches the background-side error class.
+// matches the background-side error class and whose `code` /
+// `retryAfterMs` / `burst` / `windowMs` survive the hop (the rebuild is
+// MessageHost's own `hydrateEnvelopeError`, so every shell that unwraps the
+// envelope keeps the same fields rather than whichever one was patched last).
 //
 // Kept here (not in `src/popup/` or `src/approval/`) so both entries
 // can import the same implementation without depending on each other.
@@ -23,6 +26,7 @@
 // request named, which is the same set `submitAction` would have dropped.
 
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
+import { hydrateEnvelopeError } from '../background/MessageHost.js';
 
 /**
  * @param {string} type
@@ -54,9 +58,7 @@ export function sendMessage(type, request) {
                 resolve(response.result);
                 return;
             }
-            const err = new Error(response.error?.message || 'unknown error');
-            err.name = response.error?.name || 'Error';
-            reject(err);
+            reject(hydrateEnvelopeError(response.error));
         });
     });
 }

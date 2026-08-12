@@ -52,12 +52,14 @@
 //     token carrying one ("0x", "1d", "v2") is non-trivial and IS
 //     flagged; the smoke test pins those three.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
-//   - Technical attributes that never render to humans: `className`,
-//     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
-//     `on*`, and every `aria-*` outside USER_FACING_ATTRS (so
-//     `aria-label`, `aria-description`, `aria-roledescription` and
-//     `aria-valuetext` stay checked while `aria-labelledby`,
-//     `aria-hidden` and the rest do not).
+//   - Every attribute outside USER_FACING_ATTRS, which is the single
+//     authority on both sides of the rule: `className`, `style`, `id`,
+//     `key`, `role`, `type`, `htmlFor`, `name`, `data-*`, `on*` and the
+//     rest are allowed because they are absent from that set, not
+//     because a separate deny-list names them. So `aria-label`,
+//     `aria-description`, `aria-roledescription` and `aria-valuetext`
+//     stay checked while `aria-labelledby`, `aria-hidden` and every
+//     other `aria-*` do not.
 //   - Files matching `ignoreFiles` glob list (defaults exclude
 //     `*.smoke.js`, `test/**`, `*.test.js`, `*.test.jsx`,
 //     `tools/**`, `claude/**`).
@@ -96,53 +98,10 @@ const USER_FACING_ATTRS = new Set([
     'backLabel',
 ]);
 
-const TECHNICAL_ATTR_PREFIXES = ['data-', 'on'];
-const TECHNICAL_ATTR_NAMES = new Set([
-    'className',
-    'class',
-    'style',
-    'id',
-    'key',
-    'role',
-    'type',
-    'htmlFor',
-    'htmlType',
-    'name',
-    'href',
-    'src',
-    'srcSet',
-    'rel',
-    'target',
-    'method',
-    'action',
-    'form',
-    'value',
-    'defaultValue',
-    'min',
-    'max',
-    'step',
-    'pattern',
-    'autoComplete',
-    'autoCapitalize',
-    'autoCorrect',
-    'spellCheck',
-    'inputMode',
-    'tabIndex',
-    'aria-hidden',
-    'aria-controls',
-    'aria-describedby',
-    'aria-labelledby',
-    'aria-pressed',
-    'aria-expanded',
-    'aria-checked',
-    'aria-current',
-    'aria-haspopup',
-    'aria-live',
-    'role',
-    'as',
-    'variant',
-    'size',
-]);
+// There is deliberately no technical-attribute deny-list here. Both
+// `create()` and `findViolations` decide by USER_FACING_ATTRS membership,
+// so a second list of names to exclude was unreachable code that could
+// only drift out of step with the set that actually decides.
 
 const DEFAULT_IGNORE_FILES = [
     /\.smoke\.js$/,
@@ -153,18 +112,6 @@ const DEFAULT_IGNORE_FILES = [
     /\/dist\//,
     /\/node_modules\//,
 ];
-
-function isTechnicalAttr(name) {
-    if (!name) return true;
-    if (TECHNICAL_ATTR_NAMES.has(name)) return true;
-    for (const prefix of TECHNICAL_ATTR_PREFIXES) {
-        if (name.startsWith(prefix)) return true;
-    }
-    // aria-* is mostly technical except for the USER_FACING_ATTRS members
-    // (aria-label, aria-description, aria-roledescription, aria-valuetext).
-    if (name.startsWith('aria-') && !USER_FACING_ATTRS.has(name)) return true;
-    return false;
-}
 
 /**
  * Decide whether a string value is "trivial" enough to ignore: pure
@@ -260,9 +207,20 @@ export function findViolations(node, options = {}) {
                     }
                 }
             }
-            // Recurse inside non-flagged attributes too; JSX expression
-            // children may hide further JSX trees.
-            visit(n.value);
+            // Descend once, and enter an expression container at its
+            // *expression* rather than at the container itself. The
+            // container belongs to this attribute and the branch above
+            // has already judged it; re-entering it let the JSX-content
+            // branch below report the same title={'…'} a second time and
+            // the generic recursion a third, and made the helper flag
+            // technical values such as className={'btn'} that the
+            // shipping create() correctly ignores. Returning here keeps
+            // the generic recursion from walking `value` again, while
+            // stepping through the expression still finds JSX trees
+            // hidden in render props.
+            const value = n.value;
+            visit(value?.type === 'JSXExpressionContainer' ? value.expression : value);
+            return;
         } else if (n.type === 'JSXExpressionContainer'
                 && n.expression?.type === 'Literal'
                 && typeof n.expression.value === 'string'
@@ -369,4 +327,4 @@ function create(context) {
 }
 
 export default { meta, create };
-export { meta, create, USER_FACING_ATTRS, TECHNICAL_ATTR_NAMES, isTechnicalAttr };
+export { meta, create, USER_FACING_ATTRS };

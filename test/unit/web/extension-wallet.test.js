@@ -31,13 +31,28 @@ import {
     writeExtensionWalletPreference,
 } from '../../../packages/web/src/extensionWallet.js';
 
+// bridge-spec shapes, not approximations of them: connect answers a
+// ConnectResult union and getBalances answers a Balance[] ().
+const CONNECT_SUCCESS = {
+    ok: true,
+    version: '0.1.0',
+    accounts: [{ id: 'acct-1', name: 'A' }],
+    chains: ['bitcoin'],
+    permissions: {
+        chains: ['bitcoin'],
+        accounts: ['acct-1'],
+        canSignMessage: false,
+        canSignAction: {},
+    },
+};
+
 function makeProvider(overrides = {}) {
     return {
         isXChainWallet: true,
-        connect: vi.fn().mockResolvedValue({ accounts: [{ id: 'acct-1' }] }),
+        connect: vi.fn().mockResolvedValue(CONNECT_SUCCESS),
         getAccounts: vi.fn().mockResolvedValue([{ id: 'acct-1', name: 'A' }]),
         getAddresses: vi.fn().mockResolvedValue([{ id: 'addr-1' }]),
-        getBalances: vi.fn().mockResolvedValue({ native: '0', tokens: [] }),
+        getBalances: vi.fn().mockResolvedValue([]),
         getSupportedChains: vi.fn().mockResolvedValue([{ id: 'bitcoin-mainnet' }]),
         signMessage: vi.fn().mockResolvedValue({ signature: 'sig' }),
         signAction: vi.fn().mockResolvedValue({ txid: 'tx' }),
@@ -123,7 +138,7 @@ describe('connectExtensionWallet', () => {
         window.xchain = provider;
         const result = await connectExtensionWallet({ chains: ['bitcoin-mainnet'] });
         expect(provider.connect).toHaveBeenCalledWith({ chains: ['bitcoin-mainnet'] });
-        expect(result).toEqual({ accounts: [{ id: 'acct-1' }] });
+        expect(result).toEqual(CONNECT_SUCCESS);
         expect(readExtensionWalletPreference()).toBe(true);
     });
 
@@ -135,6 +150,25 @@ describe('connectExtensionWallet', () => {
         await expect(connectExtensionWallet()).rejects.toThrow('User rejected');
         expect(readExtensionWalletPreference()).toBe(false);
     });
+
+    // : the published ConnectResult is a UNION, so a refusal RESOLVES
+    // with `ok: false`. Persisting on any resolve flipped the web app into
+    // extension-wallet mode against a session the wallet never granted.
+    for (const refusal of [
+        { ok: false, error: 'USER_REJECTED' },
+        { ok: false, error: 'BLOCKED_BY_USER' },
+        { ok: false, error: 'BRIDGE_VERSION_MISMATCH', message: 'bridge: BRIDGE_VERSION_MISMATCH' },
+        { ok: false, error: 'THROTTLED', retryAfterMs: 4000 },
+    ]) {
+        it(`does NOT persist the preference on a resolved ${refusal.error} result`, async () => {
+            window.xchain = makeProvider({
+                connect: vi.fn().mockResolvedValue(refusal),
+            });
+            const result = await connectExtensionWallet();
+            expect(result).toEqual(refusal);
+            expect(readExtensionWalletPreference()).toBe(false);
+        });
+    }
 });
 
 describe('disableExtensionWallet', () => {

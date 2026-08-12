@@ -499,6 +499,35 @@ xr_header_field() {
     sed -n "s/^# ${field}: //p" "$manifest" | head -1
 }
 
+# Which RELEASE a tag names, with any re-sign suffix stripped .
+#
+# A re-sign tag is `<release tag>-resign<N>`: the release tag's tree with
+# the release TOOLING corrected and nothing else, cut so that a manifest
+# can be signed by a gate that really runs. `tools/release/prepare-resign-tag.sh`
+# is the only thing that makes one, and it refuses any name whose X.Y.Z
+# core differs from the release it re-signs.
+#
+# It exists because signing reads TWO trees. The scripts come from the
+# invoking checkout; `check-no-dev-mock.sh`, `shipped-lanes.txt` and
+# `expected-artifacts.txt` come from `--repo`, the tree at the tag. So a
+# defect fixed in the gate cannot reach a release already tagged, and the
+# published v0.336.0 manifest says `dev-mock-gate: enforced` for a gate
+# that read zero bytes. Correcting that record means re-signing from a
+# NEW tag, and the corrected manifest is then republished under the
+# release's own name - `RELEASE_HASHES/v0.336.0.txt`, the name every
+# existing link and every reader already has.
+#
+# So the anchor check has to know that `v0.336.0-resign1` describes
+# `v0.336.0` while still refusing a manifest from any OTHER release,
+# which is the only thing that check has ever been for. The relation is
+# ONE-WAY at the call site: a re-signature satisfies a request for the
+# release, and the superseded original does NOT satisfy a request for the
+# re-signature.
+# Args: tag
+xr_release_tag_of() {
+    printf '%s\n' "$1" | sed -E 's/-resign[0-9]+$//'
+}
+
 # True if the manifest carries the signed header at all.
 xr_has_header() {
     grep -q '^# manifest-version: ' "$1" 2>/dev/null

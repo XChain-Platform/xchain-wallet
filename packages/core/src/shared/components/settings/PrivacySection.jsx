@@ -21,16 +21,20 @@
 //     toggle persists the preference, the FILE-action submit/fetch
 //     wiring is shell-level work pending separately)
 //
-// Plus one numeric input (§17.7.1 / G028):
-//   - Clipboard auto-clear seconds: 0–600, 0 disables. Read by
-//     ViewPrivateKey to time its post-copy clipboard wipe.
+//  (operator ruling a, 2026-08-11): the "Clipboard auto-clear
+// (seconds)" input that used to sit at the bottom of this panel is gone.
+// Its only consumer was ViewPrivateKey's post-copy wipe timer, and
+//  made key material uncopyable on every shell, so the control
+// wrote `settings.privacy.clipboardAutoClearSeconds` and nothing read it.
+// A privacy control that governs nothing is worse than an absent one: it
+// tells the user they hold a protection they do not hold. The schema
+// field stays (see schemas/settings.js) because dropping it would be a
+// stored-settings migration for no gain, and because a future copy path
+// can claim it back.
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
 import {
-    CLIPBOARD_AUTO_CLEAR_DEFAULT,
-    CLIPBOARD_AUTO_CLEAR_MAX,
-    CLIPBOARD_AUTO_CLEAR_MIN,
     FORM_DRAFT_TTL_OFF,
     FORM_DRAFT_TTL_1H,
     FORM_DRAFT_TTL_24H,
@@ -55,31 +59,13 @@ export function PrivacySection() {
         }
     };
 
-    const clipboardSeconds = (() => {
-        const raw = settings?.privacy?.clipboardAutoClearSeconds;
-        if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
-        return CLIPBOARD_AUTO_CLEAR_DEFAULT;
-    })();
-    const onClipboardSecondsChange = async (next) => {
-        const clamped = Math.max(
-            CLIPBOARD_AUTO_CLEAR_MIN,
-            Math.min(CLIPBOARD_AUTO_CLEAR_MAX, Math.floor(Number(next) || 0)),
-        );
-        try {
-            await update({ privacy: { clipboardAutoClearSeconds: clamped } });
-        } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('privacy.clipboardAutoClearSeconds update failed:', err);
-        }
-    };
-
     return (
         <div style={STACK}>
-            {/* : shown only where the host can actually do it.
-                A browser page cannot speak SOCKS at all, and an MV3
-                extension could only proxy the user's whole browser
-                rather than the wallet, so offering the toggle there
-                would promise something no code could keep. It was
+            {/* : the live toggle renders only where the host can
+                actually route. A browser page cannot speak SOCKS at all,
+                and an MV3 extension could only proxy the user's whole
+                browser rather than the wallet, so an operable toggle
+                there would promise something no code could keep. It was
                 offered in all three shells and implemented in none. */}
             {shellCapabilities().socksProxy && (
                 <ToggleRow
@@ -87,6 +73,25 @@ export function PrivacySection() {
                     hint="Send the wallet's requests through a local Tor SOCKS5 proxy (127.0.0.1:9050), so the servers it talks to see Tor rather than your address. Tor must already be running: if it is not reachable, requests fail rather than quietly going direct."
                     checked={settings.privacy.torRouting}
                     onChange={(v) => onToggle('torRouting', v)}
+                />
+            )}
+            {/*  (operator ruling a): the shells that cannot route
+                say so, rather than dropping the row. Silence reads as
+                "this wallet has no Tor option"; the disabled row reads
+                as "not here, and here is where". It is rendered
+                unchecked and inert on purpose: a saved `torRouting: true`
+                carried in from a desktop vault must never draw a switch
+                in the on position on a shell where nothing is proxied,
+                which is the exact misrepresentation this item exists to
+                close. Same disclosure shape as "Labels survive restore"
+                below. */}
+            {!shellCapabilities().socksProxy && (
+                <ToggleRow
+                    label="Tor routing"
+                    hint="Not available on this platform. A web page cannot open a SOCKS connection at all, and a browser extension could only send your entire browser through the proxy rather than just the wallet. The desktop app can do it: install it there to route the wallet's requests through Tor."
+                    checked={false}
+                    disabled
+                    onChange={() => {}}
                 />
             )}
             <ToggleRow
@@ -145,28 +150,6 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
             <FormDraftTtlRow settings={settings} update={update} />
-            <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        Clipboard auto-clear (seconds)
-                    </span>
-                    <span style={ROW_HINT}>
-                        After copying a private key or mnemonic, wipe the clipboard
-                        after this many seconds. Range {CLIPBOARD_AUTO_CLEAR_MIN}–{CLIPBOARD_AUTO_CLEAR_MAX};
-                        0 disables auto-clear.
-                    </span>
-                </div>
-                <input
-                    type="number"
-                    min={CLIPBOARD_AUTO_CLEAR_MIN}
-                    max={CLIPBOARD_AUTO_CLEAR_MAX}
-                    step={5}
-                    value={clipboardSeconds}
-                    onChange={(e) => onClipboardSecondsChange(e.target.value)}
-                    aria-label="Clipboard auto-clear seconds"
-                    style={{ ...INPUT, width: 96 }}
-                />
-            </div>
         </div>
     );
 }
