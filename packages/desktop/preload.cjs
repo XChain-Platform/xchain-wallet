@@ -60,6 +60,8 @@ const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
 const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
+const UPDATER_EVENT_CHANNEL = 'xchain:updater';
+const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
@@ -92,6 +94,40 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
      */
     openDetached(args) {
         return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, args);
+    },
+});
+
+// The update bridge ( row 140/142).
+//
+// WHAT WAS MISSING, AND IT WAS THE WHOLE LAST MILE. main/index.js has
+// broadcast `xchain:updater` events since the updater was wired, and
+// under `contextIsolation: true` a renderer cannot call `ipcRenderer.on`,
+// so nothing could ever receive them: the channel had one writer and no
+// possible reader. `downloadAndInstall()` in main/updater.js - the only
+// path to an installed update, and the one that runs the S5 signature
+// gate before it calls `quitAndInstall` - had no caller anywhere in the
+// repo. So the shipped desktop wallet checked for updates on launch,
+// told no one, and could not install one. Both halves are exposed here.
+contextBridge.exposeInMainWorld('xchainWalletUpdater', {
+    /**
+     * Subscribe to updater events: `available`, `verifying`, `rejected`,
+     * `error`, `downloaded`. Returns an unsubscribe.
+     * @param {(event: {type: string, info?: any}) => void} listener
+     * @returns {() => void}
+     */
+    onEvent(listener) {
+        const wrapped = (_event, payload) => { listener(payload); };
+        ipcRenderer.on(UPDATER_EVENT_CHANNEL, wrapped);
+        return () => ipcRenderer.removeListener(UPDATER_EVENT_CHANNEL, wrapped);
+    },
+    /**
+     * Download the offered update, verify it against the K1-signed
+     * release manifest, and install it. The app quits and relaunches on
+     * success, so a resolved `{ ok: true }` is rarely observed.
+     * @returns {Promise<{ ok: boolean, reason?: string }>}
+     */
+    install() {
+        return ipcRenderer.invoke(UPDATER_INSTALL_CHANNEL);
     },
 });
 

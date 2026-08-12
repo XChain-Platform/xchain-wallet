@@ -496,11 +496,28 @@ app.whenReady().then(async () => {
     // returns false in dev). Events relay to every open renderer via
     // IPC so any window can surface the "update available" toast.
     try {
-        const { checkForUpdates } = await attachUpdater({
+        const { checkForUpdates, downloadAndInstall } = await attachUpdater({
             onEvent: (event) => {
                 broadcastToWindows('xchain:updater', event);
             },
         });
+
+        // THE INSTALL HANDLER IS THE HALF THAT WAS MISSING ( row
+        // 142). The broadcast above has always fired, into a channel no
+        // renderer could subscribe to under contextIsolation, and nothing
+        // in the repo ever called `downloadAndInstall`. The app therefore
+        // checked for updates on launch and had no way to offer or apply
+        // one - while the feed, the pointers and the S5 manifest gate
+        // were all built and tested. Same sender check as the message
+        // channel below: an install is a quit-and-replace, so it must not
+        // be reachable from a frame that is positively remote.
+        ipcMain.handle('xchain:updater-install', async (event) => {
+            if (!isTrustedSenderEvent(event)) {
+                return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
+            }
+            return downloadAndInstall();
+        });
+
         // Kick a check on launch. User-triggered re-checks land later
         // via a "Check for updates" menu item (future step).
         void checkForUpdates();
