@@ -471,20 +471,283 @@ function jobBlock(name) {
     //    rewrite the AppImage and the deb in place with host bytes.
     //    Narrowing it to the snap target is what keeps that from happening
     //    the day the Snap credential lands.
+    //    THE REHEARSAL VARIANT USED TO BE EXEMPT HERE AND IS NOT ANY MORE
+    //    ( row 136). The exemption reasoned about reproducibility -
+    //    nothing publishes a pre-signing hash for a rehearsal, so it has no
+    //    reproduction for a host toolchain to break - and that was true and
+    //    beside the point. measured what a host build omits: the
+    //    runner install never compiles tiny-secp256k1 into the packaged tree,
+    //    so a host-built rehearsal ships the JS elliptic-curve fallback where
+    //    a release ships the addon, and xr_check_payload_native refuses that
+    //    shape. A rehearsal that could not pass the release's own payload
+    //    gate is not a rehearsal of the release. The snap stays exempt for
+    //    the reason it always had: snapcraft cannot run in the image.
     const hostBuilds = linuxJob.split(/\n(?= {6}- )/)
         .filter((step) => /dist --linux/.test(step));
     for (const step of hostBuilds) {
         const name = (/name: (.+)/.exec(step) || [, step.trim().split('\n')[0]])[1];
-        const targetsSnapOnly = /dist --linux snap\b/.test(step);
-        const isRehearsal = /STAGING_FEED|dist-staging/.test(step);
-        assert.ok(targetsSnapOnly || isRehearsal,
+        assert.ok(/dist --linux snap\b/.test(step),
             `the desktop-linux step "${name}" runs a full electron-builder Linux build on the `
             + 'runner. It would rewrite the AppImage and the deb that the container just '
             + 'produced, with bytes compiled against the runner\'s toolchain, and nothing '
             + 'downstream can tell. A host build in this job is allowed only for the snap '
-            + '(snapcraft cannot run in the image, and the snap is outside the reproduce set) '
-            + 'or for the rehearsal variant, which writes to dist-staging and is never signed.');
+            + '(snapcraft cannot run in the image, and the snap is outside the reproduce set). '
+            + 'The rehearsal variant goes through reproduce.sh like everything else.');
     }
+
+    // 5. The rehearsal goes through the container, in its OWN out dir.
+    //
+    //    Two separate failures, and the second is the quiet one. Routing the
+    //    rehearsal back onto the host re-creates a bundle the payload gate
+    //    refuses; pointing it at the production run's out dir overwrites
+    //    RELEASE_HASHES.txt for the artifacts this release actually
+    //    publishes, with the rehearsal's, and nothing downstream would say so.
+    const reproSteps = linuxJob.split(/\n(?= {6}- )/)
+        .filter((step) => /reproduce\.sh/.test(step));
+    assert.equal(reproSteps.length, 2,
+        `the desktop-linux job calls reproduce.sh ${reproSteps.length} time(s); it must call it `
+        + 'exactly twice - once for the release set and once for the §7.5 rehearsal variant, '
+        + 'so both are cut by the same code path a third party runs.');
+
+    const rehearsal = reproSteps.filter((s) => /XCHAIN_STAGING_FEED_URL/.test(s));
+    assert.equal(rehearsal.length, 1,
+        'exactly one of the desktop-linux reproduce.sh steps must carry '
+        + 'XCHAIN_STAGING_FEED_URL. That variable is what selects the rehearsal variant at '
+        + 'build time; without it the step reproduces a second production set.');
+    assert.match(rehearsal[0], /XCHAIN_REPRODUCE_IN_PLACE: '1'/,
+        'the rehearsal reproduce.sh step does not set XCHAIN_REPRODUCE_IN_PLACE, so it builds '
+        + 'a detached worktree whose dist-staging is deleted on exit and the upload finds '
+        + 'nothing.');
+
+    const outDirs = reproSteps.map((s) => (/reproduce\.sh HEAD "([^"]+)"/.exec(s) || [, null])[1]);
+    assert.ok(outDirs.every(Boolean),
+        `a reproduce.sh step in desktop-linux passes no quoted out dir: ${JSON.stringify(outDirs)}`);
+    assert.notEqual(outDirs[0], outDirs[1],
+        `both desktop-linux reproduce.sh steps write to ${outDirs[0]}. reproduce.sh emits `
+        + "RELEASE_HASHES.txt into that directory, so the rehearsal would overwrite the "
+        + 'release set\'s own manifest and the published hashes would describe bytes nobody '
+        + 'shipped.');
+}
+
+// ------- home 6: the §7.5 rehearsal selector has to reach the container
+//
+// The lane above made the container the only place a shippable Linux bundle
+// is cut, and that closed the rehearsal off. A §7.5 rehearsal variant is
+// selected purely by XCHAIN_STAGING_FEED_URL, which
+// electron-builder.config.cjs reads at build time; `docker run` passed a
+// FIXED `-e` list that did not carry it, so the container could only ever
+// produce a production set. Meanwhile a rehearsal built OUTSIDE the
+// container carries no compiled tiny-secp256k1, and xr_check_payload_native
+// in tools/release/lib.sh now refuses exactly that (). So the only
+// rehearsal a maintainer could build was correctly refused, and the only
+// build path that satisfies the gate could not bake the staging feed: §7.5
+// was unreachable, with every check in this file green.
+//
+// TWO WAYS THIS BREAKS, AND ONLY ONE OF THEM LOOKS LIKE A REGRESSION.
+// Dropping the passthrough re-closes §7.5, loudly. The other one is worse
+// and would be done as tidying: making the `-e` unconditional. An env var
+// that is always declared, empty or not, is a change to the build
+// environment of every PRODUCTION reproduction, which is the one property
+// this whole file defends. Both are driven below rather than pattern
+// matched, because the difference between them lives in shell expansion and
+// not in the text.
+{
+    // Taken from the file, not restated, so the harness drives reproduce.sh's
+    // own derivation. The `:-` form is what keeps `set -u` off the unset case.
+    const derive = /^STAGING_FEED_URL="\$\{XCHAIN_STAGING_FEED_URL:-\}"$/m.exec(reproduceSh);
+    assert.ok(derive,
+        'reproduce.sh must read XCHAIN_STAGING_FEED_URL into STAGING_FEED_URL via the '
+        + 'unset-safe `${XCHAIN_STAGING_FEED_URL:-}` form. The script runs under `set -u`, '
+        + 'so a bare reference aborts every production reproduction, which is a worse '
+        + 'failure than the one being fixed.');
+
+    // The `docker run` invocation, verbatim, from the file under test.
+    const runStart = reproduceSh.indexOf('docker run --rm');
+    assert.notEqual(runStart, -1, 'reproduce.sh must invoke `docker run --rm`');
+    const tail = '"${IMAGE_TAG}"';
+    const runEnd = reproduceSh.indexOf(tail, runStart);
+    assert.notEqual(runEnd, -1, 'reproduce.sh\'s `docker run` must end with the image tag');
+    const dockerRun = reproduceSh.slice(runStart, runEnd + tail.length);
+
+    /**
+     * The argv `docker run` would receive, with `docker` stubbed and every
+     * variable the invocation reads supplied. Nothing is built and no
+     * container starts; this is the shell doing its expansion and printing
+     * the result. `null` means the variable is absent from the environment
+     * entirely, which is the production case.
+     */
+    function dockerRunArgv(staging) {
+        const script = [
+            'set -euo pipefail',
+            'docker() { printf "%s\\n" "$@"; }',
+            'BUILD_PLATFORM=linux/amd64',
+            'SOURCE_DATE_EPOCH=1700000000',
+            `NODE_VERSION=${toolchain.node.version}`,
+            `COMMIT_SHA=${'0'.repeat(40)}`,
+            'SDK_COMMIT=',
+            'SDK_PINNED=npm:@dankest-llc/xchain-sdk@0.0.0',
+            'SDK_WORKTREE_DIR=',
+            'WORKTREE_DIR=/guard/worktree',
+            'OUT_DIR_ABS=/guard/out',
+            'IMAGE_TAG=xchain-wallet-desktop:guard',
+            derive[0],
+            dockerRun,
+        ].join('\n');
+
+        const env = { ...process.env };
+        if (staging === null) delete env.XCHAIN_STAGING_FEED_URL;
+        else env.XCHAIN_STAGING_FEED_URL = staging;
+
+        const r = spawnSync('bash', ['-c', script], { encoding: 'utf8', env });
+        assert.equal(r.status, 0,
+            `reproduce.sh's docker invocation does not evaluate cleanly: ${r.stderr}`);
+        return r.stdout.split('\n').filter((l) => l !== '');
+    }
+
+    const STAGING = 'https://downloads.xchain.io/wallet/_rehearsal-7f3a91c2/desktop/';
+    const bare = dockerRunArgv(null);
+    const empty = dockerRunArgv('');
+    const set = dockerRunArgv(STAGING);
+
+    // 1. THE PRODUCTION RUN IS UNCHANGED. Absent and empty must both give
+    //    the argv the script had before the passthrough existed - not an
+    //    `-e` with an empty value, not a declared-but-blank variable.
+    assert.deepEqual(empty, bare,
+        'reproduce.sh builds a different `docker run` for XCHAIN_STAGING_FEED_URL="" than '
+        + 'for the variable being absent. An empty rehearsal selector IS a production '
+        + 'build, and the release lane sets the variable from a secret that may be unset.');
+    for (const argv of [bare, empty]) {
+        assert.equal(argv.filter((a) => a.includes('XCHAIN_STAGING_FEED_URL')).length, 0,
+            'a production reproduction passes XCHAIN_STAGING_FEED_URL into the container. '
+            + 'Even empty, that declares a variable in the build environment that was not '
+            + 'there before, and Level-2 reproducibility is a claim about that environment. '
+            + 'Keep the `${STAGING_FEED_URL:+-e ...}` conditional; do not flatten it.');
+    }
+
+    // 2. AND THE REHEARSAL RUN CARRIES IT. Positional, so a passthrough that
+    //    loses its `-e` (one word, silently making the value a stray arg) is
+    //    caught too.
+    const idx = set.findIndex((a) => a === `XCHAIN_STAGING_FEED_URL=${STAGING}`);
+    assert.notEqual(idx, -1,
+        'reproduce.sh does not forward XCHAIN_STAGING_FEED_URL to the container. '
+        + 'electron-builder.config.cjs selects the §7.5 rehearsal variant off that variable '
+        + 'at build time, so without it the container can only produce a production set - '
+        + 'and a rehearsal built outside the container has no compiled tiny-secp256k1, which '
+        + 'xr_check_payload_native in tools/release/lib.sh refuses (). Between the '
+        + 'two, §7.5 has no build path at all.');
+    assert.equal(set[idx - 1], '-e',
+        'the forwarded XCHAIN_STAGING_FEED_URL is not preceded by `-e`, so docker reads it '
+        + 'as a positional argument rather than an environment variable.');
+
+    // 3. The delta is EXACTLY those two words. Anything else the rehearsal
+    //    path changes about the invocation is a second variable between the
+    //    two builds, and nothing downstream would name it.
+    const withoutStaging = [...set];
+    withoutStaging.splice(idx - 1, 2);
+    assert.deepEqual(withoutStaging, bare,
+        'a rehearsal `docker run` differs from the production one by more than the single '
+        + '`-e XCHAIN_STAGING_FEED_URL=...` pair. The two builds already differ in the bytes '
+        + 'they produce; any further difference in HOW they are built makes a rehearsal stop '
+        + 'exercising the release path it exists to rehearse.');
+
+    // 4. One invocation, both modes. In-place changes WORKTREE_DIR and the
+    //    cleanup and nothing else, so a second `docker run` added for the
+    //    lane would be a second copy of the pin set - the defect home 5
+    //    exists to prevent, and it would take the passthrough out of sync
+    //    with it too.
+    assert.equal((reproduceSh.match(/^docker run /gm) || []).length, 1,
+        'reproduce.sh has more than one `docker run`. The in-place mode the release lane '
+        + 'uses and the worktree mode a verifier uses must share ONE container invocation, '
+        + 'or the lane and the verification drift apart exactly as they did before .');
+}
+
+// ------- home 7: the rehearsal has to be MANIFESTED from its own directory
+//
+// Home 6 got the staging selector into the container. What it could not see
+// is that build.sh then hashed a hard-coded `dist/`, while
+// electron-builder.config.cjs writes a staging build to `dist-staging`. In a
+// fresh worktree that mismatch failed loudly under `set -e` and cost nothing.
+// Under XCHAIN_REPRODUCE_IN_PLACE=1 - the mode the release lane itself uses -
+// it SUCCEEDED, because dist/ is already on disk from the production
+// container run earlier in the same job, so a rehearsal would have emitted a
+// manifest of the PRODUCTION artifacts and the rehearsal set would have gone
+// unhashed beside it. That is the §7.5 seam finding one level up: a rehearsal
+// and its proof must ride the same bytes, and a rehearsal that reports on the
+// wrong ones is worse than a rehearsal that cannot run.
+//
+// Driven, and pinned to the config, because there are two ways to break it
+// and neither is a typo. The selection can invert or go stale (a rename in
+// the config that nothing propagates here re-creates the exact defect), and
+// the empty-string case can drift apart between the two files - the release
+// lane feeds this variable from a secret that may be unset, and `-n ""` and
+// JavaScript's `"" || null` have to keep agreeing that an empty selector is a
+// PRODUCTION build.
+{
+    const selector = /\nif \[ -n "\$\{XCHAIN_STAGING_FEED_URL:-\}" \]; then\n(?:.*\n)*?fi\n/
+        .exec(buildSh);
+    assert.ok(selector,
+        'build.sh must choose its manifest directory from `${XCHAIN_STAGING_FEED_URL:-}` in '
+        + 'an if/fi block. The `:-` form is what keeps `set -u` off the production case, '
+        + 'where the variable is absent entirely.');
+
+    assert.ok(!/^cd \/workspace\/packages\/desktop\/dist$/m.test(buildSh),
+        'build.sh still cds to a hard-coded packages/desktop/dist. Under '
+        + 'XCHAIN_REPRODUCE_IN_PLACE=1 that path exists from the production build in the '
+        + 'same job, so a rehearsal silently manifests the production artifacts instead of '
+        + 'failing ().');
+    assert.ok(/^cd "\/workspace\/packages\/desktop\/\$\{DIST_DIR\}"$/m.test(buildSh),
+        'build.sh does not cd into the directory its own selector chose, so the selector '
+        + 'decides nothing.');
+
+    /**
+     * DIST_DIR and BUILD_VARIANT as build.sh's own block computes them, run
+     * under the same `set -euo pipefail` the script uses. `null` means the
+     * variable is absent from the environment, which is the production case.
+     */
+    function select(staging) {
+        const script = ['set -euo pipefail', selector[0], 'printf "%s\\n%s\\n" "${DIST_DIR}" "${BUILD_VARIANT}"'].join('\n');
+        const env = { ...process.env };
+        if (staging === null) delete env.XCHAIN_STAGING_FEED_URL;
+        else env.XCHAIN_STAGING_FEED_URL = staging;
+        const r = spawnSync('bash', ['-c', script], { encoding: 'utf8', env });
+        assert.equal(r.status, 0,
+            `build.sh's output-directory selector does not evaluate cleanly: ${r.stderr}`);
+        const [dir, variant] = r.stdout.split('\n');
+        return { dir, variant };
+    }
+
+    // The config is the authority on both names; build.sh mirrors it, and this
+    // is the assertion that fails when only one of the two is renamed.
+    const config = read('packages/desktop/electron-builder.config.cjs');
+    const outputs = /output:\s*isStaging \? '([^']+)' : '([^']+)'/.exec(config);
+    assert.ok(outputs,
+        "electron-builder.config.cjs no longer sets `directories.output` as "
+        + "`isStaging ? '<staging>' : '<production>'`. build.sh mirrors that expression to "
+        + 'find the artifacts it hashes; re-point this guard at whatever replaced it rather '
+        + 'than deleting it.');
+    const [, stagingDir, productionDir] = outputs;
+
+    const STAGING = 'https://downloads.xchain.io/wallet/_rehearsal-7f3a91c2/desktop/';
+    assert.deepEqual(select(STAGING), { dir: stagingDir, variant: 'staging' },
+        `a rehearsal build does not manifest ${stagingDir}/, which is where `
+        + 'electron-builder.config.cjs puts it. The manifest would cover whatever else is '
+        + 'on disk.');
+    for (const absent of [null, '']) {
+        assert.deepEqual(select(absent), { dir: productionDir, variant: 'production' },
+            'a production build does not manifest ' + productionDir + '/ when '
+            + `XCHAIN_STAGING_FEED_URL is ${absent === null ? 'absent' : 'empty'}. The config `
+            + 'reads that variable as `process.env.X || null`, so an empty selector is a '
+            + 'production build there; the two files must not disagree about which build '
+            + 'the release lane just made.');
+    }
+
+    // The variant reaches the reader, not just the shell. Both manifests carry
+    // it, so a file on its own says which build it describes - the question a
+    // maintainer holding two RELEASE_HASHES.txt files actually has.
+    assert.equal((buildSh.match(/^ {4}echo "# variant: +\$\{BUILD_VARIANT\}"$/gm) || []).length, 2,
+        'build.sh does not stamp `# variant:` into BOTH manifests. Without it the packaged '
+        + 'and diagnostic manifests of a rehearsal are byte-shaped exactly like a release\'s '
+        + 'and nothing in the file says otherwise.');
 }
 
 // ------- home 6: the §7.5 rehearsal selector has to reach the container

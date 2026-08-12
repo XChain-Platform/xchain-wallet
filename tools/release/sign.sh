@@ -43,8 +43,21 @@
 #   --os <name>         rehearse ONE OS (linux|mac|windows). --staging only.
 #   --passphrase-file <path>
 #                       read K1's passphrase from <path> instead of a
-#                       pinentry. --staging only, and refused on a
-#                       production run (operator ruling `dq-9`, 2026-08-10).
+#                       pinentry. Takes a PATH and never a value. On a
+#                       PRODUCTION run it additionally requires
+#                       --unattended (operator ruling `dq-9` and its
+#                       same-day amendment, 2026-08-10).
+#   --unattended        permit an unattended PRODUCTION signature. Must be
+#                       typed by every run that wants one, so the
+#                       affordance is never inherited from a copied
+#                       staging command or an env default. The manifest
+#                       then declares `# signing: unattended` in the bytes
+#                       K1 signs over, because what this gives up is that
+#                       a person chose to make the signature, and a reader
+#                       weighing it is entitled to know. Refused without
+#                       --passphrase-file (it would authorise nothing) and
+#                       refused with --staging (a rehearsal already reads
+#                       a file).
 #   --force, -f         overwrite an existing manifest
 #
 # PARTIAL RELEASES, and why the flag is narrower than it looks. Without
@@ -112,13 +125,18 @@ RELEASE_SET=release
 STAGING_OS=""
 LANE_NAMES=()
 
-# Where a rehearsal reads K1's passphrase (operator ruling `dq-9`,
-# 2026-08-10). Empty means a pinentry, which is what a production run
-# always gets. The asymmetry is deliberate: a rehearsal only a human can
-# start happens as often as a human remembers, and §7.5 has been caught
-# five times shipping a step nothing ever ran; a production manifest is
-# the one signature whose worth IS that a person chose to make it.
+# Where K1's passphrase is read from (operator ruling `dq-9`, 2026-08-10).
+# Empty means a pinentry. It was a rehearsal-only affordance on that
+# original ruling - a rehearsal only a human can start happens as often as
+# a human remembers, and §7.5 has been caught five times shipping a step
+# nothing ever ran - and the operator AMENDED it the same day to allow a
+# production run to use one behind `--unattended`.
 PASSPHRASE_FILE=""
+
+# Whether this run may sign a PRODUCTION manifest without a human at the
+# pinentry (the dq-9 amendment). Off unless typed, on every run: the whole
+# value of the flag is that it cannot be inherited.
+UNATTENDED=0
 
 # Split one --lane value on commas so `--lane android,ios` and two flags
 # mean the same thing. Empty words are dropped rather than becoming an
@@ -166,12 +184,19 @@ while [[ $# -gt 0 ]]; do
             STAGING_OS="$2"
             shift 2
             ;;
-        # A rehearsal's passphrase source (`dq-9`). Takes a PATH and never
-        # a value, so the passphrase cannot reach a process listing, a
-        # shell history or this script's own output.
+        # K1's passphrase source (`dq-9`). Takes a PATH and never a value,
+        # so the passphrase cannot reach a process listing, a shell history
+        # or this script's own output.
         --passphrase-file)
             PASSPHRASE_FILE="$2"
             shift 2
+            ;;
+        # Permit an unattended PRODUCTION signature (the dq-9 amendment,
+        # 2026-08-10). Deliberately takes no value: an authorisation that
+        # can be spelled `--unattended=0` is one somebody will spell wrong.
+        --unattended)
+            UNATTENDED=1
+            shift
             ;;
         --help|-h)
             # The usage block: everything between the license header's
@@ -645,18 +670,42 @@ if [[ -n "$STAGING_OS" && "$RELEASE_SET" != "staging" ]]; then
     exit 2
 fi
 
-# The passphrase file is a REHEARSAL affordance and refusing it on a
-# production run is the whole of the operator's ruling, so it is refused
-# here rather than quietly ignored: a run that believed it was signing
-# non-interactively and instead blocked on a pinentry is recoverable,
-# while a production manifest signed from a file is a ceremony that
-# silently stopped being one.
-if [[ -n "$PASSPHRASE_FILE" && "$RELEASE_SET" != "staging" ]]; then
-    echo "sign.sh: --passphrase-file is only allowed with --staging." >&2
-    echo "  A production manifest keeps a human at the pinentry (dq-9," >&2
-    echo "  2026-08-10). That signature's worth is that a person chose to" >&2
-    echo "  make it; reading it from a file makes the ceremony a cron job" >&2
-    echo "  that nobody decided to run." >&2
+# The passphrase file was a REHEARSAL-ONLY affordance until the operator
+# amended `dq-9` on 2026-08-10 to allow an unattended PRODUCTION signature.
+# The amendment is honoured with a second flag rather than by deleting the
+# check, and the distinction matters more than it looks.
+#
+# The original ruling's reasoning still stands on its own terms: a
+# production manifest signed from a file is a ceremony that silently
+# stopped being one, and K1 is the key attesting the bytes users install.
+# What changed is who decided to accept that, not whether it costs
+# anything. So an unattended production signature must be TYPED, every
+# time, by the run that wants it - it can never be inherited from a
+# staging command someone copied, from an env default, or from a
+# passphrase file that happens to be lying next to the key.
+#
+# `--unattended` alone is refused for the same reason in reverse: a flag
+# that reads as an authorisation while changing nothing would be taken for
+# one, and the next reader would believe a control exists that does not.
+if [[ -n "$PASSPHRASE_FILE" && "$RELEASE_SET" != "staging" && "$UNATTENDED" -ne 1 ]]; then
+    echo "sign.sh: --passphrase-file on a production run needs --unattended." >&2
+    echo "  The operator amended dq-9 on 2026-08-10 to allow this, and the" >&2
+    echo "  flag is what makes each such run a choice rather than an" >&2
+    echo "  inherited default. A production manifest signed from a file is" >&2
+    echo "  a ceremony that stopped being one; the manifest records that in" >&2
+    echo "  its own '# signing: unattended' header so a reader can weigh it." >&2
+    exit 2
+fi
+if [[ "$UNATTENDED" -eq 1 && -z "$PASSPHRASE_FILE" ]]; then
+    echo "sign.sh: --unattended without --passphrase-file does nothing." >&2
+    echo "  This run would still meet a pinentry. Refusing rather than" >&2
+    echo "  proceeding, because a flag that reads as an authorisation and" >&2
+    echo "  changes nothing is worse than no flag at all." >&2
+    exit 2
+fi
+if [[ "$UNATTENDED" -eq 1 && "$RELEASE_SET" == "staging" ]]; then
+    echo "sign.sh: --unattended is meaningless with --staging." >&2
+    echo "  A rehearsal already reads its passphrase from a file (dq-9)." >&2
     exit 2
 fi
 
@@ -829,17 +878,34 @@ node "$LAUNCH_PROBE" "$INPUT_DIR" "$RELEASE_SET"
 
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# The provenance declaration, and it is EMPTY unless this is an unattended
+# production run. A rehearsal already announces itself through
+# `# rehearsal-os:` and lives on a feed no user reads, so stamping it here
+# would spend the field's meaning on the case that never needed it.
+SIGNING_PROVENANCE=""
+if [[ "$UNATTENDED" -eq 1 && "$RELEASE_SET" != "staging" ]]; then
+    SIGNING_PROVENANCE="unattended"
+fi
 xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" \
-    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS"
+    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS" "$SIGNING_PROVENANCE"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
-# Loopback pinentry ONLY when a rehearsal supplied a passphrase file. The
-# array stays empty on every other path, so a production run reaches gpg
-# with exactly the arguments it always had and still meets a pinentry.
+# Loopback pinentry ONLY when a passphrase file was supplied. The array
+# stays empty on every other path, so a run that did not ask for one
+# reaches gpg with exactly the arguments it always had and meets a pinentry.
 GPG_PASSPHRASE_ARGS=()
 if [[ -n "$PASSPHRASE_FILE" ]]; then
     GPG_PASSPHRASE_ARGS=(--pinentry-mode loopback --passphrase-file "$PASSPHRASE_FILE")
-    echo "sign.sh: passphrase from $PASSPHRASE_FILE (staging only, dq-9)" >&2
+    if [[ "$SIGNING_PROVENANCE" == "unattended" ]]; then
+        # Loud, on the production path only. The operator authorised this;
+        # nobody should be able to discover it after the fact from a log
+        # they had to go looking for.
+        echo "sign.sh: *** UNATTENDED PRODUCTION SIGNATURE (dq-9 amendment," >&2
+        echo "sign.sh: *** operator 2026-08-10). No human is at the pinentry" >&2
+        echo "sign.sh: *** for the key that attests what users install. The" >&2
+        echo "sign.sh: *** manifest records this as '# signing: unattended'." >&2
+    fi
+    echo "sign.sh: passphrase from $PASSPHRASE_FILE (dq-9)" >&2
 fi
 gpg --batch --yes \
     "${GPG_PASSPHRASE_ARGS[@]+"${GPG_PASSPHRASE_ARGS[@]}"}" \

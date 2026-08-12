@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/test-dapp",
-    "version": "0.337.0",
+    "version": "0.339.0",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "description": "Reference dApp exercising the window.xchain bridge - mock wallet provider + worked usage examples for third-party integrators",

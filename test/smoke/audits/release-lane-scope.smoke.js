@@ -213,7 +213,7 @@ try {
     //    files on different releases.
     {
         const bad = join(work, 'lanes-drift.txt');
-        writeFileSync(bad, 'android   NOT-SHIPPED   xchain-wallet-v*.sideload\n');
+        writeFileSync(bad, 'android   NOT-SHIPPED  store-only  xchain-wallet-v*.sideload\n');
         const s = scope(['android'], { lanesPath: bad });
         check('a lane glob no expected-artifacts row declares is refused',
             !s.ok && /declares/.test(s.out), s.out);
@@ -257,15 +257,15 @@ try {
     {
         const lanesShipped = join(work, 'lanes-shipped.txt');
         writeFileSync(lanesShipped, [
-            'android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
-            'ios       SHIPPED       xchain-wallet-ios-v*.ipa',
-            'mas       NOT-SHIPPED   *-mas.pkg',
-            'msstore   NOT-SHIPPED   *-appx.appx',
-            'snap      NOT-SHIPPED   *.snap',
+            'android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
+            'ios       SHIPPED      store-only  xchain-wallet-ios-v*.ipa',
+            'mas       NOT-SHIPPED  store-only  *-mas.pkg',
+            'msstore   NOT-SHIPPED  store-only  *-appx.appx',
+            'snap      NOT-SHIPPED  store-only  *.snap',
             // See release-shipped-lanes.smoke.js: an optional row claimed by
             // no lane is a hard failure, so `s second direct APK needs
             // its lane present even in a fixture that never stages it.
-            'android-full NOT-SHIPPED xchain-wallet-v*-full.apk',
+            'android-full NOT-SHIPPED store-only  xchain-wallet-v*-full.apk',
             '',
         ].join('\n'));
         const dir = stage([AAB, APK]);

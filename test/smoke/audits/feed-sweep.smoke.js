@@ -26,7 +26,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { parseManifest, parseUpdateInfo, sweep, verifyManifestSignature }
+import { PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep, verifyManifestSignature }
     from '../../../tools/release/feed-sweep.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'xchain-feed-sweep-'));
@@ -272,5 +272,110 @@ const V2 = {
         'entries are keyed on basename: the manifest says ./name, the feed says desktop/name');
 }
 
+// -------------------------- the K1 fingerprint the world sees (row 137)
+//
+// K1 signs with a subkey, so VALIDSIG's first field is the SUBKEY while
+// every document a user is handed - xchain.io/security, SECURITY.md, the
+// verification recipe - publishes the PRIMARY. Matching only field 1 made
+// the documented value the wrong one: driven against the live feed,
+// `--gpg-key <primary>` reported MANIFEST-BAD-SIG on a genuine K1
+// signature and dropped the manifest from the baseline with it.
+
+{
+    const K1_PRIMARY = '1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7';
+    const K1_SUBKEY = '27A1593607C828903EF67DAD10ADF79899B41573';
+    // The exact status line the live feed produces, fields and all.
+    const validsig = () => ({
+        status: 0,
+        stdout: `[GNUPG:] GOODSIG 10ADF79899B41573 XChain Wallet Release Signing\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-08-06 1786041697 0 4 0 22 10 00 ${K1_PRIMARY}\n`,
+    });
+
+    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+        K1_PRIMARY, validsig), 'ok',
+    'the PRIMARY fingerprint verifies - it is the only one any document publishes');
+    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+        K1_SUBKEY, validsig), 'ok',
+    'and the signing subkey still verifies, for anyone who pinned that');
+
+    // The property that must not be lost while widening the match: a
+    // signature from a key that is not K1 is still rejected. An attacker
+    // with their own key is exactly what this check exists for.
+    const otherKey = () => ({
+        status: 0,
+        stdout: '[GNUPG:] VALIDSIG ' + 'B'.repeat(40) + ' 2026-08-06 1 0 4 0 22 10 00 '
+            + 'C'.repeat(40) + '\n',
+    });
+    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+        K1_PRIMARY, otherKey), 'bad',
+    'a good signature from someone else is still rejected on both fields');
+}
+
+// ------------------------------------- the android lane ( row 136)
+//
+// The direct-APK lane is the only one that has ever published, and this
+// sweep could not see it: PAYLOAD_DIRS listed desktop/extension/web, and
+// the pointer test accepted only `.yml`. Measured on origin-host the hourly
+// cron reported "0 artifact(s), 0 pointer(s), 1 manifest(s), 0 finding(s)"
+// over a feed holding a published APK and its pointer - a clean report on
+// an empty set, from the tool whose job is spotting a swapped binary.
+
+{
+    // A whole android lane, in the shape the real feed carries: the APK
+    // covered by its signed manifest, and a JSON pointer naming the version.
+    const apk = 'xchain-wallet-v0.336.0.apk';
+    const bytes = 'apk-bytes';
+    buildFeed(root, { artifacts: { [apk]: bytes }, manifests: { 'v0.336.0': [apk] } });
+    mkdirSync(join(root, 'android'), { recursive: true });
+    rmSync(join(root, 'desktop', apk));
+    writeFileSync(join(root, 'android', apk), bytes);
+    writeFileSync(join(root, 'android', 'latest.json'), '{"version":"0.336.0"}\n');
+
+    const clean = sweep(root);
+    assert.equal(clean.checked, 1, 'the published APK is hashed, not skipped');
+    assert.equal(clean.pointers, 1, 'the JSON pointer is recognised as a pointer');
+    assert.deepEqual(codes(clean), [], 'a feed that matches its signed manifest is clean');
+
+    // The swap this tool exists to detect, on the only binary we ship.
+    writeFileSync(join(root, 'android', apk), `${bytes}-tampered`);
+    assert.deepEqual(codes(sweep(root)), ['MISMATCH'],
+        'rewritten APK bytes are caught against the K1-signed manifest');
+    writeFileSync(join(root, 'android', apk), bytes);
+
+    // The pointer attack: send every direct install at a version no signed
+    // manifest covers. The pointer names no bytes, so this is the whole of
+    // what the JSON lane can check, and it is the check that matters.
+    writeFileSync(join(root, 'android', 'latest.json'), '{"version":"9.9.9"}\n');
+    assert.deepEqual(codes(sweep(root)), ['POINTER-NO-MANIFEST'],
+        'a pointer moved to an unsigned version is caught');
+    writeFileSync(join(root, 'android', 'latest.json'), '{"version":"0.336.0"}\n');
+
+    // An extra binary appearing beside the real one.
+    writeFileSync(join(root, 'android', 'xchain-wallet-v9.9.9.apk'), 'rogue');
+    assert.deepEqual(codes(sweep(root)), ['UNCOVERED'],
+        'an unmanifested file in the android lane is reported');
+    rmSync(join(root, 'android', 'xchain-wallet-v9.9.9.apk'));
+
+    // Carrying a version is what makes a JSON file a pointer. Without one it
+    // is not an unparseable pointer, it is an unexplained file on the feed,
+    // and it must be treated as payload rather than waved through.
+    writeFileSync(join(root, 'android', 'latest.json'), '{}\n');
+    const stripped = sweep(root);
+    assert.equal(stripped.pointers, 0, 'a versionless JSON file is not a pointer');
+    assert.deepEqual(codes(stripped), ['UNCOVERED'],
+        'and it is reported as an uncovered file rather than ignored');
+}
+
+{
+    // The lane list is the whole defect, so assert it by property rather
+    // than by re-listing it: every directory the feed publishes into must
+    // be swept. A future lane that ships without being added here is the
+    // same bug again.
+    assert.ok(PAYLOAD_DIRS.includes('android'),
+        'the only lane that has ever published must be one the sweep walks');
+}
+
 rmSync(root, { recursive: true, force: true });
-console.log('feed-sweep.smoke.js: ok');
+console.log('feed-sweep.smoke.js: ok (including the  row 136 android lane: '
+    + 'the published APK is hashed against its signed manifest and the JSON '
+    + 'update pointer is checked, neither of which this sweep could see)');

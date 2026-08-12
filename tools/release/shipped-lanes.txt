@@ -79,7 +79,7 @@
 # also swallowed the full-feature APK below, silently labelling it `store`.
 # This row must keep spelling the glob exactly as that file does, because a
 # glob here that no row there declares is a hard failure by design.
-android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk
+android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk
 
 # The second direct APK (, operator answer 2026-08-07): the same tag
 # built at the `default` profile and signed by K10, for the audience that
@@ -99,25 +99,25 @@ android   SHIPPED       xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk
 # for the same reason. Flip this to SHIPPED in the commit that records the
 # first release actually carrying the file, and from then on a release that
 # omits it is a lane left behind rather than a smaller release.
-android-full NOT-SHIPPED xchain-wallet-v*-full.apk
+android-full NOT-SHIPPED store-only  xchain-wallet-v*-full.apk
 
 # iOS . Store-bound only; there is no direct-install lane on that
 # platform, so this row is one glob and always will be.
-ios       NOT-SHIPPED   xchain-wallet-ios-v*.ipa
+ios       NOT-SHIPPED  store-only  xchain-wallet-ios-v*.ipa
 
 # Mac App Store . Blocked on Apple Developer Program enrollment
 # and the distribution certificates that follow it.
-mas       NOT-SHIPPED   *-mas.pkg
+mas       NOT-SHIPPED  store-only  *-mas.pkg
 
 # Microsoft Store ( /  §15). Opt-in behind
 # XCHAIN_BUILD_APPX=1 and the Partner Center identity does not exist yet.
-msstore   NOT-SHIPPED   *-appx.appx
+msstore   NOT-SHIPPED  store-only  *-appx.appx
 
 # Snap Store ( /  §16). Opt-in behind XCHAIN_BUILD_SNAP=1 and
 # the Snapcraft store account does not exist yet (ceremony: account +
 # reserved name + exported login). Flip to SHIPPED in the commit that
 # records the first store upload.
-snap      NOT-SHIPPED   *.snap
+snap      NOT-SHIPPED  store-only  *.snap
 
 # Chrome Web Store . THE ODD ONE OUT, and the reason it belongs
 # here is worth stating, because the shape of every other row above is
@@ -145,4 +145,54 @@ snap      NOT-SHIPPED   *.snap
 # release. The signature class of its glob is `none`, so a partial
 # manifest scoped to this lane demands no OS code signature; Chrome signs
 # the item itself, with a key the store holds and we never see.
-extension NOT-SHIPPED   xchain-wallet-extension-v*.zip
+extension NOT-SHIPPED  store-only  xchain-wallet-extension-v*.zip
+
+# THE DESKTOP LANES (, operator answer to dq-11, 2026-08-11), and
+# they are here for the same reason the extension row above is: sign.sh
+# signs a release as a SET, so one lane missing an OS signing identity
+# takes every other lane down with it. That is not hypothetical - it is
+# the paragraph above this one, where two unsigned Windows installers
+# meant the Chrome submission could not have a signed manifest at all.
+#
+# The same wall then stopped the desktop feed itself. expected-artifacts.txt
+# declares *.exe and *win*.zip required at both arches, so a mac-plus-Linux
+# release fails the artifact-set gate on Windows alone (measured with a
+# control: 6 problems, every one of them Windows; the identical directory
+# plus the four Windows files exits 0). Azure Trusted Signing is an
+# operator ceremony that has not happened, and mac and Linux users were
+# waiting behind it for a signature that says nothing about their bytes.
+#
+# So the three desktop lanes are nameable, exactly like the store lanes,
+# and `sign.sh --lane mac,linux` cuts a real partial release for the two
+# whose credentials exist today. NOT-SHIPPED until the first desktop
+# release publishes: flip a row to SHIPPED in the commit that records it,
+# and from then on a release omitting it is a lane left behind.
+#
+# THE FEED COLUMN IS WHY THESE ROWS ARE NOT JUST MORE OF THE SAME. Every
+# lane above ships through a STORE, which is its own update channel, so a
+# partial release covering them carries no electron-updater pointer and
+# needs no 7.5 rehearsal - publish.sh waives both, deliberately .
+# These three DO carry pointers and DO need rehearsing, so a waiver keyed
+# on "is this partial" would silently publish a desktop release with the
+# rehearsal gate skipped. The column makes the real question - does this
+# release carry an updater feed - a declared fact rather than an inference
+# from whether a yml happens to be sitting in the directory.
+# mac and linux SHIPPED in v0.338.0, published 2026-08-11 to
+# downloads.xchain.io/wallet/desktop/ - the first desktop release this
+# project has cut. Eight artifacts, `coverage: partial`, attested by the
+# K1-signed manifest at RELEASE_HASHES/v0.338.0.txt. Verified after upload
+# the way the runbook asks: the three channel pointers answer 200 to
+# electron-builder's own user-agent and name 0.338.0, and the .AppImage and
+# .deb were re-downloaded from the public URL and hash to what that signed
+# manifest claims.
+#
+# So from here a release that omits either lane fails by name, which is the
+# whole point of the flip: those users now have an update feed pointing at
+# them, and a lane left behind is no longer a smaller release.
+#
+# windows stays NOT-SHIPPED: its signing identity does not exist (rails row
+# 13, deferred by operator priority 2026-08-11), and nothing here demands
+# anything of a NOT-SHIPPED lane.
+mac       SHIPPED      updater     *.dmg *mac*.zip
+linux     SHIPPED      updater     *.AppImage *.deb
+windows   NOT-SHIPPED  updater     *.exe *win*.zip

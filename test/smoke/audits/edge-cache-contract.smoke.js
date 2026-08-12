@@ -24,7 +24,8 @@
 
 import { strict as assert } from 'node:assert';
 
-import { judgeArtifact, judgePointer } from '../../../tools/release/verify-edge-cache.mjs';
+import { androidPointerPath, judgeArtifact, judgePointer } from '../../../tools/release/verify-edge-cache.mjs';
+import { UPDATE_FEED_URL } from '../../../packages/web/src/update/directUpdateCheck.js';
 
 // --- the trap this tool exists to avoid --------------------------------
 //
@@ -43,11 +44,44 @@ import { judgeArtifact, judgePointer } from '../../../tools/release/verify-edge-
 }
 
 // --- the good case ------------------------------------------------------
+//
+// BYPASS is the only status that proves a bypass rule from a header alone.
 
-for (const cfCache of ['BYPASS', 'DYNAMIC', 'bypass']) {
+for (const cfCache of ['BYPASS', 'bypass']) {
     assert.equal(
         judgePointer({ status: 200, cacheControl: 'no-store', cfCache }).verdict, 'PASS',
         `cf-cache-status=${cfCache} on a published pointer with no-store is the contract`);
+}
+
+// --- DYNAMIC is not the good case, and used to be ( row 35) -------
+//
+// The 404 trap above, one layer deeper. A LIVE pointer behind a bypass
+// rule PROVEN to match it by Cloudflare Trace reads DYNAMIC - and so does
+// a path with no rule at all. Measured in one minute on 2026-08-11:
+// `android/latest.json` (rule matches) DYNAMIC; `desktop/stable.yml` (rule
+// matches, 404) DYNAMIC; and the control that settles it,
+// `RELEASE_HASHES/v0.336.0.txt`, which NO rule touches and which asks to
+// be cached with `public, max-age=300`, ALSO DYNAMIC. None of `.yml`,
+// `.json` or `.txt` is in Cloudflare's default cacheable-extension set, so
+// DYNAMIC tracks the file extension, not the rule. (The APK beside them,
+// an extension that IS in the set, reads HIT under no rule at all.)
+//
+// So this judge scored PASS on a property its inputs cannot observe, for
+// as long as the tool has existed - the bare-`max-age` defect below,
+// arriving on the pointer side.
+{
+    const v = judgePointer({ status: 200, cacheControl: 'no-store', cfCache: 'DYNAMIC' });
+    assert.equal(v.verdict, 'UNMEASURED',
+        'DYNAMIC reads identically with and without a bypass rule, so it can neither pass '
+        + 'nor fail a pointer; scoring it PASS certified a rule the header cannot see');
+    assert.match(v.detail, /cannot show whether a bypass rule/);
+    // The origin half IS observable and must still be reported, or this
+    // verdict degrades into "we learned nothing" when half of it is solid.
+    assert.match(v.detail, /origin half holds/);
+    // An UNMEASURED pointer is not a FAIL either: nothing is wrong with it.
+    // Collapsing the two would make the tool cry defect at a correct feed.
+    assert.notEqual(v.verdict, 'FAIL',
+        'an unreadable edge half is an absence of evidence, not a defect');
 }
 
 // --- the edge is caching a pointer: the defect the rule exists to stop --
@@ -109,7 +143,74 @@ for (const cfCache of ['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATI
 
     assert.equal(judgeArtifact({ status: 404, cacheControl: 'no-store' }).verdict, 'UNPROVEN',
         'an unpublished artifact proves nothing either way');
+
+    //  run 22. Cached and cached-BY-RULE are different states, and this
+    // judge scored them identically until the origin was probed with
+    // Cloudflare bypassed and answered with no cache-control at all. A bare
+    // max-age is what the CDN falls back to when nothing covers the name, so
+    // accepting it certified a platform default as the contract.
+    const def = judgeArtifact({ status: 200, cacheControl: 'max-age=14400' });
+    assert.equal(def.verdict, 'FAIL',
+        'a bare max-age is a CDN default, not an origin rule: it says nothing is written '
+        + 'down about this name, and it disappears the day the zone default changes');
+    assert.match(def.detail, /platform default/);
+    // The two FAIL branches must stay distinguishable, or the message that
+    // reaches an operator cannot tell "not cached" from "cached by accident".
+    assert.doesNotMatch(def.detail, /must cache freely/,
+        'the by-default failure must not borrow the never-cached failure\'s message');
+
+    assert.equal(judgeArtifact({ status: 200, cacheControl: 'public, max-age=600, immutable' }).verdict,
+        'PASS', 'immutable is the load-bearing word; a rule that sets it is a rule');
+}
+
+// --- the Android pointer is IN the probe set ( run 20) ------------
+//
+// The lane this tool was written for has never published a pointer; the
+// direct-APK lane has, and until run 20 this tool did not know it existed.
+// So the check that matters here is not a verdict at all - every verdict
+// above already worked - it is that the Android path is DERIVED from the
+// URL the app actually fetches, so a probe can never be aimed at a name no
+// client takes. That is the `latest*.yml` defect restated, and it is the
+// one thing a green run of this tool could otherwise hide.
+{
+    assert.equal(androidPointerPath(UPDATE_FEED_URL), 'android/latest.json',
+        'the direct-APK pointer path must come from the app\'s own UPDATE_FEED_URL');
+
+    assert.equal(androidPointerPath('https://downloads.xchain.io/wallet/android/beta.json'),
+        'android/beta.json',
+        'the derivation must follow the app, not a name written in this tool');
+
+    // Fails SHUT. A feed that moves out from under /wallet/ must stop the
+    // tool rather than yield an absolute path: that would probe a URL
+    // nobody serves and report UNPROVEN, which reads as "not published
+    // yet" rather than "this tool no longer knows where to look".
+    assert.throws(() => androidPointerPath('https://downloads.xchain.io/mobile/latest.json'),
+        /does not know what to probe/,
+        'an underivable feed path must throw, never guess');
+}
+
+// The real headers this tool measured live, kept as a case so the state that
+// prompted the work cannot silently become unrepresentable. Run 20 read these
+// at the edge and concluded "the binary half of the contract is right and the
+// pointer half is not". Run 22 probed the ORIGIN with Cloudflare bypassed and
+// disproved the first half of that sentence: BOTH Android paths answer 200
+// with no cache-control at all, so neither half is a rule. The pointer is
+// merely uncached by default and the APK is merely cached by default, and
+// `sudo grep -rn android /etc/apache2/` on the origin returns nothing.
+{
+    const v = judgePointer({ status: 200, cacheControl: null, cfCache: 'DYNAMIC' });
+    assert.equal(v.verdict, 'FAIL',
+        'a pointer with NO cache-control is not protected by the origin at all; it is '
+        + 'merely un-cached by default today, which is not a rule and does not survive '
+        + 'anyone adding one');
+    assert.match(v.detail, /expected no-store/);
+
+    assert.equal(judgeArtifact({ status: 200, cacheControl: 'max-age=14400' }).verdict, 'FAIL',
+        'the APK beside that pointer is cached by Cloudflare default, not by the contract; '
+        + 'the origin sets no header on it at all');
 }
 
 console.log('OK: edge cache contract smoke ( §3 / : a 404 is UNPROVEN, never a pass; '
-    + 'MISS and EXPIRED are as fatal as HIT; the origin and the edge are both required)');
+    + 'MISS and EXPIRED are as fatal as HIT; the origin and the edge are both required; '
+    + ' run 20: the Android pointer is derived from the app\'s own feed URL; '
+    + ' row 35: DYNAMIC is UNMEASURED, never a pass - only BYPASS proves the rule)');

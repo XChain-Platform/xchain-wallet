@@ -7,13 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed .
+- The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched .
+
+## [0.339.0] - 2026-08-12
+
 ### Added
+- The desktop wallet now offers an available update and installs it, which nothing in the app could do before .
+
+### Fixed
+- The signed macOS app can start: the hardened runtime allows JIT, without which Electron's V8 cannot reserve executable memory and the app dies at launch .
+- The macOS `.dmg` is signed, notarized and stapled, so it installs without an unidentified-developer warning .
+- The release signature gate verifies the disk image itself on macOS instead of recording it as unverifiable .
+- The release verification page names both published releases and what each covers, instead of stating that no desktop artifact exists .
+
+## [0.338.0] - 2026-08-11
+
+### Added
+- `shipped-lanes.txt` declares the three desktop lanes and the update feed each lane ships through, so `sign.sh --lane mac,linux` can cut a release the Windows signing identity does not gate .
 - `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session .
 
 ### Fixed
 - The desktop update offer survives being made before the wallet is unlocked, so an update found at launch is still shown once a window exists to show it .
-- `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed .
-- The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched .
+- `publish.sh` keys its partial-release waivers on a lane`s declared feed rather than on the release being partial, so a desktop partial is no longer published with the channel-pointer assertion and the §7.5 rehearsal silently skipped .
+- The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see .
+- The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up" .
 - A Linux `.deb` whose payload carries no compiled native addon is refused before signing, so a rehearsal built where the addon never compiled cannot stand in for a release .
 - `reproduce.sh` forwards `XCHAIN_STAGING_FEED_URL` into the pinned container, so a staging rehearsal can be built the way a release is .
 - The desktop builder config no longer claims the project has no native dependencies; a Linux install compiles `tiny-secp256k1` .

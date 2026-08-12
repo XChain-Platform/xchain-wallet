@@ -67,6 +67,14 @@ const d = drift();
 
 assert.ok(!d.missing, 'the pin vanished between two reads of the same file.');
 
+if (d.behind) {
+    console.log('SKIP: release phase4-rehearsal smoke - this checkout does not contain '
+        + `${String(pin.scriptRef).slice(0, 8)}, the commit the rehearsal was observed at, so its signing `
+        + 'path is the OLDER one rather than a changed one. Pull and re-run. The CI venue always tests the '
+        + 'pushed commit, where this cannot arise.');
+    process.exit(0);
+}
+
 assert.equal(d.moved.length, 0,
     'the release signing path has moved since the last observed Phase 4 rehearsal:\n  '
     + d.moved.map((m) => m.path).join('\n  ')

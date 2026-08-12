@@ -208,6 +208,25 @@ XR_SETS=(release staging)
 # own purpose. Operator answer that day: scope it per OS, properly.
 XR_STAGING_OSES=(linux mac windows)
 
+# The update channel a lane's users actually receive versions through,
+# declared per lane in shipped-lanes.txt (, dq-11 answer 2026-08-11).
+#
+# `store-only` is every lane that ships through a store: Play, the App
+# Stores, Snap, Chrome. The store IS their update channel, so a release
+# covering only such lanes carries no electron-updater pointer and has no
+# desktop update path to rehearse - which is why publish.sh waives both
+# checks for them .
+#
+# `updater` is the three desktop lanes, whose users update through OUR
+# feed: a channel pointer we publish, walked by electron-updater, proven
+# on real hardware by the §7.5 rehearsal. Keying those waivers on "is this
+# release partial" was safe only while every partial release was a store
+# release. The moment a partial DESKTOP release became cuttable, that
+# inference would have published to real users with the rehearsal gate
+# silently skipped, so the question publish.sh asks is now this column
+# rather than the shape of the directory.
+XR_LANE_FEEDS=(updater store-only)
+
 # Echo the release set a status token belongs to, or nothing if the token
 # is not a status at all. The empty answer is what makes an unknown
 # status a hard failure at the call site rather than a silently skipped
@@ -245,6 +264,19 @@ xr_is_staging_os() {
     return 1
 }
 
+# True if an OS is inside a rehearsal's declared scope (dq-13). The scope is
+# a list, so this is membership rather than equality; an EMPTY scope matches
+# nothing, deliberately - "no OS was named" must never read as "every OS is
+# in scope" inside a gate whose whole job is to demand artifacts.
+xr_os_in_scope() {
+    local candidate="$1" o
+    shift
+    for o in "$@"; do
+        [[ "$candidate" == "$o" ]] && return 0
+    done
+    return 1
+}
+
 # True if a status token DEMANDS its artifact, as opposed to allowing it.
 xr_status_is_required() {
     case "$1" in
@@ -268,6 +300,49 @@ xr_is_profile() {
     for p in "${XR_PROFILES[@]}"; do
         [[ "$candidate" == "$p" ]] && return 0
     done
+    return 1
+}
+
+# True if $1 is a declared lane-feed name.
+xr_is_lane_feed() {
+    local candidate="$1" f
+    for f in "${XR_LANE_FEEDS[@]}"; do
+        [[ "$candidate" == "$f" ]] && return 0
+    done
+    return 1
+}
+
+# True if ANY of the named lanes updates through our own feed.
+#
+# Deliberately ANY rather than ALL: a release covering one updater lane
+# and three store lanes still publishes a channel pointer that real
+# installs will fetch, so it still needs the pointer assertion and the
+# §7.5 rehearsal. ALL would waive both the moment a store lane joined a
+# desktop release, which is the same silent-waiver shape this column
+# exists to end.
+#
+# Fails SHUT on an unreadable list (return 0, "treat as updater"): the
+# consequence of a false positive is a rehearsal being demanded of a
+# release that did not need one, and of a false negative is a desktop
+# release published unrehearsed.
+xr_lanes_have_updater_feed() {
+    local lanes="$1"
+    shift
+    local -a want=("$@")
+    local lane lstatus feed rest w
+
+    if [[ ! -f "$lanes" ]] || [[ ${#want[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    while read -r lane lstatus feed rest || [[ -n "$lane" ]]; do
+        case "$lane" in ''|'#'*) continue ;; esac
+        for w in "${want[@]}"; do
+            [[ "$w" == "$lane" ]] || continue
+            [[ "$feed" == "updater" ]] && return 0
+        done
+    done < "$lanes"
+
     return 1
 }
 
@@ -352,7 +427,7 @@ xr_assert_store_profile_buildable() {
 # that omits the one thing v2 exists for.
 xr_write_manifest() {
     local dir="$1" tag="$2" commit="$3" built="$4" gate="$5" expected="${6:-}"
-    local lanes="${7:-}" staging_os="${8:-}"
+    local lanes="${7:-}" staging_os="${8:-}" signing="${9:-}"
     local sha
     sha="$(xr_sha256_cmd)" || return 2
 
@@ -413,7 +488,28 @@ xr_write_manifest() {
         # this for a day. Coverage stays whole WITHIN the OS it names, so
         # this is not `coverage: partial`.
         if [[ -n "$staging_os" ]]; then
-            echo "# rehearsal-os: $staging_os"
+            # Normalised to space-separated, matching `# lanes:` above, so
+            # the scope reads the same whichever way it was typed (dq-13).
+            echo "# rehearsal-os: $(echo "$staging_os" | tr ',' ' ' | tr -s ' ')"
+        fi
+        # AN UNATTENDED SIGNATURE SAYS SO, IN THE THING IT SIGNS.
+        #
+        # `dq-9` originally kept a human at the pinentry for production and
+        # allowed a passphrase file for rehearsals only; the operator amended
+        # it on 2026-08-10 to permit an unattended production signature
+        # behind an explicit `--unattended`. What that amendment costs is the
+        # property the original ruling was protecting: that a K1 signature on
+        # a production manifest meant a person chose to make it. That cost
+        # cannot be undone, but it CAN be made visible, and a reader deciding
+        # how much a signature is worth is exactly who needs to know.
+        #
+        # So the manifest declares its own provenance. Emitted ONLY on the
+        # unattended path, so every attended manifest stays byte-identical to
+        # the ones already published and no verifier sees a new field where
+        # nothing changed. A `#` line is ignored by `sha256sum -c` like every
+        # other header here.
+        if [[ -n "$signing" ]]; then
+            echo "# signing: $signing"
         fi
         [[ ${#profile_lines[@]} -gt 0 ]] && printf '%s\n' "${profile_lines[@]}"
     } > "$dir/RELEASE_HASHES.txt"
@@ -886,11 +982,26 @@ xr_check_payload_native() {
                 listing="$(dpkg-deb -c "$f" 2>/dev/null || true)"
             fi
             if [[ -z "$listing" ]]; then
-                echo "PAYLOAD-NATIVE  '${name#./}' could not be unpacked as a Debian package," >&2
-                echo "              so nothing has read its payload. An artifact whose" >&2
-                echo "              contents cannot be read is not an artifact whose contents" >&2
-                echo "              have been checked." >&2
-                problems=$((problems + 1))
+                # TWO SITUATIONS, and conflating them is what the Linux venue
+                # caught: bytes that are not a Debian package at all, and a
+                # real package no reader on this host can open. GNU tar does
+                # not read an ar container, so a Linux box without dpkg-deb
+                # has neither reader and was refusing good artifacts. The ar
+                # magic separates them, which keeps a refusal a statement
+                # about the ARTIFACT rather than about the host.
+                if [[ "$(head -c 7 "$f" 2>/dev/null)" != "!<arch>" ]]; then
+                    echo "PAYLOAD-NATIVE  '${name#./}' does not begin with an ar magic, so it is" >&2
+                    echo "              not the Debian package its name claims to be." >&2
+                    problems=$((problems + 1))
+                else
+                    # Same posture as the AppImage branch and as the arch
+                    # gate's own dpkg-deb case: a missing extractor is a fact
+                    # about the host, and refusing on it would block the one
+                    # path a release depends on.
+                    echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: no reader on" >&2
+                    echo "              this host can open an ar container (GNU tar cannot, and" >&2
+                    echo "              dpkg-deb is absent). Install dpkg to have it checked." >&2
+                fi
             fi
             rm -rf "$tmp"
             ;;
@@ -910,10 +1021,33 @@ xr_check_payload_native() {
                 return 0
             fi
             # An AppImage is an ELF runtime with the squashfs appended, so the
-            # extractor needs the offset that image starts at; 'hsqs' is the
-            # image's own magic, and finding it costs one scan.
-            offset="$(grep -a -b -o -m1 hsqs "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
-            if [[ -z "$offset" ]] || ! listing="$(unsquashfs -o "$offset" -l "$f" 2>/dev/null)"; then
+            # extractor needs the offset that image starts at, and 'hsqs' is
+            # the image's own magic.
+            #
+            # THE MAGIC OCCURS MORE THAN ONCE AND THE FIRST ONE IS NOT THE
+            # IMAGE. This took the first textual match, and the first real
+            # AppImage ever put through it proved that wrong: on the v0.336.0
+            # x86_64 build, 'hsqs' appears at byte 32609 inside the ELF
+            # runtime and the actual superblock is at 188392. unsquashfs at
+            # 32609 lists nothing, so the branch fell through to UNCHECKED and
+            # returned 0 - meaning this gate has never once read an AppImage,
+            # and it failed in the one way nothing notices, by declining to
+            # judge rather than by judging wrong ( frontier row 132).
+            #
+            # Try the candidates in order and keep the first that actually
+            # lists. The extractor reading the image is the only honest test of
+            # where the image is; a magic string is a guess at it. Bounded at
+            # 32 candidates so a pathological file cannot turn a release gate
+            # into a full-file rescan loop.
+            listing=""
+            while IFS= read -r offset; do
+                [[ -n "$offset" ]] || continue
+                if listing="$(unsquashfs -o "$offset" -l "$f" 2>/dev/null)" && [[ -n "$listing" ]]; then
+                    break
+                fi
+                listing=""
+            done < <(grep -a -b -o hsqs "$f" 2>/dev/null | cut -d: -f1 | head -32)
+            if [[ -z "$listing" ]]; then
                 echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: its squashfs" >&2
                 echo "              image could not be located or listed here. The .deb in the" >&2
                 echo "              same set carries the same payload and IS checked, so" >&2
@@ -966,6 +1100,19 @@ xr_check_payload_arches() {
             *.AppImage|*.snap|*.deb) ;;
             *) continue ;;
         esac
+        # The same set answers a second question, and the §7.5 rehearsal got
+        # it wrong (): does the payload carry the addon a Linux
+        # install compiles? Tallied apart from the arch count so each gate
+        # reports the defect it actually found.
+        #
+        # ASKED FIRST, BECAUSE IT NEEDS NO ARCH AND WAS BEING SKIPPED AS
+        # THOUGH IT DID. The `continue` below is written for the arch check
+        # and silently took this one with it, so a Linux package that lost
+        # its arch suffix passed BOTH payload gates without a word - the
+        # artifact shape most likely to have been renamed or hand-assembled,
+        # checked least. Nobody chose that; it fell out of the ordering.
+        n="$(xr_check_payload_native "$dir" "$name")"
+        native=$((native + n))
         arch="$(xr_artifact_arch "$name")"
         # An unattributable name is xr_check_expected's finding to report,
         # not this one's; reporting it twice would double-count one defect.
@@ -1177,15 +1324,42 @@ xr_check_expected() {
         return 1
     fi
 
+    # The OS scope is a LIST (dq-13, operator 2026-08-11). A rehearsal used
+    # to be scoped to exactly one OS, and each OS's rehearsal of one tag
+    # signs a manifest that lands on the SAME RELEASE_HASHES/<tag>.txt on the
+    # shared staging feed - so rehearsing mac after Linux overwrote the
+    # manifest the Linux lanes verify against, and only one OS could be
+    # rehearsed per tag. Naming the file per OS was the other candidate and
+    # was rejected: that path is resolved by the SHIPPED updateVerify.js from
+    # the bundle's own feed base and version, so it must not be varied for a
+    # rehearsal-only reason. One signature over every rehearsed artifact.
+    local -a want_oses=()
     if [[ -n "$want_os" ]]; then
         if [[ "$want_set" != staging ]]; then
             echo "release/lib.sh: OS scope '$want_os' given for release set" \
                  "'$want_set'; only a staging run is per-OS (§7.5)." >&2
             return 1
         fi
-        if ! xr_is_staging_os "$want_os"; then
-            echo "release/lib.sh: unknown rehearsal OS '$want_os'" \
-                 "(expected one of: ${XR_STAGING_OSES[*]})" >&2
+        local _o _dupes
+        # Split on commas AND whitespace, so `--os mac,linux` and the same
+        # scope read back out of a manifest header are one input shape.
+        IFS=', ' read -r -a want_oses <<< "$want_os"
+        if [[ ${#want_oses[@]} -eq 0 ]]; then
+            echo "release/lib.sh: OS scope '$want_os' names no OS" >&2
+            return 1
+        fi
+        for _o in "${want_oses[@]}"; do
+            if ! xr_is_staging_os "$_o"; then
+                echo "release/lib.sh: unknown rehearsal OS '$_o'" \
+                     "(expected one of: ${XR_STAGING_OSES[*]})" >&2
+                return 1
+            fi
+        done
+        # A repeated OS would add its required rows to the tally twice,
+        # which is a gate that is silently wrong rather than loudly wrong.
+        _dupes="$(printf '%s\n' "${want_oses[@]}" | sort | uniq -d | tr '\n' ' ')"
+        if [[ -n "${_dupes// /}" ]]; then
+            echo "release/lib.sh: OS scope '$want_os' names ${_dupes}more than once" >&2
             return 1
         fi
     fi
@@ -1220,7 +1394,7 @@ xr_check_expected() {
         # so a stray Windows installer in a Linux rehearsal directory is
         # still undeclared rather than quietly permitted.
         if [[ "$row_set" == "$want_set" ]] \
-           && { [[ -z "$want_os" ]] || [[ "$(xr_os_for_status "$status")" == "$want_os" ]]; }; then
+           && { [[ -z "$want_os" ]] || xr_os_in_scope "$(xr_os_for_status "$status")" "${want_oses[@]}"; }; then
             seen_rows=$((seen_rows + 1))
             if xr_status_is_required "$status"; then
                 req_pats+=("$pattern"); req_arch+=("$arches")
@@ -1408,10 +1582,10 @@ xr_check_shipped_lanes() {
         [[ -n "$line" ]] && artifacts+=("${line#./}")
     done < <(xr_list_artifacts "$dir")
 
-    local failures=0 lane lstatus rest pat p name matched claimed
+    local failures=0 lane lstatus feed rest pat p name matched claimed
     local -a claimed_pats=()
 
-    while read -r lane lstatus rest || [[ -n "$lane" ]]; do
+    while read -r lane lstatus feed rest || [[ -n "$lane" ]]; do
         case "$lane" in ''|'#'*) continue ;; esac
 
         if [[ "$lstatus" != "SHIPPED" && "$lstatus" != "NOT-SHIPPED" ]]; then
@@ -1419,6 +1593,11 @@ xr_check_shipped_lanes() {
                  "'${lstatus:-<missing>}'; expected SHIPPED or NOT-SHIPPED." >&2
             echo "  Not defaulted to the permissive one on purpose: a typo must" >&2
             echo "  not quietly disarm the parity requirement it was editing." >&2
+            return 1
+        fi
+        if ! xr_is_lane_feed "$feed"; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares feed" \
+                 "'${feed:-<missing>}'; expected ${XR_LANE_FEEDS[*]}." >&2
             return 1
         fi
         if [[ -z "$rest" ]]; then
@@ -1564,9 +1743,9 @@ xr_lane_scope() {
     fi
 
     local -a known=() scoped=() lane_globs=()
-    local lane lstatus rest w
+    local lane lstatus feed rest w
 
-    while read -r lane lstatus rest || [[ -n "$lane" ]]; do
+    while read -r lane lstatus feed rest || [[ -n "$lane" ]]; do
         case "$lane" in ''|'#'*) continue ;; esac
 
         # The same fail-shut parse as xr_check_shipped_lanes, for the same
@@ -1576,6 +1755,15 @@ xr_lane_scope() {
         if [[ "$lstatus" != "SHIPPED" && "$lstatus" != "NOT-SHIPPED" ]]; then
             echo "release/lib.sh: $lanes: lane '$lane' declares status" \
                  "'${lstatus:-<missing>}'; expected SHIPPED or NOT-SHIPPED." >&2
+            return 1
+        fi
+        # Same argument one column over: the feed word decides whether
+        # publish.sh demands a channel pointer and a §7.5 rehearsal of a
+        # partial release, so an unreadable one must not reach the
+        # permissive branch either.
+        if ! xr_is_lane_feed "$feed"; then
+            echo "release/lib.sh: $lanes: lane '$lane' declares feed" \
+                 "'${feed:-<missing>}'; expected ${XR_LANE_FEEDS[*]}." >&2
             return 1
         fi
         known+=("$lane")

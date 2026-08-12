@@ -317,15 +317,43 @@ if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
     exit 2
 fi
 
+# WHICH PARTIAL RELEASE IS THIS? Until 2026-08-11 the question did not
+# exist, because every lane `sign.sh --lane` could name was a store lane
+# and every store lane ships without a channel pointer. So "partial"
+# implied "no pointer" and the three waivers below keyed on partiality.
+#
+# The desktop lanes are nameable now , and a partial release
+# covering them carries pointers that real installs will fetch. Keying on
+# partiality would waive the pointer assertion and the §7.5 rehearsal for
+# exactly the release that most needs both. The lane's own feed column
+# answers it instead, read from the committed list and matched against the
+# lanes the SIGNED manifest names - so a directory still cannot talk its
+# way out of either check by what it does or does not contain.
+LANES="$HERE/shipped-lanes.txt"
+COVERAGE_HAS_UPDATER=0
+if [[ -n "$COVERAGE_LANES" ]]; then
+    # Unquoted on purpose: `# lanes:` is a space-separated list and each
+    # name is a separate argument. The helper fails SHUT, so a list this
+    # cannot read demands the checks rather than waiving them.
+    # shellcheck disable=SC2086
+    if xr_lanes_have_updater_feed "$LANES" $COVERAGE_LANES; then
+        COVERAGE_HAS_UPDATER=1
+    fi
+fi
+
 # Are these the bytes for the feed we are about to write to? The
 # installers cannot answer that (identical names either way), the
 # pointers can.
-if [[ -n "$COVERAGE_LANES" ]]; then
+if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
     echo "publish.sh: PARTIAL release - the signed manifest covers lane(s):" \
          "$COVERAGE_LANES" >&2
     echo "  These lanes ship no channel pointer, so the '$EXPECT_CHANNEL' check" >&2
     echo "  is answered by the signed header instead of by the pointers." >&2
 else
+    if [[ -n "$COVERAGE_LANES" ]]; then
+        echo "publish.sh: PARTIAL release covering lane(s) $COVERAGE_LANES," \
+             "which update through our own feed - checking the pointers." >&2
+    fi
     echo "publish.sh: checking the input is a '$EXPECT_CHANNEL' build ..." >&2
     node "$HERE/update-info.mjs" assert-channel "$INPUT_DIR" --channel "$EXPECT_CHANNEL" >&2
 fi
@@ -383,7 +411,7 @@ if [[ "$STAGING" -eq 0 ]]; then
     # rehearses it. Waiving quietly here would turn "we have not built that
     # rehearsal yet" into "this release was rehearsed", which is the exact
     # substitution §7.5 exists to prevent.
-    if [[ -n "$COVERAGE_LANES" ]]; then
+    if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
         echo "publish.sh: §7.5 rehearsal NOT REQUIRED for lane(s) $COVERAGE_LANES," \
              "and NOT PERFORMED." >&2
         echo "  The rehearsal matrix declares desktop lanes only, so there is no" >&2
@@ -437,13 +465,37 @@ if [[ "$STAGING" -eq 0 && "$TARGET_IS_STAGING" -eq 1 ]]; then
     exit 1
 fi
 
-# Immutability check.
+# Immutability check - PRODUCTION ONLY (dq-14, operator 2026-08-11).
+#
+# The rule it enforces is about PUBLISHED releases: two signed manifests
+# for one version make tampering indistinguishable from housekeeping, and
+# people have installed the first one. None of that is true of the staging
+# feed. §7.5 says the opposite about it in as many words - failed-rehearsal
+# artifacts are DELETED as the last rehearsal step, and only the last
+# PASSED set is retained - so a rehearsal set is transient by design and
+# nobody has ever installed from it.
+#
+# Applying the production rule there made a CORRECTED rehearsal
+# unpublishable, which is exactly backwards: it protected the superseded
+# set and blocked the good one. Measured on this project's first desktop
+# release - a Linux-only rehearsal was published, the mac lane was then
+# built, and the combined rehearsal the release actually needed could not
+# be published under its own tag.
+#
+# The narrowing is deliberate and is NOT "staging is unchecked": a staging
+# publish still passes verify.sh, still asserts the channel of what it is
+# handed, and still refuses a target that carries no .staging-feed marker.
+# What it may now do is replace a rehearsal that has been superseded.
 if target_exists "RELEASE_HASHES/$TAG.txt"; then
-    echo "publish.sh: $TAG is already published." >&2
-    echo "  Published versions and their manifests are never modified in" >&2
-    echo "  place (§3): two signed manifests for one version make tampering" >&2
-    echo "  indistinguishable from housekeeping. Cut a new version." >&2
-    exit 1
+    if [[ "$STAGING" == 1 ]]; then
+        echo "publish.sh: replacing the superseded $TAG rehearsal on the staging feed (§7.5)." >&2
+    else
+        echo "publish.sh: $TAG is already published." >&2
+        echo "  Published versions and their manifests are never modified in" >&2
+        echo "  place (§3): two signed manifests for one version make tampering" >&2
+        echo "  indistinguishable from housekeeping. Cut a new version." >&2
+        exit 1
+    fi
 fi
 
 # Split the upload into ordered phases. Everything a yml could point at
@@ -479,7 +531,7 @@ while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
 # Kept anyway: it is the guard that would still hold if the channel
 # assertion were ever narrowed, and its message names the build problem
 # where the other names the feed problem. Not counted as coverage.
-if [[ ${#YMLS[@]} -eq 0 && -n "$COVERAGE_LANES" ]]; then
+if [[ ${#YMLS[@]} -eq 0 && -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
     echo "publish.sh: no channel pointers, and none is expected: this release" \
          "covers lane(s) $COVERAGE_LANES, which ship no electron-updater feed." >&2
 elif [[ ${#YMLS[@]} -eq 0 ]]; then

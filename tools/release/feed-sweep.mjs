@@ -49,8 +49,20 @@ import { spawnSync } from 'node:child_process';
 
 import { isUpdateInfoContent } from './update-info.mjs';
 
+// THE ANDROID LANE IS HERE BECAUSE IT IS THE ONLY ONE THAT HAS PUBLISHED.
+// This list read ['desktop', 'extension', 'web'] from the day it was written
+// and none of those directories has ever held a file, while the direct-APK
+// lane went live on 2026-08-06. Measured on origin-host 2026-08-10, the
+// hourly cron was reporting "0 artifact(s), 0 pointer(s), 1 manifest(s),
+// 0 finding(s)" against a feed holding a published APK and its update
+// pointer: a clean bill of health over an empty set. The one binary this
+// project has shipped to the public was the one the swap detector could not
+// see. ( rows 128 and 130 are the same blindness in the edge-cache
+// verifier and the store monitor; three tools, one cause - all written for
+// desktop, none extended when Android became the lane that shipped.)
+//
 /** Feed subdirectories that hold published payload. */
-export const PAYLOAD_DIRS = ['desktop', 'extension', 'web'];
+export const PAYLOAD_DIRS = ['desktop', 'extension', 'web', 'android'];
 
 /** Where signed manifests live, one per release, append-only (§7.3). */
 export const MANIFEST_DIR = 'RELEASE_HASHES';
@@ -118,6 +130,36 @@ function hashFile(path, algorithm, encoding) {
  */
 export function releaseTagOf(tag) {
     return String(tag).replace(/-resign\d+$/, '');
+}
+
+/**
+ * Is this the direct-install lane's JSON update pointer?
+ *
+ * Deliberately structural rather than name-based: `android/latest.json` is
+ * the only one today, but a name test would go blind the moment a second
+ * lane publishes under a different filename, which is precisely how the
+ * desktop-only assumptions in this file survived so long. A pointer is a
+ * JSON object carrying a `version` string; anything else in that directory
+ * is payload and is hashed as payload.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isJsonPointerContent(text) {
+    return parseJsonPointerVersion(text) !== '';
+}
+
+/**
+ * The version a JSON pointer names, or '' if it names none.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function parseJsonPointerVersion(text) {
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { return ''; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+    return typeof parsed.version === 'string' ? parsed.version.trim() : '';
 }
 
 export function parseManifest(path) {
@@ -220,10 +262,28 @@ export function verifyManifestSignature(manifestPath, keyFingerprint, run = spaw
     // case an attacker with their own key produces. VALIDSIG carries the
     // fingerprint that actually signed, so it is the only line that
     // answers "was this K1".
-    const validsig = /^\[GNUPG:\] VALIDSIG ([0-9A-F]+)/m.exec(result.stdout);
+    //
+    // MATCH THE PRIMARY KEY AS WELL AS THE SIGNING ONE, because they are
+    // different fingerprints and the world only ever sees one of them. K1
+    // signs with a subkey, so VALIDSIG's FIRST field is that subkey
+    // (27A15936…) while `xchain.io/security`, SECURITY.md, the docs recipe
+    // and every instruction a user is given publish the PRIMARY
+    // (1A29E7C4…). Matching field 1 alone made the documented value wrong:
+    // driven against the live feed, `--gpg-key <primary>` reported
+    // MANIFEST-BAD-SIG on a perfectly good K1 signature AND dropped the
+    // manifest from the baseline, so every published file would have gone
+    // UNCOVERED behind it. That is this file's own "alarms that fire during
+    // normal operations get muted" failure, aimed at the one operator who
+    // followed the instructions. GnuPG's last VALIDSIG field is the primary
+    // key fingerprint precisely so a caller can do this.
+    const validsig = /^\[GNUPG:\] VALIDSIG (.+)$/m.exec(result.stdout);
     if (!validsig) return 'bad';
+    const fields = validsig[1].trim().split(/\s+/);
+    const signing = fields[0] || '';
+    const primary = fields.length > 1 ? fields[fields.length - 1] : '';
     const want = keyFingerprint.replace(/\s+/g, '').toUpperCase();
-    return validsig[1].toUpperCase().endsWith(want) ? 'ok' : 'bad';
+    const matches = (fpr) => /^[0-9A-F]+$/.test(fpr) && fpr.toUpperCase().endsWith(want);
+    return matches(signing) || matches(primary) ? 'ok' : 'bad';
 }
 
 /**
@@ -305,7 +365,16 @@ export function sweep(root, options = {}) {
             const rel = `${dir}/${name}`;
 
             if (name.endsWith('.yml') && isUpdateInfoContent(readFileSync(file, 'utf8'))) {
-                pointers.push({ rel, file });
+                pointers.push({ rel, file, dir, kind: 'yml' });
+                continue;
+            }
+            // The direct-APK lane's pointer is JSON, not an electron-updater
+            // yml, so the test above cannot see it. Classifying it matters
+            // twice over: unclassified it would be hashed as payload and
+            // reported UNCOVERED forever (no manifest names a pointer, by
+            // §7.1 design), and the check it actually needs would never run.
+            if (name.endsWith('.json') && isJsonPointerContent(readFileSync(file, 'utf8'))) {
+                pointers.push({ rel, file, dir, kind: 'json' });
                 continue;
             }
 
@@ -328,7 +397,29 @@ export function sweep(root, options = {}) {
     // them, which would make every rollback look like tampering. That
     // exclusion is safe only if something else checks them, and this is
     // that something.
-    for (const { rel, file } of pointers) {
+    for (const { rel, file, dir, kind } of pointers) {
+        // A JSON pointer carries a version and nothing else - no file list,
+        // no hashes - so only the version check applies to it. Stated rather
+        // than silently skipped: this lane's pointer names no bytes, so
+        // DANGLING/HASH/UNCOVERED have nothing to read, and the protection
+        // that remains is that the version it sends every direct install to
+        // must be one a K1-signed manifest actually covers.
+        // There is deliberately no POINTER-UNPARSEABLE case here. Carrying a
+        // version is what makes a JSON file a pointer at all, so one that
+        // lost its version is not an unparseable pointer, it is an
+        // unexplained file on the feed - and payload is exactly what it is
+        // then treated as, which UNCOVERED reports. Driven: emptying
+        // `latest.json` to `{}` moves it from `pointers=1` to
+        // `UNCOVERED:android/latest.json`.
+        if (kind === 'json') {
+            const version = parseJsonPointerVersion(readFileSync(file, 'utf8'));
+            if (tagsSeen.size > 0 && !tagsSeen.has(`v${version}`)) {
+                add('POINTER-NO-MANIFEST', rel,
+                    `names version ${version}, no RELEASE_HASHES/v${version}.txt`);
+            }
+            continue;
+        }
+
         const info = parseUpdateInfo(readFileSync(file, 'utf8'));
         if (!info.version || info.files.length === 0) {
             add('POINTER-UNPARSEABLE', rel, 'no version or no files entry');
@@ -339,18 +430,22 @@ export function sweep(root, options = {}) {
                 `names version ${info.version}, no RELEASE_HASHES/v${info.version}.txt`);
         }
 
+        // The payload a yml names sits beside the yml. This was a literal
+        // `desktop/` until the lane list grew; deriving it keeps the message
+        // honest and cannot change today's readings, since every yml pointer
+        // this feed carries lives in desktop/.
         for (const entry of info.files) {
-            const target = join(root, 'desktop', entry.url);
+            const target = join(root, dir, entry.url);
             if (!existsSync(target)) {
-                add('POINTER-DANGLING', rel, `names desktop/${entry.url}, which is absent`);
+                add('POINTER-DANGLING', rel, `names ${dir}/${entry.url}, which is absent`);
                 continue;
             }
             if (entry.sha512 && sha512File(target) !== entry.sha512) {
-                add('POINTER-HASH', rel, `sha512 does not match desktop/${entry.url}`);
+                add('POINTER-HASH', rel, `sha512 does not match ${dir}/${entry.url}`);
             }
             if (!union.has(entry.url)) {
                 add('POINTER-UNCOVERED', rel,
-                    `names desktop/${entry.url}, which no signed manifest covers`);
+                    `names ${dir}/${entry.url}, which no signed manifest covers`);
             }
         }
     }

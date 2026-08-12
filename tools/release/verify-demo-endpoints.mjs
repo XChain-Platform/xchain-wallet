@@ -320,6 +320,33 @@ export const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 export const MAX_INDEXER_LAG_BLOCKS = 1000;
 
 /**
+ * The DEMO coin's own lag ceiling, which is tight where the two above are loose.
+ *
+ * Both thresholds above measure a RATE, and the failure they missed is not a
+ * rate: on 2026-08-10 an indexer migration moved every source's consensus hash
+ * and each replica fail-closed on the divergence, so TBTC's replica froze at
+ * block 147814 while its source ran on to 147854. That reads as `lag 40, newest
+ * block 4h old` - inside a 1,000-block allowance and inside a six-hour window -
+ * so the gate called the demo chain current for the whole time it was already
+ * never going to apply another block.
+ *
+ * A halt is terminal, not slow, and on a chain minting every ten minutes it
+ * hides behind loose rate thresholds for most of a day. What the demo actually
+ * needs is stricter and simpler to state: the reviewer's funding transaction
+ * lands at the SOURCE's tip, so the demo chain's replica has to BE at that tip,
+ * not merely near it. Every healthy chain measured at the same moment sat at
+ * lag 0 (BTC, LTC and DOGE mainnet, and TLTC); only the two halted replicas
+ * carried a gap. Two blocks is therefore slack for a sample taken mid-apply,
+ * not tolerance for a chain that is behind.
+ *
+ * This catches a frozen replica once its gap opens; it cannot catch a halt
+ * whose gap is still inside the slack. That residue is now closed by
+ * replicaHaltVerdict() below, which reads the explorer's own replica_halted
+ * signal instead of inferring one from a rate.
+ */
+export const MAX_DEMO_LAG_BLOCKS = 2;
+
+/**
  * How current is one coin's indexed view, per the explorer's own status body.
  *
  * Two independent signals, because they fail apart: `last_block_time` catches a
@@ -331,9 +358,12 @@ export const MAX_INDEXER_LAG_BLOCKS = 1000;
  * @param {any} json      the explorer's /{COIN}/api/status body
  * @param {string} coin
  * @param {number} nowMs
+ * @param {number} maxLagBlocks  ceiling on the indexer's distance behind the
+ *                               decoder; the demo coin passes the tighter
+ *                               MAX_DEMO_LAG_BLOCKS, everything else the loose one
  * @returns {{ state: 'fresh'|'stale'|'unknown', detail: string }}
  */
-export function indexerFreshness(json, coin, nowMs = Date.now()) {
+export function indexerFreshness(json, coin, nowMs = Date.now(), maxLagBlocks = MAX_INDEXER_LAG_BLOCKS) {
     const blockTimeSec = json?.last_block_time?.[coin];
     const lagBlocks = json?.decoder_lag_blocks?.[coin];
     const haveTime = typeof blockTimeSec === 'number' && Number.isFinite(blockTimeSec);
@@ -354,8 +384,9 @@ export function indexerFreshness(json, coin, nowMs = Date.now()) {
             reasons.push(`its newest indexed block is ${describeAge(ageMs)} old`);
         }
     }
-    if (haveLag && lagBlocks > MAX_INDEXER_LAG_BLOCKS) {
-        reasons.push(`its indexer trails the decoder by ${lagBlocks.toLocaleString('en-US')} blocks`);
+    if (haveLag && lagBlocks > maxLagBlocks) {
+        reasons.push(`its indexer trails the decoder by ${lagBlocks.toLocaleString('en-US')} blocks`
+            + ` (ceiling ${maxLagBlocks.toLocaleString('en-US')})`);
     }
 
     if (reasons.length > 0) {
@@ -415,6 +446,35 @@ export function absenceCause(json, coin) {
             + ` (serving ${served})`;
     }
     return `up, and ${coin} is not in its configured set at all (serving ${served})`;
+}
+
+/**
+ * Read the explorer's fail-closed-halt signal for one coin, the fact a lag
+ * ceiling can only ever proxy: a replica halted AT its source's tip has no
+ * gap to measure until the source mints its next block, and this asks the
+ * source of truth instead of inferring one from a rate.
+ *
+ * @param {any} json    the explorer's /{COIN}/api/status body
+ * @param {string} coin
+ * @returns {{ state: 'halted'|'ok'|'unknown', detail: string }}
+ */
+export function replicaHaltVerdict(json, coin) {
+    const halted = json?.replica_halted?.[coin];
+    if (halted === true) {
+        return {
+            state: 'halted',
+            detail: 'its replica has an active consensus-divergence HALT: it applies no further'
+                + ' blocks until an operator intervenes',
+        };
+    }
+    if (halted === false) {
+        return { state: 'ok', detail: 'no active replica halt' };
+    }
+    return {
+        state: 'unknown',
+        detail: `the status body carries no readable replica_halted signal for ${coin}`
+            + ' (absent field, null, or an explorer deployment that predates it)',
+    };
 }
 
 function describeAge(ms) {
@@ -605,8 +665,28 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
         // chain, so a stale chain nobody funds is a fact worth printing rather
         // than a reason to hold a submission.
         const served = `serving ${probe.coin} (${Object.keys(available).length} networks)`;
-        const fresh = indexerFreshness(json, probe.coin, nowMs);
+        // Checked before, and independent of, freshness below: a halt is the
+        // fact a lag ceiling can only proxy, and a replica halted AT its
+        // source's tip passes every lag check for as long as the source sits
+        // idle (row 84's residue - measured 2026-08-10, twice, 22 minutes
+        // apart, over a provably halted demo chain).
+        const halt = replicaHaltVerdict(json, probe.coin);
+        const fresh = indexerFreshness(json, probe.coin, nowMs,
+            probe.isDemoCoin ? MAX_DEMO_LAG_BLOCKS : MAX_INDEXER_LAG_BLOCKS);
         if (probe.isDemoCoin) {
+            if (halt.state === 'halted') {
+                return {
+                    state: 'failure',
+                    detail: `${served}, but ${halt.detail}: the demo wallet's funding transaction`
+                        + ' would never appear on the balance screen the reviewer is looking at',
+                };
+            }
+            if (halt.state === 'unknown') {
+                return {
+                    state: 'inconclusive',
+                    detail: `${served}, but ${halt.detail}, so its halt state cannot be checked`,
+                };
+            }
             if (fresh.state === 'unknown') {
                 return {
                     state: 'inconclusive',
@@ -621,6 +701,12 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
                 };
             }
             return { state: 'live', detail: `${served}, demo chain current (${fresh.detail})` };
+        }
+        if (halt.state === 'halted') {
+            return {
+                state: 'live',
+                detail: `${served} - NOT FUNDABLE: ${halt.detail}. Fund the demo wallet on ${DEMO_COIN}.`,
+            };
         }
         if (fresh.state === 'stale') {
             return {

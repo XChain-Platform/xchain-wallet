@@ -72,7 +72,7 @@ import { join, dirname, resolve as resolvePath } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-import { pointerNameFor } from './update-info.mjs';
+import { pointerNameFor, readPublishConfig } from './update-info.mjs';
 import {
     LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS,
 } from './rehearsal-matrix.mjs';
@@ -644,6 +644,181 @@ export function swapRequirement({ repo, tag, previousTag, run = gitRun }) {
     return { requirement: 'one-os', reason: 'no updater, vault or release-path files changed' };
 }
 
+/** shipped-lanes.txt lane name -> the LANES `os` its artifacts belong to. */
+const LANE_NAME_TO_OS = { mac: 'darwin', linux: 'linux', windows: 'win32' };
+
+/**
+ * The OSes that have no published predecessor at `previousTag`, and whose
+ * swap is therefore unrehearsABLE rather than unrehearsed (`dq-12`,
+ * operator 2026-08-11).
+ *
+ * WHY THIS IS PER-LANE AND NOT PER-RELEASE. `swapRequirement` above waives
+ * the swap when there is no previous TAG at all, on the correct reasoning
+ * that a first release has nothing to update FROM. But a tag is not a
+ * publication: v0.336.0 exists and shipped ANDROID ONLY, so at v0.338.0 -
+ * the first desktop release - every desktop OS was being asked for a swap
+ * from a build that was never published to any feed. The requirement was
+ * unsatisfiable by construction, and the waiver written for exactly that
+ * situation did not fire because it was reading the wrong fact.
+ *
+ * WHERE THE FACT COMES FROM, AND WHY IT IS NO LONGER shipped-lanes.txt.
+ * This read the previous tag's roster and asked which lanes said SHIPPED,
+ * on the reasoning that a lane flips to SHIPPED in the commit recording
+ * its first release. That reasoning is sound and the file does not obey
+ * it: the flip is a human step, and for v0.338.0 - the release that put
+ * mac and Linux on the feed - it landed AFTER the tag was cut. So the
+ * frozen v0.338.0 roster says `mac NOT-SHIPPED` and `linux NOT-SHIPPED`
+ * about the very release that shipped them, and at v0.339.0 this function
+ * waived the swap for BOTH desktop OSes and `assert` exited 0. Measured,
+ * not theorised ( frontier row 147): the waiver fired on a false
+ * premise for the first release that had a real predecessor to swap from,
+ * which is the one case the gate exists for.
+ *
+ * The defect is structural rather than clerical. A roster at tag N is a
+ * DECLARATION made before N is published, so it can only describe N's own
+ * lanes if somebody remembers; and no gate can check that memory, because
+ * the thing it would check against is the publish that has not happened.
+ *
+ * So the fact is read from the FEED instead: the previous tag's published
+ * `RELEASE_HASHES/<tag>.txt` lists exactly the artifacts that reached
+ * users, K1-signed, and its absence is exactly "that tag published
+ * nothing". That is not a declaration anybody has to maintain - it is the
+ * publication itself, and it cannot disagree with what users can install.
+ *
+ * FAIL-SHUT, like everything else here, and now in the direction that
+ * matters: if the manifest cannot be read for any reason OTHER than a
+ * clean 404, NOTHING is treated as bootstrap and every OS keeps its swap
+ * requirement. A network blip must never be the sentence that waives a
+ * gate. A 404 is not a blip: it is the feed saying the tag published no
+ * manifest, which is the bootstrap case itself.
+ *
+ * @returns {Promise<{oses: string[], reason: string}>}
+ */
+export async function bootstrapOsesAt({ previousTag, prodFeedBase, fetchImpl = fetch }) {
+    const desktopOses = [...new Set(Object.values(LANE_NAME_TO_OS))];
+    if (!previousTag) {
+        return { oses: desktopOses, reason: 'no previous release: no lane has a published predecessor' };
+    }
+    if (!prodFeedBase) {
+        return {
+            oses: [],
+            reason: 'no production feed base was resolved, so what '
+                + `${previousTag} published is unknown; no lane is treated as bootstrap`,
+        };
+    }
+    let published;
+    try {
+        published = await publishedOsesAt({ previousTag, prodFeedBase, fetchImpl });
+    } catch (err) {
+        return {
+            oses: [],
+            reason: `could not read the published manifest for ${previousTag} `
+                + `(${String(err?.message || err)}); no lane is treated as bootstrap`,
+        };
+    }
+    const oses = desktopOses.filter((os) => !published.oses.has(os));
+    return {
+        oses,
+        reason: oses.length
+            ? `${previousTag} published no ${oses.join(', ')} artifact (read from `
+              + `${published.source}), so those lanes have nothing to update FROM`
+            : `${previousTag} published every desktop lane (read from ${published.source})`,
+    };
+}
+
+/**
+ * The production feed base, taken from the desktop builder config.
+ *
+ * Evaluated with XCHAIN_STAGING_FEED_URL cleared, because that variable is
+ * what makes the config answer with the STAGING feed (§7.5): a rehearsal
+ * run has every reason to have it set in the environment, and reading the
+ * staging feed here would ask the staging tree what production published.
+ *
+ * The config names the DESKTOP directory (`.../wallet/desktop/`) because
+ * that is where the channel pointers and installers live, but
+ * `RELEASE_HASHES/` sits one level up at the feed ROOT, shared with every
+ * other lane - the same root/desktop distinction that makes `run --feed`
+ * 404 all eight lanes when it is handed the desktop directory. So the
+ * trailing `desktop/` is dropped here, once, rather than by each caller.
+ *
+ * Returns null rather than throwing, so an unreadable config reaches
+ * `bootstrapOsesAt`'s fail-shut branch instead of aborting the run.
+ *
+ * @returns {string|null}
+ */
+export function resolveProdFeed(repo) {
+    const saved = process.env.XCHAIN_STAGING_FEED_URL;
+    try {
+        delete process.env.XCHAIN_STAGING_FEED_URL;
+        const { url } = readPublishConfig(join(repo, 'packages/desktop/electron-builder.config.cjs'));
+        return String(url).replace(/\/+$/, '').replace(/\/desktop$/, '');
+    } catch {
+        return null;
+    } finally {
+        if (saved !== undefined) process.env.XCHAIN_STAGING_FEED_URL = saved;
+    }
+}
+
+/**
+ * Which desktop OSes a published tag actually put on the production feed.
+ *
+ * Reads the tag's own signed release manifest, which is the only record of
+ * a publish that nobody has to remember to update. Artifact names are
+ * mapped to OSes by `osesInRelease`, the same mapping the release in hand
+ * is scoped with, so "what the previous release shipped" and "what this
+ * release ships" are answered by one rule rather than two.
+ *
+ * A 404 means the tag published no manifest at all. Every other non-OK
+ * status throws, so the caller can fail shut rather than read an error
+ * page as an empty release.
+ *
+ * @returns {Promise<{oses: Set<string>, source: string}>}
+ */
+export async function publishedOsesAt({ previousTag, prodFeedBase, fetchImpl = fetch }) {
+    const url = `${String(prodFeedBase).replace(/\/+$/, '')}/RELEASE_HASHES/${previousTag}.txt`;
+    const res = await fetchImpl(url);
+    if (res.status === 404) return { oses: new Set(), source: `${url} (404, nothing published)` };
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    const text = await res.text();
+    // sha256sum format: `<hash>  ./<name>`. `#` lines are the header.
+    const names = text.split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'))
+        .map((l) => l.split(/\s+/).slice(1).join(' '))
+        .filter(Boolean);
+    return { oses: osesInRelease(names) || new Set(), source: url };
+}
+
+/**
+ * Which OSes the release in hand actually carries artifacts for.
+ *
+ * `lanesInRelease` answers desktop yes/no for the whole release, which was
+ * right while a desktop release meant all six lanes. A partial release
+ *  makes that too coarse: v0.338.0 ships mac and Linux, and the
+ * gate demanded passing WINDOWS lanes of it, for a lane whose artifacts it
+ * deliberately does not contain and whose signing identity does not exist.
+ *
+ * Same fail-shut posture: an unusable listing returns null, and callers
+ * treat null as "every OS", which is the historical behaviour.
+ *
+ * @returns {Set<string>|null}
+ */
+export function osesInRelease(releaseArtifacts) {
+    if (!Array.isArray(releaseArtifacts) || releaseArtifacts.length === 0) return null;
+    const names = releaseArtifacts.map((n) => String(n).split('/').pop().toLowerCase());
+    const found = new Set();
+    for (const lane of LANES) {
+        const ext = `.${lane.format.toLowerCase()}`;
+        // `zip` is emitted by both the mac and windows lanes, and only the
+        // mac one is update-capable, so the darwin claim needs the token
+        // too: a *win*.zip must never read as a macOS artifact.
+        const hit = names.some((n) => n.endsWith(ext)
+            && (lane.os !== 'darwin' || n.includes('mac')));
+        if (hit) found.add(lane.os);
+    }
+    return found;
+}
+
 function gitRun(repo, args) {
     return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
 }
@@ -710,14 +885,34 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
 
     const { desktop: desktopInRelease, direct: directInRelease } = lanesInRelease(releaseArtifacts);
 
+    // Which OSes this release actually carries . Null means the
+    // listing could not be read, and null keeps the historical every-lane
+    // behaviour rather than waiving anything.
+    const releaseOses = osesInRelease(releaseArtifacts);
+    const laneShipsHere = (lane) => releaseOses === null || releaseOses.has(lane.os);
+
     const lanes = Array.isArray(record.lanes) ? record.lanes : [];
     if (desktopInRelease) {
-        const missing = LANES.filter((l) => !lanes.some((r) => r.id === l.id));
+        const missing = LANES.filter((l) => laneShipsHere(l) && !lanes.some((r) => r.id === l.id));
         if (missing.length) {
             problems.push(`no result for lane(s): ${missing.map((l) => l.id).join(', ')}`);
         }
     }
     for (const lane of lanes) {
+        const declared = laneById(lane.id);
+        // A lane this release does not ship is reported, never demanded: a
+        // rehearsal run probes every shipped lane, so a partial release's
+        // record legitimately carries failures for lanes it has no
+        // artifacts for. Demanding those made a mac+Linux release
+        // unpublishable on the absence of a Windows signing identity,
+        // which is the exact coupling  removed from sign.sh.
+        if (declared && !laneShipsHere(declared)) {
+            if (!lane.ok) {
+                notes.push(`lane ${lane.id} failed, and is not demanded: this release carries no `
+                    + `${declared.os} artifact`);
+            }
+            continue;
+        }
         if (!lane.ok) problems.push(`lane ${lane.id} failed at ${lane.failed}: ${lane.reason}`);
     }
 
@@ -738,7 +933,19 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
         // the one-OS / all-OS calculus has no lane to range over. The
         // direct lane below answers for it instead.
     } else if (requirement === 'all-os') {
+        // An OS with no published predecessor is waived here rather than
+        // demanded, and the waiver is recorded per OS by the run that
+        // observed it (`dq-12`). A record written before this field
+        // existed carries none, which waives nothing.
+        const bootstrapOses = new Set(
+            Array.isArray(record['swap-bootstrap-oses']) ? record['swap-bootstrap-oses'] : [],
+        );
         for (const os of lanesByOs().keys()) {
+            if (releaseOses !== null && !releaseOses.has(os)) continue;
+            if (bootstrapOses.has(os)) {
+                notes.push(`${os}: swap waived, ${record['swap-bootstrap-reason'] || 'no published predecessor'}`);
+                continue;
+            }
             if (!swappedOs.has(os)) {
                 problems.push(
                     `this release requires an observed swap on every OS (${record['requirement-reason']}), `
@@ -747,7 +954,15 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
             }
         }
     } else if (requirement === 'one-os') {
-        if (swappedOs.size === 0) {
+        const bootstrapOses = new Set(
+            Array.isArray(record['swap-bootstrap-oses']) ? record['swap-bootstrap-oses'] : [],
+        );
+        // Every OS this release ships is a first publication => there is no
+        // swap to show anywhere, which is the bootstrap case one OS at a
+        // time rather than a release that skipped its rehearsal.
+        const demandable = [...lanesByOs().keys()]
+            .filter((os) => (releaseOses === null || releaseOses.has(os)) && !bootstrapOses.has(os));
+        if (demandable.length > 0 && swappedOs.size === 0) {
             problems.push('no observed swap on any OS; §7.5 requires at least one per release');
         }
     }
@@ -956,6 +1171,13 @@ async function main(argv) {
 
         const previousTag = flag(argv, '--previous-tag') ?? resolvePrevious(repo, tag);
         const requirement = swapRequirement({ repo, tag, previousTag });
+        // The PRODUCTION feed, which is where a previous release's manifest
+        // lives - deliberately not `--feed`, which is the staging one this
+        // rehearsal probes. Read from the builder config rather than kept as
+        // a second literal here, because the config is what the shipped app
+        // bakes and a copy would be free to drift from it.
+        const prodFeedBase = flag(argv, '--prod-feed') || resolveProdFeed(repo);
+        const bootstrap = await bootstrapOsesAt({ previousTag, prodFeedBase });
 
         const lanes = [];
         for (const lane of LANES) {
@@ -994,6 +1216,14 @@ async function main(argv) {
             'swap-requirement': requirement.requirement,
             'requirement-reason': requirement.reason,
             'requirement-paths': requirement.paths ?? [],
+            // Which OSes had no published predecessor when this rehearsal
+            // ran (`dq-12`). Recorded by the OBSERVATION rather than
+            // recomputed at assert time, for the same reason the swap
+            // requirement is: the record must describe what was true when
+            // the bytes were rehearsed, not what is true when someone
+            // decides to publish them.
+            'swap-bootstrap-oses': bootstrap.oses,
+            'swap-bootstrap-reason': bootstrap.reason,
             'pinned-key-override': pinned ? { fingerprint: pinned.fingerprint } : null,
             'generated-at': new Date().toISOString(),
             lanes,
