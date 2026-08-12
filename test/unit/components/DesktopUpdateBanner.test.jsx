@@ -25,15 +25,28 @@ import { render, screen, act } from '@testing-library/react';
 import React from 'react';
 import { DesktopUpdateBanner } from '../../../packages/desktop/renderer/DesktopUpdateBanner.jsx';
 
-/** Install a fake preload bridge and return a handle to drive it. */
-function installBridge({ install = vi.fn(async () => ({ ok: true })) } = {}) {
+/**
+ * Install a fake preload bridge and return a handle to drive it.
+ *
+ * `retained` is what main answers on the state channel: the last event it
+ * saw, which on a locked install is an offer made long before this component
+ * mounted ( row 148). Pass `omitGetState` to model an older preload.
+ */
+function installBridge({
+    install = vi.fn(async () => ({ ok: true })),
+    retained = null,
+    omitGetState = false,
+} = {}) {
     let listener = null;
+    const getState = vi.fn(async () => retained);
     window.xchainWalletUpdater = {
         onEvent(cb) { listener = cb; return () => { listener = null; }; },
         install,
+        ...(omitGetState ? {} : { getState }),
     };
     return {
         install,
+        getState,
         emit(event) { act(() => { listener?.(event); }); },
         get subscribed() { return listener !== null; },
     };
@@ -88,6 +101,55 @@ describe('DesktopUpdateBanner', () => {
         expect(text).toContain('could not be verified');
         expect(text).toContain('wallet is untouched');
         expect(text).not.toContain('manifest says');
+    });
+
+    //  row 148. Everything above drives an event that arrives AFTER the
+    // component mounts, and on a real install that never happens: main checks
+    // the feed at launch and this banner is rendered only once the vault is
+    // unlocked, which is a human typing a passphrase later. Measured on a
+    // packaged build - main logged `Found version 0.339.0`, the banner showed
+    // nothing - so the offer was unreachable rather than merely late.
+    it('shows an offer main made before it existed', async () => {
+        const bridge = installBridge({ retained: { type: 'available', info: { version: '0.339.0' } } });
+        render(React.createElement(DesktopUpdateBanner));
+
+        await act(async () => { await Promise.resolve(); });
+
+        expect(bridge.getState).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('status').textContent).toContain('0.339.0');
+    });
+
+    it('stays silent about a stale failure it is only now hearing about', async () => {
+        const bridge = installBridge({ retained: { type: 'error', info: { message: 'getaddrinfo ENOTFOUND' } } });
+        const { container } = render(React.createElement(DesktopUpdateBanner));
+
+        await act(async () => { await Promise.resolve(); });
+
+        // A check that failed at launch is not a refused install. Telling a
+        // user who just opened their wallet that an update "could not be
+        // verified" would describe a download nobody attempted.
+        expect(bridge.getState).toHaveBeenCalledTimes(1);
+        expect(container.textContent).toBe('');
+    });
+
+    it('lets a live event overwrite what the retained state said', async () => {
+        const bridge = installBridge({ retained: { type: 'available', info: { version: '0.339.0' } } });
+        render(React.createElement(DesktopUpdateBanner));
+        await act(async () => { await Promise.resolve(); });
+
+        bridge.emit({ type: 'verifying' });
+
+        expect(screen.getByRole('status').textContent).toContain('Downloading');
+    });
+
+    it('renders against a preload with no state channel rather than throwing', async () => {
+        const bridge = installBridge({ omitGetState: true });
+        const { container } = render(React.createElement(DesktopUpdateBanner));
+        await act(async () => { await Promise.resolve(); });
+
+        expect(container.textContent).toBe('');
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+        expect(screen.getByRole('status').textContent).toContain('0.339.0');
     });
 
     it('subscribes only when the preload bridge exists, so web and extension are unaffected', () => {

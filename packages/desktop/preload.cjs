@@ -62,6 +62,7 @@ const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
+const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
@@ -119,6 +120,19 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
         const wrapped = (_event, payload) => { listener(payload); };
         ipcRenderer.on(UPDATER_EVENT_CHANNEL, wrapped);
         return () => ipcRenderer.removeListener(UPDATER_EVENT_CHANNEL, wrapped);
+    },
+    /**
+     * The most recent updater event, or null if none has fired yet.
+     *
+     * `onEvent` alone cannot see an offer made before the listener
+     * existed, and the launch check always finishes first on a locked
+     * install ( row 148). A mounting renderer asks this instead of
+     * waiting for a broadcast that already happened.
+     *
+     * @returns {Promise<{type: string, info?: any} | null>}
+     */
+    getState() {
+        return ipcRenderer.invoke(UPDATER_STATE_CHANNEL);
     },
     /**
      * Download the offered update, verify it against the K1-signed

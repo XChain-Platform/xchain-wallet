@@ -77,7 +77,34 @@ export function DesktopUpdateBanner() {
         // bundle in dev; without the bridge there is nothing to subscribe
         // to and nothing to show.
         if (!bridge) return undefined;
-        return bridge.onEvent((event) => {
+
+        // ASK FIRST, THEN LISTEN ( row 148).
+        //
+        // Subscribing was never enough. Main checks the feed at launch and
+        // this component only exists in the unlocked branch of the app, so
+        // on any install with a vault the `available` broadcast happens
+        // while the user is still at the Locked screen and no listener is
+        // alive to hear it. Measured on a packaged 0.338.1 build against a
+        // staging feed serving 0.339.0: main logged `Found version 0.339.0`
+        // and the banner, mounted afterwards, showed nothing.
+        //
+        // Only `available` is hydrated. The retained state can also be an
+        // `error` from a check that failed at launch, and opening a wallet
+        // to be told an update "could not be verified" - about a download
+        // that was never offered, let alone attempted - would be alarming
+        // and wrong. A failure is worth showing when the user asked for
+        // something; a stale one is not.
+        let cancelled = false;
+        if (typeof bridge.getState === 'function') {
+            Promise.resolve(bridge.getState()).then((event) => {
+                if (cancelled || event?.type !== 'available') return;
+                const next = String(event?.info?.version ?? '');
+                setVersion(SEMVER.test(next) ? next : null);
+                setState((current) => (current === 'idle' ? 'available' : current));
+            }).catch(() => { /* no offer to show */ });
+        }
+
+        const unsubscribe = bridge.onEvent((event) => {
             const type = event?.type;
             if (type === 'available') {
                 const next = String(event?.info?.version ?? '');
@@ -92,6 +119,11 @@ export function DesktopUpdateBanner() {
             if (type === 'verifying') setState('installing');
             if (type === 'rejected' || type === 'error') setState('refused');
         });
+
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+        };
     }, []);
 
     const install = useCallback(() => {

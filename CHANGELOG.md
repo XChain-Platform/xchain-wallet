@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session .
 
 ### Fixed
+- The desktop update offer survives being made before the wallet is unlocked, so an update found at launch is still shown once a window exists to show it .
 - `publish.sh` keys its partial-release waivers on a lane`s declared feed rather than on the release being partial, so a desktop partial is no longer published with the channel-pointer assertion and the §7.5 rehearsal silently skipped .
 - The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see .
 - The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up" .
