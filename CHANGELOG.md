@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.339.0] - 2026-08-12
+
+### Added
+- The desktop wallet now offers an available update and installs it, which nothing in the app could do before .
+
+### Fixed
+- The signed macOS app can start: the hardened runtime allows JIT, without which Electron's V8 cannot reserve executable memory and the app dies at launch .
+- The macOS `.dmg` is signed, notarized and stapled, so it installs without an unidentified-developer warning .
+- The release signature gate verifies the disk image itself on macOS instead of recording it as unverifiable .
+- The release verification page names both published releases and what each covers, instead of stating that no desktop artifact exists .
+
 ## [0.338.0] - 2026-08-11
 
 ### Added
