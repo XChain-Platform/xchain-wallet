@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / §4.7: net a source address's UNCONFIRMED, committed spends into a
+// §4.7: net a source address's UNCONFIRMED, committed spends into a
 // concurrent approval window's pre-flight. The in-memory reservation only
 // covers approve -> broadcast (it is released the instant the send is signed
 // and handed off); this covers the much longer broadcast -> confirmation gap,

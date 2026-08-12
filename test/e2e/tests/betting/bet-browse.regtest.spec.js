@@ -47,7 +47,7 @@
 // is the busy chain, and this spec needs several minutes of nobody mining.
 // XC_REGTEST_COIN=RLTC.
 //
-// PRE-FLIGHT: creating a market is fee-bearing off Bitcoin , so the
+// PRE-FLIGHT: creating a market is fee-bearing off Bitcoin, so the
 // venue's LTC/USD snapshot must be seeded low enough for the quoted fee to
 // clear the 5,460-sat dust floor (campaign §3.2 / §3.5). Seed $30 and mine.
 

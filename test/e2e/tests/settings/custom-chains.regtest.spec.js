@@ -13,7 +13,7 @@
 //
 // WHAT THIS SURFACE CAN GET WRONG, and why "a row appeared" is not the test.
 // Settings has a documented failure MODE, not just a list of defects: D-70
-// (theme / reduced motion / hide-small-balances) and D-91 /  (the
+// (theme / reduced motion / hide-small-balances) and D-91 (the
 // endpoints editor) are the same bug twice - a control that PERSISTS its value
 // while NOTHING APPLIES it. The user changes a setting, the setting survives a
 // reload, and the wallet behaves exactly as it did before. Custom chains is the
@@ -157,7 +157,7 @@ test.describe('Settings: custom chains', () => {
                 // be served by the component's own state; after it, the only
                 // thing that can put this row on screen is a ChainRegistry
                 // rebuilt at boot from persisted settings - which is exactly
-                // what D-91/ turned out NOT to do for endpoints.
+                // what D-91 turned out NOT to do for endpoints.
                 await page.reload();
                 await unlockAfterReload(page, PASSWORD);
                 await openDeveloperMode(page);

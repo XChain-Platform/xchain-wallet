@@ -36,8 +36,8 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {boolean} [payFeeInNativeCoin]  : pay the protocol fee with a FEE_DESTINATION output instead of an XCHAIN balance (the only lane on LTC/DOGE). submitWithSigner sizes it from the indexer quote.
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {boolean} [payFeeInNativeCoin]: pay the protocol fee with a FEE_DESTINATION output instead of an XCHAIN balance (the only lane on LTC/DOGE). submitWithSigner sizes it from the indexer quote.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]

@@ -55,12 +55,12 @@ describe('sdk/SDKRegistry', () => {
         });
     });
 
-    // : the wallet froze for minutes when its backend was
+    // The wallet froze for minutes when its backend was
     // unreachable because SDK instances were built with xchain-sdk's
     // server-tuned defaults (30s timeout x 4 attempts, per call). The
     // registry now hands every factory call a bounded timeout + retry
     // policy so an offline backend surfaces as a fast, loud error.
-    describe('network patience ', () => {
+    describe('network patience', () => {
         const captureFactory = () => {
             const calls = [];
             return { calls, factory: (opts) => { calls.push(opts); return fakeFactory(opts); } };
@@ -100,11 +100,11 @@ describe('sdk/SDKRegistry', () => {
         });
     });
 
-    // : Settings -> Network & Endpoints persisted an override that
+    // Settings -> Network & Endpoints persisted an override that
     // nothing ever consumed - `setEndpointOverrides` had no callers, so
     // `_endpointOverrides` stayed `{}` for the process lifetime and an
     // operator pointing the wallet at their own node was silently ignored.
-    describe('endpoint overrides ', () => {
+    describe('endpoint overrides', () => {
         const captureFactory = () => {
             const calls = [];
             return { calls, factory: (opts) => { calls.push(opts); return fakeFactory(opts); } };
@@ -201,7 +201,7 @@ describe('sdk/SDKRegistry', () => {
             expect(calls[calls.length - 1].explorerUrl).toBe(joinEndpoint(regtest.explorer));
         });
 
-        // The latent half of : the pre-fix editor seeded its draft
+        // The latent half: the pre-fix editor seeded its draft
         // from `defaultUrl` alone and then wrote all three fields, so a
         // record saved before this fix carries port-stripped siblings.
         // Consuming those verbatim would kill the two endpoints the

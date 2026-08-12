@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  API 26-30 backup rules ( §1). The pre-Android-12 spelling of
+  API 26-30 backup rules (§1). The pre-Android-12 spelling of
   data_extraction_rules.xml, kept because this app's floor is API 26 and
   those devices read this file instead.
 

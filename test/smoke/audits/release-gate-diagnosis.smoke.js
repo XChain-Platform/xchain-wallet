@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The §6 step-1 gate must tell a red CI run apart from a CI that never
-// ran ( S41, ).
+// ran (S41).
 //
 // The verdict was never the problem. verify-validated-commit.mjs refuses
 // anything that is not a green run and always did, fail-closed. What it
@@ -212,7 +212,7 @@ await withServer({
         'the gate must fail as a gate, not as a stack trace');
 }
 
-console.log('OK: release gate-diagnosis smoke ( S41 / : verify-validated-commit.mjs '
+console.log('OK: release gate-diagnosis smoke (S41: verify-validated-commit.mjs'
     + 'separates a suite that failed from a suite that never started, measured by jobs that '
     + 'executed zero steps, quotes GitHub\'s own annotation verbatim so the reason survives the '
     + 'logs expiring, leaves a genuinely red run\'s advice alone, still passes green, and still '

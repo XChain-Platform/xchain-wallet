@@ -481,7 +481,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const esc = escrow.trim() || '?';
         if (oracleAddress.trim() && fiatCode) {
             // The oracle's usage fee, if it charges one, is a real payment leaving this
-            // transaction , so say so here rather than letting it appear only as
+            // transaction, so say so here rather than letting it appear only as
             // an unexplained output on the confirm screen.
             return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} at the oracle-priced ${fiatCode} rate. If this oracle charges a usage fee, you pay it once, now, from this transaction.`;
         }
@@ -665,7 +665,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page; hardware +
     // watcher keep the legacy review stage.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
@@ -674,7 +674,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -837,7 +837,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />,
             );
         }
-        // : signed but not broadcast, so no dispenser is open yet.
+        // Signed but not broadcast, so no dispenser is open yet.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="dispenser" />);
         }
@@ -1041,7 +1041,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -1055,7 +1055,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? sourceAddress : null}
                 hwStatus={hwStatus}

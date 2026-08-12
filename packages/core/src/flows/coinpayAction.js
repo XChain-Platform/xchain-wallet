@@ -51,7 +51,7 @@ import { verifyCoinpayObligation } from './coinpayQueries.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -66,7 +66,7 @@ import { verifyCoinpayObligation } from './coinpayQueries.js';
  * Number() would round the native-coin output, underpaying (COINPAY rejected,
  * buyer loses the coin with no settlement) or overpaying.
  *
- * : the encoder/SDK now carry >2^53-1 amounts exactly (BigInt money
+ * The encoder/SDK now carry >2^53-1 amounts exactly (BigInt money
  * path; the value travels as an exact decimal string over JSON-RPC), so a
  * big amount is no longer refused here. It must arrive as an exact decimal
  * STRING and is returned as one; a Number past safe-integer precision is
@@ -109,7 +109,7 @@ function normalizeCoinAmount(value, fnName) {
  * obligation from the chain, and returns the pieces a COINPAY transaction is
  * built from.
  *
- *  / F4: the payee and the amount decide where real native coin goes, and
+ * F4: the payee and the amount decide where real native coin goes, and
  * both reach these flows as plain arguments that originated in an indexer query
  * several layers up. Re-read the obligation here, in the flow that is about to
  * build the payment, and refuse if it disagrees with what we were asked to pay.
@@ -176,9 +176,9 @@ async function prepareCoinpay(opts, fnName) {
  * Encode-only COINPAY for §20 watcher mode: returns an unsigned PSBT request for
  * an air-gapped signer. No vault, no signer, no broadcast.
  *
- * : this path used to call the GENERIC `buildActionPsbt` with
+ * This path used to call the GENERIC `buildActionPsbt` with
  * `customOutputs` taken straight from form state, so it was the one COINPAY
- * route that skipped the  verification: a watcher could be talked into
+ * route that skipped the verification: a watcher could be talked into
  * building a PSBT that pays an attacker, and the air-gapped signer would only
  * ever see the outputs it was handed. It now runs the same verified preamble as
  * the signing paths, and the native output is built from the verified obligation.
@@ -236,7 +236,7 @@ export async function coinpayAction(opts) {
             // Select funding UTXOs BY ADDRESS and return change to the payer.
             // Without these the encoder asks the utxo-tracker for the PUBLIC
             // KEY's utxos and it answers "has no matching Script" - the D-7
-            // failure, and the sixth site of it (sendToken ,
+            // failure, and the sixth site of it (sendToken,
             // dispenserAction D-43, the three ORDER flows D-134). This lane has
             // no confirm screen to hand down a prebuilt PSBT, so it always
             // builds live and the fault was unconditional: no CoinPay

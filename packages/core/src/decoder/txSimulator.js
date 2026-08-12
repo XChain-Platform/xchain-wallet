@@ -50,13 +50,13 @@
  * @property {boolean} isFee   true only on the fee-label row (a derived coin debit)
  * @property {string} [feeAmount]  set on isFee rows; the raw fee amount as a decimal string
  * @property {string} [feeLabel]   set on isFee rows the UI must not label "Network fee"
- * @property {boolean} [isProtocolFee]  true on the protocol-fee row 
+ * @property {boolean} [isProtocolFee] true on the protocol-fee row
  */
 
 /**
  * The protocol fee the action itself charges, on top of the miner fee.
  *
- * : this is a SECOND debit and the simulator was blind to it, so the
+ * This is a SECOND debit and the simulator was blind to it, so the
  * confirm screen understated every fee-bearing action. It is not derivable
  * from the PSBT: paid in the native coin it rides as a FEE_DESTINATION
  * OUTPUT (and `inputs - outputs` excludes outputs by construction); paid in
@@ -611,7 +611,7 @@ function pushFeeRow(deltas, balMap, coinTick, feeEstimate) {
 }
 
 /**
- * : fold the action's protocol fee into the projection.
+ * Fold the action's protocol fee into the projection.
  *
  * Two payment lanes, one debit shape. In native-coin mode the fee is an
  * extra output to FEE_DESTINATION, so it comes out of the same coin balance

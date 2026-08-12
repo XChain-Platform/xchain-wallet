@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// useAutoLockPolicy . The defect these tests pin down is a MOUNT
+// useAutoLockPolicy. The defect these tests pin down is a MOUNT
 // POINT, not a timer bug: `useAutoLock` cancels its pending timeout in the
 // effect cleanup, so whichever component calls it decides how long auto-lock
 // survives. It used to be called from Home.jsx, and the shells render exactly
@@ -56,7 +56,7 @@ function Shell({ messaging, shell = 'web', activeWalletId = 'w1', onLocked, init
     );
 }
 
-// The pre- shape: auto-lock wired INSIDE the route that unmounts.
+// The pre-shape: auto-lock wired INSIDE the route that unmounts.
 function RouteWithAutoLock({ onLock, idleMs }) {
     useAutoLock(onLock, { idleMs, enabled: true });
     return <div>home</div>;
@@ -127,7 +127,7 @@ describe('useAutoLockPolicy', () => {
         expect([...AUTO_LOCK_SHELLS].sort()).toEqual(['desktop', 'popup', 'web']);
     });
 
-    it(': still locks after the user navigates off Home', async () => {
+    it('Still locks after the user navigates off Home', async () => {
         const messaging = makeMessaging({ autolockMinutes: 1 });
         const { getByTestId } = renderShell(<Shell messaging={messaging} />, { messaging });
         await settle();

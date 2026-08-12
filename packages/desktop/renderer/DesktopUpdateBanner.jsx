@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The desktop update banner ( row 142).
+// The desktop update banner (row 142).
 //
 // WHY THIS EXISTS. The desktop shell has had a complete update pipeline for
 // weeks - a signed feed, per-arch channel pointers, a K1-signed release
-// manifest and the  S5 gate that verifies a download against it before
+// manifest and the S5 gate that verifies a download against it before
 // anything is installed - and no way for a user to reach any of it. Main
 // broadcast `xchain:updater` into a channel no renderer could subscribe to
 // under contextIsolation, and `downloadAndInstall()`, the only code path that
@@ -78,7 +78,7 @@ export function DesktopUpdateBanner() {
         // to and nothing to show.
         if (!bridge) return undefined;
 
-        // ASK FIRST, THEN LISTEN ( row 148).
+        // ASK FIRST, THEN LISTEN (row 148).
         //
         // Subscribing was never enough. Main checks the feed at launch and
         // this component only exists in the unlocked branch of the app, so

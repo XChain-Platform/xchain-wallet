@@ -82,7 +82,7 @@ export const MAX_GATED_PLAINTEXT_BYTES = 6500;
  *                                    holding of gateTicker a recipient needs to
  *                                    receive the key handoff. Only accepted
  *                                    once GATE_MIN_AMOUNT is ACTIVE on this
- *                                    chain ( flag-day train); the flow
+ * chain (flag-day train); the flow
  *                                    re-checks activation itself and refuses
  *                                    to emit the field early.
  * @property {number} [feePerKb]

@@ -71,7 +71,7 @@
     width: 100%;
     accent-color: var(--xc-accent-primary);
     cursor: pointer;
-    /*  slice 2: the native range input is drawn ~16px tall, which
+    /* slice 2: the native range input is drawn ~16px tall, which
        is under the 24px pointer-target floor and genuinely hard to grab
        on a phone. Height on the INPUT enlarges the hit area; the browser
        keeps painting the track and thumb centred at their own size, so
@@ -111,7 +111,7 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     text-align: center;
-    /*  slice 2: "Low" measured 21x13. The stops are the fastest way
+    /* slice 2: "Low" measured 21x13. The stops are the fastest way
        to set a fee tier and were the smallest targets in the send form.
        Flex-centred so the label stays optically on its nub while the
        button around it reaches the 24px floor. */
@@ -200,7 +200,7 @@
 .readoutEdit {
     background: transparent;
     border: none;
-    /*  slice 2: block padding lifts a 17px-tall text button to the
+    /* slice 2: block padding lifts a 17px-tall text button to the
        24px target floor without moving the figure it underlines. */
     padding: var(--xc-space-1) 0;
     min-height: var(--xc-tap-min);

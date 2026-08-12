@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // K1's fingerprint lives in THREE places by design, and the key ceremony
-// writes all three by hand ( §4, the S3 runbook §6-§7):
+// writes all three by hand (§4, the S3 runbook §6-§7):
 //
 //   1. SECURITY.md            - publication channel one
 //   2. xchain.io/security/    - publication channel two, a different repo,
@@ -78,7 +78,7 @@ const pinnedKey = constant('UPDATE_PINNED_PUBKEY_ARMORED');
 const stated = (() => {
     const m = /PGP fingerprint:[^\S\n]*\**[^\S\n]*([^*\n.]*)/i.exec(security);
     assert.ok(m, 'SECURITY.md no longer carries a "PGP fingerprint:" line. It is one of the '
-        + 'two channels  §4 requires K1 to be published through, and the ceremony '
+        + 'two channels §4 requires K1 to be published through, and the ceremony'
         + 'runbook §7 edits exactly that line.');
     /* A label with nothing after it is the worst of the three states: it
      * reads as an oversight, so a reader goes looking for the fingerprint

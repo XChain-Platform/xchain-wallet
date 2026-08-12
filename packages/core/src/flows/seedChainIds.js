@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// seedChainIds : which chains a newly added wallet or account
+// seedChainIds: which chains a newly added wallet or account
 // gets its first addresses on.
 //
 // Address derivation for a new wallet/account walks `activeChainIds`,
@@ -54,7 +54,7 @@ export function activeChainIdsFromSettings(settings, chainRegistry) {
 /**
  * Chain ids a "pick a chain to put an address on" control should offer:
  * the chains the account already occupies, then every chain active on
- * the current network .
+ * the current network.
  *
  * Occupied-only lists turn every such control into a dead end for an
  * account with no addresses: Add-address offered no coin, and the

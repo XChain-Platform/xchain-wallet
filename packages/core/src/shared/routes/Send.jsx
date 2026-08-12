@@ -220,8 +220,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const { showToast } = useToast();
     const haptic = useHaptic();
 
-    //  §5.6 slice 1: the single-encode confirm modal. Flag-gated
-    // (read with code defaults, never vault-stamped).  brought
+    // §5.6 slice 1: the single-encode confirm modal. Flag-gated
+    // (read with code defaults, never vault-stamped). brought
     // hardware onto it; watcher sends stay on the legacy review->submit
     // stage machine below (they encode, they never sign).
     const confirmAction = useConfirmAction();
@@ -258,7 +258,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [activeByChain, setActiveByChain] = useState(
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
     );
-    //  source picker, matching the From field every other action form
+    // source picker, matching the From field every other action form
     // carries. `pickedSourceChain` records the chain a manual pick was made on,
     // so the defaulting effect below re-defaults on a chain switch (where the
     // picked address does not exist) but never overwrites a deliberate choice.
@@ -300,7 +300,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     // Raw backend/SDK/RPC error string kept for a collapsible "technical
     // details" disclosure so debuggability is preserved without leading
-    // the review dialog with jargon ().
+    // the review dialog with jargon.
     const [submitErrorDetail, setSubmitErrorDetail] = useState(/** @type {string | null} */ (null));
     // Recognized cause from humanizeError; recovery affordances key off
     // this instead of re-parsing the displayed message text.
@@ -473,7 +473,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             if (parts.amount) setAmount(parts.amount);
             const tickParam = parts.params?.tick;
             if (typeof tickParam === 'string' && tickParam.length > 0) {
-                //  §3.6: pasted text is the same untrusted-URI class as
+                // Pasted text is the same untrusted-URI class as
                 // a deep link or a scanned QR, so tick/memo get the same
                 // neutralization those paths apply. `address` stays raw; see
                 // `hardenUriIntentText`'s comment for why.
@@ -584,7 +584,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     // §29.2 Max + §29.3 fiat toggle.
     // Fiat rate for "≈ $X.XX" preview + the optional fiat-entry mode.
-    // Oracle-primary with CoinGecko fallback (§45, ); the
+    // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const fiatRate = useFiatRate({
@@ -645,7 +645,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
           + 'needs their own transaction. Remove the extra recipients, or pick a token.'
         : null;
 
-    //  dust floor on the RECIPIENT amount, refused here rather than at the node.
+    // dust floor on the RECIPIENT amount, refused here rather than at the node.
     //
     // An output below the chain's dust threshold is non-standard, so the transaction is
     // rejected at relay: it never enters a mempool and costs no miner fee, but the wallet
@@ -692,7 +692,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         setFormError((prev) => (prev !== null && prev === pushed ? null : prev));
     }, [dustBlock]);
 
-    // : `fiatRate` prices the CHAIN COIN. The amount field may be holding a
+    // `fiatRate` prices the CHAIN COIN. The amount field may be holding a
     // TOKEN amount, and pricing that at the coin's rate renders a confidently
     // formatted, wildly wrong number (50,000 XCHAIN shown as billions of dollars).
     // Everything that prices the AMOUNT uses this gated rate; the network-fee
@@ -780,7 +780,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const onSendSmallTest = useCallback(() => {
         const amtSats = exactSatsBigIntFromDecimalString(amount);
         if (amtSats == null || amtSats <= 0n) return;
-        // 1% of the original (floor division in sats). : the floor is the chain's
+        // 1% of the original (floor division in sats).: the floor is the chain's
         // dust threshold, not one satoshi, because the gate only ever fires on a NATIVE
         // send and 1% of a modest amount lands under 546 sats routinely. A one-sat "test"
         // is a transaction no node relays, so the button that exists to build the user's
@@ -813,7 +813,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
         const all = addressesByChain[chainId] || [];
-        // : a source the user picked on THIS chain wins over the default.
+        // A source the user picked on THIS chain wins over the default.
         // The tick default below still runs either way, so only the
         // from-address half is skipped.
         if (pickedSourceChain !== chainId) {
@@ -1141,7 +1141,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
     }, [previewBalances.sdkShape, tick]);
 
-    // : the asset picker is wallet-scoped, the funding is address-scoped, and this
+    // The asset picker is wallet-scoped, the funding is address-scoped, and this
     // is where they disagree. A WARNING rather than a refusal, deliberately: the only
     // evidence is a balance read, and a lagging or failed one must never be able to block
     // a send the address can genuinely pay for. Both of those states are excluded here, so
@@ -1155,7 +1155,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             + 'whole wallet, so pick the address that holds it in the From field above.';
     }, [previewBalances, sourceBalance, tick]);
 
-    // : Max is a round trip now, so the button has to be able to say it is
+    // Max is a round trip now, so the button has to be able to say it is
     // working. The wait is one encoder call, but it is a real one.
     const [maxBusy, setMaxBusy] = useState(false);
 
@@ -1299,7 +1299,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFormError('Amount must be a positive number.');
             return;
         }
-        // : refuse a below-dust amount BEFORE composing. Enter also submits this
+        // Refuse a below-dust amount BEFORE composing. Enter also submits this
         // form, so the inline warning alone would not be enough (same reasoning as the
         // test-send gate below).
         if (dustBlock) {
@@ -1355,7 +1355,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFormError(gatedMultiSendBlock);
             return;
         }
-        // §21.4 / : an un-acknowledged test-send warning stops the
+        // §21.4: an un-acknowledged test-send warning stops the
         // send here, not just on the disabled button. The button is the
         // visible control, but a form submits on Enter too, and the whole
         // value of this gate is that it cannot be walked past by accident.
@@ -1367,9 +1367,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             return;
         }
         setFormError(null);
-        //  slice 1: with the flag on, sends go straight to the
+        // slice 1: with the flag on, sends go straight to the
         // single-encode confirm modal instead of the legacy review stage.
-        //  brought hardware in with them; watcher still branches.
+        // brought hardware in with them; watcher still branches.
         if (!isWatcherMode) {
             openConfirmModal();
             return;
@@ -1382,7 +1382,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // unsigned PSBT for transport to a Signer-mode wallet. Read with the
     // explicit default fallback so v2 records without the field behave
     // like 'full' (the broadcast path).
-    // : `isSignerMode` is the route's own refusal. Gating the nav is
+    // `isSignerMode` is the route's own refusal. Gating the nav is
     // not enough - a command-palette entry, a `xchain:` URI intent, and a
     // restored view state all reach this component without passing a nav rail.
     const { isWatcherMode, isSignerMode } = useWalletMode();
@@ -1440,7 +1440,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         setHwExplicitConfirmed(false);
     }, [signRisk.requireExplicitConfirm, fromAddress?.address, sendLegs, amount]);
 
-    //  slice 1: the single-encode confirm-modal path. The modal is
+    // slice 1: the single-encode confirm-modal path. The modal is
     // rendered only while the pipeline is live (preflighting..rechecking);
     // on a terminal phase this component's own state takes over (done
     // screen on success, form error on failure), so the modal cleanly
@@ -1513,13 +1513,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 // broadcast, in the permanent terminal §5.3.4 forbids
                 // re-signing out of.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
-                // : and the native-fee half, for the sends that carry a
+                // And the native-fee half, for the sends that carry a
                 // protocol fee (a gated tick composes as BATCH, and a
                 // multi-recipient send is priced per leg).
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                //  §5.4: Send opts into confirm persistence. It is the
+                // Send opts into confirm persistence. It is the
                 // form the popup-close hazard costs the most (most-used, and a
                 // hardware prompt closes the popup by taking focus), and its
                 // Approve is a bare dispatch - everything it does afterwards is
@@ -1536,7 +1536,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     label: `send ${String(amount).trim()} ${tick.trim().toUpperCase()}`,
                 },
                 resumeRequest: sendBase,
-                // : the HW route runs the SAME send flow with a remote
+                // The HW route runs the SAME send flow with a remote
                 // signer, so it signs the prebuilt PSBT byte-identically.
                 onApprove: (_creds, composed) => {
                     const prebuiltPsbt = {
@@ -1544,7 +1544,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         encoding: composed.encoding,
                         actionString: composed.actionString,
                         version: composed.version,
-                        // : see useActionConfirmFlow. A multi-recipient
+                        // See useActionConfirmFlow. A multi-recipient
                         // send is past one OP_RETURN, so it takes the chunk
                         // lane and its fee rides the reveal.
                         deferredFeeOutput: composed.deferredFeeOutput || null,
@@ -1698,8 +1698,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         </Screen>
     );
 
-    // §21.4 test-send banner. : this used to be inlined in the
-    // `stage === 'review'` branch only, and  then routed every
+    // §21.4 test-send banner.: this used to be inlined in the
+    // `stage === 'review'` branch only, and then routed every
     // non-watcher send from the compose form straight into the confirm
     // modal - so the branch stopped rendering and the warning silently
     // stopped existing for the overwhelming majority of sends. It is a
@@ -1735,7 +1735,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         </div>
     ) : null;
 
-    // §20 / : signer mode does not spend. The Wallet Mode screen
+    // §20: signer mode does not spend. The Wallet Mode screen
     // promises "Send / receive screens are hidden; this wallet does not
     // broadcast", so the form is refused rather than rendered - and the
     // refusal names the way back, because the mode is a setting the same
@@ -1756,7 +1756,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return wrap(<p className={styles.hint}>Loading…</p>);
     }
 
-    //  confirm page, rendered in place of the form (operator
+    // confirm page, rendered in place of the form (operator
     // direction 2026-07-22: the overlay modal didn't fit small/mobile
     // viewports). All other form state stays intact behind it.
     //
@@ -1780,7 +1780,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device
+                // Hardware swaps the password field for the device
                 // block, and Approve additionally waits on the §18.5
                 // cross-check when the risk classifier demands one. Dropping
                 // that gate here would have quietly removed a control the
@@ -1803,7 +1803,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         const txid = result?.txid || result?.broadcast?.txid;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const explorerBase = desc?.explorer?.defaultUrl || '';
-        // : the explorer base is bare; append the coin path segment.
+        // The explorer base is bare; append the coin path segment.
         const explorerCode = explorerCoinCode(desc);
         const explorerUrl = txid && explorerBase
             ? `${explorerBase.replace(/\/$/, '')}${explorerCode ? `/${explorerCode}` : ''}/tx/${txid}`
@@ -2028,7 +2028,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         onConfirmedChange={setHwExplicitConfirmed}
                     />
                 ) : signerReady ? (
-                    // : "Wallet unlocked. No password needed." is a claim
+                    // "Wallet unlocked. No password needed." is a claim
                     // about this wallet's ability to sign, and panic mode makes
                     // it false. SigningReadyNote keeps the note when signing is
                     // allowed, swaps in the freeze when the user armed it
@@ -2068,7 +2068,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                   * wallet is LOCKED) carries submitError on its `error` prop.
                   * Every other path needs this banner -- including the unlocked
                   * software path, which previously had no error surface at all,
-                  * so a failed send simply vanished .
+                  * so a failed send simply vanished.
                   */}
                 {submitError && (isWatcherMode || isHwSource || signerReady) ? (
                     <StatusMessage
@@ -2120,7 +2120,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         );
     }
 
-    //  source picker, the same OwnAddressPickerScreen every other action
+    // source picker, the same OwnAddressPickerScreen every other action
     // form routes its From field to. Rendered in place of the form; all other
     // form state stays intact behind it.
     if (sourcePickerOpen) {
@@ -2184,7 +2184,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     return wrap(
         <form id="send-form" onSubmit={handleReview} noValidate>
             {/*
-              * : state the signing freeze at the TOP of the form, before
+              * State the signing freeze at the TOP of the form, before
               * the user picks a destination and an amount. The refusal used to
               * arrive only on Approve & Sign, by which point a duress observer
               * has already watched the whole transaction get composed.
@@ -2200,7 +2200,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
             {/*
-              * : the funding address, shown and changeable.
+              * The funding address, shown and changeable.
               *
               * Send resolves its source to the chain's ACTIVE address and used to
               * neither render it nor offer to change it, while the other 26 action
@@ -2388,7 +2388,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     <p className={styles.warning}>{sourceLacksTick}</p>
                 </div>
             ) : null}
-            {/* : say it while the amount field still has focus, not only on Send.
+            {/* Say it while the amount field still has focus, not only on Send.
                 Suppressed once Send has already pushed the same sentence into formError,
                 so the user is not shown it twice. */}
             {dustBlock && formError !== dustBlock ? (
@@ -2507,7 +2507,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 style={{ marginTop: 'var(--xc-space-6)' }}
             >
                 <summary className={styles.detailsToggle}>Advanced</summary>
-                {/* : no memo on a native-coin send. It only ever existed
+                {/* No memo on a native-coin send. It only ever existed
                     as a field of an XChain SEND action, and the chain rejects
                     that action outright for a native tick (there is no BTC
                     ledger), so the memo was never recorded or queryable - it

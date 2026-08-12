@@ -55,7 +55,7 @@
     font-family: inherit;
     text-align: center;
     /*
-     * , and this is the SECOND instance of the defect History's
+     * And this is the SECOND instance of the defect History's
      * .segBtn had: 4px of vertical padding plus a 13px line box measures 24px
      * on macOS and 23px on the CI runner, so these three DEX filter buttons
      * cleared the WCAG 2.2 AA 2.5.8 pointer-target floor on one operating
@@ -65,7 +65,7 @@
      * walk get PAST History and reach DEX for the first time - the walk finds
      * these one route at a time, so expect more until the sweep lands.
      * Height has to be stated, not inherited from whichever font the platform
-     * happens to ship. That sweep is , and it has now landed: the
+     * happens to ship. That sweep is a separate case, and it has now landed: the
      * geometry guard scores this rule rather than trusting that it mentions
      * the token.
      */

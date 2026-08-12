@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/rehearsal-matrix.mjs - the shipped update lanes, and what
-// each one is smoked on ( §2, §7.5, DD4).
+// each one is smoked on (§2, §7.5, DD4).
 //
 // WHAT A "LANE" IS HERE. Not an artifact and not a build lane: an
 // OS/arch pair that receives updates, plus one artifact format
@@ -18,7 +18,7 @@
 // they are not lanes - a rehearsal of them would exercise nothing (§7.5).
 //
 // THE .deb IS A LANE, AND THIS FILE SAID IT WAS NOT (corrected 2026-08-02,
-//  §5). The claim here, on the download page and in the spec was that
+// §5). The claim here, on the download page and in the spec was that
 // "electron-updater's deb path needs privilege escalation at install time",
 // so deb users get a notification and a manual link and nothing swaps. That
 // is not what the pinned electron-updater does. Measured against the
@@ -72,7 +72,7 @@
 // ready, and says so rather than passing quietly.
 //
 // DD4 IS NOW ANSWERED FOR ALL EIGHT LANES (the last two by operator
-// decision 2026-08-03, ). No lane carries `device: null`, and
+// decision 2026-08-03). No lane carries `device: null`, and
 // `rehearsal.smoke.js` refuses a new one that does, rather than letting it
 // inherit the old unanswered state silently.
 //
@@ -84,7 +84,7 @@
 // conflate them. What actually blocks a rehearsal now is K1.
 //
 // WHY A HOSTED RUNNER DOES NOT TAKE THE WINDOWS LANES, since it is the
-// obvious idea and it was measured rather than dismissed . A
+// obvious idea and it was measured rather than dismissed. A
 // `windows-latest` runner IS a free native x64 Windows machine, and the
 // nsis lane has no elevation prompt to answer (`perMachine: false`, so no
 // UAC, unlike the deb lane's pkexec). It still cannot do this job:
@@ -113,7 +113,7 @@ export const LANES = [
         format: 'exe',
         device: 'Windows 11 in Parallels on the Mac Studio (x64 under Windows-on-ARM emulation)',
         note: 'nsis. Shares stable.yml with win-arm64, so selection is load-bearing. '
-            + 'EMULATED SILICON, accepted by the operator 2026-08-03 : the '
+            + 'EMULATED SILICON, accepted by the operator 2026-08-03: the '
             + 'installer, the launch and the update swap are all genuinely exercised, '
             + 'and only the CPU is not native. Said here because this string is what '
             + 'attest copies into the rehearsal record.',
@@ -149,7 +149,7 @@ export const LANES = [
         os: 'linux',
         arch: 'x64',
         format: 'AppImage',
-        device: 'test-host.dankest.io (x86_64, Ubuntu 24.04)',
+        device: 'linux-x86_64 CI runner (Ubuntu 24.04)',
         note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing.',
     },
     {
@@ -157,7 +157,7 @@ export const LANES = [
         os: 'linux',
         arch: 'arm64',
         format: 'AppImage',
-        device: 'devhost (aarch64, Ubuntu 24.04)',
+        device: 'linux-arm64 CI runner (Ubuntu 24.04)',
         note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb.',
     },
     {
@@ -165,7 +165,7 @@ export const LANES = [
         os: 'linux',
         arch: 'x64',
         format: 'deb',
-        device: 'test-host.dankest.io (x86_64, Ubuntu 24.04)',
+        device: 'linux-x86_64 CI runner (Ubuntu 24.04)',
         note: 'DebUpdater. The only shipped update path that ends in a root install '
             + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed.',
     },
@@ -174,7 +174,7 @@ export const LANES = [
         os: 'linux',
         arch: 'arm64',
         format: 'deb',
-        device: 'devhost (aarch64, Ubuntu 24.04)',
+        device: 'linux-arm64 CI runner (Ubuntu 24.04)',
         note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage. The swap itself '
             + 'has been observed once, in a container, by drills/deb-update-swap.mjs.',
     },
@@ -194,7 +194,7 @@ export const LANES = [
 
 /**
  * The DIRECT lanes: install channels that receive update INFORMATION and
- * no installer .
+ * no installer.
  *
  * WHY THESE ARE NOT IN `LANES`. Everything above is an electron-updater
  * lane, and `probeLane` is written to that shape: a yml pointer, a
@@ -337,7 +337,7 @@ export function lanesByOs() {
     return out;
 }
 
-// A DATA MODULE IS STILL A FILE AN OPERATOR CAN RUN . This one sits
+// A DATA MODULE IS STILL A FILE AN OPERATOR CAN RUN. This one sits
 // among ten executable tools in tools/release/, and `node rehearsal-matrix.mjs
 // --help` printed NOTHING and exited 0 - indistinguishable, to a person and to
 // a gate, from a help screen having been shown. The §13 check that covers this
@@ -348,7 +348,7 @@ export function lanesByOs() {
 // the useful thing to see when you are deciding which lanes a release has to
 // rehearse. It is read-only: no argument makes this file do work.
 const USAGE = `rehearsal-matrix.mjs - the shipped update lanes, and what each one is
-smoked on ( §2, §7.5, DD4;  for the direct lane).
+smoked on (§2, §7.5, DD4).
 
 Usage:
   node tools/release/rehearsal-matrix.mjs           # print the lane table
@@ -397,10 +397,10 @@ if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
             `  ${lane.id.padEnd(w)}  ${lane.os}/${lane.arch} `
             + `${lane.format}  device: ${lane.device ?? 'none'}\n`,
         );
-        process.stdout.write(`${LANES.length} electron-updater lanes ( §2)\n\n`);
+        process.stdout.write(`${LANES.length} electron-updater lanes (§2)\n\n`);
         for (const lane of LANES) row(lane);
         process.stdout.write(`\n${DIRECT_LANES.length} direct lane(s), `
-            + 'notice-only feed, install by hand \n\n');
+            + 'notice-only feed, install by hand\n\n');
         for (const lane of DIRECT_LANES) row(lane);
         process.stdout.write('\nRun with --help for what a lane is and what imports this.\n');
     }

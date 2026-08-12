@@ -32,7 +32,7 @@
 // here, and that cycle is where the documented failure mode of this area lives.
 //
 // THE FAILURE MODE, twice measured: D-70 (theme / reduced motion /
-// hide-small-balances) and D-91 /  (the endpoints editor) are the same
+// hide-small-balances) and D-91 (the endpoints editor) are the same
 // bug - a control that PERSISTS its value while NOTHING APPLIES it. The method
 // that separates the two is the one used below: change it, RELOAD, then check
 // both that the control kept the value AND that something OTHER than the

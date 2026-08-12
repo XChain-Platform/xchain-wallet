@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The §7.5 staging rehearsal did not rehearse a release's bytes. (,
-//.)
+// The §7.5 staging rehearsal did not rehearse a release's bytes. (
 //
 // Measured on real artifacts: the rehearsal `.deb` built on the release Mac
 // parses to 93 payload entries with zero `.node` files, while's CI
@@ -31,7 +30,7 @@
 //     than waved through;
 //   - an `.AppImage` on a host with no unsquashfs is reported UNCHECKED, out
 //     loud and by name, and does NOT fail the release;
-//   - every non-Linux format is silently out of scope, because
+// - every non-Linux format is silently out of scope, because
 //     measured the Linux lane and nothing else;
 //   - the directory gate exits non-zero and says which gate refused;
 //   - `xr_check_payload_arches` actually calls it, uncommented.
@@ -172,7 +171,7 @@ try {
 
     // --- 2. The rehearsal's shape is refused ---------------------------
     //
-    // This is the measured defect itself (): same app, same version,
+    // This is the measured defect itself  : same app, same version,
     // same filename, and a payload with no compiled addon in it.
     {
         const name = 'xchain-wallet_9.9.9_amd64.deb';
@@ -281,7 +280,7 @@ try {
 
     // --- 5. Every other format is out of scope, silently ---------------
     //
-    // measured the Linux lane. What a .dmg or an .exe ought to
+    // measured the Linux lane. What a.dmg or an.exe ought to
     // carry is a rule nobody has driven, and a gate that guessed would refuse
     // a release on an assumption.
     {
@@ -359,7 +358,7 @@ if (failures > 0) {
 }
 
 console.log(
-    'OK: release payload-native smoke (: a Linux .deb is judged by whether its'
+    'OK: release payload-native smoke (: a Linux.deb is judged by whether its'
     + ' payload carries the compiled addon a Linux install produces, read with tar so the'
     + ' check is real on the Mac that signs, an AppImage with no unsquashfs is reported'
     + ' UNCHECKED rather than refused, every other format is out of scope, and the'

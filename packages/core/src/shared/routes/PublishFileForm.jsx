@@ -179,7 +179,7 @@ export function PublishFileForm({ walletId, onBack }) {
 
     // PC-51: native-coin protocol fee for the PUBLIC lane only (standalone
     // FILE is quotable; the gated lane composes a BATCH, which is fee-quote
-    // DENIED, so GatedPublishForm has no toggle by design). : declared
+    // DENIED, so GatedPublishForm has no toggle by design).: declared
     // after `descriptor` because the hook needs the chain to know whether the
     // native fee is an opt-in (BTC) or the only way to pay (LTC/DOGE).
     const nativeFee = useNativeFee(descriptor);
@@ -210,7 +210,7 @@ export function PublishFileForm({ walletId, onBack }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // : can this publish actually ride a Taproot envelope? BOTH halves must
+    // Can this publish actually ride a Taproot envelope? BOTH halves must
     // hold, and each rules out a different disaster.
     //
     // The SIGNER half (§6): a reveal that cannot be signed strands the commit, so
@@ -347,7 +347,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     rawData,
                     payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
-                    //  §6: opt in to size-aware selection, and ASSERT the signer's
+                    // Opt in to size-aware selection, and ASSERT the signer's
                     // tapscript capability rather than letting AUTO assume it. AUTO only
                     // reaches for the envelope when that flag is true, so an unaffirmed
                     // signer stays on P2WSH instead of committing to a reveal it cannot
@@ -438,7 +438,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     </>
                 ) : null}
                 {storedLine ? (
-                    /*  §8: the size the user actually paid for. Compression is
+                    /* The size the user actually paid for. Compression is
                        on by default, so this is routinely a fraction of the file they
                        picked and there is no other way for them to find that out. */
                     <p className={styles.hint}>{storedLine}</p>

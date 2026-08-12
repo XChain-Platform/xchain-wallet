@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * tools/regtest/roundtrip.cjs - reusable funded-signer regtest round-trip
- * driver ( / spec §14). Drives the live upstream BTC regtest stack:
+ * driver (spec §14). Drives the live upstream BTC regtest stack:
  * funds a fresh key from the node wallet, then runs each action through the
  * full create -> encode -> sign -> broadcast -> confirm -> read-back cycle
  * via the SDK's submitAction, so a flow's honest end-to-end path can be
@@ -15,7 +15,7 @@
  *   - SSH access to the host running the bitcoind regtest node, for funding.
  *
  * Config (env):
- *   XCHAIN_REGTEST_SSH        ssh host alias for the node box (default: devhost)
+ *   XCHAIN_REGTEST_SSH        ssh host alias for the node box (default: localhost)
  *   XCHAIN_REGTEST_NODE       node container name (default: xchain-node-bitcoin-regtest-node)
  *   XCHAIN_REGTEST_EXPLORER_PORT / _ENCODER_PORT / _HUB_PORT  (defaults 18080/3023/10000)
  *   XCHAIN_SDK_PATH           path to the xchain-sdk package (default: sibling ../xchain-sdk)
@@ -40,7 +40,7 @@ const SDK_PATH = process.env.XCHAIN_SDK_PATH
     || path.resolve(__dirname, '../../../xchain-sdk');
 const { XChainSDK } = require(SDK_PATH);
 
-const SSH = process.env.XCHAIN_REGTEST_SSH || 'devhost';
+const SSH = process.env.XCHAIN_REGTEST_SSH || 'localhost';
 const NODE = process.env.XCHAIN_REGTEST_NODE || 'xchain-node-bitcoin-regtest-node';
 const SDK_OPTS = {
     network: 'bitcoin-regtest',
@@ -111,7 +111,7 @@ async function main() {
     // no funds spent) - that encode-side refusal is the failure mode the
     // wallet's picker/review checks exist to pre-empt.
     //
-    // ENCODER IDENTITY (, FIXED 2026-07-25): the P2SH/P2WSH chunk
+    // ENCODER IDENTITY (FIXED 2026-07-25): the P2SH/P2WSH chunk
     // lane used to resolve the caller with bitcoin.address.fromBase58Check(
     // pubKey), so any payload past the OP_RETURN lane composed ONLY from a
     // base58 LEGACY address; the raw compressed pubkey the SDK/wallet flows
@@ -119,8 +119,8 @@ async function main() {
     // character". The encoder now resolves the gate HASH160 from a base58
     // address, a raw pubkey hex, OR a v0 bech32 P2WPKH address, so this leg
     // runs from a BECH32 signer with the RAW PUBKEY as identity - byte-for-byte
-    // the wallet's own path, and the direct  regression guard.
-    console.log('\n=== FILE at computed max (PC-28, bech32 signer / ) ===');
+    // the wallet's own path, and the direct regression guard.
+    console.log('\n=== FILE at computed max (PC-28, bech32 signer) ===');
     const { maxPublicFileBytes } = await import(
         path.resolve(__dirname, '../../packages/core/src/flows/fileSizeLimits.js')
     );
@@ -674,7 +674,7 @@ async function main() {
     const wInfo = await sdk.getToken(wTick).catch(() => null);
     const wRow = Array.isArray(wInfo) ? wInfo[0] : wInfo;
     const wLocks = (wRow && wRow.locks) || {};
-    // : the indexer's createToken() never writes lock_mint_supply
+    // The indexer's createToken() never writes lock_mint_supply
     // to the `tokens` table, so the READ MODEL reports that one flag as
     // unset on every token on every chain even though the action set it
     // and issue.js (which folds the issues rows) still enforces it. The
@@ -689,7 +689,7 @@ async function main() {
         && Number(wRow.callback.block) === wCallbackBlock;
     const wAllowOk = wRow && wRow.lists && String(wRow.lists.allow) === String(wAllowIdx);
     console.log(`  read-back token locks: ${locksSet.length}/6 projectable [${locksSet.join(',')}]`);
-    console.log(`  read-back locks.mint_supply=${mintSupplyProjected} -> ${mintSupplyProjected ? ' IS FIXED, tighten this leg to 7/7' : 'expected false while  is open'}`);
+    console.log(`  read-back locks.mint_supply=${mintSupplyProjected} -> ${mintSupplyProjected? 'IS FIXED, tighten this leg to 7/7': 'expected false while is open'}`);
     console.log(`  read-back callback: tick=${wRow?.callback?.tick} amount=${wRow?.callback?.amount} block=${wRow?.callback?.block} (want block ${wCallbackBlock}) -> ${wCallbackOk ? 'OK' : 'MISMATCH'}`);
     console.log(`  read-back lists.allow=${wRow?.lists?.allow} (want ${wAllowIdx}) -> ${wAllowOk ? 'OK' : 'MISMATCH'}`);
     const wizardOk = wStatus === 'valid' && actionLocks.length === 7

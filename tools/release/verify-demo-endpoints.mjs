@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// tools/release/verify-demo-endpoints.mjs - the pre-submission gate from
-//  §2.1: can a store REVIEWER, on a network we have never seen, reach
+// tools/release/verify-demo-endpoints.mjs - the pre-submission gate asking:
+// can a store REVIEWER, on a network we have never seen, reach
 // the endpoints the scripted demo walks them through?
 //
 // WHY THIS EXISTS. App Review cannot reach regtest, so the review notes send
@@ -21,7 +21,7 @@
 // have opened a wallet that could not load a balance, which is a functionality
 // rejection and arguably the 4.2 "just a website in a wrapper" rejection §2.1
 // exists to prevent. It had also been silently breaking the published SDK and
-// the MCP server for who knows how long., fixed the same day.
+// the MCP server for who knows how long. It was fixed the same day.
 //
 // No test could have caught it and none can: every suite in this repo either
 // stubs the network or runs against regtest, and the wallet's own CI runs from
@@ -103,7 +103,7 @@
 // store-version-monitor.mjs: a check that cannot tell must say so rather than
 // fold into a pass. The difference here is which side 403 lands on. That
 // script treats 403 as inconclusive because Cloudflare used to answer plain
-// tooling that way on every path. Since it does not, so a 403 on
+// tooling that way on every path. Since the fix it does not, so a 403 on
 // these hosts now means the block is BACK, and back is the regression this
 // gate exists for. It is a failure, and it says so by name.
 //
@@ -120,7 +120,7 @@ import { explorerCoinCode } from '../../packages/core/src/registry/coinTicker.js
 // (@noble/curves, for the registry signature), and it is loaded dynamically
 // for a reason about WHERE this tool gets typed rather than about cost.
 //
-//  row 50: an ES module's static imports are evaluated before any
+// An ES module's static imports are evaluated before any
 // top-level statement in the file, so the --help handling below cannot run
 // at all in a tree without dependencies installed. The process dies on the
 // import with a module-not-found stack trace, which is exactly the "a tool
@@ -556,14 +556,14 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
         return {
             state: 'failure',
             detail: '403 to a plain client: the edge is blocking non-browser traffic again'
-                + ' . A reviewer would see a wallet that cannot load a balance.',
+                + '. A reviewer would see a wallet that cannot load a balance.',
         };
     }
     if (raw.status === 429) {
         return {
             state: 'failure',
             detail: '429 rate limited: this host is no longer covered by the zone rate-limit skip'
-                + ' , and the configured limits are far below one wallet cold-open.',
+                + ', and the configured limits are far below one wallet cold-open.',
         };
     }
     if (typeof raw.status !== 'number' || raw.status < 200 || raw.status >= 300) {
@@ -842,7 +842,7 @@ export async function checkDemoEndpoints({
                 url: burstResult.url,
                 state: 'failure',
                 detail: `${burstResult.blocked}/${burst} rapid requests came back ${burstResult.statuses.join('/')}:`
-                    + ' a wallet cold-open fans out more than this per address ',
+                    + ' a wallet cold-open fans out more than this per address',
             });
         }
     }
@@ -869,7 +869,7 @@ export async function burstProbe(probes, { fetchImpl, timeoutMs, count }) {
 }
 
 const USAGE = `verify-demo-endpoints.mjs - can a reviewer following the scripted demo
-actually reach everything it needs? ( §2.1 pre-submission gate.)
+actually reach everything it needs? (Pre-submission demo gate.)
 
 Usage:
   node tools/release/verify-demo-endpoints.mjs [--network <kind>] [--burst [n]] [--json]
@@ -902,7 +902,7 @@ Options:
   -h, --help        print this and exit 0
 
 PROBES LIVE HOSTS. That is why --help is answered before the probes rather
-than after them .
+than after them, so --help works with no network.
 
 Exit codes:
   0  live          every demo endpoint reachable, and readable from the app's origin
@@ -937,7 +937,7 @@ async function main() {
     }
 
     console.log(`Demo-path endpoints, ${args.networkKind}, as seen from ${args.origin}`
-        + ' ( §2.1 pre-submission gate)\n');
+        + ' (§2.1 pre-submission gate)\n');
     for (const r of outcome.results) {
         const mark = r.state === 'live' ? 'OK  ' : r.state === 'failure' ? 'FAIL' : '??  ';
         console.log(`${mark} ${r.service.padEnd(10)} ${r.url}`);

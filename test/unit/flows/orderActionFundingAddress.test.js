@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // orderAction / cancelOrder / editOrder must name the funding address, not
-// just the pubkey. Third instance of the same fault (sendToken ,
+// just the pubkey. Third instance of the same fault (sendToken,
 // dispenserAction D-43), and the most expensive of the three: an ORDER holds
 // the seller's tokens in escrow, and CANCEL is the only way to get them back
 // before the expiration - which defaults to ninety days.

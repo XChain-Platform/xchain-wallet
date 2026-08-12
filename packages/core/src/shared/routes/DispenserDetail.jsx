@@ -263,9 +263,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
         : '';
 
-    //  / PC-51: the owner actions on this screen compose DISPENSER
+    // PC-51: the owner actions on this screen compose DISPENSER
     // updates, and off Bitcoin the native-coin output IS the protocol fee
-    // . Without this flag the action confirms on chain and the indexer
+    //Without this flag the action confirms on chain and the indexer
     // then rejects it "insufficient fee (native coin output required)" while
     // this screen reports the edit as applied.
     //
@@ -616,7 +616,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         ? dispenserRefusesEveryoneMessage()
         : buyerListMessage(buyerVerdict);
 
-    // D-37 : what the paying address actually holds of the payment
+    // D-37: what the paying address actually holds of the payment
     // token, through the same hook that backs every other form's Max +
     // "N available" footer. Without it the buy panel was the one spending
     // surface in the wallet with no funding check, and a buyer holding zero
@@ -773,7 +773,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     GIVE_ESCROW: amt,
                 },
                 ...(feePerKb != null ? { feePerKb } : {}),
-                // : `flag` is true or undefined, never false, so on Bitcoin
+                // `flag` is true or undefined, never false, so on Bitcoin
                 // (where the fee is opt-in) this leaves the payload untouched.
                 payFeeInNativeCoin: nativeFee.flag,
             };
@@ -862,7 +862,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 },
                 params,
                 ...(feePerKb != null ? { feePerKb } : {}),
-                // : `flag` is true or undefined, never false, so on Bitcoin
+                // `flag` is true or undefined, never false, so on Bitcoin
                 // (where the fee is opt-in) this leaves the payload untouched.
                 payFeeInNativeCoin: nativeFee.flag,
             };
@@ -917,7 +917,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 },
                 params: cancelParams,
                 ...(feePerKb != null ? { feePerKb } : {}),
-                // : `flag` is true or undefined, never false, so on Bitcoin
+                // `flag` is true or undefined, never false, so on Bitcoin
                 // (where the fee is opt-in) this leaves the payload untouched.
                 payFeeInNativeCoin: nativeFee.flag,
             };
@@ -1054,7 +1054,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         : null}
                 />
                 {feeSelector}
-                {/* : off Bitcoin this is mandatory, so the toggle renders
+                {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
@@ -1168,7 +1168,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </p>
                 ) : null}
                 {feeSelector}
-                {/* : off Bitcoin this is mandatory, so the toggle renders
+                {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
@@ -1332,7 +1332,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </div>
                 ) : null}
                 {feeSelector}
-                {/* : off Bitcoin this is mandatory, so the toggle renders
+                {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
@@ -1527,7 +1527,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     className={local.quickAction}
                     onClick={() => {
                         const base = descriptor?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
-                        // : the explorer base is bare; append the coin path segment.
+                        // The explorer base is bare; append the coin path segment.
                         const code = explorerCoinCode(descriptor);
                         const path = code ? `/${code}/action/${actionIndex}` : `/action/${actionIndex}`;
                         try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }

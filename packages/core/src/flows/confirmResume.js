@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Resuming a stored confirm (, §5.4).
+// Resuming a stored confirm (§5.4).
 //
 // A stored session has to be finishable WITHOUT its originating form, so what
 // it carries is a messaging METHOD NAME plus the request body that method
 // takes. That is a name crossing a trust boundary into a call, so it is
 // allow-listed here rather than dispatched on trust - the same rule
-// `action.vote.composeForConfirm` follows for its builder name .
+// `action.vote.composeForConfirm` follows for its builder name.
 //
 // Two properties this module exists to hold:
 //

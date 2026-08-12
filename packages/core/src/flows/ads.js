@@ -204,7 +204,7 @@ export async function commitAdsStep({ vault, chainId, donationIncluded }) {
  * `commitAdsStep`, post-broadcast). Factored out of `submitAction` so the
  * single-encode pipeline (`composeForConfirm`) resolves the donation output
  * BEFORE the modal opens, giving the previewed/signed PSBT byte-identity
- * ( §5.3.1), while `submitAction` keeps calling it unchanged.
+ * (§5.3.1), while `submitAction` keeps calling it unchanged.
  *
  * @param {import('../schemas/settings.js').Settings | null} settingsSnapshot
  * @param {string} chainId

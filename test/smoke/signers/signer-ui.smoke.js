@@ -148,7 +148,7 @@ assert.ok(
 // asserted above (tap-to-reveal, auto-hide on blur).
 assert.ok(
     !/navigator\.clipboard/.test(viewSrc) && !/copyText\(/.test(viewSrc),
-    'ViewPrivateKey copies nothing to the clipboard ',
+    'ViewPrivateKey copies nothing to the clipboard',
 );
 assert.ok(
     /Tap to reveal/.test(viewSrc),
@@ -271,5 +271,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + no clipboard path at all  + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
+    'OK: signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + no clipboard path at all + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
 );

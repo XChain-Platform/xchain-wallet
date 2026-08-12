@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the screen for a vault that exists and will not open.
+// The screen for a vault that exists and will not open.
 //
 // Found by corrupting the Keystore ciphertext on an Android emulator
-// (2026-08-01,  first-run session). The storage contract behaved
+// (2026-08-01, first-run session). The storage contract behaved
 // perfectly - CORRUPT rather than ABSENT, and the app refused rather than
 // offering "create new wallet" - and then showed the user
 // `vault storage unavailable: vault failed its integrity check` in red, with

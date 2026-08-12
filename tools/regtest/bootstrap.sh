@@ -42,7 +42,7 @@ VERBOSE="${XCHAIN_REGTEST_VERBOSE:-}"
 # base URL that black-holes packets (an unreachable host, a stale SSH
 # tunnel, the TEST-NET-1 address the smoke probes) costs the full
 # timeout on every probe with nothing printed meanwhile, which reads as
-# a hang rather than a slow check . Callers that only want the
+# a hang rather than a slow check. Callers that only want the
 # failure path, tests above all, shorten it.
 PROBE_TIMEOUT_MS="${XCHAIN_REGTEST_PROBE_TIMEOUT_MS:-3000}"
 
@@ -88,7 +88,7 @@ reachable() {
 }
 
 # The explorer needs more than a live socket: the whole point of the
-# G163/ breakage was an explorer that answered but served no
+# G163 breakage was an explorer that answered but served no
 # chain state (decoder_health "unconfigured", chain_tip null). Assert
 # the status body shows decoders wired and tips populated.
 if [[ -n "$VERBOSE" ]]; then
@@ -134,7 +134,7 @@ Bring it up:
   ./xchain-node.sh start
 
 Then re-run this script. If the stack runs on another host (e.g. the
-devhost regtest stack over an SSH tunnel), point the probe at it:
+shared regtest stack over an SSH tunnel), point the probe at it:
 XCHAIN_REGTEST_BASE_URL=http://your-host.
 EOF
     exit 1

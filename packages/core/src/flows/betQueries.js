@@ -86,7 +86,7 @@ export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) 
  * range, and a row that IS in range stringifies to "[object Object]" inside the
  * bignumber parse. Either way the projection throws and the screen just shows
  * nothing, which is the state a bettor cannot tell apart from "no projection is
- * offered here" .
+ * offered here".
  *
  * `outcomeCount` is the market's declared outcome count. Passing it keeps every
  * outcome present at zero, so backing the empty side of a market still projects,

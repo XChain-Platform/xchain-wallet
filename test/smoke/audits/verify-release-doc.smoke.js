@@ -10,7 +10,7 @@
 
 // Smoke for §13 / G016: the release-verification recipe.
 //
-//  moved it to the sibling xchain-documentation checkout
+// a later change moved it to the sibling xchain-documentation checkout
 // (components/wallet/release/verify-release.md), published at
 // https://docs.xchain.io/components/wallet/release/verify-release. It
 // documents commands run against THIS repo, so the assertions followed

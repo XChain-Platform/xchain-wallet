@@ -232,7 +232,7 @@ describe('receiveAddress hardware confirmation (§17.6)', () => {
 // the key already held at that index under a different encoding, and
 // disagreed with the wallet the user migrated from, whose "first segwit"
 // address is index 1 (see crypto/counterwallet-interop.test.js).
-describe('receiveAddress index space by wallet format ', () => {
+describe('receiveAddress index space by wallet format', () => {
     const LEGACY_ADDR = createAddress({
         accountId: 'acct-a',
         chain: 'bitcoin',

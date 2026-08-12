@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression ( / SIGN-3): Developer-Mode localhost auto-approve must not
+// Regression (SIGN-3): Developer-Mode localhost auto-approve must not
 // synthesize a WILDCARD permission grant.
 //
 // In the §43.3 permission model an empty `chains` / `accounts` list means "all
@@ -113,7 +113,7 @@ describe('bridge.connect: Developer-Mode auto-approve grants a concrete scope', 
         // Accounts: the primary account only. A dApp must not be able to
         // enumerate the user's other accounts by asking for nothing.
         // ConnectSuccess.accounts is `Account[]`, and `permissions.accounts`
-        // is the id list the grant stores ().
+        // is the id list the grant stores.
         expect(res.result.accounts).toEqual([{ id: 'acct-primary', name: 'Account 1' }]);
         expect(res.result.permissions.accounts).toEqual(['acct-primary']);
 

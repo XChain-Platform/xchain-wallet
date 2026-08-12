@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PreflightPanel ( §5.2.4). Renders a PreflightReport: a verdict
+// PreflightPanel (§5.2.4). Renders a PreflightReport: a verdict
 // chip, findings grouped by severity with per-finding override affordances
 // (non-overridable client errors have none; network-sourced errors carry an
 // explicit acknowledgment checkbox), the Tier-1 notice saying which party
@@ -30,7 +30,7 @@ const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
 // component importing the SDK (#3935). Adds no runtime import, no bundle weight.
 export const TIER1_NOTICE_CODES = Object.freeze({ DRYRUN_VALID, DRYRUN_UNAVAILABLE });
 
-// The preflight report schema version this panel is WRITTEN AGAINST ().
+// The preflight report schema version this panel is WRITTEN AGAINST.
 //
 // The report contract is additive-only by convention, and the SDK's own
 // constants.js says so while noting the rule "has no enforcement point": this
@@ -57,7 +57,7 @@ export const SUPPORTED_SCHEMA_VERSION = 1;
 // for a report reader ("relying on client checks"); this surface is read by
 // someone about to sign. The SDK's own text still renders underneath the
 // unavailable case as the diagnostic detail, because the REASON is what made
-//  cost a session: "timeout after 4000ms" names a slow venue, and
+// cost a session: "timeout after 4000ms" names a slow venue, and
 // nothing on the screen used to say it.
 const NOTICE_COPY = {
     [DRYRUN_VALID]:       'The network checked this action and expects it to succeed.',
@@ -95,7 +95,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     const errors = report.findings.filter((f) => f.severity === 'error');
     const warnings = report.findings.filter((f) => f.severity === 'warning');
 
-    // . `info` findings used to render NOWHERE, and DRYRUN_UNAVAILABLE is
+    //`info` findings used to render NOWHERE, and DRYRUN_UNAVAILABLE is
     // an `info` finding - so a confirm screen the network never answered was
     // pixel-identical to one the network approved, right down to the "Looks
     // good" chip. That is §4.2's "which party said what" failing in the unsafe

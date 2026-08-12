@@ -18,7 +18,7 @@ import styles from './ActionsMenu.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 // Which chains have contracts to browse, asked of the registry rather than
-// pinned to a coin here . This file held the wallet's last hard-coded
+// pinned to a coin here. This file held the wallet's last hard-coded
 // bitcoin pin for the VM surfaces: the gate has ONE home, registry/actions.js
 // BTC_EXCLUSIVE_ACTIONS, and a private copy in this file meant that when the
 // registry opened contracts to LTC/DOGE the browse surface silently did not.

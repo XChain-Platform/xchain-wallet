@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// useConfirmAction hook ( §5.3.5): busy singleton, compose-failure
+// useConfirmAction hook (§5.3.5): busy singleton, compose-failure
 // path, superseded-report guard, and the promise contract. All SDK work is
 // HOST-side (compose + tamper + preflight over messaging); the hook is a
 // pure UI state machine, so these tests inject a `compose` promise and a
@@ -165,7 +165,7 @@ describe('useConfirmAction', () => {
         expect(reserve).toHaveBeenCalledTimes(1);
     });
 
-    // : a form that does not declare what it spends still gets §4.7
+    // A form that does not declare what it spends still gets §4.7
     // protection, derived from the compose envelope's projected balances.
     it('derives the reservation from the simulation when the caller names none', async () => {
         const { result } = renderHook(() => useConfirmAction());
@@ -332,7 +332,7 @@ describe('useConfirmAction', () => {
         await act(async () => { result.current.reject(); await p; });
     });
 
-    // §4.6 input liveness . The half of the Approve-time re-check that
+    // §4.6 input liveness. The half of the Approve-time re-check that
     // was specified in v3 and never built: the pre-flight verdict was re-run,
     // the held PSBT's inputs never were.
     describe('§4.6 input liveness', () => {
@@ -412,7 +412,7 @@ describe('useConfirmAction', () => {
             expect(out.ok).toBe('sent');
         });
 
-        //  §5.4 lifecycle.
+        // §5.4 lifecycle.
         it('persists the confirm on open and re-persists it with the verdict', async () => {
             const { result } = renderHook(() => useConfirmAction());
             const put = vi.fn(async () => ({ stored: true }));
@@ -494,13 +494,13 @@ describe('useConfirmAction', () => {
         });
     });
 
-    //  §4.6, the third Approve-time re-check. A native-coin protocol fee
+    // §4.6, the third Approve-time re-check. A native-coin protocol fee
     // is sized at compose and forfeited on-chain if the action is rejected, and
     // the amount consensus requires moves inversely with the coin's USD price,
     // so a move of a little over 5 % while the confirm screen sits open turns
     // the attached output into a short one. Measured on LTC regtest: the wallet
     // broadcast the stale PSBT and 0.02 LTC was spent for nothing.
-    describe(' native-fee re-quote at Approve', () => {
+    describe('native-fee re-quote at Approve', () => {
 
         // The composed envelope as it looks in native-fee mode: the quote that
         // sized the FEE_DESTINATION output rides on it.

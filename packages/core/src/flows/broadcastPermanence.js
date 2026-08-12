@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Broadcast-failure permanence classifier ( §5.3.4).
+// Broadcast-failure permanence classifier (§5.3.4).
 //
 // A post-sign broadcast failure splits two ways:
 //

@@ -12,7 +12,7 @@
     flex-direction: column;
     background: var(--xc-bg);
     color: var(--xc-text);
-    /* : the fallback is --xc-viewport-h (tokens.css), not 100dvh. It
+    /* The fallback is --xc-viewport-h (tokens.css), not 100dvh. It
        is the viewport MINUS the top safe-area inset that body pads by, so a
        Screen that owns the whole window ends where the screen ends. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));

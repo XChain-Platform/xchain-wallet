@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: the durable record of a broadcast precedes the broadcast ().
+// Unit: the durable record of a broadcast precedes the broadcast.
 //
 // submitAction tracks the PendingTx lifecycle through the onProgress callback it
 // hands to submitWithSigner: the 'broadcasting' phase is where it durably puts
@@ -59,7 +59,7 @@ const call = (h) => submitWithSigner({
     onProgress: h.onProgress,
 });
 
-describe('submitWithSigner durably records the broadcast before making it ()', () => {
+describe('submitWithSigner durably records the broadcast before making it', () => {
 
     it('waits for the broadcasting progress write, even when it awaits', async () => {
         const h = harness({ progressDelayMs: 5 });

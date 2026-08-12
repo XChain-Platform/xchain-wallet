@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the wallet's ORDER authoring boundary is single-chain.
+// The wallet's ORDER authoring boundary is single-chain.
 //
 // The wire permits GIVE_COIN != GET_COIN (a cross-chain order escrows the
 // GIVE side locally and is matched + settled by the validator federation
@@ -19,9 +19,7 @@
 //
 // These are BOUNDARY tests, not defect guards. They pin the documented
 // state so the moment a cross-chain ORDER surface is built the suite goes
-// red and  (plus the boundary doc,
-// claude/components/xchain-wallet/ORDER-CROSS-CHAIN-BOUNDARY.md) gets
-// revisited rather than silently rotting.
+// red and gets revisited rather than silently rotting.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
@@ -67,7 +65,7 @@ beforeEach(() => {
     vi.mocked(submitAction).mockResolvedValue({ txid: 'order-tx-1' });
 });
 
-describe('orderAction chain scope ', () => {
+describe('orderAction chain scope', () => {
     it('signs on the single opts.chainId and never derives a second chain from params', async () => {
         await orderAction({
             vault: {}, walletId: 'w1', password: 'pw', chainRegistry: {}, sdkRegistry: {},
@@ -103,7 +101,7 @@ describe('orderAction chain scope ', () => {
     });
 });
 
-describe('ORDER authoring surfaces are single-chain ', () => {
+describe('ORDER authoring surfaces are single-chain', () => {
     it('PlaceOrderPanel emits one coin on both sides of the pair', () => {
         const code = codeOf(PLACE_ORDER_PANEL);
         expect(code).toContain("GIVE_COIN: coinTicker, GET_COIN: coinTicker");

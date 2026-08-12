@@ -52,7 +52,7 @@ assert.match(form, /configComplete/, 'blocks when no callback is configured');
 assert.match(form, /split their balance across new addresses/,
     'dust-split griefing caveat present');
 assert.match(form, /variant=\{isWatcherMode \? 'primary' : 'danger'\}/, 'danger-styled submit');
-assert.match(form, /prebuiltPsbt/, ' single-encode confirm path forwards the composed PSBT');
+assert.match(form, /prebuiltPsbt/, 'single-encode confirm path forwards the composed PSBT');
 assert.match(form, /WatcherResultPanel/, 'watcher encode-only result surface');
 
 // ---- Flows ----

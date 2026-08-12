@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  §3.6 finding 2: an unrecognized action segment silently becomes a
+// §3.6 finding 2: an unrecognized action segment silently becomes a
 // send. `parseXchainUri` treats any coin-code action outside the receive /
 // execute sets as `kind: 'send'`, preserving the literal in `intent.action`
 // (xchainUri.js §"Actions that map to..."). `xchain:BTC/drainwallet?...`
@@ -91,7 +91,7 @@ function sourceFiles() {
     return out;
 }
 
-describe(' §3.6 invariant: shells route a parsed URI intent on `kind`, never on `action`', () => {
+describe('§3.6 invariant: shells route a parsed URI intent on `kind`, never on `action`', () => {
     const files = sourceFiles();
 
     it('finds source files to sweep (guards against an empty walk)', () => {

@@ -15,7 +15,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the channel pointer, checked by the real `downloadAndInstall()`.
+// The channel pointer, checked by the real `downloadAndInstall()`.
 //
 // `updateVerify.test.js` holds the gate's own logic. This file holds the
 // WIRING, because that is where this defect lived: every piece needed to
@@ -25,7 +25,7 @@
 // So every case here drives `attachUpdater` end to end against a fake
 // electron-updater and a fake feed, with a real signed manifest and a
 // real file on disk, and asserts on whether `quitAndInstall` was reached.
-// The feed is hostile in the way  §7.2 describes: it serves
+// The feed is hostile in the way §7.2 describes: it serves
 // whatever it likes, and every hash it publishes is correct.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -216,7 +216,7 @@ describe('a validly-hashed but unsigned pointer', () => {
 
     it('REFUSES AN UNCOVERED ENTRY LISTED BESIDE A COVERED ONE, which nothing caught before', async () => {
         // This is the case the artifact gate alone cannot see, and the
-        // reason this item was not already closed by  S5. This
+        // reason this item was not already closed S5. This
         // install downloads the genuine artifact, so hashing what arrived
         // says yes to everything. The tampering is in the OTHER entry:
         // the same pointer hands a different lane a file K1 never signed.
@@ -266,7 +266,7 @@ describe('a validly-hashed but unsigned pointer', () => {
 // into the file: a pointer naming another LANE's artifact of the same
 // release (the .deb served to an AppImage install) is covered by the
 // signed manifest, because the manifest covers every lane of a release.
-// Anchoring the pointer cannot see that one. `selectUpdater` and 
+// Anchoring the pointer cannot see that one. `selectUpdater` and
 // §5 own it, and version FREEZE (replaying an older, genuinely signed
 // pointer) is open under both.
 describe('a feed that answers the verifier differently', () => {

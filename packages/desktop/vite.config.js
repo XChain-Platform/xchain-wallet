@@ -26,7 +26,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 const here = fileURLToPath(new URL('.', import.meta.url));
 
 // THE RENDERER HAD NO NODE POLYFILLS AND THE OTHER TWO SHELLS BOTH DO
-// ( there, frontier row 102 here). xchain-sdk is CJS and touches
+// (there, frontier row 102 here). xchain-sdk is CJS and touches
 // `Buffer` at MODULE LOAD - bitcoinjs-lib runs `check({ script:
 // Buffer.alloc(1), value: 1n })` while its module is still evaluating - and
 // this window runs with `nodeIntegration: false`, `contextIsolation: true`

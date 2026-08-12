@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the iOS half of the Capacitor shell ( §10 stage S1).
+// Smoke for the iOS half of the Capacitor shell (§10 stage S1).
 //
 // The Android twin (mobile-shell.smoke.js) exists because no lane in this repo
 // can run a Gradle build. This one exists for a sharper reason: the iOS project
@@ -28,7 +28,7 @@
 //   3. Device family "1,2", universal (D6). iPad is a shipped surface, and the
 //      listing needs iPad screenshots because of it.
 //   4. Associated domains name xchain.io and claim `applinks` only. The paths
-//      themselves live in the association file , not here.
+// themselves live in the association file, not here.
 //
 // And three postures that are cheap to lose in a template regeneration:
 // default App Transport Security (the store build ships NO arbitrary-loads
@@ -87,7 +87,7 @@ function plistValue(text, key) {
 
 // --- 2. Bundle id, and the seam it can slip through -------------------
 
-// The screenshot harness's UI-test bundle  legitimately carries its
+// The screenshot harness's UI-test bundle legitimately carries its
 // own id. It is allow-listed BY NAME rather than by loosening the check to a
 // prefix: `io.xchain.wallet.ios.anything` would then pass, and the whole point
 // of this assertion is that exactly one shipping id exists and it never moves.
@@ -160,7 +160,7 @@ assert.deepEqual(schemes, ['xchain'], 'exactly one custom scheme, and it is inbo
 
 assert.equal(
     plistValue(infoPlist, 'ITSAppUsesNonExemptEncryption'), false,
-    'export-compliance posture ( §2.5): standard cryptography, exempt',
+    'export-compliance posture (§2.5): standard cryptography, exempt',
 );
 
 const capabilities = plistValue(infoPlist, 'UIRequiredDeviceCapabilities');
@@ -179,7 +179,7 @@ assert.match(sceneDelegateSrc, /func sceneWillResignActive\(/, 'no snapshot cove
 assert.match(sceneDelegateSrc, /func sceneDidBecomeActive\(/, 'the snapshot cover is never removed');
 assert.match(sceneDelegateSrc, /privacyCover/, 'the cover view must be retained so it can be removed again');
 
-// --- SSC-1 : the two native HTTP doors --------------------------
+// --- SSC-1: the two native HTTP doors --------------------------
 //
 // Measured on an iPhone 17 Pro Max simulator, 2026-08-01, BEFORE this
 // hardening, from ordinary page script:
@@ -263,11 +263,11 @@ const vaultStoreSrc = readFileSync(join(ios, 'App', 'App', 'vault', 'VaultStore.
     .split('\n').map((line) => line.replace(/\/\/.*$/, '')).join('\n');
 assert.match(
     vaultStoreSrc, /isExcludedFromBackup = true/,
-    ' §4: the vault must not travel in a device backup (the Android twin is allowBackup="false")',
+    'The vault must not travel in a device backup (the Android twin is allowBackup="false")',
 );
 
 // SSC-5's FIRST control, and it is only the first (corrected 2026-08-02,
-//  §1.1). With img-src limited to self/data/blob, a remote NFT media URL
+// §1.1). With img-src limited to self/data/blob, a remote NFT media URL
 // cannot beacon the holder's IP on render even if some future view forgets to
 // gate it. Widening this is the change that must not happen quietly.
 //
@@ -299,7 +299,7 @@ for (const path of ['App/App/public', 'App/App/capacitor.config.json']) {
 // and an ipa uploaded under either of those spends that build number for the
 // life of the app: App Store Connect has no way to release a number. So the
 // project must carry NO literal at all and read both keys from the generated
-// xcconfig (rails §2 formula, ). A missing xcconfig leaves the keys
+// xcconfig (rails §2 formula). A missing xcconfig leaves the keys
 // empty, which is a visible failure; a literal would be a silent wrong answer.
 
 assert.ok(
@@ -364,7 +364,7 @@ assert.equal(
 // So it has to be true in Debug and absent everywhere else, and both halves are
 // worth a guard for opposite reasons. Lose it in Debug and the shell goes
 // silent on launch, which is not a visible failure - it reads as "the app
-// prints nothing", and  lost two sessions to exactly that reading. Gain
+// prints nothing", and lost two sessions to exactly that reading. Gain
 // it in Release and a shipped store build lets anyone with a cable attach a
 // debugger to the wallet.
 const debugXcconfig = readFileSync(join(ios, 'debug.xcconfig'), 'utf8');
@@ -419,7 +419,7 @@ const consoleScript = readFileSync(join(mobile, 'scripts', 'ios-console.sh'), 'u
 assert.match(
     consoleScript,
     /SIMCTL_CHILD_NSUnbufferedIO=YES/,
-    'ios-console.sh must launch with SIMCTL_CHILD_NSUnbufferedIO=YES, or it captures nothing ',
+    'ios-console.sh must launch with SIMCTL_CHILD_NSUnbufferedIO=YES, or it captures nothing',
 );
 
 // ---- Safe area: the app must not draw under the Dynamic Island ----------
@@ -461,7 +461,7 @@ assert.match(
 // from it silently, and each drift fails in a way that cannot be diagnosed
 // from inside the console. The Android twin pins its own equivalents in
 // mobile-shell.smoke.js; this is the iOS half.
-//  moved the iOS submission pack to the sibling xchain-documentation
+// a later change moved the iOS submission pack to the sibling xchain-documentation
 // checkout (release/mobile/ios-app-store.md, privacy/privacy-nutrition-labels.md)
 // and rewrote it for a reader: the artifact stem, the script filenames and
 // the four secret names are no longer restated there. The repo-side halves
@@ -578,7 +578,7 @@ assert.match(
 
 // ---- App icon: not the Capacitor template ------------------------------
 //
-// Both shells shipped the stock Capacitor mark until 2026-08-01 (),
+// Both shells shipped the stock Capacitor mark until 2026-08-01  ,
 // which no gate caught because every other check here reads identifiers and
 // wiring rather than pixels. The template icon is a known 1024x1024 file; what
 // makes this catchable is that ours is a DIFFERENT image with no alpha (Apple
@@ -875,7 +875,7 @@ assert.ok(
 
 // --- 16. The age rating declares what the STORE BUILD actually ships --------
 //
-// Two mismatches were found on one day  by opening a form the
+// Two mismatches were found on one day by opening a form the
 // frontier had already recorded as DONE, and both were the same shape: the
 // questionnaire was answered section by section, at different times, against
 // nobody's memory of what the binary contains. A capability that ships while
@@ -1063,14 +1063,14 @@ if (composeIsRemote) {
 }
 
 console.log(
-    'OK: iOS shell smoke ( S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
+    'OK: iOS shell smoke (S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
     + ' universal device family; associated domains applinks:xchain.io only, entitlements wired into the build;'
     + ' default ATS asserted by absence; camera + Face ID usage strings present and honest about what biometrics'
     + ' do; one custom scheme, xchain:, as inbound compatibility; export-compliance flag set; armv7 leftover'
     + ' removed; generated web copy and config git-ignored. S4: no literal version anywhere in the project,'
     + ' both keys read from the git-ignored Version.xcconfig via $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION),'
-    + ' and the rails §2 store integer is the same one Android gets. : CAPACITOR_DEBUG lives only in'
+    + ' and the rails §2 store integer is the same one Android gets.: CAPACITOR_DEBUG lives only in'
     + ' debug.xcconfig and reaches no Release configuration, so native logging and isInspectable are both'
     + ' debug-only, and ios-console.sh keeps the NSUnbufferedIO recipe that makes the channel readable at all.'
     + ' §15: the XChainLinks plugin exists, answers to the name the SPA looks up, is registered, and SceneDelegate'

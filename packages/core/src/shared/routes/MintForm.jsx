@@ -115,7 +115,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
 
-    // : what a MINT can carry is the token's remaining headroom -
+    // What a MINT can carry is the token's remaining headroom -
     // min(MAX_MINT, MAX_SUPPLY - current supply) - never the minter's
     // balance. The form used to size Max and its "available" footer off
     // the holdings lookup every other amount form reaches for, so a token
@@ -234,9 +234,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    //  §5.6 slice 2 (actionForms): mints go through the single-encode
+    // §5.6 slice 2 (actionForms): mints go through the single-encode
     // confirm page (compose + tamper + sdk.preflight all host-side), hardware
-    // included . Watcher mode keeps the legacy review stage: it
+    // included. Watcher mode keeps the legacy review stage: it
     // encodes, it never signs.
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -265,7 +265,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     }, [ticker, amount, destination]);
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -310,7 +310,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
-                // : re-price the native-coin protocol fee at Approve.
+                // Re-price the native-coin protocol fee at Approve.
                 // The output was sized at compose, and the amount consensus
                 // requires moves inversely with the coin price, so a move while
                 // the confirm screen sits open leaves it short - which the
@@ -366,7 +366,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             setFormError('Amount must be a positive number.');
             return;
         }
-        // : stop an over-mint here rather than three screens later.
+        // Stop an over-mint here rather than three screens later.
         // The confirm page already catches it (MAX_MINT + supply-headroom
         // preflight, plus the dry run), but only behind three individual
         // "sign anyway" overrides, and a user who takes them pays a
@@ -388,7 +388,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             return;
         }
         setFormError(null);
-        //  slice 2: with the flag on, mints go straight to the
+        // slice 2: with the flag on, mints go straight to the
         // single-encode confirm page instead of the legacy review stage.
         if (!isWatcherMode) {
             openConfirmModal();
@@ -477,7 +477,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 />,
             );
         }
-        // : a queued result is signed and NOT broadcast, so "Minted"
+        // A queued result is signed and NOT broadcast, so "Minted"
         // would claim the one thing that has not happened yet.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="mint" />);
@@ -580,7 +580,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         );
     }
 
-    //  confirm page, rendered in place of the form (operator
+    // confirm page, rendered in place of the form (operator
     // direction 2026-07-22: the overlay modal didn't fit small/mobile
     // viewports). All other form state stays intact behind it.
     if (confirmModalOpen) {
@@ -597,7 +597,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

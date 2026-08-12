@@ -13,7 +13,7 @@
  *
  *********************************************************************/
 
-//  §3 caching, measured instead of assumed. .
+// §3 caching, measured instead of assumed.
 //
 // THE RULE THIS CHECKS. Channel-pointer yml files are served no-cache;
 // binaries cache freely, being versioned and never rewritten. That takes
@@ -69,7 +69,7 @@ const isMain = Boolean(process.argv[1])
     && process.argv[1].endsWith('verify-edge-cache.mjs');
 
 const USAGE = `verify-edge-cache.mjs - does the CDN edge serve the update feed under the
-cache contract? ( §3.)
+cache contract? (§3.)
 
 Usage:
   node tools/release/verify-edge-cache.mjs \\
@@ -89,7 +89,7 @@ that looks like working, so this takes the names from update-info.mjs's own
 rule and cannot drift from what the build emits.
 
 PROBES A LIVE CDN, which is why --help is answered before the probes rather
-than after them : unhandled, the flag was dropped by the argument
+than after them: unhandled, the flag was dropped by the argument
 reader above and the full scan ran anyway.
 
 Exit codes:

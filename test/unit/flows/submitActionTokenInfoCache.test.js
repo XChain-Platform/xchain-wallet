@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : `submitAction` is the one flow every issuer action funnels through
+// `submitAction` is the one flow every issuer action funnels through
 // (ISSUE, and so ownership transfer / description / mint settings; MINT; LOCK;
 // DESTROY; CALLBACK), so it is where a broadcast that just changed a token
 // drops the tick metadata that now describes the token as it used to be.

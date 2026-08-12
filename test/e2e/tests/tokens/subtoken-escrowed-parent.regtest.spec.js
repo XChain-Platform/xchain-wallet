@@ -37,7 +37,7 @@
 //       --config=playwright.regtest.config.js \
 //       tests/tokens/subtoken-escrowed-parent.regtest.spec.js
 //
-// ⚠️ : the parent ISSUE and the first child are each the first credit of
+// ⚠️: the parent ISSUE and the first child are each the first credit of
 // a brand-new (address, tick) key, which is the shape that wedges this venue.
 // If a leg times out, compare `last_block` against `chain_tip` - NOT
 // `decoder_health`, which reads "healthy" straight through a wedge.
@@ -119,7 +119,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         + `${Math.round(timeoutMs / 1000)}s. chain_tip `
         + `${status?.chain_tip?.[REGTEST_COIN]} vs last_block `
         + `${status?.last_block?.[REGTEST_COIN]}. A last_block frozen below the tip across two `
-        + 'reads is  wedging the venue, not a wallet defect (§3.7).');
+        + 'reads is wedging the venue, not a wallet defect (§3.7).');
 }
 
 async function waitForBalance(address, tick, want, timeoutMs = 180_000) {

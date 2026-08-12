@@ -134,8 +134,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    //  / PC-51: the native-coin protocol fee is MANDATORY off Bitcoin
-    // . Without this the composed ORDER/DISPENSER carries no fee
+    // PC-51: the native-coin protocol fee is MANDATORY off Bitcoin
+    //Without this the composed ORDER/DISPENSER carries no fee
     // output, the transaction confirms, and the indexer rejects the action
     // with "insufficient fee (native coin output required)" while this form
     // reports the sale as open. Every other ORDER/DISPENSER authoring surface
@@ -256,7 +256,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     chainId,
                     from: base.from,
                     actionData: { action, params },
-                    //  FOLLOW-UP: the watcher lane does NOT go through
+                    // FOLLOW-UP: the watcher lane does NOT go through
                     // `base`, so the fee mode threaded onto the submit path
                     // above never reached it. Selling a name is priced
                     // (GAS_SCHEDULE.OWNERSHIP_ESCROW), so a watcher-mode sale
@@ -264,7 +264,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     // output, the user approved it, and the indexer then
                     // rejected the action "insufficient fee (native coin output
                     // required)" while this form reported the sale as open -
-                    // the exact bug  fixed, surviving on the one lane
+                    // the exact bug a later change fixed, surviving on the one lane
                     // its fix did not touch.
                     encoderOpts: {
                         payFeeInNativeCoin: nativeFee.flag,
@@ -284,9 +284,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            // : a native-fee refusal arrives as wire wording ("native-coin
+            // A native-fee refusal arrives as wire wording ("native-coin
             // fee pre-flight failed (dust): ...") which is not a sentence anyone
-            // can act on. Now that this form has a native-fee lane  it
+            // can act on. Now that this form has a native-fee lane it
             // needs the same mapping every other swept form uses.
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Sign failed.',
@@ -547,7 +547,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 autoComplete="off"
             />
 
-            {/* : on LTC/DOGE this is mandatory and the toggle renders
+            {/* On LTC/DOGE this is mandatory and the toggle renders
                 as a disclosure rather than a choice, which is the same
                 treatment the other ORDER/DISPENSER forms give it. */}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />

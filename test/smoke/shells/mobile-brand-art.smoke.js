@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The pixel gate for the mobile shells' brand art .
+// The pixel gate for the mobile shells' brand art.
 //
 // Both shells shipped the Capacitor TEMPLATE logo as their app icon, and both
 // shipped its launch art, all the way to a store-ready build. Nothing caught

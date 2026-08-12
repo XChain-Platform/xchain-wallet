@@ -192,7 +192,7 @@ export function SweepForm({
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    //  / D-58: every form-level error names the state of one field,
+    // D-58: every form-level error names the state of one field,
     // so the moment any of them is edited the message can already be
     // false. Leaving it up meant an emptied destination sat under "This
     // is not a valid Bitcoin regtest address", which is not what was
@@ -372,7 +372,7 @@ export function SweepForm({
     passwordValueRef.current = password;
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -413,7 +413,7 @@ export function SweepForm({
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
-                // : re-price the native-coin protocol fee at Approve.
+                // Re-price the native-coin protocol fee at Approve.
                 // The output was sized at compose, and the amount consensus
                 // requires moves inversely with the coin price, so a move while
                 // the confirm screen sits open leaves it short - which the
@@ -571,7 +571,7 @@ export function SweepForm({
                 />,
             );
         }
-        // : signed but not broadcast. None of the post-sweep effects
+        // Signed but not broadcast. None of the post-sweep effects
         // below (auto-pay disarmed, dispensers closing) have happened.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="sweep" />);
@@ -1017,7 +1017,7 @@ export function SweepForm({
                     variant="primary"
                     block
                     loading={confirmAction.composing}
-                    //  / D-58: an empty destination and a zero-category
+                    // D-58: an empty destination and a zero-category
                     // selection used to disable this button, which hid the two
                     // handleReview branches that name exactly those problems
                     // and left the user with a dead button and no reason. Send

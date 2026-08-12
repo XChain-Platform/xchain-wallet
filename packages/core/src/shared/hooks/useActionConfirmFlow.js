@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useActionConfirmFlow (, the §5.6 slice-2 migration helper).
+// useActionConfirmFlow (the §5.6 slice-2 migration helper).
 //
-// MintForm/DestroyForm piloted the  single-encode confirm pipeline
+// MintForm/DestroyForm piloted the single-encode confirm pipeline
 // by hand. Repeating those ~60 lines across the remaining ~28 action
 // forms would guarantee drift, so the invariant part lives here: read
 // the slice flag, own the useConfirmAction state machine, and run the
@@ -40,7 +40,7 @@ export function isUserRejection(err) {
 }
 
 /**
- * : the Approve dispatcher for a form whose hardware and software
+ * The Approve dispatcher for a form whose hardware and software
  * lanes are the SAME host flow with a different credential - a typed
  * password, or a paired device reached through the signer bridge
  * (`registerHwHandler` spreads the request straight through, so the `.hw`
@@ -97,7 +97,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      *   `action.composeForConfirm` returns. Defaults to the generic route.
      * @param {(prebuiltPsbt: { psbtHex: string, encoding: string, actionString: string, version: any }, composed: object) => Promise<any>} args.onApprove
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
-     *    §5.4 opt-in. Supply it only when this form's Approve can be
+     * §5.4 opt-in. Supply it only when this form's Approve can be
      *   completed away from the form: `software`/`hardware` name the same
      *   messaging methods `useConfirmSubmit` dispatches, `base` is the request
      *   body minus `prebuiltPsbt`/credentials, and `after` carries any
@@ -115,7 +115,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             // §4.6: every migrated form gets the input-liveness half of the
             // Approve-time re-check, not just the pre-flight half.
             checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
-            // : and the native-fee half. A fee-bearing action on LTC/DOGE
+            // And the native-fee half. A fee-bearing action on LTC/DOGE
             // pays its protocol fee as a real output sized at compose, so every
             // migrated form needs the same "is that amount still acceptable"
             // re-check before it signs. Quoted from the composed action string,
@@ -123,7 +123,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                 chainId, actionString, source,
             }),
-            //  §5.4: persistence is opt-in per form, via `resume`. The
+            // Persistence is opt-in per form, via `resume`. The
             // store is wired for all of them so opting in is one argument, but
             // a form that has not said how its Approve completes without it
             // stores nothing - see the `resume` contract in useConfirmAction.
@@ -143,7 +143,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 ...(encoderOpts && Object.keys(encoderOpts).length > 0 ? { encoderOpts } : {}),
             })),
             preflight: (o) => messaging.preflight({ chainId, ...o }),
-            //  / §4.7: the host-shared reservation ledger, passed for
+            // §4.7: the host-shared reservation ledger, passed for
             // EVERY migrated form. What to reserve is derived from the compose
             // envelope's projected balances (useConfirmAction), so a form does
             // not have to declare it; one background host serves all popup
@@ -158,7 +158,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 encoding: composed.encoding,
                 actionString: composed.actionString,
                 version: composed.version,
-                // : on the two-phase lane the protocol fee was left OFF
+                // On the two-phase lane the protocol fee was left OFF
                 // the previewed PSBT because it belongs on the reveal. Carry
                 // it so the submit path attaches it there.
                 deferredFeeOutput: composed.deferredFeeOutput || null,

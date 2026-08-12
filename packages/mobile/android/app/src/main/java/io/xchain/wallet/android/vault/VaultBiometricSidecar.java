@@ -34,7 +34,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /**
- * Biometric unlock shortcut ( §1, stage S2).
+ * Biometric unlock shortcut (§1, stage S2).
  *
  * WHAT IS WRAPPED: the wallet PASSWORD. This is a deliberate correction to
  * the spec's "cached copy of the vault master key". In this codebase every
@@ -83,7 +83,7 @@ final class VaultBiometricSidecar {
     }
 
     /**
-     * What the JS side needs to describe this device to its owner .
+     * What the JS side needs to describe this device to its owner.
      *
      * {@code detail} is a developer string and stays one; {@code reasonCode} is
      * the stable token the shared JS maps to plain language, so Android and

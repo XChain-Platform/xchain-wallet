@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The direct-update lane gate ( §6, D4).
+// The direct-update lane gate (§6, D4).
 //
 // The thing under test is not "does the update check work" - `directUpdateCheck`
 // already has its own tests - it is WHO IS ALLOWED TO ASK. §6 gives exactly one

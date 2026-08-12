@@ -62,7 +62,7 @@ if (!container) {
     throw new Error('web: #xchain-web-root missing. Check index.html.');
 }
 
-//  §3: the capability floor, checked BEFORE React mounts.
+// The capability floor, checked BEFORE React mounts.
 //
 // Before, not after, and not inside a component: everything the app does
 // from its first render - reading the vault, deriving a key, drawing an
@@ -88,7 +88,7 @@ function renderBlockingPanel(heading, message) {
     container.append(panel);
 }
 
-// : a NATIVE shell whose vault plugin never registered.
+// A NATIVE shell whose vault plugin never registered.
 //
 // Checked beside the capability floor and for the same reason, but it is a
 // different failure: the engine is fine, the BUILD is broken. Without this the

@@ -139,7 +139,7 @@ assert.ok(/setTokenDetailRef\b/.test(extApp),
 assert.ok(/onSelectToken=/.test(extApp),
     'extension App.jsx wires onSelectToken into Home');
 
-// --- 6. Desktop App.jsx wires the route ( parity) -------------------
+// --- 6. Desktop App.jsx wires the route (parity) -------------------
 
 const deskApp = readFileSync(join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'), 'utf8');
 assert.ok(/from '@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(deskApp),

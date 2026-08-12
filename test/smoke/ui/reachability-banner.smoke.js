@@ -37,7 +37,7 @@ assert.ok(/clearInterval/.test(hook),
     'hook clears its interval on unmount');
 assert.ok(/mountedRef/.test(hook),
     'hook tracks an unmount flag so late-arriving probes do not setState');
-// : an unmount flag alone was not enough. The flag was reset by the next
+// An unmount flag alone was not enough. The flag was reset by the next
 // effect run, so a probe about a previous chain set could still land on top of
 // a newer verdict and pin a false "You're offline" until the user hit Retry.
 // Each probe now carries a generation id and only the newest may write.

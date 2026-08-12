@@ -154,7 +154,7 @@ export function serializeOutputs(outputs) {
  * outputCount(varint) + outputs + locktime(4 LE).
  *
  * NOT USABLE FOR BUILDING A SPEND, and no longer used by
- * `toLedgerCreatePayment` . Ledger takes the outpoint it signs
+ * `toLedgerCreatePayment`. Ledger takes the outpoint it signs
  * from the bytes of the prev tx it is handed, and a synthesized tx
  * hashes to a different txid than the real one by construction, so
  * feeding this in makes the device sign a spend of an outpoint that
@@ -208,7 +208,7 @@ function prevTxHexForInput(inp) {
     if (inp.nonWitnessUtxoHex) return inp.nonWitnessUtxoHex;
 
     // A synthesized prev tx CANNOT be used to build a spend, and this used
-    // to do exactly that for every witnessUtxo-only input .
+    // to do exactly that for every witnessUtxo-only input.
     // Ledger derives the outpoint it signs from the bytes of the prev tx it
     // is handed, and a synthesized tx hashes to a different txid than the
     // real one by construction. The device happily produced a fully-formed,

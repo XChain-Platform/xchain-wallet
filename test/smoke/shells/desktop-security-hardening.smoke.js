@@ -48,7 +48,7 @@ import {
     MAX_SIGNER_IDS_PER_MESSAGE,
 } from '../../../packages/desktop/main/signerBridgeListener.js';
 // Imported by the SAME specifier `signerBridgeListener.js` uses, never by a
-// relative path to the same file . The registry is a process-wide
+// relative path to the same file. The registry is a process-wide
 // singleton, so the ownership assertions in section 4 are only about the
 // bridge while both sides resolve to one module instance; a relative import
 // here splits into two copies wherever node_modules belongs to another

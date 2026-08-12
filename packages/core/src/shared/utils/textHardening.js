@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §3.6: the general-purpose half of the neutralization
+// The general-purpose half of the neutralization
 // `betOutcomeLabels.js` originally carried alone.
 //
 // Two call sites now need "strip the characters a signing screen should

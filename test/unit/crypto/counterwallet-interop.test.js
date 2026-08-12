@@ -11,7 +11,7 @@
 // Interop vector: does a Counterwallet-format import reproduce the
 // addresses a REAL Counterwallet server shows for the same phrase?
 //
-// This is the test whose absence let  ship. Everything else about
+// This is the test whose absence let ship. Everything else about
 // the legacy lane was self-consistent - the wallet imported the phrase,
 // stamped the record `counterwallet-legacy`, derived addresses, and
 // round-tripped them - while deriving BIP84 addresses the user's own
@@ -66,7 +66,7 @@ function p2wpkhAddress(pubkey) {
     return bech32.encode('bc', [0, ...words]);
 }
 
-describe('crypto/counterwallet interop vector ', () => {
+describe('crypto/counterwallet interop vector', () => {
     it('decodes the mnemonic to the expected 16-byte seed', () => {
         expect(counterwalletMnemonicToSeedHex(VECTOR.mnemonic)).toBe(VECTOR.seedHex);
         expect(counterwalletMnemonicToSeedBytes(VECTOR.mnemonic)).toHaveLength(16);
@@ -94,7 +94,7 @@ describe('crypto/counterwallet interop vector ', () => {
     });
 
     it('does NOT match at the BIP84 path - the pre-fix behavior', () => {
-        //  itself: the legacy seed fed into the chain descriptor's
+        // itself: the legacy seed fed into the chain descriptor's
         // modern template. Kept as a test so the regression is named.
         const root = HDKey.fromMasterSeed(counterwalletMnemonicToSeedBytes(VECTOR.mnemonic));
         const pubkey = root.derive("m/84'/0'/0'/0/0").publicKey;

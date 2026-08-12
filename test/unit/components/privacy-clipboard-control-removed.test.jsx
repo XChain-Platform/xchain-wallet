@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the Settings → Privacy "clipboard auto-clear" control is gone,
+// The Settings → Privacy "clipboard auto-clear" control is gone,
 // and the schema field it wrote is not.
 //
 // The two halves are tested together on purpose, because the failure this
-// item existed to close lives in the gap between them.  made key
+// item existed to close lives in the gap between them. a later change made key
 // material uncopyable, which deleted the setting's only reader; the control
 // kept writing `settings.privacy.clipboardAutoClearSeconds` regardless. A
 // privacy-minded user reading that row came away believing the wallet wipes
@@ -73,7 +73,7 @@ afterEach(() => {
     update.mockClear();
 });
 
-describe('the Privacy panel after ', () => {
+describe('the Privacy panel after', () => {
     it('offers no clipboard auto-clear control', () => {
         render(<PrivacySection />);
         expect(screen.queryByLabelText(/clipboard/i)).toBeNull();

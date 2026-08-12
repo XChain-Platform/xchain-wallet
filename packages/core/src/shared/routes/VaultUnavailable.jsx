@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The screen for a vault that EXISTS and cannot be opened .
+// The screen for a vault that EXISTS and cannot be opened.
 //
 // The storage contract already gets the hard part right: a backend that
 // cannot read an existing blob throws rather than answering "no wallet

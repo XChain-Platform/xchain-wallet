@@ -58,7 +58,7 @@ export function NetworkSection({ activeWallet } = {}) {
         if (!NETWORKS.includes(next)) return;
         if (next === current) return;
         try {
-            // : prefer the host route that ALSO derives the first
+            // Prefer the host route that ALSO derives the first
             // address on each chain of the network being switched to.
             // Flipping the setting alone only changes a filter, which is how
             // this control used to strand a wallet with no addresses and no UI

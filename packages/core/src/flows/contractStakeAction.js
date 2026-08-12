@@ -17,7 +17,7 @@
 // Three operations share the same composer, distinguished by `mode`:
 //   - 'stake'    → STAKE v3 (AMOUNT + SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
 //   - 'unstake'  → UNSTAKE v1 (SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK, optional
-//                  AMOUNT =  partial unstake; absent sweeps the full stake)
+// AMOUNT = partial unstake; absent sweeps the full stake)
 //   - 'delegate' → DELEGATE v1 (NEW SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
 //
 // BTC-only (same gate as capability staking); the indexer rejects other chains.
@@ -45,7 +45,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -83,7 +83,7 @@ export async function contractStakeAction(opts) {
         throw new Error('contractStakeAction: params.TICK is required');
     }
 
-    // STAKE v3 needs AMOUNT; UNSTAKE v1 takes it as the  optional
+    // STAKE v3 needs AMOUNT; UNSTAKE v1 takes it as the optional
     // partial (absent = full sweep of the (pubkey, contract, tick) stake).
     if (mode === 'stake') {
         if (!opts.params.AMOUNT) {

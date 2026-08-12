@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the watcher lane's native-coin fee output, exercised at RUNTIME.
+// The watcher lane's native-coin fee output, exercised at RUNTIME.
 //
 // Every guard on this behaviour was a source-shape check ("does the file
 // mention payFeeInNativeCoin?"), and that is exactly how the defect this
-// closes survived:  threaded SellOwnershipForm's submit path, the file
+// closes survived: threaded SellOwnershipForm's submit path, the file
 // therefore contained the string, the sweep smoke went green, and the WATCHER
 // lane still composed a PSBT with no fee output. Nobody had ever executed the
 // lane and looked at what came out the other end.
@@ -28,14 +28,14 @@
 // half is `tools/regtest/watcherLaneNativeFee.mjs`, driven on litecoin-regtest
 // 2026-08-04: a watcher-composed ownership sale carrying the FEE_DESTINATION
 // output indexed valid (action 2191, 0.03333333 LTC, payment_mode 1), and the
-// same sale composed WITHOUT the flag - the shape every form whose  fix
+// same sale composed WITHOUT the flag - the shape every form whose fix
 // stopped at the submit path produced - broadcast fine and was rejected
 // `invalid: insufficient fee (native coin output required)` (action 2190).
 //
 // What "correct" looks like, from nativeFeePreflight.js: with the flag set the
 // pre-flight quotes the fee, pushes { address: feeDestination, value: feeSats }
 // onto customOutputs, and STRIPS its own flag so the encoder never sees an
-// unknown param. Off Bitcoin that output IS the protocol fee : without
+// unknown param. Off Bitcoin that output IS the protocol fee: without
 // it the transaction confirms and the indexer rejects the action
 // "insufficient fee (native coin output required)" while the form reports
 // success.
@@ -95,7 +95,7 @@ function feeOutputs(createTx) {
     return (opts.customOutputs || []).filter((o) => o.address === FEE_DESTINATION);
 }
 
-describe(': the watcher lane composes the native-coin fee output', () => {
+describe('The watcher lane composes the native-coin fee output', () => {
     it('attaches the FEE_DESTINATION output when the form threads the flag', async () => {
         const { sdk, createTx } = harness();
         await build(sdk, { payFeeInNativeCoin: true });
@@ -143,7 +143,7 @@ describe(': the watcher lane composes the native-coin fee output', () => {
     });
 
     it('preserves customOutputs a caller already supplied', async () => {
-        // The oracle-usage-fee lane  puts its own output here, so the
+        // The oracle-usage-fee lane puts its own output here, so the
         // fee output must be additive rather than a replacement.
         const { sdk, createTx } = harness();
         const existing = { address: 'rltc1qoracle', value: 1234 };

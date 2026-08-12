@@ -9,7 +9,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5 / stage S7: Chrome Web Store listing screenshots + promo tile.
+// §5 / stage S7: Chrome Web Store listing screenshots + promo tile.
 //
 // A REPEATABLE tool, not a one-off session: hand-taken screenshots rot the
 // moment the UI changes and cannot be reproduced by the next person, so this
@@ -67,7 +67,7 @@ import { ASSETS, writePin } from '../../../tools/release/verify-listing-assets.m
 // covers the sibling tools was pointed at it.
 //
 // "Before anything else" was only true of the STATEMENTS, and that is not
-// where a module starts ( row 50). An ES module evaluates every static
+// where a module starts (row 50). An ES module evaluates every static
 // import before its first statement, so in a tree with no node_modules this
 // block never ran: the process died on `@playwright/test` with a
 // module-not-found stack trace, which is the same defect this comment
@@ -270,7 +270,7 @@ async function main() {
     // Record WHICH BUILD these images depict. Their pixel dimensions cannot
     // say it and nothing else in the repo could, which is how four assets came
     // to sit three versions behind the release staged for submission with
-    // every check green ( row 42). This is the only moment the answer is
+    // every check green (row 42). This is the only moment the answer is
     // knowable: the capture is the thing that drove the tree.
     //
     // Only on a COMPLETE capture. A partial one leaves the un-recaptured

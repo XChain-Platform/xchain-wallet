@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the sentence a user reads before signing comes from the
+// Smoke for: the sentence a user reads before signing comes from the
 // SDK's describer, applied to what was actually COMPOSED.
 //
 // Two halves, and each was a real defect:
@@ -17,7 +17,7 @@
 //      decoder.parse() of an action string, never from form state or a
 //      caller's claimed intent". Every migrated form used to build its own
 //      `decoded` from ITS OWN form params and pass it down, so a surface that
-//      hand-builds wire params (the  VOTE mirror hazard) would describe
+// hand-builds wire params (the VOTE mirror hazard) would describe
 //      the form's version of events while signing the encoder's. The host now
 //      describes the composed action string and carries it in the envelope.
 //
@@ -97,7 +97,7 @@ assert.match(screenSrc, /const decoded = withOutcomeLabels\(composed\?\.decoded,
     'the intent the screen renders is derived from the HOST envelope and nothing else');
 assert.match(screenSrc, /decoded=\{decoded\}/,
     'the confirm screen passes that derived intent down');
-// No OTHER source may reach the prop: the whole of  was a caller-
+// No OTHER source may reach the prop: the whole was a caller-
 // supplied intent standing in for the composed one.
 const decodedSources = screenSrc.match(/^\s*(const decoded|decoded=).*$/gm) || [];
 assert.equal(decodedSources.length, 2,
@@ -133,7 +133,7 @@ assert.equal(flowOffenders.length, 0,
     `flows must describe through the SDK, not the local copy:\n  ${flowOffenders.join('\n  ')}`);
 
 console.log(
-    'OK: confirm intent provenance smoke (: host describes the COMPOSED action via sdk.decoder.describe; '
+    'OK: confirm intent provenance smoke (host describes the COMPOSED action via sdk.decoder.describe;'
     + `${confirmScreens} confirm call sites pass no locally-described intent; the approval window and co-sign both `
     + 'describe host-side; the wallet-local describer is reachable only from in-form draft previews)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// , the rate-sourcing half. A token amount needs a rate for THAT
+// The rate-sourcing half. A token amount needs a rate for THAT
 // TICK; the chain coin's rate is not an approximation of it, it is a
 // different number entirely. These tests pin where a token rate may come
 // from (its own oracle pair, else its DEX market against the coin) and,

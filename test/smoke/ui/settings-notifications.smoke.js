@@ -69,7 +69,7 @@ assert.match(src, /priceDataEnabled === false/, 'gates on the price-data privacy
 assert.match(src, /Native coin price data/, 'surfaces the price-data dependency to the user');
 assert.match(src, /Re-arm/, 'offers re-arm on a triggered alert');
 
-// : quiet-hours (DND) scheduling block.
+// Quiet-hours (DND) scheduling block.
 assert.match(src, /import \{ QUIET_HOURS_DEFAULT \}/, 'imports the schema quiet-hours default');
 assert.match(src, /function QuietHoursRow/, 'defines a QuietHoursRow component');
 assert.match(src, /<QuietHoursRow settings=\{settings\} update=\{update\} \/>/, 'mounts QuietHoursRow under the flag list');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Shell integration: the background message host (G164 / ).
+// Shell integration: the background message host (G164).
 //
 // `createBackgroundHost` is the single message-routing surface behind ALL
 // THREE shells: the extension service worker (packages/extension/background.js),
@@ -69,14 +69,14 @@ const CRITICAL_ROUTES = [
     'wallet.checkPassword',
     'session.autolock',
     // Signing paths. `action.coinpay.psbt` is the encode-only watcher route
-    // added by , when the air-gapped COINPAY build was found bypassing the
-    //  sign-time obligation check by going through the generic PSBT
+    // added, when the air-gapped COINPAY build was found bypassing the
+    // sign-time obligation check by going through the generic PSBT
     // builder. If it stops being registered, that hole reopens.
     'action.coinpay',
     'action.coinpay.hw',
     'action.coinpay.psbt',
     'psbt.parse',
-    // dApp bridge: the per-origin trust boundary hardened by .
+    // dApp bridge: the per-origin trust boundary hardened.
     'bridge.connect',
     'bridge.getAccounts',
     'bridge.getAddresses',

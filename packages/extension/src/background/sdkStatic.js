@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the SDK is STATICALLY imported into the MV3 service worker.
+// The SDK is STATICALLY imported into the MV3 service worker.
 //
 // `import()` is disallowed on ServiceWorkerGlobalScope by the HTML
 // specification (https://github.com/w3c/ServiceWorker/issues/1356), so the
 // dynamic import this module replaces ALWAYS rejected inside the packaged
 // extension - for the bare `xchain-sdk` specifier and equally for the
 // concrete bundled chunk path rollup emitted. Every consumer then hit the
-//  fail-closed guard ('xchain-sdk is not loaded yet ... refusing to
+// fail-closed guard ('xchain-sdk is not loaded yet... refusing to
 // serve data'), so the extension could not create a wallet, sign, or serve
 // data at all. The SDK was present in dist/ the whole time, which is why
 // check-no-dev-mock.sh reported a healthy bundle: that gate proves the SDK

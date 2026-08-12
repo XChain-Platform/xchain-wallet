@@ -30,7 +30,7 @@ import javax.crypto.spec.GCMParameterSpec;
 
 /**
  * File-backed store for one opaque payload, encrypted under a hardware-backed
- * AES-256-GCM key ( §1, D6: in-house, not a community plugin, and not
+ * AES-256-GCM key (§1, D6: in-house, not a community plugin, and not
  * the deprecated androidx.security.crypto).
  *
  * WHAT IT PROTECTS. The payload handed down from JS is ALREADY the vault

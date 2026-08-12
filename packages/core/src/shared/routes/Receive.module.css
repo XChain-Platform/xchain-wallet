@@ -160,7 +160,7 @@
     margin: var(--xc-space-4) 0;
 }
 
-/* : the "no addresses anywhere" fallback. Centred so the CTA reads
+/* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 .emptyState {
     display: flex;

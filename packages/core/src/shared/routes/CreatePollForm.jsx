@@ -257,7 +257,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
     // Wire-format VOTE v0 params, for the WATCHER branch only: that path
     // encodes through buildActionPsbtRequest and cannot run the sdk.voting
-    // builder.  moved the confirm path off this mirror and onto
+    // builder. a later change moved the confirm path off this mirror and onto
     // `action.vote.composeForConfirm`, which runs the real
     // sdk.voting.createPollParams host-side - a mirror that drifts here would
     // be SIGNED rather than caught, because the tamper check verifies the PSBT
@@ -284,14 +284,14 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         ...(pollParams.callbackDelayBlocks && { CALLBACK_DELAY_BLOCKS: pollParams.callbackDelayBlocks }),
     }), [pollParams, cleanOptions]);
 
-    //  ( §5.6 slice 2): polls go through the single-encode
-    // confirm page, hardware included . Watcher mode still
+    // (§5.6 slice 2): polls go through the single-encode
+    // confirm page, hardware included. Watcher mode still
     // branches: it encodes, it never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -318,7 +318,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                // : compose through the SDK's own createPollParams,
+                // Compose through the SDK's own createPollParams,
                 // host-side, instead of the client-side wire mirror below.
                 compose: () => messaging.composeVoteForConfirm({
                     walletId,
@@ -428,7 +428,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -532,7 +532,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -547,7 +547,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

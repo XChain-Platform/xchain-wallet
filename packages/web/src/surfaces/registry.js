@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Which SURFACES a build profile carries (;  §2.3,  §7).
+// Which SURFACES a build profile carries (; §2.3, §7).
 //
-// The `store` profile is the mobile app-store build.  §2.3 requires the
+// The `store` profile is the mobile app-store build. §2.3 requires the
 // screens app-store review posture hides to be COMPILED OUT of it, not hidden
 // at runtime: a store-hidden surface that some switch can turn back on is an
 // App Review guideline 2.3.1 hidden-feature violation, and the penalty there is
@@ -23,7 +23,7 @@
 //   twin imports NOTHING. The route components of a hidden surface never enter
 //   the bundle, so there is nothing left to switch on. That is checkable in the
 //   artifact rather than asserted in prose, which is the whole point: a `store`
-//   label in a signed manifest () has to be earned.
+// label in a signed manifest  has to be earned.
 //
 // WHAT IS IN THE DEX SURFACE, and what deliberately is not. Everything below
 // is a judgment about one App Review question ("is this an exchange?"), so it
@@ -42,12 +42,12 @@
 //   OUT: `sell-name`, an ownership transfer priced in coin, reached only from
 //        a token you already own.
 //   OUT: `bet-markets` and the betting lane. Gambling is a DIFFERENT review
-//        guideline (5.3) with a different answer, and  scopes this to
+// guideline (5.3) with a different answer, and scopes this to
 //        the DEX lane. If that answer comes back "hide it too", it is a
 //        `betting` entry in HIDDEN_SURFACES plus a `surfaces/betting.jsx`
 //        twin pair - the mechanism does not change.
 //
-// D2 ( §9) is still open: submit v1 WITH the DEX surface and defend it,
+// D2 (§9) is still open: submit v1 WITH the DEX surface and defend it,
 // or hide it preemptively. The spec recommends hiding, which is what the table
 // below does. Answering D2 the other way is deleting one line here.
 

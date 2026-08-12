@@ -224,7 +224,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             }
             return out;
         }
-        // : validate additions against the chain this fork is published
+        // Validate additions against the chain this fork is published
         // to, not just against address shape, so a wrong-network paste cannot
         // ride into the new list and be dropped by the indexer afterwards.
         const parts = airdropLib.parsePaste(addText);

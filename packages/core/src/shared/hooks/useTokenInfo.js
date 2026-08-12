@@ -31,7 +31,7 @@ import {
  *   - the lookup fails (silently; caller renders "no metadata" copy).
  *
  * The module-level cache keyed `chainId:tick` (see `utils/tokenInfoCache.js`)
- * still spares the re-fetch on Detail -> back -> Detail, but  gave it a
+ * still spares the re-fetch on Detail -> back -> Detail, but a later change gave it a
  * TTL and an invalidation channel: an action this wallet broadcasts against
  * the tick drops the record, and this hook re-reads it even while mounted.
  * Without that, Manage Token kept naming the previous owner after an

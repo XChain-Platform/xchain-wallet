@@ -21,7 +21,7 @@
 // Optional fields (EXPIRATION, FEE_REQUIRED, FEE_PROVIDED) pass
 // through unchanged. Phase 3 Step 6 uses EXPIRATION in blocks.
 //
-// Chain scope . `chainId` is the ONE chain this signs and
+// Chain scope. `chainId` is the ONE chain this signs and
 // broadcasts on. Params are forwarded verbatim, so a param map whose
 // GIVE_COIN and GET_COIN differ (a cross-chain order: GIVE escrowed
 // locally, matched and settled by the validator federation through
@@ -31,8 +31,7 @@
 // order: both ORDER surfaces (PlaceOrderPanel, CreateOrderForm) hardcode
 // GIVE_COIN = GET_COIN = their own chain's coin, and neither resolves a
 // GET_ADDRESS on a second chain. The gap is the authoring UI, not this
-// flow; cross-chain trading from the wallet is SWAP-only. Boundary doc:
-// claude/components/xchain-wallet/ORDER-CROSS-CHAIN-BOUNDARY.md.
+// flow; cross-chain trading from the wallet is SWAP-only.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -56,7 +55,7 @@ import { isNativeGiveOrder, recordAutopayConsent } from './autopayConsent.js';
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {{ enabled: boolean }} [autopay]  PC-16: arm CoinPay auto-pay for this order. Only meaningful on a native-coin GIVE; the consent + terms record is written after a successful broadcast.
  */
 

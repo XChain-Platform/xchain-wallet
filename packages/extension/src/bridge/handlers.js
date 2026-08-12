@@ -175,7 +175,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 // the error is serialized onto the wire and read by a page, so
                 // whatever `code` says it must be a code bridge-spec publishes;
                 // a page cannot act on CHAIN_NOT_PERMITTED or
-                // PanicModeActiveError (). The internal name survives
+                // PanicModeActiveError. The internal name survives
                 // in `message` and in the log line above, so no diagnosis is
                 // lost - only the page's view is narrowed to the contract.
                 throw asBridgeSpecError(err);
@@ -191,7 +191,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // dApp sends (the inject provider forwards opts verbatim), so chain
         // preselection was silently dropped and `isBridgeVersionSupported`
         // always saw `undefined` and passed, skipping negotiation outright
-        // (). Legacy names stay accepted as a fallback so in-repo
+        //Legacy names stay accepted as a fallback so in-repo
         // callers need no atomic migration.
         const requiredBridgeVersion = req.requiredBridgeVersion ?? req.bridgeVersion;
         const requestedChains = req.requestedChains ?? req.chains;
@@ -291,7 +291,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // returns "all permitted". The connect approval screen has no account
         // selector and ConnectOpts has no account field, so the prompt path
         // approved a chain and stored `accounts: []`, handing the site every
-        // account and address with no account review (). Narrow an
+        // account and address with no account review. Narrow an
         // empty grant to the primary account, which is exactly what
         // resolveAutoApproveScope already does on the auto-approve path and for
         // the same reason. Left empty when the vault has no accounts: there is
@@ -375,7 +375,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // WALLET-INTERNAL `{ native, tokens }` shape its UI consumers want.
         // Passing that straight through handed dApps an object where the
         // published type says array, with none of the seven Balance fields
-        // under the names the type gives them ().
+        // under the names the type gives them.
         return balanceRecordsFrom(await addressBalances({
             sdkRegistry: deps.sdkRegistry,
             chainRegistry: deps.chainRegistry,
@@ -669,7 +669,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             } catch (err) {
                 // Same translation the register() wrapper applies to a
                 // single-action throw, applied per slot: a batch entry must
-                // carry a published BridgeErrorCode too ().
+                // carry a published BridgeErrorCode too.
                 results.push(bridgeErrorResult(err));
             }
         }
@@ -685,7 +685,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // so an injected pipe would smuggle pseudo-fields ahead of the
         // wallet-stamped origin. formatSignInChallenge below refuses these too;
         // checking here means the user is never asked to approve a request the
-        // signer will refuse anyway ().
+        // signer will refuse anyway.
         for (const [field, value] of [['appId', req.appId], ['nonce', req.nonce]]) {
             if (typeof value === 'string' && value.includes(SIGN_IN_CHALLENGE_SEPARATOR)) {
                 throw bridgeError('INVALID_PARAMS', `${field} contains the reserved separator`);
@@ -726,7 +726,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // timestamps as ISO strings where the spec declares epoch milliseconds,
         // so parseSignInChallenge returned null for every challenge this wallet
         // has ever emitted while the mock provider's formatted output parsed
-        // fine ().
+        // fine.
         const challengeParts = {
             version: SIGN_IN_CHALLENGE_VERSION,
             appId: req.appId,
@@ -761,7 +761,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         // chainId and challengeParts are declared on SignInSuccess and were
         // being dropped, so a dApp had to re-parse the string to recover fields
-        // the wallet already held ().
+        // the wallet already held.
         return { ok: true, address: decision.address, chainId, signature, challenge, challengeParts };
     });
 }
@@ -809,7 +809,7 @@ async function executeSignAction(req, deps, ctx) {
     // bridge-spec publishes the spending address as `fromAddress` (SEND and
     // SWEEP alike); the handler read `params.from`, a name no published shape
     // carries, so the account-scope gate below was fed `undefined` and the flow
-    // call was fed a key it does not accept (). Read the published name
+    // call was fed a key it does not accept. Read the published name
     // first, keep the legacy one as a fallback, and accept an address record as
     // well as a plain string since in-repo callers pass both.
     const rawFrom = req.params?.fromAddress ?? req.params?.from;
@@ -828,7 +828,7 @@ async function executeSignAction(req, deps, ctx) {
     // Published destination / asset names, mapped once here so the approval
     // screen and the flow call read the same fields. The legacy in-repo names
     // (`to`, `tick`, `amount`) stay as fallbacks; nothing in the repo sends
-    // both ().
+    // both.
     const params = req.params ?? {};
     const toAddress = params.toAddress ?? params.to;
     const sendTick = params.asset ?? params.tick;
@@ -899,7 +899,7 @@ async function executeSignAction(req, deps, ctx) {
     // "Send ? ? to ?" with no amount and no destination on the one screen whose
     // job is to state what is being authorized. Built from the same
     // `toAddress` / `sendTick` / `sendAmount` the flow call below signs, so the
-    // number on screen is the number signed (). `from` targets the
+    // number on screen is the number signed. `from` targets the
     // screen's balance-preview read at the spending address, and `requested`
     // keeps the dApp's literal params in the developer raw view; neither is a
     // protocol key and no describer renders them.
@@ -958,7 +958,7 @@ async function executeSignAction(req, deps, ctx) {
     // from / to / tick / amount with `from` as a resolved address record
     // (normalizeSource rejects a bare string). Forwarded unmapped, a
     // spec-compliant SEND died on "sendToken: from is required" before signing
-    // (). Translate AFTER the spread so the published names win over
+    //Translate AFTER the spread so the published names win over
     // anything the caller sent under the same key. `from` is resolved from the
     // VAULT, not from the request: the flow needs a public key the dApp has
     // none of, and a caller-named source record would sidestep the lookup.
@@ -1039,7 +1039,7 @@ function decimalFromBaseUnits(raw, divisibility) {
 }
 
 // Resolve a published `amountRaw` (base units) into the decimal AMOUNT the send
-// flow signs, scaling by the ASSET's own divisibility ().
+// flow signs, scaling by the ASSET's own divisibility.
 //
 // The scale is read from the SPENDING address's balances, the same
 // `{ native, tokens }` shape bridge.getBalances already serves: native carries
@@ -1126,7 +1126,7 @@ function approvalPayload(actionName, { params, toAddress, tick, amount, spendFro
 // vocabulary (SubmitResult carries actionString / encoding / signed / indexed;
 // addressBalances carries { native, tokens }), and forwarding that made the
 // bridge's ACTUAL contract "whatever core happened to return today" while its
-// PUBLISHED contract said something else entirely (). Building the
+// PUBLISHED contract said something else entirely. Building the
 // published shape explicitly also means a field core adds later cannot reach a
 // dApp until someone decides it should.
 // ---------------------------------------------------------------------------
@@ -1425,7 +1425,7 @@ function randomNonce() {
 // log and the human-readable message show. `code` is the published
 // BridgeErrorCode the page is allowed to see and branch on; the internal names
 // are not in bridge-spec's union, and shipping them meant every dApp following
-// the spec hit its default case ().
+// the spec hit its default case.
 class BridgeError extends Error {
     constructor(code, detail) {
         super(`bridge: ${code}${detail ? ` (${detail})` : ''}`);

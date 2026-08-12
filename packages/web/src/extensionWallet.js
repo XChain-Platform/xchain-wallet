@@ -131,7 +131,7 @@ export function isExtensionWalletEnabled() {
  * used to persist on any resolve, which was right only while the provider
  * signalled every failure by rejecting. bridge-spec declares connect as
  * returning `ConnectSuccess | BridgeErrorResult`, so a rejected prompt, a
- * blocked origin and a version mismatch all RESOLVE () - and each
+ * blocked origin and a version mismatch all RESOLVE - and each
  * one flipped the web app into extension-wallet mode against a session that
  * does not exist, leaving every forwarded call to fail until the user found
  * "switch back". The `ok` flag is the gate now.
@@ -140,7 +140,7 @@ export function isExtensionWalletEnabled() {
  *   bridge-spec's ConnectOpts declares them: `{ requestedChains,
  *   requiredBridgeVersion, appName, appIcon }`. This doc said `{ chains,
  *   accounts }`, which documented the handler's mistake rather than the
- *   contract (); the handler still accepts the legacy names.
+ * contract; the handler still accepts the legacy names.
  * @returns {Promise<any>} the provider's ConnectResult, success or failure
  */
 export async function connectExtensionWallet(opts = {}) {

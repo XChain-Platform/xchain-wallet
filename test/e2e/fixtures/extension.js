@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MV3 extension venue (, spec §8.6 scenarios 2 and 5).
+// MV3 extension venue (spec §8.6 scenarios 2 and 5).
 //
 // WHY THE EXTENSION AND NOT THE WEB SHELL
 //

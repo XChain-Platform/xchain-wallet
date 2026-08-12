@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : Receive's "no addresses anywhere" state was a bare red error
+// Receive's "no addresses anywhere" state was a bare red error
 // string with no way out. Receive is the screen Home points at ("Use
 // Receive to generate one"), so the one surface that names the problem
 // also has to offer the cure: a generate CTA that opens Add addresses.
@@ -43,7 +43,7 @@ function renderReceive(messaging, props = {}) {
     );
 }
 
-describe(': Receive with no addresses on any chain', () => {
+describe('Receive with no addresses on any chain', () => {
     it('offers a generate CTA instead of dead-ending on the error string', async () => {
         renderReceive(baseMessaging());
 

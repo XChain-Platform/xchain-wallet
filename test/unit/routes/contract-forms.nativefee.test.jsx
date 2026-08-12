@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the native-coin fee lane on the two contract authoring forms.
+// The native-coin fee lane on the two contract authoring forms.
 //
 // DEPLOY and EXECUTE were the last fee-bearing forms with no fee lane at all,
 // which was defensible only while contracts were Bitcoin-only: there the
@@ -26,7 +26,7 @@
 //   2. Compose AND submit carry the flag. Compose is the load-bearing one: the
 //      fee output has to be inside the PSBT the user approves and the tamper
 //      check verifies, not bolted on afterwards.
-//   3. The valid:null caveat is SHOWN.  prices these two off the gas
+// 3. The valid:null caveat is SHOWN. prices these two off the gas
 //      schedule without a dry-run, so "the quote came back fine" does not mean
 //      "the action will be accepted", and the fee is spent either way. Every
 //      other form's quote carries a verdict; these two must not imply one.
@@ -155,12 +155,12 @@ async function reviewAndApprove(utils, label) {
     });
 }
 
-describe(' EXECUTE carries the native-coin fee lane', () => {
+describe('EXECUTE carries the native-coin fee lane', () => {
     it('forces the fee on a chain with no XCHAIN lane, and states it instead of offering a choice', async () => {
         const { messaging, calls } = harness(LTC_CHAIN);
         const utils = await mountExecute(messaging, LTC_CHAIN);
 
-        // : EXECUTE is priced, but the FORM holds no quote for it, so the
+        // EXECUTE is priced, but the FORM holds no quote for it, so the
         // row states the chain's rule rather than asserting a charge.
         expect(utils.container.textContent).toContain('Protocol fees are paid in LTC');
         expect(utils.queryByLabelText(/Pay protocol fee in LTC instead of XCHAIN/)).toBeNull();
@@ -211,7 +211,7 @@ describe(' EXECUTE carries the native-coin fee lane', () => {
     });
 });
 
-describe(' DEPLOY carries the native-coin fee lane', () => {
+describe('DEPLOY carries the native-coin fee lane', () => {
     it('threads the opt-in into both the composed PSBT and the signing submit', async () => {
         const { messaging, calls } = harness(BTC_CHAIN);
         const utils = await mountDeploy(messaging);

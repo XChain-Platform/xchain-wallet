@@ -12,7 +12,7 @@
 // into sentences a person can act on.
 //
 // The third wording class, and the last of the three services a submit talks
-// to.  covered the encoder, D-118 covered the params builder, and the
+// to. a later change covered the encoder, D-118 covered the params builder, and the
 // explorer had nothing at all: a search of the whole wallet for
 // SDKExplorerError, or for any of the strings it mints, returned zero hits
 // before this file. So every one of its failures reached the user as the

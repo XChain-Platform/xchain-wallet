@@ -346,9 +346,9 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     // The user-chosen `action` is passed straight into actionData.
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -356,7 +356,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -521,7 +521,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 />,
             );
         }
-        // : signed but not broadcast. "sent" is the claim this case
+        // Signed but not broadcast. "sent" is the claim this case
         // cannot make.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what={actionDisplayLabel(action).toLowerCase()} />);
@@ -629,7 +629,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -644,7 +644,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

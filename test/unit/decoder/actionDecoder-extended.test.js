@@ -74,7 +74,7 @@ describe('decodeAction extended', () => {
             expect(d.summary).toMatch(/^Destroy/);
         });
 
-        // : this used to assert the generic "Sign Destroy" fallback.
+        // This used to assert the generic "Sign Destroy" fallback.
         // Multi-destroy is described leg by leg now, so the summary names
         // what is being burned instead of telling the user to go read raw
         // params on the screen where they approve an irreversible burn.

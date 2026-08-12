@@ -11,7 +11,7 @@
 // PC-52: the shaping layer for a multi-recipient / multi-tick SEND.
 //
 // The failure this guards against is specific and was measured on the wire
-// : SEND v1/v2/v3 repeat their per-leg field group, and a serializer
+//: SEND v1/v2/v3 repeat their per-leg field group, and a serializer
 // fed a FLAT field map re-emitted leg 1 for every repeat, producing a
 // well-formed action that paid the same address twice. The SDK now expands a
 // LEGS array positionally and refuses a flat map against a repeated format, so
@@ -322,7 +322,7 @@ describe('summaries and totals', () => {
 // SDK serializer, must produce distinct legs on the wire and the expected
 // format version.
 //
-// RESOLVED BY PACKAGE NAME, NOT BY SIBLING PATH . This read
+// RESOLVED BY PACKAGE NAME, NOT BY SIBLING PATH. This read
 // `../../../../xchain-sdk/src/formatSelector.js`, four levels up and out of
 // the repo, so it found the SDK only on a machine that happened to have a
 // sibling checkout. Everywhere else - CI, a clean clone, a release runner -
@@ -362,7 +362,7 @@ describe.skipIf(!FormatSelector)('against the real SDK serializer', () => {
         expect(wire(built).version).toBe(0);
     });
 
-    it('two legs on one tick serialize as v1 with DISTINCT legs (the  failure)', () => {
+    it('two legs on one tick serialize as v1 with DISTINCT legs (the failure)', () => {
         const { version, action } = wire(buildSendParams([
             { to: A, tick: 'PEPE', amount: '7' },
             { to: B, tick: 'PEPE', amount: '3' },

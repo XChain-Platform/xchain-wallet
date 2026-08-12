@@ -10,7 +10,7 @@
 
 // PC-32: ADDRESS v0 "On-chain preferences" editor for ONE address.
 //
-// Deliberately NOT on the  one-tap confirm modal: the item's safety
+// Deliberately NOT on the one-tap confirm modal: the item's safety
 // rails are (a) every write carries ALL THREE preferences (a blank
 // FEE_PREFERENCE / REQUIRE_MEMO on the wire silently reverts to default at
 // the indexer), and (b) current values are RE-FETCHED when the user enters

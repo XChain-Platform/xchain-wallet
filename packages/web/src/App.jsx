@@ -59,7 +59,7 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
-//  §6 / D4. Renders nothing unless a shell installed a direct-update
+// §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
 import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
@@ -85,7 +85,7 @@ import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.jsx';
-// The DEX surface, as one module rather than nine route blocks . A
+// The DEX surface, as one module rather than nine route blocks. A
 // build whose profile hides `dex` gets the inert twin instead (vite.config.js),
 // so those route components are not in the bundle at all and every entry point
 // below goes with them: each one is wired only when DEX_SURFACE_ENABLED.
@@ -227,7 +227,7 @@ function GatedDevVariantBadge({ state }) {
 }
 
 function AppInner() {
-    // : no variant read here any more. Navigation surfaces are chosen
+    // No variant read here any more. Navigation surfaces are chosen
     // by <FullLayoutWithNav> from its measured container width; the variant
     // only decides the dev-preview frame and the messaging shell, both of
     // which are resolved in <App> above.
@@ -236,7 +236,7 @@ function AppInner() {
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
-    // : a demo graduation wipes the vault and reloads, so the lane
+    // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
@@ -397,7 +397,7 @@ function AppInner() {
     // first time the palette opens so a locked/never-opened session pays
     // nothing; refreshed on each open so newly-saved contacts appear.
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
-    //  entity search: token balances + connected sites join contacts in
+    // entity search: token balances + connected sites join contacts in
     // the palette's searchable surface. Same lazy contract: loaded on each
     // open (each is one host round-trip), and a failed load just leaves that
     // entity family out of the results.
@@ -424,7 +424,7 @@ function AppInner() {
     // help modal. Disabled while locked, while the palette owns the keys, and
     // while the help modal itself is open.
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
-    // : which Settings section a palette deep-link should open.
+    // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
         /** @type {string | null} */ (null),
@@ -507,7 +507,7 @@ function AppInner() {
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
-    // : the transaction a scan just produced, handed to the Sign panel so
+    // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
@@ -564,7 +564,7 @@ function AppInner() {
                 setStatus({
                     state: 'error',
                     error: err?.message || String(err),
-                    // : a vault that EXISTS and will not open gets a
+                    // A vault that EXISTS and will not open gets a
                     // screen of its own, and which of the three it is decides
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
@@ -576,7 +576,7 @@ function AppInner() {
     useEffect(() => { refresh(); }, [refresh]);
 
     // Apply one incoming wallet URI. Extracted from the mount effect below
-    // ( S3) because the native shells have no query string to read: an
+    // (S3) because the native shells have no query string to read: an
     // Android intent arrives through the XChainLinks plugin instead, and it
     // must land on THIS code - where the parse, the text hardening and the
     // unlock gating already are - rather than on a second intake path where
@@ -591,7 +591,7 @@ function AppInner() {
             // a chainId; without it intent.chainId is always undefined, which
             // Send tolerated but contract routes cannot.
             //
-            //  §3.6: `hardenUriIntentText` neutralizes the free-text
+            // `hardenUriIntentText` neutralizes the free-text
             // fields (memo/tick/method/params) before they ever become
             // prefill state, since this is the first point a `?uri=` query
             // string becomes something the SPA renders. `address` stays
@@ -654,7 +654,7 @@ function AppInner() {
         }
     }, [applyUriIntent]);
 
-    //  S3: the same intents, arriving as Android App Links or
+    // S3: the same intents, arriving as Android App Links or
     // `xchain:` intents instead of a query string. A no-op in a browser.
     // Not merged into the effect above: that one runs once at mount and
     // strips a query param, while this one must stay subscribed for as long
@@ -766,19 +766,19 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // Two gates, because the lanes stopped agreeing . Staking,
+    // Two gates, because the lanes stopped agreeing. Staking,
     // multisig and co-signer accounts are still Bitcoin-exclusive; the §42.2
     // Contracts nav follows the registry, which now advertises DEPLOY on
     // LTC/DOGE as well. One shared hook would have opened all of them.
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
-    // : the wallet-mode gate on the spend surfaces. Signer mode
+    // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
     const { isSignerMode } = useWalletMode();
 
-    // : accounts of the active wallet, purely so the AppHeader gear
+    // Accounts of the active wallet, purely so the AppHeader gear
     // can name the active one. The per-wallet effect above owns SELECTION;
     // this owns the label, and keeping them separate stops the header from
     // reaching into that effect's control flow.
@@ -813,7 +813,7 @@ function AppInner() {
         onResume: setUnlockedView,
     });
 
-    //  / §26: idle auto-lock. Mounted HERE, above the view switch,
+    // §26: idle auto-lock. Mounted HERE, above the view switch,
     // so one timer spans the whole unlocked session. It used to live in
     // Home.jsx, and since exactly one route renders at a time, navigating
     // to Send / Receive / History / Settings unmounted Home and cancelled
@@ -859,7 +859,7 @@ function AppInner() {
                     />
                 );
             }
-            // §20.5 / : watcher/signer pairing lane. Fresh-install
+            // §20.5: watcher/signer pairing lane. Fresh-install
             // only: it imports the shared recovery phrase itself, so the
             // add-wallet-to-an-open-vault path below doesn't offer it.
             if (onboardingStep === 'pair-partner') {
@@ -1336,7 +1336,7 @@ function AppInner() {
                             // flow. Clearing the id (or calling refresh, which
                             // resets unlockedView to home) dropped the user on
                             // Home the instant the wallet was created, so
-                            // neither screen was ever reachable . The
+                            // neither screen was ever reachable. The
                             // wizard reads the new wallet through messaging,
                             // not App state, so nothing here needs refreshing;
                             // onBack refreshes on the way out.
@@ -1366,7 +1366,7 @@ function AppInner() {
                     />
                 );
             }
-            // The DEX surface : markets, the pair views, orders and
+            // The DEX surface: markets, the pair views, orders and
             // swaps. One call instead of nine route blocks, because in a
             // profile that hides `dex` this module is the inert twin and none
             // of those components exist in the bundle. Returns null for any
@@ -2212,7 +2212,7 @@ function AppInner() {
                                 setResumeCoinpay(null);
                                 setUnlockedView('coinpay');
                             },
-                            // DEX entries : unwired in a profile that
+                            // DEX entries: unwired in a profile that
                             // hides the surface, and buildActionEntries drops
                             // an entry with no handler, so they do not render
                             // at all rather than rendering dead.
@@ -2264,7 +2264,7 @@ function AppInner() {
                 // Connected Sites drilldown (§35.9 / G108) so the spec's
                 // implied "Connected" left-nav row has somewhere to land.
                 const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
-                // : palette deep-links land on a specific section via
+                // Palette deep-links land on a specific section via
                 // settingsInitialSection; the key forces a remount when the
                 // target changes while Settings is already the active view.
                 const settingsSubpage = unlockedView === 'connected-sites'
@@ -2478,7 +2478,7 @@ function AppInner() {
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
             const activeWalletRow =
                 walletList.find((w) => w.id === activeWalletId) || null;
-            //  gear status dot: "non-default" means the user has moved
+            // gear status dot: "non-default" means the user has moved
             // off the first entry in the list, which is the only thing the
             // dot is trying to say. Lists are ordered (wallets as stored,
             // accounts by hardened index), so index 0 is the default.
@@ -2505,13 +2505,13 @@ function AppInner() {
                 hasBtcAddress,
                 hasGovernanceAddress,
                 // Compile-time, not a preference: false only in a build that
-                // dropped the DEX surface entirely , where a palette
+                // dropped the DEX surface entirely, where a palette
                 // command pointing at `markets` would navigate to a view that
                 // no longer exists.
                 hasDexSurface: DEX_SURFACE_ENABLED,
                 isSignerMode,
             };
-            //  entity handlers: tokens open TokenDetail with the full
+            // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries; sites land on the Connected Sites
             // drilldown; settings sections deep-link via
             // settingsInitialSection; help topics reuse both.
@@ -2537,7 +2537,7 @@ function AppInner() {
             // §33.3: free-form intents like "send 100 MYTOKEN" open Send
             // prefilled. Send falls back to the first chain when the prefill
             // carries no chainId, so amount + tick alone is enough. A
-            // txid/date-shaped query offers "search history" .
+            // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
@@ -2552,7 +2552,7 @@ function AppInner() {
                 },
             });
             return (
-                // : both nav surfaces are handed in unconditionally.
+                // Both nav surfaces are handed in unconditionally.
                 // FullLayoutWithNav measures its own width and mounts exactly
                 // one of them (sidebar at >= 640px, bottom tab bar below), so
                 // the web shell no longer carries a width threshold of its own
@@ -2964,7 +2964,7 @@ function buildActionEntries({
             onSelect: onPairSigner,
         },
     // An entry with no handler is an entry this build does not have: a surface
-    // compiled out  or a capability this wallet lacks (the Bitcoin-only
+    // compiled out or a capability this wallet lacks (the Bitcoin-only
     // multisig rows). Drop it rather than rendering a button that does nothing
     // when tapped - and, for a store build, rather than showing a reviewer a
     // greyed-out DEX, which raises the same question a working one would.

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: envelope commit-recovery records ( §3.5, ).
+// Unit: envelope commit-recovery records (§3.5).
 //
 // The tests that carry the weight here are the FAILURE ones. §3.5 requires the
 // cancel to be reconstructible from persisted state alone, so a write that

@@ -15,10 +15,10 @@
 // a BATCH (the indexer's SIBLING_ACTIONS is populated by the BATCH
 // handler alone), so a bare gated SEND is ALWAYS rejected, even for a
 // single recipient. See Token_Gated_Content.md and the §12 B1-a
-// verification notes in claude/specs/XCHAIN_WALLET_COVERAGE_SPEC.md.
+// verification notes in the wallet coverage spec.
 //
 // This module is the one compose-time chokepoint every SEND-building
-// flow calls (sendToken, buildSendPsbt, the  confirm pipeline's
+// flow calls (sendToken, buildSendPsbt, the confirm pipeline's
 // SEND branch): detect a gated tick, resolve the pack keys the wallet
 // holds, ECIES-encrypt the handoff to the recipient's on-chain pubkey,
 // and rewrite the plain SEND into the atomic
@@ -118,7 +118,7 @@ export function clearGatedGroupsCache() {
 }
 
 // ---------------------------------------------------------------------------
-// PC-29 unlock-threshold lane (GATE_MIN_AMOUNT; inert until the 
+// PC-29 unlock-threshold lane (GATE_MIN_AMOUNT; inert until the
 // flag day pins activation heights). Post-activation SEND rule: a pack's
 // key-handoff MESSAGE is required only when the destination's POST-SEND
 // balance of the gate tick meets the pack's threshold; below it, a plain
@@ -172,7 +172,7 @@ export function gatedGroupThreshold(group) {
 /**
  * Split a tick's gated groups into the packs whose key handoff the send
  * MUST carry and the packs the destination's post-send balance does not
- * qualify for. Pre-activation (every chain until the  train pins
+ * qualify for. Pre-activation (every chain until the train pins
  * heights) this returns all groups as required with zero network calls.
  * Failure policy while active: an unreadable destination balance treats
  * every pack as required - that direction always composes a VALID send

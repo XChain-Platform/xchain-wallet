@@ -23,7 +23,7 @@ import {
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
 
-// v2 : additive structured amount fields. The pre-flight
+// v2: additive structured amount fields. The pre-flight
 // pending-delta machinery (§4.7) needs the tick + amount a pending tx
 // will move, not just a human-readable summary string, so a concurrent
 // approval window can net them against the fetched balance.

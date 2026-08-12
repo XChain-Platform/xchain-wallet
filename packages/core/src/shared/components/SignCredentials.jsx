@@ -99,7 +99,7 @@ export function SignCredentials({
     // unlock"). Show a brief note instead of the input; the form's submit
     // gate is relaxed in parallel (see useSignerReady).
     //
-    // `submitError` MUST still render here . The locked branch below
+    // `submitError` MUST still render here. The locked branch below
     // carries the error on the password Input, and the calling forms only
     // render their own error banner for the watcher / hardware paths -- so
     // when this branch returned the note ALONE, a failed submit on an unlocked
@@ -108,10 +108,10 @@ export function SignCredentials({
     // rejected transaction from a dead button, and the natural response is to
     // press it again.
     //
-    // : the note is wrapped in <SigningReadyNote>, which withdraws it
+    // The note is wrapped in <SigningReadyNote>, which withdraws it
     // whenever panic mode has signing frozen (and states the freeze when the
     // user armed it themselves). `submitError` stays OUTSIDE the wrapper: it
-    // is the  surface and must survive every panic state.
+    // is the surface and must survive every panic state.
     if (unlocked) {
         return (
             <>

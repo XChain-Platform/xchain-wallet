@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/rehearse.mjs - the §7.5 staging rehearsal, driven and
-// recorded ( stage 5).
+// recorded (stage 5).
 //
 // THE RULE THIS ENFORCES: "No release's yml goes to wallet/desktop/
 // before its staging rehearsal passes." A rule with no artifact behind it
@@ -22,7 +22,7 @@
 //
 //   1. Resolve and prove.  Fetch the channel pointer for an OS/arch,
 //      pick the artifact the way electron-updater picks it, download it,
-//      check the sha512 the pointer claims, then run the REAL  S5
+//      check the sha512 the pointer claims, then run the REAL S5
 //      gate (`updateVerify.js`) over the bytes against the K1-signed
 //      manifest on the same feed. Every step is a property of the FEED,
 //      so all eight lanes are checked from one machine, no hardware.
@@ -48,8 +48,8 @@
 // close that; this re-checks the property on the PUBLISHED feed, which is
 // the only place it matters.
 //
-// THE DIRECT ANDROID LANE IS REHEARSED HERE TOO, by a different probe
-// . Its feed is a one-field `latest.json`, nothing is downloaded
+// THE DIRECT ANDROID LANE IS REHEARSED HERE TOO, by a different probe.
+// Its feed is a one-field `latest.json`, nothing is downloaded
 // by the app, and the install is performed by the user, so `probeLane`
 // above describes none of it. `probeDirectLane` drives the SHIPPED client
 // against the feed in both directions and proves the APK the resulting
@@ -250,7 +250,7 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
     // --- 1. the pointer exists and parses -------------------------------
     //
     // The raw text is kept, not just the parse. The shipped gate anchors
-    // the pointer against the signed manifest , and handing it a
+    // the pointer against the signed manifest, and handing it a
     // re-serialisation of our own parse would rehearse this harness
     // instead of the wallet.
     let info;
@@ -362,7 +362,7 @@ function memoryStorage() {
 }
 
 /**
- * Run the feed-side halves of a rehearsal for one DIRECT lane .
+ * Run the feed-side halves of a rehearsal for one DIRECT lane.
  *
  * The desktop probe re-implements electron-updater's selection rule
  * because upstream cannot be driven headlessly. The direct lane has the
@@ -547,7 +547,7 @@ export async function probeDirectLane({
     // artifact a person would fetch rather than one an updater would.
     //
     // The ARTIFACT half by name, because this lane has no channel pointer
-    // to anchor : the direct APK lane is not electron-updater,
+    // to anchor: the direct APK lane is not electron-updater,
     // nothing emits a `<channel>*.yml` for it, and Android re-checks the
     // package signature at install. Asking for the weaker gate explicitly
     // is the point - the desktop entry point demands a pointer, so no
@@ -658,8 +658,8 @@ function gitRun(repo, args) {
  * other than this release.
  *
  * `releaseArtifacts` is the artifact basenames the release actually
- * contains, and it decides WHICH lane sets have to be answered for
- * . Omitting it keeps the historical behaviour: every desktop
+ * contains, and it decides WHICH lane sets have to be answered for.
+ * Omitting it keeps the historical behaviour: every desktop
  * lane is demanded and the direct lane is not considered. Passing it can
  * only add requirements, with one deliberate exception - a release that
  * positively carries an APK and no electron-updater artifact is not
@@ -752,7 +752,7 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
         }
     }
 
-    // The direct lanes , demanded only of a release that ships
+    // The direct lanes, demanded only of a release that ships
     // the artifact they distribute.
     if (directInRelease) {
         const direct = Array.isArray(record['direct-lanes']) ? record['direct-lanes'] : [];
@@ -970,7 +970,7 @@ async function main(argv) {
         // they distribute, not on request. Making it a flag would mean an
         // Android release is rehearsed only by whoever remembers the flag,
         // which is the same reliance on memory that left the lane
-        // unrehearsed for its first release .
+        // unrehearsed for its first release.
         const shipping = lanesInRelease(releaseArtifactsIn(prodInput));
         const previousVersion = previousTag ? String(previousTag).replace(/^v/, '') : null;
         const directLanes = [];

@@ -182,7 +182,7 @@ assert.ok(/POLL_INTERVAL_MS\s*=\s*10_?000/.test(src), 'poll interval is 10 secon
     assert.equal(classified.invalid.length, 1);
     assert.equal(classified.duplicates, 1);
 
-    // : with a chain, validation is network-aware. A mainnet address
+    // With a chain, validation is network-aware. A mainnet address
     // pasted into a regtest wallet used to be counted, priced, paid for and
     // then dropped by the indexer.
     const onRegtest = airdropLib.classifyRecipients([
@@ -205,7 +205,7 @@ assert.ok(/POLL_INTERVAL_MS\s*=\s*10_?000/.test(src), 'poll interval is 10 secon
     assert.equal(rec.ok, false);
 }
 
-// --- 6b. Network-aware wiring at the call sites  ---------------
+// --- 6b. Network-aware wiring at the call sites ---------------
 
 assert.ok(/classifyRecipients\(\s*\n?\s*parts,\s*\n?\s*\{\s*coin: recipientCoin, network: recipientNetwork\s*\}/m.test(src),
     'AirdropForm passes the ACTIVE chain to classifyRecipients');

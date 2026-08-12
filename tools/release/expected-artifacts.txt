@@ -1,6 +1,6 @@
 # tools/release/expected-artifacts.txt - the artifact set a release must contain.
 #
-#  §6. Read by tools/release/lib.sh (xr_check_expected), enforced by
+# §6. Read by tools/release/lib.sh (xr_check_expected), enforced by
 # sign.sh before it writes a manifest.
 #
 # WHY THIS FILE EXISTS. sign.sh hashes whatever it finds. Without a
@@ -22,10 +22,10 @@
 # They are identified by CONTENT, not by name - our channel is `stable`,
 # so the real names are `stable.yml` / `stable-mac.yml` / `stable-linux.yml`
 # / `stable-linux-arm64.yml`, and the old `latest*.yml` glob matched none
-# of them ( §7.1).
+# of them (§7.1).
 #
 # Blockmaps (`*.blockmap`) are deliberately absent, so staging one is a
-# hard failure. Differential updates are a non-goal ( §7); a
+# hard failure. Differential updates are a non-goal (§7); a
 # blockmap in the release directory means the desktop build emitted
 # delta metadata that would be served but never verified.
 #
@@ -33,22 +33,22 @@
 # A stale list either blocks a legitimate release or, worse, silently
 # stops demanding a shell that quietly dropped out of the build.
 #
-# THE THIRD COLUMN IS THE BUILD PROFILE (, rails §3): which set of
+# THE THIRD COLUMN IS THE BUILD PROFILE (rails §3): which set of
 # features was compiled into that artifact. `default` is the full app
 # (web, desktop, extension); `store` is the mobile store build, which
-# compiles OUT the surfaces the app-store review posture hides (
-# §2.3). Two artifacts of one tag can hold different code, so the profile
+# compiles OUT the surfaces the app-store review posture hides (§2.3).
+# Two artifacts of one tag can hold different code, so the profile
 # is written into the signed manifest and every declared glob must name
 # one. A missing or unknown profile fails the gate here, at declaration
 # time, rather than when a release is already staged.
 #
-# The direct APK is `store` and that is not a typo:  §6 derives it
+# The direct APK is `store` and that is not a typo: §6 derives it
 # from the same AAB, so it is the store build's code signed by a
 # different key. Anything compiled out for review is therefore also
 # absent from the direct download.
 #
 # THAT COUPLING IS NOW A CHOICE RATHER THAN A CONSEQUENCE (operator answer
-# to , 2026-08-07). A SECOND direct APK is declared below at the
+# 2026-08-07). A SECOND direct APK is declared below at the
 # `default` profile, so the audience that deliberately avoids Play can get
 # the full feature set. The store-derived APK above stays exactly as it is:
 # it is what Play's review posture permits, it is derived from the uploaded
@@ -58,7 +58,7 @@
 # file's globs are extension-shaped: `*.dmg` is satisfied by ONE dmg. On
 # 2026-08-01 every desktop lane turned out to be building one architecture
 # instead of two (a `--` that ended electron-builder's option parsing,
-#  §8) and this gate passed the resulting release without a word:
+# §8) and this gate passed the resulting release without a word:
 # arm64 users would have had no download, no update, and no channel
 # pointer, and the manifest covering that release would have been
 # internally perfect. Each required arch must now be present, matched
@@ -73,7 +73,7 @@
 #   multi        ALLOWANCE, never a requirement: tolerate one artifact
 #                that carries several arches and therefore has no token.
 #                Not declared anywhere today on purpose - the combined
-#                NSIS installer is 's open question, and until it
+#                NSIS installer is an open question, and until it
 #                is answered the gate refuses the release rather than
 #                publishing a third installer nobody chose.
 #
@@ -81,7 +81,7 @@
 # a hard failure, not a default-arch guess: a combined installer and a
 # broken artifactName look identical from here, and both deserve an answer.
 #
-# THE FIFTH COLUMN IS THE SIGNATURE CLASS , and it exists because
+# THE FIFTH COLUMN IS THE SIGNATURE CLASS, and it exists because
 # this gate counted artifacts and architectures and never once asked
 # whether any of them was SIGNED. Windows signing is selected off three
 # environment variables and electron-builder.config.cjs says in as many
@@ -95,7 +95,7 @@
 # never counted.
 #
 # It matters beyond one bad release. An unsigned build shows the "unknown
-# developer" warning  records as an explicit operator requirement
+# developer" warning that operator policy records as an explicit requirement
 # not to have, and electron-updater refuses an update whose signed
 # publisher does not match the installed app's - `WIN_PUBLISHER` is called
 # "effectively a wire format" in the build config - so shipping unsigned
@@ -111,14 +111,14 @@
 #                            what we stage is legitimately unsigned
 #   codesign-dmg             the disk image itself, signed AND notarized;
 #                            assessed with spctl the way Gatekeeper
-#                            assesses a download ( row 140). It
+#                            assesses a download. It
 #                            replaced `codesign-unverified`, which had
 #                            declared the dmg Apple-signed and skipped the
 #                            check on that basis, while the published dmg
 #                            was not signed at all
 #   authenticode-unverified  the signed PE is inside the archive; the .exe
 #                            row covers the same lane
-#   deferred-android         apksigner's lane , declared not checked
+#   deferred-android         apksigner's lane, declared not checked
 #
 # THE UNVERIFIED CLASSES ARE STATED GAPS, NOT EXEMPTIONS. The checker
 # reports them as `recorded` and never as `ok`, and prints the two counts
@@ -131,7 +131,7 @@
 # notice an ungated row. tools/release/verify-signatures.mjs validates the
 # declaration itself, at parse time, before it looks at any artifact.
 #
-# THE FIRST COLUMN ALSO NAMES THE RELEASE SET ( §7.5, ).
+# THE FIRST COLUMN ALSO NAMES THE RELEASE SET (§7.5).
 #
 # AND, ON A STAGING ROW, THE OS THAT ROW BELONGS TO (operator answer, §7.5,
 # 2026-08-07). A rehearsal is per-OS - §7.5 says to watch a swap complete
@@ -200,7 +200,7 @@ required  xchain-wallet-extension-v*.zip    default  -         none
 # SPACE) in every artifact; since §7.1's rename every name is pinned to
 # `xchain-wallet-...` and no published file has a space in it.
 #
-# The per-arch naming convention this used to defer to  for is now
+# The per-arch naming convention is now
 # SET: every macOS and Windows artifact carries its architecture
 # ("-x64" / "-arm64"), because electron-updater selects an artifact by
 # substring-matching `process.arch` against the filename. That is an
@@ -221,7 +221,7 @@ required  xchain-wallet-extension-v*.zip    default  -         none
 required  *.dmg                             default  x64,arm64 codesign-dmg
 required  *mac*.zip                         default  x64,arm64 codesign
 #
-# EXACTLY TWO WINDOWS INSTALLERS, one per arch (, operator decision
+# EXACTLY TWO WINDOWS INSTALLERS, one per arch (operator decision
 # 2026-08-01). electron-builder's default ALSO emits an un-suffixed
 # installer carrying both architectures, ~193M against ~113M and ~96M;
 # `nsis.buildUniversalInstaller: false` stops it being produced at all.
@@ -240,7 +240,7 @@ required  *.deb                             default  x64,arm64 none
 # declared, so the day one is staged it is covered by the manifest instead
 # of hard-failing as undeclared.
 #
-# The Android pair is NOT two builds and NOT the same lane ( §6):
+# The Android pair is NOT two builds and NOT the same lane (§6):
 # the ceremony builds ONE AAB and derives the universal APK from that same
 # bundle, so the two files are the same code signed by different keys.
 #
@@ -255,7 +255,7 @@ required  *.deb                             default  x64,arm64 none
 #          absence from a manifest would matter most.
 #
 # iOS stays store-bound-only: there is no direct-install lane on that
-# platform to have a second artifact for .
+# platform to have a second artifact for.
 #
 # All four mobile/store rows are arch-agnostic here. The Android pair is
 # universal by construction (one AAB, one derived universal APK) and the
@@ -269,7 +269,7 @@ optional  xchain-wallet-android-v*.aab      store    -         deferred-android
 optional  xchain-wallet-v*[0-9].apk         store    -         deferred-android
 #
 # THE SECOND DIRECT APK: same tag, `default` profile, K10 signature, and it
-# exists because  was answered `build it` rather than `document the
+# exists because the operator answered `build it` rather than `document the
 # coupling`. The `store` profile genuinely compiles the DEX lane out (eight
 # modules) along with the Trezor connect CSP origin, so until this row the
 # users who avoid Play on principle were getting Play's restrictions anyway.
@@ -300,7 +300,7 @@ optional  xchain-wallet-v*-full.apk         default  -         deferred-android
 optional  xchain-wallet-ios-v*.ipa          store    -         store
 optional  *-mas.pkg                         store    universal store
 #
-# The Microsoft Store package ( §15). Optional for the same reason
+# The Microsoft Store package (§15). Optional for the same reason
 # as `-mas.pkg`: the channel is a goal, the Partner Center identity does
 # not exist yet, and the lane is opt-in behind XCHAIN_BUILD_APPX=1.
 #
@@ -312,7 +312,7 @@ optional  *-mas.pkg                         store    universal store
 # single bundle instead, this column is where that gets written down.
 optional  *-appx.appx                       default  x64,arm64 store
 #
-# The Snap Store package ( §16, ). Optional for the same
+# The Snap Store package (§16). Optional for the same
 # reason as the two rows above: the channel is a goal, the Snapcraft store
 # account does not exist yet, and the lane is opt-in behind
 # XCHAIN_BUILD_SNAP=1. Hashed into the manifest like the .aab: the store

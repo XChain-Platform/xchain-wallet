@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// , the latent half: the editor seeded its draft from the chain
+// The latent half: the editor seeded its draft from the chain
 // descriptor's bare `defaultUrl` while the real endpoint is
 // `defaultUrl` + `defaultPort`, and Save wrote all three fields
 // regardless of which one was touched. Editing Explorer alone on a
@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe('NetworkEndpointsSection ', () => {
+describe('NetworkEndpointsSection', () => {
     it('seeds every field with the port the wallet actually uses', () => {
         render(<NetworkEndpointsSection />);
         const block = ltcRegtestBlock();

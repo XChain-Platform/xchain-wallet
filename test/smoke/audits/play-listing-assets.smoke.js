@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the Play listing images are DATED, and the note that
+// Smoke for: the Play listing images are DATED, and the note that
 // dates them still describes the bytes on disk.
 //
-// The extension set got this in  row 42 and the Play set did not, which
+// The extension set got this in row 42 and the Play set did not, which
 // is the whole of the finding: `packages/mobile/store-assets/play/` last
 // changed in 7110d2e1 (2026-08-02, v0.334.0), the release was v0.336.0, and
 // nothing in the repo could say which build those six images depict. Play
@@ -62,7 +62,7 @@ const playSet = SETS.play;
 // finding, which is the one reading nobody would act on.
 if (!playSet) {
     console.error('FAIL: tools/release/verify-listing-assets.mjs declares no `play` set. The Play '
-        + 'listing images go back to being undated, which is the  defect exactly.');
+        + 'listing images go back to being undated, which is the defect exactly.');
     process.exit(1);
 }
 
@@ -78,7 +78,7 @@ check('the play set points at the Play listing images', () => {
 
 // --- 2. It covers the images the listing actually takes ---------------------
 
-// The four screenshots are the ones  named; the icon and the feature
+// The four screenshots are the ones named; the icon and the feature
 // graphic are bound to the same listing by the same upload, so they are
 // covered too. Named here rather than globbed off the directory on purpose:
 // a glob would let an asset silently LEAVE the tree and the map together,
@@ -245,6 +245,6 @@ if (failures > 0) {
     process.exit(1);
 }
 
-console.log(`OK: Play listing assets  - ${playSet.assets.length} assets pinned to `
+console.log(`OK: Play listing assets - ${playSet.assets.length} assets pinned to`
     + `${pinned.pin.capturedFrom.commit.slice(0, 8)} (v${pinned.pin.capturedFrom.version}, `
     + `how=${pinned.pin.capturedFrom.how}) via ${relative(root, playSet.pinPath)}`);

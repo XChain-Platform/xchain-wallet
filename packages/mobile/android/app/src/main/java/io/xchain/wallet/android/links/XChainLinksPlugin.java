@@ -22,7 +22,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Delivers App Links and {@code xchain:} links to the SPA ( §1, S3).
+ * Delivers App Links and {@code xchain:} links to the SPA (§1, S3).
  *
  * WHY NOT {@code @capacitor/app}. That plugin would do the delivery, and it
  * would also hand every script in the WebView {@code exitApp()},

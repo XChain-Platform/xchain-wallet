@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program, slice 1: measure the layout container
+// responsive-first program, slice 1: measure the layout container
 // and report its tier.
 //
 // Container width, not viewport width. The wallet renders into surfaces

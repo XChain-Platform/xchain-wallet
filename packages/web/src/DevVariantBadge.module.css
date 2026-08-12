@@ -76,7 +76,7 @@
     padding: 2px 8px;
     cursor: pointer;
     text-transform: lowercase;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;
@@ -106,7 +106,7 @@
     padding: 2px 8px;
     cursor: pointer;
     text-transform: lowercase;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;
@@ -145,7 +145,7 @@
     padding: 2px 8px;
     cursor: pointer;
     text-transform: lowercase;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;
@@ -173,7 +173,7 @@
     background-repeat: no-repeat;
     background-position: right 6px center;
     background-size: 8px 6px;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
 }

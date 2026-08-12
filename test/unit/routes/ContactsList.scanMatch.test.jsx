@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the scan-to-contacts flow must not open a blank new-contact form
+// The scan-to-contacts flow must not open a blank new-contact form
 // when the scanned address already belongs to a saved contact. It should
 // route to that contact's detail view instead. Covers both the module-level
 // matcher and the scanPrefill useEffect that consumes an AppHeader QR scan.

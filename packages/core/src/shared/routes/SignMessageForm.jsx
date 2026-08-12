@@ -148,7 +148,7 @@ export function SignMessageForm({ walletId, onBack }) {
         [addressOptions, addressId],
     );
 
-    //  §5.6 slice 3 / §5.5 message variant: signing goes through the
+    // §5.6 slice 3 / §5.5 message variant: signing goes through the
     // shared confirm page. Nothing is composed - the signed bytes ARE the
     // message - so `compose` just carries the text into the state machine,
     // which then supplies the same contract every other confirm surface has
@@ -417,7 +417,7 @@ export function SignMessageForm({ walletId, onBack }) {
         </form>
     );
 
-    //  §5.5 confirm page (message variant), rendered in place of the
+    // §5.5 confirm page (message variant), rendered in place of the
     // form; the draft stays intact behind it so Reject loses nothing.
     if (isConfirmOpenPhase(confirmAction.phase)) {
         return (

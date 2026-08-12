@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// UpdateNoticeBanner ( §6, D4). Mounted beside ReachabilityBanner.
+// UpdateNoticeBanner (§6, D4). Mounted beside ReachabilityBanner.
 //
 // Renders nothing at all unless a shell installed a direct-update provider,
 // which only the directly-installed Android APK does. On every other shell

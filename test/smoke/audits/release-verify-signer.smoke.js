@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// verify.sh must refuse a GOOD signature from the WRONG KEY ( S37).
+// verify.sh must refuse a GOOD signature from the WRONG KEY (S37).
 //
 // This is the check that reads as already done and was not. Until
 // 2026-08-06 verify.sh ran a bare `gpg --verify`, which answers "did
@@ -193,6 +193,6 @@ if (failures.length) {
     process.exit(1);
 }
 
-console.log('PASS release-verify-signer.smoke.js ( S37: verify.sh binds the signature to an '
+console.log('PASS release-verify-signer.smoke.js (S37: verify.sh binds the signature to an'
     + 'expected fingerprint, accepts the primary or the signing subkey, and refuses a good '
     + 'signature from any other key)');

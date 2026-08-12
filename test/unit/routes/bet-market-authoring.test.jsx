@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  P8: the BET authoring surfaces, driven as a user drives them.
+// P8: the BET authoring surfaces, driven as a user drives them.
 //
 // Three things here are worth a test rather than a read-through:
 //
@@ -35,7 +35,7 @@ import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleCo
 import { projectBetPayout } from '../../../packages/core/src/flows/betQueries.js';
 
 const CHAIN = 'bitcoin-mainnet';
-// : a chain with NO XCHAIN fee lane, where a native-coin output is the
+// A chain with NO XCHAIN fee lane, where a native-coin output is the
 // only way to pay a protocol fee.
 const LTC_CHAIN = 'litecoin-regtest';
 const OWN = 'bc1qexampleexampleexampleexampleexampleex';
@@ -181,7 +181,7 @@ function harness(overrides = {}) {
             return Promise.resolve({ data: [OWN_CLOSED_FEED] });
         },
         // Driven through the REAL flow helper, not a canned answer: the whole of
-        //  was a shape mismatch BETWEEN the screen and the SDK, and a mock
+        // was a shape mismatch BETWEEN the screen and the SDK, and a mock
         // that returns a ready-made string is exactly what hid it.
         betProjectPayout: (args) => {
             calls.push({ method: 'betProjectPayout', args });
@@ -239,7 +239,7 @@ async function fillMarket(utils, { outcomes = ['Home', 'Away'] } = {}) {
     });
 }
 
-describe(' CreateBetFeedForm: the live market-cost quote', () => {
+describe('CreateBetFeedForm: the live market-cost quote', () => {
     it('prices the market on the REFUND deadline, so the publish window moves the cost', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -271,7 +271,7 @@ describe(' CreateBetFeedForm: the live market-cost quote', () => {
     });
 });
 
-describe(' CreateBetFeedForm: compose and submit', () => {
+describe('CreateBetFeedForm: compose and submit', () => {
     it('composes through the SDK createMarketParams builder and signs the SAME params', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -406,13 +406,13 @@ describe(' CreateBetFeedForm: compose and submit', () => {
     });
 });
 
-// . A parimutuel stake has no price the bettor can work out for themselves:
+//A parimutuel stake has no price the bettor can work out for themselves:
 // it buys a share of a pot that every later bet re-divides. The projected payout
 // is therefore the one number the decision turns on, and it reached the screen as
 // nothing at all, because the explorer's pool ROWS were handed to payout math
 // that indexes amounts BY outcome. The failure was silent in both directions, so
 // what is pinned here is that the number REACHES the user.
-describe(' BetFeedDetail states what a win would pay', () => {
+describe('BetFeedDetail states what a win would pay', () => {
     async function openMarket(messaging, feedIndex = '2308') {
         let utils;
         await domAct(async () => {
@@ -521,7 +521,7 @@ describe(' BetFeedDetail states what a win would pay', () => {
     });
 });
 
-describe(' every BET surface renders the confirm page it opens', () => {
+describe('every BET surface renders the confirm page it opens', () => {
     it('BetFeedDetail: reviewing a bet draws the confirm page rather than stranding it', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -597,7 +597,7 @@ describe(' every BET surface renders the confirm page it opens', () => {
     });
 });
 
-// : the native-coin fee lane on the two FEE-BEARING BET formats.
+// The native-coin fee lane on the two FEE-BEARING BET formats.
 //
 // BET charges on create (v0, duration-priced) and on place (v2, one pre-funded
 // payout credit), and it is a COMMON_ACTION, so both are offered on LTC and
@@ -610,7 +610,7 @@ describe(' every BET surface renders the confirm page it opens', () => {
 // The flag has to travel on BOTH lanes. Compose is where it matters most: the
 // FEE_DESTINATION output has to be inside the PSBT the user previews and the
 // tamper check verifies, not added afterwards.
-describe(' BET carries the native-coin fee lane', () => {
+describe('BET carries the native-coin fee lane', () => {
     const ltcHarness = () => harness({
         getAddressesByChain: () => Promise.resolve({ [LTC_CHAIN]: [HD_ADDRESS] }),
     });
@@ -624,7 +624,7 @@ describe(' BET carries the native-coin fee lane', () => {
         });
         await fillMarket(utils);
 
-        // : the default 14-day market is FREE, and this form holds the
+        // The default 14-day market is FREE, and this form holds the
         // quote that says so, so the row states that rather than promising an
         // LTC payment that is never made. A statement either way, never a
         // switch: there is nothing to choose between on this chain.
@@ -671,7 +671,7 @@ describe(' BET carries the native-coin fee lane', () => {
         });
         await fillMarket(utils);
         // A charged market, so there is a fee lane to choose between at all:
-        //  hides the switch when the quote prices the action at zero,
+        // hides the switch when the quote prices the action at zero,
         // because both settings would then pay nothing.
         await domAct(async () => {
             fireEvent.change(utils.getByLabelText('Time to publish the result'), {
@@ -720,7 +720,7 @@ describe(' BET carries the native-coin fee lane', () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
         });
-        // : placing a bet IS priced (BET_PER_CREDIT), but this surface
+        // Placing a bet IS priced (BET_PER_CREDIT), but this surface
         // holds no quote for it, so the row states the chain's rule instead of
         // asserting a charge it has not been given.
         expect(utils.container.textContent).toContain('Protocol fees are paid in LTC');
@@ -772,7 +772,7 @@ describe(' BET carries the native-coin fee lane', () => {
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
         expect(compose.args.builder).toBe('resolveMarketParams');
         expect(compose.args.payFeeInNativeCoin).toBeUndefined();
-        // No fee row at all, in either voice ( gave the unquoted case a
+        // No fee row at all, in either voice (a later change gave the unquoted case a
         // plural wording, which a `Protocol fee is paid in` check would miss).
         expect(utils.container.textContent).not.toMatch(/Protocol fees? (is|are) paid in/);
     });

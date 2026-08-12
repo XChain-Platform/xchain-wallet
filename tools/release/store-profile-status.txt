@@ -1,19 +1,19 @@
-IMPLEMENTED 
+IMPLEMENTED store-profile-build-lane
 
-# Whether the `store` build profile EXISTS as a build mechanism .
+# Whether the `store` build profile EXISTS as a build mechanism.
 #
 # It does, as of 2026-08-01, so a `store` artifact may now be signed.
 #
 # What earns the label, in the order it was built:
 #
-#    built the profile itself: `XCHAIN_BUILD_PROFILE` resolution (a
+#   First, the profile itself: `XCHAIN_BUILD_PROFILE` resolution (a
 #   typo throws rather than quietly building `default`), a profile-aware and
 #   strictly SUBTRACTIVE CSP, a `build-profile.txt` stamp plus a meta tag
 #   emitted into the dist, and a mobile staging step that refuses anything but
 #   a `store` bundle. That made the two profiles differ - by a CSP origin.
 #
-#    built the substantive half this line was waiting for: the
-#   review-hidden surfaces of  §2.3, the DEX lane first, are compiled
+#   Then the substantive half this line was waiting for: the
+#   review-hidden surfaces of §2.3, the DEX lane first, are compiled
 #   OUT of a store build. `packages/web/src/surfaces/registry.js` holds the
 #   surface list as data; vite swaps `surfaces/dex.jsx` for a twin that imports
 #   nothing, so MarketsList, MarketView, MarketActivity, CreateOrderForm,

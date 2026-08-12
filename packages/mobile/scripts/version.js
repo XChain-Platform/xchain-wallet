@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // THE store integer, for both stores, derived from the release tag alone
-// (rails spec claude/specs/wallet-release-rails.md §2 owns it; 
-// reconciled the three copies that used to disagree).
+// (the release-rails spec §2 owns it; reconciled the three copies that
+// used to disagree).
 //
 //     storeVersion = MAJOR·10⁷ + MINOR·10⁴ + PATCH·10² + BUILD
 //
@@ -22,7 +22,7 @@
 // on the internal track, so the number has to be stable for a given tag and
 // different for the next one. A CI run counter or a timestamp gives you that
 // only as long as one machine does every build: the release ceremony happens
-// on the maintainer's release machine ( §6) while smoke artifacts come
+// on the maintainer's release machine (§6) while smoke artifacts come
 // off a runner, and those two would disagree about what build 41 was. Deriving
 // from the tag makes the number a property of the release rather than of the
 // machine that built it, so the AAB, the APK and the ipa carry the same code

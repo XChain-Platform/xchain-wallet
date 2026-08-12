@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the explorer BASE is bare (no coin) by design; every consumer appends
+// The explorer BASE is bare (no coin) by design; every consumer appends
 // the coin path segment (explorerCoinCode). This locks that in and proves the
 // mainnet URL is unchanged (the coin just moved from the base to the segment).
 
@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { tickerForCoin, explorerCoinCode } from '../../../packages/core/src/registry/coinTicker.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
-describe('explorerCoinCode ', () => {
+describe('explorerCoinCode', () => {
     it('maps coin+network to the platform coin path segment', () => {
         expect(explorerCoinCode({ coin: 'bitcoin', networkKind: 'mainnet' })).toBe('BTC');
         expect(explorerCoinCode({ coin: 'bitcoin', networkKind: 'testnet' })).toBe('TBTC');
@@ -31,7 +31,7 @@ describe('explorerCoinCode ', () => {
     });
 });
 
-describe('explorer descriptor bases are bare ', () => {
+describe('explorer descriptor bases are bare', () => {
     const reg = defaultRegistry();
 
     it('mainnet/testnet explorer bases carry NO coin segment', () => {

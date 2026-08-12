@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §4, stage S19: `tools/release/rollback-rerelease.sh`.
+// Smoke for §4, stage S19: `tools/release/rollback-rerelease.sh`.
 //
 // Spec §4 says there is no rollback lever on the Chrome Web Store, so the
 // substitute must be "prepared before launch so it is not invented
@@ -23,7 +23,7 @@
 //
 //   1. The script derived its own list of version-bearing files with a
 //      `find -maxdepth 3 -name package.json` sweep. That is a second
-//      derivation of a rule the repo already states (, enforced
+// Derivation of a rule the repo already states (enforced
 //      by version-lockstep.smoke.js) and it disagreed with that rule in
 //      BOTH directions: it swept in `test/e2e/package.json`, which is an
 //      explicit documented exemption, and it omitted
@@ -81,7 +81,7 @@ assert.ok(/does NOT\s*#?\s*commit, tag, push, sign, or publish/.test(src),
 assert.ok(/parsePublishLog/.test(src),
     'the floor reads publish-log.md through parsePublishLog, not a second regex');
 assert.ok(!/find\s+"\$REPO_ROOT"\s+-maxdepth\s+3\s+-name\s+package\.json/.test(src),
-    'the hand-rolled find sweep for version-bearing files is gone (it disagreed with  both ways)');
+    'the hand-rolled find sweep for version-bearing files is gone (it disagreed both ways)');
 
 // ------------------------------------------------------- runtime harness
 
@@ -145,7 +145,7 @@ try {
     git(repo, ['add', '-A']);
     git(repo, ['-c', 'user.email=smoke@test.invalid', '-c', 'user.name=smoke',
         'commit', '-qm', 'init']);
-    // `tag.gpgsign=false` because this machine sets it globally :
+    // `tag.gpgsign=false` because this machine sets it globally:
     // without it a lightweight `git tag` becomes a signed annotated one,
     // fails with "no tag message?", and this smoke goes red on the box
     // that does the real releases while staying green in a clean
@@ -343,6 +343,6 @@ if (failures > 0) {
     process.exit(1);
 }
 
-console.log('OK: rollback-rerelease smoke ( §4 / S19: the recipe driven end to end - '
-    + 'version-bearing set pinned to  in both directions, the store floor read from '
+console.log('OK: rollback-rerelease smoke (§4 / S19: the recipe driven end to end -'
+    + 'version-bearing set pinned in both directions, the store floor read from'
     + 'publish-log.md, and every refusal watched refusing)');

@@ -16,7 +16,7 @@
 //
 // Wire background: SEND v1/v2/v3 repeat a per-leg field group (v1 repeats
 // AMOUNT|DESTINATION under a shared TICK, v2 repeats TICK|AMOUNT|DESTINATION,
-// v3 adds a per-leg MEMO). The SDK  expands a `LEGS` array positionally
+// v3 adds a per-leg MEMO). The SDK expands a `LEGS` array positionally
 // into that group and REFUSES a flat field map against a repeated format, so
 // version choice belongs to the SDK selector and not here: hand it the legs and
 // hoist anything every leg agrees on, and it picks the shortest format that can
@@ -26,7 +26,7 @@
 // What DOES belong here is refusing the combinations the rest of the send
 // pipeline cannot honor. Two of them, both refused rather than half-supported:
 //
-//   Native coin. A "send" of BTC/LTC/DOGE carries no action at all : the
+// Native coin. A "send" of BTC/LTC/DOGE carries no action at all: the
 //   value moves in a real output built by nativePaymentOutput, which pays ONE
 //   destination. Multi-recipient native payments are a customOutputs feature,
 //   not a SEND-format feature, and nothing downstream (bare-payment detection,

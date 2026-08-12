@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §15: the Microsoft Store (MSIX/AppX) lane.
+// Smoke for §15: the Microsoft Store (MSIX/AppX) lane.
 //
 // WHAT THIS IS DEFENDING, and it is the same shape as the Mac App Store
 // smoke next door: a second store channel whose wrong settings do not fail
@@ -28,8 +28,8 @@
 //   3. Any of the four Store tile PNGs that is missing is replaced by
 //      electron-builder's own `SampleAppx.*.png` vendor artwork, with no
 //      warning. That is how the app icon went missing for months
-//      , and how the mobile shells shipped the Capacitor
-//      template logo .
+//, and how the mobile shells shipped the Capacitor
+// template logo.
 //
 // And the runtime half: an MSIX install is updated by the Store, so the
 // app must not run its own updater. Electron says which case it is in via
@@ -170,7 +170,7 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
         const file = join(buildDir, 'appx', name);
         assert.ok(existsSync(file),
             `build/appx/${name} is missing; electron-builder would substitute its own`
-            + ' SampleAppx artwork silently ( §15)');
+            + ' SampleAppx artwork silently (§15)');
         // Read the dimensions out of the PNG header rather than trusting
         // the filename: a placeholder of the wrong size is exactly the
         // kind of asset that survives review.
@@ -249,7 +249,7 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
 }
 
 console.log(
-    'OK: Microsoft Store lane smoke ( §15: the appx target is opt-in behind'
+    'OK: Microsoft Store lane smoke (the appx target is opt-in behind'
     + ' XCHAIN_BUILD_APPX=1 and never present on a staging build, without removing'
     + ' the direct-download nsis/zip lane; appx overrides the inherited win'
     + ' artifactName so a store package can never be mistaken for a hosted file;'

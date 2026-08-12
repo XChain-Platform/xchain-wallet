@@ -14,7 +14,7 @@
 #*********************************************************************
 
 # tools/release/android-ceremony.sh - build AND sign the two Android
-# artifacts on the maintainer's release machine ( §6 step 2, §7).
+# artifacts on the maintainer's release machine (§6 step 2, §7).
 #
 # Usage:
 #     bash tools/release/android-ceremony.sh --tag v0.333.1 \
@@ -28,7 +28,7 @@
 #     BUNDLETOOL           path to bundletool jar (default: ./bundletool.jar)
 #     XCHAIN_BUILD_ANDROID_FULL=1
 #                          also build the SECOND direct APK at the `default`
-#                          profile , for the audience that avoids
+#                          profile, for the audience that avoids
 #                          Play deliberately. Off by default: its lane is
 #                          NOT-SHIPPED, so no release demands it yet.
 #
@@ -245,10 +245,10 @@ APK_NAME="xchain-wallet-v${ARTIFACT_VERSION}.apk"
 echo "==> staging the web build into the shell (store profile)"
 # XCHAIN_BUILD_PROFILE=store is not optional here: `scripts/build.js` refuses to
 # stage a default-profile bundle into a release build, because an artifact whose
-# profile nobody recorded is not the same as a default one (/).
+# profile nobody recorded is not the same as a default one.
 # Both Android artifacts therefore carry the store feature set, since §6 derives
-# the universal APK from this same bundle on purpose - that coupling is the open
-# question in, not an accident of this script.
+# the universal APK from this same bundle on purpose - that coupling is
+# deliberate, not an accident of this script.
 ( cd "$REPO_ROOT" && XCHAIN_RELEASE_TAG="$TAG" XCHAIN_BUILD_PROFILE=store pnpm --filter "@xchain-wallet/mobile..." build )
 ( cd "$REPO_ROOT" && pnpm --filter @xchain-wallet/mobile exec cap sync android )
 
@@ -288,7 +288,7 @@ cp "$RAW_AAB" "$WORK_DIR/$AAB_NAME"
 # 1b. Verify what is actually inside the bundle, BEFORE any key touches it
 # ---------------------------------------------------------------------
 #
-# Added by. Until then this ceremony checked that its own signatures
+# Until this was added, this ceremony checked that its own signatures
 # verified and nothing whatever about what the manifest inside said, while
 # .github/workflows/mobile.yml asserted six manifest facts against a bundle it
 # throws away. The gates were real, correct, and pointed at the one artifact
@@ -366,7 +366,7 @@ mv "$WORK_DIR/$APK_NAME.signed" "$WORK_DIR/$APK_NAME"
 apksigner verify --verbose "$WORK_DIR/$APK_NAME" >/dev/null || die "K10 signature did not verify"
 
 # ---------------------------------------------------------------------
-# 3b. OPTIONAL: the second, FULL-feature direct APK 
+# 3b. OPTIONAL: the second, FULL-feature direct APK
 # ---------------------------------------------------------------------
 #
 # Everything above builds ONCE and derives the APK from the AAB, because the
@@ -374,7 +374,7 @@ apksigner verify --verbose "$WORK_DIR/$APK_NAME" >/dev/null || die "K10 signatur
 # the deliberate exception, and it is a second build by necessity rather
 # than by sloppiness: the `default` profile compiles DIFFERENT CODE in (the
 # DEX lane's eight modules, the Trezor connect CSP origin), so there is no
-# bundle to derive it from. Operator answer to , 2026-08-07: build
+# bundle to derive it from. Operator answer, 2026-08-07: build
 # it, rather than document the coupling and leave the self-custody audience
 # with Play's restrictions they went out of their way to avoid.
 #
@@ -497,7 +497,7 @@ echo "==> staged in $OUTPUT_DIR:"
 echo "    $AAB_NAME   (Play upload; NEVER hosted publicly)"
 echo "    $APK_NAME   (direct download, STORE feature set; hosted on downloads.xchain.io)"
 if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
-    echo "    $FULL_APK_NAME   (direct download, FULL feature set; )"
+    echo "    $FULL_APK_NAME   (direct download, FULL feature set)"
     echo
     echo "    The full APK is a SECOND build, not derived from the AAB, because"
     echo "    the default profile compiles different code in. Its lane is"
@@ -513,7 +513,7 @@ echo
 echo "Next: sign both artifacts into a GPG-signed manifest (K1). This lane is"
 echo "signed on its own, so pass --lane android - without it the artifact-set"
 echo "gate demands the web, extension and desktop artifacts this ceremony does"
-echo "not build, and refuses :"
+echo "not build, and refuses:"
 echo
 echo "    XCHAIN_RELEASE_GPG_KEY=<K1 fingerprint from SECURITY.md> \\"
 echo "      bash tools/release/sign.sh --tag $TAG --lane android \\"

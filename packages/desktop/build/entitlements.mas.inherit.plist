@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Child-process entitlements for the Mac App Store build ( §13).
+  Child-process entitlements for the Mac App Store build (§13).
 
   Electron is multi-process: the main app bundle contains Helper apps
   (renderer, GPU, plugin). Under the App Sandbox each of those is signed

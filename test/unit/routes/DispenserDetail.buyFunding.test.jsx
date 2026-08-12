@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// D-37 / : the dispenser Buy panel used to show no balance, no Max and
+// D-37: the dispenser Buy panel used to show no balance, no Max and
 // no pre-flight, so a buyer holding zero of the payment token could click
 // through Review buy and broadcast a SEND the chain then rejected as
 // `invalid: insufficient funds` - a network fee paid for nothing. These drive

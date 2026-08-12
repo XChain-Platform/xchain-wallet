@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/update-info.mjs - what is a channel pointer, and what did
-// this build actually emit? ( §7.1, stage 1.)
+// this build actually emit? (§7.1, stage 1.)
 //
 // WHY THIS EXISTS. electron-builder names its update-info files after the
 // CHANNEL, not after the word "latest". `packages/desktop` sets
@@ -308,12 +308,12 @@ const USAGE = `usage: update-info.mjs <command> [args]
       Print only the artifact filenames, one per line, sorted.
 
   checklist <dir> [--tag <tag>]
-      Print the generated publish checklist ( §7.1). Derived from
+      Print the generated publish checklist (§7.1). Derived from
       what is on disk, never hand-written.
 
   assert-feed <dir> --url <url> --channel <channel>
       Assert every app-update.yml packaged under <dir> names exactly this
-      feed URL and channel ( §7.5). Exits 1 on any mismatch, and 1
+      feed URL and channel (§7.5). Exits 1 on any mismatch, and 1
       if the directory holds no packaged app at all - a silent pass on an
       empty search is how this check would rot.
 
@@ -382,7 +382,7 @@ function main(argv) {
             `# GENERATED from ${dir} by tools/release/update-info.mjs.`,
             '# Do not hand-edit: a hand-written list that omits one arch-suffixed',
             '# yml strands that arch\'s entire fleet on its current version, and',
-            '# nothing errors ( §7.1).',
+            '# nothing errors (§7.1).',
             '',
             `# 1. artifacts first (${c.artifacts.length})`,
             ...c.artifacts.map((n) => `⬜ upload  ${n}`),

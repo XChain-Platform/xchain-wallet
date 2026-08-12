@@ -1,4 +1,4 @@
-/* : the screen for a vault that exists and will not open.
+/* The screen for a vault that exists and will not open.
    Tokens only, and the wipe block matches Locked.module.css deliberately:
    it is the same destructive gate, so it should not look like a new one. */
 

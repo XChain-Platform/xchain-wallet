@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  smoke: the safe-area inset and the app shell's height are ONE
+// smoke: the safe-area inset and the app shell's height are ONE
 // decision, and this asserts they are still made together.
 //
 // What went wrong, measured on an iPhone 17 Pro simulator rather than

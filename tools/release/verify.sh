@@ -13,7 +13,7 @@
 #
 #*********************************************************************
 
-# tools/release/verify.sh - local verification helper (G003 / §51,  §6).
+# tools/release/verify.sh - local verification helper (G003 / §51, §6).
 #
 # Re-computes SHA-256 hashes over every artifact in the input
 # directory, checks the manifest's signed header against the release it
@@ -42,7 +42,7 @@
 #                      XCHAIN_VERIFY_KEY)
 #
 # WHICH KEY SIGNED IT IS PART OF THE CHECK, NOT A DETAIL AROUND IT
-# ( S37). Until 2026-08-06 this script ran a bare `gpg --verify`,
+# (S37). Until 2026-08-06 this script ran a bare `gpg --verify`,
 # which answers "did somebody in your keyring sign this" and never "was
 # it the release key". Those are the same output on a machine holding
 # more than one project key, and this project has three that are
@@ -200,7 +200,7 @@ FULL_COUNT="$(grep -c . "$STRIPPED" || true)"
 
 # Build profiles, checked here for the same reason and against the same
 # full document: which feature set each artifact carries is a claim about
-# the whole release . Only manifests that describe an actual
+# the whole release. Only manifests that describe an actual
 # RELEASE are checked; an unsigned recompute has no profile claim to keep.
 #
 # This was gated on xr_has_header until 2026-08-02, which could not tell the
@@ -262,7 +262,7 @@ if xr_has_header "$MANIFEST"; then
     fi
 
     if [[ -n "$EXPECT_TAG" ]]; then
-        # A RE-SIGNATURE OF THE SAME RELEASE ANCHORS TO IT , and
+        # A RE-SIGNATURE OF THE SAME RELEASE ANCHORS TO IT, and
         # the direction is the whole of the accommodation. `v0.336.0-resign1`
         # is `v0.336.0`'s tree with the release tooling corrected and nothing
         # else, cut because the gate that writes `dev-mock-gate: enforced`
@@ -303,7 +303,7 @@ if xr_has_header "$MANIFEST"; then
         exit 1
     fi
 
-    # Partial coverage, said out loud . Without this line, "the
+    # Partial coverage, said out loud. Without this line, "the
     # artifact I have is not in the manifest" reads as a tampering alarm
     # when the truth may be that this manifest was never about that lane.
     M_LANES="$(xr_header_field "$MANIFEST" 'lanes')"
@@ -320,7 +320,7 @@ if xr_has_header "$MANIFEST"; then
         echo "  fabricated-address dev SDK out of a shipped bundle." >&2
     fi
 elif [[ "$NO_SIG" -eq 1 ]]; then
-    echo "verify.sh: WARNING - manifest has no header (unsigned or pre-)." >&2
+    echo "verify.sh: WARNING - manifest has no header (unsigned, or from before this header existed)." >&2
 else
     # In signature mode a missing header is not a legacy quirk: the
     # signature covers the manifest bytes, so a real signed release

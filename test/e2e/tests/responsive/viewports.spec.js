@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program, slice 2: prove the SCREENS fit.
+// responsive-first program, slice 2: prove the SCREENS fit.
 //
 // Slice 1 fixed the shell (one set of breakpoints, exactly one nav
 // surface per width) and locked it down with source-text smokes and jsdom
@@ -103,7 +103,7 @@ async function expectTappable(page, label) {
     ).toEqual([]);
 }
 
-test.describe('responsive: one interface at every width ', () => {
+test.describe('responsive: one interface at every width', () => {
     test('every primary screen fits, from the 360px popup to desktop', async ({ page }) => {
         test.slow();   // one wallet creation plus a full route walk per width
 

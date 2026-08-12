@@ -86,7 +86,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         // intent split + chainId/tick breakdown that detectQrContent
         // surfaces only as a generic 'xchain-uri' wrapper.
         if (detected.type === 'xchain-uri') {
-            //  §3.6: a scanned QR is the widest-open untrusted-input
+            // A scanned QR is the widest-open untrusted-input
             // surface this parser has (no clipboard, no click-through - just
             // whatever a camera points at), so the fields below run through
             // the same hardening the deep-link boot paths apply before they

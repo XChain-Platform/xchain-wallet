@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Screenshot protection for the screens that show key material
-// ( §1, stage S4).
+// (§1, stage S4).
 //
 // ROUTE-SCOPED, NOT APP-WIDE, and the scoping is the whole design. On a
 // mobile shell this drives Android's FLAG_SECURE, which does two things:

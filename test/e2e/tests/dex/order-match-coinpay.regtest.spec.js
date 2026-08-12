@@ -353,7 +353,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(pending, 'the obligation this wallet owes is not in Payments due')
                 .toBeVisible({ timeout: 60_000 });
             // The debt must be named in COIN units. Reading it as base units is
-            // D-137/: the explorer serves a decimal here, and a wallet that
+            // D-137: the explorer serves a decimal here, and a wallet that
             // demanded all digits labelled a 0.5 LTC debt "0.5 base units".
             await expect(pending, 'the queue does not name the amount owed in coin units')
                 .toContainText(new RegExp(`0\\.5\\s*${COIN}`));
@@ -402,7 +402,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     // than two confirmations (DEFAULT_CONFIRM_DEPTH), so the spec mines past that
     // depth and then simply waits.
     // KNOWN FAILING, and it is the product that fails, not the spec: see
-    // D-139/. Measured twice, ~10 minutes each, on a venue where the
+    // D-139. Measured twice, ~10 minutes each, on a venue where the
     // MANUAL queue settles the identical obligation in seconds (COINPAY 1524,
     // 1551). Left as fixme rather than deleted because it is the executable
     // statement of the promise the order form makes, and it will pass the

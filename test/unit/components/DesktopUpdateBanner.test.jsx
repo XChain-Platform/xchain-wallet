@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The desktop update banner ( row 142).
+// The desktop update banner (row 142).
 //
 // THE DEFECT THIS PINS is not a rendering bug, it is an absence: for as long
 // as the desktop shell has had an updater, main broadcast `xchain:updater`
@@ -30,7 +30,7 @@ import { DesktopUpdateBanner } from '../../../packages/desktop/renderer/DesktopU
  *
  * `retained` is what main answers on the state channel: the last event it
  * saw, which on a locked install is an offer made long before this component
- * mounted ( row 148). Pass `omitGetState` to model an older preload.
+ * mounted (row 148). Pass `omitGetState` to model an older preload.
  */
 function installBridge({
     install = vi.fn(async () => ({ ok: true })),
@@ -103,7 +103,7 @@ describe('DesktopUpdateBanner', () => {
         expect(text).not.toContain('manifest says');
     });
 
-    //  row 148. Everything above drives an event that arrives AFTER the
+    // row 148. Everything above drives an event that arrives AFTER the
     // component mounts, and on a real install that never happens: main checks
     // the feed at launch and this banner is rendered only once the vault is
     // unlocked, which is a human typing a passphrase later. Measured on a

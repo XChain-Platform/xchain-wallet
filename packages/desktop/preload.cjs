@@ -19,7 +19,7 @@
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
 //     extension popup + web shell wire format.
 //
-//   - `xchainWalletBridge.wipeStorage()`: . The shared
+// - `xchainWalletBridge.wipeStorage()`. The shared
 //     `wipeWalletStorage` helper can only reach localStorage +
 //     IndexedDB, and this shell keeps its vault, kdfParams meta,
 //     session key and unlock throttle in files under userData. Without
@@ -98,7 +98,7 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
     },
 });
 
-// The update bridge ( row 140/142).
+// The update bridge (row 140/142).
 //
 // WHAT WAS MISSING, AND IT WAS THE WHOLE LAST MILE. main/index.js has
 // broadcast `xchain:updater` events since the updater was wired, and
@@ -126,7 +126,7 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
      *
      * `onEvent` alone cannot see an offer made before the listener
      * existed, and the launch check always finishes first on a locked
-     * install ( row 148). A mounting renderer asks this instead of
+     * install (row 148). A mounting renderer asks this instead of
      * waiting for a broadcast that already happened.
      *
      * @returns {Promise<{type: string, info?: any} | null>}

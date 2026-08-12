@@ -18,7 +18,7 @@
  * a full-suite run, never when this file is run on its own.
  */
 
-//  stage 3: where does an installed build look for the SIGNED
+// stage 3: where does an installed build look for the SIGNED
 // manifest that authorises its update?
 //
 // THE SEAM THIS CLOSES. electron-updater follows the feed URL baked into
@@ -142,7 +142,7 @@ describe('resolveFeedBaseUrl', () => {
     });
 });
 
-// : the same question one file over. Which channel POINTER does an
+// The same question one file over. Which channel POINTER does an
 // installed build anchor its update against? Read from the same baked
 // `app-update.yml` and for the same reason: a §7.5 rehearsal build follows
 // `channel: staging`, and a verifier that assumed `stable` would fetch the

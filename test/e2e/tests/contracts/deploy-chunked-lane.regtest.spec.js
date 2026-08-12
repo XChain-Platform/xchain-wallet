@@ -451,7 +451,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('the CHAIN holds two carriers, an assembler, and the contract', async () => {
             // ORDER MATTERS, and it is a property of the EXPLORER rather than a
             // preference: `/api/action/<index>` caches a miss permanently
-            // ( - the LRU has no TTL and is only invalidated by a reorg),
+            // (the LRU has no TTL and is only invalidated by a reorg),
             // so asking for an index before the indexer has written its typed
             // row blanks that action for the life of the explorer process. So
             // wait on the CONTRACT row first - it cannot exist until every leg
@@ -699,7 +699,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
     // "Finishing costs only the remaining ones; starting over pays for all of
     // them again."
     //
-    //  is the reason this is worth driving NOW and could not be driven
+    // is the reason this is worth driving NOW and could not be driven
     // before: until legs recorded their action_index, `verifyRecordedChunks`
     // could confirm nothing, so a resume re-sent and re-paid for chunk 0 every
     // time. With the index recorded, the skip path becomes reachable for the
@@ -788,7 +788,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const text = (await banner.textContent()) || '';
             // eslint-disable-next-line no-console
             console.log(`[§11.3 resume] banner: ${JSON.stringify(text.trim().slice(0, 200))}`);
-            // 's second half: the count must include a chunk known only by
+            // that second half: the count must include a chunk known only by
             // its txid. Counting action_indexes alone read "0 of 2" over a run
             // whose first chunk was on chain and paid for, which is the one
             // number a user reads to choose between finishing and starting over.
@@ -801,7 +801,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
             await main.getByRole('button', { name: 'Resume this deploy', exact: true }).click();
 
-            // : the resume must restore the whole plan, not just the source.
+            // The resume must restore the whole plan, not just the source.
             // The flow assembles phase 2 from the record, so a blank field here
             // would mean the review screen describes a different transaction than
             // the one being signed. Measured before the fix: "" against an

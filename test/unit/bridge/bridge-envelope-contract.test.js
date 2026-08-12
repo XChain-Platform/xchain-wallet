@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the bridge answers in the envelope bridge-spec publishes.
+// The bridge answers in the envelope bridge-spec publishes.
 //
 // The handlers used to forward whatever the core flow returned. That made the
 // bridge's real contract "whatever core returns today" while its PUBLISHED

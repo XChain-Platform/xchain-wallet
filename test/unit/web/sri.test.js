@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Subresource Integrity for the web SPA build.
+// Subresource Integrity for the web SPA build.
 //
 // The CSP says WHERE scripts may load from ('self'); SRI pins WHAT they contain.
 // For a wallet, the asset-serving path is the one thing you cannot afford to

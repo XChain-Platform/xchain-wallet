@@ -10,7 +10,7 @@
 
 // dispenserAction must name the funding address, not just the pubkey (D-43).
 //
-// Sibling of the sendToken regression : the SDK says `change` is
+// Sibling of the sendToken regression: the SDK says `change` is
 // "deliberately NOT a fallback" for `sourceAddress` (xchain-sdk/src/encoder.js
 // createTx), and dispenserAction supplied NEITHER - only `pubkey`. The encoder
 // then resolved UTXOs from the raw pubkey and failed with
@@ -18,7 +18,7 @@
 //
 // Found live on BTC regtest refilling dispenser #35. It had stayed latent
 // because Refill / Edit / Close were disabled on every real dispenser until
-// ; the create lane composes through the confirm modal, which passes the
+//; the create lane composes through the confirm modal, which passes the
 // address, so only the owner-lifecycle actions were affected.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

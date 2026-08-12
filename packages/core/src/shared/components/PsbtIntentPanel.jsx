@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PsbtIntentPanel ( §5.5, the PSBT variant's foregrounded content).
+// PsbtIntentPanel (§5.5, the PSBT variant's foregrounded content).
 //
 // On the action variant the decoded action IS the thing to verify. On a
 // PSBT the wallet did not build, it is not: the theft in a hostile PSBT is

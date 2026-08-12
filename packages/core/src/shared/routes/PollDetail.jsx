@@ -176,12 +176,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         return Array.from(approvalChoices).sort((a, b) => a - b);
     }
 
-    //  ( §5.6 slice 2, late): casting a ballot was the last signing
+    // (§5.6 slice 2, late): casting a ballot was the last signing
     // surface still on the legacy stage machine, where submitWithSigner rebuilds
     // the PSBT on Approve - no output-set tamper check, no action-byte
     // cross-check, no exact fee, no pre-flight panel, no §4.7 reservation. A
     // ballot is token-weighted governance, so it is not a surface to leave
-    // unverified. Hardware included ; watcher still branches, because it
+    // unverified. Hardware included; watcher still branches, because it
     // encodes and never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -318,7 +318,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -378,7 +378,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         </div>
     ) : null;
 
-    // : the confirm page, rendered in place of the poll while the
+    // The confirm page, rendered in place of the poll while the
     // single-encode pipeline is live. The intent is decoded from the params
     // the HOST composed (the SDK's own ballot encoding), never from the
     // editor state, per §1: confirm what will broadcast.
@@ -396,7 +396,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

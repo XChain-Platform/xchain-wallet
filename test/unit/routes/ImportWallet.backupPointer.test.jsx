@@ -38,7 +38,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 // `@xchain-wallet/core/ui` to the same file this mock is keyed on. When it
 // does not, vi.mock is a silent no-op: the real camera-backed QrScanner
 // renders and the button is simply absent. Say that out loud instead of
-// leaving a bare "cannot find fake-scan" to read like a product bug .
+// leaving a bare "cannot find fake-scan" to read like a product bug.
 function clickFakeScan() {
     const stub = screen.queryByTestId('fake-scan');
     expect(
@@ -50,7 +50,7 @@ function clickFakeScan() {
     fireEvent.click(stub);
 }
 
-// : the lane now collects three distinct secrets, and the Restore
+// The lane now collects three distinct secrets, and the Restore
 // button stays disabled until all three are present. Every case that submits
 // has to fill all three, so it lives in one helper - and the labels are
 // asserted by using them, since `getByLabelText` throws when one is renamed.
@@ -112,7 +112,7 @@ describe('ImportWallet backup-pointer restore', () => {
         expect(arg.pointer.location).toBe('https://backups.example/a.json');
         expect(arg.password).toBe('pw12345678');
         expect(arg.onConflict).toBe('error');
-        // : the two re-key passwords reach the host, and each carries
+        // The two re-key passwords reach the host, and each carries
         // the value from its OWN field. Crossing them here is invisible in the
         // UI and produces a wallet that restores and then cannot sign.
         expect(arg.walletPassword).toBe('the-old-devices-password');
@@ -120,7 +120,7 @@ describe('ImportWallet backup-pointer restore', () => {
         await waitFor(() => expect(onImported).toHaveBeenCalled());
     });
 
-    it('will not submit until all three passwords are present ', async () => {
+    it('will not submit until all three passwords are present', async () => {
         const importBackupPointerRequest = vi.fn().mockResolvedValue({ walletId: 'w1' });
         globalThis.__XC_SCAN_FRAME__ = buildBackupPointer({ location: 'https://backups.example/c.json' });
 
@@ -141,8 +141,8 @@ describe('ImportWallet backup-pointer restore', () => {
         await waitFor(() => expect(importBackupPointerRequest).toHaveBeenCalledTimes(1));
     });
 
-    it('a FRESH install goes to the pre-host lane, not the host one ', async () => {
-        // The whole point of : on a device with no wallet there is no
+    it('a FRESH install goes to the pre-host lane, not the host one', async () => {
+        // The whole point: on a device with no wallet there is no
         // host, so `importBackupPointerRequest` has nothing to answer it. The
         // lane has to split here or the restore silently never happens.
         const importBackupFresh = vi.fn().mockResolvedValue({ walletId: 'w1' });

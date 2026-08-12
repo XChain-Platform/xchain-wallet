@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Single-encode pipeline compose step ( §5.3.1).
+// Single-encode pipeline compose step (§5.3.1).
 //
 // The load-bearing v3 fix: today submitWithSigner runs
 // createAction -> encoder.createTx -> sign ATOMICALLY on Approve, so any
@@ -85,7 +85,7 @@ export async function composeForConfirm({
         throw new Error('composeForConfirm: SDK encoder not initialized; call sdkRegistry.initActive([chainId]) first');
     }
 
-    // : a plain native-coin payment carries no XChain action at all, so
+    // A plain native-coin payment carries no XChain action at all, so
     // there is nothing to format, encode or cross-check. It used to compose a
     // SEND the indexer could only ever reject (no native token exists), which
     // cost an output on every send and, once the pre-flight dry-run became
@@ -102,7 +102,7 @@ export async function composeForConfirm({
         sdk, actionData, encoderOpts, source, signal,
     });
 
-    // 2b. PRICE v1 oracle usage fee : a Mode B dispenser pays its oracle
+    // 2b. PRICE v1 oracle usage fee: a Mode B dispenser pays its oracle
     // operator up front as a real output, and the indexer rejects the create when
     // that output is absent or short. Folded in BEFORE the tamper matcher below so
     // it is inside the previewed and signed PSBT like every other output. No-op for
@@ -134,18 +134,18 @@ export async function composeForConfirm({
         ? { ...encoderOptsWithAds, customOutputs: [ ...(encoderOptsWithAds.customOutputs || []), nativeOut ] }
         : encoderOptsWithAds;
 
-    // 3c . The protocol fee must ride the transaction that carries the
+    // 3c. The protocol fee must ride the transaction that carries the
     // ACTION, which on the two-phase lane is the phase-2 REVEAL, not the
     // phase-1 commit this function builds. Leaving it on phase 1 spends the fee
     // on a transaction with no action and the action is rejected for not paying
     // it - on LTC/DOGE, where native is the only fee lane, that was every
     // DEPLOY and every large FILE, gated publish or multi-recipient SEND.
     //
-    // : the fee output is still HANDED to the build below. On the chunk
+    // The fee output is still HANDED to the build below. On the chunk
     // lane the encoder does not emit it on the commit, but it does fold its
     // value (and its reveal-side byte cost) into the script output the reveal
     // spends, and that reservation is the only thing that lets the reveal
-    // afford it. Removing it from the build was the first cut of  and it
+    // afford it. Removing it from the build was the first cut and it
     // made every chunked native-fee action unbalanced ("Outputs are spending
     // more than Inputs") once the quote outgrew the commit's incidental slack.
     //
@@ -165,7 +165,7 @@ export async function composeForConfirm({
     //    change sink. Without it the encoder refuses to build ("CHANGE_ADDRESS_REQUIRED"
     //    rather than burn the change as fee). An explicit change in encoderOpts wins
     //    (the spread below overrides this default).
-    // : the quote taken moments ago is the one thing that makes an
+    // The quote taken moments ago is the one thing that makes an
     // "address has no coin" failure actionable ("it needs about 20 DOGE"), and
     // this is the last frame that still has it. Stamp it on the way out so the
     // form's message can say the amount.
@@ -180,7 +180,7 @@ export async function composeForConfirm({
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
 
-    // /: now that the encoder has answered, place the fee output.
+    // Now that the encoder has answered, place the fee output.
     // A chunk encoding means the action rides a reveal, so the fee rides it too
     // and the submit path emits it there; anything else carries the action in
     // the transaction just built, which already contains the output.
@@ -188,12 +188,12 @@ export async function composeForConfirm({
         ? feeOutput
         : null;
 
-    //  solved this for the protocol fee and for nothing else, and the gap is a
+    // solved this for the protocol fee and for nothing else, and the gap is a
     // money leak rather than a rejection: on the chunk lane the encoder emits NO custom
     // output on the commit (it folds each one's value and reveal-side byte cost into the
     // script output), and the reveal is built by the submit path, which was handed only
     // the fee. So every OTHER custom output - a Mode B dispenser's oracle usage fee
-    // , an ADS donation, a native payment output - was paid for by the commit's
+    //, an ADS donation, a native payment output - was paid for by the commit's
     // reservation and then burned as miner fee on the reveal, because nothing emitted it.
     // Measured on Litecoin regtest 2026-07-31: a Mode B dispenser reserved 0.05005464 LTC
     // in its carrier and the reveal spent all of it as fee, so the oracle was not paid and
@@ -219,7 +219,7 @@ export async function composeForConfirm({
             : finalEncoderOpts.customOutputs,
         encoding: bareNativePayment ? null : encoded.encoding,
         adsOutput,
-        // D-24 : a P2SH/P2WSH/MULTISIGN payload larger than one on-chain
+        // D-24: a P2SH/P2WSH/MULTISIGN payload larger than one on-chain
         // chunk is carried by SEVERAL data-carrier outputs; the tamper check
         // derives how many to allow from the action size, so a real contract
         // DEPLOY (or large FILE / gated publish) is not falsely flagged. Byte
@@ -248,7 +248,7 @@ export async function composeForConfirm({
         // action encoded in the transaction does not match what you approved."
         // before the modal ever opened. Every unit test around the check
         // passed its own scripts in, so nothing saw the gap; the UI-driven
-        // regtest round trip did, immediately .
+        // regtest round trip did, immediately.
         carrierScripts: Array.isArray(encoded.carrierScripts) ? encoded.carrierScripts : [],
         quote: feePreflight.quote,
         // Which lane this PSBT actually pays its protocol fee through. Stated
@@ -264,14 +264,14 @@ export async function composeForConfirm({
         // version of this fix looked right and changed nothing on screen. A
         // quote exists exactly when a coin fee was priced and attached.
         payFeeInNativeCoin: !!feePreflight.quote,
-        // : present when the protocol fee was moved off this PSBT and on
+        // Present when the protocol fee was moved off this PSBT and on
         // to the reveal the submit path builds. The confirm surface still shows
         // the fee (it reads the quote); this tells the submit path where to put
         // it without re-quoting.
         deferredFeeOutput,
         // Every output the phase-1 transaction reserved value for but did not emit, so
         // the submit path can emit them all on the reveal. Supersedes deferredFeeOutput,
-        // which it contains; that field stays for callers built against  alone.
+        // which it contains; that field stays for callers built against alone.
         deferredOutputs,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,

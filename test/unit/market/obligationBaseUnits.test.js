@@ -45,7 +45,7 @@ describe('obligationBaseUnits', () => {
     });
 
     it('holds exact past 2^53, where Number() would collide two different debts', () => {
-        // A DOGE-scale obligation : 9,007,199.254740993 coins.
+        // A DOGE-scale obligation: 9,007,199.254740993 coins.
         expect(obligationBaseUnits('9007199.25474099')).toBe(900_719_925_474_099n);
         expect(obligationBaseUnits('90071992547409931')).toBe(90_071_992_547_409_931n);
     });

@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// `XChainClipboard`, the iOS half of SSC-4 (; contract in  §1.1,
-// iOS mechanics in  §4).
+// `XChainClipboard`, the iOS half of SSC-4 (; contract in §1.1,
+// iOS mechanics in §4).
 //
 // The contract is defined once, in the SPA, at
 // packages/core/src/shared/clipboard.js. This file implements it; the Android

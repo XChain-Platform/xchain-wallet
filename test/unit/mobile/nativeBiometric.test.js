@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Native biometric provider + the core provider seam ( S2).
+// Native biometric provider + the core provider seam (S2).
 //
 // The seam exists so the SHARED unlock UI keeps working unchanged on a shell
 // where WebAuthn does not exist. So the tests are mostly about the contract

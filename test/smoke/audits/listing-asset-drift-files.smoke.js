@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : a STALE listing-asset verdict has to name the FILES that
+// Smoke for: a STALE listing-asset verdict has to name the FILES that
 // moved, not only the commits.
 //
 // The tool's own way out (2) is "read the commits and record why none of them

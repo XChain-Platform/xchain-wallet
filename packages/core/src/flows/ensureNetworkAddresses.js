@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ensureNetworkAddresses .
+// ensureNetworkAddresses.
 //
 // Addresses used to be derived exactly once, at wallet creation, one per
 // `activeChainIds` - which the shells hardcode to the three MAINNETS. The

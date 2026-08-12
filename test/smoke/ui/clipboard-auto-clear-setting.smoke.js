@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7.1 / G028 as it stands after .
+// Smoke for §17.7.1 / G028 as it stands after.
 //
 // The setting was born with two halves: a schema field with bounds, and a
 // Privacy-panel number input that ViewPrivateKey read to time its post-copy
-// clipboard wipe.  removed the Copy button, killing the only reader;
-//  (operator ruling a, 2026-08-11) then removed the control, because a
+// clipboard wipe. a later change removed the Copy button, killing the only reader;
+// (operator ruling a, 2026-08-11) then removed the control, because a
 // privacy switch that governs nothing misinforms the user who trusts it.
 //
 // What this smoke guards is therefore the SPLIT: the schema half survives for
@@ -50,7 +50,7 @@ assert.ok(/clipboardAutoClearSeconds === undefined/.test(settingsSchema),
 assert.ok(/Number\.isInteger\(\s*r\.privacy\.clipboardAutoClearSeconds\s*\)/.test(settingsSchema),
     'validateSettings requires integer when present');
 
-// --- 2. PrivacySection offers NO clipboard control  -------------
+// --- 2. PrivacySection offers NO clipboard control -------------
 //
 // Asserted by absence of every trace the control left behind, not just the
 // label: a reworded row ("Clear clipboard after…") would slip past a
@@ -59,7 +59,7 @@ assert.ok(/Number\.isInteger\(\s*r\.privacy\.clipboardAutoClearSeconds\s*\)/.tes
 const ps = readFileSync(join(components, 'settings', 'PrivacySection.jsx'), 'utf8');
 const psBody = ps.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 assert.ok(!/Clipboard auto-clear/.test(psBody),
-    'PrivacySection no longer renders a "Clipboard auto-clear" row ');
+    'PrivacySection no longer renders a "Clipboard auto-clear" row');
 assert.ok(!/onClipboardSecondsChange/.test(psBody),
     'PrivacySection has no clipboard-seconds change handler');
 assert.ok(!/clipboardAutoClearSeconds/.test(psBody),
@@ -80,8 +80,8 @@ assert.ok(/Change-address rotation/.test(psBody) && /Form draft retention/.test(
 // whether the setting comes back with it.
 const vpk = readFileSync(join(routes, 'ViewPrivateKey.jsx'), 'utf8');
 assert.ok(!/clipboardAutoClearSeconds/.test(vpk),
-    'ViewPrivateKey no longer reads the setting ( removed its Copy button)');
+    'ViewPrivateKey no longer reads the setting (removed its Copy button)');
 assert.ok(!/navigator\.clipboard/.test(vpk),
     'ViewPrivateKey writes no clipboard at all');
 
-console.log('clipboard-auto-clear-setting smoke OK (schema field retained for compatibility; the control is gone by  and its consumer by )');
+console.log('clipboard-auto-clear-setting smoke OK (schema field retained for compatibility; the control is gone and its consumer )');

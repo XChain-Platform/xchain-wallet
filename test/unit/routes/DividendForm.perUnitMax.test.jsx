@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  (wallet E2E D-86): Pay dividend's Max dropped the WHOLE balance
+// (wallet E2E D-86): Pay dividend's Max dropped the WHOLE balance
 // into the per-unit field. On S19MINT (500 units, one eligible holder)
 // with 4,999 XCHAIN to pay out, Max filled 4,999 and the form's own
 // summary then read "total distribution ~2,499,500 XCHAIN" - 500x the
@@ -138,7 +138,7 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-describe('DividendForm Max fills a rate, not the balance ', () => {
+describe('DividendForm Max fills a rate, not the balance', () => {
     it('fills balance / eligible units, not the whole balance', async () => {
         mountDividend();
         await pickDividendToken();

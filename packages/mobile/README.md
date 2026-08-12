@@ -4,9 +4,6 @@ Capacitor shell for XChain Wallet. It wraps the **same built SPA the web shell
 ships** and adds native seams; it contains no UI of its own and must never grow
 any. One Capacitor project holds every mobile platform: `android/` and `ios/`.
 
-Spec: `claude/specs/wallet-publishing-android.md`  in the platform repo.
-Release rails: `claude/specs/wallet-release-rails.md` .
-
 ## What is here today (stage S1)
 
 ⬜ → ✅ Scaffold, wired to the web build, with the store-facing numbers pinned:
@@ -18,7 +15,7 @@ Release rails: `claude/specs/wallet-release-rails.md` .
 ✅ Smoke CI workflow: unsigned AAB + universal APK on tags and on PRs that
 touch this package
 
-✅ Generated `ios/` native project (** S1**), with:
+✅ Generated `ios/` native project (**S1**), with:
 `PRODUCT_BUNDLE_IDENTIFIER io.xchain.wallet.ios` (**iOS D1**), deployment target
 **iOS 16** (**D5**, in the project *and* `Package.swift`), universal device family
 (**D6**), camera + Face ID usage strings, the `xchain:` scheme as inbound
@@ -33,7 +30,7 @@ App Transport Security, and the export-compliance flag. Pinned by
 > the iOS smoke asserts both ids in opposite directions so the seam stays open
 > and visible.
 
-> **The iOS version numbers now come from the tag** ( S4a, 2026-08-01).
+> **The iOS version numbers now come from the tag** (S4a, 2026-08-01).
 > `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` are gone from the pbxproj
 > entirely and are read from the generated, git-ignored `ios/App/Version.xcconfig`
 > instead, so there is no template `1.0`/`1` left to upload by accident. Both
@@ -92,8 +89,7 @@ unblocks the assetlinks fingerprints and the `SECURITY.md` slot.
 > replayed to the listener attached right after the queue was read; fixed to
 > queue XOR notify). BiometricPrompt has now been shown and the whole SSC-3
 > lifecycle driven; FLAG_SECURE has taken effect; the vault's
-> ABSENT/OK/CORRUPT statuses are measured rather than asserted. Report:
-> `claude/reports/2026-08-01_xc999-android-emulator-first-run.md`.
+> ABSENT/OK/CORRUPT statuses are measured rather than asserted.
 >
 > **Two things an emulator cannot tell you.** `setWebContentsDebuggingEnabled(false)`
 > cannot be checked on any `google_apis` image (`ro.debuggable=1` makes WebView

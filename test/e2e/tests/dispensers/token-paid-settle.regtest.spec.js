@@ -47,7 +47,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** ISSUE pays a real coin fee on this chain . */
+/** ISSUE pays a real coin fee on this chain. */
 const FUNDING = 2;
 const STAMP = Date.now().toString().slice(-6);
 /** What the buyer pays WITH: their own token, issued in this run. */
@@ -300,7 +300,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the buy panel never rendered for a dispenser this wallet does not own')
                 .toBeVisible({ timeout: 30_000 });
             // The panel must know what the buyer holds of the PAYMENT token;
-            // a wrong read here is what disables the button .
+            // a wrong read here is what disables the button.
             await expect(page.getByTestId('buy-balance'))
                 .toContainText(new RegExp(`1,?000\\s*${PAY_TICK}`), { timeout: 60_000 });
 

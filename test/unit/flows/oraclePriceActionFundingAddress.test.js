@@ -10,14 +10,14 @@
 
 // D-146: oraclePriceAction must name the funding ADDRESS, not just the pubkey.
 //
-// Fourth instance of the D-7 family (sendToken , dispenserAction D-43,
+// Fourth instance of the D-7 family (sendToken, dispenserAction D-43,
 // the three ORDER flows D-134), and the first where the missing address broke
 // something OTHER than UTXO selection. `submitWithSigner` hands the address on
 // to the native-coin fee pre-flight as the quoted action's SOURCE, and the
 // indexer's PRICE dry run writes a row keyed on it: with no source it answers
 // `valid:false` carrying a raw SQL error, the wallet classifies that as an
 // unpriceable action, and the form says "the LTC fee price is temporarily
-// unavailable". On LTC/DOGE the coin fee is the ONLY lane , so
+// unavailable". On LTC/DOGE the coin fee is the ONLY lane, so
 // publishing an oracle price was impossible there and the message named the
 // wrong cause, the wrong component and the wrong remedy (waiting).
 //
@@ -95,7 +95,7 @@ describe('D-146: oraclePriceAction funding address', () => {
     });
 });
 
-// The sibling sweep. Every OTHER wallet form composes through the 
+// The sibling sweep. Every OTHER wallet form composes through the
 // confirm pipeline, which supplies the address itself (composeForConfirm sets
 // `sourceAddress`/`change` from the caller's `source`), so a flow that omits it
 // is only exposed where nothing hands down a prebuilt PSBT. Exactly two forms

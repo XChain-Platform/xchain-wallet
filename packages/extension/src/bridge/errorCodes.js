@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Internal wallet error vocabulary -> published BridgeErrorCode ().
+// Internal wallet error vocabulary -> published BridgeErrorCode.
 //
 // The bridge handlers speak a wallet-internal dialect: CHAIN_NOT_PERMITTED,
 // ADDRESS_NOT_PERMITTED, MISSING_ORIGIN, NO_PASSWORD and nine more. None of

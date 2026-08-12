@@ -57,7 +57,7 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'WITHDRAW',
 ]);
 
-// What stays Bitcoin-only, and why each one does .
+// What stays Bitcoin-only, and why each one does.
 //
 // Most of the contract family moved into COMMON_ACTIONS above, because
 // `supportedActions` advertises WHAT THE CHAIN'S PROTOCOL ACCEPTS (see
@@ -90,15 +90,15 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 // and the denylist advice - "pay the fee in XCHAIN" - has no LTC/DOGE
 // equivalent. A wallet there could compose them and never pay for them.
 //
-// That gap is closed, in all four places it had to close :
-//   - INDEXER:  gives DEPLOY/EXECUTE a schedule-priced, verdict-free
+// That gap is closed, in all four places it had to close:
+// - INDEXER: a later change gives DEPLOY/EXECUTE a schedule-priced, verdict-free
 //     static quote, and the SDK reads its `valid:null` as payable-but-
 //     unverified rather than as a refusal.
-//   - WALLET forms:  put the useNativeFee/NativeFeeToggle lane on
+// - WALLET forms: put the useNativeFee/NativeFeeToggle lane on
 //     DeployContractForm and ExecuteContractForm (mandatory wherever there is
 //     no XCHAIN lane) and pointed the DEPLOY form chain list at THIS list.
-//   - FEE PLACEMENT:  moved the fee output onto the phase-2 reveal (the
-//     transaction the indexer checks) and  kept it declared to the
+// - FEE PLACEMENT: a later change moved the fee output onto the phase-2 reveal (the
+// transaction the indexer checks) and a later change kept it declared to the
 //     phase-1 build so the commit reserves its value; see flows/nativeFeeLane.
 //   - VENUE: proven live rather than argued. A wallet-composed DEPLOY paying
 //     the native fee indexes `valid` on litecoin-regtest (actions 1226-1228,
@@ -127,7 +127,7 @@ export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
 // (ControllerBindForm), so it is authorable on every chain. (The old note
 // claiming the messaging flows emit ADDRESS was wrong; only controllerBind
 // composed it.)
-// BET  moved OUT with its P8 authoring surface (CreateBetFeedForm plus
+// BET moved OUT with its P8 authoring surface (CreateBetFeedForm plus
 // the place-bet flow and the oracle console), in lockstep with the manifest's
 // walletForm flag.
 //

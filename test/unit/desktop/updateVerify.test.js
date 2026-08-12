@@ -18,7 +18,7 @@
  * nothing to do with the code under test.
  */
 
-//  S5 (decision D5): the desktop updater's verification gate.
+// S5 (decision D5): the desktop updater's verification gate.
 //
 // The threat this is written against, stated once so every case below
 // has a point: an attacker who owns downloads.xchain.io, or the
@@ -137,7 +137,7 @@ function manifestFor({
         `# dev-mock-gate: ${gate}`,
         `# artifacts: ${count ?? entries.length}`,
     ];
-    // The two fields sign.sh --lane writes for a PARTIAL release .
+    // The two fields sign.sh --lane writes for a PARTIAL release.
     if (lanes) lines.push('# coverage: partial', `# lanes: ${lanes}`);
     for (const [name, hash] of entries) lines.push(`${hash}  ./${name}`);
     return Buffer.from(`${lines.join('\n')}\n`);
@@ -364,7 +364,7 @@ describe('verifyDownloadedUpdate', () => {
     });
 
     it('refuses a PARTIAL manifest, which never covered the desktop lane', async () => {
-        // sign.sh --lane signs one lane's artifacts on their own ,
+        // sign.sh --lane signs one lane's artifacts on their own,
         // so an Android manifest can be perfectly signed, name the right
         // tag, and have been gated against the Android pair alone. It is
         // not wrong; it is simply not about this artifact.
@@ -395,10 +395,10 @@ describe('verifyDownloadedUpdate', () => {
     });
 });
 
-// --- the channel pointer  -------------------------------------
+// --- the channel pointer -------------------------------------
 //
 // Everything above authenticates the BYTES. Nothing above authenticated
-// the file that chose them.  §7.2 accepted that residual in
+// the file that chose them. §7.2 accepted that residual in
 // writing for launch; these are the tests for the deferred half.
 
 describe('channelPointerName', () => {
@@ -579,7 +579,7 @@ describe('a compromised update feed', () => {
     });
 
     it('cannot smuggle an uncovered artifact through a pointer that is otherwise honest', async () => {
-        // The residual  names. Every check the artifact gate owns
+        // The residual names. Every check the artifact gate owns
         // says yes: the downloaded file is the genuine AppImage, K1
         // signed its hash, the tag matches. The tampering is in the
         // pointer's OTHER entry, which hands a different lane a file

@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : Settings > Privacy offered "Use a fresh change address for every
+// Settings > Privacy offered "Use a fresh change address for every
 // send. Improves chain-analysis resistance." and drove nothing. The string
 // `changeAddress` did not appear in the send path at all, so no rotation
 // mechanism existed for the flag to switch on. Proven on BTC regtest: with

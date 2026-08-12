@@ -8,25 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//. Every platform spec's LIVE frontier rows have to cite artifacts
+//Every platform spec's LIVE frontier rows have to cite artifacts
 // that exist somewhere in the monorepo.
 //
-// WHAT THIS IS A PORT OF, AND WHY IT IS NOT A COPY.  built §6 of
+// WHAT THIS IS A PORT OF, AND WHY IT IS NOT A COPY. built §6 of
 // extension-ceremony-collateral.smoke.js after its own frontier rotted twice
 // in two stages: S23 found row 3 naming docs/BRIDGE.md, deleted by the
-//  documentation migration, and S24 found ROW 1 - the row that IS that
+// documentation migration, and S24 found ROW 1 - the row that IS that
 // spec's goal - still telling an operator to execute a runbook the operator's
 // own one-home ruling had deleted. The re-scan that closed it then asked
 // whether the defect was a class. It was: `wallet-publishing-desktop.md` had a
 // live row citing packages/desktop/REPRODUCIBLE_BUILDS.md and
 // `wallet-publishing-android.md` one citing packages/mobile/docs/, both moved
 // into xchain-documentation by the same migration, neither resolving anywhere
-// on disk, and NOTHING checked any spec's frontier except 's.
+// on disk, and NOTHING checked any spec's frontier except that.
 //
 // WHY IT MATTERS BEYOND TIDINESS. A frontier row is what a later stage, or the
 // operator, reads to learn what is left. A row naming a deleted artifact does
 // not fail loudly; it sends the next reader to nothing, and the reader spends
-// the stage rediscovering that. In  it cost two.
+// the stage rediscovering that. In it cost two.
 //
 // The two traps this inherits - a `packages/`//`tools/`//`test/` path is not
 // necessarily the wallet repo's, and a checkout is not its repo - live in
@@ -97,7 +97,7 @@ assert.equal(dead.length, 0,
     `live frontier rows cite paths that do not exist in any checkout:\n  ${dead.join('\n  ')}\n`
     + 'The frontier is what a later stage, or the operator, reads to find out what is left, so a live '
     + 'row pointing at a deleted file quietly costs a stage. Repoint it at wherever the artifact went '
-    + '(the  migration moved most of them to xchain-documentation/components/wallet/). If the '
+    + '(the migration moved most of them to xchain-documentation/components/wallet/). If the'
     + 'row is narrating something that is SUPPOSED to be gone, that is prose rather than a pointer: '
     + 'drop the backticks and say it is deleted, the way the superseded rows do.');
 
@@ -145,7 +145,7 @@ assert.equal(deadTests.length, 0,
 // session that wrote the floor had no way to know the spec would retire.
 assert.ok(withFrontier.length >= 6,
     `only ${withFrontier.length} of ${specs.length} specs in ${SPECS_DIR} carry a BUILD-SPEC:FRONTIER `
-    + 'block, fewer than the 6 standing after retired its spec to claude/specs/resolved/. That '
+    + 'block, fewer than the 6 standing after retired its spec to claude/specs/resolved/. That'
     + 'block is where a spec keeps its own record of what is left and who owns each row; if one lost '
     + 'its block, the goal state now lives nowhere. If a spec was genuinely retired, lower this floor '
     + 'in the same change and say why.');

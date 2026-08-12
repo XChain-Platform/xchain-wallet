@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program: the measuring tape.
+// responsive-first program: the measuring tape.
 //
 // Slice 1 gave the shell one set of breakpoints and one nav surface per
 // width. It could not prove that the SCREENS inside that shell survive a
@@ -223,6 +223,6 @@ export async function enterDemoWallet(page, { dismissIntroCarousel, expect, unlo
     // it is as slow as onboarding and needs the same budget. It said exactly
     // this and then hardcoded 90_000, which is HALF the budget CI computes -
     // the comment claimed the budget while the code opted out of it
-    // ().
+    //  .
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }

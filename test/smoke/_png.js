@@ -10,7 +10,7 @@
 
 // A dependency-free PNG reader, enough to let a smoke look at PIXELS.
 //
-//  shipped the Capacitor template logo to both stores because every
+// a later change shipped the Capacitor template logo to both stores because every
 // gate here checked wiring and identifiers, never image content. A guard
 // against that has to decode the image, and it must do so with nothing but
 // `node:zlib`: the smoke lane runs bare `node`, and the only image libraries

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the watcher / air-gapped lane handed out a HALF transaction for any
+// The watcher / air-gapped lane handed out a HALF transaction for any
 // action the encoder chunked, with no warning.
 //
 // `buildActionPsbt` is the whole watcher lane - all three of its callers are
@@ -21,7 +21,7 @@
 //
 // AND IT COSTS COIN TO FIND OUT. The encoder folds the payload's value and
 // EVERY custom output's value - the native protocol fee, a Mode B dispenser's
-// oracle usage fee , an ADS donation - into the script output, so
+// oracle usage fee, an ADS donation - into the script output, so
 // broadcasting the commit alone spends real money into a script only the
 // missing reveal can open, and records no action. Measured on Litecoin regtest
 // 2026-07-31: a Mode B dispenser is 90 action bytes, past the 80-byte OP_RETURN

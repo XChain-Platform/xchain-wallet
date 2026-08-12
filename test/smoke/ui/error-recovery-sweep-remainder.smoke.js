@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : error-recovery sweep remainder. Cluster P FOLLOWUP 4 shipped
+// Error-recovery sweep remainder. Cluster P FOLLOWUP 4 shipped
 // StatusMessage + one-click recovery on IssueTokenForm / DispenserForm /
 // AddAccountForm; this closes the two lanes it explicitly deferred:
 //
@@ -39,8 +39,6 @@ const duressSrc = read('packages/core/src/shared/components/settings/DuressPassp
 const aboutSrc = read('packages/core/src/shared/components/settings/AboutSection.jsx');
 
 // --- 1. MultisigSigningSession ---------------------------------------
-
-assert.ok(//.test(multisigSrc), 'MultisigSigningSession tags ');
 
 // The inline `<div role="alert" className={styles.error}>` error rows are
 // gone: every error surface now goes through StatusMessage.
@@ -93,7 +91,6 @@ assert.ok(
 
 // --- 2. BiometricRow --------------------------------------------------
 
-assert.ok(//.test(biometricSrc), 'BiometricRow tags ');
 assert.ok(
     /import \{ StatusMessage \} from '@xchain-wallet\/core\/ui'/.test(biometricSrc),
     'BiometricRow imports StatusMessage',
@@ -114,7 +111,6 @@ assert.ok(
 
 // --- 3. DuressPassphraseRow ------------------------------------------
 
-assert.ok(//.test(duressSrc), 'DuressPassphraseRow tags ');
 assert.ok(
     /import \{ StatusMessage \} from '@xchain-wallet\/core\/ui'/.test(duressSrc),
     'DuressPassphraseRow imports StatusMessage',
@@ -143,7 +139,6 @@ assert.ok(
 
 // --- 4. AboutSection --------------------------------------------------
 
-assert.ok(//.test(aboutSrc), 'AboutSection tags ');
 assert.ok(
     /import \{ Button, StatusMessage \} from '@xchain-wallet\/core\/ui'/.test(aboutSrc),
     'AboutSection imports StatusMessage',

@@ -1,7 +1,7 @@
 /* §24.2 / G053: left-nav layout. The .layout flex container places
    .sidebar alongside .main.
 
-   : which navigation surface shows is keyed on `data-xc-tier`,
+ which navigation surface shows is keyed on `data-xc-tier`,
    which FullLayoutWithNav sets from the layout's own measured width
    (shared/styles/breakpoints.js is the single source of truth for the
    numbers). Viewport media queries are deliberately NOT used here: the
@@ -12,7 +12,7 @@
     position: relative;
     display: flex;
     flex-direction: row;
-    /* : the fallback is --xc-viewport-h (tokens.css), not 100dvh. It
+    /* The fallback is --xc-viewport-h (tokens.css), not 100dvh. It
        is the viewport MINUS the top safe-area inset that body pads by, so
        the shell ends where the screen ends instead of overhanging it. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
@@ -62,7 +62,7 @@
     position: relative;
 }
 
-/*  compact tier (< 640px): the bottom tab bar owns navigation.
+/* compact tier (< 640px): the bottom tab bar owns navigation.
    FullLayoutWithNav already withholds the nav slot here, so this rule is
    the belt-and-braces for any shell that renders a sidebar anyway. */
 .layout[data-xc-tier='compact'] .sidebar {
@@ -244,7 +244,7 @@
     }
 }
 
-/* ──  rail tier (640-899px) ──────────────────────────────────────
+/* ── rail tier (640-899px) ──────────────────────────────────────
    Tablet portrait and half-screen desktop windows used to fall in a gap
    with no persistent navigation at all: too wide for the bottom tab bar,
    too narrow for the 220px sidebar. They now keep the sidebar, collapsed

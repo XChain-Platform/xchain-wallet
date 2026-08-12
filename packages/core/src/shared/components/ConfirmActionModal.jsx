@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ConfirmActionModal ( §5.1-5.2). The wallet's single standardized
+// ConfirmActionModal (§5.1-5.2). The wallet's single standardized
 // confirmation surface. Originally an overlay modal; per operator
 // direction 2026-07-22 it renders as a full PAGE in the same frame as the
 // action forms (the overlay didn't fit small/mobile viewports), shown in
 // place of the form the way picker screens are. The exported name stays
-// `ConfirmActionModal` so the  slice wiring and its tests keep
+// `ConfirmActionModal` so the slice wiring and its tests keep
 // their vocabulary. Built on the single-encode pipeline (the previewed
 // PSBT is the signed PSBT). Anatomy top-to-bottom (§5.2): "Confirm"
 // header, intent, balance deltas, pre-flight panel, fee section,
@@ -91,14 +91,14 @@ export function ConfirmActionModal({
     // network-fee line - so nothing about which network moves the money is lost.
     // Do not reintroduce the suffix here or in SignApproval.jsx.
     const defaultApproveLabel = 'Approve';
-    // . Read off the composed envelope rather than taken as a prop, for
+    //Read off the composed envelope rather than taken as a prop, for
     // the same reason as the label above: a rule every adapter has to remember
     // is a rule one of them will forget, and the one that forgets shows a
     // "pre-flight unavailable" warning on an ordinary payment.
     const preflightNotApplicable = !!composed?.bareNativePayment;
-    // : the protocol fee in the DEFAULT (XCHAIN) payment lane, read from
+    // The protocol fee in the DEFAULT (XCHAIN) payment lane, read from
     // the pre-flight report the panel above already renders. The native lane
-    // discloses its own fee as a coin debit , so the helper returns
+    // discloses its own fee as a coin debit, so the helper returns
     // null there rather than charging the user twice on screen.
     //
     // Action variant only. A caller-supplied PSBT (the psbt variant) was built
@@ -152,7 +152,7 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
-                    {/* : Settings > Developer Mode > Learn Mode. Renders
+                    {/* Settings > Developer Mode > Learn Mode. Renders
                         nothing unless the user asked for it; first in the body
                         because it frames everything under it. */}
                     <LearnNote variant={variant} chainLabel={chainLabel} />
@@ -177,7 +177,7 @@ export function ConfirmActionModal({
                         wallet cannot rebuild a caller's PSBT, so findings inform
                         but never block. The caller controls `canApprove`; this
                         renders the panel either way so the user still sees them. */}
-                    {/* : a plain native-coin payment has no XChain action,
+                    {/* A plain native-coin payment has no XChain action,
                         so pre-flight does not apply to it. Rendering the panel's
                         null-report state here would tell the user "Pre-flight
                         unavailable; proceeding is at your discretion" on an
@@ -198,7 +198,7 @@ export function ConfirmActionModal({
 
                     {/* Directly under the miner fee so the two costs read as
                         one section, and named as itself so neither passes for
-                        the other (the same rule the  delta rows follow). */}
+                        the other (the same rule the delta rows follow). */}
                     {protocolFee ? (
                         <div className={styles.fee} data-testid="confirm-protocol-fee">{protocolFee.text}</div>
                     ) : null}

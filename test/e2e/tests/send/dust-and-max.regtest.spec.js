@@ -21,7 +21,7 @@
 // anything on screen.
 //
 // DRIVEN ON BITCOIN, and for once the wedged indexer (§3.7) does not matter:
-// both legs are BARE NATIVE SENDS, which carry no XChain action at all ,
+// both legs are BARE NATIVE SENDS, which carry no XChain action at all,
 // so nothing here waits on an indexed row and every measurement comes from the
 // utxo set and the confirm screen. Bitcoin is also the chain whose asset the
 // Send form already defaults to; off it the amount would have to be selected
@@ -180,7 +180,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
             // Approve enabled, and signed it. There was no dust guard on the
             // recipient output anywhere in the wallet; the encoder's `dustAmount`
             // governs its own CHANGE output (M-6), not what the user typed.
-            //  added one in the Send form, so this should now read
+            // a later change added one in the Send form, so this should now read
             // "refused before composing" and the refusal should name the floor.
             // The leg still follows the transaction to the end when it DOES
             // compose, because what matters is whether the user can be left worse
@@ -219,14 +219,14 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
         });
     });
 
-    // D-131/ LIVES HERE, and it was deliberately NOT pinned with
+    // D-131 LIVES HERE, and it was deliberately NOT pinned with
     // `test.fail()`. That marker was tried and removed: a test marked expected-
     // failure reports green when it fails for ANY reason, and the first thing it
     // hid was a wrong locator of mine rather than the defect. So this test
     // asserted only what must ALWAYS hold and PRINTED the rest, because a gap
     // that depends on the venue's fee rate cannot be a red suite.
     //
-    //  CLOSED THAT, so the printed number is now an assertion. Max no
+    // a later change CLOSED THAT, so the printed number is now an assertion. Max no
     // longer subtracts a static 250-vB estimate; it asks the encoder to price the
     // sweep it is about to build (flows/maxSendable.js) and subtracts THAT. The
     // gap is therefore zero at any fee rate, on any input set, with or without an
@@ -250,7 +250,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
                 .toBeEnabled({ timeout: 30_000 });
             await max.click();
 
-            //  made Max a round trip: the amount is filled only after the
+            // a later change made Max a round trip: the amount is filled only after the
             // encoder has priced the sweep, so reading the field straight after
             // the click races an empty input. Poll instead of waiting a fixed
             // time - the wait is one encoder call on a venue whose latency is
@@ -278,7 +278,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
             // sendable and the transaction pays this much fee, so the address
             // holds their sum only if Max used the fee the transaction actually
             // pays. It used to subtract a fee ESTIMATE sized from a static
-            // assumed vsize, so the two agreed only by luck;  has it ask
+            // assumed vsize, so the two agreed only by luck; has it ask
             // the encoder for the price of the sweep it is about to build, so
             // they agree by construction and the difference is asserted.
             const gap = fundedSats - (maxSats + feeSats);
@@ -288,7 +288,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
                 `Max offered ${maxSats} against a ${feeSats}-sat fee out of ${fundedSats}, leaving ${gap} `
                 + 'satoshis unaccounted for. Max is not pricing the transaction it builds: it is a sweep, '
                 + 'so the outputs plus the fee must be the whole balance and there is nothing left to '
-                + 'become change .')
+                + 'become change.')
                 .toBe(0);
 
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
@@ -309,7 +309,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
             expect(left,
                 `Max left ${left} sats at an address the user was told they had emptied. Anything above `
                 + `zero is money missed; anything under the ${DUST_SATS[COIN]}-sat dust floor is money `
-                + 'lost, because a residue below it cannot be spent again .')
+                + 'lost, because a residue below it cannot be spent again.')
                 .toBe(0);
 
             // And the money went where the screen said. Read as a DELTA, since

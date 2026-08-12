@@ -38,7 +38,7 @@
 //
 //   1. THE ORACLE IS PAID. A Mode B dispenser pays its oracle operator a usage
 //      fee UP FRONT, as a real native-coin output inside the DISPENSER
-//      transaction, scaled to the escrow being locked (,
+// Transaction, scaled to the escrow being locked (
 //      `utility.quoteOracleFee`). Nothing has ever measured that money. The
 //      operator's spendable balance is read before and after and must rise by
 //      exactly the quoted amount.
@@ -90,7 +90,7 @@ import {
 import { writeRowsScript } from '../../fixtures/priceSeed.js';
 
 const PASSWORD = 'regtestpassword123';
-/** The create pays a coin protocol fee AND the oracle's usage fee . */
+/** The create pays a coin protocol fee AND the oracle's usage fee. */
 const FUNDING = 2;
 
 /**
@@ -318,7 +318,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
                 .toBe(expectedFeeSats);
             expect(quote.belowDust,
                 'the oracle fee is below the dust threshold, so no output is required and the '
-                + ' payment leg cannot be measured at all')
+                + 'payment leg cannot be measured at all')
                 .toBe(false);
         });
 
@@ -388,7 +388,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
                 `opening the dispenser did not escrow ${ESCROW} ${ORACLE.tick}`)
                 .toBe(MINT - ESCROW);
 
-            // , and this is the assertion nothing has ever made: the
+            // And this is the assertion nothing has ever made: the
             // oracle operator is a third party to this transaction who gets PAID
             // by it, up front, in coin. A create that quoted the fee and dropped
             // the output would be refused by consensus - so what this measures

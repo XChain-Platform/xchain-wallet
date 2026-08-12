@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  regression. `useTokenInfo`'s module cache had no TTL and no
+// regression. `useTokenInfo`'s module cache had no TTL and no
 // invalidation, so a tick record fetched once was authoritative for the whole
 // session. Wallet E2E session 18 walked into the consequence: the wallet
 // broadcast an ownership TRANSFER of S18PROBE, opened Manage Token as the NEW

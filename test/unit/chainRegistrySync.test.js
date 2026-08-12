@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the wallet-side gate on the hub's chain-registry snapshot.
+// The wallet-side gate on the hub's chain-registry snapshot.
 //
 // The bundled chain descriptors are copied into xchain-hub/src/chain-registry.json
 // by bin/sync-chain-registry.mjs. Until now the ONLY thing comparing the two was
@@ -170,7 +170,7 @@ describe('chain-registry sync gate @regression', () => {
     // ---- what --check proves without a sibling checkout ----------------------
 
     it('--check FAILS on an unmirrored descriptor change with no hub checkout at all', () => {
-        // The ledger's acceptance test , driven end to end: sync once
+        // The ledger's acceptance test, driven end to end: sync once
         // the way a paired tree does, then take the sibling away entirely - a
         // wallet-only clone, which is what every wallet CI job actually has.
         const { venue, wallet } = makeVenue();

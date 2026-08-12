@@ -251,7 +251,7 @@ describe('duplicate and failure defenses', () => {
         expect(notify).not.toHaveBeenCalled();
     });
 
-    // The restart half of . submitWithSigner now AWAITS the durable
+    // The restart half. submitWithSigner now AWAITS the durable
     // 'broadcasting' put before broadcastTx, so any transaction the network could
     // have accepted has left this exact row behind. This watcher is a fresh instance
     // with an empty _attempted set - the restarted process - and the durable row is

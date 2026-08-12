@@ -65,7 +65,7 @@ function chainLabelFor(descriptor) {
     return descriptor.networkKind === 'mainnet' ? name : `${name} ${descriptor.networkKind}`;
 }
 
-//  / D-81: validate the TRANSFER destination against the chain the
+// D-81: validate the TRANSFER destination against the chain the
 // edit is broadcast on. Ownership moves to an address on that same chain,
 // so an address for another coin, for the right coin on the wrong network,
 // or simply mistyped, can never own the token: the indexer rejects the
@@ -264,7 +264,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
-    // Live network-aware check on the new owner ( / D-81). Derived, so
+    // Live network-aware check on the new owner (D-81). Derived, so
     // it clears itself the moment the address is corrected instead of sitting
     // stale under a field the user already fixed.
     const transferToError = useMemo(
@@ -606,9 +606,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // Token admin uses the ISSUE action with admin-only field combinations.
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -616,7 +616,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -767,7 +767,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 />,
             );
         }
-        // : signed, not broadcast. The confirm pipeline resolves this
+        // Signed, not broadcast. The confirm pipeline resolves this
         // case, so the done screen has to tell them apart.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="update" />);
@@ -884,7 +884,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -899,7 +899,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}
@@ -1322,7 +1322,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
               * D-165: the typed confirmation for a LOCK, on the path a normal
               * wallet actually takes. It used to live only in the legacy
               * review stage below, which `singleEncode = !isWatcherMode`
-              * renders for watcher wallets and nobody else - so 's
+              * renders for watcher wallets and nobody else - so that
               * confirm-page slice left the wallet's one irreversible action
               * (every flag here is a one-way switch) behind a checkbox and a
               * single click, while lesser and reversible actions kept their

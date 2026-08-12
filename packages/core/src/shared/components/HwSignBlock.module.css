@@ -71,7 +71,7 @@
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-xs);
     cursor: pointer;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;

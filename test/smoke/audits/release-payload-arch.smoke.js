@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The release gate reads artifact NAMES; this is the check that opens the
-// bytes. ( §16,.)
+// bytes. (§16,.)
 //
 // On 2026-08-06 snapcraft was measured packing x86-64 libraries into a snap
 // whose own meta/snap.yaml declared `architectures: [arm64]` - exit 0, no

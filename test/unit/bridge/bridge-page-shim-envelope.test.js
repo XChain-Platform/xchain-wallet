@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// , seen from the PAGE.
+// Seen from the PAGE.
 //
 // The other bridge suites drive the MessageHost directly, which is one hop
 // short of the thing that was broken: what a dApp gets is whatever survives

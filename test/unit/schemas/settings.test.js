@@ -519,7 +519,7 @@ describe('validateSettings', () => {
         expect(validateSettings(without).ok).toBe(true);
     });
 
-    //  / §20.5: the verified watcher <-> signer partner record.
+    // §20.5: the verified watcher <-> signer partner record.
     describe('partnerPairing', () => {
         const validRecord = {
             walletMode: 'signer',

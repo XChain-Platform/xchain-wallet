@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// What the update notice puts on screen, and what it must not ( §6, D4).
+// What the update notice puts on screen, and what it must not (§6, D4).
 //
 // The lane gate has its own tests; this is the other half of the same rule.
 // Both mobile shells and the web shell mount `UpdateNoticeBanner` from the one

@@ -52,7 +52,7 @@ const BALANCE_POLL_INTERVAL_MS = 20000;
  * Locking is a shell concern, not a route concern: idle auto-lock runs
  * from each shell's AppInner via `useAutoLockPolicy`, and the manual
  * Lock affordance lives in the shell's menu + keyboard shortcut.
- *  found that wiring the idle timer here meant navigating off
+ * found that wiring the idle timer here meant navigating off
  * Home cancelled it, so a wallet left on Send or Settings never locked.
  *
  * @param {object} props
@@ -64,7 +64,7 @@ const BALANCE_POLL_INTERVAL_MS = 20000;
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+); full mode only, see the §40 note below
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
- * @param {(session: object) => void} [props.onResumeConfirm]   §5.4: finish a confirm the popup closed on
+ * @param {(session: object) => void} [props.onResumeConfirm] §5.4: finish a confirm the popup closed on
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
  * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
@@ -83,7 +83,7 @@ const BALANCE_POLL_INTERVAL_MS = 20000;
  * §40 actions are NOT a Home prop. Home used to accept an `extraActions`
  * array "for the small-mode drawer" and never rendered it, so the web
  * shell built 24 entries per render that no user could ever reach from
- * this component . Both variants route to the same dedicated
+ * this component. Both variants route to the same dedicated
  * ActionsMenu screen instead: full mode via the "More actions" button in
  * the action grid below (`onActions`), small mode via the pancake menu's
  * "More actions" row (MenuRoute) or the command palette. Add entries
@@ -140,7 +140,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [pendingCoinpays, setPendingCoinpays] = useState(
         /** @type {any[]} */ ([]),
     );
-    //  §5.4: unfinished confirms (an UNSIGNED composed PSBT the popup
+    // Unfinished confirms (an UNSIGNED composed PSBT the popup
     // closed on). Same slot as the two cards above; nothing here has moved
     // money, which is why the card says so in as many words.
     const [confirmSessions, setConfirmSessions] = useState(
@@ -185,9 +185,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             window.removeEventListener('keydown', onKey);
         };
     }, [homeMoreOpen]);
-    // : the overflow menu's entries as data, so an empty list can
+    // The overflow menu's entries as data, so an empty list can
     // drop the "More" button itself. Every entry it holds today is
-    // DEX-gated, so a store build  wires none and used to open
+    // DEX-gated, so a store build wires none and used to open
     // the menu onto a dead "No additional actions" row. A future non-DEX
     // entry appends here and keeps More alive on its own.
     const homeMoreActions = useMemo(() => {
@@ -206,7 +206,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
     const [settingsSubpage, setSettingsSubpage] = useState(/** @type {string | null} */ (null));
-    // : the "no addresses yet" hint pointed at Receive but offered
+    // The "no addresses yet" hint pointed at Receive but offered
     // no way to get there, so the emptiest possible Home was also the most
     // inert. The hint now carries an Add-address CTA; `homeReloadKey`
     // refetches balances once the address lands, so Home fills in without
@@ -522,7 +522,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             } catch { /* non-fatal */ }
         }
 
-        //  §5.4: confirms the popup closed on. Extension-only in
+        // Confirms the popup closed on. Extension-only in
         // practice (the store is chrome.storage.session), and the route
         // answers with an empty list on the shells that have none, so no
         // shell check is needed here.
@@ -583,7 +583,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         };
     }, [activeWalletId, activeAccountId, loadHomeData]);
 
-    // : Home does not lock, in either sense. The idle timer lives
+    // Home does not lock, in either sense. The idle timer lives
     // in each shell's AppInner via `useAutoLockPolicy`, because this
     // route unmounts the moment the user navigates to Send / Receive /
     // History / Settings, and useAutoLock's effect cleanup cancelled the
@@ -612,7 +612,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
     const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
 
-    // : `hideSmallBalances` persisted for fourteen sessions without a
+    // `hideSmallBalances` persisted for fourteen sessions without a
     // single reader. HomeTabs forwards it to the Coins and Tokens lists,
     // which collapse dust rows into their own expandable section.
     const hideSmallBalances = settings.settings?.privacy?.hideSmallBalances === true;
@@ -807,7 +807,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {/*
-                  * : a self-armed panic freeze is announced here, above
+                  * A self-armed panic freeze is announced here, above
                   * the balances, so the user learns signing is frozen BEFORE
                   * they tap Send. A duress-armed freeze renders nothing (the
                   * component owns that policy) so an observer sees no cue.
@@ -851,7 +851,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
                         onCommandPalette={onCommandPalette}
-                        // : only shells without a nav surface pass this;
+                        // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
                         onOpenSettings={onOpenSettings}
                         actions={(
@@ -876,7 +876,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                 </button>
                                 {/* Not rendered at all when the shell wires no
                                     handler: a build can have compiled the DEX
-                                    surface out , and a greyed-out
+                                    surface out, and a greyed-out
                                     Exchange button still advertises an
                                     exchange. Locked-wallet states pass a
                                     handler and disable elsewhere. */}
@@ -893,7 +893,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                 {/* Absent, not greyed and not empty, when the
                                     list is empty: a "More" that opens onto
                                     nothing is a dead control on the primary
-                                    surface . */}
+                                    surface. */}
                                 {homeMoreActions.length > 0 ? (
                                     <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                                         <button
@@ -983,7 +983,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         Create token
                     </Button>
                     {/* Same rule as Exchange above: absent, not greyed, when
-                        this build has no markets to open . */}
+                        this build has no markets to open. */}
                     {onMarkets ? (
                         <Button
                             variant="secondary"

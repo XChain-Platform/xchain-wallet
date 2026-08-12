@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SSC-1 : Capacitor's own general-purpose plugins, neutered.
+// SSC-1: Capacitor's own general-purpose plugins, neutered.
 //
 // MEASURED ON AN iPhone 17 Pro Max SIMULATOR, 2026-08-01, from ordinary page
 // script, exactly as the Android twin was measured:

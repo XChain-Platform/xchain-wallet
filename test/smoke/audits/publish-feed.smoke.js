@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §7.3: publish.sh, RUN rather than read.
+// Smoke for §7.3: publish.sh, RUN rather than read.
 //
 // The existing coverage of this script was a set of greps over its source,
 // which is how the stage-1 defect survived review: the text said "channel
@@ -54,7 +54,7 @@ execFileSync('gpg', ['--batch', '--quiet', '--passphrase', '', '--quick-generate
 { env: { ...process.env, GNUPGHOME: gnupg } });
 
 /* publish.sh runs verify.sh, and verify.sh binds a signature to an
- * expected fingerprint since  S37 rather than accepting any good
+ * expected fingerprint S37 rather than accepting any good
  * one. Left unset it would resolve the repo's own pin, which is K1 - the
  * real release key, which this throwaway key is emphatically not - and
  * every publish here would fail on a wrong-key refusal that has nothing
@@ -100,7 +100,7 @@ function makeRelease(name, channel, extra = {}) {
     // Written through lib.sh, not hand-rolled, so the fixture is the same
     // shape sign.sh produces - including the artifact/pointer split, which
     // is the thing under test, and the build-profile lines verify.sh now
-    // requires . The expected-artifacts list is passed for the same
+    // requires. The expected-artifacts list is passed for the same
     // reason sign.sh passes it: without it the manifest claims to be
     // version 2 and omits the one thing version 2 exists for.
     execFileSync('bash', ['-c',
@@ -127,7 +127,7 @@ function makeTarget(name, { staging = false } = {}) {
  *
  * Every case below except the one testing the record gate itself runs
  * with this pointed at by `XCHAIN_WALLET_RELEASE_RECORDS`. Without it
- * every prod case would stop at the  gate, which is correct
+ * every prod case would stop at the gate, which is correct
  * behaviour and useless coverage: the point of those cases is what
  * happens AFTER the preconditions are satisfied.
  *
@@ -205,7 +205,7 @@ function writeRehearsalRecord(releaseDir, { manifestFrom = releaseDir, ...over }
         'pinned-key-override': null,
         lanes: LANES.map((l) => ({ id: l.id, ok: true })),
         // The direct lanes are demanded of any release carrying their
-        // artifact , and the Android case below carries one. Set
+        // artifact, and the Android case below carries one. Set
         // unconditionally: a record naming them on a desktop-only release
         // is never consulted for them, so there is nothing to condition on
         // and one fixture shape fewer to get wrong.
@@ -216,7 +216,7 @@ function writeRehearsalRecord(releaseDir, { manifestFrom = releaseDir, ...over }
     return path;
 }
 
-// ------------------------------------------ the §6 record gate 
+// ------------------------------------------ the §6 record gate
 //
 // §6's release record was a convention with nothing enforcing it, so the
 // first release was tagged and built with no record open and its only
@@ -395,7 +395,7 @@ writeRehearsalRecord(prodRelease);
     // before anything opens an SSH connection to a host this test does
     // not have.
     const r = await run(['--input', prodRelease, '--tag', TAG,
-        '--target', 'deploy@origin-host.example.invalid:/srv/downloads/wallet']);
+        '--target', 'deploy@release-host.example.invalid:/srv/downloads/wallet']);
     assert.equal(r.status, 2, 'a remote publish demands --public-base');
     assert.match(r.out, /--public-base is required/);
     assert.doesNotMatch(r.out, /verifying the signed release/,
@@ -476,7 +476,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
         'again, no pointer');
 }
 
-// ------------------------------------------- the Android pair ( §6/§7)
+// ------------------------------------------- the Android pair (§6/§7)
 //
 // Two artifacts, two different rules, and the routing used to get both wrong
 // because it ended in a catch-all that meant "desktop".
@@ -533,7 +533,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     writeRehearsalRecord(prodRelease);
 }
 
-// ------------------------------ a PARTIAL release, no channel pointers 
+// ------------------------------ a PARTIAL release, no channel pointers
 //
 // The block above publishes the Android pair ALONGSIDE a full desktop release,
 // which is the case that existed when it was written. It is not the case that

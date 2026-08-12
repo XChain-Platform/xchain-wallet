@@ -14,7 +14,7 @@ import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
-// : the three password fields, their hints, and the copy for every way
+// The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
 import {
@@ -56,7 +56,7 @@ const NO_BACKUP_CONTENT_MESSAGE = 'Pick a backup file, paste its contents, or sc
  * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
 export function ImportWallet({ onBack, onImported, variant: importVariant = 'default', mode = 'fresh' }) {
-    //  S4: The phrase is TYPED here, and a keyboard-visible screen recording is
+    // S4: The phrase is TYPED here, and a keyboard-visible screen recording is
     // as good as a screenshot of it.
     // No-op on every shell that installs no screen guard (web, extension,
     // desktop): a browser tab cannot stop a screenshot and must not pretend to.
@@ -77,7 +77,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [confirm, setConfirm] = useState('');
     const [backupContent, setBackupContent] = useState('');
     const [backupPassword, setBackupPassword] = useState('');
-    // : three different secrets reach the restore, and conflating any
+    // Three different secrets reach the restore, and conflating any
     // two of them produces a wallet that restores looking complete and then
     // cannot sign. `backupPassword` opens the FILE. `backupWalletPassword`
     // opens the WALLET's own seal, which travelled inside the file sealed
@@ -181,7 +181,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             setError(NO_BACKUP_CONTENT_MESSAGE);
             return;
         }
-        //  / . Checked here rather than only in core so the user
+        //Checked here rather than only in core so the user
         // is told which field is empty, BY THE NAME ON THAT FIELD, instead of
         // reading a flow-level throw about a parameter they cannot see.
         if (backupPassword.length === 0) {
@@ -200,7 +200,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         setError(null);
         setBusy(true);
         try {
-            // : a fresh install has no vault, so it has no host, so the
+            // A fresh install has no vault, so it has no host, so the
             // host-registered restore has nothing to answer it. `fresh` goes to
             // the pre-host lane, which creates the vault under the new device
             // password and then merges. Same core flow underneath either way;
@@ -243,7 +243,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 await messaging.importBackupRequest({
                     fileContent: backupContent,
                     password: backupPassword,
-                    // : the seal travels with the record, so it has to
+                    // The seal travels with the record, so it has to
                     // be opened with the wallet's old password and moved onto
                     // this device's before anything is written.
                     walletPassword: backupWalletPassword,
@@ -259,7 +259,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             }
             onImported();
         } catch (err) {
-            // : a restore has three passwords in play, so "wrong
+            // A restore has three passwords in play, so "wrong
             // password" is never an answer. Whatever came back, the screen
             // says which of the three boxes it is talking about.
             setError(restoreFailureMessage(err, { mode }));
@@ -424,7 +424,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             ? (isFull
                                 ? (mode === 'add'
                                     ? 'Restore an encrypted backup as a new wallet alongside your existing one(s). The wallet record gets a fresh id at decode time so the two wallets don\'t collide.'
-                                    // : it used to say "the password",
+                                    // It used to say "the password",
                                     // singular, one line above three password
                                     // boxes.
                                     : 'Pick a `.xchain-wallet` file you exported from this app, then fill in the three passwords a restore needs.')
@@ -441,7 +441,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 <StatusMessage
                     variant="error"
                     recovery={
-                        // : anchored on the "no file yet" message
+                        // Anchored on the "no file yet" message
                         // itself. It used to fire on any error mentioning
                         // "backup file", which now includes the wrong-password
                         // copy - offering Browse to a user whose file is fine
@@ -531,7 +531,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     />
                         </>
                     )}
-                    {/*  / . The copy has to earn each of these:
+                    {/*. The copy has to earn each of these:
                         three password fields on one screen is exactly where
                         users give up, and the reason they are all here is that
                         the backup carries a sealed wallet, not a plain one. So

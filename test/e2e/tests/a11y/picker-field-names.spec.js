@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : every chip-style picker must announce WHICH field it is.
+// Every chip-style picker must announce WHICH field it is.
 //
 // ChainPicker, IconSelect and TokenField all render their label as a plain
 // <span> beside a <button>, so the label is visible but not ASSOCIATED. Without

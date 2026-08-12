@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: the real on-chain size ( §8, ).
+// Unit: the real on-chain size (§8).
 //
 // This renders on a SUCCESS screen, after the user's money is already spent, so
 // the failure that matters is not an exception: it is confidently showing a

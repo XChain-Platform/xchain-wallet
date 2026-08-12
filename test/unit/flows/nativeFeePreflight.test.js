@@ -146,7 +146,7 @@ describe('applyNativeFeePreflight', () => {
     });
 });
 
-// : "turn it off to pay in XCHAIN" is only actionable advice on a chain
+// "turn it off to pay in XCHAIN" is only actionable advice on a chain
 // that HAS an XCHAIN fee lane. On LTC/DOGE it sends the user to build a
 // transaction the network rejects outright.
 describe('nativeFeeErrorMessage', () => {

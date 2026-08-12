@@ -184,7 +184,7 @@ function AppInner() {
     // Keyboard-binding overrides for the palette + shortcuts live in
     // settings; null-safe reads below tolerate the pre-load window.
     const { settings } = useSettings();
-    // : a demo graduation wipes the vault and reloads, so the lane
+    // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
@@ -239,7 +239,7 @@ function AppInner() {
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
-    // : the transaction a scan just produced, handed to the Sign panel so
+    // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
@@ -277,11 +277,11 @@ function AppInner() {
         binding: settings?.keyboard?.bindings?.['command-palette'],
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
-    //  entity search: token balances + connected sites join contacts
+    // entity search: token balances + connected sites join contacts
     // in the palette's searchable surface. Same lazy contract as contacts:
     // loaded on each open, and a failed load just drops that entity family
     // from the results. Token commands land on the 'token-detail' route
-    // ( desktop parity with the web shell). (Desktop exposes no
+    // (desktop parity with the web shell). (Desktop exposes no
     // connected-sites bridge, so the sites load is guarded and normally
     // stays empty.)
     const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
@@ -307,7 +307,7 @@ function AppInner() {
     }, [palette.open, status.state, activeWalletId, activeAccountId]);
     // §34 keyboard shortcuts (see the web shell for the reference wiring).
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
-    // : which Settings section a palette deep-link should open.
+    // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
         /** @type {string | null} */ (null),
@@ -342,7 +342,7 @@ function AppInner() {
     );
     // Shared token-context slot: Home balance rows / the palette's token
     // commands fill it fully (kind, quantity, fiatRate, ...) for the
-    // held-token 'token-detail' view ; MyTokens fills the owner
+    // held-token 'token-detail' view; MyTokens fills the owner
     // subset for the owner-gated 'manage-token' view.
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName?: string, divisibility?: number | null, fiatRate?: number | null, quantity?: string, imageUrl?: string | null, issuer?: string | null } | null} */ (null),
@@ -409,7 +409,7 @@ function AppInner() {
     const [historyInitialFocus, setHistoryInitialFocus] = useState(
         /** @type {{ chainId?: string, actionIndex?: string, txHash?: string } | null} */ (null),
     );
-    // : a palette "search history" intent pre-populates History's
+    // A palette "search history" intent pre-populates History's
     // search box (and optionally scopes its chain filter) on entry, then
     // returns to whichever view launched it. Empty = no scoping.
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
@@ -433,7 +433,7 @@ function AppInner() {
                 setStatus({
                     state: 'error',
                     error: err?.message || String(err),
-                    // : a vault that EXISTS and will not open gets a
+                    // A vault that EXISTS and will not open gets a
                     // screen of its own, and which of the three it is decides
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
@@ -552,14 +552,14 @@ function AppInner() {
         if (id) writeActiveWallet(id);
     };
 
-    // Two gates, because the lanes stopped agreeing . Staking,
+    // Two gates, because the lanes stopped agreeing. Staking,
     // multisig and co-signer accounts are still Bitcoin-exclusive; the §42.2
     // Contracts nav follows the registry, which now advertises DEPLOY on
     // LTC/DOGE as well. One shared hook would have opened all of them.
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
-    // : the wallet-mode gate on the spend surfaces. Signer mode
+    // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
     const { isSignerMode } = useWalletMode();
@@ -580,7 +580,7 @@ function AppInner() {
         skip: isDetachedWindow.current,
     });
 
-    //  / §26: idle auto-lock. Mounted HERE, above the view switch,
+    // §26: idle auto-lock. Mounted HERE, above the view switch,
     // so one timer spans the whole unlocked session. It used to live in
     // Home.jsx, and since exactly one route renders at a time, navigating
     // to Send / Receive / History / Settings unmounted Home and cancelled
@@ -626,7 +626,7 @@ function AppInner() {
                     />
                 );
             }
-            // §20.5 / : watcher/signer pairing lane. Fresh-install
+            // §20.5: watcher/signer pairing lane. Fresh-install
             // only: it imports the shared recovery phrase itself, so the
             // add-wallet-to-an-open-vault path below does not offer it.
             if (onboardingStep === 'pair-partner') {
@@ -1046,7 +1046,7 @@ function AppInner() {
                             // flow. Clearing the id (or calling refresh, which
                             // resets unlockedView to home) dropped the user on
                             // Home the instant the wallet was created, so
-                            // neither screen was ever reachable . The
+                            // neither screen was ever reachable. The
                             // wizard reads the new wallet through messaging,
                             // not App state, so nothing here needs refreshing;
                             // onBack refreshes on the way out.
@@ -1774,7 +1774,7 @@ function AppInner() {
                     />
                 );
             }
-            // : held-token detail view, ported from the web shell so
+            // Held-token detail view, ported from the web shell so
             // Home balance rows and palette token commands land somewhere.
             if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
                 return (
@@ -1971,7 +1971,7 @@ function AppInner() {
                 // route the web shell ships; 'connected-sites' deep-links
                 // into the Connected Sites drilldown.
                 const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
-                // : palette deep-links land on a specific section via
+                // Palette deep-links land on a specific section via
                 // settingsInitialSection; the key forces a remount when the
                 // target changes while Settings is already the active view.
                 const settingsSubpage = unlockedView === 'connected-sites'
@@ -2186,8 +2186,8 @@ function AppInner() {
                 hasGovernanceAddress,
                 isSignerMode,
             };
-            //  entity handlers: tokens open TokenDetail with the full
-            // ref the row already carries ( desktop parity); sites land
+            // entity handlers: tokens open TokenDetail with the full
+            // ref the row already carries (desktop parity); sites land
             // on the Connected Sites drilldown; settings sections deep-link
             // via settingsInitialSection; help topics open the shortcut help
             // modal.
@@ -2212,7 +2212,7 @@ function AppInner() {
             ];
             // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send
             // resolves the chain from the first available when unset). A
-            // txid/date-shaped query offers "search history" .
+            // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
@@ -2256,7 +2256,7 @@ function AppInner() {
                     }
                     header={
                         <>
-                            {/*  row 142: outside the activeWalletId branch on
+                            {/* row 142: outside the activeWalletId branch on
                                 purpose. An update offer must reach a user who has
                                 no wallet open yet, and the banner renders nothing
                                 until main says an update exists. */}

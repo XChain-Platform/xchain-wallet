@@ -27,7 +27,7 @@
 // mistake the issuer can correct afterwards, and it gates other people's money
 // rather than their own.
 //
-// WHY THE HEADROOM IS THE INTERESTING PART.  already fixed this form's
+// WHY THE HEADROOM IS THE INTERESTING PART. already fixed this form's
 // Max button and its "available to mint" footer once: they used to be sized off
 // the minter's BALANCE, so a token at its cap offered a Max the chain rejects
 // by construction. The fix was `mintHeadroom({ maxSupply, totalSupply,
@@ -474,7 +474,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('the per-transaction cap is pre-blocked client-side, before any broadcast', async () => {
             await mineUntil(startBlock);
 
-            // 's guard on the dimension it does cover: `mintHeadroom`
+            // that guard on the dimension it does cover: `mintHeadroom`
             // takes MAX_MINT, so an amount over the per-tx cap never composes.
             // Asserted as a NEGATIVE, because a client-side block that composed
             // anyway would be worse than none.

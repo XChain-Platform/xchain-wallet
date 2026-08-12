@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Change-address rotation (§35.1 Privacy, ).
+// Change-address rotation (§35.1 Privacy).
 //
 // Settings > Privacy offers "Use a fresh change address for every send".
 // Until this file existed the toggle drove nothing: every flow handed the

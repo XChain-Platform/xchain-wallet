@@ -154,7 +154,7 @@ export default defineConfig({
             // at ~50% across this lens today, so an 80% gate would just fail
             // every push and get switched off within a week. These floors sit
             // just under the current numbers: coverage can go up, never down.
-            // Raise them as the coverage tail  lands. A threshold that
+            // Raise them as the coverage tail lands. A threshold that
             // is always red teaches people to ignore the build; one that only
             // goes red on a real regression gets believed.
             thresholds: {

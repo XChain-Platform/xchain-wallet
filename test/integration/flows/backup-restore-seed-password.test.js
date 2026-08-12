@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / : which password opens a RESTORED wallet's seed.
+// Which password opens a RESTORED wallet's seed.
 //
 // WHY THIS EXISTS. The §19.4 envelope carries the wallet record verbatim -
 // including `encryptedSeed`, `importedKeys[].encryptedWif` and that wallet's OWN
-// `kdfParams`. Before  `importBackupFile` re-encrypted none of it, so a
+// `kdfParams`. Before `importBackupFile` re-encrypted none of it, so a
 // restored wallet was opened by the password it had on the device it left, and
 // by no other. `SignerPool.populate` unlocks each wallet with the one password
 // it was handed and, on failure, "skip[s] it" so "the op-level fallback
@@ -135,7 +135,7 @@ async function restoreInto(exported, opts = {}) {
     return { target, res, restored: await target.wallets.get(res.walletId) };
 }
 
-describe('integration/flows/backup restore: which password opens the seed ', () => {
+describe('integration/flows/backup restore: which password opens the seed', () => {
     let sourceVault;
     let exported;
     /** @type {{ encryptedSeed: string, kdfParams: any }} */
@@ -231,7 +231,7 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
         // Compared as a boolean: a failure message must never print a mnemonic.
         expect(new TextDecoder().decode(plaintext) === MNEMONIC,
             'the device password did not recover the seed, so the restored wallet cannot sign - '
-            + 'which is the entire defect  exists to close')
+            + 'which is the entire defect exists to close')
             .toBe(true);
     });
 
@@ -278,7 +278,7 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
     });
 
     it('a WRONG wallet password fails at RESTORE time and writes nothing', async () => {
-        // The teeth. Before  there was no restore-time check at all: the
+        // The teeth. Before there was no restore-time check at all: the
         // wallet landed, looked complete, and failed at the first signature.
         const target = makeVault();
         await expect(importBackupFile({
@@ -302,7 +302,7 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
         // Omitting it is how a caller silently reintroduces the defect, so it is
         // an error rather than a skip.
         //
-        // : the refusal names the FIELD, not the parameter. This used to
+        // The refusal names the FIELD, not the parameter. This used to
         // assert `/devicePassword is required/`, which is a string that only
         // means something to whoever wrote the call site; the user is looking
         // at three password boxes and needs to know which one is empty.
@@ -317,7 +317,7 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
         expect(await target.wallets.list()).toHaveLength(0);
     });
 
-    it('a password typed into the WRONG BOX is told which box wants it ', async () => {
+    it('a password typed into the WRONG BOX is told which box wants it', async () => {
         // The reported failure, exactly: the user puts THIS DEVICE's password
         // into the backup-file field. It is a password they really do use, so
         // "wrong password" reads as the app being broken rather than as a
@@ -335,7 +335,7 @@ describe('integration/flows/backup restore: which password opens the seed ', () 
         expect(caught, 'the wrong file password restored anyway').toBeTruthy();
         expect(caught.message,
             'the restore rejected a correct-but-misfiled password without naming which of the '
-            + 'three passwords it wanted, which is the whole of ')
+            + 'three passwords it wanted, which is the whole')
             .toContain('backup file');
         expect(restoreFailureMessage(caught, { mode: 'add' }))
             .toContain(RESTORE_PASSWORD_LABELS.file);

@@ -150,7 +150,7 @@ export const settingsMigrations = {
 };
 /** @type {MigrationMap} */
 export const pendingTxMigrations = {
-    // v1 → v2 : additive structured amount fields for the
+    // v1 → v2: additive structured amount fields for the
     // pre-flight pending-delta machinery (§4.7). Legacy records carry no
     // per-tick amount, so seed nulls; the wallet re-populates on the next
     // submit. Purely additive, no data loss.

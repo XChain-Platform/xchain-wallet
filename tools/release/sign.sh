@@ -13,7 +13,7 @@
 #
 #*********************************************************************
 
-# tools/release/sign.sh - release-signing pipeline (G003 / §51,  §6).
+# tools/release/sign.sh - release-signing pipeline (G003 / §51, §6).
 #
 # Computes a SHA-256 manifest over every artifact in the input
 # directory, then GPG-signs the manifest with the release key.
@@ -33,7 +33,7 @@
 #                       Repeatable, and comma-separated names are accepted.
 #                       Lane names come from tools/release/shipped-lanes.txt
 #                       in the tree given to --repo, which is the TAG's
-#                       copy rather than this checkout's . The
+#                       copy rather than this checkout's. The
 #                       roster is PRINTED at the end of this help instead
 #                       of listed here: a hand-copied list is how
 #                       `extension` stayed missing from this text for
@@ -56,7 +56,7 @@
 # wait for lanes that are not - the Android ceremony produces a signed
 # AAB and APK on a machine that builds no desktop artifact at all, and
 # before this flag existed the ceremony's own closing instruction (run
-# sign.sh) could not be followed .
+# sign.sh) could not be followed.
 #
 # --lane resolves to the globs that lane claims in shipped-lanes.txt, and
 # inside that scope the gate is STRICTER rather than weaker: every one of
@@ -105,7 +105,7 @@ INPUT_DIR=""
 REPO_ROOT=""
 TAG=""
 FORCE=0
-# Which artifact set this run is signing ( §7.5, ). Default
+# Which artifact set this run is signing (§7.5). Default
 # `release`, so an invocation that says nothing signs a production set
 # exactly as it always has.
 RELEASE_SET=release
@@ -152,7 +152,7 @@ while [[ $# -gt 0 ]]; do
             FORCE=1
             shift
             ;;
-        # §7.5 rehearsal set . Spelled `--staging` to match
+        # §7.5 rehearsal set. Spelled `--staging` to match
         # publish.sh's flag of the same name, so the two halves of the
         # rehearsal read the same way on the command line.
         --staging)
@@ -224,7 +224,7 @@ sign.sh: --tag <vX.Y.Z> or XCHAIN_RELEASE_TAG is required.
 
 The manifest embeds the tag it describes so a signed manifest cannot
 float between versions: without it, a manifest lifted from one release
-and served as another verifies perfectly (see  §6). Pass the
+and served as another verifies perfectly (see §6). Pass the
 release tag exactly as it exists in git.
 EOF
     exit 2
@@ -271,7 +271,7 @@ if ! command -v git >/dev/null 2>&1; then
     exit 2
 fi
 
-# --- Pristine-clone gate ( §6) ------------------------------------
+# --- Pristine-clone gate (§6) ------------------------------------
 #
 # The tag must exist, HEAD must be sitting on it, and the worktree must
 # be clean. This is not defensive programming: `~/Sites` is shared with a
@@ -348,7 +348,7 @@ elif [[ ! -f "$DEV_MOCK_CHECK" ]]; then
     echo "  Refusing to sign. A gate that cannot run has not passed." >&2
     exit 1
 else
-    # THE GATE IS POINTED AT THE ARTIFACTS, NOT AT THE REPO ( S33).
+    # THE GATE IS POINTED AT THE ARTIFACTS, NOT AT THE REPO (S33).
     #
     # It used to run bare, which scans the repo's dist/ trees. Signing is
     # documented to happen from a pristine clone checked out at the tag -
@@ -367,7 +367,7 @@ else
     # The gate now refuses a scan that covers nothing, so reaching the line
     # after this one means at least one shipped bundle was really read.
     #
-    # EXCEPT THAT IT IS NOT THIS SCRIPT'S GATE ( S38). This file comes
+    # EXCEPT THAT IT IS NOT THIS SCRIPT'S GATE (S38). This file comes
     # from whichever checkout invoked it; $DEV_MOCK_CHECK comes from --repo,
     # which is the tree at the release tag. Those are routinely different
     # trees, deliberately: --repo exists so a current sign.sh can sign an
@@ -420,7 +420,7 @@ else
     fi
 fi
 
-# --- Tag/artifact version gate ( S33) -----------------------------
+# --- Tag/artifact version gate (S33) -----------------------------
 #
 # This script's own reason for embedding the tag, stated in its --tag
 # diagnostic, is "so a signed manifest cannot float between versions:
@@ -471,7 +471,7 @@ if [[ -n "$VERSION_MISMATCH" ]]; then
 fi
 
 # THE CHECK ABOVE READS THE NAME, AND A NAME IS CHOSEN BY WHOEVER STAGED THE
-# FILE ( S46). Driven rather than argued: the real CI-built
+# FILE (S46). Driven rather than argued: the real CI-built
 # xchain-wallet-extension-v0.336.0.zip from release run 31072271075, copied to
 # xchain-wallet-extension-v0.337.0.zip, passes every gate above and every gate
 # below and is hashed into the manifest. One `cp` defeats the guard whose own
@@ -530,7 +530,7 @@ if [[ -e "$SIG" && "$FORCE" -ne 1 ]]; then
     exit 1
 fi
 
-# --- Which copy of an executable gate runs  ---------------------
+# --- Which copy of an executable gate runs ---------------------
 #
 # A CHECK THE RELEASE PREDATES USED TO CRASH THE CEREMONY, and the crash
 # was a node stack trace rather than a refusal.
@@ -556,7 +556,7 @@ fi
 #
 # The dev-mock gate is deliberately NOT given this fallback: it is the one
 # gate whose answer is a word in the signed header, and requiring the
-# TAG's copy to produce that word is what  S38 closed. A tag that
+# TAG's copy to produce that word is what S38 closed. A tag that
 # cannot run it is refused, and `prepare-resign-tag.sh` exists to cut one
 # that can.
 TOOL_ROOT_FOR_GATES="$(cd "$HERE/../.." && pwd)"
@@ -623,8 +623,8 @@ fi
 
 # GATE_EXPECTED is what every artifact-level gate below is pointed at. It
 # is the committed list for a full release, and a per-run scope derived
-# from that list plus shipped-lanes.txt for a partial one (--lane,
-# ). Derived rather than hand-written on purpose: the command line
+# from that list plus shipped-lanes.txt for a partial one (--lane).
+# Derived rather than hand-written on purpose: the command line
 # names a LANE, and the committed files decide what that lane contains.
 COVERAGE_LANES=""
 GATE_EXPECTED="$EXPECTED"
@@ -731,8 +731,8 @@ xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET" "$STAGING_OS"
 
 # The gate above reads NAMES. This one opens the bytes, because on
 # 2026-08-06 snapcraft was shown packing x86-64 libraries into a snap whose
-# own metadata declared `architectures: [arm64]`, exit 0, no warning
-# (). Name, metadata and contents all have to agree before a
+# own metadata declared `architectures: [arm64]`, exit 0, no warning.
+# Name, metadata and contents all have to agree before a
 # signature says they do: an artifact signed under the wrong arch installs,
 # verifies against this manifest, and cannot start.
 xr_check_payload_arches "$INPUT_DIR"
@@ -740,7 +740,7 @@ xr_check_payload_arches "$INPUT_DIR"
 # A lane that already has users must not vanish from a release. The gate
 # above cannot ask this: every store lane is `optional` there until it has
 # shipped once, and nothing about a first upload edits that file
-# ( §6 release parity,  §2).
+# (§6 release parity, §2).
 #
 # It reads the FULL expected list even on a partial release, because its
 # two drift checks are about whether the two committed files agree with
@@ -770,10 +770,10 @@ else
 fi
 
 # A profile the build cannot actually produce must not be signed into the
-# record as though it had .
+# record as though it had.
 xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 
-# --- Signature gate  --------------------------------------------
+# --- Signature gate --------------------------------------------
 # Every gate above this line counts artifacts: how many, which arches,
 # which profile, which lanes. None of them asks whether the artifacts are
 # SIGNED, and the build cannot be relied on to fail if they are not -
@@ -794,7 +794,7 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 SIGNATURE_GATE="$(gate_script tools/release/verify-signatures.mjs)" || exit 1
 node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
 
-# --- Launch probe ( row 144) --------------------------------------
+# --- Launch probe (row 144) --------------------------------------
 # EVERY GATE ABOVE THIS LINE READS THE ARTIFACTS. NONE OF THEM RUNS ONE.
 #
 # v0.338.0 shipped a macOS build that died about three seconds after launch
@@ -864,7 +864,7 @@ fi
 echo >&2
 echo "  This one signature is checked three ways: by verify.sh, by a user" >&2
 echo "  following https://docs.xchain.io/components/wallet/release/verify-release, and by the desktop updater" >&2
-echo "  against the key pinned in the app ( S5)." >&2
+echo "  against the key pinned in the app (S5)." >&2
 echo >&2
 echo "  Publish the manifest under its VERSIONED name so verify.sh can" >&2
 echo "  anchor it: RELEASE_HASHES/$TAG.txt (+ .asc)." >&2

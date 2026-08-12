@@ -11,7 +11,7 @@
 #
 # Read the iOS shell's NATIVE console on a simulator.
 #
-# WHY THIS IS A SCRIPT AND NOT A COMMAND YOU REMEMBER .
+# WHY THIS IS A SCRIPT AND NOT A COMMAND YOU REMEMBER.
 #
 # The obvious command does not work, and it fails by printing NOTHING rather
 # than by erroring, which is the worst way for a diagnostic channel to fail:

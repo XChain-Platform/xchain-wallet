@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Which build profile this build is (, ; rails §3 owns the
+// Which build profile this build is (; rails §3 owns the
 // names and tools/release records them in the signed manifest).
 //
 // BUILD-ONLY, like sri.js beside it: it reads `process.env`, which exists in
@@ -16,7 +16,7 @@
 // differences live in `src/csp.js`, which the app bundles; this file only
 // answers "which one are we building right now".
 //
-// COMPILE-TIME ONLY, permanently.  §2.3 is explicit and the reason is
+// COMPILE-TIME ONLY, permanently. §2.3 is explicit and the reason is
 // not stylistic: a store-hidden surface that can be switched on at runtime is
 // an App Review guideline 2.3.1 hidden-feature violation, and the penalty is
 // developer-account termination, which takes every Apple surface with it

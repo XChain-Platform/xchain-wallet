@@ -62,7 +62,7 @@
 // differing ONLY in not being on the list, is the cheapest way to say that.
 //
 // AND THE LIST ITSELF IS READ BACK OFF THE CHAIN, not trusted from the screen.
-// 's second half: the indexer marks a LIST valid while silently dropping
+// that second half: the indexer marks a LIST valid while silently dropping
 // items it rejects into `list_items_invalid`, so "the LIST action is valid" is
 // NOT "the membership is what was asked for". D-87 was exactly that - a mainnet
 // address counted among "3 valid addresses", printed on the review screen, given
@@ -93,7 +93,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** ISSUE, LIST, SEND and AIRDROP each pay a real coin fee on this chain . */
+/** ISSUE, LIST, SEND and AIRDROP each pay a real coin fee on this chain. */
 const FUNDING = 3;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `DRP${STAMP}`;
@@ -165,7 +165,7 @@ function expectPerRecipientFee(dropped, recipients) {
         `an airdrop to ${recipients} addresses was billed ${fee.gas_cost} gas units; the unified `
         + `schedule prices it per recipient, so it should be ${100 * recipients}`)
         .toBe(100 * recipients);
-    // : off Bitcoin the native coin is the ONLY lane, so a fee recorded
+    // Off Bitcoin the native coin is the ONLY lane, so a fee recorded
     // against an XCHAIN balance here would be a fee this wallet cannot pay (it
     // holds no XCHAIN at all).
     expect(Number(fee.payment_mode),
@@ -599,7 +599,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
 
-            // D-87 / , checked on the live form and in the SAME paste that
+            // D-87, checked on the live form and in the SAME paste that
             // composes the real drop: a well-formed address for another network
             // used to count as valid all the way through review, dry-run and
             // broadcast, and only the chain dropped it - after it was paid for.
@@ -686,7 +686,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             projectedFeeSats = await projectedProtocolFeeSats(page);
             expect(projectedFeeSats,
                 'the confirm screen projected NO protocol fee for an airdrop that is about to be '
-                + 'charged one per recipient, which is  s screen: the miner fee quoted to '
+                + 'charged one per recipient, which is s screen: the miner fee quoted to'
                 + 'eight places and the larger charge unmentioned')
                 .not.toBeNull();
             satsBefore = await coinBalanceSats(issuer);
@@ -709,7 +709,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // The LIST being valid is NOT the membership being right: the
             // indexer stores a list while dropping items it rejects into
-            // `list_items_invalid` . Read the rows back.
+            // `list_items_invalid`. Read the rows back.
             const stored = (published.list || published.items || published.members || [])
                 .map((row) => String(typeof row === 'object' ? (row.address ?? row.item ?? '') : row));
             expect(stored.sort(), `list #${listIndex} did not store the addresses it was shown`)
@@ -753,7 +753,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(projectedFeeSats);
 
             // What the payer actually lost: the miner fee plus the protocol
-            // fee, and nothing else.  was exactly this subtraction coming
+            // fee, and nothing else. was exactly this subtraction coming
             // out short, and on an action whose fee is a function of its own
             // recipient count it is the only check that would catch a
             // projection computed off the wrong number.

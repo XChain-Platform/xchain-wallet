@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the desktop shell ships ITS OWN app icon.
+// Smoke for: the desktop shell ships ITS OWN app icon.
 //
 // WHAT THIS IS DEFENDING. Until 2026-08-01 `packages/desktop/build/` held
 // no icon at all. electron-builder's response to that is a log line -
 // "default Electron icon is used" - and then a perfectly successful build,
 // so the first real macOS lane run produced an app whose Info.plist read
 // `CFBundleIconFile = electron.icns`. Shipping the framework's own logo is
-// the same defect  found on both mobile shells, and no gate caught
+// the same defect found on both mobile shells, and no gate caught
 // it there either, because every check in this area verifies wiring and
 // identifiers rather than pixels.
 //
@@ -159,7 +159,7 @@ assert.ok(opaque > 50000, `icon.png has real artwork (${opaque} opaque pixels)`)
 assert.ok(blue > 20000, `the XChain blue link is present (${blue} px)`);
 assert.ok(purple > 20000, `the XChain purple link is present (${purple} px)`);
 
-// The approved iOS geometry : mark at ~78% of canvas width,
+// The approved iOS geometry: mark at ~78% of canvas width,
 // centred both ways. A wordmark creeping back in would break the aspect.
 const contentWidth = maxX - minX + 1;
 const contentHeight = maxY - minY + 1;
@@ -219,7 +219,7 @@ for (const size of [16, 32, 256]) {
 }
 
 console.log(
-    'OK: desktop icons smoke (: build/icon.{png,icns,ico} exist and are named explicitly as '
+    'OK: desktop icons smoke (build/icon.{png,icns,ico} exist and are named explicitly as'
         + 'mac.icon/win.icon/linux.icon rather than left to the silent implicit lookup; the PNG master is '
         + '1024x1024 RGBA with transparent corners, carries both brand colours, and holds the mark alone '
         + 'at the approved iOS geometry - ~78% of canvas width, 2.45:1, centred on both axes, so no '

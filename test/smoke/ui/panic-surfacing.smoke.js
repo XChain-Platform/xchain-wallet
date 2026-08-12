@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  wiring smoke: panic mode's signing freeze must be surfaced on the
+// wiring smoke: panic mode's signing freeze must be surfaced on the
 // screens where the user SPENDS, not only in Settings -> Safety.
 //
 // The rendered behaviour is covered by the unit tests

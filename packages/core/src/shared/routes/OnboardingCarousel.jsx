@@ -55,7 +55,7 @@ export function OnboardingCarousel({
     // is retired for the rest of the session. A reader who takes the wheel
     // should never have the slide yanked out from under them.
     const [userDrove, setUserDrove] = useState(false);
-    // : the OS media query AND the in-app Settings → Appearance
+    // The OS media query AND the in-app Settings → Appearance
     // override. The stacked-frames fallback and the auto-advance timer below
     // are both JS decisions, so they have to ask rather than leave it to CSS.
     const reducedMotion = useReducedMotion();

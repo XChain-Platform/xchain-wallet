@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Campaign coverage map, "Onboarding & wallet lifecycle" -> "backup-pointer
-// restore" (§15.4), plus the browser half of  and .
+// restore" (§15.4), plus the browser half and.
 //
 // THE USER STORY, from `uri/backupPointer.js`: a user publishes their encrypted
 // backup somewhere (an https mirror, a self-hosted blob), keeps a small QR that
@@ -21,12 +21,12 @@
 //
 //   1. ADD mode: a device that already has a wallet takes on a second one from
 //      a pointer. §15.4's original scenario.
-//   2. FRESH mode : a device with NO wallet at all restores from a
+// 2. FRESH mode: a device with NO wallet at all restores from a
 //      pointer. This is the primary reason to keep a backup, it was broken from
 //      the day the lane was offered until 2026-08-03, and the fix is a
 //      pre-host route (`wallet.importBackup.fresh` / `importBackupLocal`)
 //      because a device with no vault has no host to answer the normal one.
-//   3. The restored wallet SIGNS . Landing unlocked was never the
+// 3. The restored wallet SIGNS. Landing unlocked was never the
 //      bug. The bug was a wallet that unlocked and then could not sign,
 //      because the seed travels in the backup still sealed under the OLD
 //      device's password, and nothing re-keyed it onto this one. A restore
@@ -43,7 +43,7 @@
 // spec asserts the request the wallet actually made rather than trusting that
 // it made one.
 //
-// THREE PASSWORDS, AND THEY ARE DELIBERATELY ALL DIFFERENT HERE .
+// THREE PASSWORDS, AND THEY ARE DELIBERATELY ALL DIFFERENT HERE.
 // The restore screen asks for the password that opens the FILE, the password
 // the wallet used on the device it came FROM, and the password this device
 // will unlock with from now on. A spec that reused one string for two of them
@@ -83,7 +83,7 @@ const DEVICE_PASSWORD = 'regtestpassword123';
 const BACKUP_PASSWORD = 'backup-envelope-password-9182';
 /**
  * The password the RESTORING device picks for itself, and it matches neither
- * of the other two on purpose.  is the claim that a restored wallet is
+ * of the other two on purpose. is the claim that a restored wallet is
  * re-sealed onto whatever this device unlocks with; if the spec reused
  * DEVICE_PASSWORD the re-key could be a no-op and everything would still pass.
  */
@@ -320,7 +320,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     + 'the user\'s only chance to notice a pointer aimed somewhere they did not choose')
                     .toContainText(ENVELOPE_URL);
 
-                // : three fields, not one. In ADD mode the device
+                // Three fields, not one. In ADD mode the device
                 // password is the one this browser already unlocks with, and
                 // the wallet password is device one's - which happens to be
                 // the same string here only because device one and device two
@@ -367,7 +367,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
         }
     });
 
-    //  + , and this is the lane the whole file exists for.
+    // +, and this is the lane the whole file exists for.
     //
     // It used to be a `test.fail`-shaped pin asserting "wallet is locked",
     // written so it would go red the day the lane was built. That day was
@@ -379,7 +379,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
     // the balances are right, and the failure waits until the user's first
     // spend - by which time they have thrown away the paper. So the last step
     // signs a real transaction and asks the chain whether it landed.
-    test(': a FRESH install restores from a pointer, and the restored wallet can sign',
+    test('A FRESH install restores from a pointer, and the restored wallet can sign',
         async ({ page }) => {
             /** @type {string} */
             let envelope;
@@ -452,7 +452,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     await two.getByRole('button', { name: 'Restore', exact: true }).click();
 
                     await expect(unlockedShell(two),
-                        'the fresh-install restore never reached an unlocked wallet -  is the '
+                        'the fresh-install restore never reached an unlocked wallet - is the'
                         + 'item that says it could not, so check whether the pre-host lane is wired '
                         + 'into this shell before assuming a regression')
                         .toBeVisible({ timeout: 180_000 });
@@ -506,7 +506,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                         .toBeVisible({ timeout: 60_000 });
                     await expect(two.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
 
-                    // 's exact failure mode lives here, and this is the
+                    // that exact failure mode lives here, and this is the
                     // shape it takes on screen: with the seed still sealed
                     // under the OLD device's password the signer pool has no
                     // signer for this address, so Approve is rendered
@@ -519,7 +519,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     // future red run says WHY instead of timing out inside
                     // Playwright's retry loop.
                     await expect(two.getByTestId('confirm-approve'),
-                        'the restored wallet composed a payment it cannot approve, which is  '
+                        'the restored wallet composed a payment it cannot approve, which is'
                         + 'exactly - the seed is still sealed under the password of the device it '
                         + 'was backed up from, so this device holds no signer for its own address')
                         .toBeEnabled({ timeout: 60_000 });
@@ -543,7 +543,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
             }
         });
 
-    // The negative half of , and the reason `BackupSeedPasswordError`
+    // The negative half, and the reason `BackupSeedPasswordError`
     // names WHICH password: two of the three can be right while the third is
     // wrong, and "wrong password" on its own sends the user back to re-type the
     // one that was already correct.
@@ -558,7 +558,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
     // Driven with a pasted envelope rather than a pointer: the pointer lane is
     // proven above, and what is under test here is the password check, which
     // runs identically either way.
-    test(': a wrong wallet password is refused at restore time, and the install stays fresh',
+    test('A wrong wallet password is refused at restore time, and the install stays fresh',
         async ({ page, browser }) => {
             const words = await createWallet(page, { password: DEVICE_PASSWORD, name: ORIGIN_WALLET });
             const envelope = await exportEnvelope(page, { walletName: ORIGIN_WALLET, words });

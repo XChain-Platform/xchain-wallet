@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// `describeBiometric()` and the provider self-description contract .
+// `describeBiometric()` and the provider self-description contract.
 //
 // The defect these cover: the shared settings row hardcoded "Touch ID /
 // Windows Hello" and explained unavailability in terms of WebAuthn and PRF,

@@ -4,7 +4,7 @@
 <dict>
 	<!-- Universal Links. iOS fetches https://xchain.io/.well-known/apple-app-site-association
 	     and honours only the paths that file claims: one prefix, /wallet/link/*, so explorer,
-	     docs and marketing URLs keep opening in the browser ( §3, ).
+	     docs and marketing URLs keep opening in the browser (§3, ).
 
 	     `applinks` and nothing else on purpose. `webcredentials` would offer password autofill
 	     for a wallet that has no server-side account, and each key here is a capability the

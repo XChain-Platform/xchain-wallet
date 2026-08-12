@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  (wallet E2E D-78): the Mint form's "available" footer and Max
+// (wallet E2E D-78): the Mint form's "available" footer and Max
 // button reported what the user HOLDS instead of what can still be
 // minted. On a token at its cap (S18PROBE, 5,000 of a 5,000 cap) the
 // footer read "5,000 S18PROBE available" and Max filled 5,000 - an
@@ -95,7 +95,7 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-describe('MintForm sizes off mint headroom, not holdings ', () => {
+describe('MintForm sizes off mint headroom, not holdings', () => {
     it('reads 0 available for a token sitting at its supply cap', async () => {
         mountMint();
         expect(await screen.findByText(/0 S18PROBE available to mint/)).toBeInTheDocument();

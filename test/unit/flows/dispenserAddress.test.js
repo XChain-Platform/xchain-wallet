@@ -220,11 +220,11 @@ describe('dispenserAddress (§16)', () => {
     });
 });
 
-// Same index-space rule as receiveAddress : a counterwallet-legacy
+// Same index-space rule as receiveAddress: a counterwallet-legacy
 // wallet derives m/0'/C/I for every address type, so a dispenser allocated
 // per type would land on the key already serving as a personal receive
 // address - defeating the isolation this flow exists to provide.
-describe('dispenserAddress index space by wallet format ', () => {
+describe('dispenserAddress index space by wallet format', () => {
     const LEGACY_RECEIVE = createAddress({
         accountId: 'acct-a',
         chain: 'bitcoin',

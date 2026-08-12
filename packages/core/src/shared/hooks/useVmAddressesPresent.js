@@ -14,7 +14,7 @@ import { useMessaging } from '../useMessaging.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Chains that can carry contracts, resolved once from the registry .
+// Chains that can carry contracts, resolved once from the registry.
 //
 // This exists as a SEPARATE hook from useBtcAddressesPresent, which the nav
 // used to share between Contracts and Staking, because the two lanes stopped

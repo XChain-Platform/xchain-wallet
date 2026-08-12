@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/capture-update-check.mjs - what does an update check
-// actually send? ( §7.6.)
+// actually send? (§7.6.)
 //
 // WHY THIS EXISTS. The download page is going to tell users what the
 // wallet transmits when it checks for updates. §7.6 is explicit that the
@@ -40,7 +40,7 @@
 //              that half.
 //
 // THE DEFAULT MODE MISSED A HEADER, AND IT WAS THE ONE THAT MATTERED
-// (found 2026-08-02,  §7.6). `configureRequestOptions` sets the
+// (found 2026-08-02, §7.6). `configureRequestOptions` sets the
 // user agent and the cache header; `AppUpdater.getUpdateInfoAndProvider`
 // then adds `x-user-staging-id`, a UUID generated once per install,
 // persisted to `<userData>/.updaterId`, and sent on EVERY check. It is by
@@ -325,7 +325,7 @@ const invokedDirectly = (() => {
 })();
 
 const USAGE = `capture-update-check.mjs - capture what an update check actually sends
-( §7.6). The download page may state only what a CAPTURE shows.
+(§7.6). The download page may state only what a CAPTURE shows.
 
 Usage:
   node tools/release/capture-update-check.mjs [--out <file>]
@@ -356,7 +356,7 @@ Options:
 WRITES A FILE IN EVERY MODE. That is why --help is answered before any of
 them: this script used to ignore the flag, run the default capture and
 OVERWRITE the capture the download page's privacy copy is checked against,
-exiting 0 because the work had succeeded .
+exiting 0 because the work had succeeded.
 `;
 
 if (invokedDirectly) {

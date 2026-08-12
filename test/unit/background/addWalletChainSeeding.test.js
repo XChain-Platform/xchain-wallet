@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  regression, at the host boundary: a wallet or account added
+// regression, at the host boundary: a wallet or account added
 // while the app sits on regtest used to derive its first addresses on
 // the three MAINNETS (the shells' hardcoded default), which the
 // active-network filter then hides everywhere. The result was an inert
@@ -104,7 +104,7 @@ async function createdChainIds(host) {
     return res.result.addresses.map((a) => a.chainId);
 }
 
-describe(': new accounts seed from the vault active chain set', () => {
+describe('New accounts seed from the vault active chain set', () => {
     it('lands on the regtest chains when the app is on regtest', async () => {
         const { host } = makeHost({
             activeNetwork: 'regtest',

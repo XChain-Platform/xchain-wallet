@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  / §20.5: the watcher <-> signer pairing lane reads a wallet's
+// §20.5: the watcher <-> signer pairing lane reads a wallet's
 // account-level public material through the Signer interface.
 // `getAccountXpub` is the optional half of that (software signers have it;
 // hardware signers do not, and `collectPairingKeys` feature-detects it),
@@ -43,7 +43,7 @@ function unlocked() {
     return signer;
 }
 
-describe('SoftwareSigner.getAccountXpub ', () => {
+describe('SoftwareSigner.getAccountXpub', () => {
     it('returns the account-level xpub for the unlocked seed', async () => {
         const xpub = await unlocked().getAccountXpub({ path: ACCOUNT_PATH });
         expect(xpub.startsWith('xpub')).toBe(true);

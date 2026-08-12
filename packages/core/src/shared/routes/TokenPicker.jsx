@@ -59,7 +59,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]
  * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
  * @param {boolean} [props.kindLocked]  hide the kind segments because the
- *   caller's action only accepts one kind (: BET escrows tokens, so the
+ * Caller's action only accepts one kind (BET escrows tokens, so the
  *   native coin is not a legal wager and must not be offered)
  * @param {string} [props.title]
  * @param {import('react').ReactNode} [props.titleIcon]
@@ -372,7 +372,7 @@ export function TokenPicker({
                     spellCheck={false}
                     aria-label="Search coins or tokens"
                 />
-                {/* : a caller that pins `kindFilter` is stating a
+                {/* A caller that pins `kindFilter` is stating a
                     protocol constraint, not a default. Rendering the segments
                     anyway would offer a choice the action cannot honour, and
                     the segments would appear dead because the pinned prop wins
@@ -414,7 +414,7 @@ export function TokenPicker({
                             onSelectToken={handleSelect}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
-                            // : the held-balance list is cross-chain too
+                            // The held-balance list is cross-chain too
                             // whenever the caller has not pinned a network, so
                             // a user holding the same tick on two chains would
                             // otherwise face the same indistinguishable rows the
@@ -441,7 +441,7 @@ export function TokenPicker({
                                 <BalanceList
                                     rows={platformResults}
                                     onSelectToken={handleSelect}
-                                    // : this section searches EVERY chain
+                                    // This section searches EVERY chain
                                     // the wallet holds an address on, so the
                                     // same tick legitimately appears once per
                                     // chain. Without the chain named, those

@@ -60,7 +60,7 @@ pnpm --filter @xchain-wallet/desktop run build:renderer
 
 # --- 3. Package --------------------------------------------------------
 # THIS BUILDS THE PACKAGED LINUX ARTIFACTS, NOT JUST THE UNPACKED BUNDLE,
-# AND THAT CHANGE IS THE WHOLE POINT OF DD7 ( §11).
+# AND THAT CHANGE IS THE WHOLE POINT OF DD7 (§11).
 #
 # It used to run `dist:unpacked` (electron-builder's `--dir` mode), which
 # emits `linux-unpacked/` and `linux-arm64-unpacked/` directory trees and
@@ -85,7 +85,7 @@ pnpm --filter @xchain-wallet/desktop run build:renderer
 #
 # The precondition this rested on is paid, not assumed: all four packaged
 # Linux artifacts reproduce byte-for-byte across two independent builds of
-# one commit in this container (, after the mksquashfs wrapper
+# One commit in this container (after the mksquashfs wrapper
 # normalised the two clocks the AppImage carried).
 #
 # Packaging still emits the unpacked trees as an intermediate, so the
@@ -199,7 +199,7 @@ cd "/workspace/packages/desktop/${DIST_DIR}"
 # above disagree, this is what says WHICH file inside the bundle moved,
 # and without it a mismatch is a 130MB binary diff.
 #
-# IT COVERS node_modules PATHS, AND THAT IS THE POINT ( /build-spec
+# IT COVERS node_modules PATHS, AND THAT IS THE POINT (build-spec
 # 2026-08-02). This find used to carry `-not -path '*/node_modules/*'`,
 # borrowed from the recipes that hash a SOURCE tree, where skipping
 # node_modules is obviously right. Here it runs inside `dist/`, which holds

@@ -72,7 +72,7 @@ test.describe('command palette', () => {
         await expect(navItem(page, 'Home')).toHaveAttribute('aria-current', 'page');
     });
 
-    test('token entity search opens TokenDetail with the full ref ', async ({ page }) => {
+    test('token entity search opens TokenDetail with the full ref', async ({ page }) => {
         await createWallet(page);
 
         // Balance rows join the palette's searchable surface on open. The

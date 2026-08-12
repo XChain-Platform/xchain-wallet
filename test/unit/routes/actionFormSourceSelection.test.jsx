@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / D-57: every form built on `useActionForm` (MINT, SWEEP,
+// D-57: every form built on `useActionForm` (MINT, SWEEP,
 // DESTROY, SLEEP, CALLBACK, ORACLE, CREATE ORDER, address preferences)
 // used to default its SOURCE to the newest HD external address, while
 // Home, Send and every `preferredSourceId` form operate on the chain's
@@ -106,7 +106,7 @@ async function fromValue() {
 
 afterEach(() => cleanup());
 
-describe('useActionForm source default ( / D-57)', () => {
+describe('useActionForm source default (D-57)', () => {
     it('MintForm opens on the chain ACTIVE address, not the newest HD address', async () => {
         const messaging = mountWith({ Form: MintForm });
         expect(await fromValue()).toBe(ADDR_ACTIVE.address);
@@ -201,7 +201,7 @@ describe('useActionForm source default ( / D-57)', () => {
 });
 
 
-// : the loaded form must reach the user with its source already
+// The loaded form must reach the user with its source already
 // resolved, in ONE render rather than two.
 //
 // The default used to be written into state by an effect, so a form whose
@@ -226,7 +226,7 @@ describe('useActionForm source default ( / D-57)', () => {
 // intermediate state is invisible - the same timing dependence that made the
 // original failure hard to see, reproduced inside the test that is supposed
 // to catch it.
-describe('useActionForm single-render load ', () => {
+describe('useActionForm single-render load', () => {
     /** Records the hook's output on every render; renders nothing. */
     function Probe({ log, options }) {
         const form = useActionForm({
@@ -284,7 +284,7 @@ describe('useActionForm single-render load ', () => {
 
     it('the settled source is still the ACTIVE address', async () => {
         // The single-render invariant must not be bought by defaulting to
-        // whatever is cheapest to compute early ( / D-57).
+        // whatever is cheapest to compute early (D-57).
         const log = await recordRenders();
         expect(log[log.length - 1].fromAddress).toBe(ADDR_ACTIVE.address);
         expect(log[log.length - 1].fromAddressId).toBe(ADDR_ACTIVE.id);

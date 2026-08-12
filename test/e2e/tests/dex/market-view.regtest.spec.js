@@ -26,7 +26,7 @@
 //
 // AND THE ORDER CARRIES A MEMO, which is not decoration: driving this lane found
 // that an order WITHOUT one is missing from the book entirely
-// (D-136/ - `getOrderInfoBatch` INNER JOINed `index_memos`, and MEMO is an
+// (D-136 - `getOrderInfoBatch` INNER JOINed `index_memos`, and MEMO is an
 // optional field, so the book silently dropped every order that omitted it).
 // Fixed in xchain-explorer, but a venue runs a built image, so this spec pins the
 // working shape today and its second test - the same order with NO memo, which is
@@ -52,7 +52,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** ISSUE pays a real coin fee on this chain , so fund generously. */
+/** ISSUE pays a real coin fee on this chain, so fund generously. */
 const FUNDING = 2;
 const SUPPLY = '1000';
 const STAMP = Date.now().toString().slice(-6);
@@ -182,7 +182,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Amount', { exact: true }).last().fill(String(GET));
 
             // The memo is load-bearing on a venue that has not taken the
-            // D-136/ fix: without it the book drops the order. Set here so
+            // D-136 fix: without it the book drops the order. Set here so
             // this test pins the market path itself rather than re-failing on a
             // defect its sibling below already owns.
             await main.getByRole('button', { name: /Advanced options/ }).click();
@@ -256,7 +256,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
     // The same lane with the field left blank, which is what the form produces
     // unless the user opens "Advanced options" - so this is the ordinary case,
     // and it is the one that was broken.
-    test('an order with no memo is on the book too (D-136/)', async ({ page }) => {
+    test('an order with no memo is on the book too (D-136)', async ({ page }) => {
         const noMemoTick = `NMO${STAMP}`;
 
         await test.step('issue, order without a memo, and expect the book to carry it', async () => {

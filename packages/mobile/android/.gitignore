@@ -55,7 +55,7 @@ captures/
 # Keystore files. UNCOMMENTED, unlike the template: K9 (Play upload) and K10
 # (direct-APK) are custody rows in the key-rotation runbook, K10 is the one
 # key in the wallet's whole release surface that cannot be rotated at all
-# ( §4), and neither ever goes near a CI runner (§7). A keystore that
+# (§4), and neither ever goes near a CI runner (§7). A keystore that
 # reaches this repo is an incident, so the ignore is not optional here.
 *.jks
 *.keystore

@@ -43,7 +43,7 @@ const container = document.getElementById('xchain-desktop-root');
 if (!container) {
     throw new Error('desktop: #xchain-desktop-root missing; check renderer/index.html');
 }
-// : declare what this shell can actually do before the UI
+// Declare what this shell can actually do before the UI
 // renders. Desktop runs the SDK in the Electron main process, so its
 // sockets are ours to open and a SOCKS5 proxy is reachable. The web and
 // extension shells declare nothing and the Tor toggle stays hidden

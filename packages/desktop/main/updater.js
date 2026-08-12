@@ -16,7 +16,7 @@
 //
 // electron-updater fetches the update-info file for its CHANNEL, not a
 // file called "latest". Our channel is `stable`, so the shipped §2
-// matrix is four pointers ( §7.1, names confirmed against a real
+// matrix is four pointers (§7.1, names confirmed against a real
 // build 2026-07-31):
 //
 //     stable.yml              Windows, x64 + arm64 in one file
@@ -30,7 +30,7 @@
 // host as the binary, which is why `updateVerify.js` exists.
 //
 // "Swaps it in" means something different per Linux format, and the
-// difference is a privilege boundary rather than a detail ( §5,
+// difference is a privilege boundary rather than a detail (§5,
 // measured 2026-08-02): the AppImage is replaced in place by the running
 // process, while the `.deb` is installed by `dpkg -i` run through
 // `pkexec`, so the user is asked for administrator rights. Both paths are
@@ -48,7 +48,7 @@
 // currently-installed app before letting the user install. Linux
 // (.AppImage / .deb) had no equivalent: the SHA512 in the YML manifest
 // is served by the same host as the binary, so it is a checksum, not a
-// signature.  S5 (decision D5) closes that with a signed release
+// signature. S5 (decision D5) closes that with a signed release
 // manifest checked against a key pinned in the app; see
 // `updateVerify.js` for the full argument, and the reproducible-builds doc
 // (https://docs.xchain.io/components/wallet/reproducible-builds)
@@ -60,7 +60,7 @@
 // up later, because there is no second path at all. The UI can only ask
 // for the checked one.
 //
-// The channel pointer is verified there too (, the  §7.2
+// The channel pointer is verified there too (the §7.2
 // fast-follow). Proving the downloaded bytes were signed said nothing
 // about the file that CHOSE those bytes, and that file is authored by
 // whoever controls the feed. `downloadAndInstall()` re-fetches this
@@ -94,7 +94,7 @@ export const UPDATE_FEED_BASE_URL = 'https://downloads.xchain.io/wallet/';
 /**
  * Headers pinned on every update request, and the reason is one header.
  *
- * WHAT THIS SUPPRESSES ( §7.6, measured 2026-08-02).
+ * WHAT THIS SUPPRESSES (§7.6, measured 2026-08-02).
  * `AppUpdater.getUpdateInfoAndProvider` sends `x-user-staging-id` with
  * every check. The value is a UUID electron-updater generates on the first
  * check from 4096 random bytes, writes to `<userData>/.updaterId`, and
@@ -326,7 +326,7 @@ export function selectUpdater(mod, {
 
     // A snap is updated by snapd, and electron-updater has no snap class
     // at all - so the only right updater here is NONE, whatever the bundle
-    // claims ( §16). This is the same defect family as the APPIMAGE
+    // claims (§16). This is the same defect family as the APPIMAGE
     // check below, one packaging over: snapcraft stages the SAME
     // `linux-unpacked` tree the deb target writes `package-type` into, and
     // the mksquashfs wrapper that strips that file protects only the
@@ -392,7 +392,7 @@ export async function attachUpdater({
         throw new Error('attachUpdater: onEvent must be a function');
     }
 
-    // STORE BUILDS MUST NOT SELF-UPDATE ( §13 macOS, §15 Windows).
+    // STORE BUILDS MUST NOT SELF-UPDATE (§13 macOS, §15 Windows).
     // Both platforms hand updates to the store, and both tell the app so:
     // Electron sets `process.mas` on a Mac App Store build and
     // `process.windowsStore` on an MSIX/AppX one. In either channel there
@@ -411,7 +411,7 @@ export async function attachUpdater({
     // Short-circuit BEFORE loading electron-updater, so a store build
     // never registers the listeners or reaches the network.
     //
-    // The SNAP env check is the Linux member of this family ( §16):
+    // The SNAP env check is the Linux member of this family (§16):
     // snapd owns updates for a Snap Store install exactly as the two app
     // stores own theirs, and Electron has NO process flag for it - there
     // is no `process.snap` the way there is `process.mas` and
@@ -448,7 +448,7 @@ export async function attachUpdater({
         // this install down that package manager's updater.
         console.error(
             `[xchain] this AppImage carries package-type "${mislabelledAs}"; `
-            + 'forcing the AppImage updater ( §5)',
+            + 'forcing the AppImage updater (§5)',
         );
     }
     if (!autoUpdater || typeof autoUpdater.checkForUpdates !== 'function') {
@@ -496,7 +496,7 @@ export async function attachUpdater({
     autoUpdater.autoInstallOnAppQuit = false;
 
     // AND NO DOWNGRADES, EXPLICITLY, BECAUSE THE DEFAULT IS ONE ASSIGNMENT
-    // AWAY FROM FLIPPING ( §7.4).
+    // AWAY FROM FLIPPING (§7.4).
     //
     // The rollback doctrine rests on one property of electron-updater:
     // it never installs a version at or below the running one, so restoring
@@ -593,7 +593,7 @@ export async function attachUpdater({
                 if (!fetched.ok) return reject(fetched.reason);
 
                 // The pointer that chose this download, re-fetched so it
-                // can be anchored to the signed manifest . Fetched
+                // can be anchored to the signed manifest. Fetched
                 // rather than remembered because electron-updater keeps its
                 // parsed UpdateInfo and not the bytes, and a paraphrase is
                 // not the thing that was served. A feed that answers with a

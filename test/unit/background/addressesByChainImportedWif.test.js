@@ -16,12 +16,12 @@
 // import reported success and named the right address, and the address
 // then appeared nowhere.
 //
-// Same shape as : the allocating side and the selecting side have
+// Same shape: the allocating side and the selecting side have
 // to agree, so both directions are pinned here.
 //
 // This file pins the BEHAVIOUR. Its sibling addressesByChainSharedRule
 // pins where the behaviour comes from, which is the half that kept
-// regressing .
+// regressing.
 
 import { describe, it, expect } from 'vitest';
 import { makeHost, byChain, addressesOn } from './_addressesByChainFixture.js';

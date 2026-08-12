@@ -164,7 +164,7 @@ const specSrc = read('packages/bridge-spec/src/index.ts');
 assert.ok(/\|\s*'BLOCKED_BY_USER'/.test(specSrc),
     'BridgeErrorCode union includes BLOCKED_BY_USER');
 
-// The bridge doc left this repo in ; the assertion follows it into
+// The bridge doc left this repo in; the assertion follows it into
 // the sibling checkout rather than being dropped, and skips when absent.
 if (docsAvailable()) {
     const bridgeDocSrc = readDoc('bridge.md');

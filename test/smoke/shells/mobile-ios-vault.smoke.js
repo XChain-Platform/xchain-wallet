@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The iOS vault plugin, checked from the side that can actually run ( S2).
+// The iOS vault plugin, checked from the side that can actually run (S2).
 //
 // NONE of the Swift below can be compiled by this repo's CI, and on the release
 // Mac it cannot be compiled either right now: Xcode's iOS platform support is
@@ -109,7 +109,7 @@ for (const method of declared) {
 // probes exactly one method, so that method must exist or every device reads
 // as a browser.
 // Either spelling: the inline duck-type it used to do, or the `method:` argument
-// it now passes to core's shared probe ( collapsed the two copies of that
+// it now passes to core's shared probe (collapsed the two copies of that
 // probe into one).
 const probe = (
     /typeof plugin\.([A-Za-z0-9_]+) === 'function'/.exec(nativeVaultJs)
@@ -151,7 +151,7 @@ assert.ok(
 
 assert.match(
     store, /kSecAttrAccessibleWhenUnlockedThisDeviceOnly/,
-    ' §4 pins this accessibility class; a weaker one is a spec change, not an implementation choice',
+    '§4 pins this accessibility class; a weaker one is a spec change, not an implementation choice',
 );
 assert.match(store, /kSecAttrSynchronizable as String: false/, 'vault key material must never reach iCloud Keychain');
 for (const weaker of ['kSecAttrAccessibleAfterFirstUnlock', 'kSecAttrAccessibleAlways']) {
@@ -177,7 +177,7 @@ assert.ok(
     'the wrap must be released by the Keychain ACL, never by branching on an evaluatePolicy result',
 );
 
-// --- The other half of the registration guard  -----------------
+// --- The other half of the registration guard -----------------
 //
 // Every assertion above proves the plugin registration EXISTS in source. None
 // of them can prove it RAN: the registration ran on this shell right up until
@@ -210,12 +210,12 @@ assert.match(
 );
 
 console.log(
-    'OK: iOS vault smoke ( S2: jsName XChainVault matches nativeVault.js PLUGIN_NAME;'
+    'OK: iOS vault smoke (S2: jsName XChainVault matches nativeVault.js PLUGIN_NAME;'
     + ` all ${calledByJs.size} SPA-called methods are both declared to the bridge and @objc-implemented;`
     + ' the detection probe exists; MainViewController registers the plugin from capacitorDidLoad and the'
     + ' storyboard instantiates it, without which the app silently falls back to WebView storage;'
     + ' vault key pinned WhenUnlockedThisDeviceOnly + non-synchronizable with no weaker class present;'
     + ' biometric wrap uses biometryCurrentSet, no biometryAny, no reuse window, no evaluatePolicy gate.'
-    + ' : the shared SPA refuses to boot a native shell whose plugin never registered, checked'
+    + ' the shared SPA refuses to boot a native shell whose plugin never registered, checked'
     + ' before React mounts, and the backend factory throws rather than downgrading to IndexedDB)',
 );

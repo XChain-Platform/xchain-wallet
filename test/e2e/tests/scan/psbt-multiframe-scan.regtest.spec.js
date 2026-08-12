@@ -16,7 +16,7 @@
 // story rests on. A watcher builds a PSBT it cannot sign, displays it as a
 // sequence of QR frames, and the offline signer collects them with its camera -
 // there is no cable, no clipboard and no file system between the two halves. And
-// it is the same transport  wants for the pairing payload, so what this
+// it is the same transport a later change wants for the pairing payload, so what this
 // measures is also what chunked pairing would cost.
 //
 // WHAT IS ASSERTED:

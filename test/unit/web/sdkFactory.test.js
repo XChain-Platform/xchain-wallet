@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the web shell's SDK venue is CHOSEN, not caught.
+// The web shell's SDK venue is CHOSEN, not caught.
 //
 // The resolver used to decide between the real xchain-sdk and the dev mock by
 // trying the import and treating the exception as "use the mock". That made

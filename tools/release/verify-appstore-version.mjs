@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/verify-appstore-version.mjs - the pre-submission gate for the
-// half of  that lives on Apple's servers rather than on ours.
+// half of the App Store submission that lives on Apple's servers rather than on ours.
 //
 // WHY THIS EXISTS. Every other pre-submission condition in this spec became a
 // command, because a condition that is only written down keeps being READ
@@ -63,8 +63,8 @@
 //     derived here rather than restated so the two cannot drift.
 //
 // THE GAMBLING ANSWER IS DELIBERATELY LOUD AND NOT FATAL. The operator decided
-// on 2026-08-06 to ship the betting surface and leave Gambling declared NO
-// (). That is a decision, not an oversight, and a gate that fails on
+// on 2026-08-06 to ship the betting surface and leave Gambling declared NO.
+// That is a decision, not an oversight, and a gate that fails on
 // a standing decision is a gate an operator learns to route around on
 // submission day - which is the lesson row 49 paid for. So it reports, in
 // full, every run, and never blocks. A decision to leave a known mismatch in
@@ -484,7 +484,7 @@ export function classifyVersionRecord(record, ships, pinned = null) {
         } else {
             checks.push(loud(
                 'age-gambling',
-                'DEFERRED OPERATOR DECISION, re-read it before pressing submit: the store build'
+                'DEFERRED OPERATOR DECISION (age-gambling declaration), re-read it before pressing submit: the store build'
                 + ' ships the parimutuel betting lane and Apple\'s declaration says gambling=false'
                 + ` (simulated=${JSON.stringify(rating.gamblingSimulated)}). Nothing is misrepresented while`
                 + ' this version is a draft; the form and the binary are asserted TOGETHER at the moment'
@@ -652,7 +652,7 @@ export async function fetchVersionRecord({ token, bundleId, fetchImpl = fetch })
 }
 
 const USAGE = `verify-appstore-version.mjs - would App Store Connect actually accept a
-submission of the current version? ( pre-submission gate.)
+submission of the current version? (App Store Connect pre-submission gate.)
 
 Usage:
   node tools/release/verify-appstore-version.mjs [--json]
@@ -662,7 +662,7 @@ Options:
   -h, --help        print this and exit 0
 
 READS LIVE APP STORE CONNECT STATE, and writes nothing. --help is answered
-before any network call .
+before any network call.
 
 Credentials: APPLE_API_KEY (or APPLE_API_KEY_PATH), APPLE_API_KEY_ID,
 APPLE_API_ISSUER - the same three the archive and export lanes take.
@@ -722,7 +722,7 @@ async function main() {
         return outcome.exit;
     }
 
-    console.log('App Store Connect version record ( pre-submission gate)\n');
+    console.log('App Store Connect version record (pre-submission gate)\n');
     if (outcome.record) {
         const { app, version } = outcome.record;
         console.log(`  ${app.name} (${app.bundleId})  version ${version.versionString}  ${version.state}\n`);

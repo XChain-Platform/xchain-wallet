@@ -47,7 +47,7 @@ const chainRegistry = registryLib.defaultRegistry();
  *   TYPE=1 (TICK)    - type ticks directly, or add from the token picker.
  *
  * Stage machine mirrors CreatePollForm: 'form' -> 'review' -> 'submitting'
- * -> 'done', with the  single-encode confirm page substituting for
+ * -> 'done', with the single-encode confirm page substituting for
  * 'review' when that slice is enabled and the source isn't HW/watcher.
  *
  * @param {object} props
@@ -118,7 +118,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    // : an ADDRESS list is only useful on the chain it is published to -
+    // An ADDRESS list is only useful on the chain it is published to -
     // the indexer rejects items that are not addresses for that coin+network
     // (into `list_items_invalid`) while still storing the list. Validate here so
     // the count the form shows is the count the chain will keep.
@@ -231,14 +231,14 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         reader.readAsText(file);
     }
 
-    // : software sources go through the single-encode confirm
+    // Software sources go through the single-encode confirm
     // page; hardware + watcher keep the legacy review stage (same split
     // as CreatePollForm / AirdropForm).
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -250,7 +250,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     });
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -397,7 +397,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
         }
-        // : signed but never broadcast. "List published ... is on its
+        // Signed but never broadcast. "List published... is on its
         // way" is the one thing that did not happen.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="list" />);
@@ -420,7 +420,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         );
     }
 
-    //  confirm page, rendered in place of the form.
+    // confirm page, rendered in place of the form.
     if (actionConfirm.open) {
         return (
             <ActionConfirmScreen
@@ -433,7 +433,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? fromAddress : null}
                 hwStatus={hwStatus}
@@ -631,7 +631,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             ) : null}
                         </div>
                     ) : null}
-                    {/* : a real address for a different chain is not a typo;
+                    {/* A real address for a different chain is not a typo;
                         say which chain this list is being published to. */}
                     {recipients.wrongNetwork.length > 0 ? (
                         <div role="alert" className={styles.warnings}>

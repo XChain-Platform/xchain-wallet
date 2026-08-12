@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  D6: every origin a harness expects `window.xchain` on is
+// Smoke for D6: every origin a harness expects `window.xchain` on is
 // actually covered by the manifest's content-script match patterns.
 //
 // This closes a lesson the spec wrote down and nothing enforced. D6 narrowed
@@ -54,7 +54,7 @@ const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const MANIFEST = 'packages/extension/manifest.json';
-// The runbook moved to the sibling xchain-documentation checkout ;
+// The runbook moved to the sibling xchain-documentation checkout;
 // rule B is skipped, loudly, when that checkout is absent.
 const RUNBOOK = 'xchain-documentation components/wallet/release/extension/test-dapp-runbook.md';
 const E2E_DIR = 'test/e2e/tests';
@@ -191,7 +191,7 @@ assert.ok(found.length >= 2,
 assert.deepEqual(uncovered, [],
     'an extension harness drives the injected provider at an origin the content script does not match, so '
     + '`window.xchain` will never appear there and the harness will fail looking like a wallet bug. This is '
-    + `exactly what  D6 did to the co-sign spec. Manifest matches: ${patterns.join(', ')}. `
+    + `exactly what D6 did to the co-sign spec. Manifest matches: ${patterns.join(', ')}. `
     + 'Move the harness origin (https needs no TLS when the harness fulfils the route itself), do not widen '
     + 'the manifest: widening triggers CWS re-review and can disable the extension for installed users.');
 
@@ -227,6 +227,6 @@ assert.ok(/192\.168|LAN/.test(runbook),
     `${RUNBOOK} must warn that a LAN address is not loopback and gets no provider. The runbook's own `
     + 'worked example uses localhost, which still works, so nothing else surfaces the hazard.');
 
-console.log(`OK: extension provider-origins smoke ( D6: ${found.length} harness origins across `
+console.log(`OK: extension provider-origins smoke (D6: ${found.length} harness origins across `
     + `${harnesses.length} harnesses all covered by ${patterns.length} manifest match patterns, `
     + 'test-dApp runbook quoting the manifest)');

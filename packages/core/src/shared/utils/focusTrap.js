@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Focus trap + background-inert utilities ( §5.1).
+// Focus trap + background-inert utilities (§5.1).
 //
 // The confirm modal is a TRUE modal: Tab must cycle within it, focus
 // returns to the invoker on close, and the background is `inert`. No

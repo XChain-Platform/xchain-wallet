@@ -83,19 +83,19 @@ assert.match(
 // --- "Send small test" reduces amount + returns to form ----------------
 
 assert.match(sendSrc, /onSendSmallTest = useCallback/, 'small-test handler memoized');
-assert.match(sendSrc, /amtSats \/ 100n/, '1% reduction in exact sats ');
+assert.match(sendSrc, /amtSats \/ 100n/, '1% reduction in exact sats');
 assert.match(
     sendSrc,
     /decimalStringFromSats\(reduced\)/,
-    'small-test amount formatted via exact non-scientific formatter ',
+    'small-test amount formatted via exact non-scientific formatter',
 );
 assert.match(sendSrc, /setStage\('form'\)/, 'returns to form');
 
 // --- gate UI -----------------------------------------------------------
 
 assert.match(sendSrc, /styles\.testSendGate/, 'banner uses testSendGate class');
-// : the banner used to be inlined in the `stage === 'review'` branch,
-// which  made unreachable for every non-watcher send. Every assertion
+// The banner used to be inlined in the `stage === 'review'` branch,
+// which a later change made unreachable for every non-watcher send. Every assertion
 // in this file still passed while the feature was dead, so pin the banner to
 // a shared const AND to the compose form, which is the screen every send path
 // actually goes through. Behavioural cover: test/unit/routes/Send.testSendGate.test.jsx.
@@ -109,17 +109,17 @@ assert.ok(formRender.length > 0, 'compose form found');
 assert.match(
     formRender,
     /\{testSendGateBanner\}/,
-    'banner renders on the compose form ',
+    'banner renders on the compose form',
 );
 assert.match(
     formRender,
     /form="send-form"[\s\S]{0,200}disabled=\{!!testSendGate\}/,
-    'compose-form Send button disabled while the gate is up ',
+    'compose-form Send button disabled while the gate is up',
 );
 assert.match(
     sendSrc,
     /if \(testSendGate\) \{[\s\S]{0,400}return;/,
-    'handleReview refuses to open the confirm path while the gate is up ',
+    'handleReview refuses to open the confirm path while the gate is up',
 );
 assert.match(sendSrc, /Send a small test first/i, 'small-test button copy');
 assert.match(sendSrc, /I've verified[,]?\s*continue/i, 'continue button copy');

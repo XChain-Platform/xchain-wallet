@@ -15,7 +15,7 @@
 
 // tools/release/upload-listing-assets.mjs - push the PINNED iOS listing
 // screenshots to App Store Connect through the same API key the gates read
-// with ( row 63, ).
+// with (row 63).
 //
 // WHY THIS EXISTS. The pin, the capture harness and the two gates were all
 // built before anything could ACT on them: verify-listing-assets.mjs says the
@@ -68,7 +68,7 @@ const WS_ROOT = join(HERE, '..', '..');
 const API = 'https://api.appstoreconnect.apple.com';
 
 export const USAGE = `upload-listing-assets.mjs - upload the pinned iOS listing
-screenshots to App Store Connect ( row 63).
+screenshots to App Store Connect (row 63).
 
 Usage:
   node tools/release/upload-listing-assets.mjs [--dry-run] [--locale <code>]

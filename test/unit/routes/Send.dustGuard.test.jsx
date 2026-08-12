@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the Send form must refuse a below-dust NATIVE amount before composing.
+// The Send form must refuse a below-dust NATIVE amount before composing.
 //
 // Measured on BTC regtest before the fix: a 109-sat send (floor 546) filled the
 // form, composed, opened the confirm screen with Approve enabled, got SIGNED, and
@@ -134,7 +134,7 @@ function decimal(sats) {
 
 afterEach(() => cleanup());
 
-describe('Send: below-dust amounts are refused before composing ', () => {
+describe('Send: below-dust amounts are refused before composing', () => {
     it('[REGRESSION] does not compose the measured 109-sat Bitcoin send', async () => {
         const { messaging, chain } = mount('bitcoin');
         await fill({ to: chain.to, amount: '0.00000109' });

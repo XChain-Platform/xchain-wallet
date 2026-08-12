@@ -110,7 +110,7 @@ export function obligationBaseUnits(raw) {
 /**
  * Render a base-unit native-coin amount (8 decimals: BTC/LTC/DOGE) as
  * a decimal string at coin scale. BigInt throughout: a DOGE
- * obligation can exceed Number.MAX_SAFE_INTEGER , where
+ * obligation can exceed Number.MAX_SAFE_INTEGER, where
  * float math would display a *different amount than gets paid*.
  * Returns null for anything that is not a plain non-negative integer
  * shape; callers show the raw value with a "base units" label

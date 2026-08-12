@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createList must name the funding address, not just the pubkey .
+// createList must name the funding address, not just the pubkey.
 //
 // Wallet E2E session 20: Manage Token -> More -> Official list -> Publish list
 // died at step 1 with "Error getting utxos: <pubkey> has no matching Script".
@@ -17,8 +17,8 @@
 // (bech32) form of the same key. createList passed only `pubkey`, so the SDK
 // never got the address it needed to pre-select UTXOs.
 //
-// Sibling of sendToken , advancedAction (D-17/D-18) and
-// dispenserAction . It stayed latent because the confirm-modal lane
+// Sibling of sendToken, advancedAction (D-17/D-18) and
+// dispenserAction. It stayed latent because the confirm-modal lane
 // hands submitAction a prebuiltPsbt and skips createTx entirely; only the
 // legacy direct-dispatch publishes (official-token list, list fork, airdrop,
 // watcher/HW branches) build the tx from these encoderOpts.

@@ -87,7 +87,7 @@ for (const stage of ['explain', 'create', 'submitting', 'backup', 'done']) {
 }
 // This wizard runs on a device that ALREADY holds the legacy wallet, so the
 // fresh-install `wallet.create` handler refuses it outright ("a wallet
-// already exists"). It must persist through the add path instead .
+// already exists"). It must persist through the add path instead.
 assert.ok(
     !/messaging\.createWallet\s*\(/.test(migrate),
     'MigrateToBip39 does NOT call the fresh-install messaging.createWallet',

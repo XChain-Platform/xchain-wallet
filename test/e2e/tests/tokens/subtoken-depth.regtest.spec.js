@@ -52,7 +52,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/subtoken-depth.regtest.spec.js
 //
-// ⚠️ : three of the four legs here are the FIRST credit of a brand-new
+// ⚠️: three of the four legs here are the FIRST credit of a brand-new
 // (address, tick) key, which is the shape that wedged this venue twice in
 // Session 39. A leg that times out with `decoder_lag_blocks` not shrinking over
 // two reads is that, not this spec - restart the indexer and re-run.
@@ -74,7 +74,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** Three ISSUEs plus a refused one, each paying a real coin fee . */
+/** Three ISSUEs plus a refused one, each paying a real coin fee. */
 const FUNDING = 4;
 const STAMP = Date.now().toString().slice(-6);
 
@@ -142,7 +142,7 @@ async function mineIfPending() {
  *
  * Waits on the ACTION LIST and fetches the detail only for an index the list
  * has already returned: a speculative GET of an index that does not exist yet
- * is memoised blank for the life of the explorer process (§3.6, D-127/).
+ * is memoised blank for the life of the explorer process (§3.6, D-127).
  */
 async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
@@ -158,7 +158,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         + `${Math.round(timeoutMs / 1000)}s. Decoder lag `
         + `${status?.decoder_lag_blocks?.[REGTEST_COIN]}, indexer lag `
         + `${status?.chain_lag_blocks?.[REGTEST_COIN]}. A lag that does not shrink over two reads `
-        + 'is  wedging the venue, not a wallet defect (§3.7).');
+        + 'is wedging the venue, not a wallet defect (§3.7).');
 }
 
 /** Waits for `tick` at `address` to read exactly `want`, and returns it. */
@@ -234,7 +234,7 @@ async function screenNetworkFeeSats(page) {
 /**
  * The protocol-fee row inside the balance projection, in satoshis, or null.
  *
- * Read out of the deltas panel because that is where 's fix put it.
+ * Read out of the deltas panel because that is where that fix put it.
  */
 async function projectedProtocolFeeSats(page) {
     const deltas = page.getByTestId('action-intent-deltas');
@@ -346,7 +346,7 @@ async function issueSubtokenAndSettle(page, { parent, child, supply, owner, expe
     const minerSats = await screenNetworkFeeSats(page);
     const feeSats = await projectedProtocolFeeSats(page);
     expect(feeSats,
-        'the confirm screen disclosed no protocol fee at all on a fee-bearing ISSUE ')
+        'the confirm screen disclosed no protocol fee at all on a fee-bearing ISSUE')
         .not.toBeNull();
     expect(feeSats,
         `the screen projected ${feeSats} sats of protocol fee against the venue's own quote of `

@@ -323,7 +323,7 @@ async function addressesByChain(req, { vault, chainRegistry }) {
     // show exactly these.
     //
     // The rule lives in flows/_importedAddressIds.js and is read from
-    // there, never restated here : this is the query AddressList
+    // there, never restated here: this is the query AddressList
     // actually calls, so an inline copy is the one that would keep
     // shipping the D-63 defect while the shared resolver looked correct.
     const importedAddressIds = await importedAddressIdsFor(vault, walletId);
@@ -362,7 +362,7 @@ async function addressesByChain(req, { vault, chainRegistry }) {
 }
 
 /**
- *  confirm-path preamble shared by every `*.composeForConfirm` route:
+ * confirm-path preamble shared by every `*.composeForConfirm` route:
  * settle where the change output pays, then collect the wallet's own
  * addresses on that chain for the tamper check.
  *
@@ -374,7 +374,7 @@ async function addressesByChain(req, { vault, chainRegistry }) {
  * its own confirm check.
  *
  * The rotation happens HERE rather than in submitAction because the
- * single-encode pipeline  builds the PSBT at this step and signs
+ * single-encode pipeline builds the PSBT at this step and signs
  * those exact bytes on Approve; a change address chosen later would never
  * reach the wire.
  *
@@ -566,7 +566,6 @@ async function newestAddress(req, { vault, chainRegistry }) {
     // Not `descriptor.defaultAddressType`: a counterwallet-legacy wallet
     // stores p2pkh addresses, so the chain default matches none of them
     // and Receive would report the wallet as having no address at all
-    // .
     const type = addressType
         ?? await flows.defaultAddressTypeForWallet(vault, walletId, descriptor);
 
@@ -670,7 +669,7 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
-        // : called after a settings.update whose patch touches
+        // Called after a settings.update whose patch touches
         // `privacy`, so a shell that routes requests itself can re-apply
         // before the next one. Desktop uses it for Tor routing; the web
         // and extension shells cannot proxy their own traffic and pass
@@ -702,7 +701,7 @@ export function createBackgroundHost(deps) {
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
 
-    //  §4.7: ONE reservation ledger per host, shared across every
+    // ONE reservation ledger per host, shared across every
     // approval window. A single background SW serves all popup windows, so
     // an in-memory ledger already closes the two-window same-balance race
     // (both windows' preflights net each other's approved-but-unbroadcast
@@ -786,7 +785,7 @@ export function createBackgroundHost(deps) {
             // Vault not open / read failed: boot continues.
         }
     }
-    // : Settings -> Network & Endpoints is the surface an operator
+    // Settings -> Network & Endpoints is the surface an operator
     // uses to point the wallet at their OWN explorer / encoder / hub, and
     // until this ran the record was written, read back by the summary row,
     // and consumed by nothing: every SDK instance kept the bundled
@@ -901,7 +900,7 @@ export function createBackgroundHost(deps) {
     // already exists). Same flow underneath; the difference is which
     // path is reachable in which session state.
     host.register('wallet.add.import', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        // : seed from the vault's active chain set, not the mainnet
+        // Seed from the vault's active chain set, not the mainnet
         // constant. A wallet added while the app sits on regtest/testnet
         // used to get mainnet-only addresses, which the active-network
         // filter hides everywhere - an inert wallet with no in-app way to
@@ -968,7 +967,7 @@ export function createBackgroundHost(deps) {
     // `source: 'trezor' | 'ledger'`. Falls back to a password-based
     // unlock for shells/sessions that don't pre-populate the pool.
     host.register('account.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        // : same seeding rule as wallet.add.import - a new account
+        // Same seeding rule as wallet.add.import - a new account
         // created on regtest/testnet must land on the chains the vault is
         // actually active on, not on the mainnet constant.
         const activeChainIds = await seedChainIdsForVault({
@@ -1062,7 +1061,7 @@ export function createBackgroundHost(deps) {
         // calls it shortly after unlock, before any chain-aware UI
         // mounts.
         void seedCustomChainsFromVault(vault, chainRegistry);
-        // : same opportunistic trigger for custom endpoints. Covers
+        // Same opportunistic trigger for custom endpoints. Covers
         // the web shell, where the module-scoped SDKRegistry is replaced
         // once the real SDK factory resolves and the fresh instance would
         // otherwise start with an empty override map.
@@ -1070,7 +1069,7 @@ export function createBackgroundHost(deps) {
         return getSettings(vault);
     });
 
-    // : switch the active network AND make sure the wallet actually has
+    // Switch the active network AND make sure the wallet actually has
     // addresses on it. `settings.update` alone only flips a filter, which is
     // how a network switch used to strand a wallet with no addresses and no UI
     // path to create one. Address derivation is best-effort and reported, never
@@ -1093,12 +1092,12 @@ export function createBackgroundHost(deps) {
             addresses = await ensureNetworkAddresses({
                 vault, chainRegistry, sdkRegistry, walletId, network, signer: signer || undefined,
             });
-            // : switching the active network must also seed per-chain
+            // Switching the active network must also seed per-chain
             // Settings (fees + ads.perChain) for that network's chains, the
             // same contract activateChain honours ("consumers key off
             // settings.fees"). ensureNetworkAddresses derives addresses only,
             // so without this a host-driven switch - the extension's ONLY path
-            // to regtest, since it has no Settings UI  - leaves
+            // to regtest, since it has no Settings UI - leaves
             // settings.fees mainnet-only. useReachability then derives an empty
             // active-chain set on regtest and reachability.check maps empty ->
             // offline, so a second popup shows a false "You're offline" and its
@@ -1117,7 +1116,7 @@ export function createBackgroundHost(deps) {
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
         const result = await updateSettings(vault, patch);
-        // : a saved endpoint takes effect on the next request, not
+        // A saved endpoint takes effect on the next request, not
         // at the next wallet restart. Invalidates only the chains whose
         // endpoints actually moved.
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'sdkEndpoints')
@@ -1131,7 +1130,7 @@ export function createBackgroundHost(deps) {
             throttleVault = vault;
             await refreshThrottleLimitsFromVault();
         }
-        // : privacy settings that change how requests are MADE
+        // Privacy settings that change how requests are MADE
         // have to take effect on the next request, not the next restart.
         // Tor routing is the case in point: a user flips it on, keeps
         // browsing their balances, and every one of those requests would
@@ -1152,7 +1151,7 @@ export function createBackgroundHost(deps) {
         return result;
     });
 
-    //  / §20.5: watcher <-> signer auto-pairing over a shared seed.
+    // §20.5: watcher <-> signer auto-pairing over a shared seed.
     //
     // `pairing.payload` exports THIS wallet's account-level public material
     // (never any seed or private key) for the partner to scan or paste.
@@ -1430,7 +1429,7 @@ export function createBackgroundHost(deps) {
             vault,
             fileContent: req?.fileContent,
             password: req?.password,
-            // : `password` opens the FILE. These two move the
+            // `password` opens the FILE. These two move the
             // wallet's own seal onto this device, and without them a
             // restored wallet lands unsignable and says nothing.
             walletPassword: req?.walletPassword,
@@ -1460,7 +1459,7 @@ export function createBackgroundHost(deps) {
             vault,
             pointer: req?.pointer,
             password: req?.password,
-            walletPassword: req?.walletPassword,     // , as wallet.importBackup above
+            walletPassword: req?.walletPassword,     // As wallet.importBackup above
             devicePassword: req?.devicePassword,
             onConflict: req?.onConflict,
             mode: req?.mode,
@@ -1836,7 +1835,7 @@ export function createBackgroundHost(deps) {
         return buildActionPsbt({ ...req, chainRegistry, sdkRegistry });
     });
 
-    //  §5.3: the HOST half of the single-encode pipeline. Compose the
+    // The HOST half of the single-encode pipeline. Compose the
     // ONE PSBT the ConfirmActionModal previews and the signer signs, resolve
     // fee + ADS, and run the tamper check HOST-side (decomposePsbt +
     // decodeActionFromPsbt live here). Returns a serializable, already-
@@ -1895,7 +1894,7 @@ export function createBackgroundHost(deps) {
             };
         }
 
-        // : a device source needs each segwit input's FULL previous
+        // A device source needs each segwit input's FULL previous
         // transaction in the PSBT. Ledger takes the outpoint it signs from
         // those bytes rather than from the PSBT's own txid, so a
         // witnessUtxo-only input - which is what the encoder builds by default,
@@ -1925,7 +1924,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // : what the Max button is allowed to fill in for a native-coin send.
+    // What the Max button is allowed to fill in for a native-coin send.
     //
     // The renderer cannot answer this. The number it needs is the fee the
     // ENCODER will charge for the transaction it is about to build, and the
@@ -1966,7 +1965,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // : VOTE's wire params are built by sdk.voting.*Params, which lives
+    // VOTE's wire params are built by sdk.voting.*Params, which lives
     // HERE, not in the renderer. The three VOTE forms each kept a hand-written
     // client-side mirror of that encoding to feed the generic compose route -
     // and a mirror that drifts is signed, not caught: the tamper check
@@ -1977,7 +1976,7 @@ export function createBackgroundHost(deps) {
     // (spec §1: the SDK owns the logic, the wallet owns the glass).
     //
     // No vault unlock and no password: the builders are pure shape validation.
-    // The signer pool is read only for  change rotation, which is a
+    // The signer pool is read only for change rotation, which is a
     // no-op when the pool is empty.
     host.register('action.vote.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const chainId = req?.chainId;
@@ -2026,7 +2025,7 @@ export function createBackgroundHost(deps) {
         return { ...composed, voteParams: params };
     });
 
-    //  §3.2/§3.5: describe an action the wallet did NOT compose - a
+    // §3.2/§3.5: describe an action the wallet did NOT compose - a
     // dApp's `signAction` payload, or a co-signer request decoded out of a
     // PSBT. The in-wallet path gets its intent from composeActionForConfirm,
     // which describes the composed action string; these two have no compose
@@ -2060,7 +2059,7 @@ export function createBackgroundHost(deps) {
         );
     });
 
-    //  §5.4: confirm-session persistence.
+    // Confirm-session persistence.
     //
     // The store (confirmActionSessionStorage) shipped with slice 1 and its
     // session half had NO production caller for months - only the reservation
@@ -2078,7 +2077,7 @@ export function createBackgroundHost(deps) {
     // The dispatch descriptor is stored as a messaging METHOD NAME, not a
     // closure, because it has to cross the boundary; the name is allow-listed
     // on resume for the same reason `action.vote.composeForConfirm` allow-lists
-    // its builder name .
+    // its builder name.
     host.register('action.confirmSession.put', async (req) => {
         if (!confirmSessionStorage) return { stored: false };
         const id = req?.id;
@@ -2118,7 +2117,7 @@ export function createBackgroundHost(deps) {
         return { cleared: true };
     });
 
-    // : re-price a composed action's native-coin protocol fee at Approve
+    // Re-price a composed action's native-coin protocol fee at Approve
     // time. The fee output was sized at COMPOSE from an oracle price, and the
     // amount consensus requires moves inversely with the coin price, so a move
     // of a little over 5 % (FEE_TOLERANCE_MIN) while the confirm screen sits
@@ -2144,7 +2143,7 @@ export function createBackgroundHost(deps) {
         return sdk.quoteNativeFee(actionString, { source: req?.source });
     });
 
-    //  §4: run sdk.preflight HOST-side (the SDK, its explorer endpoint,
+    // Run sdk.preflight HOST-side (the SDK, its explorer endpoint,
     // and Tier-2 state all live here) and return the serializable report. The
     // popup's AbortController cannot cross the boundary; a superseded report
     // is simply ignored by the hook once it resolves. `bypassCache` powers
@@ -2168,7 +2167,7 @@ export function createBackgroundHost(deps) {
         // Send flow, where reserve always follows the last preflight).
         const reserved = await reservationLedger.localDeltas(chainId, req.excludeReservationId);
         const callerDeltas = Array.isArray(req.localDeltas) ? req.localDeltas : [];
-        // : also net the source's UNCONFIRMED committed spends. The
+        // Also net the source's UNCONFIRMED committed spends. The
         // reservation covers approve -> broadcast only (released the instant the
         // send is signed and handed off); this covers broadcast -> confirmation,
         // where the spend is real but the explorer balance does not yet reflect
@@ -2471,7 +2470,7 @@ export function createBackgroundHost(deps) {
         // is required for broadcasting"), so calling it one-argument here meant
         // every "Broadcast now" failed with an SDK developer message and the
         // signed transaction stayed queued forever. Measured on an Android
-        // emulator against the LTC regtest venue,  SSC-6. Same call the
+        // emulator against the LTC regtest venue, SSC-6. Same call the
         // core queue drain and `broadcast.signedTx` below already make.
         if (typeof sdk?.encoder?.broadcastTx !== 'function') {
             throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks encoder.broadcastTx`);
@@ -2486,7 +2485,7 @@ export function createBackgroundHost(deps) {
         try {
             result = await sdk.encoder.broadcastTx(entry.signedTxHex);
         } catch (err) {
-            //  §5.3: the same permanence split the core queue applies,
+            // The same permanence split the core queue applies,
             // applied here too - this queue retries on demand and had no way to
             // stop. A signed transaction whose inputs are gone can never
             // confirm, so leaving it on the list invites the user to press
@@ -2628,7 +2627,7 @@ export function createBackgroundHost(deps) {
         }
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
 
-        //  §5.5: also decode the XChain action carried inside, so the
+        // Also decode the XChain action carried inside, so the
         // PSBT confirm variant can show intent alongside the output set. This
         // is strictly ADDITIVE and best-effort: decodeActionFromPsbt fails
         // closed on the documented punts (P2SH/P2WSH, multi-leg, rest-fields),
@@ -3030,7 +3029,7 @@ export function createBackgroundHost(deps) {
     host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return coinpayAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
-    // : encode-only COINPAY for §20 watcher mode. A dedicated route rather
+    // Encode-only COINPAY for §20 watcher mode. A dedicated route rather
     // than the generic `action.psbt`, because the payee and amount must be
     // re-verified against the on-chain obligation before the output is built,
     // and that check has no business living in a generic PSBT builder.
@@ -3196,7 +3195,7 @@ export function createBackgroundHost(deps) {
         return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    //  §5.6 slice 3: compose-for-confirm for MESSAGE. MESSAGE is the one
+    // §5.6 slice 3: compose-for-confirm for MESSAGE. MESSAGE is the one
     // action whose wire params cannot be built client-side: the body is
     // ENCRYPTED host-side (recipient pubkey lookup + address binding, and for
     // ECDH the sender's own key). So this route encrypts FIRST, then composes
@@ -3481,7 +3480,7 @@ export function createBackgroundHost(deps) {
 
     // Compose a BET through the SDK's own builder HOST-side, so the confirm page
     // decodes what the host actually composed rather than a client-side wire
-    // mirror (the  rule the vote route already follows).
+    // mirror (the rule the vote route already follows).
     host.register('action.bet.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const chainId = req?.chainId;
         if (typeof chainId !== 'string' || !chainId) {
@@ -3518,7 +3517,7 @@ export function createBackgroundHost(deps) {
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
-                // : the native-coin fee mode has to reach COMPOSE, not just
+                // The native-coin fee mode has to reach COMPOSE, not just
                 // submit, so the FEE_DESTINATION output sits inside the PSBT the
                 // user approves and is covered by the tamper check. BET is
                 // fee-bearing on create (v0) and place (v2), and on LTC/DOGE a

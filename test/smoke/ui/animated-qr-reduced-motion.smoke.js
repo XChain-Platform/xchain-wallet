@@ -30,7 +30,7 @@ const resolverPath = join(here, '..', '..', '..', 'packages', 'core', 'src', 'ui
 const resolver = readFileSync(resolverPath, 'utf8');
 
 // 1. The component reads the SHARED resolver rather than the media query
-//    directly. : reading matchMedia here made the in-app "Always
+// directly.: reading matchMedia here made the in-app "Always
 //    reduce" setting unenforceable, because an OS that reports
 //    no-preference is exactly why a user reaches for that setting.
 assert.ok(

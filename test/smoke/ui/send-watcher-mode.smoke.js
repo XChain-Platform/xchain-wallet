@@ -139,7 +139,7 @@ assert.match(
     /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/,
     'Send.jsx imports the shared WatcherResultPanel',
 );
-//  added `isSignerMode` to the same destructure (signer mode refuses
+// a later change added `isSignerMode` to the same destructure (signer mode refuses
 // the route outright), so this pins the binding rather than the whole line.
 assert.match(
     sendSrc,

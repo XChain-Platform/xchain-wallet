@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// encoderErrors : the wallet's translation of xchain-sdk encoder
+// encoderErrors: the wallet's translation of xchain-sdk encoder
 // failures into sentences a person can act on.
 //
 // The SDK throws SDKEncoderError with a machine-readable `code` and a message

@@ -21,7 +21,7 @@
 // placeholders. "Reset to default" wipes the entry; "Save" commits
 // the local edit buffer to the persisted record.
 //
-// : the draft is seeded with the FULL default URL, port included
+// The draft is seeded with the FULL default URL, port included
 // (`joinEndpoint`), not the descriptor's bare `defaultUrl`. Saving
 // writes all three fields, so seeding a regtest endpoint as
 // "http://localhost" (port dropped) meant editing Explorer alone
@@ -211,7 +211,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         hubUrl: sdkLib.joinEndpoint(descriptor.hub),
     };
     // A persisted value equal to the descriptor's bare `defaultUrl` on a
-    // ported endpoint is the  seeding bug, not a choice: SDKRegistry
+    // ported endpoint is the seeding bug, not a choice: SDKRegistry
     // ignores it, so show what the wallet is really using.
     const seed = (value, endpoint, fallback) => {
         if (typeof value !== 'string' || value.trim() === '') return fallback;

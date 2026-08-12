@@ -11,7 +11,7 @@
 // check-packaged-manifest.mjs - the reproducible build's packaged manifest
 // covers every shipped Linux artifact, on every shipped architecture.
 //
-// WHY THIS IS A FILE RATHER THAN A grep IN build.sh ( DD7).
+// WHY THIS IS A FILE RATHER THAN A grep IN build.sh (DD7).
 //
 // The manifest this checks is what a third party compares against the
 // official release. A SHORT one is worse than none: `sha256sum -c` over

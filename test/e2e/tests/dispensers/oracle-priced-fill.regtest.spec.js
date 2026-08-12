@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the Mode B (USER-ORACLE) dispenser lane, the half of oracle pricing
+// The Mode B (USER-ORACLE) dispenser lane, the half of oracle pricing
 // that fiat-priced-fill.regtest.spec.js does not reach.
 //
 // MODE A vs MODE B. Mode A prices a fill in dollars and lets the VALIDATOR price
@@ -209,7 +209,7 @@ async function oracleRow() {
     const body = await explorerJson('oracle_prices');
     const row = (body?.data || []).find((r) => String(r.source_address) === ORACLE_ADDRESS);
     expect(row, `the oracle feed for ${ORACLE_ADDRESS} is gone from this venue: the ten feeds `
-        + 'planted for  on 2026-07-30 may have been reset away, in which case this lane '
+        + 'planted for on 2026-07-30 may have been reset away, in which case this lane'
         + 'needs a fresh publish plus another 24h maturation wait')
         .toBeTruthy();
     return row;

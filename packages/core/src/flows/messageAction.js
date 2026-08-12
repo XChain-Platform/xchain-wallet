@@ -133,18 +133,18 @@ export function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descripto
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
- * @property {Record<string, string>} [prebuiltParams]    §5.6 slice 3: MESSAGE
+ * @property {Record<string, string>} [prebuiltParams] §5.6 slice 3: MESSAGE
  *   params already built (and ENCRYPTED) by buildMessageParams at confirm time.
  *   Encryption is non-deterministic (fresh nonce / ephemeral key per call), so
  *   re-encrypting here would produce a DIFFERENT action string than the one the
  *   user previewed. Supplying them skips the pubkey lookup + encrypt entirely.
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  */
 
 /**
  * Resolve the MESSAGE wire params for a send, doing the encryption half only:
  * validate the chains, look up + address-bind the recipient's pubkey, and
- * encrypt per method. Split out of messageAction so the  confirm
+ * encrypt per method. Split out of messageAction so the confirm
  * pipeline can build the params ONCE at compose time (the ciphertext is what
  * gets encoded into the previewed PSBT) and hand the exact same params back on
  * Approve via `prebuiltParams`.

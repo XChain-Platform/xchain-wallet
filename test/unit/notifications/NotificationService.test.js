@@ -260,7 +260,7 @@ describe('NotificationService', () => {
         expect(deps.notify).not.toHaveBeenCalled();
     });
 
-    it('suppresses delivery during quiet hours ', async () => {
+    it('suppresses delivery during quiet hours', async () => {
         const deps = makeDeps();
         // Window spans the whole day except one minute, so it's guaranteed
         // to contain "now" regardless of when the test runs, with no clock

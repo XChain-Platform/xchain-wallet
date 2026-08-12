@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// tools/regtest/watcherLaneNativeFee.mjs - 's on-chain residual.
+// tools/regtest/watcherLaneNativeFee.mjs - that on-chain residual.
 //
 // WHAT IS STILL OWED AFTER THE UNIT LANE
 //
-//  threaded the native-coin protocol fee onto `SellOwnershipForm`'s
+// threaded the native-coin protocol fee onto `SellOwnershipForm`'s
 // SUBMIT path and not onto its WATCHER path, so a watcher-mode name sale off
 // Bitcoin composed a PSBT with no FEE_DESTINATION output, the user signed it,
 // and the indexer then rejected the action "insufficient fee (native coin
-// output required)" while the form reported the sale as open.  fixed the
+// output required)" while the form reported the sale as open. a later change fixed the
 // lane and pinned it with `test/unit/flows/buildActionPsbtNativeFeeOutput.test.js`,
 // which drives the real `buildActionPsbt` against a FAKE sdk and inspects the
 // arguments `encoder.createTx` receives.
@@ -21,7 +21,7 @@
 //   2. does the INDEXER accept the resulting action.
 //
 // Only a chain can answer those, so this driver asks one. It is the same shape
-// as `deployNativeFee.mjs` : production wallet code, a real venue, a
+// as `deployNativeFee.mjs`: production wallet code, a real venue, a
 // throwaway WIF standing in for the vault, and a verdict read back off the
 // explorer rather than off the wallet's own report.
 //
@@ -31,7 +31,7 @@
 // drives a watcher build through the UI, on Bitcoin, as a DIFFERENTIAL (build
 // twice, flag off then on, assert the bytes differ). That differential only
 // works where the flag is a genuine opt-in, which is Bitcoin alone: off Bitcoin
-// the fee is MANDATORY  and the form forces the toggle on, so there is
+// the fee is MANDATORY and the form forces the toggle on, so there is
 // no "off" build to compare against and no way, through the UI, to compose the
 // shape the broken forms produced. This driver reaches the lane one level below
 // the form, where the broken shape is still expressible, and asserts on the
@@ -43,7 +43,7 @@
 //             and indexes valid. This is setup (the sale needs a name to sell)
 //             and evidence at the same time.
 //   NEGATIVE  the same ORDER composed WITHOUT the flag - the exact shape every
-//             form whose  fix stopped at the submit path produced -
+// form whose fix stopped at the submit path produced -
 //             carries NO fee output, broadcasts happily, and is REJECTED by the
 //             indexer for the fee. This is the regression itself, reproduced on
 //             chain, and it is what makes the positive leg attributable.
@@ -66,14 +66,14 @@
 //
 //   ssh -N -L 18080:localhost:18080 -L 3223:localhost:3223 \
 //          -L 3225:localhost:3225 -L 3123:localhost:3123 \
-//          -L 3125:localhost:3125 jdog@devhost
+//          -L 3125:localhost:3125 jdog@localhost
 //
 //   node tools/regtest/watcherLaneNativeFee.mjs [litecoin-regtest|dogecoin-regtest]
 //
 // PRICES. Nothing on a regtest stack publishes `price_snapshots`, and a seeded
 // row is usable for 1800 chain-seconds, so a venue that priced an hour ago
 // answers "no current oracle price" now. This driver reuses the e2e suite's own
-// `seedPrices()` , which checks first and only writes when the margin is
+// `seedPrices()`, which checks first and only writes when the margin is
 // thin, rather than growing a second seeding recipe that could drift from it.
 //
 // The WIF is generated here, used once on regtest, and never printed.
@@ -144,13 +144,13 @@ async function venueHealth() {
  * that failure is a trap this driver walked into on its first real run.
  *
  * A wallet-composed ISSUE that MINTS its supply wedged the LTC regtest indexer:
- * the action itself parsed `valid`, and then the  balances touched-set
+ * the action itself parsed `valid`, and then the balances touched-set
  * guard refused the block ("the ledger moved 1 key(s) the commitment did not
  * apply", the key being the brand-new [address, TICK] balance), rolled back, and
  * retried the same block forever. Every read after that is stale, so the driver
  * looks like it broadcast into a void.
  *
- * It is the LTC face of the stale-resolver-cache defect  has the fix for
+ * It is the LTC face of the stale-resolver-cache defect has the fix for
  * and the venue does not, and the recovery is a container restart: the same
  * block applies cleanly against a fresh cache (measured 2026-08-04, block 5205
  * drained on the first restart). This driver now issues WITHOUT an initial mint
@@ -162,8 +162,8 @@ function wedgeMessage(health) {
         + `is at ${health.decoded} (lag ${health.lag}). That is a HALTED VENUE, not a verdict on `
         + 'anything this driver composed. Check '
         + `\`docker logs --tail 40 xchain-node-${cfg.regtestCoin === 'RLTC' ? 'litecoin' : 'dogecoin'}`
-        + '-regtest-xchain-indexer\` on devhost: a repeating "balances touched-set guard FAILED" '
-        + 'is  firing on a stale resolver cache (, fix undeployed), and restarting that '
+        + '-regtest-xchain-indexer\` on the regtest host: a repeating "balances touched-set guard FAILED" '
+        + 'Is firing on a stale resolver cache (fix undeployed), and restarting that'
         + 'one container clears it.';
 }
 
@@ -226,7 +226,7 @@ async function main() {
 
     // Step 0: the venue has to be able to price a fee-bearing action, now and
     // still in several minutes' time, or every leg below fails on the oracle
-    // and reads as a wallet defect .
+    // and reads as a wallet defect.
     // A venue that is already behind cannot answer anything this driver asks,
     // and every leg would fail on a symptom that reads as a wallet defect. Say
     // so first, in one line, with the recovery.
@@ -291,7 +291,7 @@ async function main() {
     // The fair-mint shape `IssueTokenForm` composes when "Initial mint" is 0:
     // the cap is declared and nothing is minted yet. Deliberate, not incidental.
     // Minting at issuance moves a brand-new [address, TICK] balance key, and on
-    // this venue that trips the  touched-set guard (see `wedgeMessage`) and
+    // this venue that trips the touched-set guard (see `wedgeMessage`) and
     // halts the indexer on the block. Ownership is what a name sale escrows, and
     // ownership exists from the ISSUE regardless of supply, so this driver needs
     // no balance and should not create one.

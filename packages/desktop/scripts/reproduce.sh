@@ -45,7 +45,7 @@ REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")/../../.." rev-parse --show-t
 IN_PLACE="${XCHAIN_REPRODUCE_IN_PLACE:-0}"
 
 # §7.5 rehearsal selector, forwarded to the container only when it is set
-# (). electron-builder.config.cjs reads XCHAIN_STAGING_FEED_URL at
+#  . electron-builder.config.cjs reads XCHAIN_STAGING_FEED_URL at
 # build time and switches output to dist-staging, so the variable has to
 # reach the container or a rehearsal can only ever be built outside it - and
 # a build outside it carries no compiled tiny-secp256k1, which
@@ -80,7 +80,7 @@ OUT_DIR_ABS="$(cd "${OUT_DIR}" && pwd)"
 
 # --- 1b. The SDK, which is now an ordinary dependency --------------------
 #
-# THIS USED TO BE FATAL, AND THE FATAL IS GONE ( D8 / ).
+# THIS USED TO BE FATAL, AND THE FATAL IS GONE (D8).
 # packages/desktop depended on `xchain-sdk` as `link:../../../xchain-sdk`,
 # a filesystem link to a SIBLING REPOSITORY three levels above the wallet
 # root, which is why the published reproduce protocol was never
@@ -116,7 +116,7 @@ fi
 
 # --- 2. Worktree checkout (isolates reproduction from local changes) ---
 #
-# THE RELEASE LANE RUNS THIS SCRIPT TOO, AND THAT IS THE POINT .
+# THE RELEASE LANE RUNS THIS SCRIPT TOO, AND THAT IS THE POINT.
 #
 # toolchain.json pinned Node for both sides and nothing pinned the C
 # compiler. `.github/workflows/release.yml`'s desktop-linux job was
@@ -125,7 +125,7 @@ fi
 # tiny-secp256k1 against a different gcc and glibc on each side.
 # `secp256k1.node` therefore came out different, and so did the asar whose
 # header embeds its hash: measured at v0.334.0, 186 of the deb's 188 files
-# reproduced and those two did not . Neither build was wrong. They
+# reproduced and those two did not. Neither build was wrong. They
 # were deterministic against different toolchains, which no amount of
 # determinism on either side can reconcile, so the published promise that a
 # zero-byte diff means our bytes are what this source produces could not be

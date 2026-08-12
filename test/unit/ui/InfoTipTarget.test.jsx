@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first, slice 2: the help dot grew a target without
+// responsive-first, slice 2: the help dot grew a target without
 // losing its name.
 //
 // The fix moved the painted circle off the <button> and onto an inner
@@ -25,7 +25,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { InfoTip } from '../../../packages/core/src/ui/InfoTip.jsx';
 
-describe('InfoTip target ( slice 2)', () => {
+describe('InfoTip target (slice 2)', () => {
     afterEach(cleanup);
 
     it('keeps the trigger\'s accessible name exactly its aria label', () => {

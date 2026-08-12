@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : how much of a token can still be minted, which is NOT what the
+// How much of a token can still be minted, which is NOT what the
 // minter holds. A MINT is bounded by two independent caps the indexer
 // enforces (xchain-indexer src/actions/mint.js, mirrored in the SDK's
 // preflight check): the per-transaction MAX_MINT, and the remaining
@@ -136,7 +136,7 @@ export function exceedsHeadroom(amount, headroom) {
  * Where the chain tip sits relative to a token's public-mint window.
  *
  * D-164: `mintHeadroom` bounds a mint by supply and by MAX_MINT, which is what
- *  needed - and a token can also be un-mintable for a reason that has
+ * a later change needed - and a token can also be un-mintable for a reason that has
  * nothing to do with quantity. `mint.js` refuses with `MINT_START_BLOCK` below
  * MINT_START_BLOCK and with `MINT_STOP_BLOCK` above MINT_STOP_BLOCK, so a form
  * that offers "10 available to mint" while the window is shut is stating

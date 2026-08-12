@@ -1,5 +1,5 @@
 ext {
-    // D2 ( §10, decided 2026-07-31): API 26 / Android 8, above
+    // D2 (§10, decided 2026-07-31): API 26 / Android 8, above
     // Capacitor's own floor of 24. Chosen for where the System WebView is
     // realistically still updated: the wallet's crypto path is WebCrypto in
     // that WebView, and a device stuck on an ancient one is a device the
@@ -14,7 +14,7 @@ ext {
     androidxFragmentVersion = '1.8.9'
     coreSplashScreenVersion = '1.2.0'
     androidxWebkitVersion = '1.14.0'
-    // Pinned like every other androidx line here ( S2). 1.1.0 is the
+    // Pinned like every other androidx line here (S2). 1.1.0 is the
     // last stable release; the 1.2.0-alpha line carries the API changes for
     // Android 15's identity-check work and is not something a wallet's unlock
     // path should ride while it is still alpha.

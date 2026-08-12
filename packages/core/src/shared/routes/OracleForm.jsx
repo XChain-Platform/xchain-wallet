@@ -71,7 +71,7 @@ function fmtPct(pct) {
  * (Mode B) dispensers cross-convert that quote through the validator
  * federation's COIN/FIAT snapshot, so a buyer can trigger a dispense with a
  * bare coin payment and no XChain transaction of their own. Publishing is
- * permissionless and unstaked; the publisher earns the  usage fee,
+ * permissionless and unstaked; the publisher earns the usage fee,
  * paid up front in coin by whoever opens a dispenser against this address.
  *
  * Three things make this riskier than it looks, and the screen is built

@@ -79,7 +79,7 @@ for (const call of [
     assert.ok(formSrc.includes(call), `DeployContractForm calls ${call}`);
 }
 
-// Chain gate.  moved this off a hard-coded VM_COIN='bitcoin' and onto
+// Chain gate. a later change moved this off a hard-coded VM_COIN='bitcoin' and onto
 // the descriptor's supportedActions, which is the SAME list
 // (registry/actions.js BTC_EXCLUSIVE_ACTIONS) that decides where DEPLOY is
 // offered everywhere else. Two copies of one policy is how a flip lands in the
@@ -222,10 +222,9 @@ for (const [shell, appPath] of [
 }
 
 // --- 8. (Retired) Monaco follow-up note ------------------------------
-// Previously asserted a deferral note under claude/reports/specs/ in the
-// parent monorepo, a cross-repo doc not tracked from the wallet sub-repo
-// (the file does not exist). The wiring checks above are the load-bearing
-// part of this smoke.
+// Previously asserted a deferral note in a cross-repo doc not tracked
+// from the wallet sub-repo (the file does not exist). The wiring checks
+// above are the load-bearing part of this smoke.
 
 console.log(
     'OK: deploy contract form smoke (DeployContractForm shared route + deployAction / contractValidate / checkCodeSize / suggestGasLimit flows + four new background handlers + three-shell messaging helpers + ContractsList onDeploy button + three-shell contract-deploy sub-route)',

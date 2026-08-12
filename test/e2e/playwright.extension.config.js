@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Playwright config for the MV3 EXTENSION venue (, spec §8.6
+// Playwright config for the MV3 EXTENSION venue (spec §8.6
 // scenarios 2 and 5).
 //
 // These two scenarios are here rather than in the regtest web config

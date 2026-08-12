@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the Approve-time native-coin fee re-quote must be wired
+// Smoke for: the Approve-time native-coin fee re-quote must be wired
 // END TO END, on every surface that can approve a composed action.
 //
 // The defect this guards is not subtle logic, it is a missing link: the fee

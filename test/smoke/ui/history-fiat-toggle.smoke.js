@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : History fiat-display toggle.
+// Smoke for: History fiat-display toggle.
 //
 // Pins: the settings-backed toggle, the fiat computation being gated to
 // native-coin amounts only (never a token's), and the Amount row wiring
@@ -43,7 +43,7 @@ assert.match(src, /import \{ coinToFiat \}/, 'imports coinToFiat from priceLooku
 
 // Native-only gate: nativeAmountFieldOf must reject anything with a
 // non-native tick (a token movement), so a token amount can never be
-// priced against the coin rate (the  latent bug this must not
+// priced against the coin rate (the latent bug this must not
 // replicate).
 assert.match(src, /function nativeAmountFieldOf/, 'defines the native-amount gate');
 assert.match(src, /String\(tick\)\.toUpperCase\(\)\s*!==\s*nativeTicker\)\s*return null;.*token movement/s, 'rejects non-native ticks as token movements');

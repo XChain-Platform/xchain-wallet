@@ -104,7 +104,7 @@ assert.ok(/messaging\.getTokenInfo\b/.test(hook),
 assert.ok(/__clearTokenInfoCache\b/.test(hook),
     'useTokenInfo exposes a __clearTokenInfoCache test helper');
 
-// : the module-level cache moved to shared/utils/tokenInfoCache.js so
+// The module-level cache moved to shared/utils/tokenInfoCache.js so
 // the flows layer can invalidate it without importing React, and it grew a TTL
 // plus an invalidation channel. Without those, an ownership transfer the
 // wallet itself broadcast left Manage Token naming the previous owner and

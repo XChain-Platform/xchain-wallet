@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Campaign coverage map, "Onboarding & wallet lifecycle" -> "Pair a watcher or
-// signer" (§20.5 / ), undriven since the lane shipped.
+// signer" (§20.5), undriven since the lane shipped.
 //
 // WHY THIS ONE. It is the fourth onboarding lane and the only one that ends
 // with two DEVICES trusting each other. Its whole reason to exist is stated in
@@ -246,11 +246,11 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                     .toBe(true);
             });
 
-            await test.step(': the QR hand-off this lane exists for renders, and reassembles', async () => {
+            await test.step('The QR hand-off this lane exists for renders, and reassembles', async () => {
                 // Everything else in this spec moves the pairing code as TEXT,
                 // which is the one thing a real air-gapped pair cannot do: the
                 // offline half shares no clipboard with the online one. The
-                // screen's answer to that is a QR, and until  it was
+                // screen's answer to that is a QR, and until it was
                 // never drawn - a default wallet has three mainnet chains and a
                 // ~1900-character payload against MAX_QR_CHARS of 1200, so the
                 // screen said "too many chains switched on for a single QR
@@ -267,7 +267,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 const qrWrap = watcher.page.getByTestId('animated-qr-frames');
                 await expect(qrWrap,
                     'the exchange screen drew no QR at all, so an air-gapped partner is left with '
-                    + '"copy the text" across a gap that has no clipboard ')
+                    + '"copy the text" across a gap that has no clipboard')
                     .toBeVisible({ timeout: 30_000 });
 
                 // A control on the fixture itself: the payload really is past
@@ -276,7 +276,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 expect(code.length > 1200,
                     `this wallet's payload is only ${code.length} characters, inside the 1200 that fit `
                     + 'in one frame, so the multi-frame path was never entered and this step proves '
-                    + 'nothing about ')
+                    + 'nothing about')
                     .toBe(true);
                 await expect(watcher.page.getByText(/cycles through \d+ frames/),
                     'the code is too long for one frame but the screen never says it is animated, so '
@@ -462,7 +462,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
         }
     });
 
-    test(': the partner collects the animated code off a CAMERA and pairs', async ({ browser }) => {
+    test('The partner collects the animated code off a CAMERA and pairs', async ({ browser }) => {
         // The test above proves the frames on the watcher's screen reassemble to
         // its code. This one closes the loop the lane exists for: the code moves
         // from one device to the other by CAMERA ONLY - no clipboard, no paste,
@@ -482,7 +482,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
             const frames = encodeXcwChunks(new TextEncoder().encode(watcherCode.code));
             expect(frames.length > 1,
                 'this wallet\'s pairing code fits in one frame, so the camera hand-off under test '
-                + 'is not the multi-frame one  is about')
+                + 'is not the multi-frame one is about')
                 .toBe(true);
 
             cameraBrowser = await launchWithQrCamera(frames);

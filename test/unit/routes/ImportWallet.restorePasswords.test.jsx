@@ -6,10 +6,10 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : the restore screen names WHICH of its three passwords it is asking
+// The restore screen names WHICH of its three passwords it is asking
 // for, in the fields and in every failure.
 //
-// The mechanism shipped with  (the restore re-keys the wallet onto this
+// The mechanism shipped (the restore re-keys the wallet onto this
 // device's password). What did not ship was the copy: three password boxes,
 // and a failure that said only "wrong password". A user who typed a perfectly
 // correct password into the wrong box could not tell that from a typo, and two
@@ -57,7 +57,7 @@ function fillWithTheMixUp(mode = 'fresh') {
     fill(restoreDeviceLabel(mode), DEVICE_PASSWORD);
 }
 
-describe(': the restore screen says which password it wants', () => {
+describe('The restore screen says which password it wants', () => {
     it('names all three, in the fields and once above them', () => {
         openRestoreLane({ importBackupFresh: vi.fn() });
 

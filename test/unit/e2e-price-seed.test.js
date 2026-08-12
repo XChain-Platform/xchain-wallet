@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: test/e2e/fixtures/priceSeed.js - the venue price fixture .
+// Unit: test/e2e/fixtures/priceSeed.js - the venue price fixture.
 //
 // Test infrastructure testing test infrastructure, and it earns its keep the
 // same way the timeout-budget suite does: everything here is invisible when it
@@ -42,7 +42,7 @@ import {
 const CHAIN = 1_785_300_000;
 const WALL = CHAIN + 9_000;   // the idle regime: chain trails wall by 2.5h
 
-describe('e2e price seed ', () => {
+describe('e2e price seed', () => {
     describe('planPairRows anchoring', () => {
         it('gives the wall anchor to the HIGHEST round and the tip to the rest', () => {
             const rows = planPairRows({
@@ -155,7 +155,7 @@ describe('e2e price seed ', () => {
         });
 
         it('writes only rounds the platform-wide cleanup already knows', () => {
-            // : a synthetic round outranks every derived round forever and
+            // A synthetic round outranks every derived round forever and
             // suppressing new seeds cannot retract old rows, so the e2e tree
             // keeps ONE list of every synthetic round for clearSeedSentinels to
             // undo. A wallet-private family would be invisible to that cleanup.
@@ -272,7 +272,7 @@ describe('e2e price seed ', () => {
         });
     });
 
-    // . The venue answered at setup and failed at approve, so every case
+    //The venue answered at setup and failed at approve, so every case
     // here is about the difference between "prices now" and "still prices later".
     describe('selectedSnapshot mirrors getLatestPrice', () => {
         const PAIR = 'LTC/USD';
@@ -334,7 +334,7 @@ describe('e2e price seed ', () => {
             expect(seedMarginSeconds({ rows, chainTime: CHAIN, coinPairs: PAIRS })).toBeNull();
         });
 
-        it('REGRESSION: the near-expiry venue that  accepted is now refused', () => {
+        it('REGRESSION: the near-expiry venue that accepted is now refused', () => {
             // The exact shape of the red run: both pairs answer, so the old
             // usable-only check returned "venue already priced", and the bet
             // failed minutes later once chain time crossed the window.
@@ -387,7 +387,7 @@ describe('e2e price seed ', () => {
         });
     });
 
-    //  second half: the shared venue, where another suite's idea of what a
+    // second half: the shared venue, where another suite's idea of what a
     // coin is worth arrives as a perfectly fresh price.
     describe('venueDisagreement', () => {
         const EXPECTED = { [XCHAIN_PAIR]: XCHAIN_USD_PRICE, 'LTC/USD': '30.00000000' };

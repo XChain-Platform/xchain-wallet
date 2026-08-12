@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// DisplayPrefsGate  mount point. Renders nothing; bridges the
+// DisplayPrefsGate mount point. Renders nothing; bridges the
 // display-wide settings (theme, reduced motion, learn mode) into
 // useSettingsRootAttributes so every shell that wraps its tree in
 // <MessagingProvider> honours them without duplicating the wiring.

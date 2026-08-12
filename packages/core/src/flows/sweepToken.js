@@ -43,8 +43,8 @@ import { disableAutopayForAddress } from './autopayConsent.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the confirm page previewed + tamper-checked) instead of rebuilding.
- * @property {{ releaseByAddress?: (chainId: string, address: string) => Promise<number> }} [reservationLedger]  PC-34 force-close interplay: when ORDERS=1 broadcasts, release this address's auto-pay holds (host passes its shared  ledger).
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the confirm page previewed + tamper-checked) instead of rebuilding.
+ * @property {{ releaseByAddress?: (chainId: string, address: string) => Promise<number> }} [reservationLedger] PC-34 force-close interplay: when ORDERS=1 broadcasts, release this address's auto-pay holds (host passes its shared ledger).
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]

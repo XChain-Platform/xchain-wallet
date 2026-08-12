@@ -302,7 +302,7 @@ export function ComposeMessage({
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
     // to the time estimate. Tiny sub-cent fees collapse to "< $0.01".
-    // Oracle-primary with CoinGecko fallback (§45, ); the
+    // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const { settings } = useSettings();
     const fiatRate = useFiatRate({
@@ -335,13 +335,13 @@ export function ComposeMessage({
         setEncryptionChoice(value);
     }
 
-    //  §5.6 slice 3: sends compose ONE PSBT host-side and confirm it on
+    // §5.6 slice 3: sends compose ONE PSBT host-side and confirm it on
     // the shared confirm page. Two carve-outs stay on the legacy review stage:
     // the demo wallet (its send is faked, there is nothing to compose), and a
     // LOCKED wallet sending ECDH - that method needs our own private key to
     // derive the shared secret at COMPOSE time, and on this path the password
     // isn't collected until the confirm page. ECIES and plaintext compose fine
-    // while locked. : hardware is NOT a carve-out here - ECDH is not even
+    // while locked.: hardware is NOT a carve-out here - ECDH is not even
     // offered to a HW source (the dropdown omits it), so every method a device
     // can send composes without a private key.
     const isDemo = flowsLib.isDemoWallet(walletId);
@@ -669,7 +669,7 @@ export function ComposeMessage({
         );
     }
 
-    //  confirm page, rendered in place of the form; form state stays
+    // confirm page, rendered in place of the form; form state stays
     // intact behind it, so Reject returns the user to their draft. The intent
     // is decoded from the params the HOST actually composed (the encrypted
     // body), never from form state - §1: confirm what will broadcast.
@@ -690,7 +690,7 @@ export function ComposeMessage({
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? fromAddress : null}
                 hwStatus={hwStatus}

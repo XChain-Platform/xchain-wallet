@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  API 31+ backup/transfer rules ( §1). Android 12 split the old
+  API 31+ backup/transfer rules (§1). Android 12 split the old
   fullBackupContent into two independent surfaces, and BOTH have to refuse:
   cloud-backup takes app data to Google's servers, device-transfer copies it
   to a new phone during setup.

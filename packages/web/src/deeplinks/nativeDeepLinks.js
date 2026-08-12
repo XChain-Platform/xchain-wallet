@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Deep-link intake for the native shells ( §1, stage S3).
+// Deep-link intake for the native shells (§1, stage S3).
 //
 // On the web a link arrives as `?uri=` in the query string and the SPA reads
 // it once at mount. There is no query string to read when Android hands the

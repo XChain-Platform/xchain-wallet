@@ -443,7 +443,7 @@ export function TokenDetail({
                         <span>Receive</span>
                     </button>
                     {/* Absent, not greyed, when the shell wires no handler: a
-                        build can have compiled the DEX surface out ,
+                        build can have compiled the DEX surface out,
                         and there is then no market for this token to open. */}
                     {onBuy ? (
                         <button type="button" className={styles.quickAction} onClick={onBuy}>

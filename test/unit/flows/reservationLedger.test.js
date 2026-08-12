@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// In-flight approval reservation ledger ( §4.7).
+// In-flight approval reservation ledger (§4.7).
 
 import { describe, it, expect, vi } from 'vitest';
 import { createReservationLedger } from '../../../packages/core/src/flows/reservationLedger.js';
@@ -49,7 +49,7 @@ describe('reservationLedger (in-memory)', () => {
         expect(deltas).toEqual([{ tick: 'JDOG', amount: '100' }]);
     });
 
-    // Exact decimal netting (). Float accumulation understated the delta the
+    // Exact decimal netting. Float accumulation understated the delta the
     // concurrent-spend guard subtracts, which is a silently weakened guard.
     it('nets fractional reservations exactly (no float residue)', async () => {
         const led = createReservationLedger();

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : bridge.getSupportedChains must hand dApps a resolvable icon URL,
+// Bridge.getSupportedChains must hand dApps a resolvable icon URL,
 // not an empty string. The handler resolves each descriptor's bare icon
 // filename (e.g. `bitcoin-mainnet-icon-20.png`) against the web-accessible
 // `chain-icons/` path via an injected getAssetUrl (chrome.runtime.getURL in
@@ -43,7 +43,7 @@ async function getChains(chains, opts = {}) {
 
 const EXT = (p) => `chrome-extension://testext/${p}`;
 
-describe('bridge.getSupportedChains icon resolution ', () => {
+describe('bridge.getSupportedChains icon resolution', () => {
     it('resolves a bare icon filename to the web-accessible chain-icons URL', async () => {
         const chains = [
             {

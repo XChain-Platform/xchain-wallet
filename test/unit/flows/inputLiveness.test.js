@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// §4.6 input liveness .
+// §4.6 input liveness.
 //
 // The property under test is asymmetric on purpose: proving a coin SPENT takes
 // a positive answer from its own address, while every gap - a dead explorer, an

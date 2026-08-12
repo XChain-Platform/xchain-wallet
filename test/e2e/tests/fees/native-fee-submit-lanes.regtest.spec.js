@@ -24,7 +24,7 @@
 // wire" would be true no matter what the form did with it; on Bitcoin the flag
 // is a genuine opt-in, which is the only place the question has an answer.
 //
-//   LANE 1, the  confirm path: compose with the toggle ON, approve, and
+// LANE 1, the confirm path: compose with the toggle ON, approve, and
 //     read the RESULT OFF THE CHAIN - the action must index valid AND pay the
 //     protocol fee in coin. An action that dropped the flag indexes `invalid:
 //     insufficient fee` or silently pays from the XCHAIN balance instead.
@@ -47,7 +47,7 @@
 // (§3.2). This stack's BTC chain clock is ~10h behind wall time, and staleness
 // is judged against WALL clock, so the sentinels must be seeded at wall clock -
 // the §3.2 recipe for a clock-frozen chain, measured safe on Bitcoin in
-// session 22. See  for why the spec cannot do this itself yet.
+// session 22. for why the spec cannot do this itself yet.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
@@ -85,7 +85,7 @@ async function nudgeChain() {
 async function feeQuote(params) {
     // Retried, not read once. This venue's fee-quote path stalls past the
     // explorer's 5s indexer-hop timeout often enough to redden this spec on a
-    // perfectly healthy stack (), and reading it cold at the top of a
+    // perfectly healthy stack  , and reading it cold at the top of a
     // run is the likeliest moment to hit it. The failure then reads as a
     // price-seed problem that is not there.
     return warmFeeQuote({ action: 'ISSUE', params });
@@ -166,7 +166,7 @@ test.describe('the native-fee flag on each submit lane', () => {
 
             // The venue's own price of this action, read BEFORE composing so the
             // spec fails on a stale oracle with that named rather than blaming
-            // the wallet several steps later (§3.2, ).
+            // the wallet several steps later (§3.2).
             const quote = await feeQuote(`${TICK}|${SUPPLY}|0|0|0`);
             expect(quote?.valid,
                 `the venue cannot price this action (${quote?.status}); seed the sentinels at wall `
@@ -181,7 +181,7 @@ test.describe('the native-fee flag on each submit lane', () => {
             const main = await fillIssueForm(page, TICK, { nativeFee: true });
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            // In full mode this form is SINGLE-ENCODE : the form button
+            // In full mode this form is SINGLE-ENCODE: the form button
             // composes and opens the confirm screen directly, with no review
             // stage in between. Watcher mode is the one that gets "Preview".
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
@@ -191,7 +191,7 @@ test.describe('the native-fee flag on each submit lane', () => {
             await page.getByTestId('confirm-approve').click();
 
             // Read the RESULT off the chain rather than off the screen: the
-            // screen is what  already showed can be wrong about fees.
+            // screen is what already showed can be wrong about fees.
             const until = Date.now() + 300_000;
             let action = null;
             while (Date.now() < until && !action) {

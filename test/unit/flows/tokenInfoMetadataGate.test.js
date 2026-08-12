@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SSC-5's SECOND control ( §1.1, corrected 2026-08-02).
+// SSC-5's SECOND control (§1.1, corrected 2026-08-02).
 //
 // The contract used to say `img-src 'self' data: blob:` was "the whole
 // control" on remote token media. It is the whole control on every media

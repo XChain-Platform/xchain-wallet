@@ -21,7 +21,7 @@
 // calls through `messaging.getAddressHistory` - answered `{"data":[],"total":
 // "0"}` for that address after the payment confirmed. That is not a UI bug:
 // `getHistoryData` (xchain-explorer/src/db.js:5091) reads the `actions` /
-// `mappings_actions` tables, and  (confirm-broadcast.regtest.spec.js's
+// `mappings_actions` tables, and (confirm-broadcast.regtest.spec.js's
 // own header) deliberately composes a bare native send with NO OP_RETURN, so
 // no action is ever written for one. History is action-indexed end to end; a
 // plain coin payment has nothing to index. Reported, not fixed (out of this

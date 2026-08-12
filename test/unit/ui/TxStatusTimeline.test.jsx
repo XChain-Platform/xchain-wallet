@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit:  / §28.3. TxStatusTimeline renders the full five-stage
+// Unit: §28.3. TxStatusTimeline renders the full five-stage
 // ladder (Signed, Broadcast, mempool, Confirmed, Indexed), computing each
 // stage's done/pending state from the entry fields plus the optional
 // chainTip / indexerWatermark props.

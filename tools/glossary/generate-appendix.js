@@ -15,7 +15,7 @@
 // fenced markers, populated from canonical sources in the codebase
 // that the human-written prose section depends on:
 //
-//  moved the glossary itself into the sibling xchain-documentation
+// a later change moved the glossary itself into the sibling xchain-documentation
 // repo (components/wallet/glossary.md), published at
 // https://docs.xchain.io/components/wallet/glossary. The canonical sources
 // stay here, so this generator reaches across the two checkouts.
@@ -42,7 +42,7 @@ const DEFAULT_GLOSSARY_PATH = join(
 );
 // XCHAIN_DOCS_ROOT is honoured between the two, matching the precedence in
 // test/smoke/_docs-repo.js, so every consumer of the docs sibling resolves it
-// the same way. : GitHub Actions cannot put the sibling beside the
+// the same way.: GitHub Actions cannot put the sibling beside the
 // workspace (actions/checkout refuses any `path:` outside GITHUB_WORKSPACE),
 // so CI checks it out to `.docs-sibling` INSIDE the workspace and points
 // XCHAIN_DOCS_ROOT at it. This script honoured only the relative default and

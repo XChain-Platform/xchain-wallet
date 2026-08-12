@@ -14,7 +14,7 @@
 #*********************************************************************
 
 # tools/release/rollback-rerelease.sh - the Chrome Web Store "rollback"
-# recipe ( §4), prepared before launch so it is not invented
+# recipe (§4), prepared before launch so it is not invented
 # mid-incident.
 #
 # THERE IS NO ROLLBACK. Chrome Web Store item versions strictly increase
@@ -145,14 +145,14 @@ fi
 
 # --- Precondition 2: derive the current version floor ---------------------
 #
-# The version-bearing set is the one  defines and
+# The version-bearing set is the one
 # test/smoke/audits/version-lockstep.smoke.js enforces: the root
 # package.json, every package under packages/ (membership derived from
 # the filesystem, so a package added tomorrow is in scope the moment it
 # exists), packages/extension/manifest.json, and
 # packages/core/src/buildInfo.js's WALLET_VERSION. test/e2e is
 # DELIBERATELY absent: it is a private harness, never published, never
-# installed, exempt by 's own decision and documented as such in
+# installed, exempt by that same contract's decision and documented as such in
 # README.md.
 #
 # This was a `find -maxdepth 3 -name package.json` sweep until
@@ -371,7 +371,7 @@ release - claim the release in the ledger before touching anything):
      $GOOD_TAG on a new branch.
   3. Bump every version-bearing file listed above to $NEW_VERSION,
      in the same commit, per the synchronized-versioning rule
-     (CONTRIBUTING.md). That list is exactly what  defines and
+     (CONTRIBUTING.md). That list is exactly what
      test/smoke/audits/version-lockstep.smoke.js enforces, so bump those
      files and no others: test/e2e carries its own version by decision
      and must NOT be dragged along. Note that
@@ -388,7 +388,7 @@ release - claim the release in the ledger before touching anything):
      version-matches-wallet rule and version-lockstep.smoke.js demand
      DIFFERENT values for a prerelease root and both run in
      pnpm test:smoke, so the suite cannot pass until that is resolved
-     ('s ground, not this script's). Add a CHANGELOG.md entry that
+     (that contract's ground, not this script's). Add a CHANGELOG.md entry that
      says plainly this is a rollback re-release of $GOOD_TAG, not new work.
   4. Run the manual QA checklist in full against the bumped build
      (https://docs.xchain.io/components/wallet/release/qa-checklist), including

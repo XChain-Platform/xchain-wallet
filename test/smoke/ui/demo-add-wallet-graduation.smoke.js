@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  leg 2: a real wallet must never be added into a vault
+// Smoke for leg 2: a real wallet must never be added into a vault
 // the demo created.
 //
 // The vault has ONE password. `meta.kdfParams` is written when the vault
@@ -228,4 +228,4 @@ assert.equal(wiped, 0, 'a vault still holding a real wallet is never wiped');
 
 delete globalThis.localStorage;
 
-console.log('OK: demo add-wallet graduation smoke ( leg 2: the add lane refuses to grow a demo-keyed vault; one shared teardown behind all three demo escapes; three shells pass mode="add" and resume the picked lane across the wipe reload)');
+console.log('OK: demo add-wallet graduation smoke (leg 2: the add lane refuses to grow a demo-keyed vault; one shared teardown behind all three demo escapes; three shells pass mode="add" and resume the picked lane across the wipe reload)');

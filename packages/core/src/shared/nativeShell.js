@@ -11,8 +11,8 @@
 // "Is this a native shell, and does it have plugin X?" - asked in ONE place.
 //
 // Two things need this now: the vault bridge in the web shell
-// (`packages/web/src/storage/nativeVault.js`,  §1 / ) and the
-// clipboard bridge beside this file . A second hand-rolled copy of a
+// (`packages/web/src/storage/nativeVault.js`, §1) and the
+// clipboard bridge beside this file. A second hand-rolled copy of a
 // five-line duck-type probe is exactly the drift was filed about, and
 // the two would not drift visibly: both would keep working in a browser, and
 // only the native shells - the ones nobody smoke-runs locally - would disagree.
@@ -30,7 +30,7 @@
 /**
  * Is this the native shell at all, regardless of which plugins registered?
  *
- * Deliberately separate from "does plugin X exist" (: conflating them
+ * Deliberately separate from "does plugin X exist" (conflating them
  * is what let a broken native build read as an ordinary browser). A page that
  * merely defines `window.Capacitor` - some dApp libraries do - is not a native
  * shell, so the real function has to be there and has to say so.

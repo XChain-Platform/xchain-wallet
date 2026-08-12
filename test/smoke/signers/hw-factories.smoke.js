@@ -186,7 +186,7 @@ assert.throws(
     // Mock Ledger Btc app + transport (matches the shape pairing
     // exercises: getWalletPublicKey on the app client, and the app
     // name/version read as BOLOS bytes off the transport, since the real
-    // Btc class ships no getAppAndVersion .
+    // Btc class ships no getAppAndVersion.
     class MockBtcApp {
         constructor({ transport, currency }) {
             this.transport = transport;

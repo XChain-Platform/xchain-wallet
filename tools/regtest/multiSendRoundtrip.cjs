@@ -4,7 +4,7 @@
  * paying SEVERAL recipients, composed from the WALLET's own shaping layer.
  *
  * Why this exists as its own drill rather than another leg in roundtrip.cjs:
- * the defect it guards against  is invisible to a status check. A
+ * the defect it guards against is invisible to a status check. A
  * multi-leg SEND built from a flat field map serialized as a WELL-FORMED
  * action that paid the first recipient twice, so "indexed valid" proves
  * nothing here. The assertions are per-recipient CREDITS, with deliberately
@@ -23,7 +23,7 @@
  *
  * A 2-leg SEND is ~110 bytes, past the 80-byte OP_RETURN lane, so this also
  * covers the P2SH chunk lane from a bech32 signer with a raw-pubkey identity
- * (the  path).
+ * (the path).
  *
  * Config (env): XCHAIN_REGTEST_SSH / _NODE / _EXPLORER_PORT / _ENCODER_PORT /
  * _HUB_PORT / XCHAIN_SDK_PATH, as in roundtrip.cjs.
@@ -38,7 +38,7 @@ const { execFileSync } = require('child_process');
 const SDK_PATH = process.env.XCHAIN_SDK_PATH || path.resolve(__dirname, '../../../xchain-sdk');
 const { XChainSDK } = require(SDK_PATH);
 
-const SSH = process.env.XCHAIN_REGTEST_SSH || 'devhost';
+const SSH = process.env.XCHAIN_REGTEST_SSH || 'localhost';
 const NODE = process.env.XCHAIN_REGTEST_NODE || 'xchain-node-bitcoin-regtest-node';
 const SDK_OPTS = {
     network: 'bitcoin-regtest',
@@ -146,7 +146,7 @@ async function main() {
     const balSender = await waitForBalance(sender.address, 89);
     console.log(`  read-back: alice=${balA} (want 7), bob=${balB} (want 3), carol=${balC} (want 1), sender=${balSender} (want 89)`);
 
-    // Each leg credited EXACTLY once: the direct  regression guard. An
+    // Each leg credited EXACTLY once: the direct regression guard. An
     // overpaid leg 1 (alice=11 or alice=7 with bob/carol at 0) fails here even
     // though the action would have indexed valid.
     const legsOk = sendRes.status === 'valid'

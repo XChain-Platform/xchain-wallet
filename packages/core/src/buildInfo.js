@@ -20,7 +20,7 @@
 // wrong quietest: it sat at 0.333.0 while the root and the shipped
 // extension were at 0.333.1, so About under-reported the build for as long
 // as that drift lasted, and the only check on it compared this constant to
-// core's package.json, which was equally stale (, 2026-08-01).
+// Core's package.json, which was equally stale (2026-08-01).
 // test/smoke/audits/version-lockstep.smoke.js now holds it to the ROOT.
 
 export const WALLET_VERSION = '0.337.0';
@@ -44,7 +44,7 @@ export const SECURITY_FILE = 'SECURITY.md';
 export const SECURITY_PUBLISHED = true;
 
 // Reproducible-build verification + release-signing artifacts. These are
-// live pages on the hosted documentation site ( moved the wallet
+// live pages on the hosted documentation site (a later change moved the wallet
 // docs out of this repo), so the About panel renders them as links the
 // user can open. The root reproducible-build page orients across every
 // shell; the desktop-specific recipe is a section of that same page.

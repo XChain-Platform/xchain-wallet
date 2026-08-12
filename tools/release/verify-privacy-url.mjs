@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/verify-privacy-url.mjs - proves the public privacy-policy
-// URL is live and serving the CURRENT in-repo policy ( §5 / D5).
+// URL is live and serving the CURRENT in-repo policy (§5 / D5).
 //
 // WHY THIS EXISTS, AND WHAT IT WOULD HAVE CAUGHT. Every store submission
 // is hard-blocked on a privacy-policy URL, and the Chrome Web Store form
@@ -28,7 +28,7 @@
 // repo to explain why. A generated page nobody can reach is not a
 // published policy.
 //
-// RESOLVED THE SAME DAY: the operator flipped the apex  and the
+// RESOLVED THE SAME DAY: the operator flipped the apex and the
 // URL now serves the current policy, confirmed two ways, since one was not
 // enough: through the edge in a real browser, and against the origin
 // directly (`curl --resolve xchain.io:443:<origin-ip>`) fed back in with
@@ -73,7 +73,7 @@
 // THE --html ESCAPE HATCH, AND WHAT IT DOES NOT PROVE. This header used to
 // say Cloudflare 403s this host on every path, so the fetch verdict was
 // permanently exit 3 and the check could never go green on its own. That
-// STOPPED BEING TRUE when turned Super Bot Fight Mode off, and it
+// STOPPED BEING TRUE once Super Bot Fight Mode was turned off, and it
 // was measured on 2026-08-02 rather than assumed: a plain `curl` with no
 // User-Agent, and this script's own fetch, both get 200 from the release
 // operator's machine, and the live run exits 0. The correction matters more
@@ -142,7 +142,7 @@ const here = dirname(fileURLToPath(import.meta.url));  // tools/release
 
 // D5, decided 2026-07-31. Trailing slash is the canonical form; see header.
 export const DEFAULT_URL = 'https://xchain.io/wallet/privacy/';
-//  moved the wallet's prose docs into the sibling
+// The wallet's prose docs moved into the sibling
 // xchain-documentation repo, which is checked out beside this one. Resolved
 // from this script's own location rather than cwd, so it holds wherever the
 // script is invoked from. Override with --source / PRIVACY_POLICY_PATH when
@@ -162,7 +162,7 @@ export const DEFAULT_TIMEOUT_MS = 15000;
 
 export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3, CONTACT_GATED: 4 };
 
-// THE DEPLOY PIN ( S31). This script is the only thing in this repo
+// THE DEPLOY PIN (S31). This script is the only thing in this repo
 // that can see what is actually PUBLISHED; everything else can prove at most
 // what would be published. That asymmetry has now cost this spec four times
 // (S10's 404, S17's edge obfuscation, S22's stale policy, S31's again), and
@@ -311,7 +311,7 @@ export function policyTextFromMarkdown(markdown) {
  * Without this, the check reports the hosted policy as DIVERGING at the
  * contact line on every run, while the deployed bytes are correct. That is a
  * false alarm on the one check whose whole design goal is to never cry
- * outage:  S10 built four separate fixes for exactly this class of
+ * outage: S10 built four separate fixes for exactly this class of
  * bug in its Markdown-side comparison, and this is the same bug arriving
  * from the edge instead. A check that is red when nothing is wrong gets
  * waived, and a waived check is the one that misses the real 404.
@@ -639,7 +639,8 @@ Usage:
   node tools/release/verify-privacy-url.mjs --html <saved-page.html>
 
 The second form skips the fetch and checks bytes you supply, for when
-Cloudflare blocks the host you are on. It no longer blocks by default: turned Super Bot Fight Mode off, measured 2026-08-02, so prefer
+Cloudflare blocks the host you are on. It no longer blocks by default:
+Super Bot Fight Mode was turned off, measured 2026-08-02, so prefer
 the plain live run. Get supplied bytes from the origin, bypassing the edge:
 
   curl -sS -o /tmp/policy.html --resolve xchain.io:443:<origin-ip> \
@@ -648,7 +649,7 @@ the plain live run. Get supplied bytes from the origin, bypassing the edge:
 or save the page from a browser. It proves the bytes are the current
 policy, not that the URL is reachable; check that separately.
 
-Defaults to ${DEFAULT_URL} ( D5) and the sibling xchain-documentation
+Defaults to ${DEFAULT_URL} (D5) and the sibling xchain-documentation
 checkout's components/wallet/privacy/privacy-policy.md, the one policy
 covering every wallet shell. Without that checkout the run exits 2 (config
 error); --source / PRIVACY_POLICY_PATH points it elsewhere.

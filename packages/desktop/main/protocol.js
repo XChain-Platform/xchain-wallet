@@ -161,7 +161,7 @@ export function classifyDeepLink(url) {
         // when the parser returns `kind: 'unknown'` so the renderer can
         // still surface a generic "couldn't parse" message.
         //
-        //  §3.6: hardened here rather than in the renderer because
+        // Hardened here rather than in the renderer because
         // this is where an OS-supplied URI crosses into our process, and
         // the intent goes out over IPC. The renderer has no listener yet,
         // so nothing consumes this today; hardening now means whoever

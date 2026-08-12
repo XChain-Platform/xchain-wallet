@@ -12,7 +12,7 @@
 // screen, and the lie runs in the unsafe direction: the user is told the
 // network is happy about an action the network never saw.
 //
-// Found by the  drive on the devhost regtest venue, where a cold
+// Found by the drive on the the regtest host regtest venue, where a cold
 // dry-run costs 1.2s-5.0s and the SDK budget is 4000ms
 // (xchain-sdk/src/preflight/constants.js DEFAULT_TIMEOUT_MS). The missing
 // verdict read as a wallet defect to an experienced reader and cost most of
@@ -38,14 +38,14 @@ import { fileURLToPath } from 'node:url';
 import { PreflightPanel, TIER1_NOTICE_CODES, SUPPORTED_SCHEMA_VERSION }
     from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
 
-// WHERE THE SDK COMES FROM, and it is not a sibling any more ().
+// WHERE THE SDK COMES FROM, and it is not a sibling any more.
 //
 // This was a top-level `import ... from '../../../../xchain-sdk/src/preflight/constants.js'`,
 // four levels up, i.e. a checkout sitting BESIDE the wallet. That path exists on
 // a developer box working both repos and nowhere else: the `test` job in
-// .github/workflows/ci.yml checks out this repository alone, and since  DD6
+//.github/workflows/ci.yml checks out this repository alone, and DD6
 // the shells consume the published `@dankest-llc/xchain-sdk` instead. An
-// unresolvable static import is a vitest COLLECTION error, so the whole 
+// unresolvable static import is a vitest COLLECTION error, so the whole
 // regression file - every rendering case below, not just the parity ones - died
 // before a single assertion ran, and took `pnpm test:unit` red with it.
 //
@@ -124,7 +124,7 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
         expect(notice.textContent).toMatch(/not a network approval/i);
     });
 
-    // The reason is the half that cost the  session: "timeout after
+    // The reason is the half that cost the session: "timeout after
     // 4000ms" is what tells a reader the venue was slow, not the wallet broken.
     it('keeps the SDK reason visible as the diagnostic detail', () => {
         mount(reportWith('pass', [DRYRUN_UNAVAILABLE_FINDING]));
@@ -288,7 +288,7 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
     // that bundle. So the parity lives here, where importing the SDK is free
     // (#3935). A silent rename in the registry would otherwise leave the panel
     // matching a code the SDK no longer emits, failing the way the original
-    //  defect did: by rendering nothing.
+    // defect did: by rendering nothing.
     it('keeps the Tier-1 notice codes in parity with the SDK registry', () => {
         expect(TIER1_NOTICE_CODES.DRYRUN_VALID)
             .toBe(preflightConstants.FINDING_CODES.DRYRUN_VALID);
@@ -302,7 +302,7 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
         }
     });
 
-    // : the panel interprets the report's fields and never reads
+    // The panel interprets the report's fields and never reads
     // report.schemaVersion, and the SDK's constants.js says in as many words that
     // the additive-only rule "has no enforcement point". This is that point. It
     // fires on an SDK bump, which is the moment a human has to re-read the panel's

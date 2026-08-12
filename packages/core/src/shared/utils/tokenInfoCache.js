@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the tick-metadata cache behind `useTokenInfo`, lifted out of the
+// The tick-metadata cache behind `useTokenInfo`, lifted out of the
 // hook so the flows layer can invalidate it without importing React.
 //
 // The cache used to be a plain module-level Map with no TTL and no

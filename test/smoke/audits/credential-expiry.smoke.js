@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §6: the release credentials have an expiry clock, and the
+// Smoke for §6: the release credentials have an expiry clock, and the
 // clock is right.
 //
 // WHY. §6 records four dated credentials and calls the K3 certificate's date
@@ -28,7 +28,7 @@
 // The one case worth naming separately is DRIFT. A hand-maintained date file
 // is itself a declaration nothing measures, which is exactly how
 // `expected-artifacts.txt` declared artifact CLASSES and never counted them,
-// certifying half-built releases until . So the tool reads the expiry
+// certifying half-built releases until. So the tool reads the expiry
 // out of the artifact whenever it can reach it, and disagreement is a failure
 // rather than a preference for the file.
 

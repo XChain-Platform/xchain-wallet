@@ -37,7 +37,7 @@ assert.match(form, /ListPickerScreen/, 'allow/block via the shared list picker')
 assert.match(form, /Enable CoinPay auto-pay/, 'PC-16 auto-pay checkbox');
 assert.match(form, /autopayEligible = giveIsNative && !isWatcherMode && !isHwSource/, 'auto-pay only for native GIVE software signers');
 assert.match(form, /autopay: \{ enabled: true \}/, 'auto-pay flag threads into orderAction');
-assert.match(form, /composeForConfirm/, ' single-encode confirm path');
+assert.match(form, /composeForConfirm/, 'single-encode confirm path');
 // Native side is encoded as an EMPTY tick, never a coin-named tick.
 assert.match(form, /p\.GIVE_TICK = '';/, 'native GIVE = empty tick');
 assert.match(form, /p\.GET_TICK = '';/, 'native GET = empty tick');
@@ -63,7 +63,7 @@ for (const shell of [
 
 // ---- 3-shell App + ActionsMenu wiring ----
 // The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
-// rather than inline in App.jsx : a store-profile build swaps that
+// rather than inline in App.jsx: a store-profile build swaps that
 // module for a twin that imports nothing, which is how the surface is
 // compiled out. The two files together are that shell's wiring, so read them
 // as one - asserting on App.jsx alone would go green on a shell that has no

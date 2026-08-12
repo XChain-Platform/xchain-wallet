@@ -53,7 +53,7 @@ const epoch = process.env.SOURCE_DATE_EPOCH
     ? Number(process.env.SOURCE_DATE_EPOCH)
     : undefined;
 
-// --- Update feed ( §7.1, §7.5) -------------------------------------
+// --- Update feed (§7.1, §7.5) -------------------------------------
 //
 // The production feed and channel. `channel` IS the update-info filename
 // stem, so these two lines name the four files the feed must serve
@@ -83,7 +83,7 @@ const isStaging = Boolean(STAGING_FEED_URL);
 // Electron. linux-armv7l is post-launch on demand (DD1).
 const ARCHES = ['x64', 'arm64'];
 
-// Mac App Store channel ( §13). Opt-in, because the target cannot
+// Mac App Store channel (§13). Opt-in, because the target cannot
 // build without an Apple Distribution certificate and a provisioning
 // profile: leaving it on would break every dev and CI mac build that has
 // neither. A staging/rehearsal build never gets it either - the App Store
@@ -91,7 +91,7 @@ const ARCHES = ['x64', 'arm64'];
 const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 
 // The qualifier the store build looks its TWO certificates up by, and it
-// has to be a qualifier rather than a certificate name .
+// has to be a qualifier rather than a certificate name.
 //
 // `mas.identity` is not only the app-signing identity: app-builder-lib
 // passes the same string to the installer lookup,
@@ -122,7 +122,7 @@ const MAS_IDENTITY = process.env.MAS_IDENTITY_NAME || process.env.CSC_IDENTITY_N
 const macSigningCertSupplied = Boolean(process.env.CSC_LINK || process.env.CSC_KEYCHAIN);
 
 // The direct-download qualifier, defaulted HERE rather than in the
-// workflow . This was `CSC_IDENTITY_NAME || null`, and the only
+// workflow. This was `CSC_IDENTITY_NAME || null`, and the only
 // non-null source of it anywhere was one env line in each of release.yml's
 // two Developer-ID steps: `macPackager.sign` tests `qualifier === null`
 // before it looks at CSC_LINK and before notarization, so deleting either
@@ -136,7 +136,7 @@ const macSigningCertSupplied = Boolean(process.env.CSC_LINK || process.env.CSC_K
 // trigger, which is a thing the lane cannot lose without failing loudly.
 const MAC_IDENTITY = process.env.CSC_IDENTITY_NAME || (macSigningCertSupplied ? TEAM_QUALIFIER : null);
 
-// The Microsoft Store lane ( §15), opt-in for the same three
+// The Microsoft Store lane (§15), opt-in for the same three
 // reasons as MAS. It needs a Partner-Center-assigned publisher identity
 // nobody has yet; it can only be produced on a Windows 10+ host (or a
 // macOS host driving a Parallels VM, which no CI runner is), so an
@@ -145,7 +145,7 @@ const MAC_IDENTITY = process.env.CSC_IDENTITY_NAME || (macSigningCertSupplied ? 
 // that channel and there is nothing to rehearse.
 const buildAppx = process.env.XCHAIN_BUILD_APPX === '1' && !isStaging;
 
-// The Snap Store lane ( §16, ), opt-in for the same reasons
+// The Snap Store lane (§16), opt-in for the same reasons
 // as MAS and AppX. Building a snap runs the real snapcraft CLI (this
 // app-builder-lib's core24 strategy shells out to it), which no dev box
 // or default runner is guaranteed to have; and a rehearsal build must
@@ -157,7 +157,7 @@ const buildSnap = process.env.XCHAIN_BUILD_SNAP === '1' && !isStaging;
 // can actually swap in place on that OS. A staging dmg or win-zip
 // exercises nothing, because neither has an auto-update path.
 //
-// THE .deb BELONGS HERE AND WAS MISSING (added 2026-08-02,  §5). It
+// THE.deb BELONGS HERE AND WAS MISSING (added 2026-08-02, §5). It
 // sat in the same sentence as the dmg on the strength of one belief: that
 // electron-updater's deb path "needs privilege escalation" and therefore
 // does not exist. It exists. `DebUpdater` in the pinned electron-updater
@@ -187,7 +187,7 @@ const UPDATE_CAPABLE_TARGET = {
     ],
 };
 
-// --- Artifact names carry their architecture ( DD4) ----------------
+// --- Artifact names carry their architecture (DD4) ----------------
 //
 // THIS IS AN UPDATE-CORRECTNESS SETTING, NOT COSMETICS.
 //
@@ -214,7 +214,7 @@ const UPDATE_CAPABLE_TARGET = {
 // app-builder-lib).
 //
 // EVERY ARTIFACT IS NAMED `xchain-wallet-...`, NOT `${productName}-...`
-// (operator decision 2026-08-02,  §7.1: lowercase-with-dashes).
+// (operator decision 2026-08-02, §7.1: lowercase-with-dashes).
 //
 // `productName` is "XChain Wallet", with a SPACE, and app-builder-lib's
 // space-to-dash `safeArtifactName` substitution is gated on
@@ -249,7 +249,7 @@ const WIN_ARTIFACT = 'xchain-wallet-${version}-${arch}-win.${ext}';
 const NSIS_ARTIFACT = 'xchain-wallet-setup-${version}-${arch}.${ext}';
 const APPIMAGE_ARTIFACT = 'xchain-wallet-${version}-${arch}.${ext}';
 
-// --- Windows signing identity ( §4, DD2) ---------------------------
+// --- Windows signing identity (§4, DD2) ---------------------------
 //
 // The certificate subject CN, pinned. electron-updater refuses an update
 // whose publisher does not match the installed app's, so this string is
@@ -292,7 +292,7 @@ const config = {
     copyright: 'Copyright © Dankest, LLC',
 
     // A store build that cannot sign must FAIL, not succeed quietly
-    // . Every macOS signing miss in app-builder-lib is silent by
+    //Every macOS signing miss in app-builder-lib is silent by
     // default: `handleNullIdentity` logs and returns false, and a missing
     // certificate goes through `reportError`, which only throws when this
     // flag is on. Both paths end the same way, exit 0 with no .pkg, and
@@ -302,7 +302,7 @@ const config = {
     // Store build never is.
     forceCodeSigning: buildMas,
 
-    // --- Reproducible AppImage ( DD7) ----------------------------
+    // --- Reproducible AppImage (DD7) ----------------------------
     //
     // The AppImage was the one shipped artifact that did NOT reproduce,
     // because mksquashfs takes TWO timestamps from the wall clock: the
@@ -328,7 +328,7 @@ const config = {
         await prepareDeterministicAppImageToolset(context.arch);
     },
 
-    // --- The store package lands where nothing looks  ---------
+    // --- The store package lands where nothing looks ---------
     //
     // Every other artifact this config produces is written to `dist/`.
     // The Mac App Store `.pkg` is not: app-builder-lib's
@@ -356,7 +356,7 @@ const config = {
     // The name cannot be used to do this: createMasInstaller runs the
     // artifactName template through `path.basename`, on purpose, so a
     // `../` in it is stripped rather than honoured.
-    // IT ALSO NOTARIZES THE DISK IMAGE ( row 140), which is a second
+    // IT ALSO NOTARIZES THE DISK IMAGE (row 140), which is a second
     // job in one hook because this is the only seam that sees a FINISHED
     // dmg. `mac.notarize` runs during afterSign, on the .app, and the dmg
     // is built from that bundle afterwards - so the container itself has
@@ -403,10 +403,10 @@ const config = {
     // tiny-secp256k1 (root package.json's pnpm onlyBuiltDependencies),
     // and the Linux artifacts ship
     // resources/app.asar.unpacked/node_modules/tiny-secp256k1/build/Release/secp256k1.node
-    // ( counted it in the release lane's own .deb). It needs no
+    // (counted it in the release lane's own.deb). It needs no
     // asarUnpack entry because *.node is unpacked by default; a macOS
     // build compiles nothing, which is why this read as "none right
-    // now" for as long as it did .
+    // now" for as long as it did.
     asar: true,
 
     // Resources we ship alongside the app bundle. The renderer build
@@ -531,7 +531,7 @@ const config = {
     dmg: {
         artifactName: DMG_ARTIFACT,
         // TRUE, and it was FALSE by default for every release before
-        // v0.339.0 ( row 140). dmg-builder signs the disk image only
+        // v0.339.0 (row 140). dmg-builder signs the disk image only
         // on `this.options.sign === true` (`out/dmg.js`), so the default
         // shipped a signed, notarized, stapled .app inside a container that
         // `codesign` reported as "not signed at all". Measured on the
@@ -546,7 +546,7 @@ const config = {
         // the unsigned dev case: dmg-builder returns early on it, and the
         // notarize hook makes the same decision from the same value.
         sign: Boolean(MAC_IDENTITY),
-        // FALSE by operator decision, 2026-08-03 ().
+        // FALSE by operator decision, 2026-08-03  .
         //
         // At `true` the .dmg was listed in `stable-mac.yml` beside the .zip,
         // and electron-updater has no dmg install path at all: `MacUpdater`
@@ -562,7 +562,7 @@ const config = {
         writeUpdateInfo: false,
     },
 
-    // --- Mac App Store ( §13) ------------------------------------
+    // --- Mac App Store (§13) ------------------------------------
     //
     // A SECOND macOS channel, not a variant of the first. The direct
     // download is Developer ID + hardened runtime + notarization, updating
@@ -598,7 +598,7 @@ const config = {
         entitlementsInherit: 'build/entitlements.mas.inherit.plist',
         hardenedRuntime: false,
         // THE THIRD INSTANCE OF THE INHERITANCE TRAP, and the one that made
-        // this lane produce nothing at all . Without this line the
+        // this lane produce nothing at all. Without this line the
         // store build inherits `mac.identity`, which is null on any machine
         // holding no certificate, and a null identity short-circuits
         // signing before `createMasInstaller` - the only thing that emits a
@@ -666,7 +666,7 @@ const config = {
     },
     nsis: {
         artifactName: NSIS_ARTIFACT,
-        // TWO INSTALLERS, ONE PER ARCH. NOT THREE (, operator
+        // TWO INSTALLERS, ONE PER ARCH. NOT THREE (operator
         // decision 2026-08-01, reversing the same day's earlier call to
         // publish all three).
         //
@@ -696,7 +696,7 @@ const config = {
         deleteAppDataOnUninstall: false,
         // Deterministic uninstaller name; the default injects a timestamp.
         uninstallDisplayName: '${productName}',
-        // Differential updates are a non-goal ( §7), so do not emit
+        // Differential updates are a non-goal (§7), so do not emit
         // the delta metadata for them. This also stops the channel pointer
         // (`stable.yml` on Windows - never `latest.yml`, which is the
         // default channel's name and not ours) from advertising a
@@ -712,13 +712,13 @@ const config = {
         // is true below, which also puts both dmg files in
         // `stable-mac.yml` even though electron-updater can never offer
         // one (MacUpdater selects with `findFile(files, "zip", ["pkg",
-        // "dmg"])`). Harmless, and registered as  rather than
+        // "dmg"])`). Harmless, and registered rather than
         // changed here, because it alters what a published pointer
         // contains.
         differentialPackage: false,
     },
 
-    // --- Microsoft Store ( §15) ----------------------------------
+    // --- Microsoft Store (§15) ----------------------------------
     //
     // A SECOND Windows channel, not a variant of the first. The direct
     // download is an Authenticode-signed NSIS installer hosted by us and
@@ -845,7 +845,7 @@ const config = {
         // reading a bare `.AppImage` as x64. With the name forced, that
         // exception is gone and an un-suffixed AppImage is what it should
         // be, an artifact the gate refuses to attribute - the same posture
-        // as the combined NSIS installer ().
+        // as the combined NSIS installer  .
         artifactName: APPIMAGE_ARTIFACT,
         // SOURCE_DATE_EPOCH ALONE IS NOT ENOUGH HERE, and this comment
         // once claimed it was. Measured 2026-08-01: two packaged builds of
@@ -893,7 +893,7 @@ const config = {
         compression: 'xz',
     },
 
-    // --- Snap Store ( §16, ) ------------------------------
+    // --- Snap Store (§16) ------------------------------
     //
     // A THIRD Linux channel, not a variant of the other two. The AppImage
     // and .deb are hosted by us and updated through our own feed; the
@@ -980,7 +980,7 @@ const config = {
     // stable-mac.yml, stable-linux.yml, stable-linux-arm64.yml. Changing
     // it renames all of them, and any installed build keeps asking for
     // the name it was built with, forever. Treat it as a wire format
-    // ( §7.1).
+    // (§7.1).
     publish: [
         {
             provider: 'generic',

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: the web-link envelope ( §3, ).
+// Unit: the web-link envelope (§3).
 //
 // THE DEFECT THIS FILE EXISTS FOR was invisible at every layer taken on its
 // own. iOS Universal Links and Android App Links both deliver the ORIGINAL

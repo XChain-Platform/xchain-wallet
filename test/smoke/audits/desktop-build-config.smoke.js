@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §4 / stage 2: the shape of the desktop signing config
+// Smoke for §4 / stage 2: the shape of the desktop signing config
 // after the electron-builder v25 -> v26 upgrade.
 //
 // WHY A TEST AND NOT JUST THE UPGRADE. v26 moved every signtool setting
@@ -163,7 +163,7 @@ function loadConfig(env = {}) {
 {
     const cfg = loadConfig();
 
-    // Differential updates are a non-goal ( §7). nsis can be told
+    // Differential updates are a non-goal (§7). nsis can be told
     // not to emit delta metadata; the macOS zip blockmap cannot (see the
     // note in the config), which is why release.yml still deletes them.
     assert.equal(cfg.nsis.differentialPackage, false,
@@ -178,7 +178,7 @@ function loadConfig(env = {}) {
     assert.deepEqual([...new Set(arches(cfg.linux.target))].sort(), ['arm64', 'x64'],
         'linux ships x64 + arm64; armv7l is post-launch on demand (DD1)');
 
-    //  DD4: every artifact name carries its arch.
+    // DD4: every artifact name carries its arch.
     //
     // This is update correctness, not cosmetics. electron-updater selects an
     // artifact by substring-matching `process.arch` against the filename and
@@ -242,7 +242,7 @@ function loadConfig(env = {}) {
         'macOS rehearses the zip (electron-updater never swaps the dmg)');
     assert.deepEqual(cfg.win.target.map((t) => t.target), ['nsis'],
         'Windows rehearses nsis (the zip has no auto-update path)');
-    // BOTH Linux formats, because both auto-update ( §5, corrected
+    // BOTH Linux formats, because both auto-update (§5, corrected
     // 2026-08-02). The deb was excluded here on the belief that
     // electron-updater cannot swap it; `DebUpdater` swaps it by running
     // `dpkg -i` under `pkexec`, and the shipped `.deb` carries the
@@ -278,7 +278,7 @@ function loadConfig(env = {}) {
     assert.deepEqual(prod.linux.target.map((t) => t.target), ['AppImage', 'deb']);
 }
 
-// --- No Windows install format without an update story ( §4) -----
+// --- No Windows install format without an update story (§4) -----
 //
 // THIS IS ABOUT `msi`, AND IT IS NOT A STYLE RULE. electron-updater ships
 // exactly ONE Windows updater: `NsisUpdater`, which downloads and runs an
@@ -313,7 +313,7 @@ function loadConfig(env = {}) {
                 `win target '${name}' has no declared update story. electron-updater`
                 + ' has no MSI updater, so a plain `msi` lane strands every install it'
                 + ' produces; use msiWrapped (which keeps the NSIS update path) and'
-                + ' record the decision in  §4 before adding it here.');
+                + ' record the decision in §4 before adding it here.');
         }
     }
 }

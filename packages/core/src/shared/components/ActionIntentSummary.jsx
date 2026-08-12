@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ActionIntentSummary ( §5.2.2-3). Renders decoder.describe() of the
+// ActionIntentSummary (§5.2.2-3). Renders decoder.describe() of the
 // PARSED COMPOSED action string (never form state) plus the txSimulator
 // balance deltas. Both consume ONE canonical source - the parsed action -
 // so intent and deltas provably agree. Display-hardened by decoder.describe
@@ -53,7 +53,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                         // Label-only rows (empty before/after) are paired with
                         // the balance row that already carries the debit, so
                         // showing a before → after here would print a bare
-                        // arrow. : the protocol fee is still named and
+                        // arrow.: the protocol fee is still named and
                         // priced, because the balance row folds it in with the
                         // miner fee and this is the only place it is stated.
                         if (d.before === '' && d.after === '') {

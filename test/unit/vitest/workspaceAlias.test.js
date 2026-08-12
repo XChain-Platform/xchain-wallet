@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Guards the alias map that pins `@xchain-wallet/*` to this checkout
-// . The map is generated from each package's own `exports` block,
+//The map is generated from each package's own `exports` block,
 // so these tests are mostly about the two ways generation can go wrong:
 // a wildcard swallowing a more specific exact key, and a replacement that
 // points at a file nobody moved the alias to follow.

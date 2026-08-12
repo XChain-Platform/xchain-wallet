@@ -25,7 +25,7 @@
 //      the refusal comes from the SDK's `placeBetParams`, which rejects any
 //      amount that is not a positive number. The prediction is that it refuses
 //      correctly and that the user sees the builder's own context string
-//      (`betting.placeBetParams: ...`), which is the D-100/ error-mapping
+// (`betting.placeBetParams:...`), which is the D-100 error-mapping
 //      family rather than a new defect class.
 //   3. A stake LARGER THAN THE BALANCE - nothing in the form checks the
 //      balance (the Send form's equivalent gap is D-3), so this composes. The
@@ -326,7 +326,7 @@ test.describe('BET unhappy stakes', () => {
             const text = (await alert.first().innerText()) || '';
             expect(text,
                 'the refusal is the SDK builder talking to itself: a user is shown a function '
-                + 'name and a context string (the D-100/ error-mapping family)')
+                + 'name and a context string (the D-100 error-mapping family)')
                 .not.toMatch(/placeBetParams|betting\./);
             await expect(page.getByTestId('confirm-modal'),
                 'a zero stake reached the confirm screen, which is one Approve away from paying '

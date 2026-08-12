@@ -25,7 +25,7 @@ public class MainActivity extends BridgeActivity {
         // app whose backup posture assumes the vault is in native storage.
         registerPlugin(XChainVaultPlugin.class);
         registerPlugin(XChainLinksPlugin.class);
-        // SSC-4 : without this the SPA finds no clipboard plugin and
+        // SSC-4: without this the SPA finds no clipboard plugin and
         // refuses sensitive copies, rather than writing a seed phrase to an
         // unmarked clip any foreground app can read.
         registerPlugin(XChainClipboardPlugin.class);
@@ -35,7 +35,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * SSC-1 door 2 : refuse Capacitor's native cross-origin HTTP
+     * SSC-1 door 2: refuse Capacitor's native cross-origin HTTP
      * proxy, which does NOT go through the plugin registry and therefore
      * survives {@link #dropUnusedCapacitorPlugins()} entirely. The rule, the
      * measurement and the reasoning live in

@@ -27,7 +27,7 @@
 // all - a fact worth stating in the threat model rather than leaving
 // implied by a passing extension test.
 //
-// WHY A TOKEN SEND, NOT A NATIVE ONE . The reservation ledger nets
+// WHY A TOKEN SEND, NOT A NATIVE ONE. The reservation ledger nets
 // a reservation into the NEXT window's PRE-FLIGHT, and it reserves the TOKEN
 // tick only: `reserveFromSimulation` excludes the native coin on purpose
 // (its debit is dominated by the miner fee), and a native-coin send is a
@@ -73,9 +73,9 @@ async function composeTokenSend(page) {
 
 test.describe('two-window same-balance race (extension)', () => {
 
-    // . The venue miner auto-mines every few seconds while window 2 needs
+    //The venue miner auto-mines every few seconds while window 2 needs
     // ~8s to onboard and compose, so window 1's send often CONFIRMS in that gap.
-    // The  netting deliberately stops at `indexed` (a confirmed spend is
+    // The netting deliberately stops at `indexed` (a confirmed spend is
     // supposed to be reflected in the balance) but the indexer lags a beat, so
     // window 2 briefly sees the full balance and reports "Looks good" - a venue
     // artifact, not a protection failure: production blocks are ~10 minutes, so a
@@ -101,12 +101,12 @@ test.describe('two-window same-balance race (extension)', () => {
         expect(page.url()).toContain(extensionId);
     });
 
-    // Native sends are deliberately outside §4.7 , so this uses a TOKEN
+    // Native sends are deliberately outside §4.7, so this uses a TOKEN
     // send (XCHAIN, free-mintable on regtest). Getting here fixed two §4.7 bugs:
-    //   : the pre-flight coalescer keyed on (chainId, actionString, source)
+    // The pre-flight coalescer keyed on (chainId, actionString, source)
     //     and omitted localDeltas, so a reservation-carrying pre-flight coalesced
     //     onto the un-netted producer (fixed in xchain-sdk with a unit test).
-    //   : the reservation is released the instant window 1's send is signed
+    // The reservation is released the instant window 1's send is signed
     //     and handed off, and nothing covered the broadcast -> confirmation gap.
     //     Fixed by netting the source's UNCONFIRMED pendingTx debits (submitAction
     //     now records the SEND's tick/amount; the host pre-flight nets them), so
@@ -132,7 +132,7 @@ test.describe('two-window same-balance race (extension)', () => {
         await unlockAfterReload(page, PASSWORD);
 
         // From here the race must run against an UNCONFIRMED window-1 send
-        // : stop the venue's auto-miner so no block can land between
+        //: stop the venue's auto-miner so no block can land between
         // window 1's broadcast and window 2's pre-flight.
         await minerRpc('pause_mining', {});
 
@@ -146,7 +146,7 @@ test.describe('two-window same-balance race (extension)', () => {
         // shared pendingTx store, so this closes the write-vs-read race that
         // otherwise makes the assertion timing-dependent. Safe now that mining
         // is paused - the settle can no longer hand a block time to land
-        // , which is what made it counterproductive before.
+        //, which is what made it counterproductive before.
         await page.waitForTimeout(3_000);
 
         // Window 2: the same token balance, reserved by window 1. The shared

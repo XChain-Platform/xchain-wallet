@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / D-81: "Transfer ownership" validated nothing but emptiness.
+// D-81: "Transfer ownership" validated nothing but emptiness.
 // The mainnet bech32 vector typed into a regtest wallet produced no
 // error, no warning and an enabled submit button; only the confirm
 // screen's dry-run refused it, behind a "Sign anyway" checkbox. The
@@ -104,7 +104,7 @@ function labelledInput(container, labelText) {
 
 afterEach(() => cleanup());
 
-describe('Transfer ownership address validation ( / D-81)', () => {
+describe('Transfer ownership address validation (D-81)', () => {
     it('rejects a mainnet address on a regtest wallet, in the form', async () => {
         const q = await mountTransfer();
 

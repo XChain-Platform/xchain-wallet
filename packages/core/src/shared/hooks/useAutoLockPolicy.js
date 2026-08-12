@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useAutoLockPolicy (§26 / ). Owns the whole foreground auto-lock
+// useAutoLockPolicy (§26). Owns the whole foreground auto-lock
 // decision for a shell: which timeout applies, whether auto-lock is armed
 // at all, performing the lock, and reporting the arm state to the
 // extension's service-worker backstop.
 //
 // MOUNT THIS AT THE SHELL LEVEL (each shell's AppInner, above the view
-// switch), never inside a route. : the wiring used to live in
+// switch), never inside a route.: the wiring used to live in
 // Home.jsx, and every shell renders exactly one route at a time, so
 // navigating to Send / Receive / History / Settings unmounted Home and
 // useAutoLock's effect cleanup cancelled the pending timer and dropped

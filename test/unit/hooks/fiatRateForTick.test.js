@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// . `useFiatRate` prices a COIN FAMILY (BTC / LTC / DOGE) and knows
+//`useFiatRate` prices a COIN FAMILY (BTC / LTC / DOGE) and knows
 // nothing about tokens, so handing its rate to a field holding a TOKEN amount
 // prices that amount as if it were the coin. The operator-visible symptom was
 // a 50,000 XCHAIN send previewing as billions of dollars, rendered with the

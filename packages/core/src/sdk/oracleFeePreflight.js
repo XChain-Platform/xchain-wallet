@@ -12,7 +12,7 @@
 //
 // A dispenser that names an ORACLE_ADDRESS pays the oracle operator UP FRONT, as a real
 // native-coin output inside the DISPENSER transaction itself, sized from the escrow the
-// action adds (Counterparty parity, ):
+// action adds (Counterparty parity):
 //
 //     oracle_fee = FEE x (oracle_price x GIVE_ESCROW) / validator_coin_price
 //

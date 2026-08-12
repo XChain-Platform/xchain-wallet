@@ -8,19 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign §11.1, 's browser half: does the confirm screen state what a
+// Campaign §11.1, that browser half: does the confirm screen state what a
 // fee-bearing action actually COSTS, in both payment lanes, and does the
 // number it prints match what the chain then charges?
 //
-//  was measured twice by hand and fixed in code ( added the
+// was measured twice by hand and fixed in code (a later change added the
 // XCHAIN-lane line, composeActionForConfirm folds the native-lane quote into
 // the projection). What was never driven is the whole claim end to end, and
 // the campaign's own rule for this lane is "measure, do not read": every fee
 // finding in it that came from reading a screen was wrong.
 //
 // So each lane is asked of the CHAIN as well as the screen, on the SAME action
-// (ISSUE, which is what  was measured on) and on BITCOIN, the only chain
-// where the lane is a choice at all - off Bitcoin  makes the coin output
+// (ISSUE, which is what was measured on) and on BITCOIN, the only chain
+// where the lane is a choice at all - off Bitcoin a later change makes the coin output
 // mandatory and the XCHAIN half has nowhere to run.
 //
 //   LANE 1, the DEFAULT XCHAIN lane. The screen must print the protocol fee as
@@ -37,15 +37,15 @@
 //     Before the fix that difference was exactly the fee, silently.
 //
 // THE NEGATIVE IS THE SECOND TEST, and it is not decoration: the cheap way to
-// "fix"  is to print a fee on everything, which trades a silent
+// "fix" is to print a fee on everything, which trades a silent
 // understatement for a confident lie on the many actions that charge nothing
-// (BROADCAST, MINT, DESTROY, SLEEP, ... - see ). BROADCAST is priced at
+// (BROADCAST, MINT, DESTROY, SLEEP,... -). BROADCAST is priced at
 // exactly zero by this venue's own schedule, so it is driven in BOTH lanes and
 // must stay silent in both, and its coin cost on chain must be the miner fee
 // alone - a stray fee output would show up there even if no screen mentioned it.
 //
 // PRE-FLIGHT: ISSUE is priced, so the venue needs a usable BTC/USD snapshot;
-// global setup's `seedPrices()`  guarantees one or fails naming the
+// global setup's `seedPrices()` guarantees one or fails naming the
 // venue. The quote is read here anyway BEFORE composing, so a stale oracle
 // fails with that named instead of looking like a wallet defect three steps
 // later (§3.2).
@@ -118,7 +118,7 @@ async function mineIfPending() {
  * Looks it up in the LIST rather than probing an action index: the list only
  * ever contains indexed actions, while a speculative
  * `GET /api/action/<index>` before the indexer writes its row poisons that
- * index permanently (§3.6 / , unfixed on this venue). Status is asserted
+ * index permanently (§3.6, unfixed on this venue). Status is asserted
  * by the caller, since "an action was recorded" includes `invalid`.
  */
 async function waitForIndexedAction(txid, timeoutMs = 300_000) {
@@ -237,7 +237,7 @@ async function composeIssue(page, tick, { nativeFee }) {
 
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    // Full mode is SINGLE-ENCODE : this button composes and opens the
+    // Full mode is SINGLE-ENCODE: this button composes and opens the
     // confirm screen directly, with no review stage in between.
     await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
@@ -293,7 +293,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const quote = await feeQuote('ISSUE', `${TICK_XCHAIN_LANE}|${SUPPLY}|0|0|0`);
             expect(quote?.valid,
                 `the venue cannot price this action (${quote?.status}); this is venue state, not a `
-                + 'wallet defect - see campaign §3.2 / ')
+                + 'wallet defect - see campaign §3.2')
                 .toBe(true);
             quotedXchain = Number(quote.xchainFee);
             quotedSats = Number(quote.requiredFeeSats);
@@ -304,13 +304,13 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
         await test.step('LANE 1: the XCHAIN lane names the fee, and the chain debits that amount', async () => {
             await composeIssue(page, TICK_XCHAIN_LANE, { nativeFee: false });
 
-            // The line / exists for. Its absence IS the defect:
+            // The line exists for. Its absence IS the defect:
             // the screen priced the miner fee to eight decimals and said
             // nothing about the larger charge beside it.
             const line = page.getByTestId('confirm-protocol-fee');
             await expect(line,
                 'the confirm screen says nothing about the protocol fee in the XCHAIN lane, which is '
-                + ' exactly: the larger of the two costs, missing')
+                + 'exactly: the larger of the two costs, missing')
                 .toBeVisible();
             const said = await line.innerText();
             const shown = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
@@ -375,7 +375,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const projectedFeeSats = await projectedProtocolFeeSats(page);
             expect(projectedFeeSats,
                 'the balance projection carries no protocol-fee row, so the screen is showing the '
-                + 'miner fee as the whole cost -  in the native lane, where the fee is a real '
+                + 'miner fee as the whole cost - in the native lane, where the fee is a real'
                 + 'output the miner-fee arithmetic cannot see')
                 .toBe(quotedSats);
 
@@ -415,15 +415,15 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
     // FOUND BY THIS SPEC, on its second run, and kept as its OWN test because
     // it needs nothing from the chain but a utxo: no XCHAIN, no broadcast, no
     // indexing. That independence is worth having - the run that found the
-    // defect also wedged this venue's indexer on an unrelated one , and
+    // defect also wedged this venue's indexer on an unrelated one, and
     // a guard that only runs when the whole pipeline is healthy is a guard that
     // will be skipped exactly when it matters.
-    test('the protocol fee is still stated when the dry run does not answer ', async ({ page }) => {
+    test('the protocol fee is still stated when the dry run does not answer', async ({ page }) => {
         // The XCHAIN-lane fee line read ONLY the pre-flight report, and that
         // report is best-effort: the SDK's Tier-1 dry run has a 4000ms budget
         // and the wallet drops the verdict when the indexer misses it. So on a
         // merely busy venue the screen went back to quoting the miner fee alone
-        // with the larger charge unmentioned - 's screen, silently. It
+        // with the larger charge unmentioned - that screen, silently. It
         // happened spontaneously, twice in one hour, on the same action.
         //
         // Engineered here rather than waited for: the dry run is aborted at the
@@ -465,7 +465,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const line = page.getByTestId('confirm-protocol-fee');
             await expect(line,
                 'with the dry run unavailable the screen states no protocol fee at all, so the '
-                + 'disclosure is only as reliable as a 4-second budget on a shared venue ')
+                + 'disclosure is only as reliable as a 4-second budget on a shared venue')
                 .toBeVisible();
             expect(Number((await line.innerText()).match(/([\d.]+)\s*XCHAIN/)?.[1]),
                 'the fallback quote does not agree with the venue')
@@ -526,7 +526,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await composeBroadcast(`no fee here ${STAMP}`, false);
             await expect(page.getByTestId('confirm-protocol-fee'),
                 'the screen states a protocol fee on an action this venue prices at zero, which is '
-                + 'the opposite failure to  and just as wrong')
+                + 'the opposite failure and just as wrong')
                 .toHaveCount(0);
             expect(await projectedProtocolFeeSats(page),
                 'the balance projection carries a protocol-fee row for a fee of zero')
@@ -566,7 +566,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await page.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
             await mainButton(page, 'Send').click();
             await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
-            // A bare native payment carries no XChain action at all ,
+            // A bare native payment carries no XChain action at all,
             // so there is no fee to disclose and nothing to project.
             await expect(page.getByTestId('confirm-protocol-fee'),
                 'a plain coin payment claims a protocol fee')

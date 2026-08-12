@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SSC-4 clipboard hygiene .
+// SSC-4 clipboard hygiene.
 //
 // The property that matters is not "sensitive copies call the plugin". It is
 // that a sensitive copy NEVER reaches the web clipboard API on a native shell.

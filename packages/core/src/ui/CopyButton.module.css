@@ -12,7 +12,7 @@
     cursor: pointer;
     white-space: nowrap;
     transition: background var(--xc-transition), border-color var(--xc-transition);
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
 }

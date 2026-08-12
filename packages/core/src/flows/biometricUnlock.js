@@ -68,7 +68,7 @@ export class BiometricPrfUnavailableError extends Error {
 }
 
 // ---------------------------------------------------------------------
-// Provider seam ( S2)
+// Provider seam (S2)
 // ---------------------------------------------------------------------
 //
 // WebAuthn+PRF is the implementation for browsers, and it is the default.
@@ -92,7 +92,7 @@ export class BiometricPrfUnavailableError extends Error {
 // provider releases the password, and the password remains the KDF root:
 // biometrics shorten the path to it, they never replace the derivation.
 //
-// HOW A PROVIDER DESCRIBES ITSELF . The shared UI used to hardcode
+// HOW A PROVIDER DESCRIBES ITSELF. The shared UI used to hardcode
 // "Touch ID / Windows Hello / device biometric" and explain unavailability in
 // terms of WebAuthn and PRF. On a phone that is wrong twice over: it names an
 // Apple brand and a Microsoft one on Android, and it explains a browser API to
@@ -159,7 +159,7 @@ export function biometricProviderName() {
  * The reasons are separated because they ask different things of the user:
  * an absent API means "this browser cannot", an absent authenticator means
  * "set one up and come back". Collapsing both into one sentence is what
- *  was filed about.
+ * was filed about.
  *
  * PRF support cannot be probed in advance. It is discovered at
  * registration time when `prf.results.first` is missing.
@@ -356,7 +356,7 @@ const webAuthnProvider = {
  * Generic copy, used when a provider does not supply its own. Every string a
  * user reads about biometric unlock is either one of these or a provider's,
  * and none of them names a vendor: a component that guesses the mechanism is
- * the defect  records.
+ * the defect records.
  */
 export const BIOMETRIC_GENERIC_MECHANISM = 'your device biometric';
 export const BIOMETRIC_GENERIC_UNAVAILABLE = 'Biometric unlock is not available on this device.';

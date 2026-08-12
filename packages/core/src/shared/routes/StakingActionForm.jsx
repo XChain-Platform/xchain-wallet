@@ -69,7 +69,7 @@ function extractRows(resp) {
  *
  *   - `mode: 'unstake'`: VERSION|SIGNING_PUBKEY[|AMOUNT]. Capability-
  *     staking model (capability-staking-model.md §3): UNSTAKE addresses
- *     a specific signing pubkey. AMOUNT is the  optional partial:
+ * a specific signing pubkey. AMOUNT is the optional partial:
  *     absent = full sweep of the pubkey's active balance (original v1
  *     stake + any v2 top-ups), present = only that much enters cooldown
  *     and the residual stays staked.
@@ -159,7 +159,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     // Full claimable (pending rewards) or unstakeable (active stake)
     // balance for the source address; upper bound for the editable
-    // Amount field ( partial claim/unstake).
+    // Amount field (partial claim/unstake).
     const [positions, setPositions] = useState(
         /** @type {{ stakes: any[], rewards: any[] } | null} */ (null),
     );
@@ -247,7 +247,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // §29.3 fiat preview + toggle, same wiring as Send. The canonical
     // `amount` stays coin-scale; fiat mode only changes the display.
     // The amount here is XCHAIN, so the rate has to be XCHAIN's own
-    // : the chain coin's rate would price a stake of 50,000
+    //: the chain coin's rate would price a stake of 50,000
     // XCHAIN as if it were 50,000 BTC. `useTickFiatRate` sources the
     // XCHAIN/USD oracle pair and returns null when nothing can price
     // it, which is AmountField's "hide the toggle and the ≈ preview".
@@ -330,9 +330,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -340,7 +340,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -414,7 +414,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     // Emit AMOUNT only for a strict partial; a full-balance (or
     // unknown-balance) submit keeps the legacy absent-AMOUNT bytes
-    // (see the header note on the  wire policy).
+    // (see the header note on the wire policy).
     const isPartial = useMemo(() => {
         const n = Number(String(amount).replace(/,/g, ''));
         return Number.isFinite(n) && n > 0 && availableAmt != null && n < availableAmt;
@@ -538,7 +538,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -660,7 +660,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -675,7 +675,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// D-80 / : Manage Token's Activity tab labelled every row "Event".
+// D-80: Manage Token's Activity tab labelled every row "Event".
 // The explorer's /history/<tick>/token rows carry the action type under
 // `action`; the panel read `type` / `action_type` / `kind` and fell through
 // to its 'EVENT' default, so an ISSUE and a mint-settings edit were

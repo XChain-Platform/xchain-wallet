@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// D-37 (, verification leg ): the dispenser buy-funding gate,
+// D-37 (verification leg): the dispenser buy-funding gate,
 // walked live.
 //
 // The fix itself shipped as xchain-wallet b62e157 + a966ea2 and has unit
@@ -64,8 +64,8 @@
 //
 // NOTE ON FIXTURES: this spec creates every on-chain object it needs. The
 // dispensers the original campaign observed (#3543 and friends) do not exist
-// any more - the BTC regtest chain was rebuilt during the  recovery
-//  - and a spec that reused an index would fail as `exists:false`.
+// any more - the BTC regtest chain was rebuilt during the recovery
+// - and a spec that reused an index would fail as `exists:false`.
 
 import {
     LICENSE_ACCEPTED_AT_KEY,

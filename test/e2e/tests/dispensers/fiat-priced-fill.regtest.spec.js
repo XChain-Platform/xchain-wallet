@@ -63,7 +63,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** The dispenser create pays a real coin protocol fee on this chain . */
+/** The dispenser create pays a real coin protocol fee on this chain. */
 const FUNDING = 2;
 const STAMP = Date.now().toString().slice(-6);
 /** What the dispenser sells: XCHAIN, free-mintable on regtest. */

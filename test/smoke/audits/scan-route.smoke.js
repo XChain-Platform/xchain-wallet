@@ -45,13 +45,13 @@ assert.ok(/import \{ detectQrContent \} from '\.\.\/\.\.\/uri\/detectQrContent\.
     'ScanRoute imports the existing detectQrContent classifier (no duplicate logic)');
 assert.ok(/import \{[^}]*\bparseXchainUri\b[^}]*\} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
     'ScanRoute imports parseXchainUri for the richer xchain: intent split');
-//  §3.6: the same import line now also pulls hardenUriIntentText, the
+// The same import line now also pulls hardenUriIntentText, the
 // deep-link display-hardening fix (memo/tick land in prefill state
 // unneutralized otherwise). Asserted separately from the line above so a
 // regression in either import is its own failure, not a shared one.
 assert.ok(/import \{[^}]*\bhardenUriIntentText\b[^}]*\} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
     'ScanRoute imports hardenUriIntentText and applies it to a scanned xchain: intent before routing');
-//  §3.6 follow-up: the bip21 branch reaches chainId by a different road
+// §3.6 follow-up: the bip21 branch reaches chainId by a different road
 // (bip21.js, not xchainUri.js) and originally passed `chain=` through on a bare
 // length check, so a scanned QR could ride an arbitrary string into a routing
 // decision that the xchain: road drops. Both roads now share safeChainIdParam.
@@ -167,7 +167,7 @@ for (const shell of shells) {
     assert.ok(/outcome\.kind === 'psbt'[\s\S]*?setUnlockedView\('sign-psbt'\)/.test(src),
         `${shell.name} App.jsx routes psbt outcomes to the Sign PSBT view`);
     // Membership, not position. This asserted `'scan'` was the LAST member of
-    // the union, so any later view (PC-30's 'oracle', 's 'settings')
+    // the union, so any later view (PC-30's 'oracle', that 'settings')
     // read as a missing scan route.
     assert.ok(/@type \{[^}]*'scan'[^}]*\} \*\/ \('home'\)/.test(src),
         `${shell.name} App.jsx unlockedView union covers 'scan'`);

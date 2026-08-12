@@ -48,7 +48,7 @@ COMMIT_SHA="$(git rev-parse --verify "${REF}^{commit}")"
 # never rebased or amended, and 10 of the last 200 commits here diverge,
 # by up to 36 minutes. On any of those tags the verifier and the release
 # stamp different mtimes, the hashes cannot match, and the published
-# protocol tells the verifier to suspect tampering .
+# protocol tells the verifier to suspect tampering.
 SOURCE_DATE_EPOCH="$(git log -1 --pretty=%at "${COMMIT_SHA}")"
 
 echo "[reproduce] ref=${REF} commit=${COMMIT_SHA} epoch=${SOURCE_DATE_EPOCH}"

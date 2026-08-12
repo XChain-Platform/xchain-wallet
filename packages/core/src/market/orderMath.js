@@ -81,7 +81,7 @@ export function multiplyAmounts(a, b) {
  * Exact decimal comparison of two amounts: -1 when `a < b`, 0 when equal,
  * 1 when `a > b`.
  *
- * Added for , where the answer gates whether a buy may be broadcast at
+ * Added for, where the answer gates whether a buy may be broadcast at
  * all. `Number(a) >= Number(b)` is the wrong instrument for that: at 8dp a
  * balance and a price that differ by one sat compare equal once they round
  * through a float, which is exactly the case a funding check exists to catch.
@@ -106,7 +106,7 @@ export function compareAmounts(a, b) {
 /**
  * Exact decimal difference `a - b` as a plain fixed-notation string.
  *
- * Added for : deriving how much of a token an action spends from the
+ * Added for: deriving how much of a token an action spends from the
  * confirm surface's projected balances, which arrive as decimal strings at the
  * tick's own DECIMALS. §4.5 rule 1 is explicit that native JS numbers WILL
  * produce false verdicts here, and this value gates a balance reservation, so

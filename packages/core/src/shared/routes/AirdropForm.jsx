@@ -199,7 +199,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [listActionIndex, setListActionIndex] = useState(
         /** @type {string | null} */ (null),
     );
-    // : what the chain actually stored for the LIST this flow just
+    // What the chain actually stored for the LIST this flow just
     // published, read back once it is indexed and BEFORE step 2 is priced.
     // The indexer drops items it rejects into `list_items_invalid` and still
     // marks the LIST valid, so a shorter stored list is the only signal that
@@ -306,7 +306,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     }, [chainId, addressesByChain, fromAddressId, initialFromAddress]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    // : the chain the recipients have to be spendable ON. Passing it to
+    // The chain the recipients have to be spendable ON. Passing it to
     // the parser is what makes a mainnet address pasted into a regtest wallet
     // count as skipped instead of valid; without it the form only checked
     // length + charset and the chain silently dropped the address after the
@@ -421,7 +421,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
     }, [stage]);
 
-    //  reconcile: once the LIST this flow published is indexed, read the
+    // reconcile: once the LIST this flow published is indexed, read the
     // membership the chain actually stored and compare it with what the wallet
     // submitted. The indexer accepts a LIST whose items it partly rejected (it
     // writes the rejects to `list_items_invalid` and still marks the action
@@ -495,7 +495,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     // Balance of the amount tick at the source address, backing the
     // AmountField's "available" footer. It is NOT the Max: the field is
-    // per-recipient, so see `maxPerRecipient` below .
+    // per-recipient, so see `maxPerRecipient` below.
     const tickAmtBalance = useTickBalance({
         messaging,
         walletId,
@@ -609,7 +609,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // doc comment for the full honesty rationale).
     const recipientPreview = useMemo(() => {
         if (sourceMode === 'paste') {
-            // : once the published list has been read back, the chain's
+            // Once the published list has been read back, the chain's
             // count is the truth - it is what the AIRDROP will actually pay
             // and be charged for. Before that (and if the read failed) fall
             // back to what was submitted.
@@ -632,7 +632,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return { kind: 'tick', count: holderPreview.total, loading: holderPreview.loading, error: holderPreview.error, volatile: true };
     }, [sourceMode, recipients.valid.length, holderPreview, existingListDetail, listReconcile]);
 
-    // : exact decimal math, not a float product. This number both
+    // Exact decimal math, not a float product. This number both
     // prices the preview and gates submit, so an ulp of drift is the
     // difference between a payable drop and one the chain rejects.
     const totalDistribution = useMemo(() => {
@@ -642,7 +642,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return multiplyDecimal(amt, String(recipientPreview.count));
     }, [amountPer, recipientPreview.count]);
 
-    //  (E2E D-86, second form): the amount field is PER RECIPIENT,
+    // (E2E D-86, second form): the amount field is PER RECIPIENT,
     // so filling the whole balance into it proposes a payout of balance x
     // recipients - N times the total the form itself prints one row below.
     // Same defect and the same shape as Pay dividend's Max, whose divisor
@@ -712,7 +712,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setFormError('Per-recipient amount must be a positive number.');
             return;
         }
-        // : stop a drop the balance cannot cover here, not several
+        // Stop a drop the balance cannot cover here, not several
         // screens and one broadcast LIST later. Only fires when both the
         // projected total and the balance are known, so an explorer
         // hiccup leaves the form ungated.
@@ -770,11 +770,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // partial flow that strands the user mid-LIST.
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): AIRDROP is two signed transactions, so
+    // (§5.6 slice 2): AIRDROP is two signed transactions, so
     // BOTH legs get their own single-encode confirm round. The recipient-list
     // review stage stays: it is a data review (who gets what), not an encoded-
     // action preview, and the confirm page is what gates each signature.
-    // : hardware comes through here too, on both legs.
+    // Hardware comes through here too, on both legs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
@@ -830,7 +830,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
-                //  §5.4. This leg is the reason the resume descriptor
+                // §5.4. This leg is the reason the resume descriptor
                 // carries an `after` at all: the pending-airdrop record below
                 // is written AFTER Approve, and a resume that broadcast the
                 // LIST without it would leave the user with a published
@@ -870,7 +870,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 },
             });
             const txid = res?.txid || res?.broadcast?.txid;
-            // : a TRANSIENT post-sign broadcast failure RESOLVES as
+            // A TRANSIENT post-sign broadcast failure RESOLVES as
             // `queued` rather than throwing. The LIST is signed and the queue
             // will land it, but it has no txid yet, so the pending-airdrop
             // record that anchors leg 2 cannot be written. Say that, instead
@@ -930,7 +930,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 }),
             });
             const txid = res?.txid || res?.broadcast?.txid;
-            // : signed, queued, no txid yet (see leg 1). The pending
+            // Signed, queued, no txid yet (see leg 1). The pending
             // record stays at its current stage so the queue's eventual
             // broadcast is what completes the airdrop.
             if (res?.queued) {
@@ -1133,7 +1133,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         );
     }
 
-    //  confirm page, rendered in place of the review stage (the overlay
+    // confirm page, rendered in place of the review stage (the overlay
     // modal didn't fit small/mobile viewports); flow state stays intact.
     if (actionConfirm.open) {
         return (
@@ -1148,7 +1148,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? fromAddress : null}
                 hwStatus={hwStatus}
@@ -1253,7 +1253,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         ? 'You will confirm on your hardware device twice.'
                         : 'You will enter your password twice.'}
                 </p>
-                {/* : on the single-encode path the credentials live on
+                {/* On the single-encode path the credentials live on
                     the confirm page, so this stage stays a pure recipient
                     review and the button opens that page. */}
                 {singleEncode ? null : (
@@ -1345,7 +1345,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         ))}
                     </div>
                 ) : null}
-                {/* : the chain kept fewer items than the wallet published.
+                {/* The chain kept fewer items than the wallet published.
                     Say so here, on the screen that prices step 2, because the
                     LIST was already paid for at the larger count and the AIRDROP
                     will only pay (and only be charged for) what survived. */}
@@ -1390,7 +1390,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     enough of {token.trim().toUpperCase() || 'the token'} +
                     fee tick to cover the full distribution.
                 </p>
-                {/* : credentials live on the confirm page for leg 2 too. */}
+                {/* Credentials live on the confirm page for leg 2 too. */}
                 {singleEncode ? null : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -1668,7 +1668,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         </div>
                     ) : null}
 
-                    {/* : a well-formed address for the wrong chain is not a
+                    {/* A well-formed address for the wrong chain is not a
                         typo, and calling it "invalid" hides what went wrong. Name
                         it, and name the chain this airdrop pays on. */}
                     {recipients.wrongNetwork.length > 0 ? (

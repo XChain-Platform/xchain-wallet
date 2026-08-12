@@ -28,7 +28,7 @@
  *     clear, a fresh `wallet.import` call after the IDB wipe still
  *     trips the existence check and the demo flow can't restart.
  *
- * Shell-side store (desktop, ): the Electron shell keeps its
+ * Shell-side store (desktop): the Electron shell keeps its
  * vault blob, kdfParams meta, cached session key and unlock throttle
  * in files under `app.getPath('userData')`, which no renderer API can
  * reach. Clearing localStorage + IndexedDB there is a silent no-op, so

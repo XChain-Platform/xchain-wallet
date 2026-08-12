@@ -1,4 +1,4 @@
-/* PsbtIntentPanel ( §5.5, PSBT variant).
+/* PsbtIntentPanel (§5.5, PSBT variant).
    The input/output enumeration is the FOREGROUNDED content on this
    variant: the theft in a hostile PSBT is the output set, not the action
    data, so WHO gets paid must be readable at a glance and can never be

@@ -31,7 +31,7 @@
 //
 // Phase 2 exists because the weakest useful property turned out not to be
 // enough either. On 2026-08-07 the tree mounted, the text read fine, and every
-// section of Settings said "Settings unavailable" ( row 105): the
+// section of Settings said "Settings unavailable" (row 105): the
 // renderer's IPC bridge was missing seventeen wrappers the main process
 // already answers. So the walk now enters demo mode and opens Settings, which
 // is the first screen that talks to the host about anything other than the
@@ -126,7 +126,7 @@ try {
     // ---- Phase 2: the app is not just painted, it is WIRED ---------------
     //
     // A mounted tree was the weakest useful property and it is not enough:
-    // measured 2026-08-07 ( row 105), the tree above mounted perfectly
+    // measured 2026-08-07 (row 105), the tree above mounted perfectly
     // while every section of Settings painted "Settings unavailable:
     // messaging.getSettings is not available in this shell". The renderer's
     // bridge was missing seventeen wrappers whose message types the main

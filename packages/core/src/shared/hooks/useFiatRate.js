@@ -54,7 +54,7 @@ export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFal
 }
 
 /**
- * Gate a coin-family fiat rate to the thing actually being priced .
+ * Gate a coin-family fiat rate to the thing actually being priced.
  *
  * `useFiatRate` prices a COIN FAMILY: BTC, LTC, DOGE. It knows nothing about
  * tokens. Handing its rate to a field that is holding a token amount prices
@@ -106,7 +106,7 @@ function classifyTick({ tick, nativeTicker }) {
 }
 
 /**
- * The fiat rate for whatever tick a field is actually holding .
+ * The fiat rate for whatever tick a field is actually holding.
  *
  * This is the hook an AmountField consumer wants. `useFiatRate` answers
  * "what is one BTC worth", which is the right question only when the

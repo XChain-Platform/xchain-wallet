@@ -76,9 +76,9 @@ panel. The bundled regtest descriptors
 (`packages/core/src/registry/descriptors/{bitcoin,dogecoin,litecoin}.js`)
 already pin these localhost defaults.
 
-### Pointing at the devhost stack over SSH
+### Pointing at the shared regtest stack over SSH
 
-The shared regtest stack runs on **devhost**, not on the Mac. The
+The shared regtest stack runs on the shared regtest host, not on the Mac. The
 descriptors use `localhost`, so forward the five ports over SSH before
 running any regtest-backed test from the Mac:
 
@@ -89,25 +89,25 @@ ssh -N \
   -L 3123:localhost:3123 \
   -L 3223:localhost:3223 \
   -L 10000:localhost:10000 \
-  devhost
+  localhost
 ```
 
 With the tunnel up, `bash tools/regtest/bootstrap.sh` reports green and
 the e2e round-trip targets the live stack. Alternatively run the tests
-on devhost itself (localhost resolves natively there).
+on the regtest host itself (localhost resolves natively there).
 
 ## Scripts
 
 | Script | Purpose | Status |
 |---|---|---|
-| `bootstrap.sh` | Probe explorer + per-chain encoders + hub; print a readiness report; exit 0 when every service responds AND the explorer's status shows its decoders wired (not just a live socket). | Runnable today; validated against the live devhost stack 2026-07-24. |
+| `bootstrap.sh` | Probe explorer + per-chain encoders + hub; print a readiness report; exit 0 when every service responds AND the explorer's status shows its decoders wired (not just a live socket). | Runnable today; validated against the live the regtest host stack 2026-07-24. |
 | `down.sh` | Wrapper around `xchain-node stop` - exists so wallet test runners don't depend on the platform repo's exact stop command. | Scaffolding - runnable today. |
 | `wait-ready.sh` | Block until every required service responds within a timeout; used by `pnpm test:integration` to bring the stack up before running tests. | Scaffolding - runnable today. |
-| `multiSendRoundtrip.cjs` | PC-52 multi-recipient SEND round-trip: mints regtest XCHAIN, then sends to three recipients in ONE action with unequal amounts, composed through the wallet's own `flows/sendLegs.js`. Asserts per-recipient credits (not just `indexed: valid`), which is what tells "every leg landed" apart from the  failure where leg 1 was emitted twice. | Runnable; validated 2026-07-26 (BTC regtest: `SEND\|1\|^1\|7\|…\|3\|…\|1\|…` on the P2SH chunk lane indexed valid, credits 7/3/1, sender debited 11; single-recipient control still OP_RETURN v0). |
-| `roundtrip.cjs` | Reusable funded-signer round-trip driver ( / spec §14): funds a fresh key from the node wallet, then runs each action through create -> encode -> sign -> broadcast -> confirm -> read-back via the SDK, against the live indexer. Run after the tunnel is up. | Runnable; validated 2026-07-25 (LIST + max-size FILE index valid; SWEEP leg moves a real balance; CALLBACK leg mints free regtest XCHAIN, ISSUEs a token, sets the ISSUE v4 callback config, distributes, and executes CALLBACK - holder loses the token and gains XCHAIN, owner's supply restored; ORDER leg creates/edits/cancels an order and proves EXPIRATION is a Unix timestamp + cancel is ORDER v1, PC-17). |
+| `multiSendRoundtrip.cjs` | PC-52 multi-recipient SEND round-trip: mints regtest XCHAIN, then sends to three recipients in ONE action with unequal amounts, composed through the wallet's own `flows/sendLegs.js`. Asserts per-recipient credits (not just `indexed: valid`), which is what tells "every leg landed" apart from the failure where leg 1 was emitted twice. | Runnable; validated 2026-07-26 (BTC regtest: `SEND\|1\|^1\|7\|…\|3\|…\|1\|…` on the P2SH chunk lane indexed valid, credits 7/3/1, sender debited 11; single-recipient control still OP_RETURN v0). |
+| `roundtrip.cjs` | Reusable funded-signer round-trip driver (spec §14): funds a fresh key from the node wallet, then runs each action through create -> encode -> sign -> broadcast -> confirm -> read-back via the SDK, against the live indexer. Run after the tunnel is up. | Runnable; validated 2026-07-25 (LIST + max-size FILE index valid; SWEEP leg moves a real balance; CALLBACK leg mints free regtest XCHAIN, ISSUEs a token, sets the ISSUE v4 callback config, distributes, and executes CALLBACK - holder loses the token and gains XCHAIN, owner's supply restored; ORDER leg creates/edits/cancels an order and proves EXPIRATION is a Unix timestamp + cancel is ORDER v1, PC-17). |
 
-| `deployNativeFee.mjs` | : drives a wallet-composed contract DEPLOY that pays the protocol fee with a native-coin output on a chain with no XCHAIN lane, through both `submitWithSigner` branches. | Runnable; validated 2026-07-28 (litecoin-regtest actions 1226-1228, dogecoin-regtest action 953). |
-| `watcherLaneNativeFee.mjs` | : drives the WATCHER lane (`buildActionPsbt`, what every form's "Create unsigned transaction" reaches) for a priced ownership sale off Bitcoin, and reads the verdict back off the chain. Three legs: a natively-priced ISSUE, the same sale composed WITHOUT the flag (the broken-form shape, which must be rejected), and the sale composed WITH it. Proves the encoder puts the composed FEE_DESTINATION output into the PSBT it returns and the indexer accepts the action. | Runnable; validated 2026-08-04 (litecoin-regtest: ISSUE action 2189 valid, flagless ORDER 2190 `invalid: insufficient fee (native coin output required)`, flagged ORDER 2191 valid paying 0.03333333 LTC, payment_mode 1). |
+| `deployNativeFee.mjs` |: drives a wallet-composed contract DEPLOY that pays the protocol fee with a native-coin output on a chain with no XCHAIN lane, through both `submitWithSigner` branches. | Runnable; validated 2026-07-28 (litecoin-regtest actions 1226-1228, dogecoin-regtest action 953). |
+| `watcherLaneNativeFee.mjs` |: drives the WATCHER lane (`buildActionPsbt`, what every form's "Create unsigned transaction" reaches) for a priced ownership sale off Bitcoin, and reads the verdict back off the chain. Three legs: a natively-priced ISSUE, the same sale composed WITHOUT the flag (the broken-form shape, which must be rejected), and the sale composed WITH it. Proves the encoder puts the composed FEE_DESTINATION output into the PSBT it returns and the indexer accepts the action. | Runnable; validated 2026-08-04 (litecoin-regtest: ISSUE action 2189 valid, flagless ORDER 2190 `invalid: insufficient fee (native coin output required)`, flagged ORDER 2191 valid paying 0.03333333 LTC, payment_mode 1). |
 
 All of them exit 0 on success and a non-zero code with a structured
 diagnostic on failure. They never start a stack themselves - that

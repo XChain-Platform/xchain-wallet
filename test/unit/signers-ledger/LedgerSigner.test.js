@@ -259,7 +259,7 @@ describe('LedgerSigner.getPublicKey', () => {
     // Omitting the format makes hw-app-btc default to 'legacy', and the
     // Bitcoin app answers 0x6a80 for a legacy request on a segwit path.
     // getAddresses always passed one; getPublicKey did not, so it failed
-    // against real hardware on every purpose except 44' .
+    // against real hardware on every purpose except 44'.
     it.each([
         ["m/84'/0'/0'/0/0", 'bech32'],
         ["m/49'/0'/0'/0/0", 'p2sh'],
@@ -317,7 +317,7 @@ describe('LedgerSigner.signPsbt', () => {
     // (hex, isSegwitSupported, hasExtraData, additionals). The old 5-arg
     // call shifted `false` into additionals and dropped the real array,
     // which blew up inside the library as `additionals.includes is not a
-    // function` on the first real signing attempt .
+    // function` on the first real signing attempt.
     it('calls splitTransaction with the v10 four-argument signature', async () => {
         const prevTxHex = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
             + '00000000160014' + 'bb'.repeat(20) + '00000000';

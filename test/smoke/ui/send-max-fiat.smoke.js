@@ -60,14 +60,14 @@ assert.doesNotMatch(
 
 // --- fiat rate + toggle state -----------------------------------------
 
-assert.match(sendSrc, /fiatRate = useFiatRate\(/, 'fiat rate via oracle-backed hook ');
+assert.match(sendSrc, /fiatRate = useFiatRate\(/, 'fiat rate via oracle-backed hook');
 assert.match(sendSrc, /amountInputMode/, 'amount-entry mode state');
 assert.match(sendSrc, /fiatAmount/, 'fiat-mode input state');
 assert.match(sendSrc, /'coin' \| 'fiat'/, 'mode union typed');
 
 assert.match(sendSrc, /toggleAmountInputMode = useCallback/, 'toggle callback');
 assert.match(sendSrc, /onAmountFieldChange = useCallback/, 'fiat input handler');
-//  re-anchor: the amount side now converts through `amountFiatRate`, the
+// re-anchor: the amount side now converts through `amountFiatRate`, the
 // tick-gated rate, not the raw coin-family `fiatRate`. Asserting the raw name
 // here would pin the defect (a token amount priced at the coin's rate).
 assert.match(
@@ -81,7 +81,7 @@ assert.match(
 assert.match(
     sendSrc,
     /amountFiatRate = useMemo\(\s*\n?\s*\(\) => fiatRateForTick\(/,
-    'the amount-side rate is gated on the tick ',
+    'the amount-side rate is gated on the tick',
 );
 assert.match(
     sendSrc,
@@ -99,12 +99,12 @@ assert.match(sendSrc, /onMax = useCallback/, 'Max callback');
 assert.match(
     sendSrc,
     /balanceSats - feeSats/,
-    'native send subtracts fee from balance in exact sats ',
+    'native send subtracts fee from balance in exact sats',
 );
 assert.match(
     sendSrc,
     /decimalStringFromSats\(maxSats\)/,
-    'Max amount formatted via exact non-scientific formatter ',
+    'Max amount formatted via exact non-scientific formatter',
 );
 assert.match(sendSrc, /maxDisabled=\{!sourceBalance\}/, 'Max disabled without balance prop forwarded to AmountField');
 

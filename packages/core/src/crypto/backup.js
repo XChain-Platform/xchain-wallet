@@ -54,10 +54,10 @@ export class BackupFormatError extends Error {
 /**
  * The envelope did not open under the password it was handed.
  *
- * : the message names WHICH password that is. A restore screen asks for
+ * The message names WHICH password that is. A restore screen asks for
  * three of them (the file's, the backed-up wallet's, this device's), and this
  * one is only ever the file's. "Wrong password" on its own, which is what this
- * said until , leaves a user who typed a correct password into the
+ * said until, leaves a user who typed a correct password into the
  * wrong field with nothing to act on. The message carries the naming rather
  * than the class, because the error crosses the shell messaging boundary as a
  * bare string.

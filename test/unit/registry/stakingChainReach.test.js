@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : which chains advertise the contract lane vs the validator lane.
+// Which chains advertise the contract lane vs the validator lane.
 //
 // The operator's decision (2026-07-23) is that token staking into a contract
 // must work on BTC/LTC/DOGE while VALIDATOR (capability) staking stays
@@ -39,12 +39,12 @@ import {
 
 // Actions whose contract-lane versions the indexer accepts on any chain, and
 // which a wallet can now also PAY for there. DEPLOY/EXECUTE joined this list in
-// , once the native-fee quote gap closed end to end (indexer ,
-// wallet forms , fee placement /) and a wallet-composed
+// Once the native-fee quote gap closed end to end (indexer,
+// wallet forms, fee placement ) and a wallet-composed
 // DEPLOY paying the native fee indexed `valid` on both LTC and DOGE regtest.
 const CONTRACT_LANE = ['DEPOSIT', 'WITHDRAW', 'STAKE', 'UNSTAKE', 'DELEGATE', 'DEPLOY', 'EXECUTE'];
 
-describe(' staking + contract chain reach', () => {
+describe('staking + contract chain reach', () => {
     it('advertises the whole contract lane on Litecoin and Dogecoin', () => {
         for (const action of CONTRACT_LANE) {
             expect(LITECOIN_ACTIONS, `LTC should advertise ${action}`).toContain(action);
@@ -52,7 +52,7 @@ describe(' staking + contract chain reach', () => {
         }
     });
 
-    // . The hold-back this used to assert was a FEE-QUOTE gap, never a
+    //The hold-back this used to assert was a FEE-QUOTE gap, never a
     // chain refusal, and it is closed: the driver
     // tools/regtest/deployNativeFee.mjs composed a DEPLOY through
     // submitWithSigner (both branches) paying the fee in native coin, and the

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: wipeWalletStorage across the three shells .
+// Unit: wipeWalletStorage across the three shells.
 //
 // The wipe is the escape hatch behind both "exit the demo" and Locked's
 // "forgot password". It has to clear whatever store the *host shell*

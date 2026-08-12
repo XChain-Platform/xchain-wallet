@@ -144,7 +144,7 @@ assert.ok(
     /p\.MAX_SUPPLY\s*=\s*s/.test(src),
     'composer sets MAX_SUPPLY from the supply field',
 );
-// : MINT_SUPPLY must come from its OWN field, defaulting to the
+// MINT_SUPPLY must come from its OWN field, defaulting to the
 // supply. Tying it to `s` like MAX_SUPPLY did is the defect: it births
 // every wallet-issued token at its cap with zero mint headroom, which
 // makes the entire Mint surface unreachable for anything issued here.

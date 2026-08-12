@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the web shell's variant resolution, and the trap it used to set.
+// The web shell's variant resolution, and the trap it used to set.
 //
 // The bug this locks down was measured against the live web wallet: at a
 // 1489px viewport the unlock screen rendered inside a ~245px column pinned
@@ -50,7 +50,7 @@ function setViewport(px) {
     Object.defineProperty(window, 'innerWidth', { value: px, configurable: true, writable: true });
 }
 
-describe('web shell variant resolution ', () => {
+describe('web shell variant resolution', () => {
     beforeEach(() => {
         window.localStorage.clear();
         setUrl('');

@@ -15,7 +15,7 @@
 // be classified 'offline' (that needs all three services down) and neither
 // could `overall`. A device with no connectivity told the user "partly
 // unavailable; some features may not work" instead of "can't reach the
-// network". Measured on an Android emulator,  SSC-6 session ().
+// network". Measured on an Android emulator, SSC-6 session  .
 
 import { describe, it, expect } from 'vitest';
 import { checkReachability } from '../../../packages/core/src/flows/reachability.js';

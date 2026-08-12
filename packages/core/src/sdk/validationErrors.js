@@ -23,8 +23,8 @@
 // **"betting.placeBetParams: amount must be a positive stake"** on screen, in
 // the alert a user reads to find out what they did wrong. The refusal itself is
 // correct and nothing was broadcast; the wording is the defect. This is the
-// same family as  (the native-fee refusal reaching users as wire wording)
-// and  (the encoder's ten codes doing the same), and it is deliberately
+// same family (the native-fee refusal reaching users as wire wording)
+// and (the encoder's ten codes doing the same), and it is deliberately
 // solved the same way: one mapper, wired into `submitFailureMessage`, so a form
 // that routes its catch through that helper gets every one of these.
 //

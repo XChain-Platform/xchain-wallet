@@ -227,7 +227,7 @@ describe('PC-38 deployChunkedRun', () => {
         expect(submitAction).toHaveBeenCalledTimes(1);
     });
 
-    // , found by driving a full three-leg deploy on Bitcoin regtest.
+    // Found by driving a full three-leg deploy on Bitcoin regtest.
     //
     // `waitForTxid` settles from two different shapes and every test above
     // models only one of them. The WEBSOCKET fast path settles with a
@@ -366,7 +366,7 @@ describe('PC-38 verifyRecordedChunks fails toward re-sending', () => {
     });
 });
 
-// , found by interrupting a real two-chunk run on Bitcoin regtest during
+// Found by interrupting a real two-chunk run on Bitcoin regtest during
 // leg 2's indexer wait. The result was THREE carriers: 2223 (chunk 0), 2224
 // (chunk 1, from the interrupted run) and 2225 (chunk 1 again, from the resume).
 // Rule 3 dedups by position so nothing corrupted, but 2225 was a fee paid for
@@ -376,7 +376,7 @@ describe('PC-38 verifyRecordedChunks fails toward re-sending', () => {
 // The cause is a WINDOW, not a wrong check: a chunk's action_index is only
 // knowable after the indexer answers, so the record held nothing for a chunk
 // that was already broadcast. The txid is knowable at broadcast.
-describe(' a chunk broadcast but not yet indexed is recoverable from its txid', () => {
+describe('a chunk broadcast but not yet indexed is recoverable from its txid', () => {
     const txidRecord = {
         codeHash: HASH,
         chunks: [{ index: 0, txid: 'abc', actionIndex: null }],
@@ -444,12 +444,12 @@ describe(' a chunk broadcast but not yet indexed is recoverable from its txid', 
     });
 });
 
-// 's second window, found by re-driving the fix for the first one: a chunk
+// that second window, found by re-driving the fix for the first one: a chunk
 // whose txid is recorded but which the chain carries no action for YET, because
 // the transaction is still unmined. Measured live - a resume re-sent a chunk that
 // was in the mempool and confirmed a moment later, so one position ended up with
 // two paid carriers. The txid is known, so the honest move is to WAIT on it.
-describe(' a recorded txid that has not been mined yet is waited on, not re-sent', () => {
+describe('a recorded txid that has not been mined yet is waited on, not re-sent', () => {
     beforeEach(() => submitAction.mockReset());
 
     function resumableVault(chunk0) {
@@ -520,8 +520,8 @@ describe(' a recorded txid that has not been mined yet is waited on, not re-sent
     });
 });
 
-// : the assembling leg on a resume must be the one that was PLANNED.
-describe(' a resumed run assembles from the record, not from current arguments', () => {
+// The assembling leg on a resume must be the one that was PLANNED.
+describe('a resumed run assembles from the record, not from current arguments', () => {
     // Own the mock's state: these read `mock.calls` to find the ASSEMBLER, and a
     // call recorded by an earlier describe would shift which leg that is.
     beforeEach(() => submitAction.mockReset());

@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: the wallet completes a Taproot envelope pair ( §6/§3.5, ).
+// Unit: the wallet completes a Taproot envelope pair (§6/§3.5).
 //
 // The wallet does NOT use the SDK's lifecycleManager; submitWithSigner is a
-// second implementation of the same job, and it had the same gap  fixed
+// second implementation of the same job, and it had the same gap a later change fixed
 // in the SDK: sign one PSBT, broadcast it, and branch to a second transaction
 // only for P2SH/P2WSH. A commit/reveal pair would have had its commit broadcast
 // and its reveal dropped.
@@ -76,7 +76,7 @@ const call = ({ sdkRegistry, signPsbt }) => submitWithSigner({
     signingPaths: [{ inputIndex: 0, path: "m/86'/0'/0'/0/3" }],
 });
 
-describe('submitWithSigner completes the envelope pair ', () => {
+describe('submitWithSigner completes the envelope pair', () => {
     beforeEach(() => { localStorage.clear(); });
 
     it('signs BOTH halves before anything is broadcast, then commit -> reveal', async () => {

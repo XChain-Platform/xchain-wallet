@@ -62,7 +62,7 @@ const MIN_PASSWORD_LENGTH = 8;
  *        Opens the SweepForm for one chain row (App wires the view + props).
  */
 export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChain }) {
-    //  S4: Shows the old and new phrases side by side during migration.
+    // S4: Shows the old and new phrases side by side during migration.
     // No-op on every shell that installs no screen guard (web, extension,
     // desktop): a browser tab cannot stop a screenshot and must not pretend to.
     useProtectedScreen();
@@ -85,7 +85,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     // The generated phrase is held only until the user confirms they wrote
     // it down, then dropped. It is the ONLY copy: the wizard tells them to
     // sweep real funds into this wallet, so it must not reach the sweep
-    // stage without showing them how to restore it .
+    // stage without showing them how to restore it.
     const [mnemonic, setMnemonic] = useState(/** @type {string | null} */ (null));
     const [wroteItDown, setWroteItDown] = useState(false);
     const [newAddrs, setNewAddrs] = useState(
@@ -154,7 +154,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             // is the fresh-install handler: it builds a new vault and refuses
             // outright once one exists, so this wizard - which by definition
             // runs on a device that already holds the legacy wallet - could
-            // never complete through it .
+            // never complete through it.
             const phrase = cryptoLib.generateBip39Mnemonic(128);
             if (typeof messaging.addImportedWallet !== 'function') {
                 throw new Error('messaging.addImportedWallet is not available in this shell.');

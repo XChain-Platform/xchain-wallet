@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Behavioural test for  leg 2: the Add-Wallet lane entered from
+// Behavioural test for leg 2: the Add-Wallet lane entered from
 // inside the demo.
 //
 // The vault has ONE password. `meta.kdfParams` is written when the vault

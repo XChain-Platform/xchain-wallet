@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke:  desktop wallet wipe.
+// Smoke: desktop wallet wipe.
 //
 // The shared `wipeWalletStorage` helper clears localStorage and
 // IndexedDB, and the desktop shell uses neither: its vault blob,

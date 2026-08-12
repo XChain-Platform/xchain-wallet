@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  §3.6 finding 1, adoption guard.
+// §3.6 finding 1, adoption guard.
 //
 // `hardenUriIntentText` neutralizes the free-text fields of a parsed URI
 // intent (memo / tick / EXECUTE method + params / label / message) before
@@ -84,7 +84,7 @@ function sourceFiles() {
     return out;
 }
 
-describe(' §3.6: every parseXchainUri call site also hardens the intent', () => {
+describe('Every parseXchainUri call site also hardens the intent', () => {
     const files = sourceFiles();
 
     it('finds source files to sweep (guards against an empty walk)', () => {

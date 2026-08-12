@@ -39,7 +39,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -103,7 +103,7 @@ export async function createList(opts) {
         actionData: { action: 'LIST', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
-            // : name the funding address so the SDK selects UTXOs BY
+            // Name the funding address so the SDK selects UTXOs BY
             // ADDRESS (`sourceAddress` is SDK-side only, never on the create_tx
             // wire) and returns change to the spender. Without it the encoder
             // falls back to resolving UTXOs from the raw `pubkey`, which it
@@ -120,7 +120,6 @@ export async function createList(opts) {
             // official-token list (ProjectRosterForm), list fork, airdrop and
             // the watcher/HW branches of ListCreateForm - build the tx here.
             // Same family as advancedAction's D-17/D-18 and dispenserAction's
-            // .
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),

@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # reproduce.sh. This file pinned 20.18.0 by hand while the release lane
 # built the same bundle with 22.23.2, so the reproduction could not have
 # matched on any host - the same defect the extension twin carried
-# , for the same reason: toolchain.json names its consumers by
+#, for the same reason: toolchain.json names its consumers by
 # hand and neither of these two was on the list.
 ARG NODE_VERSION=22.23.2
 ARG NODE_SHA256_X64=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307

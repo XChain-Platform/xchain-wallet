@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  P8: BET composes through the SDK's own builder, host-side.
+// Smoke for P8: BET composes through the SDK's own builder, host-side.
 //
-// Same rule the VOTE route follows , and BET has a sharper reason to
+// Same rule the VOTE route follows, and BET has a sharper reason to
 // need it. A resolve (v3) and a place-bet (v2) differ on the wire only by
 // AMOUNT, so a client-side wire mirror that drifts by one field turns an
 // intended stake into a payout decision. It would not fail loudly either: the
@@ -113,7 +113,7 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
     // diverge, and the divergence would be signed rather than caught.
     assert.match(src, /function betParams\(\)/, 'BetFeedDetail derives the bet input in one place');
     // The window is a proximity heuristic for "compose and submit are handed the
-    // SAME derivation", not a line budget; it widened when  threaded the
+    // SAME derivation", not a line budget; it widened when threaded the
     // native-fee flag (and its comment) through both calls.
     assert.match(src, /params: betParams\(\),[\s\S]{0,600}params: betParams\(\),/,
         'BetFeedDetail composes and submits the same betParams()');
@@ -183,7 +183,7 @@ assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
     assert.ok(!/actionData: \{ action: 'BET'/.test(src),
         'CreateBetFeedForm does not feed a client-side wire mirror into the signing path');
     // One derivation feeding both compose and submit, as in BetFeedDetail (same
-    // proximity heuristic, same  widening).
+    // proximity heuristic, same widening).
     assert.match(src, /params: marketParams,[\s\S]{0,600}params: marketParams,/,
         'CreateBetFeedForm composes and submits the same marketParams');
 
@@ -268,7 +268,7 @@ for (const [shell, ...p] of [
 }
 
 console.log(
-    'OK: bet compose-for-confirm smoke ( P8: action.bet.composeForConfirm runs the real '
+    'OK: bet compose-for-confirm smoke (P8: action.bet.composeForConfirm runs the real'
     + 'sdk.betting builder host-side with an allow-listed builder name and returns betParams; all 4 '
     + 'formats have their own software + hardware routes; all 3 shells export the read and write '
     + 'surfaces; each composer is nailed to one builder so a place-bet can never reach the resolve '

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  (D-21): a P2SH/P2WSH two-phase REVEAL tx spends the chunk-lane
+// (D-21): a P2SH/P2WSH two-phase REVEAL tx spends the chunk-lane
 // data-carrier outputs, whose redeem script is a custom "<data> OP_DROP
 // <P2PKH gate>" that the default single-sig finalizer cannot finalize
 // ("Can not finalize input #0"). SoftwareSigner.signPsbt must route the
@@ -50,7 +50,7 @@ function makeSigner() {
     return { signer, calls };
 }
 
-describe('SoftwareSigner.signPsbt reveal routing ', () => {
+describe('SoftwareSigner.signPsbt reveal routing', () => {
     const params = { psbtHex: 'deadbeef', chainId: CHAIN, signingPaths: [{ inputIndex: 0, path: PATH }] };
 
     it('reveal:true routes to sdk.wallet.signRevealPsbt (custom finalizer, sign-all)', async () => {

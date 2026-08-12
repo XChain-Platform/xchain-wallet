@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  at the seam that decides what actually goes on chain.
+// at the seam that decides what actually goes on chain.
 //
 // `submitAction` is the one flow every atomic (non-prebuilt) submission
 // funnels through, and the encoderOpts it hands submitWithSigner are what

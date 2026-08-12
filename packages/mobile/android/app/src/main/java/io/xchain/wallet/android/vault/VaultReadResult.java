@@ -13,7 +13,7 @@
 package io.xchain.wallet.android.vault;
 
 /**
- * The four answers a vault read can give ( §1 blob-lifecycle contract).
+ * The four answers a vault read can give (§1 blob-lifecycle contract).
  *
  * They are four and not two on purpose. ABSENT is a claim about the device -
  * the JS side turns it straight into the create-a-new-wallet screen - so

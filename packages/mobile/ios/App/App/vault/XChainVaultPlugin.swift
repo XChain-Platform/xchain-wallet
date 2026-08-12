@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// `XChainVault`, the iOS twin of Android's XChainVaultPlugin.kt ( S2).
+// `XChainVault`, the iOS twin of Android's XChainVaultPlugin.kt (S2).
 //
 // The contract is not defined here. It is defined once, in the SPA, at
 // packages/web/src/storage/nativeVault.js: the plugin name, the methods,
@@ -151,7 +151,7 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
             "available": status.available,
             "enrolled": status.enrolled,
             "detail": status.detail,
-            // : the code is what the JS maps to plain language;
+            // The code is what the JS maps to plain language;
             // `detail` stays a developer string and is never shown to a user.
             "reasonCode": status.reasonCode,
             "mechanism": status.mechanism

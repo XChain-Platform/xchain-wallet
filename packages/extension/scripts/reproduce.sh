@@ -38,7 +38,7 @@
 set -euo pipefail
 
 # THE FIRST POSITIONAL IS A GIT REF, so an unrecognized flag was not
-# ignored, it was checked out . `reproduce.sh --help` reached
+# ignored, it was checked out. `reproduce.sh --help` reached
 # `git rev-parse --verify "--help^{commit}"` and died there, which reads to
 # a third-party verifier - the audience this whole lane exists for - as the
 # reproducible build being broken rather than as a flag being unsupported.
@@ -91,7 +91,7 @@ COMMIT_SHA="$(git rev-parse --verify "${REF}^{commit}")"
 # never rebased or amended, and 10 of the last 200 commits here diverge,
 # by up to 36 minutes. On any of those tags the verifier and the release
 # stamp different mtimes, the hashes cannot match, and the published
-# protocol tells the verifier to suspect tampering .
+# protocol tells the verifier to suspect tampering.
 SOURCE_DATE_EPOCH="$(git log -1 --pretty=%at "${COMMIT_SHA}")"
 
 echo "[reproduce] ref=${REF} commit=${COMMIT_SHA} epoch=${SOURCE_DATE_EPOCH}"
@@ -147,7 +147,7 @@ bash "${REPO_ROOT}/tools/release/emulation-preflight.sh" "${BUILD_PLATFORM}"
 # lane's, which runs on an amd64 runner. Without it the image resolves to
 # the host arch and the Dockerfile's x64 Node tarball dies at `exit code:
 # 133`, an exec-format error that names nothing (measured on arm64,
-# 2026-08-02). The desktop twin has carried this flag since ; this
+# 2026-08-02). The desktop twin has carried this flag; this
 # half was missed, so the extension reproduction was unrunnable on every
 # arm64 machine, which today is most of the Macs a verifier owns.
 IMAGE_TAG="xchain-wallet-extension:reproduce-${COMMIT_SHA:0:12}"

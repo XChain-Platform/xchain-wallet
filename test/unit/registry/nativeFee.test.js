@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the wallet's copy of the indexer's fee-payment rule
+// The wallet's copy of the indexer's fee-payment rule
 // (xchain-indexer/src/utility.js detectFeePaymentMode). Getting this wrong in
 // either direction is expensive: answering false on LTC/DOGE composes actions
 // the chain rejects for `insufficient fee (native coin output required)` after
@@ -70,7 +70,7 @@ describe('nativeFeeTickerFor', () => {
     });
 });
 
-// : the label side of the same answer. NativeFeeToggle renders nothing
+// The label side of the same answer. NativeFeeToggle renders nothing
 // for an empty ticker, so this is what keeps a user-added custom chain from
 // being shown a fee control the protocol has no rule for.
 describe('protocolCoinTickerFor', () => {

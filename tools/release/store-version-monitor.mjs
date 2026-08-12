@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/store-version-monitor.mjs - Chrome Web Store publish
-// monitor ( §2 "Publish monitoring (compromise detection)").
+// monitor (§2 "Publish monitoring (compromise detection)").
 //
 // THE ONE RULE THIS SCRIPT ENFORCES. For each configured item (main,
 // and beta once it exists) it fetches the version the Chrome Web Store
@@ -85,7 +85,7 @@
 //
 // EXIT CODES (what cron reads; install notes are in the CLI usage text
 // below and in tools/release/README.md "Installing the store-version
-// monitor on origin-host"):
+// monitor on the release host"):
 //
 //   0   clean - every configured item's live version has a matching
 //       row in the publish log
@@ -101,14 +101,14 @@
 // by hand or redirected to a log file). STDERR carries content ONLY on
 // exit codes 1, 2 and 3 - a clean run is silent on stderr - so the cron
 // line below (which discards stdout but lets stderr reach cron's own
-// mail delivery, the same pattern already live on origin-host for the
-// / refresh-status checks) mails only when there is
+// mail delivery, the same pattern already live on the release host for
+// the existing refresh-status checks) mails only when there is
 // something to say.
 //
 // ---------------------------------------------------------------- PLAY
 //
 // THE PLAY LANE CHECKS PRESENCE, NOT VERSION, AND THAT IS A MEASURED
-// DECISION RATHER THAN A SHORTCUT ( frontier row 69). The obvious
+// DECISION RATHER THAN A SHORTCUT (frontier row 69). The obvious
 // design was to mirror the Chrome lane: scrape the listing, read the
 // version, compare it against a log. It does not transfer, because a
 // Play listing page does not carry a version. Measured 2026-08-08
@@ -314,7 +314,7 @@ export async function checkItem({ key, itemId, entries, fetchImpl, timeoutMs }) 
 
 // ----------------------------------------------------------------- PLAY
 
-/** The shipped Android applicationId ( D1). Immutable once published,
+/** The shipped Android applicationId (D1). Immutable once published,
  *  so it is a constant here rather than something an operator must supply. */
 export const PLAY_PACKAGE_NAME = 'io.xchain.wallet.android';
 export const DEFAULT_STATE_PATH = join(here, 'store-monitor-state.json');
@@ -445,7 +445,7 @@ export function judgePlay({ fetched, packageName, firstSeen }) {
         return {
             state: 'ok',
             detail: 'no public Play listing yet, and none has ever been seen - the expected state '
-                + 'until the production promote ( frontier rows 36/37)',
+                + 'until the production promote (frontier rows 36/37)',
             sawLive: false,
             title: null,
         };
@@ -494,14 +494,14 @@ const USAGE = `usage: store-version-monitor.mjs [--main-id <id>] [--beta-id <id>
 
 CHROME lane: compares the live Chrome Web Store version of each
 configured item against packages/extension/docs/publish-log.md
-( §2). A live version with no matching log row is the
+(§2). A live version with no matching log row is the
 rogue-publish incident signal.
 
 Item IDs come from --main-id/--beta-id or CWS_MAIN_ITEM_ID/CWS_BETA_ITEM_ID.
 CWS_MAIN_ITEM_ID (or --main-id) is REQUIRED unless --no-chrome; the beta
 item is optional and is skipped, without error, until it is configured.
 
-PLAY lane ( row 69): checks that the Android listing is PRESENT
+PLAY lane (row 69): checks that the Android listing is PRESENT
 and is ours. It does not check a version, because a Play listing page
 does not publish one - see the header comment for the measurement. The
 first time the listing is seen live, an absence latch is armed in the
@@ -518,17 +518,17 @@ unreadable, or both lanes disabled - the monitor did NOT run a full
 check), 3 inconclusive (could not determine state this run - NOT the
 same as clean).
 
-Install, origin-host cron (see the manual QA checklist at
+Install, release-host cron (see the manual QA checklist at
 https://docs.xchain.io/components/wallet/release/qa-checklist for the
 one-time setup steps). Installed 2026-08-01; the Play lane is ARMED and
 the Chrome lane is staged-and-commented until the first upload assigns
 an item id.
 
 PLAY_STATE_PATH is in both lines on purpose. Its default sits beside
-this script, and on origin-host that is root-owned /opt/xchain, which the
-cron user cannot write. That failure is silent while the listing is
-absent (a 404 exits 0) and arrives as EACCES exit 2 on the FIRST
-SIGHTING of a live listing, then repeats every six hours.
+this script, and on the release host that directory is root-owned
+/opt/xchain, which the cron user cannot write. That failure is silent
+while the listing is absent (a 404 exits 0) and arrives as EACCES exit
+2 on the FIRST SIGHTING of a live listing, then repeats every six hours.
 
   0 */6 * * * CWS_MAIN_ITEM_ID=<id> CWS_BETA_ITEM_ID=<id> \\
     PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \\
@@ -585,7 +585,7 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
             + 'item to check. This is a CONFIG error, not a clean bill of health - it means the '
             + 'monitor did not run any check this pass. Set CWS_MAIN_ITEM_ID (and, once it '
             + 'exists, CWS_BETA_ITEM_ID) after the first upload, when the extension ID is '
-            + 'recorded per spec  §2.',
+            + 'recorded per spec §2.',
         );
         // The Play lane needs no id and could have run, so say so rather than
         // leaving an operator to conclude the Android listing is being watched.

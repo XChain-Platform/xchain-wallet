@@ -141,7 +141,7 @@ assert.ok(/\|\s*'THROTTLED'/.test(specSrc),
 assert.ok(/retryAfterMs\?: number/.test(specSrc),
     'BridgeErrorResult declares optional retryAfterMs');
 
-// The bridge doc left this repo in ; the assertion follows it into
+// The bridge doc left this repo in; the assertion follows it into
 // the sibling checkout rather than being dropped, and skips when absent.
 if (docsAvailable()) {
     const bridgeDocSrc = readDoc('bridge.md');

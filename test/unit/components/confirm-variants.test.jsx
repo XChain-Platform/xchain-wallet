@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5.5: the two NON-action confirm variants.
+// The two NON-action confirm variants.
 //
 // The action variant confirms something the wallet composed, so its intent
 // summary is authoritative. Neither of these is that:
@@ -286,7 +286,7 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
         expect(utils.container.textContent).not.toContain('Send 1 JDOG');
     });
 
-    // : there is no caller fallback any more. An action the host could
+    // There is no caller fallback any more. An action the host could
     // not describe shows NO intent line, rather than one built from form
     // state: a visible absence beats a plausible substitute on the screen
     // whose job is saying what will broadcast. (The psbt and message variants

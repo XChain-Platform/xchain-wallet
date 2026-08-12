@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Build profiles in the release manifest (; rails §3,  §5).
+// Build profiles in the release manifest (; rails §3, §5).
 //
 // A build profile is WHICH FEATURE SET was compiled in. v1 has two:
 // `default` (web, desktop, extension) and `store` (the mobile builds, which
@@ -48,7 +48,7 @@ const verify = join(repo, 'tools', 'release', 'verify.sh');
 // electron-builder's real ones rather than approximations. This list used
 // to be one arch (and had `-mac-arch` the wrong way round), which the gate
 // accepted happily until the arch column landed - the same blind spot that
-// let all six lanes ship one arch for real ( §8). Note the x64
+// let all six lanes ship one arch for real (§8). Note the x64
 // AppImage carries NO arch token: that is electron-builder's default-arch
 // rule, not an omission here, and lib.sh's classifier knows it.
 const ARTIFACTS = [
@@ -123,7 +123,7 @@ for (const [name, profile] of ARTIFACTS) {
 }
 // The direct APK is `store`, and that is a fact about what users get: it is
 // built from the same AAB, so anything compiled out for review is missing
-// from the direct download too ( §6).
+// from the direct download too (§6).
 assert.ok(
     profileLines.includes('# profile store: ./xchain-wallet-v0.333.1.apk'),
     'the direct APK carries the store feature set, not the default one',
@@ -191,7 +191,7 @@ const rows = declared.split('\n')
     .map((l) => l.trim().split(/\s+/));
 assert.ok(rows.length > 0, 'expected-artifacts.txt declares nothing');
 for (const row of rows) {
-    // FIVE columns since 's signature class. Pinning the exact count
+    // FIVE columns since that signature class. Pinning the exact count
     // rather than a minimum is deliberate and is why this assertion earns
     // its keep: lib.sh parses the row as `status pattern profile arches
     // _rest`, so any sixth column would be swallowed silently, and a fifth
@@ -281,7 +281,7 @@ assert.ok(gate(desktopOnly).ok, 'a release with no store-profile artifact is not
 // The profile names now exist in two languages: `XR_PROFILES` in lib.sh, which
 // writes them into the manifest, and `BUILD_PROFILES` in csp.js, which decides
 // what a build actually contains. Two lists of the same names in two languages
-// is exactly the drift  spent a session reconciling, so they are
+// is exactly the drift spent a session reconciling, so they are
 // checked against each other rather than trusted to stay in step.
 
 const libProfiles = /XR_PROFILES=\(([^)]*)\)/.exec(readFileSync(lib, 'utf8'))?.[1]
@@ -299,7 +299,7 @@ assert.deepEqual(
 // nothing, it copies `packages/web/dist` verbatim, so without this a `default`
 // bundle could be wrapped in a store artifact and signed as `store`.
 //
-// The expected profile became a VARIABLE when  added a second direct
+// The expected profile became a VARIABLE when a later change added a second direct
 // APK at the `default` profile, so what is asserted here is the pair of
 // properties that keep the guard honest once it is parameterised:
 //   1. it refuses any MISMATCH, rather than accepting a set of profiles;
@@ -332,7 +332,7 @@ assert.match(
 
 // ---- The two direct APKs must not be able to wear each other's label ----
 //
-//  puts a SECOND direct APK at the `default` profile beside the
+// puts a SECOND direct APK at the `default` profile beside the
 // store-derived one, and the failure this guards was measured rather than
 // imagined (2026-08-07, against this same function): while the store row's
 // glob was the greedy `xchain-wallet-v*.apk`, a default-profile APK named
@@ -402,14 +402,14 @@ assert.match(
 
 rmSync(work, { recursive: true, force: true });
 
-// ---- A store build does not ship its own sourcemaps ( §5) ---------
+// ---- A store build does not ship its own sourcemaps (§5) ---------
 //
 // The web shell is HOSTED, so a sourcemap costs a fetch nobody makes unless
 // DevTools is open. A mobile store build is not hosted: `cap sync` copies all
 // of dist/ into the app bundle, so the maps are shipped, not offered.
 // Measured on the iOS store build before this guard existed: 22 MB of .map in
 // a 27 MB payload, each carrying `sourcesContent`, to serve a debugger that
-// Release configurations disable outright ( pins isInspectable off).
+// Release configurations disable outright (a later change pins isInspectable off).
 //
 // Both other shells had already decided this the other way, which is what
 // makes it an inherited default rather than a posture: desktop and extension
@@ -455,7 +455,7 @@ for (const pkg of ['desktop', 'extension']) {
 }
 
 console.log(
-    'OK: release build-profile smoke (: manifest-version 2 carries one'
+    'OK: release build-profile smoke (manifest-version 2 carries one'
     + ' `# profile <name>: <artifact>` line per artifact, written from the committed'
     + ' expected-artifacts.txt profile column; names with spaces survive the round trip;'
     + ' verify.sh refuses a dropped line, an undeclared profile name, a double claim, a'
@@ -463,8 +463,8 @@ console.log(
     + ' set must name a profile for every glob and must not declare two for one artifact;'
     + ' and sign.sh refuses to record a `store` label while the store build profile is'
     + ' unimplemented, without gating the desktop-only releases that are cuttable today.'
-    + ' : lib.sh and csp.js agree on the profile names, and a release build refuses'
-    + ' to stage a web bundle that is not the store profile.  §5: a `store` web'
+    + ' lib.sh and csp.js agree on the profile names, and a release build refuses'
+    + ' to stage a web bundle that is not the store profile. §5: a `store` web'
     + ' bundle emits no sourcemaps, resolved from the config rather than grepped, while the'
     + ' hosted shell keeps them and desktop/extension stay as they were)',
 );

@@ -14,7 +14,7 @@
 // or adds a SitePermissions key without re-running the generator gets a
 // red smoke.
 //
-//  moved the glossary to the sibling xchain-documentation checkout
+// a later change moved the glossary to the sibling xchain-documentation checkout
 // (components/wallet/glossary.md). The generator crosses that boundary, so
 // this gate skips loudly when the sibling is absent.
 

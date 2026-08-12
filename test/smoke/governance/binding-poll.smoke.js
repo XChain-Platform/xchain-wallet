@@ -14,7 +14,7 @@
 //   1. CreatePollForm has a binding-poll section and threads all six callback
 //      fields into BOTH param paths - the sdk.voting builder path AND the
 //      watcher-mode wire mirror. A field present in one and missing from the
-//      other is the drift class  was about.
+// other is the drift class was about.
 //   2. The turnout floor is enforced before a transaction is built, and the
 //      submit button is disabled while it fails.
 //   3. CALLBACK_DELAY_BLOCKS is emitted ONLY when its flag-day is active on the

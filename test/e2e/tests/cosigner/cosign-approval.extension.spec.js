@@ -47,7 +47,7 @@ const crypto  = require('crypto');
 // bech32m, so it cannot even parse the P2TR address this account IS. Using the
 // SDK's copy also means the PSBT is built by the same library the co-signer
 // decodes it with.
-// RESOLVED THROUGH THE INSTALLED SDK, NOT A SIBLING CHECKOUT .
+// RESOLVED THROUGH THE INSTALLED SDK, NOT A SIBLING CHECKOUT.
 // These read `../../../../../xchain-sdk/node_modules/...`, five levels up and
 // into a sibling repository's private dependency tree, so this spec ran only
 // on a machine that happened to have that checkout. The SDK is a registry
@@ -63,7 +63,7 @@ const MuSig2 = sdkRequire('./src/musig2.js');
 // itself initialises one on load.
 bitcoin.initEccLib(sdkRequire('@bitcoinerlab/secp256k1'));
 
-// HTTPS because  D6 narrowed the content-script matches to
+// HTTPS because D6 narrowed the content-script matches to
 // `https://*/*` plus loopback: the wallet deliberately no longer injects
 // `window.xchain` into a plain-HTTP origin that is not localhost, so this
 // spec's `expect.poll(() => Boolean(window.xchain))` would simply time out

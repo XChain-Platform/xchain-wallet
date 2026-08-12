@@ -19,7 +19,7 @@
 #   bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/ \
 #     --tag vX.Y.Z --target /srv/downloads/wallet \
 #     --public-base https://downloads.xchain.io/wallet
-#   bash tools/release/publish.sh ... --target user@origin-host:/srv/downloads/wallet
+#   bash tools/release/publish.sh ... --target user@release-host:/srv/downloads/wallet
 #   bash tools/release/publish.sh ... --staging   # §7.5 rehearsal set
 #   bash tools/release/publish.sh ... --dry-run
 #
@@ -47,7 +47,7 @@
 # pointer list came back EMPTY (nothing was ever uploaded last, because
 # nothing was recognised as a pointer at all) while the same files fell
 # through into the binary phase and were uploaded FIRST. Both halves of
-# the ordering guarantee were inverted at once, silently. See  §7.1.
+# the ordering guarantee were inverted at once, silently. See §7.1.
 #
 # The same reasoning runs backwards during a rollback (§6b): re-uploading
 # the previous yml is safe precisely because §3 retention guarantees its
@@ -84,7 +84,7 @@
 # under the same version. Staging publishes are exempt for the obvious
 # reason - publishing the staging set is step one OF the rehearsal.
 #
-# AND THE RELEASE MUST HAVE A RECORD (§6, ). Same shape, same
+# AND THE RELEASE MUST HAVE A RECORD (§6). Same shape, same
 # reason, one document over. §6 says the release record is instantiated
 # from TEMPLATE.md at the START of a release and closed by step 8, and
 # for the first release nothing created it and nothing asked for it:
@@ -258,7 +258,7 @@ fi
 
 MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
 
-# IS THIS A PARTIAL RELEASE?  Read BEFORE the channel assertion,
+# IS THIS A PARTIAL RELEASE? Read BEFORE the channel assertion,
 # because the answer decides which question that assertion can even ask.
 #
 # `sign.sh --lane` signs one lane's artifacts on their own, and the lanes
@@ -376,7 +376,7 @@ if [[ "$STAGING" -eq 0 ]]; then
     # partial release covering only store lanes contains no such lane, so
     # demanding a rehearsal record of it is demanding evidence about lanes
     # that are not in the release - the same shape as the two checks above,
-    # a third time .
+    # a third time.
     #
     # SAID OUT LOUD RATHER THAN SKIPPED, because the direct APK does have
     # an update path of its own (its `latest.json` feed) and NOTHING
@@ -462,7 +462,7 @@ while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
 # feed looks healthy, and every wallet in the field simply never hears
 # about the version. Refuse here, where it is still a build problem.
 #
-# EXCEPT ON A PARTIAL RELEASE , where "no pointer" is not a
+# EXCEPT ON A PARTIAL RELEASE, where "no pointer" is not a
 # missing desktop build but the correct shape: the store lanes have no
 # electron-updater feed to point into, and their own update path is the
 # per-lane one (`latest.json` for the direct APK). The distinction is
@@ -487,7 +487,7 @@ elif [[ ${#YMLS[@]} -eq 0 ]]; then
     echo "  A release with no update-info yml is invisible to every" >&2
     echo "  installed wallet, permanently, with nothing logged. Check that" >&2
     echo "  the desktop lanes ran and that their *.yml files were collected" >&2
-    echo "  into the staging directory ( §7.1)." >&2
+    echo "  into the staging directory (§7.1)." >&2
     exit 1
 fi
 
@@ -578,7 +578,7 @@ for rel in "${BINARIES[@]}"; do
     # expected-artifacts.txt, and it must still never reach the CDN: it is the
     # bundle Play re-signs and serves, so a public copy is an artifact users
     # cannot install and cannot verify against anything Google served
-    # ( §7, and expected-artifacts.txt says NEVER hosted in as many
+    # (§7, and expected-artifacts.txt says NEVER hosted in as many
     # words). Refused BY NAME rather than skipped silently, because "where did
     # my artifact go" is the question a silent skip creates.
     if [[ "$name" == *.aab ]]; then

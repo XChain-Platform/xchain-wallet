@@ -15,16 +15,16 @@
 // because in every case the handler read a name no published shape carries and
 // the wrong value was `undefined` rather than an error:
 //
-//   -   connect stored `accounts: []`, which §43.3 reads as a
+// - connect stored `accounts: []`, which §43.3 reads as a
 //                WILDCARD, so approving a chain handed the site every account.
-//   -   connect read `req.chains` / `req.bridgeVersion` while
+// - connect read `req.chains` / `req.bridgeVersion` while
 //                ConnectOpts publishes `requestedChains` /
 //                `requiredBridgeVersion`, so preselection was dropped and
 //                version negotiation never ran.
-//   -   signAction forwarded SendActionParams' fromAddress /
+// - signAction forwarded SendActionParams' fromAddress /
 //                toAddress / asset / amountRaw straight into sendToken, which
 //                takes from / to / tick / amount.
-//   -   bridge events were sent to a mutable tab id with no origin on
+// - bridge events were sent to a mutable tab id with no origin on
 //                the message, so a tab navigating mid-fire got the previous
 //                origin's accountsChanged.
 //
@@ -155,7 +155,7 @@ beforeEach(() => {
     sendToken.mockReset().mockImplementation(async () => ({ txid: 'tx' }));
 });
 
-describe(': connect never persists a wildcard account grant', () => {
+describe('Connect never persists a wildcard account grant', () => {
     it('narrows an empty approved account list to the primary account', async () => {
         const vault = makeVault();
         const host = buildHost(vault, recordingApprovals({ accounts: [] }));
@@ -206,7 +206,7 @@ describe(': connect never persists a wildcard account grant', () => {
     });
 });
 
-describe(': connect reads the option names ConnectOpts publishes', () => {
+describe('Connect reads the option names ConnectOpts publishes', () => {
     it('forwards requestedChains to the approval screen for preselection', async () => {
         const approvals = recordingApprovals();
         const host = buildHost(makeVault(), approvals);
@@ -255,7 +255,7 @@ describe(': connect reads the option names ConnectOpts publishes', () => {
     });
 });
 
-describe(': signAction consumes the published SEND parameter shape', () => {
+describe('signAction consumes the published SEND parameter shape', () => {
     it('maps fromAddress/toAddress/asset onto the flow contract', async () => {
         const vault = makeVault({ sites: [connectedSite()] });
         const host = buildHost(vault, recordingApprovals());
@@ -421,7 +421,7 @@ describe(': signAction consumes the published SEND parameter shape', () => {
     });
 });
 
-describe(': bridge events carry the origin they were meant for', () => {
+describe('Bridge events carry the origin they were meant for', () => {
     function fakeTabs(tabList) {
         const sent = [];
         return {

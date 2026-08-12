@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §7.5, stage 5: the staging rehearsal, RUN.
+// Smoke for §7.5, stage 5: the staging rehearsal, RUN.
 //
 // It stands up a real staging feed - real artifacts, real pointers, a real
 // GPG-signed manifest - and drives `rehearse.mjs` over it exactly as a
@@ -89,7 +89,7 @@ const ARTIFACTS = {
     [`xchain-wallet-${VERSION}-arm64-mac.zip`]: 'mac-arm64-bytes',
     [`xchain-wallet-${VERSION}.AppImage`]: 'linux-x64-bytes',
     [`xchain-wallet-${VERSION}-arm64.AppImage`]: 'linux-arm64-bytes',
-    // The debs are lanes too ( §5, corrected 2026-08-02): DebUpdater
+    // The debs are lanes too (§5, corrected 2026-08-02): DebUpdater
     // selects them out of these same two pointers and installs them with
     // `dpkg -i` under pkexec. The arch tokens are Debian's, not
     // electron-builder's - `amd64`, not `x64` - which is its own reason to
@@ -328,7 +328,7 @@ const good = makeFeed('feed-good');
 }
 
 {
-    // A STRAY COMBINED INSTALLER ON THE FEED .
+    // A STRAY COMBINED INSTALLER ON THE FEED.
     //
     // The operator decided on 2026-08-01 to ship only the two per-arch
     // installers, and `nsis.buildUniversalInstaller: false` stops the
@@ -425,7 +425,7 @@ const good = makeFeed('feed-good');
 
 {
     // The https requirement, against the UNMAPPED function. Worth its own
-    // case: the staging feed on origin-host is served on :80 today, so this
+    // case: the staging feed on the release host is served on :80 today, so this
     // is the error a first live rehearsal will actually hit.
     serving = good.dir;
     const r = await probeLane({

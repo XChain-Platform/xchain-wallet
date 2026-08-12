@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The wire audit stays true, or this fails ( §2.6 / §5).
+// The wire audit stays true, or this fails (§2.6 / §5).
 //
 // Apple's privacy nutrition labels, Play's Data safety form and the published
 // privacy policy all have to describe the same traffic. Getting them right
@@ -138,7 +138,7 @@ describe('wire audit: the mobile egress set is pinned', () => {
         'api.coingecko.com',
         'arweave.net',
         // Reachable on ONE lane of one mobile shell: a sideloaded Android APK
-        // ( D4, wired 2026-08-02). Listed here rather than lane-scoped
+        // (D4, wired 2026-08-02). Listed here rather than lane-scoped
         // away, because a store form is safer describing a request the store
         // build does not make than omitting one it might. The lane gate itself
         // is pinned by the `has no path into a store build` block above.
@@ -215,7 +215,7 @@ describe('wire audit: the structural claims the labels rest on', () => {
 describe('wire audit: the update feed has no path into a store build', () => {
     // This used to assert that NOTHING imported the feed client, which was the
     // right guard while D4 was unwired and the wrong one the moment it was
-    // built ( §6: the direct APK's only update path). The guard did not
+    // Built (the direct APK's only update path). The guard did not
     // relax, it moved: the feed still has exactly one caller, and that caller
     // is still unreachable from any store build - but now the enforcement is a
     // runtime gate rather than an absence, so these tests pin the gate.

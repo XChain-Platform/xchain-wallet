@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the Chrome Web Store submission documents cite real
+// Smoke for: the Chrome Web Store submission documents cite real
 // files.
 //
 // The submission runbook is a ceremony document, 8 phases of ordered steps
@@ -23,7 +23,7 @@
 // bad place to discover a stale path, and it is a completely mechanical
 // thing to check.
 //
-//  MOVED THESE DOCUMENTS OUT OF THIS REPO, into the sibling
+// a later change MOVED THESE DOCUMENTS OUT OF THIS REPO, into the sibling
 // xchain-documentation checkout, and the port rewrote most of their
 // repo-relative citations into relative Markdown links between documents.
 // So this checks BOTH shapes, against whichever repo owns the target:
@@ -115,5 +115,5 @@ assert.deepEqual(missing, [],
     + 'ceremony with irreversible steps in it; a stale path is found by the operator mid-submission, on '
     + 'a review clock. Fix the citation or restore the file.');
 
-console.log(`OK: extension submission-docs smoke (: ${checked} citations across `
+console.log(`OK: extension submission-docs smoke (${checked} citations across`
     + `${DOCS.length} documents all resolve)`);

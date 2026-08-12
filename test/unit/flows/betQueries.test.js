@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  P8 BET read passthroughs backing BetFeedsList (market browser),
+// P8 BET read passthroughs backing BetFeedsList (market browser),
 // BetFeedDetail (market + pools + timeline), MyBets and the oracle console.
 
 import { describe, it, expect, vi } from 'vitest';
@@ -91,7 +91,7 @@ describe('BET query passthroughs', () => {
     });
 });
 
-// . The projection is the ONE number a parimutuel bettor decides on, and it
+//The projection is the ONE number a parimutuel bettor decides on, and it
 // reached the screen as nothing at all: BetFeedDetail forwarded the explorer's
 // pool ROWS straight into payout math that indexes amounts BY outcome. Both ways
 // that fails are silent, so these tests pin the shape rather than the arithmetic.

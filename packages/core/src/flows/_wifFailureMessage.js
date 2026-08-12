@@ -13,7 +13,7 @@
 // D-64. The SDK rejects a bad key in library terms ("Failed to import WIF:
 // Non-base58 character", "WIF key does not match configured network") and
 // both import lanes rendered whatever they caught, verbatim, in front of the
-// user. Same class as , which rewrote the recovery-phrase lane's copy
+// user. Same class, which rewrote the recovery-phrase lane's copy
 // and left the two key lanes alone.
 //
 // The classification lives at the flow layer, not in the form, because the

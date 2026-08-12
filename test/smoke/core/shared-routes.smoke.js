@@ -112,7 +112,7 @@ const routeMessagingCalls = {
     Locked: ['messaging.unlockWallet'],
     CreateWallet: ['messaging.importMnemonic'],
     ImportWallet: ['messaging.importMnemonic'],
-    //  removed messaging.lockWallet from Home: both lock paths
+    // a later change removed messaging.lockWallet from Home: both lock paths
     // (idle timer and the manual Lock entry) are shell-owned now, since a
     // route unmounts on navigation and took the idle timer with it.
     Home: [

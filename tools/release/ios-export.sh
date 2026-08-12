@@ -2,7 +2,7 @@
 # Copyright © 2025–2026 Dankest, LLC
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Export the archived iOS shell to an .ipa ( §5, stage S4b).
+# Export the archived iOS shell to an .ipa (§5, stage S4b).
 #
 # The artifact is NAMED here rather than wherever it lands, because rails
 # §3 names it and expected-artifacts.txt matches on that name: an ipa
@@ -20,12 +20,12 @@
 set -euo pipefail
 
 # Before the credential guards, for the reason ios-archive.sh states at the
-# same position : `--help` answered with `APPLE_API_KEY ... is
+# same position: `--help` answered with `APPLE_API_KEY ... is
 # required` and exit 1 turns a question into a refusal.
 case "${1:-}" in
     -h|--help)
         cat <<'USAGE'
-ios-export.sh - export the archived iOS shell to a named .ipa ( §5).
+ios-export.sh - export the archived iOS shell to a named .ipa (§5).
 
 Usage:
   XCHAIN_RELEASE_TAG=vX.Y.Z bash tools/release/ios-export.sh
@@ -74,8 +74,8 @@ if [ ! -d "$archive" ]; then
     exit 1
 fi
 
-# REFUSE TO EXPORT AN ARCHIVE THAT DOES NOT CARRY WHAT THE PROJECT PINS
-# . The archive on disk need not be the one this tag's ios-archive.sh
+# REFUSE TO EXPORT AN ARCHIVE THAT DOES NOT CARRY WHAT THE PROJECT PINS.
+# The archive on disk need not be the one this tag's ios-archive.sh
 # wrote: it is whatever is at that path, and the path is stable across runs. So
 # the version pair is checked against the TAG here rather than only against
 # Version.xcconfig, which is what catches yesterday's archive being exported

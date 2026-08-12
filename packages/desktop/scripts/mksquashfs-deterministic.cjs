@@ -15,7 +15,7 @@
 
 // A drop-in `mksquashfs` that makes the AppImage reproducible.
 //
-// WHY THIS EXISTS ( DD7). Two packaged builds of one commit with one
+// WHY THIS EXISTS (DD7). Two packaged builds of one commit with one
 // SOURCE_DATE_EPOCH produced byte-DIFFERENT AppImages while the .deb files
 // from the same runs were byte-identical. The cause is the squashfs
 // superblock's `mkfs_time`, which mksquashfs writes from the wall clock.

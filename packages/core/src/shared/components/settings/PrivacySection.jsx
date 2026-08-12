@@ -21,10 +21,10 @@
 //     toggle persists the preference, the FILE-action submit/fetch
 //     wiring is shell-level work pending separately)
 //
-//  (operator ruling a, 2026-08-11): the "Clipboard auto-clear
+// (operator ruling a, 2026-08-11): the "Clipboard auto-clear
 // (seconds)" input that used to sit at the bottom of this panel is gone.
 // Its only consumer was ViewPrivateKey's post-copy wipe timer, and
-//  made key material uncopyable on every shell, so the control
+// a later change made key material uncopyable on every shell, so the control
 // wrote `settings.privacy.clipboardAutoClearSeconds` and nothing read it.
 // A privacy control that governs nothing is worse than an absent one: it
 // tells the user they hold a protection they do not hold. The schema
@@ -61,7 +61,7 @@ export function PrivacySection() {
 
     return (
         <div style={STACK}>
-            {/* : the live toggle renders only where the host can
+            {/* The live toggle renders only where the host can
                 actually route. A browser page cannot speak SOCKS at all,
                 and an MV3 extension could only proxy the user's whole
                 browser rather than the wallet, so an operable toggle
@@ -75,7 +75,7 @@ export function PrivacySection() {
                     onChange={(v) => onToggle('torRouting', v)}
                 />
             )}
-            {/*  (operator ruling a): the shells that cannot route
+            {/* (operator ruling a): the shells that cannot route
                 say so, rather than dropping the row. Silence reads as
                 "this wallet has no Tor option"; the disabled row reads
                 as "not here, and here is where". It is rendered
@@ -96,7 +96,7 @@ export function PrivacySection() {
             )}
             <ToggleRow
                 label="Change-address rotation"
-                /* : this drives flows/changeAddress.js. The second
+                /* This drives flows/changeAddress.js. The second
                    sentence is not a caveat for its own sake - the wallet funds
                    one action from one address, so after a rotated send the
                    remaining balance sits on the new address and the address you

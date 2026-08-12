@@ -24,7 +24,7 @@
 // the `CI=1` + `reuseExistingServer: false` path so each job starts
 // from a clean port. Locally we reuse if already running.
 //
-// : the timeouts are NOT constants. This suite shares a machine
+// The timeouts are NOT constants. This suite shares a machine
 // with whatever else is on it, and on a busy one it used to fail a
 // different spec each run while every one of them passed in isolation.
 // `timeout-budget.js` sizes the budget from the measured load; see its
@@ -80,7 +80,7 @@ export default defineConfig({
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',
-        // : name the venue instead of inheriting it. This suite runs on
+        // Name the venue instead of inheriting it. This suite runs on
         // the dev-mock SDK; the real one talks to mainnet explorers no test
         // browser can reach, and when the dev server quietly started serving it
         // (Vite began pre-bundling the linked CJS SDK) every compose died on

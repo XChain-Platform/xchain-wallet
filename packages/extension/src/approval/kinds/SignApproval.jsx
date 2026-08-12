@@ -17,7 +17,7 @@ import {
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
-//  §5.6 slice 4: the confirm surface's building blocks, reused here.
+// §5.6 slice 4: the confirm surface's building blocks, reused here.
 // The whole <ConfirmActionModal> deliberately is NOT reused: this window is
 // already a confirm surface with its own Screen, origin block, always-allow
 // toggle and Approve/Reject footer, so nesting the modal would mean two
@@ -278,7 +278,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     error: null,
                     decomposed: res?.decomposed || null,
                     ownAddresses,
-                    //  §5.5: the XChain action carried inside, when it
+                    // The XChain action carried inside, when it
                     // decodes. A punt is a state to render, not a parse failure.
                     action: res?.action || null,
                     actionDecodeReason: res?.actionDecodeReason || null,
@@ -299,7 +299,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, chainId, psbtHexForSign, walletId]);
 
-    //  §5.6 slice 4 / §6 "dApp-supplied action string": run pre-flight for
+    // §5.6 slice 4 / §6 "dApp-supplied action string": run pre-flight for
     // the requested action and render the same <PreflightPanel> the in-wallet
     // confirm page uses, so a dApp request gets the indexer's own verdict before
     // the password is entered rather than only a balance-delta guess.
@@ -368,7 +368,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, coSignAccountId, coSignPsbtHex]);
 
-    //  §3.2/§3.5: the plain-English intent, described by the SDK on the
+    // §3.2/§3.5: the plain-English intent, described by the SDK on the
     // host rather than by the wallet's own local describer here.
     //
     // Two reasons this window in particular must not keep its own copy. The
@@ -468,7 +468,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             !coSignPreview.preview.decodeOk ||
             !coSignPreview.preview.policyOk);
 
-    //  §5.5 refusal, layered ON TOP of the gates above (never replacing
+    // §5.5 refusal, layered ON TOP of the gates above (never replacing
     // them): a PSBT that decomposed fine but whose ACTION data will not decode,
     // while spending our own inputs, is the user authorizing bytes nobody can
     // read. Developer mode is the documented inspect-and-sign escape hatch.
@@ -580,7 +580,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 intentLoading={intent.loading}
             />
 
-            {/*  §5.6 slice 4: the shared PSBT panel enumerates every
+            {/* §5.6 slice 4: the shared PSBT panel enumerates every
                 input AND output (the local summary showed outputs + totals
                 only), marks which input this wallet signs, and states a failed
                 action-decode loudly. Legacy summary stays as the flag-off path
@@ -732,7 +732,7 @@ function SignSummary({ kind, payload, decoded, intentLoading }) {
                 </div>
             ) : null;
         case 'signAction': {
-            // : described by the SDK, host-side (see `intent` above).
+            // Described by the SDK, host-side (see `intent` above).
             // While it is in flight, or if it could not be described, this
             // says so rather than rendering a locally-guessed sentence about
             // attacker-supplied params.
@@ -879,7 +879,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
     );
 }
 
-// One-line intent for an action decoded OUT of a PSBT ( §5.5). Mirrors
+// One-line intent for an action decoded OUT of a PSBT (§5.5). Mirrors
 // PsbtSignForm's wording: on this variant the output set is what gets verified,
 // so a decoded action is context and is not dressed up as more than that.
 function psbtActionSummary(parsed) {

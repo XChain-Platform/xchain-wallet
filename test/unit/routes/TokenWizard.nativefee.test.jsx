@@ -17,8 +17,8 @@
 // per-form toggle that shipped on the standalone
 // Issue/Dispenser/Swap/Order/Advanced forms.
 //
-// : the wizard's own preview + sign stages were replaced by the
-// shared  confirm page, so the drive ends on that page.
+// The wizard's own preview + sign stages were replaced by the
+// shared confirm page, so the drive ends on that page.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';

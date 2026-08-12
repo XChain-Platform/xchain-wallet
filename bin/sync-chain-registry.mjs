@@ -13,7 +13,7 @@
 // The snapshot is only rewritten when the descriptors actually change, so
 // generated_at stays stable and --check can byte-compare descriptor content.
 //
-// TWO GUARDS LIVE HERE , because the cross-repo copy failed silently
+// TWO GUARDS LIVE HERE, because the cross-repo copy failed silently
 // once: wallet b3fd8dd5 corrected the bitcoin-regtest encoder port and the hub
 // snapshot kept the superseded value on origin for both repos, since the only
 // thing comparing them was a hub test that SKIPS when the wallet sibling is not
@@ -161,7 +161,7 @@ if (!ALLOW_STALE) {
     if (fresh.answerable && fresh.behind > 0) {
         console.error('REFUSED: ' + stalenessMessage(fresh, 'this wallet checkout') + '.');
         console.error('This script copies the LOCAL descriptors into the hub, so syncing from here '
-            + 'would rewrite a superseded value and look like a legitimate resync .');
+            + 'would rewrite a superseded value and look like a legitimate resync.');
         console.error('Pull, then rerun. Use --allow-stale only when you mean to publish THIS '
             + 'tree\'s descriptors.');
         process.exit(2);

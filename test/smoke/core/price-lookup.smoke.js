@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive fiat conversion + the  oracle wire:
+// Smoke for §29 Send/Receive fiat conversion + the oracle wire:
 // priceLookup is oracle-primary (explorer price_snapshots) with a
 // CoinGecko fallback, and getFiatRate stays a sync cache read.
 

@@ -17,7 +17,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
  * {@code XChainClipboard}, the Android half of SSC-4 (; contract in
- *  §1.1, Android mechanics in  §1).
+ * §1.1, Android mechanics in §1).
  *
  * <p>The contract is defined once, in the SPA, at
  * packages/core/src/shared/clipboard.js. This file implements it; the iOS twin

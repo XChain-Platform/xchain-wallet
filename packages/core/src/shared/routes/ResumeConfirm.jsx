@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ResumeConfirm ( §5.4). Finishes a confirm the popup closed on.
+// ResumeConfirm (§5.4). Finishes a confirm the popup closed on.
 //
 // It runs the SAME useConfirmAction state machine every other signing surface
 // runs, with a `compose` that resolves the stored PSBT instead of building a
@@ -85,7 +85,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 compose: () => Promise.resolve(composed),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
-                // : a resumed confirm is by construction the oldest PSBT
+                // A resumed confirm is by construction the oldest PSBT
                 // in the wallet, so it is the likeliest of all to be carrying a
                 // native-coin fee the oracle price has moved out from under.
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({

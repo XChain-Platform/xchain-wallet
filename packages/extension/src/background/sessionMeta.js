@@ -72,7 +72,7 @@ export const PRE_HOST_MESSAGE_TYPES = new Set([
     'wallet.lock',
     'wallet.create',
     'wallet.import',
-    // : the FRESH-INSTALL backup restore. Named apart from the
+    // The FRESH-INSTALL backup restore. Named apart from the
     // host-registered 'wallet.importBackup' on purpose - that one adds a wallet
     // to an open vault, and putting the same string in this set would take it
     // away from the host and break the shipping add lane.

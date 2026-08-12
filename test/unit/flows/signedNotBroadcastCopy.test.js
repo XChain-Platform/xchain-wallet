@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  leg (a): a transaction that was signed but never broadcast must not render as a
+// leg (a): a transaction that was signed but never broadcast must not render as a
 // completed action.
 //
 // useConfirmAction deliberately ends a TRANSIENT post-sign broadcast failure in its own
@@ -50,7 +50,7 @@ function confirmDoneScreens() {
     return out;
 }
 
-describe(': a signed-but-not-broadcast result never renders as done', () => {
+describe('A signed-but-not-broadcast result never renders as done', () => {
     const forms = confirmDoneScreens();
 
     it('finds the confirm-pipeline done screens to check (guards against an empty sweep)', () => {
@@ -83,7 +83,7 @@ describe(': a signed-but-not-broadcast result never renders as done', () => {
     }
 });
 
-describe(': submitFailureMessage says what actually happened', () => {
+describe('submitFailureMessage says what actually happened', () => {
     it('turns a native-fee refusal into the actionable sentence, not the wire string', async () => {
         const { submitFailureMessage } =
             await import('../../../packages/core/src/shared/utils/submitFailureMessage.js');

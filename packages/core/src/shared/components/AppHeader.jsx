@@ -17,7 +17,7 @@
 // copy. `onMenuOpen` fires when the pancake is tapped; the parent layout
 // owns the menu drawer mount so it can span the viewport.
 //
-// : the gear leads the right-side stack so switching wallet or
+// The gear leads the right-side stack so switching wallet or
 // account is one tap from ANY unlocked route, not a walk through
 // Settings -> Accounts. It renders only when the host wires at least one
 // of the pickers or a complete network filter, so shells that supply

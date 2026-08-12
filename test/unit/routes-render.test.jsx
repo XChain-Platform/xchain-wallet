@@ -413,7 +413,7 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
         destroyToken: record('destroyToken'),
         destroyAssetHw: record('destroyAssetHw'),
         buildActionPsbtRequest: record('buildActionPsbtRequest'),
-        //  single-encode confirm pipeline (the actionForms-slice
+        // single-encode confirm pipeline (the actionForms-slice
         // default path): compose resolves a ComposedAction envelope, the
         // preflight report is clean so Approve enables.
         composeForConfirm: (args) => {
@@ -469,7 +469,7 @@ async function mountActionForm(Form, { walletMode } = {}) {
 // Drive a single-action form through the legacy review stage to submit,
 // returning the recorded dispatches.
 //
-//  slice 5: this path is now reached ONLY by watcher mode, which
+// slice 5: this path is now reached ONLY by watcher mode, which
 // encodes and never signs, so there is nothing to confirm. The
 // `actionForms:false` override that used to pin it is gone with the flags.
 // `confirm` is the typed-confirmation string some forms gate on
@@ -508,7 +508,7 @@ async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
 }
 
 // Drive a software form through the DEFAULT single-encode confirm modal
-// ( slice 2): action button -> composeForConfirm -> preflight ->
+// (slice 2): action button -> composeForConfirm -> preflight ->
 // Approve signs the prebuilt PSBT via the software messaging method.
 async function driveActionFormThroughConfirmModal(Form, { actionLabel, confirm } = {}) {
     const { utils, calls } = await mountActionForm(Form, { walletMode: 'full' });
@@ -572,7 +572,7 @@ describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => 
         });
     });
 
-    //  slice 2 default path: the action button composes the ONE
+    // slice 2 default path: the action button composes the ONE
     // PSBT host-side, preflight streams into the confirm modal, and
     // Approve dispatches the software method with the prebuilt PSBT.
     it('MintForm (software, default) confirms via the single-encode modal and signs the prebuilt PSBT', async () => {
@@ -588,7 +588,7 @@ describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => 
         expect(mint, 'mintToken was dispatched on Approve').toBeTruthy();
         expect(mint.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
         expect(mint.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
-        // Carried over from the deleted legacy-path case ( slice 5): the
+        // Carried over from the deleted legacy-path case (slice 5): the
         // signing descriptor and the empty-not-undefined password are properties
         // of the DISPATCH, not of which surface produced it.
         expect(mint.args.from).toMatchObject({

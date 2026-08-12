@@ -59,7 +59,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** Three publishes, each paying a real coin protocol fee here . */
+/** Three publishes, each paying a real coin protocol fee here. */
 const FUNDING = 3;
 const TICK = 'XCHAIN';
 const FIAT = 'USD';
@@ -100,7 +100,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     throw new Error(`No XChain action recorded for ${txid} within `
         + `${Math.round(timeoutMs / 1000)}s. Decoder lag `
         + `${status?.decoder_lag_blocks?.[REGTEST_COIN]}. A lag that does not shrink over two `
-        + 'reads, on a venue whose node is at the tip, is  (see the campaign report).');
+        + 'reads, on a venue whose node is at the tip, is (see the campaign report).');
 }
 
 /** Waits until the form can see a prior quote for this pair, pending included. */

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : VOTE composes through the SDK's own builder, host-side.
+// Smoke for: VOTE composes through the SDK's own builder, host-side.
 //
 // VOTE's wire params are produced by sdk.voting.*Params - the option/ballot
 // encoding, mode enums and gate defaults all live in the SDK, which runs
@@ -111,7 +111,7 @@ for (const [file, builder] of VOTE_FORMS) {
 }
 
 console.log(
-    'OK: vote compose-for-confirm smoke (: action.vote.composeForConfirm runs the real '
+    'OK: vote compose-for-confirm smoke (action.vote.composeForConfirm runs the real'
     + 'sdk.voting builder host-side with an allow-listed builder name and returns voteParams; '
     + 'exported by all 3 shells; CreatePollForm + DelegateVoteForm + PollDetail all compose through '
     + 'it and none feeds a client-side wire mirror into the signing path)',

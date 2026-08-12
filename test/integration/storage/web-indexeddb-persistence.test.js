@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Storage integration: web-shell persistence across a reload (G164 / ).
+// Storage integration: web-shell persistence across a reload (G164).
 //
 // The web shell splits one wallet across two stores: the encrypted vault blob
 // in IndexedDB (`IndexedDBStorageBackend`) and the plaintext kdfParams in

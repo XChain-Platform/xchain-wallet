@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // test/smoke/_workspace-linkage.js is the smoke runner's notice for a
-// node_modules that belongs to a DIFFERENT checkout . A borrowed tree
+// node_modules that belongs to a DIFFERENT checkout. A borrowed tree
 // makes a run a hybrid: bare `@xchain-wallet/*` specifiers load the owning
 // checkout's code while relative imports load the tree under test. That is how
 // a correct desktop signer bridge was measured red at an origin/master
@@ -18,7 +18,7 @@
 // What these cases pin is the part that is easy to get subtly wrong and
 // impossible to notice: WHEN it speaks. A notice that fires in an ordinary
 // checkout is noise that gets tuned out within a week, and a notice that stays
-// quiet on a borrowed tree is the silence that cost  in the first
+// quiet on a borrowed tree is the silence that cost in the first
 // place. So both directions are asserted, plus the two ways it must decline to
 // guess.
 //
@@ -94,7 +94,7 @@ describe('noteWorkspaceLinkage', () => {
     it('names both trees when node_modules is borrowed', () => {
         const { state, out } = capture({ root: ROOT, resolve: () => foreign });
         expect(state.borrowed).toBe(true);
-        // Naming the foreign tree is the entire job:  was two hours of
+        // Naming the foreign tree is the entire job: was two hours of
         // reading a correct bridge because nothing said a second tree existed.
         expect(out).toContain('/checkouts/other-wallet/packages/extension');
         expect(out).toContain(ROOT);

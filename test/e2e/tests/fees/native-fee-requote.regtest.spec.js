@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign §11.5's last leg: the  Approve-time re-quote, driven by
+// Campaign §11.5's last leg: the Approve-time re-quote, driven by
 // actually moving the price out from under an open confirm screen.
 //
 // WHY THIS IS THE EXPENSIVE ONE. A native-coin protocol fee is a REAL output,
@@ -21,7 +21,7 @@
 // and the protocol fee is kept. A confirm screen left open while the user
 // checks something else is the ordinary way to get there.
 //
-// Before  the wallet re-ran its per-block pre-flight ("Checked at block
+// Before the wallet re-ran its per-block pre-flight ("Checked at block
 // N") but never re-checked the AMOUNT, so it broadcast the PSBT it had already
 // built. This spec is the proof that it now refuses instead.
 //
@@ -33,7 +33,7 @@
 //
 // TWO VENUE FACTS THIS RUN DEPENDS ON, both learned the hard way elsewhere in
 // this campaign:
-//   - The indexer MEMOIZES its verdict per block height , so a re-quote
+// - The indexer MEMOIZES its verdict per block height, so a re-quote
 //     at the same height replays the old answer and reads exactly like "the
 //     re-price did not work". Mine after writing.
 //   - `seedPrices()` deliberately refuses to write over a venue that already
@@ -220,7 +220,7 @@ test.describe('§11.5: the protocol fee moving while the confirm screen is open'
             await page.getByTestId('confirm-approve').click();
 
             await expect(page.getByText(/protocol fee changed while this was on screen/i),
-                'the wallet did not say the fee moved; before  it would have broadcast the '
+                'the wallet did not say the fee moved; before it would have broadcast the'
                 + 'already-built transaction, forfeiting the short fee')
                 .toBeVisible({ timeout: 120_000 });
             await expect(page.getByText(/nothing was signed or sent/i),
@@ -228,7 +228,7 @@ test.describe('§11.5: the protocol fee moving while the confirm screen is open'
                 .toBeVisible();
 
             expect(await mempoolSize(),
-                'a transaction was broadcast despite the refusal - this is the forfeiture  exists '
+                'a transaction was broadcast despite the refusal - this is the forfeiture exists'
                 + 'to prevent').toBe(0);
             expect(await coinBalanceSats(source),
                 'the payer\'s balance moved, so a miner fee was paid for an action the wallet refused')

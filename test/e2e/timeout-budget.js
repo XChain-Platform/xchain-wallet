@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the Playwright timeout budget, sized for the machine the run
+// The Playwright timeout budget, sized for the machine the run
 // actually lands on.
 //
 // The dev-server suite was LOAD-SENSITIVE: on a busy dev box it failed a
@@ -80,7 +80,7 @@ export const MAX_LOAD_SCALE = 2;
  * and five of the eight flaky ones waiting on a wallet create or unlock (run
  * 30827175941, 2026-08-03).
  *
- * The same defect as the unit suite's ceilings in , one venue over,
+ * The same defect as the unit suite's ceilings in, one venue over,
  * on a job the release gate requires to be green. The floor reuses the
  * existing ceiling rather than inventing a number: a runner is at least as
  * disadvantaged as a fully contended dev box.

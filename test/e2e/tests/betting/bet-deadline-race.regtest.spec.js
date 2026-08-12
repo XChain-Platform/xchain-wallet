@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / D-112: the deadline race, and the receipt the wallet owes when the
+// D-112: the deadline race, and the receipt the wallet owes when the
 // user overrides it.
 //
 // THE RACE. A market is `open` when a bet is composed and `closed` by the time
@@ -48,7 +48,7 @@
 // need. Run it with XC_REGTEST_COIN=RLTC (see fixtures/regtest.js).
 //
 // PRE-FLIGHT, and it is not optional: a place-bet off Bitcoin pays its protocol
-// fee in the native coin , so LTC/USD must be seeded low enough that the
+// fee in the native coin, so LTC/USD must be seeded low enough that the
 // quoted fee clears the chain's 5,460-sat dust floor ((b)). At the venue's
 // real ~$47 price the fee quotes ~4,200 sats and every place-bet is refused
 // before it can race anything. Seed at $30 and mine, per campaign §3.2.
@@ -59,7 +59,7 @@
 // (`xchain-indexer/src/actions/bet.js`), reachable no other way. A cold dry-run
 // on this shared venue has been measured between 1.2s and 5.0s and the SDK
 // abandons Tier 1 at 4000ms, so an unwarmed assertion is a coin flip on venue
-// load rather than a test of the wallet. `warmPreflight`  is the fix
+// load rather than a test of the wallet. `warmPreflight` is the fix
 // and `warmBet` below is this spec's use of it.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
@@ -475,7 +475,7 @@ test.describe('BET deadline race', () => {
             // And it must pass because the NETWORK said so. `pass` alone cannot
             // tell that apart from a dry-run that never answered: DRYRUN_UNAVAILABLE
             // is an info finding, so a Tier-2-only report is also a `pass`. This is
-            // the machine-readable Tier-1 state , and asserting it here is
+            // the machine-readable Tier-1 state, and asserting it here is
             // what makes the degradation below a real transition rather than the
             // first time the network was ever heard from.
             await expect(page.getByTestId('preflight-panel'))
@@ -541,7 +541,7 @@ test.describe('BET deadline race', () => {
             await expect(ack.first()).not.toBeChecked();
         });
 
-        await test.step('overriding it sends the bet AND says so (D-112 / )', async () => {
+        await test.step('overriding it sends the bet AND says so (D-112)', async () => {
             const ack = page.locator('[data-testid^="ack-"]').first();
             await ack.check();
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 30_000 });

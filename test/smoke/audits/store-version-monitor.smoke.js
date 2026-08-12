@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §2/§4: the Chrome Web Store publish-log monitor.
+// Smoke for §2/§4: the Chrome Web Store publish-log monitor.
 //
 // The four failure modes that matter, per the spec, are the four cases
 // driven here: item IDs unset (must refuse loudly, not report clean),
@@ -366,7 +366,7 @@ const realRows = parsePublishLog(realLog);
 
 // ------------------------------------------------------------ Play lane
 //
-//  row 69. The Play lane's whole contract is the absence LATCH:
+// row 69. The Play lane's whole contract is the absence LATCH:
 // a 404 is normal before the listing exists and an incident after it
 // has been seen live even once. The cases below are that distinction
 // plus the ways it can be defeated. No version is asserted anywhere,

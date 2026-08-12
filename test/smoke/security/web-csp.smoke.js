@@ -118,7 +118,7 @@ assert.match(
     /import \{ contentSecurityPolicyFor \} from '\.\/src\/csp\.js'/,
     'vite imports the policy builder',
 );
-// : the injected policy is the one for THIS build's profile, and the
+// The injected policy is the one for THIS build's profile, and the
 // profile is resolved once so the meta tag and the stamp written into the dist
 // cannot disagree about which build this is.
 assert.match(

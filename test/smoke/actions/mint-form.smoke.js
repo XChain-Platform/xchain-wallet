@@ -102,13 +102,13 @@ assert.ok(
     'MintForm submit stage calls the hook submit() with params + password (+ fee opts)',
 );
 
-// --- 4b.  slice 2: single-encode confirm page -------------------
+// --- 4b. slice 2: single-encode confirm page -------------------
 // Mints default into the confirm pipeline: the action button composes
 // host-side, sdk.preflight streams into the confirm page, Approve signs the
-// byte-identical prebuilt PSBT.  brought hardware onto it (the device
+// byte-identical prebuilt PSBT. brought hardware onto it (the device
 // block replaces the password field); watcher still keeps review, because it
 // encodes and never signs.
-//  slice 5: the flags are gone, so the confirm path is unconditional
+// slice 5: the flags are gone, so the confirm path is unconditional
 // for anything that signs. Watcher is the only branch left.
 assert.ok(
     /if \(!isWatcherMode\) \{/.test(src),
@@ -116,7 +116,7 @@ assert.ok(
 );
 assert.ok(
     /if \(!isWatcherMode\)(?! && !isHwSource)/.test(src),
-    'the confirm page covers hardware too ; only watcher branches',
+    'the confirm page covers hardware too; only watcher branches',
 );
 assert.ok(
     /hwSource=\{isHwSource \? fromAddress : null\}/.test(src),

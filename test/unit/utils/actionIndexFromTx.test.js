@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// D-88 / : the two-transaction flows (AIRDROP, list fork, attach
+// D-88: the two-transaction flows (AIRDROP, list fork, attach
 // content, project roster) poll `getActionByTxid` after broadcasting step 1
 // to learn the ACTION_INDEX step 2 must reference. The explorer answers
 // /transaction/{txid}/tx_hash with the index nested inside an `actions` array

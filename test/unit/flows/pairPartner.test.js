@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: flows/pairPartner (§20.5 / ). The watcher <-> signer
+// Unit: flows/pairPartner (§20.5). The watcher <-> signer
 // auto-pairing lane.
 //
 // The load-bearing claim is that two wallets restored from ONE recovery

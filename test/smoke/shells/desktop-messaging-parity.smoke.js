@@ -16,7 +16,7 @@
 // type one shell's renderer can send is a message type the other shell's host
 // can already answer, and a wrapper missing from one renderer is pure drift.
 //
-// WHAT IT COST. Measured 2026-08-07 ( row 105) by driving the real
+// WHAT IT COST. Measured 2026-08-07 (row 105) by driving the real
 // desktop app, which row 102's blank-window fix had just made possible:
 // packages/desktop/renderer/messaging.js exported 297 wrappers to the web
 // shell's 313, and every section of the desktop Settings screen painted

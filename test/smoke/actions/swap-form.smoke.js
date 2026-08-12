@@ -100,7 +100,7 @@ assert.ok(/setStage\('review'\)/.test(src),
     'SwapForm calls setStage(review) on form submit');
 assert.ok(/function handleReview\b/.test(src),
     'SwapForm has a handleReview handler that gates the review transition');
-// Signing must never be reachable from handleReview.  gave the software
+// Signing must never be reachable from handleReview. a later change gave the software
 // path a second signing lane: openConfirmScreen, whose swapAction call fires
 // only from the confirm page's Approve callback. Hardware + watcher still sign
 // from handleSubmit. Neither lane may be called by handleReview itself.
@@ -110,10 +110,10 @@ assert.ok(/function handleReview\b/.test(src),
     const confirmIdx = src.indexOf('function openConfirmScreen');
     assert.ok(reviewIdx !== -1, 'handleReview is present');
     assert.ok(submitIdx !== -1, 'handleSubmit is present');
-    assert.ok(confirmIdx !== -1, 'openConfirmScreen ( single-encode lane) is present');
+    assert.ok(confirmIdx !== -1, 'openConfirmScreen (single-encode lane) is present');
     // handleReview must appear before handleSubmit in the file.
     assert.ok(reviewIdx < submitIdx, 'handleReview is defined before handleSubmit');
-    // Signing happens inside onApprove, never at review time.  routed
+    // Signing happens inside onApprove, never at review time. routed
     // it through useConfirmSubmit, which picks swapAction / swapActionHw from
     // the source instead of hard-coding the software lane.
     assert.ok(/onApprove: \(prebuiltPsbt\) => submitConfirmed\(/.test(src),

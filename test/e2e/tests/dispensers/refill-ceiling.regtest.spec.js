@@ -60,7 +60,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** Seven fee-bearing broadcasts ride on this address ( coin fees). */
+/** Seven fee-bearing broadcasts ride on this address (coin fees). */
 const FUNDING = 4;
 const TICK = 'XCHAIN';
 const MINT = 1000;

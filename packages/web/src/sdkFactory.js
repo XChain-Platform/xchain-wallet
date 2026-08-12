@@ -23,7 +23,7 @@
 // Signing / broadcast ONLY work under the real factory. Onboarding
 // works under either.
 //
-// : WHICH of the two runs is a DELIBERATE choice, never a
+// WHICH of the two runs is a DELIBERATE choice, never a
 // side effect of bundling. It used to be decided by `try { import }
 // catch`: the dev server could not transform the linked CJS SDK, the
 // import threw, and the catch handed back the mock. When Vite started
@@ -52,7 +52,7 @@ export const REAL_SDK_ENV_FLAG = 'VITE_XCHAIN_REAL_SDK';
  * environment alone (no imports, no exception handling).
  *
  * - production builds: always `real`. A shipped wallet has no mock (it is
- *   dead-code-eliminated, ) and must never serve fabricated data.
+ * dead-code-eliminated) and must never serve fabricated data.
  * - dev/test: `dev-mock` unless `VITE_XCHAIN_REAL_SDK=1` asks for the real
  *   one, because the default dev chains point at mainnet explorers that a
  *   dev box or a CI browser generally cannot reach.
@@ -119,7 +119,7 @@ export async function resolveSdkFactory({
         // cannot sign, and a user (or a test) cannot tell the difference by
         // looking, which makes the quiet fallback the dangerous option. That
         // quiet fallback is also what made the dev venue an accident of
-        // bundling  and shipped as /557 in production.
+        // bundling and shipped as 557 in production.
         //
         // Whoever wants the mock says so with the env flag; anyone who does not
         // gets an error naming the reason.

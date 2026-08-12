@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / Cluster K FOLLOWUP 1: the inline aria-live rows across
+// Cluster K FOLLOWUP 1: the inline aria-live rows across
 // `packages/core/src/shared/{routes,components}` migrate to the shared
 // `<StatusMessage>` primitive, so a screen reader hears one grammar
 // everywhere instead of 300 hand-rolled variations.
@@ -165,7 +165,7 @@ const sendCss = readFileSync(join(shared, 'routes/Send.module.css'), 'utf8');
 assert.match(
     sendCss,
     /\.warnings \{[^}]*--xc-warning/s,
-    'Send.module.css .warnings no longer keys off --xc-warning; revisit  carve-out (a)',
+    'Send.module.css.warnings no longer keys off --xc-warning; revisit carve-out (a)',
 );
 
 // StatusMessage still ships exactly three variants, which is why (a) exists.
@@ -173,7 +173,7 @@ const primitive = readFileSync(join(root, 'packages/core/src/ui/StatusMessage.js
 assert.match(
     primitive,
     /'status' \| 'error' \| 'success'/,
-    'StatusMessage variant set changed; re-run the  sweep against the new variants',
+    'StatusMessage variant set changed; re-run the sweep against the new variants',
 );
 assert.ok(
     !/data-testid/.test(primitive),
@@ -181,6 +181,6 @@ assert.ok(
 );
 
 console.log(
-    `OK: StatusMessage migration ( / Cluster K FOLLOWUP 1: ${elements.length} <StatusMessage> rows `
+    `OK: StatusMessage migration (Cluster K FOLLOWUP 1: ${elements.length} <StatusMessage> rows`
     + `across ${adopters.length} shell files; every residual role="alert" matches a declared carve-out)`,
 );

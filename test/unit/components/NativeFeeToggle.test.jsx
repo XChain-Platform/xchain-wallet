@@ -38,7 +38,7 @@ describe('NativeFeeToggle', () => {
         expect(onChange).toHaveBeenCalledWith(true);
     });
 
-    // : on a chain with no XCHAIN fee lane there is nothing to choose
+    // On a chain with no XCHAIN fee lane there is nothing to choose
     // between, and a switch the user could untick produced a transaction the
     // network rejects after the miner fee was already spent.
     it('states the fee rather than offering a switch when mandatory', () => {
@@ -56,9 +56,9 @@ describe('NativeFeeToggle', () => {
         expect(container.firstChild).toBeNull();
     });
 
-    // . The row mounts on far more actions than the schedule prices, and
+    //The row mounts on far more actions than the schedule prices, and
     // an unquoted one used to be told a fee would be spent and forfeited.
-    describe(' it does not promise a fee it has not been given', () => {
+    describe('it does not promise a fee it has not been given', () => {
         it('speaks conditionally on LTC when the form holds no quote', () => {
             render(<NativeFeeToggle checked mandatory onChange={() => {}} coinTicker="LTC" />);
             expect(screen.getByText('Protocol fees are paid in LTC')).toBeTruthy();

@@ -6,10 +6,10 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  on the path a real Send actually takes.
+// on the path a real Send actually takes.
 //
 // Send.jsx composes through `action.composeForConfirm` and then signs those
-// exact bytes on Approve ('s single-encode pipeline, `prebuiltPsbt`).
+// exact bytes on Approve (that single-encode pipeline, `prebuiltPsbt`).
 // So a change address chosen anywhere later than this route never reaches
 // the wire, and submitAction's own rotation is deliberately inert here.
 // This pins the rotation at the step that decides the transaction.

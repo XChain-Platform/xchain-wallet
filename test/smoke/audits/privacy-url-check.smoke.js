@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for tools/release/verify-privacy-url.mjs ( §5 / D5).
+// Smoke for tools/release/verify-privacy-url.mjs (§5 / D5).
 //
 // The script answers one pre-submission question: is the privacy-policy
 // URL the store form validates actually live, and is it serving THIS
@@ -20,7 +20,7 @@
 //    inconclusive run reported as clean is worse than no check, because
 //    people stop looking once a check exists. The 403 case was not
 //    hypothetical: Cloudflare fronted xchain.io and answered plain tooling
-//    with 403 on every path, live page or not. turned that off
+// with 403 on every path, live page or not. turned that off
 //    and a plain live run now exits 0 (measured 2026-08-02), but the
 //    inconclusive-on-403 treatment stays, because the block can come back
 //    and this check must not report a false outage when it does.
@@ -65,7 +65,7 @@ const root = join(here, '..', '..', '..');                       // xchain-walle
 const HOSTED_PAGE = join(root, '..', 'xchain-websites', 'xchain.io', 'wallet', 'privacy', 'index.html');
 
 // This must precede the read below, and getting the order wrong is what it is
-// here to prevent.  moved the policy into the sibling docs repo, so
+// here to prevent. a later change moved the policy into the sibling docs repo, so
 // DEFAULT_SOURCE_PATH now points ACROSS the repo boundary and the tool half
 // became docs-dependent along with the store-document half at the bottom. Until
 // this line existed the file read the policy at import time and died with a raw
@@ -373,14 +373,14 @@ if (existsSync(HOSTED_PAGE)) {
 // keep "your IP address … for 14 days", against a repo whose data-safety
 // answers come from the corrected measurement that says the opposite.
 // Filling the Play form from that row would have put a reviewer in front
-// of exactly the policy/form mismatch  §5 calls a rejection class,
+// of exactly the policy/form mismatch §5 calls a rejection class,
 // and it would have looked fine from inside the console. The App Store
 // doc had been corrected the same day with this reasoning; the Play one
 // was simply missed, which is what a cross-doc check is for.
 //
 // A dead wrong URL is the safe failure here. A LIVE wrong URL serving
 // superseded text is the one nobody catches.
-//  MOVED THE STORE DOCUMENTS OUT OF THIS REPO and, in the same
+// a later change MOVED THE STORE DOCUMENTS OUT OF THIS REPO and, in the same
 // pass, stopped them restating the URL at all: each one now links the
 // policy and tells the operator to take the URL from the policy itself.
 // That removes the drift class this check existed for, by construction
@@ -427,7 +427,7 @@ const LISTING_DOCS = [
         `only ${docsChecked} of ${LISTING_DOCS.length} store documents were read`);
 }
 
-// --- 9. The deploy pin: only an OBSERVATION may advance it ( S31) ----
+// --- 9. The deploy pin: only an OBSERVATION may advance it (S31) ----
 //
 // The pin is how the smoke suite learns what is actually published without
 // fetching. Its entire worth is that it cannot be set by anything except this

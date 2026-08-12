@@ -51,7 +51,7 @@ assert.match(formSrc, /messaging\.getAddressesByChain/, 'loads chain/address map
 assert.match(formSrc, /<ChainPicker/, 'uses ChainPicker for chain selection');
 assert.match(formSrc, /<select[\s\S]*aria-label="Address"/, 'has address select');
 assert.match(formSrc, /<textarea/, 'has message textarea');
-//  slice 5: the password moved ONTO the confirm page (§5.5 message
+// slice 5: the password moved ONTO the confirm page (§5.5 message
 // variant) and the form's inline copy is deleted, so the form must NOT ask
 // for it - collecting it twice would be the drift this slice removes.
 assert.doesNotMatch(

@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  / D-64, the rest of the screen. The import form was fixed first
+// D-64, the rest of the screen. The import form was fixed first
 // because that is where the defect was reported, but every other failure
 // path on Addresses still rendered `err.message` straight into the page -
 // including the one that produced the message D-65 was filed for,
@@ -69,7 +69,7 @@ async function openDetail(messaging) {
     await screen.findByRole('button', { name: /Use/ });
 }
 
-describe(' / D-64: Use reports a refusal in the user\'s language', () => {
+describe('D-64: Use reports a refusal in the user\'s language', () => {
     it('does not render the flow name from a setActiveAddress rejection', async () => {
         const messaging = messagingWith({
             setActiveAddress: vi.fn(async () => {
@@ -99,7 +99,7 @@ describe(' / D-64: Use reports a refusal in the user\'s language', () => {
     });
 });
 
-describe(' / D-64: the other Addresses failures', () => {
+describe('D-64: the other Addresses failures', () => {
     it('shows house copy when the address list cannot be read', async () => {
         const messaging = messagingWith({
             getAddressesByChain: vi.fn(async () => {

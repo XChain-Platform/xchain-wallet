@@ -99,7 +99,7 @@ function makeFakeTabs(tabs) {
     // The origin check above reads a URL snapshot while the send is addressed by
     // a mutable tab id, so the message must name the origin it was meant for and
     // the content script must re-check it against the document it actually runs
-    // in (). Both halves, or the guard is a comment.
+    // in. Both halves, or the guard is a comment.
     assert.equal(
         fake.sent[0].message.origin,
         'https://dapp.example',

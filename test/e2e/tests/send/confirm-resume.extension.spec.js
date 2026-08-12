@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5.4: finishing a confirm the popup closed on.
+// Finishing a confirm the popup closed on.
 //
-// This is the venue the item's own handover insisted on: "'s popup-close
+// This is the venue the item's own handover insisted on: "that popup-close
 // path cannot be trusted from unit tests. Drive a packaged extension before
 // believing it works." Two prior findings in this spec's history earned that
 // sentence - §5.4's stated premise (that a WORKER eviction loses the confirm)
-// was overturned the first time anyone measured it, and 's worker bug was
+// was overturned the first time anyone measured it, and that worker bug was
 // invisible to every Node smoke because they read the bundle as text instead of
 // executing it.
 //
@@ -63,7 +63,7 @@ async function openConfirm(page) {
     await expect(page.getByTestId('confirm-approve')).toBeEnabled();
 }
 
-test.describe(': resuming a confirm the popup closed on (extension)', () => {
+test.describe('Resuming a confirm the popup closed on (extension)', () => {
 
     test('a closed popup leaves the confirm resumable, and finishing it broadcasts', async ({ context, extensionId, page }) => {
         await fundedWallet(page);

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // SSC-7: the pre-unlock guards live in native storage on the native shells
-// ( §3).
+// (§3).
 //
 // The property under test is not "the records round-trip". It is that each of
 // the three fails SILENTLY and PERMISSIVELY when its store disappears, so a

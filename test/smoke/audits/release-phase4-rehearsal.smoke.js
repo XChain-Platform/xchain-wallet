@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// row 89. "Ceremony Phase 4 is rehearsed" is a claim about a tree,
+// "Ceremony Phase 4 is rehearsed" is a claim about a tree,
 // and this repo's trees move. This gate makes the claim expire on its own.
 //
 // THE HISTORY THAT BOUGHT IT. Phase 4 was rehearsed by hand at S38, S40, S41
@@ -76,7 +76,7 @@ assert.equal(d.moved.length, 0,
     + 'and re-pin it, or record in the release record why these changes cannot affect signing. Do NOT '
     + 'hand-edit the pin: the whole value of that file is that only an observation can set it.');
 
-console.log(`OK: release phase4-rehearsal smoke ( row 89: the signing path at HEAD is `
+console.log(`OK: release phase4-rehearsal smoke (row 89: the signing path at HEAD is`
     + `byte-identical to the rehearsal observed ${pin.observedAt}; pinned at script `
     + `${String(pin.scriptRef).slice(0, 8)} / repo ${String(pin.repoRef).slice(0, 8)}, tag ${pin.tag}, `
     + `lane ${pin.lane || 'all'}, reached '${pin.reached}'`

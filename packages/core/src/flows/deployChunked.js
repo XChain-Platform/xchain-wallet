@@ -142,7 +142,7 @@ export function normalizeConstructorParams(v) {
  * The action_index of the leg that was just submitted, from EITHER shape the
  * indexer wait can resolve with.
  *
- * : this used to read `indexed.action_index` alone, and that field only
+ * This used to read `indexed.action_index` alone, and that field only
  * exists on ONE of the two paths `waitForTxid` can settle from:
  *
  *   - the WEBSOCKET fast path settles with a NEW_ACTION event, which carries
@@ -207,7 +207,7 @@ async function confirmByActionIndex({ sdk, record, chunk, actionIndex }) {
 /**
  * The action_index a broadcast txid ended up as, or null while it has none.
  *
- * : this is the lookup that closes the double-pay window. A chunk's
+ * This is the lookup that closes the double-pay window. A chunk's
  * action_index is only knowable once the indexer has read it, but its TXID is
  * known the moment it is broadcast - so a run interrupted DURING the indexer
  * wait leaves a chunk that is on chain, paid for, and invisible to a record
@@ -232,7 +232,7 @@ async function actionIndexForTxid({ sdk, txid }) {
 /**
  * Re-verify a resumed record's chunks against the chain.
  *
- * TWO WAYS IN, and the second one is . A chunk recorded with an
+ * TWO WAYS IN, and the second one is a separate case. A chunk recorded with an
  * `actionIndex` is checked directly. A chunk recorded with only a `txid` -
  * broadcast, but interrupted before the indexer answered - is resolved through
  * that txid first. Without the second path a resume re-sends and re-pays for a
@@ -300,7 +300,7 @@ export async function verifyRecordedChunks({ sdkRegistry, chainId, record }) {
  * @param {string} [opts.cooldownBlocks]
  * @param {string} [opts.slashDestination]
  * @param {number} [opts.feePerKb]
- * @param {boolean} [opts.payFeeInNativeCoin]  : pay each leg's protocol fee in the native
+ * @param {boolean} [opts.payFeeInNativeCoin]: pay each leg's protocol fee in the native
  *   coin. Every leg is its own priced DEPLOY (the carriers per CODE_PART byte, the assembler at
  *   VM_DEPLOY_BASE), so the flag belongs on all of them or the run stalls partway through.
  * @param {string} [opts.resumeId]   existing pendingDeploy id to continue
@@ -379,7 +379,7 @@ export async function deployChunkedRun(opts) {
         await opts.vault.pendingDeploys.put(record);
     }
 
-    // : on a RESUME the assembling leg comes from the record, not from the
+    // On a RESUME the assembling leg comes from the record, not from the
     // caller's current arguments. The record stores `assembleParams` for exactly
     // this - "the DEPLOY v2/v3 params for phase 2", per its schema - and nothing
     // read it back, so a resumed run rebuilt phase 2 from whatever the form
@@ -418,7 +418,7 @@ export async function deployChunkedRun(opts) {
     /**
      * Write a leg's txid into the record the moment it is broadcast.
      *
-     * : the chunk row used to be written only AFTER the indexer wait
+     * The chunk row used to be written only AFTER the indexer wait
      * returned, so a run interrupted during that wait - up to 120s per leg, on a
      * flow that tells the user it takes a few minutes - left a chunk on chain,
      * paid for, and invisible to the resumed run, which re-sent and re-paid for
@@ -490,7 +490,7 @@ export async function deployChunkedRun(opts) {
             progress('chunk-skipped', { index: i, total: plan.totalChunks });
             continue;
         }
-        // , second window: a chunk whose txid we hold but which the chain
+        // Second window: a chunk whose txid we hold but which the chain
         // does not YET carry an action for. `verifyRecordedChunks` could not
         // confirm it because the transaction is still unmined - measured live,
         // where a resume re-sent a chunk that was sitting in the mempool and

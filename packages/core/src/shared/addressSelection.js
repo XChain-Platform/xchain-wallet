@@ -26,7 +26,7 @@
  * counterwallet-legacy wallet derives m/0'/change/index, where [4] does not
  * exist at all. Testing position 4 there matched NOTHING, so every form that
  * picks a funding address this way reported that a fully funded legacy wallet
- * had "no address on this chain" . The allocating side
+ * had "no address on this chain". The allocating side
  * (flows/receiveAddress.js) already reads change/index end-relative; this is
  * the selecting side agreeing with it.
  *

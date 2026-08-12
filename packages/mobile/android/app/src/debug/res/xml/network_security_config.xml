@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  DEBUG BUILDS ONLY ( §7). Gradle's source-set merge replaces the
+  DEBUG BUILDS ONLY (§7). Gradle's source-set merge replaces the
   release file with this one for the debug variant, so nothing here can
   reach a signed release: the ceremony builds `bundleRelease`, which never
   reads this directory.
@@ -26,6 +26,5 @@
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">devhost</domain>
     </domain-config>
 </network-security-config>

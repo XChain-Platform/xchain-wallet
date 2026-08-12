@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  (wallet E2E D-86, second form): Airdrop's Max dropped the WHOLE
+// (wallet E2E D-86, second form): Airdrop's Max dropped the WHOLE
 // balance into a PER-RECIPIENT field, so one click proposed paying every
 // address the full balance - a total of balance x recipients, N times the
 // "total ~" figure the form printed one line below it, with submit still
@@ -30,7 +30,7 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
 // Real bitcoin-mainnet addresses: the recipient parser is network-aware
-// , so placeholder strings would be counted as invalid and never
+//, so placeholder strings would be counted as invalid and never
 // reach the divisor.
 const RECIPIENTS = [
     'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
@@ -148,7 +148,7 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-describe('AirdropForm Max fills a per-recipient share, not the balance ', () => {
+describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     it('fills balance / recipients, not the whole balance', async () => {
         mountAirdrop();
         await pasteRecipients();

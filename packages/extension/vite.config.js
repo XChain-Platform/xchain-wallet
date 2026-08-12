@@ -54,7 +54,7 @@ const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
 
-//  (mirrors packages/web/vite.config.js): vite-plugin-node-polyfills
+// (mirrors packages/web/vite.config.js): vite-plugin-node-polyfills
 // rewrites Buffer/process/global inside transformed CJS to bare
 // `vite-plugin-node-polyfills/shims/*` specifiers, which cannot resolve
 // from the `link:`-resolved xchain-sdk directory under pnpm's strict
@@ -84,7 +84,7 @@ const polyfillShimResolver = {
 
 // xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`;
 // resolve the subpath from the SDK's own context (see the web config),
-// through node_modules rather than a sibling directory .
+// through node_modules rather than a sibling directory.
 const musigBaseCrypto = createRequire(
     createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
@@ -92,7 +92,7 @@ const musigBaseCrypto = createRequire(
 /**
  * Emit `build-profile.txt` into the extension bundle.
  *
- * The web shell has done this since , for a reason that reads as
+ * The web shell has done this, for a reason that reads as
  * mobile-specific and is not: `packages/mobile` stages `packages/web/dist`
  * verbatim, so without a stamp travelling INSIDE the bundle there is nothing
  * to stop a `default` build being wrapped in a store artifact and labelled
@@ -219,7 +219,7 @@ export default defineConfig({
             // for connection pooling; browser manages its own pool, so
             // our tiny no-op shim avoids pulling in stream-http (~30 KB).
             http: httpBrowserShim,
-            // : the same clients pick `require('https').Agent` for
+            // The same clients pick `require('https').Agent` for
             // https endpoints (every mainnet default); without this alias
             // real-SDK construction throws in the browser and wallet
             // creation never completes.
@@ -238,7 +238,7 @@ export default defineConfig({
         target: 'es2022',
         sourcemap: false,
         minify: false,
-        // : xchain-sdk is a `link:` dep living outside every
+        // Xchain-sdk is a `link:` dep living outside every
         // node_modules dir, so Rollup's commonjs pass (default include
         // /node_modules/) skipped it and the bundle kept literal require()
         // calls; evaluating those throws in the worker and the extension

@@ -14,7 +14,7 @@ import { QueuedResultPanel } from '../../../packages/core/src/shared/components/
 
 afterEach(() => cleanup());
 
-describe('QueuedResultPanel ', () => {
+describe('QueuedResultPanel', () => {
     it('says the transaction is signed and not yet broadcast', () => {
         render(<QueuedResultPanel onDone={() => {}} />);
         expect(screen.getByText('Signed. Broadcast will retry.')).toBeTruthy();

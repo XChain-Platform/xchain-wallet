@@ -1,11 +1,11 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// : the confirm screen must disclose the XCHAIN-mode protocol fee.
+// The confirm screen must disclose the XCHAIN-mode protocol fee.
 //
 // The screen quoted the miner fee to eight decimals and said nothing about
 // the protocol fee unless the user had switched to native-coin payment - so
-// in the DEFAULT mode the larger of the two charges was invisible. 
+// in the DEFAULT mode the larger of the two charges was invisible.
 // put the number on `report.quote.xchainFee`; this is the wiring that reads
 // it, and the guards that keep it from double-counting the native lane.
 
@@ -17,7 +17,7 @@ afterEach(() => cleanup());
 
 const DECODED = { summary: 'Issue 1000 S19FEE', details: [], warnings: [] };
 
-// What sdk.preflight lands after : the echoed fee record on the quote.
+// What sdk.preflight lands after: the echoed fee record on the quote.
 const REPORT = (xchainFee) => ({
     verdict: 'pass', restricted: false, unverified: [], stateHeight: 100,
     findings: [{ code: 'DRYRUN_VALID', severity: 'info', message: 'ok' }],
@@ -37,7 +37,7 @@ function base(overrides = {}) {
     };
 }
 
-describe('confirm screen protocol-fee disclosure ', () => {
+describe('confirm screen protocol-fee disclosure', () => {
 
     it('shows an XCHAIN protocol-fee row in the default mode', () => {
         render(<ConfirmActionModal {...base()} />);
@@ -86,7 +86,7 @@ describe('confirm screen protocol-fee disclosure ', () => {
     });
 
     it('does not claim an XCHAIN fee on a bare native payment', () => {
-        // : no XChain action, so no protocol fee at all.
+        // No XChain action, so no protocol fee at all.
         render(<ConfirmActionModal {...base({
             composed: { psbt: 'x', bareNativePayment: true }, report: null,
         })} />);

@@ -42,7 +42,7 @@
 //     header to actually prevent framing.
 //   - img/font allow data: + blob: for QR codes and the favicon.
 
-// PROFILES (, ; rails §3 owns the names). The policy is not the
+// PROFILES (; rails §3 owns the names). The policy is not the
 // same on every shell, because the shells do not have the same capabilities.
 // `store` is the mobile build: there is no WebHID in a WKWebView or an Android
 // WebView, so the hardware-signer path is unreachable there BY DESIGN, and the

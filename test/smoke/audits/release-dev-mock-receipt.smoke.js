@@ -12,7 +12,7 @@
 // the desktop updater refuses any release whose header is not exactly that
 // word. This file holds that word to a gate that actually read something.
 //
-//  S38, and the finding is about WHICH TREE runs. sign.sh comes from
+// S38, and the finding is about WHICH TREE runs. sign.sh comes from
 // the checkout that invoked it; the gate script it runs comes from --repo,
 // the tree at the release tag. Those are routinely different, by design:
 // --repo is what lets a current sign.sh sign an older tag's artifacts, and
@@ -244,7 +244,7 @@ const RECEIPT_REFUSAL = 'exited 0 without saying it read anything';
 
 // --- 7. The lane that HAS shipped can produce a receipt at all -----------
 //
-// . Cases 1-6 hold sign.sh to the receipt; this one holds the pair
+//Cases 1-6 hold sign.sh to the receipt; this one holds the pair
 // together for the android lane, driving the REAL gate out of the repo
 // fixture against an android-only staging set - the only shape
 // `sign.sh --lane android` can ever be given, because inside a lane scope

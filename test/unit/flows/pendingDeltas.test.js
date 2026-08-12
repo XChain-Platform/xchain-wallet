@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / §4.7: the concurrent-window pending-delta netting that covers the
+// §4.7: the concurrent-window pending-delta netting that covers the
 // broadcast -> confirmation gap the in-memory reservation no longer holds.
 
 import { describe, it, expect } from 'vitest';
@@ -24,7 +24,7 @@ function tx(over = {}) {
     };
 }
 
-describe('unconfirmedPendingDeltas ', () => {
+describe('unconfirmedPendingDeltas', () => {
     it('nets a broadcast-but-unconfirmed SEND debit for the matching venue+source', () => {
         expect(unconfirmedPendingDeltas([tx()], VENUE)).toEqual([{ tick: 'XCHAIN', amount: '600' }]);
     });
@@ -62,7 +62,7 @@ describe('unconfirmedPendingDeltas ', () => {
     });
 });
 
-describe('sendDeltaFromAction ', () => {
+describe('sendDeltaFromAction', () => {
     it('returns the tick+amount of a single-leg SEND', () => {
         expect(sendDeltaFromAction({ action: 'SEND', params: { TICK: 'XCHAIN', AMOUNT: '600' } }))
             .toEqual({ tick: 'XCHAIN', amount: '600' });

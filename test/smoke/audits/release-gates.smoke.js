@@ -31,7 +31,7 @@ const wsRoot = join(here, '..', '..', '..');
 
 // --- 1. Threat model doc --------------------------------------------
 //
-//  moved this out of the repo and split it in two: security.md now
+// a later change moved this out of the repo and split it in two: security.md now
 // carries the posture (protected assets, in scope, out of scope) and
 // threat-model.md carries the scenarios and the open items. The assertions
 // followed the content into whichever file now owns it, and skip loudly
@@ -151,7 +151,7 @@ assert.equal(
 // --- 3. Script REFUSES a tree where it can scan nothing --------------
 //
 // This assertion used to read "exits 0 when no dist exists", and it was the
-// reason the defect it enshrined survived ( S33). A pristine clone
+// reason the defect it enshrined survived (S33). A pristine clone
 // checked out at the tag is precisely a tree with no dist/, and it is the
 // only tree sign.sh will sign from, so the state this test blessed as
 // success was the state the gate ran in for every real release: three
@@ -426,7 +426,7 @@ try {
 
 // --- 6. An ANDROID-ONLY artifact set is scanned, not refused ----------
 //
-// , and it is the lane that has actually shipped. `sign.sh --lane
+// And it is the lane that has actually shipped. `sign.sh --lane
 // android` stages the `.aab` and the `.apk` and nothing else, because the
 // artifact-set gate calls every other lane's file undeclared inside a
 // lane scope. Measured 2026-08-07 against the real pair: artifact mode

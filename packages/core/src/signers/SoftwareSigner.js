@@ -353,13 +353,13 @@ export class SoftwareSigner extends Signer {
         if (!inputIndices.every(i => Number.isInteger(i) && i >= 0)) {
             throw new Error('SoftwareSigner.signPsbt: every signingPaths entry must carry a non-negative integer inputIndex');
         }
-        // : a P2SH/P2WSH two-phase REVEAL tx spends the chunk-lane data-carrier
+        // A P2SH/P2WSH two-phase REVEAL tx spends the chunk-lane data-carrier
         // outputs, whose redeem script is a custom "<data> OP_DROP <P2PKH gate>" that
         // the default single-sig finalizer can't finalize ("Can not finalize input
         // #0"). The reveal's only inputs are those chunk outputs (all the caller's own
         // key, one source), so sign every input and finalize with the SDK's reveal
         // finalizer, exactly as sdk.submitAction's lifecycleManager does for phase 2.
-        //  §3.2/§3.5: a TAPROOT ENVELOPE reveal is a different animal again. It
+        // §3.2/§3.5: a TAPROOT ENVELOPE reveal is a different animal again. It
         // is a BIP341 script-path spend, so it needs a SCHNORR signature over the
         // envelope leaf and the standard taproot finalizer; neither the ECDSA key
         // path nor the chunk-lane finalizer above applies to it. signEnvelopeRevealPsbt

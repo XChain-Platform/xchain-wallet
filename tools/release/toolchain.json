@@ -1,6 +1,6 @@
 {
     "_comment": [
-        "Single source of truth for the toolchain that produces a release ( §51).",
+        "Single source of truth for the toolchain that produces a release (§51).",
         "",
         "The reproducible-builds doc (https://docs.xchain.io/components/wallet/reproducible-builds)",
         "makes the central claim that 'the toolchain version is part",

@@ -122,7 +122,7 @@ export class MessageHost {
 // bridge-spec's BridgeErrorResult declares. Serializing only { name, message }
 // dropped all four at the transport, so a rate-limited dApp had no
 // `retryAfterMs` to wait on and a spec-following dApp had no `error` code to
-// switch on - it could only regex the human-readable message ().
+// switch on - it could only regex the human-readable message.
 const NUMERIC_ERROR_FIELDS = ['retryAfterMs', 'burst', 'windowMs'];
 
 /**

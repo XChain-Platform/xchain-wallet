@@ -15,7 +15,7 @@
 //     - ThisWalletSection imports `clearLastView` and calls it after a
 //       successful messaging.removeWallet.
 //     - DemoBanner does the same when the user (or auto-expire) exits
-//       demo mode, now via the shared `exitDemoWallet` teardown .
+// demo mode, now via the shared `exitDemoWallet` teardown.
 //   FU 6: multi-wallet threading:
 //     - useLastView guards the persist effect with a per-walletId
 //       lastResumedFor + lastPersistedFor pair so a wallet switch
@@ -60,7 +60,7 @@ assert.match(
     'ThisWalletSection clears last-view AFTER removeWallet',
 );
 
-// : the demo teardown moved into one shared helper so the three
+// The demo teardown moved into one shared helper so the three
 // escapes (Wallet details, the 24h auto-expire, and the add-wallet
 // graduation) cannot drift. DemoBanner now reaches clearLastView +
 // clearDemoWalletId through it, so pin the call site and the helper.

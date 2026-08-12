@@ -6,11 +6,11 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  residuals on the Import-address form, all D-64:
+// residuals on the Import-address form, all D-64:
 //
 //  - the address-type select defaulted to the CHAIN's default, so a
 //    counterwallet-legacy wallet landed on P2WPKH here while the sibling
-//    Add-address modal - fixed for exactly this in  - sat on P2PKH.
+// Add-address modal - fixed for exactly this in - sat on P2PKH.
 //    Two screens in one app disagreeing about a migrating user's format.
 //  - a rejected import rendered `err.message` verbatim, so the user read
 //    "importWif: Failed to import WIF: Non-base58 character".
@@ -80,7 +80,7 @@ async function submitWif(value = 'not a real key') {
     fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));
 }
 
-describe(' / D-64: address type follows the wallet, not just the chain', () => {
+describe('D-64: address type follows the wallet, not just the chain', () => {
     it('defaults a counterwallet-legacy wallet to p2pkh', async () => {
         await openImportForm(messagingFor('counterwallet-legacy'));
         // The wallet format lands after the first render, so this is also the
@@ -133,7 +133,7 @@ describe(' / D-64: address type follows the wallet, not just the chain', () => {
     });
 });
 
-describe(' / D-64: a rejected import reads as copy, not as a stack trace', () => {
+describe('D-64: a rejected import reads as copy, not as a stack trace', () => {
     it('does not render the flow name or the library internal', async () => {
         const messaging = messagingFor('bip39', {
             importWifRequest: vi.fn(async () => {
@@ -179,7 +179,7 @@ describe(' / D-64: a rejected import reads as copy, not as a stack trace', () =>
     });
 });
 
-describe(' / D-64: the WIF placeholder matches the chain', () => {
+describe('D-64: the WIF placeholder matches the chain', () => {
     it('does not show a mainnet example on a regtest chain', async () => {
         await openImportForm(messagingFor('bip39'));
         const field = await screen.findByLabelText(/WIF private key/i);

@@ -17,7 +17,7 @@
 //
 // Capability-staking model (capability-staking-model.md §3): UNSTAKE
 // addresses a specific signing pubkey, not a tier. AMOUNT is the
-//  optional partial (indexer gate PARTIAL_UNSTAKE_COLLECT):
+// optional partial (indexer gate PARTIAL_UNSTAKE_COLLECT):
 // absent = full sweep of the pubkey's active balance / full pending
 // rewards, exactly the legacy behavior; present = only that much is
 // unstaked/claimed and the residual stays staked/pending. The
@@ -37,11 +37,11 @@ import { normalizeSource } from './sendToken.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {{ VERSION: string, SIGNING_PUBKEY: string, AMOUNT?: string }} params  AMOUNT optional: partial unstake ; absent = full sweep
+ * @property {{ VERSION: string, SIGNING_PUBKEY: string, AMOUNT?: string }} params AMOUNT optional: partial unstake; absent = full sweep
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -110,11 +110,11 @@ export async function unstakeAction(opts) {
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {{ VERSION: string, AMOUNT?: string }} params  AMOUNT optional: partial claim ; absent = claim all pending rewards
+ * @property {{ VERSION: string, AMOUNT?: string }} params AMOUNT optional: partial claim; absent = claim all pending rewards
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]

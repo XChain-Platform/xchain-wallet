@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : a wallet added while the app sits on a regtest network was
+// A wallet added while the app sits on a regtest network was
 // inert. New wallets/accounts derive one address per `activeChainIds`,
 // and every shell defaults that to the three MAINNETS, which the
 // active-network filter then hides: Home, Receive and Addresses all
@@ -49,7 +49,7 @@ function settingsFor(chainIds, activeNetwork) {
     };
 }
 
-describe(': activeChainIdsFromSettings', () => {
+describe('activeChainIdsFromSettings', () => {
     it('returns the configured chains on the active network', () => {
         const settings = settingsFor([...MAINNETS, 'bitcoin-regtest', 'litecoin-regtest'], 'regtest');
         expect(activeChainIdsFromSettings(settings, chainRegistry))
@@ -74,7 +74,7 @@ describe(': activeChainIdsFromSettings', () => {
     });
 });
 
-describe(': resolveSeedChainIds', () => {
+describe('resolveSeedChainIds', () => {
     it('seeds the ACTIVE network first, then the other configured chains', () => {
         // The repro: regtest activated, app on regtest, user adds a wallet.
         // The new wallet must land on the regtest chains, and keeps the
@@ -117,7 +117,7 @@ describe(': resolveSeedChainIds', () => {
     });
 });
 
-describe(': seedChainIdsForVault', () => {
+describe('seedChainIdsForVault', () => {
     it('reads the vault settings', async () => {
         const vault = {
             settings: { get: async () => settingsFor([...MAINNETS, 'bitcoin-regtest'], 'regtest') },

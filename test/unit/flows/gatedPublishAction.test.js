@@ -263,7 +263,7 @@ describe('buildGatedPublishPsbtRequest (watcher path)', () => {
 
 // --- PC-29: unlock threshold emission gate ----------------------------
 // GATE_MIN_AMOUNT may only ride the FILE sub-command once the chain's
-// activation height ( train) is live; the flow enforces that
+// activation height (train) is live; the flow enforces that
 // itself so no caller can emit early. Activation is forced in tests via
 // the `_activationHeights` override plus a getStatus watermark.
 describe('gateMinAmount (PC-29)', () => {

@@ -86,7 +86,7 @@ export function ToggleRow({ label, hint, checked, onChange, disabled }) {
                 onChange={(e) => onChange(e.target.checked)}
                 style={{
                     width: 36,
-                    //  slice 2: was 20px tall, under the 24px pointer
+                    // slice 2: was 20px tall, under the 24px pointer
                     // target floor (--xc-tap-min). Every settings switch in
                     // the wallet renders through this one row, so the whole
                     // Settings screen moves with this number.

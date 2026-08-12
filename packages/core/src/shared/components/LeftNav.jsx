@@ -23,7 +23,7 @@ import styles from './LeftNav.module.css';
  * Two of those rows are conditional on the wallet, not the build:
  * `isSignerMode` (§20) removes Send and Receive, because the Wallet Mode
  * screen promises exactly that when the user picks the air-gapped signer
- * role .
+ * role.
  *
  * Visibility is the parent's responsibility: this component renders
  * itself unconditionally. `<FullLayoutWithNav>` decides whether the
@@ -83,8 +83,8 @@ export function formatBadgeCount(n) {
  * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
  * @param {string} [props.walletName]
  * @param {boolean} [props.hasBtcAddress]
- * @param {boolean} [props.hasDexSurface]   false only in a build that compiled the DEX surface out ; the tab is then absent, not disabled
- * @param {boolean} [props.isSignerMode]   §20 air-gapped signer mode; drops Send + Receive from the nav 
+ * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the tab is then absent, not disabled
+ * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops Send + Receive from the nav
  * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
  */
 export function LeftNav({
@@ -103,7 +103,7 @@ export function LeftNav({
     const primary = [
         { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
         { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-        // : signer mode's own hint promises "Send / receive screens
+        // Signer mode's own hint promises "Send / receive screens
         // are hidden; this wallet does not broadcast". Absent, not disabled,
         // for the reason the DEX row below is absent: a greyed Send row still
         // reads as a capability the device has, and the whole value of the
@@ -114,7 +114,7 @@ export function LeftNav({
         ]),
         { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
         // Absent, not greyed, when the build has no DEX surface: the store
-        // build compiles those routes out , so the destination does
+        // build compiles those routes out, so the destination does
         // not exist, and a visibly disabled exchange tab asks an app reviewer
         // the same question a working one does.
         ...(hasDexSurface
@@ -250,7 +250,7 @@ export function LeftNav({
  * Wraps the unlocked-route render tree in a flex layout that places
  * `<LeftNav>` alongside the active route.
  *
- * : the layout picks the navigation surface itself, from its own
+ * The layout picks the navigation surface itself, from its own
  * measured width (`useLayoutTier`), and publishes the result as
  * `data-xc-tier` for the CSS to key off:
  *

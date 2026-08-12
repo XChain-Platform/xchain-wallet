@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// What the surrounding shell can actually do .
+// What the surrounding shell can actually do.
 //
 // Shared UI runs in three hosts with genuinely different powers, and the
 // wallet had no way to say so. That is not a cosmetic gap: it is how a

@@ -14,7 +14,7 @@
 // the data-collection record are the two documents all three store forms are
 // transcribed from.
 //
-//  S21 found the failure this closes. All five block-explorer hosts
+// S21 found the failure this closes. All five block-explorer hosts
 // carry `shells: ['extension']`, for a structural reason (the extension ships
 // no `content_security_policy` key, so MV3's default leaves `img-src`
 // unrestricted, while every other shell injects the §51 CSP). The iOS
@@ -149,6 +149,6 @@ assert.ok(checked > 0,
     + 'named in either privacy document, so this check passed without checking anything. That is '
     + 'either a porting accident or a real disclosure gap; both want a human.');
 
-console.log(`OK: privacy shell-scope smoke ( S21: ${restricted.length} shell-restricted hosts `
+console.log(`OK: privacy shell-scope smoke (S21: ${restricted.length} shell-restricted hosts`
     + `from wireAudit.js, ${checked} disclosure passages scoped correctly across ${DOCS.length} `
     + `documents, ${skippedUnnamed} host/document pairs not named and so not applicable)`);

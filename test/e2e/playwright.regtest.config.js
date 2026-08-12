@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Playwright config for the REGTEST venue (, spec §8.6).
+// Playwright config for the REGTEST venue (spec §8.6).
 //
 // Everything here differs from `playwright.config.js` for one reason:
 // these specs sign and broadcast, and the default config cannot. See
 // the header of `fixtures/regtest.js` for the full root cause - in
 // short, the Vite DEV server serves the dev-mock SDK (deliberately, as
-// of ), whose signing path throws by design.
+// ), whose signing path throws by design.
 //
 // THE PRODUCTION BUILD IS THE POINT. `webServer` runs `vite build`
 // before `vite preview` on every run, deliberately: a stale `dist/`

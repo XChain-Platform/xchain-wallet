@@ -13,7 +13,7 @@
 // `descriptor.defaultAddressType` answers that for a BIP39 wallet and
 // only for a BIP39 wallet. A `counterwallet-legacy` wallet defaults to
 // the address type Counterwallet showed first (p2pkh), because that is
-// where a migrating user's balances are .
+// where a migrating user's balances are.
 //
 // This lives in one place because the answer is read at nearly a dozen
 // call sites - derive, receive, dispenser, activate-chain, new-account,

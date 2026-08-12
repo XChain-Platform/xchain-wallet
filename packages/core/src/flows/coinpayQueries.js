@@ -67,7 +67,7 @@ function extractRows(resp) {
  * what the caller thinks it says. Returns the authoritative obligation row;
  * throws rather than let a mismatch reach the signer.
  *
- * Why this exists ( / F4): a COINPAY carries a native-coin output paying a
+ * Why this exists (F4): a COINPAY carries a native-coin output paying a
  * payee an amount, and both fields arrive from an indexer query, get hydrated
  * into form state, and are then passed back down to be signed. Nothing in that
  * round trip re-checked them, so any tampering after the fetch - a compromised
@@ -80,7 +80,7 @@ function extractRows(resp) {
  * Scope, stated honestly: this re-read hits the same indexer, so it does NOT
  * defend against an indexer that lies consistently. It closes the gap between
  * fetch and sign. Verifying the obligation against the chain itself needs the
- * SPV/light-client path .
+ * SPV/light-client path.
  *
  * @param {SdkCtx & {
  *   payerAddress: string,
@@ -140,7 +140,7 @@ export async function verifyCoinpayObligation({
     }
 
     // Compare in BigInt, not Number: a DOGE obligation can exceed 2^53-1 base
-    // units , where Number() rounds BOTH sides and two different
+    // units, where Number() rounds BOTH sides and two different
     // amounts can collide after rounding. BigInt('...') throws on a
     // non-integer shape, which is exactly the unusable-amount case.
     // The explorer serves this column as the match's DECIMAL coin figure on

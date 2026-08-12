@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  (wallet E2E D-86): the arithmetic behind the Pay dividend form's
+// (wallet E2E D-86): the arithmetic behind the Pay dividend form's
 // Max button. A DIVIDEND's AMOUNT is a per-unit RATE, so the ceiling is
 // balance / eligible units, floored to the dividend token's divisibility.
 // The property that matters throughout: rate x units must never exceed

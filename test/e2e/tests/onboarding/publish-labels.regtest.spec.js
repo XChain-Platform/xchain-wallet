@@ -103,7 +103,7 @@ const NODE = {
     RLTC: { container: 'xchain-node-litecoin-regtest-node', cli: 'litecoin-cli', conf: '/etc/litecoin/litecoin.conf' },
 }[REGTEST_COIN];
 
-const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'devhost';
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'localhost';
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -159,7 +159,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         const row = (list?.data || []).find((r) => r.tx_hash === txid);
         // Details only for an index the LIST returned: a speculative GET on an
         // index that does not exist yet is memoized blank for the life of the
-        // explorer process (D-127/, campaign §3.6).
+        // explorer process (D-127, campaign §3.6).
         if (row) return explorerJson(`action/${row.action_index}`);
         await mineIfBehind();
         await new Promise((r) => setTimeout(r, 2_000));

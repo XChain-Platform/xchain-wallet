@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5.5: classifying why decodeActionFromPsbt said no.
+// Classifying why decodeActionFromPsbt said no.
 //
 // Its `ok: false` covers two categorically different situations, and treating
 // them alike is a false-block waiting to happen:

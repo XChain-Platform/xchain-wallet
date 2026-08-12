@@ -119,7 +119,7 @@ describe('bridge.parallel: per-action results carry their own ok flag', () => {
         expect(results[1].ok).toBe(false);
         // The published code, not the wallet's internal CHAIN_NOT_PERMITTED: a
         // batch entry is read by the page and must carry a BridgeErrorCode
-        // (). The internal name survives in the message.
+        //The internal name survives in the message.
         expect(results[1].error).toBe('CHAIN_NOT_SUPPORTED');
         expect(results[1].message).toMatch(/CHAIN_NOT_PERMITTED/);
 

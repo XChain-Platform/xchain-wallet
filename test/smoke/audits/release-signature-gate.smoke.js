@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : a release must not be able to ship UNSIGNED artifacts
+// Smoke for: a release must not be able to ship UNSIGNED artifacts
 // while every other gate reports green.
 //
 // The defect this guards is one missing repository secret. Windows signing
@@ -204,7 +204,7 @@ function makePE({ certAddr = 0, certSize = 0, numRva = 16, magic = 0x20b } = {})
         'every unsigned artifact is reported, not just the first');
 }
 
-// --- the disk image itself ( row 140) ----------------------------
+// --- the disk image itself (row 140) ----------------------------
 //
 // THE CASE THIS EXISTS FOR IS A REAL RELEASE, NOT A HYPOTHETICAL. v0.338.0
 // published a .dmg whose app bundle was signed, notarized and stapled and
@@ -289,7 +289,7 @@ function makePE({ certAddr = 0, certSize = 0, numRva = 16, magic = 0x20b } = {})
     const signSrc = readFileSync(join(root, 'tools/release/sign.sh'), 'utf8');
     const signLines = signSrc.split('\n');
     const lineOf = (rx) => signLines.findIndex((l) => rx.test(l));
-    // The gate is RESOLVED into a variable and then run, since : a
+    // The gate is RESOLVED into a variable and then run,: a
     // release predating an executable check gets this checkout's copy,
     // announced, rather than a MODULE_NOT_FOUND stack trace from a tag that
     // never carried it. Both halves are asserted, because either one alone

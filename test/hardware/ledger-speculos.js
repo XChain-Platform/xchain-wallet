@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Ledger device leg : drives the wallet's production pair
+// Ledger device leg: drives the wallet's production pair
 // sequence and signer against a real Ledger Bitcoin app running under
 // the Speculos emulator. Nothing in this path is faked, which is the
 // entire point: every other Ledger test injects a hand-written app
@@ -22,7 +22,7 @@
 // an emulator (or a real device behind an APDU proxy) that CI does not
 // have. Skipping is reported, never silent.
 //
-//   SPECULOS_API_URL=http://devhost:5012 pnpm test:hardware:ledger
+//   SPECULOS_API_URL=http://localhost:5012 pnpm test:hardware:ledger
 //
 // Optionally also set SPECULOS_TESTNET_API_URL to a Speculos running the
 // Bitcoin TEST app, which proves the wallet refuses to pair against it
@@ -217,7 +217,7 @@ assert.ok(
 // that the transaction the device returns spends the outpoint the PSBT
 // actually named. The second is the one that mattered: a synthesized
 // prev tx made the device sign a spend of an outpoint that does not
-// exist, and the result looked perfectly well-formed .
+// exist, and the result looked perfectly well-formed.
 //
 // A legacy input, because the prev tx has to be real: the encoder emits
 // segwit inputs with witnessUtxo only, which is exactly the case the
@@ -296,7 +296,7 @@ await assert.rejects(
 );
 
 // ...and the SAME segwit input signs correctly once the real prev tx rides
-// along (, the completing fix). The encoder now attaches it on request
+// Along (the completing fix). The encoder now attaches it on request
 // (`attachPrevTx`, set when the source is a device) so the PSBT the user
 // previews already carries it - hydrating it after the preview would sign
 // bytes the §5.3.2 tamper check never saw.
@@ -347,7 +347,7 @@ console.log(
     + 'identity xpub, getStatus available/wrong-app, address derivation, message signed and '
     + 'approved on-device with the path + message shown on screen'
     + (WalletUtils ? ', PSBT signed on-device spending the outpoint the PSBT named, '
-        + 'witnessUtxo-only input refused, the SAME input signed once its real prev tx rides along ( completing fix)' : '')
+        + 'witnessUtxo-only input refused, the SAME input signed once its real prev tx rides along (completing fix)' : '')
     + (TESTNET_API ? ', Test app refused by name)' : ')'),
 );
 console.log(`  device: ${pairingInfo.model} / app ${pairingInfo.firmwareVersion} / id ${pairingInfo.deviceIdentifier}`);

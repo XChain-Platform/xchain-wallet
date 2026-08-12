@@ -84,7 +84,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [signPassword, setSignPassword] = useState('');
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
 
-    //  (error-recovery sweep remainder): each error surface offers a
+    // (error-recovery sweep remainder): each error surface offers a
     // one-click "Try again" against whatever action last failed. The
     // failing handler records its own re-run here so the recovery button
     // retries the right operation without the user re-navigating. Left
@@ -385,7 +385,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         }
     }
 
-    // : recovery slot for the shared `error` surface. Present only
+    // Recovery slot for the shared `error` surface. Present only
     // when the last failure recorded a re-runnable action (retryRef);
     // undefined otherwise so StatusMessage renders the diagnostic alone.
     const errorRecovery = retryRef.current

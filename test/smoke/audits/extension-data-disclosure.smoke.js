@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  stage S15: the Chrome Web Store data-disclosure answers
+// Smoke for stage S15: the Chrome Web Store data-disclosure answers
 // are derived from the code, and the three store forms cannot disagree.
 //
 // The Privacy practices tab is the most rejection-prone form in the
@@ -26,16 +26,16 @@
 //    cannot observe, which is the same error pointing the other way.
 //
 // 2. The three store forms (Chrome, Play, Apple) must agree about whether
-//    the wallet collects data at all. That binary was blocked on
+// the wallet collects data at all. That binary was blocked on
 //    for both mobile forms while nobody had noticed it blocks the Chrome one
 //    too: the decision was called D8 in the iOS file, D9 in the Play file,
-//    and  in the ledger, so there was no shared token to notice it
-//    by.  is now SETTLED and all three answer "not collected"; the
+// and in the ledger, so there was no shared token to notice it
+// by. is now SETTLED and all three answer "not collected"; the
 //    rule stayed symmetric, so all three must still give the SAME answer.
 //    Flipping it edits three files in one pass.
 //
-//     moved all three forms into the sibling xchain-documentation
-//    checkout, and the port dropped the literal ": SETTLED" state
+// a later change moved all three forms into the sibling xchain-documentation
+// checkout, and the port dropped the literal ": SETTLED" state
 //    token in favour of prose, so the agreement is now read off the answer
 //    each form actually gives. The gate skips, loudly, without the sibling.
 //
@@ -169,7 +169,7 @@ assert.deepEqual(documented, actual,
 
 // Desktop-only egress must not be claimed. Named explicitly rather than left
 // to the set comparison, because this is the specific mistake the Play form
-// already made once and had to correct ().
+// already made once and had to correct  .
 assert.ok(!documented.includes('downloads.xchain.io'),
     `${DISCLOSURE} §3 claims downloads.xchain.io. That is the desktop update feed; the extension updates `
     + 'through the browser store and never requests it.');
@@ -293,6 +293,6 @@ assert.deepEqual(claimedMatches, manifestMatches,
     + 'This is the document all three store forms are transcribed from, and content-script scope is a '
     + 'question every one of them asks.');
 
-console.log(`OK: extension data-disclosure smoke ( S15: ${documented.length} extension egress hosts `
+console.log(`OK: extension data-disclosure smoke (S15: ${documented.length} extension egress hosts`
     + `derived from wireAudit.js, ${STORE_FORMS.length} store forms agreeing on the collection binary, `
     + `content-script scope matching the manifest)`);

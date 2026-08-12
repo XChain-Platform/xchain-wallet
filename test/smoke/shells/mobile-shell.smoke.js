@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the Capacitor mobile shell scaffold ( §11 stage S1).
+// Smoke for the Capacitor mobile shell scaffold (§11 stage S1).
 //
 // Everything here is a claim the Android build makes that NOTHING ELSE in
 // this repo's CI can check: the native build needs a JDK and the Android SDK,
@@ -166,7 +166,7 @@ const { versionCodeFromTag } = await import(
 );
 // Stable sits at build 50, not 0: betas occupy 1-49 below it so a closed-track
 // tester can be promoted to production, and respins 51-99 above (rails §2,
-// , which superseded this spec's original stable-at-0 formula).
+// Which superseded this spec's original stable-at-0 formula).
 assert.equal(versionCodeFromTag('v0.333.1'), 3330150, 'rails §2 worked example');
 assert.ok(
     versionCodeFromTag('v0.333.1-beta.1') < versionCodeFromTag('v0.333.1'),
@@ -386,7 +386,7 @@ assert.match(
     + ' because the spec still claims it',
 );
 
-// SSC-1 door 2 : the native HTTP proxy, which does NOT go through the
+// SSC-1 door 2: the native HTTP proxy, which does NOT go through the
 // plugin registry, so everything above leaves it wide open.
 //
 // Measured on an API 36 emulator (2026-08-01), before the block:
@@ -813,7 +813,7 @@ for (const [label, seed] of [
 assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not built again');
 
 // The STORE APK is derived and must stay derived. The second, full-feature
-// APK  is a genuine second build, because the `default` profile
+// APK is a genuine second build, because the `default` profile
 // compiles different code in and so there is no bundle to derive it from.
 // What stops that eroding the rule above is that it is OPT-IN: an unset
 // XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was, and its
@@ -984,7 +984,7 @@ assert.ok(
 );
 
 // The Play submission runbook and listing collateral moved to the sibling
-// xchain-documentation checkout in  (release/mobile/android-play.md),
+// xchain-documentation checkout in (release/mobile/android-play.md),
 // and were rewritten for a reader rather than for a maintainer: they no
 // longer restate this repo's artifact names, script paths or lane files. The
 // repo-side halves of those pairs stayed here and are still checked. The
@@ -1019,7 +1019,7 @@ assert.match(
     /never hosted publicly/i,
     'the AAB is store-bound; only the K10-signed APK is ever downloaded',
 );
-// Release parity ( §6). The first upload gives Android users, and
+// Release parity (§6). The first upload gives Android users, and
 // nothing about it changes what the release gate demands: every mobile row in
 // expected-artifacts.txt is `optional` and stays so. The flip that arms the
 // requirement lives in shipped-lanes.txt, and the only place an operator will
@@ -1033,7 +1033,7 @@ assert.match(
     /^android\s+(SHIPPED|NOT-SHIPPED)\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
     'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
 );
-// The full-feature direct APK  is its OWN lane, and this pins that
+// The full-feature direct APK is its OWN lane, and this pins that
 // separation rather than merely that the lane exists. Hanging its glob off the
 // android row above would arm the parity requirement for an artifact no
 // ceremony builds by default, failing every release until one did; a lane of
@@ -1109,7 +1109,7 @@ assert.match(
 );
 
 console.log(
-    'OK: mobile shell smoke ( S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
+    'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
     + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
     + ' zero registered plugins; minSdkVersion 26 (D2); versionCode/versionName read from the'
     + ' tag-derived version.properties with no literal fallback and a hard failure when absent;'

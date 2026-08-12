@@ -81,7 +81,7 @@ assert.match(
 
 // --- 1b. the SAME rule on the in-wallet confirm surface -----------------
 //
-//  gave the wallet a second signing surface, and every action form now
+// a later change gave the wallet a second signing surface, and every action form now
 // routes through it. It shipped with a bare "Approve": the button that commits
 // the signature never said which chain it was committing on, while the dApp
 // window a few files away got it right. Found by finally driving the page in a

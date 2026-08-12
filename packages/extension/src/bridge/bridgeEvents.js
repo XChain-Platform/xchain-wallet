@@ -72,7 +72,7 @@ export function createBridgeEventBroadcaster(deps = {}) {
                 // old origin's event (accountsChanged carries account ids and
                 // names). Stamp the intended origin: the receiver always runs
                 // against the document actually loaded and can drop what was
-                // never meant for it ().
+                // never meant for it.
                 tabs.sendMessage(tab.id, {
                     type: EVENT_MESSAGE_TYPE,
                     event,

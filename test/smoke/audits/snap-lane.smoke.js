@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §16 : the Snap Store lane.
+// Smoke for §16: the Snap Store lane.
 //
 // WHAT THIS IS DEFENDING, same family as the mas/msstore smokes next
 // door: a third store channel whose wrong settings do not fail the build.
@@ -366,7 +366,7 @@ if (docsAvailable()) {
 }
 
 console.log(
-    'OK: Snap Store lane smoke ( §16: the snap target is opt-in behind'
+    'OK: Snap Store lane smoke (the snap target is opt-in behind'
     + ' XCHAIN_BUILD_SNAP=1 and never present on a staging build, without removing'
     + ' the AppImage/deb lane; the artifact name is pinned past the scoped-package'
     + ' default and carries its arch; base core24, strict confinement, stable'

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §25.2 / Cluster J FOLLOWUP 3 smoke : the first-time explainer
+// §25.2 / Cluster J FOLLOWUP 3 smoke: the first-time explainer
 // carousel exists and stays wired into Onboarding. The behaviour is
 // covered by test/unit/routes/OnboardingCarousel.test.jsx; this smoke is
 // the cheap insurance against a future import-organizer silently dropping
@@ -35,7 +35,7 @@ assert.ok(
 
 // --- 2. Reduced-motion contract: matchMedia subscription + stacking ---
 
-// : the preference is resolved centrally (OS media query AND the
+// The preference is resolved centrally (OS media query AND the
 // in-app Settings > Appearance override), so the carousel asks the shared
 // hook instead of reading matchMedia, which could only ever see the OS.
 assert.ok(
@@ -83,7 +83,7 @@ assert.ok(
 );
 
 console.log(
-    'OK: onboarding explainer-carousel smoke (Cluster J FOLLOWUP 3 / ): '
+    'OK: onboarding explainer-carousel smoke (Cluster J FOLLOWUP 3):'
     + 'OnboardingCarousel exports + honours prefers-reduced-motion (subscription '
     + '+ stacked branch); dot tablist pagination with Get started + Skip; '
     + 'Onboarding imports and renders it behind the xc:onboardingExplainerSeenAt '

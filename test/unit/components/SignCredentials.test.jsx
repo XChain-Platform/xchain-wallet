@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  regression guard.
+// regression guard.
 //
 // SignCredentials is the shared sign-screen block rendered by 18 of the 19
 // signing forms in the wallet, so a hole here is a hole in nearly every

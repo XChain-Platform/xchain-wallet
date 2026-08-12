@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MessageConfirmScreen ( §5.5, message variant adapter).
+// MessageConfirmScreen (§5.5, message variant adapter).
 //
 // For surfaces that sign a MESSAGE rather than a transaction (Sign
 // message, dApp signIn). Same shell, same two exits, same a11y contract
@@ -76,7 +76,7 @@ export function MessageConfirmScreen({
                         </p>
                     ) : null}
                     {signerReady ? (
-                        // : panic mode freezes signMessageFlow too, so
+                        // Panic mode freezes signMessageFlow too, so
                         // this note is a claim the wallet cannot honour while
                         // a freeze is on.
                         <SigningReadyNote>

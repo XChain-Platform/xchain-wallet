@@ -11,10 +11,10 @@
 // Reads the BUILD-SPEC:FRONTIER blocks that the platform's specs carry, and
 // resolves the file paths their rows cite.
 //
-// WHY THIS IS SHARED RATHER THAN LOCAL TO ONE GATE (): the frontier
+// WHY THIS IS SHARED RATHER THAN LOCAL TO ONE GATE  : the frontier
 // table is what a later stage, or the operator, reads to learn what is left,
 // so a row naming an artifact that no longer exists quietly costs a stage. It
-// cost  two.  closed its own instance in §6 of
+// cost two. a later change closed its own instance in §6 of
 // extension-ceremony-collateral.smoke.js, and the same rot was then measured
 // in the sibling publishing specs, which nothing checked at all. One parser
 // serves every spec so the rule cannot drift between them.
@@ -70,9 +70,9 @@ export function listSpecs() {
 // one people delete.
 //
 // The prefixes are the ones the specs actually use: the four in-repo trees
-// 's §6 already matched, plus `claude/` (platform-owned) and any
+// that §6 already matched, plus `claude/` (platform-owned) and any
 // `xchain-*/` sibling checkout, which is how a spec names a page that the
-//  migration moved into xchain-documentation.
+// migration moved into xchain-documentation.
 export const CITED = new RegExp(
     '`((?:packages|tools|test|\\.github|claude|xchain-[a-z0-9-]+)/[A-Za-z0-9_./-]+)`', 'g');
 
@@ -136,7 +136,7 @@ const ROOTS = specsAvailable() ? checkouts() : [WALLET_ROOT];
 // spec edit can fix, which is how a gate gets deleted.
 //
 // So a miss on disk falls back to the committed tips, and ONLY the tips: not
-// history. A file that  moved out is absent from every tip, which is
+// history. A file that a later change moved out is absent from every tip, which is
 // exactly the rot being guarded; a file that merely has not been pulled yet
 // is present in one.
 const TIPS = ['HEAD', 'origin/HEAD', 'origin/master', 'origin/main'];

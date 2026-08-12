@@ -55,7 +55,7 @@ assert.match(src, /onClick=\{onCommit\}/, 'Save action wired (onCommit)');
 assert.match(src, /matchesDefault\b/, 'matchesDefault check present');
 assert.match(src, /custom: !matchesDefault/, 'custom flag set when draft diverges from defaults');
 
-// : the draft carries the port, and the override the user saves is
+// The draft carries the port, and the override the user saves is
 // consumed by SDKRegistry rather than persisted into a void.
 assert.match(src, /sdkLib\.joinEndpoint\(descriptor\.explorer\)/, 'draft seeded with the joined default URL');
 assert.ok(!/descriptor\.explorer\?\.defaultUrl/.test(src), 'no bare defaultUrl seeding (drops the port)');

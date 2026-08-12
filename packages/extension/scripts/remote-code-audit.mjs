@@ -9,7 +9,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §3.2: remote-code audit of the BUILT extension bundle.
+// Remote-code audit of the BUILT extension bundle.
 //
 // Manifest V3 bans remotely-hosted code outright and it is the first thing
 // a Chrome Web Store reviewer checks on a wallet, so this runs against

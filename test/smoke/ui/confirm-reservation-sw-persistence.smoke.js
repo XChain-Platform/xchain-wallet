@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §5.4: the §4.7 reservation ledger survives an MV3 service-
+// Smoke for §5.4: the §4.7 reservation ledger survives an MV3 service-
 // worker kill.
 //
 // The mechanism (confirmActionSessionStorage) had been BUILT and left
@@ -96,7 +96,7 @@ assert.match(
 );
 
 console.log(
-    'OK: confirm reservation SW-persistence smoke ( §5.4: createBackgroundHost '
+    'OK: confirm reservation SW-persistence smoke (createBackgroundHost'
     + 'now backs the §4.7 reservation ledger with chrome.storage.session, so an MV3 '
     + 'worker kill mid-modal no longer drops reservations and silently re-opens the '
     + 'two-window race; adapter returns null outside an extension; ledger hydrates '

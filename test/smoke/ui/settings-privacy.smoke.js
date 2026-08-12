@@ -40,7 +40,7 @@ for (const field of ['torRouting', 'changeAddressRotation', 'hideSmallBalances',
 assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur row present');
 assert.match(src, /Labels survive restore/, 'labels-survive-restore row present');
 
-// : the Tor row is the one toggle that is NOT unconditional. It
+// The Tor row is the one toggle that is NOT unconditional. It
 // was offered in all three shells and implemented in none, which made it
 // a privacy claim the code did not keep. It now renders only where the
 // host can actually route: desktop, whose SDK runs in the Electron main
@@ -59,7 +59,7 @@ assert.ok(torGate > 0 && torRow > torGate && torRow - torGate < 600,
 assert.ok(!/Route SDK requests through a local Tor SOCKS5 proxy when available/.test(src),
     'the old hint is gone: it promised routing that did not exist');
 
-//  (operator ruling a): the shells that cannot route do not simply
+// (operator ruling a): the shells that cannot route do not simply
 // lose the row, they carry an explicit not-available state. Both halves
 // are asserted here because dropping either one is a regression in a
 // different direction: without the negative branch the feature reads as

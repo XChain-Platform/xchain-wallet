@@ -127,7 +127,7 @@
     }
 }
 
-/* : the add-a-wallet lane, entered from inside the demo, explains
+/* The add-a-wallet lane, entered from inside the demo, explains
    why the demo has to be cleared before a real wallet can be made. */
 .demoGraduateNotice {
     margin: 0 var(--xc-space-3) var(--xc-space-3);

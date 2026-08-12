@@ -58,7 +58,7 @@
 // the destinations do not have to be spendable by anyone in particular - but
 // they do have to be real addresses for this exact coin and network, because
 // the list form validates them properly (`classifyRecipients` -> base58check /
-// bech32 for the chain, ). Generating them in the wallet is the only way
+// bech32 for the chain). Generating them in the wallet is the only way
 // to be sure of that on a venue table that spans three chains, and it makes the
 // resulting balances readable at the explorer.
 //
@@ -83,7 +83,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** ISSUE, LIST and the ISSUE v5 edit each pay a real coin fee on this chain . */
+/** ISSUE, LIST and the ISSUE v5 edit each pay a real coin fee on this chain. */
 const FUNDING = 2;
 const STAMP = Date.now().toString().slice(-6);
 const TICK_ALLOW = `ALW${STAMP}`;
@@ -372,7 +372,7 @@ async function publishAddressList(page, source, chooseMembers) {
     const listIndex = String(published.action_index);
 
     // The indexer stores a list even when it drops items it rejects into
-    // `list_items_invalid` , so the ACTION being valid is not the same
+    // `list_items_invalid`, so the ACTION being valid is not the same
     // as the MEMBERSHIP being what was asked for. Read it back.
     const stored = (published.list || published.items || published.members || [])
         .map((row) => String(typeof row === 'object' ? (row.address ?? row.item ?? '') : row));

@@ -21,7 +21,7 @@
 //     verify-release, glossary, threat model, maintainers, security,
 //     contributor process, code of conduct).
 //
-//  moved the checklist, and the docs it covers, into the sibling
+// a later change moved the checklist, and the docs it covers, into the sibling
 // xchain-documentation checkout, so the parity half skips when that checkout
 // is absent. The CONTRIBUTING.md half is in this repo and always runs.
 

@@ -165,9 +165,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    //  §5.6 slice 2 (actionForms): destroys go through the single-encode
+    // §5.6 slice 2 (actionForms): destroys go through the single-encode
     // confirm page (compose + tamper + sdk.preflight all host-side), hardware
-    // included . Watcher mode keeps the legacy review stage: it
+    // included. Watcher mode keeps the legacy review stage: it
     // encodes, it never signs. The typed-DESTROY gate rides in the confirm
     // page's credentials block.
     const { settings } = useSettings();
@@ -192,7 +192,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     }), [ticker, amount]);
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -237,7 +237,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
-                // : re-price the native-coin protocol fee at Approve.
+                // Re-price the native-coin protocol fee at Approve.
                 // The output was sized at compose, and the amount consensus
                 // requires moves inversely with the coin price, so a move while
                 // the confirm screen sits open leaves it short - which the
@@ -294,7 +294,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             return;
         }
         setFormError(null);
-        //  slice 2: with the flag on, software destroys go straight
+        // slice 2: with the flag on, software destroys go straight
         // to the single-encode confirm modal instead of the legacy review
         // stage. Hardware + watcher keep the legacy path for this slice.
         if (!isWatcherMode) {
@@ -391,7 +391,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 />,
             );
         }
-        // : signed but not broadcast. Nothing has been destroyed yet.
+        // Signed but not broadcast. Nothing has been destroyed yet.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="destroy" />);
         }
@@ -505,7 +505,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         );
     }
 
-    //  confirm page, rendered in place of the form (operator
+    // confirm page, rendered in place of the form (operator
     // direction 2026-07-22: the overlay modal didn't fit small/mobile
     // viewports). All other form state stays intact behind it; the
     // typed-DESTROY gate rides in the credentials block.
@@ -524,7 +524,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
                 // The typed-DESTROY gate is ANDed onto whichever credential the
-                // source needs: a password, or an available device .
+                // source needs: a password, or an available device.
                 credentialsReady={(isHwSource
                     ? hwStatus === 'available'
                     : (signerReady || password.length > 0)) && typedConfirmOk}

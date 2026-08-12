@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Which transaction carries the native-coin protocol fee .
+// Which transaction carries the native-coin protocol fee.
 //
 // The indexer validates the fee against the outputs of the transaction that
 // carries the ACTION (`data['TX_OUTPUTS']` in the handlers). On the one-tx
@@ -24,7 +24,7 @@
 //
 // THE FEE OUTPUT STAYS IN THE PHASE-1 BUILD, AND IS EMITTED ON PHASE 2
 //
-// : the first cut of this deferral removed the fee output from the
+// The first cut of this deferral removed the fee output from the
 // phase-1 `createTx` call as well as from the phase-1 transaction, and that
 // undersized the commit. The reveal's ONLY inputs are the phase-1 script
 // outputs, so a reveal-side output has to be paid for out of value the commit
@@ -32,7 +32,7 @@
 // reveal fails to balance - "Outputs are spending more than Inputs" - as soon
 // as the fee is larger than the commit's incidental slack. It reproduced on
 // litecoin-regtest at a ~0.069 LTC quote and hid on dogecoin-regtest at 2084
-// sats, which is why the DOGE half of  passed and the LTC half did not.
+// sats, which is why the DOGE half passed and the LTC half did not.
 //
 // The encoder already does the right thing with a customOutput on this lane
 // (xchain-encoder XChainEncoder.js, `revealCustomOutputsValue` /
@@ -99,7 +99,7 @@ export function isChunkEncoding(encoding) {
  */
 export function withoutCustomOutput(encoderOpts, output) {
     const outs = Array.isArray(encoderOpts?.customOutputs) ? encoderOpts.customOutputs : [];
-    // Exact satoshi match, not Number() equality (): this builds the EXPECTED-OUTPUT
+    // Exact satoshi match, not Number() equality: this builds the EXPECTED-OUTPUT
     // set the §5.3.2 tamper check consumes, so a >2^53 collapse here removes the wrong output
     // and reopens the same one-koinu hole from the other side.
     const kept = outs.filter((o) => !(o

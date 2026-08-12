@@ -1,17 +1,17 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-//  / : submitWithSigner puts the native-coin protocol fee on the
+// submitWithSigner puts the native-coin protocol fee on the
 // transaction that carries the ACTION, and still declares it to the phase-1
 // build so the reveal can afford it.
 //
 // Both halves are load-bearing and they pull in opposite directions:
 //   - emitted on the COMMIT, the indexer (which reads the reveal's outputs)
-//     rejects the action for not paying, and the fee is spent anyway ;
+// rejects the action for not paying, and the fee is spent anyway;
 //   - withheld from the phase-1 BUILD, the encoder reserves nothing in the
 //     script output the reveal spends, and the reveal cannot balance
 //     ("Outputs are spending more than Inputs") once the quote outgrows the
-//     commit's incidental slack (, measured on litecoin-regtest).
+// Commit's incidental slack (measured on litecoin-regtest).
 // So it is PASSED to createTx and EMITTED on spendP2sh, and only ever paid once
 // because the encoder skips emitting customOutputs on a chunk-lane commit.
 
@@ -96,7 +96,7 @@ describe('submitWithSigner native-fee placement on the chunk lane', () => {
     });
 });
 
-//  moved the PROTOCOL FEE to the reveal and nothing else, and the gap is a
+// a later change moved the PROTOCOL FEE to the reveal and nothing else, and the gap is a
 // money leak rather than a rejection: the encoder emits NO custom output on a
 // chunk-lane commit (it folds each one's value and reveal-side byte cost into the
 // script output), so any output the reveal is not handed was paid for and then
@@ -143,7 +143,7 @@ describe('submitWithSigner carries the WHOLE deferred set to the reveal', () => 
     });
 
     it('still declares it to the phase-1 build, or the reveal cannot afford it', async () => {
-        // 's other half. The reveal's only input is the commit's script
+        // that other half. The reveal's only input is the commit's script
         // output, so an output emitted there has to be paid for out of value the
         // commit reserved.
         const h = makeModeBHarness();

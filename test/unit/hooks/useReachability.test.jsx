@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  regression. A cold load, and later any re-mount after an idle
+// regression. A cold load, and later any re-mount after an idle
 // auto-lock, greeted the user with "You're offline. Can't reach the network."
 // while the explorer, the encoder and the hub were all answering 200 from the
 // same host. Wallet E2E sessions 18 and 19 saw it three times; one press of
@@ -105,7 +105,7 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
-describe('useReachability ', () => {
+describe('useReachability', () => {
     beforeEach(() => { vi.clearAllMocks(); });
 
     it('does not probe, and claims nothing, while the chain set is unseeded', async () => {
@@ -220,7 +220,7 @@ describe('useReachability ', () => {
     });
 });
 
-describe('ReachabilityBanner ', () => {
+describe('ReachabilityBanner', () => {
     it('stays silent on a cold load instead of blaming the user\'s connection', async () => {
         const check = vi.fn(async () => EMPTY_CHAIN_SET_ANSWER);
         const messaging = lockedThenUnlockedMessaging(check);

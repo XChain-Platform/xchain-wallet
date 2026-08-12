@@ -38,7 +38,7 @@ import { useReducedMotion } from './reducedMotion.js';
 export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated QR' }) {
     const [index, setIndex] = useState(0);
     const [urls, setUrls] = useState(/** @type {Record<number, string>} */ ({}));
-    // : the OS media query AND the in-app Settings → Appearance
+    // The OS media query AND the in-app Settings → Appearance
     // override, resolved in one place. The auto-advance below is a JS timer,
     // so no CSS rule can stop it on the user's behalf.
     const reducedMotion = useReducedMotion();

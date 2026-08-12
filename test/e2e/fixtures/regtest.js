@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Regtest venue helpers: the seam between a Playwright spec and a real
-// chain (, spec §8.6).
+// Chain (spec §8.6).
 //
 // WHY THESE SPECS ARE SEPARATE FROM THE REST OF THE SUITE
 //
@@ -19,7 +19,7 @@
 // not "missing regtest wiring", is why §8.6's signing legs went unrun
 // for months.
 //
-// : the dev server runs the mock because it is TOLD to
+// The dev server runs the mock because it is TOLD to
 // (`VITE_XCHAIN_REAL_SDK=0`, pinned in `playwright.config.js`), not
 // because the real SDK fails to load there. It used to be the latter -
 // vite dev threw `require is not defined` on the CJS import and
@@ -38,7 +38,7 @@
 //
 // VENUE CONTRACT
 //
-// These specs need the devhost 3-chain regtest stack reachable on
+// These specs need the shared 3-chain regtest stack reachable on
 // localhost at the ports the wallet's own regtest descriptors already
 // name (explorer 18080, hub 10000, shared by all three chains; encoder
 // 3023/3223/3123 for BTC/LTC/DOGE) plus that chain's regtest-miner on
@@ -48,7 +48,7 @@
 //   ssh -N -L 18080:localhost:18080 -L 10000:localhost:10000 \
 //          -L 3023:localhost:3023 -L 3025:localhost:3025 \
 //          -L 3223:localhost:3223 -L 3225:localhost:3225 \
-//          -L 3123:localhost:3123 -L 3125:localhost:3125 jdog@devhost
+//          -L 3123:localhost:3123 -L 3125:localhost:3125 jdog@localhost
 //
 // `assertVenueReachable()` (called from global setup) fails once, fast,
 // with that command in the message, rather than letting every spec die
@@ -96,7 +96,7 @@ const VENUES = {
     RBTC: {
         encoderPort: 3023, minerPort: 3025,
         chainId: 'bitcoin-regtest', chainLabel: 'Bitcoin',
-        // The container `seedPrices()` runs its price seed inside . Named
+        // The container `seedPrices()` runs its price seed inside. Named
         // here rather than derived from chainId because the stack's naming uses
         // the coin's full name where the wallet's chain id does too, but there is
         // no rule saying it always will - a rename should break on a missing key,
@@ -205,7 +205,7 @@ export async function assertVenueReachable() {
     const hint =
         `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
         + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
-        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} jdog@devhost`;
+        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} jdog@localhost`;
 
     let status;
     try {
@@ -244,7 +244,7 @@ export async function assertVenueReachable() {
  * it. Overridable for a stack that lives somewhere else; never a credential,
  * just a host, and the key is the operator's own agent.
  */
-const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'jdog@devhost';
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'jdog@localhost';
 
 /**
  * Whether this run may write a price snapshot at all.
@@ -270,7 +270,7 @@ const PRICE_SEED_SUPPRESSED =
  *
  * Exported because `seedPrices()` deliberately refuses to write over a venue
  * that already prices, which is right for setup and useless for the one spec
- * that must MOVE a price it just used: the  Approve-time re-quote can
+ * that must MOVE a price it just used: the Approve-time re-quote can
  * only be driven by changing the fee between composing and approving. That
  * spec drives the write itself, through this same credential-free path.
  */
@@ -432,7 +432,7 @@ async function priceHealth(venue) {
 
 /**
  * Guarantees this venue can price a fee-bearing action, or fails naming that as
- * the reason .
+ * the reason.
  *
  * WHAT THIS REPLACES. Nothing on a regtest stack publishes `price_snapshots` -
  * those rows come from a validator federation and there is none here - so until
@@ -447,7 +447,7 @@ async function priceHealth(venue) {
  *   1. CHECK FIRST, and return without writing anything if the venue already
  *      prices. This is not an optimization. A synthetic round outranks every
  *      derived round forever (selection is `ORDER BY round_number DESC`), so on
- *      a venue whose hub really does publish the pair - the end state 
+ * a venue whose hub really does publish the pair - the end state
  *      step 8 is driving at - an unconditional seed would silently replace real
  *      data with a fixture and every green run after it would prove nothing.
  *   2. SEED, delegated over SSH into the indexer container so no credential
@@ -470,7 +470,7 @@ export async function seedPrices({ attempts = 4 } = {}) {
     }
 
     // Step 1: does the venue already answer, and will it still answer at the
-    // approve step? "Answers now" was the whole test until , and it is not
+    // approve step? "Answers now" was the whole test until, and it is not
     // enough: the run that found this composed a bet against a healthy quote and
     // failed minutes later on "no current oracle price for LTC/USD". Off Bitcoin
     // the window is spent in CHAIN seconds, and an idle LTC/DOGE chain burns them
@@ -665,14 +665,14 @@ const PREFLIGHT_WARM_MS = 750;
  * slow. It USED to be worse: `DRYRUN_UNAVAILABLE` is an `info` finding, and
  * `PreflightPanel` rendered only errors, warnings and the unverified list, so
  * nothing on the screen distinguished "the network said this is fine" from
- * "the network never answered".  fixed that half - the panel now reads
+ * "the network never answered". a later change fixed that half - the panel now reads
  * "Local checks only" with an explicit unreached notice, and carries
  * `data-dryrun="unreached"` - so a spec that hits the slow path now FAILS
  * loudly instead of asserting against a false pass. Warming is still the right
  * move: a spec that waits and hopes is a coin flip on this venue.
  *
  * The lever is that the indexer MEMOIZES the verdict per block height
- * , which is measurable: the same query costs seconds cold and ~10ms
+ *, which is measurable: the same query costs seconds cold and ~10ms
  * warm. So this asks the endpoint for exactly what the wallet is about to ask
  * it - same action, same params, same source, same query shape as
  * `explorer.getPreflight` - until the answer comes back warm.
@@ -733,7 +733,7 @@ export async function warmPreflight({ action, params, source }, timeoutMs = 120_
 /**
  * Reads a native-coin fee quote, retrying past the venue's cold-path stall.
  *
- * WHY THIS EXISTS, measured on the devhost BTC regtest venue 2026-08-02.
+ * WHY THIS EXISTS, measured on the shared BTC regtest venue 2026-08-02.
  * `/api/feequote` intermittently answers `502 {"code":"UPSTREAM_ERROR"}`, and
  * the explorer logs `processFeeQuoteRequest error: timeout of 5000ms exceeded`
  * for each one. Twelve identical calls gave 10 valid / 2 failed, and the
@@ -787,7 +787,7 @@ export async function warmFeeQuote({ action, params, source, feeOutputSats }, ti
     }
     throw new Error(
         `fee quote for ${action} never came back valid within ${timeoutMs}ms. Every attempt was `
-        + `UPSTREAM_ERROR (the explorer's 5s indexer-hop timeout,) rather than an `
+        + `UPSTREAM_ERROR (the explorer's 5s indexer-hop timeout,) rather than an`
         + `invalid quote, so this is venue state and not a wallet defect - last: `
         + `${JSON.stringify(last)}`,
     );
@@ -837,7 +837,7 @@ export async function failBroadcast(page, kind) {
 /**
  * Asserts the chain recorded NO XChain action for `txid`.
  *
- * : a plain native-coin payment must be an ordinary payment. It used
+ * A plain native-coin payment must be an ordinary payment. It used
  * to carry a `SEND|0|BTC|...` OP_RETURN that the indexer could only ever
  * record as `invalid: TICK (unknown)`, so "did an action get written?" is
  * the question that actually distinguishes the fix from the bug - a
@@ -1116,7 +1116,7 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_00
 export async function switchToRegtest(page, password) {
     // One UI walk for every shell. `openSettings` absorbs the only difference:
     // web/desktop navigate, the MV3 popup goes through the command palette
-    // because it has no nav surface .
+    // because it has no nav surface.
     await openSettings(page);
 
     await page.getByRole('button', { name: /^Developer Mode/ }).click();
@@ -1132,7 +1132,7 @@ export async function switchToRegtest(page, password) {
     }
     await page.getByRole('button', { name: 'Back to settings' }).click();
 
-    // : this select now derives an address on each chain of the
+    // This select now derives an address on each chain of the
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
@@ -1165,7 +1165,7 @@ export async function unlockAfterReload(page, password) {
     // Home's balance hero, not the Lock button: the popup renders no nav at
     // all, and below 600px Lock sits inside the closed More sheet.
     // Shared budget, not a hand-picked number: this is the far side of an
-    // Argon2id unlock ().
+    // Argon2id unlock  .
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 

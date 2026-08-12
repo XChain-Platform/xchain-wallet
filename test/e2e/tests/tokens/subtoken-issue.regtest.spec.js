@@ -33,7 +33,7 @@
 // the wallet knows that. It quotes by handing the composed params to the venue,
 // so a wizard that composed the child's name without joining the parent (or
 // quoted before the join) would price this action at DOUBLE and disclose the
-// wrong number under , while still broadcasting something the chain
+// wrong number under, while still broadcasting something the chain
 // accepts. A green "the token exists" would hide that completely, which is why
 // the projected protocol fee is compared against the SUBTOKEN quote and
 // asserted to differ from the plain-ISSUE one.
@@ -69,7 +69,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** Every leg here (two ISSUEs, plus a refused one) pays a real coin fee . */
+/** Every leg here (two ISSUEs, plus a refused one) pays a real coin fee. */
 const FUNDING = 3;
 const STAMP = Date.now().toString().slice(-6);
 /** The parent, issued through the DIRECT form, which is the only one with a source picker. */
@@ -132,7 +132,7 @@ async function mineIfPending() {
  *
  * Waits on the ACTION LIST and fetches the detail only for an index the list
  * has already returned: a speculative GET of an index that does not exist yet
- * is memoised blank for the life of the explorer process (§3.6, D-127/).
+ * is memoised blank for the life of the explorer process (§3.6, D-127).
  */
 async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
@@ -224,7 +224,7 @@ async function screenNetworkFeeSats(page) {
 /**
  * The protocol-fee row inside the balance projection, in satoshis, or null.
  *
- * Read out of the deltas panel because that is where 's fix put it: the
+ * Read out of the deltas panel because that is where that fix put it: the
  * row rides beside the coin balance it was folded into, so a fee claimed in
  * words but missing from the projection is exactly what this reads for.
  */
@@ -457,12 +457,12 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
 
             // THE ASSERTION THIS TEST EXISTS FOR. Litecoin forces the native
-            // lane , so the cost is disclosed as a coin row in the
+            // lane, so the cost is disclosed as a coin row in the
             // projection. It must be the SUBTOKEN quote.
             const projected = await projectedProtocolFeeSats(page);
             expect(projected,
                 'the balance projection carries no protocol-fee row, so the screen is showing the '
-                + 'miner fee as the whole cost of a fee-bearing action ')
+                + 'miner fee as the whole cost of a fee-bearing action')
                 .toBe(Number(childQuote.requiredFeeSats));
             expect(projected,
                 'the screen priced this subtoken as a PLAIN ISSUE - double what the chain charges. '
@@ -496,7 +496,7 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
                 'issuing the child moved the parent supply')
                 .toBe(PARENT_SUPPLY);
 
-            // 's subtraction: what it cost, against what was disclosed.
+            // that subtraction: what it cost, against what was disclosed.
             const satsAfter = await coinBalanceSats(owner);
             expect(satsBefore - satsAfter,
                 `the subtoken cost ${satsBefore - satsAfter} sats against a screen that disclosed `

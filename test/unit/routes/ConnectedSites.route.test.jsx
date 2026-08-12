@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Connected Sites as a top-level route.
+// Connected Sites as a top-level route.
 //
 // The route is a header plus the shared ConnectedSitesSection. What
 // matters is that it mounts the SECTION (so the standalone screen and

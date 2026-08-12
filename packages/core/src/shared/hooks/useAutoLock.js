@@ -31,7 +31,7 @@ import { useEffect, useRef } from 'react';
  * in-flight). All three shells (popup, web, desktop) opt in through
  * `useAutoLockPolicy`, which owns the enable decision and the timeout.
  *
- *  - MOUNT POINT IS LOAD-BEARING: the effect cleanup cancels the
+ * - MOUNT POINT IS LOAD-BEARING: the effect cleanup cancels the
  * pending timer, so this hook only counts idle time while its caller is
  * mounted. Call it (via useAutoLockPolicy) from a shell-level component
  * that outlives navigation, never from a route: wiring it into Home

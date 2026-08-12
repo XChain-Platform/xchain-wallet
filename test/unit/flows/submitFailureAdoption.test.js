@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  /  / §11.5: every authoring form turns a failed submit into a
+// §11.5: every authoring form turns a failed submit into a
 // sentence through ONE helper, and every form that calls that helper imports it.
 //
 // Both halves were found by driving §11.5's native-fee lane against a payer who
@@ -15,7 +15,7 @@
 //   D-121. Nine authoring surfaces still hand-rolled the mapping - they
 //     translated NativeFeeForfeitError and passed everything else through as
 //     `err.message`. So an encoder build failure reached the user as the wire
-//     wording  exists to remove. Measured on the Issue form on Bitcoin
+// wording exists to remove. Measured on the Issue form on Bitcoin
 //     regtest: "Encoder RPC error: insufficient funds: selected inputs total
 //     1000 but 3206 is required (outputs 2000 + fee 1206)". The facts are all
 //     there; the sentence is not, and on other codes it is worse - a stale
@@ -63,7 +63,7 @@ function importsIdentifier(src, name) {
     return imports.some((stmt) => new RegExp(`\\b${name}\\b`).test(stmt));
 }
 
-describe(': one helper turns a failed submit into a sentence', () => {
+describe('One helper turns a failed submit into a sentence', () => {
     it('finds the shared surfaces (guards against an empty sweep)', () => {
         expect(SOURCES.length).toBeGreaterThan(50);
     });
@@ -91,7 +91,7 @@ describe(': one helper turns a failed submit into a sentence', () => {
             expect(/submitFailureMessage\s*\(/.test(src),
                 `${rel} calls nativeFeeErrorMessage directly. That maps the native-fee refusal and `
                 + 'lets every other failure through as wire wording - the encoder\'s own developer '
-                + 'strings , and a params-builder refusal (D-118). submitFailureMessage is '
+                + 'strings, and a params-builder refusal (D-118). submitFailureMessage is'
                 + 'the single place that decision belongs.')
                 .toBe(true);
         });

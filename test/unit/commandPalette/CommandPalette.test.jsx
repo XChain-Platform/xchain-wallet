@@ -131,7 +131,7 @@ describe('CommandPalette', () => {
         // Score-sorted results can interleave categories, so the same
         // category renders as several consecutive-run groups. Group keys
         // must stay unique or React leaves zombie option rows behind on
-        // the next keystroke (the  e2e regression).
+        // the next keystroke (the e2e regression).
         const mk = (id, category, title) => ({ id, category, title, run: () => {} });
         const commands = [
             mk('a1', 'Navigate', 'alpha one'),

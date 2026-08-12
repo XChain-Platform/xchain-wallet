@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Release parity for lanes that have already shipped ( §6,  §2).
+// Release parity for lanes that have already shipped (§6, §2).
 //
 // WHAT THIS EXISTS TO STOP. expected-artifacts.txt has two strengths per
 // row, and every store lane starts `optional` because a lane that has
@@ -19,7 +19,7 @@
 // good, verify.sh green - while every direct-APK install sits on a
 // version that will never receive the fix it was told to expect.
 //
-// That is the  §8 defect one level up: the gate cannot fail on an
+// That is the §8 defect one level up: the gate cannot fail on an
 // artifact it was never told to want. tools/release/shipped-lanes.txt is
 // where a lane's shipping state is declared, and flipping one word is
 // what arms the requirement.
@@ -136,7 +136,7 @@ const BASE = [
     'mas       NOT-SHIPPED   *-mas.pkg',
     'msstore   NOT-SHIPPED   *-appx.appx',
     'snap      NOT-SHIPPED   *.snap',
-    //  declared a second direct APK as an `optional` row, and every
+    // declared a second direct APK as an `optional` row, and every
     // optional row must be claimed by SOME lane or the gate refuses. Its own
     // NOT-SHIPPED lane is what lets the declaration exist before the artifact
     // does; without this line the fixture fails that check rather than the
@@ -185,7 +185,7 @@ try {
             r.ok && /shipped-lane gate ok/.test(r.out), r.out);
     }
 
-    // 4. The asymmetric case  §6 is actually about: the store lane
+    // 4. The asymmetric case §6 is actually about: the store lane
     //    ships and the DIRECT lane is left behind. The AAB satisfies one
     //    glob; nothing about that should excuse the APK.
     {
@@ -224,7 +224,7 @@ try {
         // Drop exactly ONE lane, by name rather than by slicing the list. A
         // positional slice made this case quietly depend on how many lanes
         // exist and on the order expected-artifacts.txt lists their globs in:
-        // adding 's android-full lane changed which unclaimed row the
+        // adding that android-full lane changed which unclaimed row the
         // gate reported first, so the case failed on the artifact it named
         // rather than on the property it is actually about.
         const r = gate(stage(), lanes(
@@ -312,7 +312,7 @@ if (failures > 0) {
 
 assert.ok(true);
 console.log(
-    'OK: release shipped-lane smoke ( §6,  §2:'
+    'OK: release shipped-lane smoke (§6, §2:'
     + ' tools/release/shipped-lanes.txt declares which lanes have users, and'
     + ' sign.sh refuses a release that drops one; a desktop-only release still'
     + ' passes while every lane is NOT-SHIPPED, so the Android rows can stay'

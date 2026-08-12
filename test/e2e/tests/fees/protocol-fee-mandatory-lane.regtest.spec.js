@@ -11,7 +11,7 @@
 // Campaign §11.1 + §11.2's owed browser half, OFF BITCOIN - the sibling of
 // `protocol-fee-disclosure.regtest.spec.js` and the half that chain cannot run.
 //
-// WHY A SECOND FILE RATHER THAN A FLAG. Off Bitcoin,  makes the
+// WHY A SECOND FILE RATHER THAN A FLAG. Off Bitcoin, a later change makes the
 // native-coin output the ONLY way to pay a protocol fee, so `useNativeFee`
 // forces the flag on and the fee row is a statement instead of a choice. That
 // makes this venue the wrong place to test a fee LANE (there is one) and the
@@ -31,7 +31,7 @@
 //   LEG 1, THE PRICED ACTION. An ISSUE on Litecoin quotes a real coin fee -
 //     6,666,667 sats at this venue's seeded $30/LTC, which is three orders of
 //     magnitude above the 5,460-sat dust floor that makes small fees unpayable
-//     here ((b)). The confirm screen must project it as a Protocol fee row
+// here ((b)). The confirm screen must project it as a Protocol fee row
 //     ALONGSIDE the network fee and NOT as an XCHAIN line (the fee is a coin
 //     debit on this chain, and a second XCHAIN figure would read as a second
 //     charge). Then the payer's satoshis must fall by exactly
@@ -40,13 +40,13 @@
 //
 //   LEG 2, THE UNPRICED ACTION, which is §11.2's owed browser half. The fee row
 //     on this chain used to state that a fee would be paid and forfeited on
-//     actions that carry NO fee at all (D-114/) - MINT, BROADCAST,
+// actions that carry NO fee at all (D-114) - MINT, BROADCAST,
 //     DESTROY, SLEEP, LIST, LINK, PUBLISH, ATTACH, and the ordinary
 //     under-90-day ORDER/SWAP/DISPENSER. This drives the CONFIRM screen for one
 //     of them and asks the chain what it cost: no fee stated, no fee projected,
 //     and no coin output beyond the miner's. Deliberately scoped to the confirm
 //     screen and NOT to the authoring row's wording, which a concurrent session
-//     was still editing for  while this was written; asserting on
+// was still editing for while this was written; asserting on
 //     half-written copy would report on their draft rather than on the product.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
@@ -103,7 +103,7 @@ async function mineIfPending() {
 /**
  * The indexed action for a txid. Looked up in the LIST, never by probing an
  * index: a speculative `GET /api/action/<index>` before the indexer writes its
- * row poisons that index permanently (§3.6 / ).
+ * row poisons that index permanently (§3.6).
  */
 async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
@@ -174,7 +174,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
         // a silent skip on the wrong venue is how a suite reports coverage it
         // does not have.
         test.skip(REGTEST_COIN === 'RBTC',
-            'this spec is about the chain where the coin fee is MANDATORY ; '
+            'this spec is about the chain where the coin fee is MANDATORY;'
             + 'run it with XC_REGTEST_COIN=RLTC or RDOGE');
     });
 
@@ -204,7 +204,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             const quote = await feeQuote('ISSUE', `${TICK}|${SUPPLY}|0|0|0`);
             expect(quote?.valid,
                 `the venue cannot price this action (${quote?.status}); this is venue state, not a `
-                + 'wallet defect - see campaign §3.2 / ')
+                + 'wallet defect - see campaign §3.2')
                 .toBe(true);
             quotedSats = Number(quote.requiredFeeSats);
             // Above the dust floor by a wide margin, which is the condition
@@ -224,12 +224,12 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
 
             // There is nothing to opt into on this chain, and that is the
-            // premise of the whole file:  forces the coin lane, so the
+            // premise of the whole file: a later change forces the coin lane, so the
             // row is a statement and no switch exists to flip.
             await expect(
                 main.getByRole('switch', { name: /^Pay protocol fee in/ })
                     .or(main.getByRole('checkbox', { name: /^Pay protocol fee in/ })),
-                `${COIN} offers a fee-lane choice, so 's mandatory rule is not in force here`)
+                `${COIN} offers a fee-lane choice, so mandatory rule is not in force here`)
                 .toHaveCount(0);
 
             const password = main.getByLabel('Password', { exact: true });
@@ -249,7 +249,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             const projectedFeeSats = await projectedProtocolFeeSats(page);
             expect(projectedFeeSats,
                 'the balance projection carries no protocol-fee row, so the screen shows the miner fee '
-                + 'as the whole cost -  in the lane where the fee is a real output that '
+                + 'as the whole cost - in the lane where the fee is a real output that'
                 + 'inputs-minus-outputs cannot see')
                 .toBe(quotedSats);
 
@@ -268,7 +268,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(action.fee?.native_coin)).toBe(COIN);
 
             // THE MEASUREMENT §11.1 OWES: what the screen said this costs
-            // against what it cost. Before  these differed silently by
+            // against what it cost. Before these differed silently by
             // the whole protocol fee.
             const satsAfter = await coinBalanceSats(source);
             expect(satsBefore - satsAfter,
@@ -304,7 +304,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await expect(page.getByTestId('confirm-protocol-fee'),
                 'the confirm screen states a protocol fee on an action this venue prices at zero, which '
-                + 'is D-114/ reaching the screen the user signs from')
+                + 'is D-114 reaching the screen the user signs from')
                 .toHaveCount(0);
             expect(await projectedProtocolFeeSats(page),
                 'the projection carries a protocol-fee row for a fee of zero')

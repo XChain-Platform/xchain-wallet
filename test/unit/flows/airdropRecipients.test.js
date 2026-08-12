@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the airdrop recipient parser must validate NETWORK, not only form.
+// The airdrop recipient parser must validate NETWORK, not only form.
 //
 // Wallet E2E session 19 pasted five lines into Airdrop on a REGTEST wallet:
 // two regtest addresses, one duplicate, one MAINNET bech32, one garbage
@@ -43,7 +43,7 @@ const GARBAGE = 'notanaddress';
 const BTC_REGTEST = { coin: 'bitcoin', network: 'regtest' };
 const BTC_MAINNET = { coin: 'bitcoin', network: 'mainnet' };
 
-describe('classifyRecipients - network-aware validation ', () => {
+describe('classifyRecipients - network-aware validation', () => {
     it('does not count a mainnet address as valid on a regtest wallet', () => {
         const out = classifyRecipients([
             REGTEST_BECH32,
@@ -119,7 +119,7 @@ describe('classifyRecipients - network-aware validation ', () => {
     });
 });
 
-describe('reconcileStoredList - post-index count check ', () => {
+describe('reconcileStoredList - post-index count check', () => {
     it('reports the address the chain dropped', () => {
         const out = reconcileStoredList(
             [REGTEST_BECH32, REGTEST_LEGACY, MAINNET_BECH32],

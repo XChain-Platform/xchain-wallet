@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  /  (wallet E2E session 20, D-89 + D-90). The BROADCAST form
+// (wallet E2E session 20, D-89 + D-90). The BROADCAST form
 // packs two text fields into one protocol pair: with a feed name set, the
 // message body becomes the MEMO. The wire version was picked from VALUE and
 // FEE only, and MEMO exists in v1/v2/v3 but NOT in v0
@@ -17,7 +17,7 @@
 // controlled pair: action 1152 "BROADCAST|0|S20FEED" with memo null against
 // action 1153 "BROADCAST|2|S20FEED|1.5|MEMO-SURVIVES-TEST", identical input
 // except the fee. Both were valid, both paid the protocol fee, and the
-// confirm screen showed the body in neither. Its sibling  lives in the
+// confirm screen showed the body in neither. Its sibling lives in the
 // same branch: the memo parts were joined with ' | ', and '|' is the field
 // delimiter the SDK refuses, so the wallet's own timestamp checkbox made the
 // action unsendable.
@@ -145,7 +145,7 @@ async function composedParams() {
 beforeEach(() => { composeForConfirm = undefined; });
 afterEach(() => cleanup());
 
-describe('BroadcastForm keeps the typed body on the wire ', () => {
+describe('BroadcastForm keeps the typed body on the wire', () => {
     it('picks a MEMO-carrying version for a feed broadcast with no feed fee', async () => {
         mountForm();
         await fill({ feed: 'S20FEED', body: 'MEMO-SURVIVES-TEST' });
@@ -208,7 +208,7 @@ describe('BroadcastForm keeps the typed body on the wire ', () => {
     });
 });
 
-describe('BroadcastForm builds a sendable MEMO ', () => {
+describe('BroadcastForm builds a sendable MEMO', () => {
     it('joins the timestamp and body without the field delimiter', async () => {
         mountForm();
         await fill({ feed: 'S20FEED', body: 'MEMO-SURVIVES-TEST', timestamp: true });
@@ -232,15 +232,15 @@ describe('BroadcastForm builds a sendable MEMO ', () => {
     });
 });
 
-//  (wallet E2E session 25, D-114). BROADCAST has no gas-schedule entry:
+// (wallet E2E session 25, D-114). BROADCAST has no gas-schedule entry:
 // `/RLTC/api/feequote?action=BROADCAST` answers `xchainFee 0.00000000`,
 // `requiredFeeSats 0`, and applyNativeFeePreflight builds no fee output for it.
-// The SCREEN said otherwise. On LTC, where  turns the fee row into a
+// The SCREEN said otherwise. On LTC, where a later change turns the fee row into a
 // statement rather than a choice, this form read "Protocol fee is paid in LTC ·
 // LTC is the only way to pay the protocol fee on this chain. The fee is sent
 // on-chain and is not refunded if the network rejects this transaction" for an
 // action that is never charged anything.
-describe(' the fee row does not promise a fee BROADCAST never pays', () => {
+describe('the fee row does not promise a fee BROADCAST never pays', () => {
     it('states the chain rule conditionally on LTC instead of asserting a charge', async () => {
         mountForm(LTC_CHAIN, LTC_ADDRESSES);
         await screen.findByLabelText(/^Feed name/);

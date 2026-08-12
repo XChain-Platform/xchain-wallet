@@ -1,7 +1,7 @@
 # Copyright © 2025–2026 Dankest, LLC
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Add the AppUITests target to the generated iOS project .
+# Add the AppUITests target to the generated iOS project.
 #
 # WHY THIS IS A SCRIPT AND NOT A COMMITTED PBXPROJ EDIT. The `ios/` project
 # was generated from the Capacitor template (S1) and is regenerated whenever
@@ -37,7 +37,7 @@ end
 
 # The harness drives the real app through its real onboarding. It does NOT
 # get a launch argument that seeds state, and the app has no branch keyed on
-# one:  §2.1 forbids any build that behaves differently when it thinks
+# one: §2.1 forbids any build that behaves differently when it thinks
 # it is being tested, and a screenshot harness is not an exception to that.
 existing.build_configurations.each do |config|
   config.build_settings.merge!(
@@ -91,7 +91,7 @@ puts "add-uitest-target: wrote shared scheme #{TARGET_NAME}"
 # Xcode auto-generates implicit schemes for a project that has NO shared ones.
 # The moment the scheme above is written, that auto-generation stops, and
 # `xcodebuild -scheme App` starts failing with "does not contain a scheme named
-# App" - which breaks the release lane ( §5) as a side effect of adding
+# App" - which breaks the release lane (§5) as a side effect of adding
 # a screenshot harness. Writing App explicitly restores it and pins it.
 app_scheme_path = File.join(project_path, 'xcshareddata', 'xcschemes', 'App.xcscheme')
 unless File.exist?(app_scheme_path)

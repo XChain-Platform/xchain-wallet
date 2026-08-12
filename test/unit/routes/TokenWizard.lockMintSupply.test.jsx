@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the COLLECTIBLE and MEME templates both promise a supply that can
+// The COLLECTIBLE and MEME templates both promise a supply that can
 // never grow. Two locks do not deliver that promise:
 //
 //   LOCK_MAX_SUPPLY  freezes the cap.
@@ -91,7 +91,7 @@ async function composedParams() {
 
 afterEach(() => cleanup());
 
-describe('TokenWizard fixed-supply templates lock MINT_SUPPLY ', () => {
+describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
     it('the collectible composes all three locks, so its 1-of-1 needs no flag day', async () => {
         mountWizard();
         await pickTemplate('Collectible');

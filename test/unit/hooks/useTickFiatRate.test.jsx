@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// . `useTickFiatRate` is what an AmountField consumer should call:
+//`useTickFiatRate` is what an AmountField consumer should call:
 // it prices the tick the field is holding rather than the chain coin.
 // The bug it closes was a token amount rendered at the coin's rate
 // (50,000 XCHAIN shown as billions of dollars), so the tests care about

@@ -12,7 +12,7 @@
 //
 // COINPAY needs a native-coin output paying the matched seller. This smoke used
 // to pin the form BUILDING that output itself and passing it to the generic
-// `buildActionPsbtRequest`, which is exactly the shape  removed: the
+// `buildActionPsbtRequest`, which is exactly the shape a later change removed: the
 // generic builder does no verification, so a watcher could be talked into
 // encoding a payment to any payee/amount its form state happened to hold, and an
 // air-gapped signer only ever sees the outputs it is handed.

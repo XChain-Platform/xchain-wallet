@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  P8 BET write composers. The property that matters most here is that
+// P8 BET write composers. The property that matters most here is that
 // each composer is nailed to ONE sdk.betting builder: a resolve and a place-bet
 // differ on the wire only by AMOUNT, so a composer reaching the wrong builder
 // would turn an intended stake into a payout decision (or the reverse).
@@ -16,7 +16,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // The builder-selection tests below never reach submitAction (they stop at the
-// missing signing source), so stubbing it here only affects the  block,
+// missing signing source), so stubbing it here only affects the block,
 // which is the one that needs to read the encoderOpts the flow builds.
 const { submitCalls } = vi.hoisted(() => ({ submitCalls: [] }));
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
@@ -120,7 +120,7 @@ describe('flows/betActions up-front guards', () => {
     });
 });
 
-// : the native-coin protocol fee. BET charges on create (v0) and place
+// The native-coin protocol fee. BET charges on create (v0) and place
 // (v2), and on LTC/DOGE a native-coin output is the ONLY way to pay a protocol
 // fee, so a flow that dropped this flag composed a guaranteed-invalid action
 // that still cost a miner fee.

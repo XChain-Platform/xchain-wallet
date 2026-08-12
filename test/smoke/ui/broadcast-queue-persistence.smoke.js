@@ -118,7 +118,7 @@ assert.ok(
     broadcastBlock && /q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
     'broadcast.queue.broadcast persists after splicing the entry',
 );
-//  §5.3: this queue retries on demand, so it needs the same permanence
+// This queue retries on demand, so it needs the same permanence
 // verdict the core drain applies. A signed transaction whose inputs are gone
 // can never confirm; leaving it listed invites the user to press "Broadcast
 // now" forever on dead bytes, and the recovery is a fresh compose. Transient

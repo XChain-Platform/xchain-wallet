@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// pairPartner (§20.5 / Cluster W FOLLOWUP 6, ): the watcher /
+// pairPartner (§20.5 / Cluster W FOLLOWUP 6): the watcher /
 // signer auto-pairing lane.
 //
 // THE PROBLEM

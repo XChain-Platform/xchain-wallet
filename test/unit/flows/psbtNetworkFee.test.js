@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5.2.5: the confirm surface shows the fee the composed PSBT actually
+// The confirm surface shows the fee the composed PSBT actually
 // pays, not a rate-table estimate. The whole point of the single-encode
 // pipeline is that what the user sees is what gets signed, and the fee is part
 // of what they agree to.
@@ -71,7 +71,7 @@ describe('exactNetworkFeeSats', () => {
     });
 });
 
-// : on the P2SH/P2WSH chunk lanes an action is TWO transactions, and the
+// On the P2SH/P2WSH chunk lanes an action is TWO transactions, and the
 // composed PSBT the confirm screen inspects is only the first. Measured
 // on-chain in wallet E2E session 20 while creating BET market #1160: the screen
 // said 0.00000546 BTC and the address moved 0.00001092, because the funding tx
@@ -127,7 +127,7 @@ describe('totalNetworkFeeSats', () => {
     it('excludes the native-coin protocol fee the reveal re-emits', () => {
         // The reveal spends the carrier to pay its miner fee AND the
         // FEE_DESTINATION output. Only the miner half is a network fee; the
-        // rest is the protocol fee, which is 's to surface.
+        // rest is the protocol fee, which is that to surface.
         expect(totalNetworkFeeSats({
             inputs: [{ value: 100000 }],
             outputs: [

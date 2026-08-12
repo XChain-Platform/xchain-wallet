@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The other half of : nothing OFFERS the DEX when the build has none.
+// The other half: nothing OFFERS the DEX when the build has none.
 //
 // `storeSurfaces.test.js` proves the route components are out of the bundle.
 // That is not the same as proving a user (or an app reviewer) sees no way in,
@@ -103,7 +103,7 @@ describe('the command palette', () => {
     });
 });
 
-// : the same failure one level down. Home's quick-action row hides
+// The same failure one level down. Home's quick-action row hides
 // Exchange on a store build, but kept its "More" button, whose only entry is
 // the DEX-gated Swap. The button survived into a build with nothing behind it,
 // so tapping it opened a menu whose single row read "No additional actions".

@@ -35,7 +35,7 @@ assert.ok(/@param \{number\} \[props\.chainTip\]/.test(timelineSrc),
 assert.ok(/@param \{number\} \[props\.indexerWatermark\]/.test(timelineSrc),
     'TxStatusTimeline JSDoc documents the indexerWatermark prop');
 
-// 1b. : the stages array carries the full §28.3 ladder, including
+// 1b.: the stages array carries the full §28.3 ladder, including
 //     the 'signed' (first) and 'indexed' (last) stages.
 for (const key of ['signed', 'broadcast', 'mempool', 'confirmed', 'indexed']) {
     assert.ok(new RegExp(`key: '${key}'`).test(timelineSrc),
@@ -86,7 +86,7 @@ assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark,
 assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} indexerWatermark=\{indexerWatermark\} \/>/.test(historySrc),
     'DetailCard forwards chainTip + indexerWatermark to TxStatusTimeline');
 
-// : History.jsx fetches the per-chain indexer watermark and threads
+// History.jsx fetches the per-chain indexer watermark and threads
 // it through every EntryRow alongside chainTip.
 assert.ok(/const \[indexerWatermarkByChainId, setIndexerWatermarkByChainId\] = useState/.test(historySrc),
     'History.jsx holds indexerWatermarkByChainId state');

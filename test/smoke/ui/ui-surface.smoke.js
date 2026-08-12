@@ -59,13 +59,13 @@ assert.ok(
     tokens.includes('@media (prefers-reduced-motion: reduce)'),
     'tokens.css has reduced-motion block',
 );
-// : tokens.css darkens the sampled brand value (#1E90C7, still
+// Tokens.css darkens the sampled brand value (#1E90C7, still
 // branding.js ACCENT_PRIMARY) one step to clear WCAG AA as UI text/button
 // colour, so it is no longer a literal match -- just check it stays in
 // the same accent-blue hue family the AA fix used.
 assert.ok(
     tokens.includes('#1A7BAC'),
-    'tokens.css accent-primary is the  AA-compliant shade',
+    'tokens.css accent-primary is the AA-compliant shade',
 );
 assert.ok(
     tokens.includes('#7B2C8F'),

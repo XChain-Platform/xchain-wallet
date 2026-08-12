@@ -24,7 +24,7 @@ function makeProvider(overrides = {}) {
     return {
         isXChainWallet: true,
         // A bridge-spec ConnectSuccess. The banner reads the `ok` flag now,
-        // because a refusal resolves rather than throws ().
+        // because a refusal resolves rather than throws.
         connect: vi.fn().mockResolvedValue({
             ok: true,
             version: '0.1.0',
@@ -103,7 +103,7 @@ describe('<ExtensionBanner>', () => {
         expect(screen.queryByText(/Using your extension wallet/i)).toBeNull();
     });
 
-    // The shape a real refusal actually arrives in (): the promise
+    // The shape a real refusal actually arrives in: the promise
     // RESOLVES with `ok: false`. Read as "did not throw", this flipped the
     // banner into its active state with no session behind it.
     it('shows an error and stays on the web app when the connect RESOLVES ok:false', async () => {

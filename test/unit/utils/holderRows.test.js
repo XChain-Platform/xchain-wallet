@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// D-76 / : ManageToken accepted only a bare array from
+// D-76: ManageToken accepted only a bare array from
 // getHoldersForToken, but the explorer answers with an envelope
 // (`{ tick, supply, total, data: [...] }`), so every token showed
 // "Holders 0" / "No holders yet" - including one whose only holder was the

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  regression. Theme, Reduced motion, Hide small balances and Learn
+// regression. Theme, Reduced motion, Hide small balances and Learn
 // Mode all persisted, validated and appeared in the diagnostic dump while
 // NOTHING read them: Theme=Light survived a reload with the body still at
 // rgb(11, 15, 23), Reduced motion=Always left --xc-transition at 160ms, and
@@ -65,7 +65,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('settings -> root attributes ', () => {
+describe('settings -> root attributes', () => {
     it('stamps an explicit theme and clears it again for System default', () => {
         applySettingsRootAttributes({ theme: 'light' });
         expect(root().getAttribute(THEME_ATTR)).toBe('light');
@@ -115,7 +115,7 @@ describe('settings -> root attributes ', () => {
     });
 });
 
-describe('reduced motion resolution ', () => {
+describe('reduced motion resolution', () => {
     it('follows the OS when the user has not overridden it', () => {
         mockOsReducedMotion(true);
         expect(resolveReducedMotion()).toBe(true);
@@ -138,7 +138,7 @@ describe('reduced motion resolution ', () => {
     });
 });
 
-describe('LearnNote ', () => {
+describe('LearnNote', () => {
     it('renders nothing while Learn Mode is off', () => {
         render(<LearnNote variant="action" chainLabel="Bitcoin" />);
         expect(screen.queryByTestId('learn-note')).toBeNull();
@@ -170,7 +170,7 @@ describe('LearnNote ', () => {
     });
 });
 
-describe('tokens.css theme + motion switches ', () => {
+describe('tokens.css theme + motion switches', () => {
     // Vite rewrites import.meta.url to an http URL under the jsdom
     // environment, so anchor on the workspace root instead.
     const css = readFileSync(resolve(WORKSPACE_ROOT, 'packages/core/src/ui/tokens.css'), 'utf8');
@@ -215,7 +215,7 @@ describe('tokens.css theme + motion switches ', () => {
     });
 });
 
-describe('hide small balances ', () => {
+describe('hide small balances', () => {
     const nativeRow = (chainId, quantity) => ({
         chainId, tick: 'X', kind: 'native', quantity, divisibility: 8,
     });

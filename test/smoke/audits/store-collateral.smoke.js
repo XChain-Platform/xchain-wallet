@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §6c: the shared store-submission collateral.
+// Smoke for §6c: the shared store-submission collateral.
 //
 // Every store hard-blocks submission without a privacy policy URL, and
 // Play and Apple each want a data declaration on top. The content is
@@ -18,7 +18,7 @@
 // nothing to notice, and the thing you find out later is that you declared
 // something untrue to a store.
 //
-//  moved the three documents into the sibling xchain-documentation
+// a later change moved the three documents into the sibling xchain-documentation
 // checkout, under components/wallet/privacy/, and PUBLISHED them. The
 // draft-hygiene checks that used to lead this file (a DRAFT banner while
 // [UNSETTLED] markers remain, no pending marker in the publishable body,
@@ -32,7 +32,7 @@
 // 1. Every host the policy discloses is named in the declaration of record,
 //    derived from the policy rather than from a list someone maintains.
 //
-// 2. The Tor claim . `settings.privacy.torRouting` is offered
+// 2. The Tor claim. `settings.privacy.torRouting` is offered
 //    in the UI as "route SDK requests through a local Tor SOCKS5 proxy"
 //    and NOTHING consumes it - there is no SOCKS plumbing in the wallet
 //    or the SDK. So the collateral must warn against claiming Tor
@@ -208,7 +208,7 @@ for (const srcRoot of SRC_ROOTS) {
     }
 }
 
-//  is IMPLEMENTED, so the direction of this check flips: the
+// is IMPLEMENTED, so the direction of this check flips: the
 // collateral must now DESCRIBE Tor routing, and must keep saying it is
 // desktop-only. If the implementation is ever removed, torConsumers goes
 // empty and this fails, telling whoever removed it that three documents
@@ -248,4 +248,4 @@ for (const alg of ['AES-256-GCM', 'Argon2id', 'secp256k1', 'Ed25519']) {
 assert.ok(/legal judgment|compliance decision/i.test(exportDoc),
     'export-compliance.md marks the classification call as a legal judgment, not an engineering one');
 
-console.log('OK: store-submission collateral smoke ( §6c: data declaration, privacy policy, export stance; Tor claim derived from code per )');
+console.log('OK: store-submission collateral smoke (data declaration, privacy policy, export stance; Tor claim derived from code )');

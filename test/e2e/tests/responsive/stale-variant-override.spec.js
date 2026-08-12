@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the web wallet must use the page width on a desktop browser.
+// The web wallet must use the page width on a desktop browser.
 //
 // Measured against the live wallet at a 1489px viewport: the unlock screen
 // rendered inside a narrow column pinned to the right edge, leaving most of
@@ -48,7 +48,7 @@ async function shellGeometry(page) {
     });
 }
 
-test.describe('web shell at desktop width ', () => {
+test.describe('web shell at desktop width', () => {
     test('a stale stored variant cannot pin the shell to popup width', async ({ page }) => {
         // Exactly the state the live wallet was found in: the preview
         // override left behind, and no `?variant=` in the URL asking for it.

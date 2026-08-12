@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : a restore is the only screen that asks for three passwords at once,
+// A restore is the only screen that asks for three passwords at once,
 // and until this landed every failure said "wrong password" without saying
 // which of the three it meant. A correct password typed into the wrong box was
 // indistinguishable from a typo.
@@ -56,7 +56,7 @@ function expectNamesAField(message, mode = 'fresh') {
         .toBeGreaterThan(0);
 }
 
-describe(': the three restore passwords are distinguishable', () => {
+describe('The three restore passwords are distinguishable', () => {
     it('gives each role a distinct label', () => {
         const labels = new Set([
             RESTORE_PASSWORD_LABELS.file,
@@ -88,7 +88,7 @@ describe(': the three restore passwords are distinguishable', () => {
     });
 });
 
-describe(': restoreFailureMessage names the password it is talking about', () => {
+describe('restoreFailureMessage names the password it is talking about', () => {
     it('the file password: the exact case in the ledger entry', () => {
         // The user typed this device's password into the backup-file box. The
         // password is right for something, just not for this field, and the old
@@ -101,7 +101,7 @@ describe(': restoreFailureMessage names the password it is talking about', () =>
 
     it('the file password, still, when only the string survived the boundary', () => {
         // The extension popup gets a bare string. Both the current wording and
-        // the pre- one have to classify, because a shell one release
+        // the pre-one have to classify, because a shell one release
         // behind still throws the old text.
         expectNamesAField(restoreFailureMessage('backup: wrong password or tampered file'));
         expectNamesAField(restoreFailureMessage(new BackupPasswordError().message));

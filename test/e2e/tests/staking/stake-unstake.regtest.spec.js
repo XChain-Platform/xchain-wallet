@@ -13,7 +13,7 @@
 //
 // Session 4 already proved a full validator STAKE end to end (form -> sign
 // -> broadcast -> VALID index -> lock -> ACTIVE stake). Session 6 then tried
-// UNSTAKE and hit : a PARTIAL unstake (20 of 50) carries the mandatory
+// UNSTAKE and hit: a PARTIAL unstake (20 of 50) carries the mandatory
 // 64-hex signing pubkey plus an AMOUNT field, tips the OP_RETURN payload past
 // the point a bare full sweep sits at, and the encoder's non-base58 chunk
 // lane crashed with "Non-base58 character at XChainEncoder.prepareData:293".
@@ -26,7 +26,7 @@
 // 1. THE FAILING SHAPE, NOT THE SAFE ONE. StakingActionForm keeps the wire
 //    byte-identical to legacy for a full-balance unstake (VERSION|PUBKEY, no
 //    AMOUNT) and only emits AMOUNT for a STRICT PARTIAL. A full sweep would
-//    dodge  by construction and prove nothing about the fix; this spec
+// dodge by construction and prove nothing about the fix; this spec
 //    deliberately unstakes LESS than the full stake so the broadcast carries
 //    the exact AMOUNT-bearing wire that crashed before.
 //
@@ -49,7 +49,7 @@
 //    anyway); `failBroadcast` intercepts the encoder's `broadcast_tx` call
 //    the same way `confirm-broadcast.regtest.spec.js` proves Send's
 //    permanent-failure classification. Here it proves the confirm surface
-//    would NOT have quietly reported an -style encoder crash as a
+// would NOT have quietly reported an -style encoder crash as a
 //    success, before the same inputs are sent for real.
 
 import { randomBytes } from 'node:crypto';
@@ -100,7 +100,7 @@ async function stakesForSource(address) {
     return Array.isArray(body) ? body : (Array.isArray(body?.data) ? body.data : []);
 }
 
-/** The wallet's shared confirm surface , used by every action form. */
+/** The wallet's shared confirm surface, used by every action form. */
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
@@ -112,7 +112,7 @@ async function approveConfirm(page) {
 
 /** Navigates through the command palette, the way a returning user reaches
  * anything that is not one of the four primary tabs. Staking is not a nav
- * destination at any width ; it hangs off Home's secondary actions
+ * destination at any width; it hangs off Home's secondary actions
  * and off the palette, so the palette is what works identically in every
  * shell. */
 async function gotoPalette(page, title) {
@@ -178,7 +178,7 @@ async function waitForCondition(fetchFn, predicate, what, timeoutMs = 120_000) {
     throw new Error(`${what} never observed; last=${JSON.stringify(last)}`);
 }
 
-test.describe('STAKE -> UNSTAKE lifecycle on regtest ( partial unstake, re-driven against the fixed  encoder)', () => {
+test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven against the fixed encoder)', () => {
     // The regtest config bounds `expect` but leaves ACTION timeouts unbounded, so
     // a click on a locator that never appears would hang until the whole test
     // times out and report nothing useful. Bounded here, spec-locally.
@@ -375,7 +375,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest ( partial unstake, re-drive
             expect(Number(unstakeAction.cooldown_end_block),
                 'a cooldown window was assigned').toBeGreaterThan(Number(unstakeAction.block_index));
 
-            // The exact wire-format claim this row exists to re-test. 
+            // The exact wire-format claim this row exists to re-test.
             // broke on the AMOUNT-bearing lane specifically: a full sweep stays
             // legacy-short (UNSTAKE|0|<pubkey>, 3 segments) and would never have
             // hit the P2SH chunk lane; a strict partial adds AMOUNT (4 segments)

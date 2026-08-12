@@ -9,7 +9,7 @@
 // Wallet E2E session 16 / D-64: the import form rendered whatever the flow
 // threw, so a mistyped key came back as
 // "importWif: Failed to import WIF: Non-base58 character" - a function name
-// the user has never heard of, wrapped around a library internal. 
+// the user has never heard of, wrapped around a library internal.
 // fixed exactly this on the recovery-phrase lane and stopped there.
 //
 // The copy is asserted at the flow layer because that is where it has to

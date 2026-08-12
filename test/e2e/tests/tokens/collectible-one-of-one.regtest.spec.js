@@ -51,12 +51,12 @@
 //                                      mainnet only from 1786924800
 //                                      (2026-08-17 00:00:00 UTC).
 //
-// Before  the template wrote no LOCK_MINT_SUPPLY and this venue answered
+// Before the template wrote no LOCK_MINT_SUPPLY and this venue answered
 // with the second message, which meant a MAINNET collectible minted before that
 // date was not actually a 1-of-1. The composer now writes the flag, the
 // token-level check runs FIRST, and this step asserts the first message
 // specifically: reading a bare refusal here would pass just as happily on a
-// chain where the only thing saying no is a calendar. Closed under .
+// chain where the only thing saying no is a calendar. Closed under.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
@@ -78,7 +78,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** One ISSUE, paying a real coin fee . */
+/** One ISSUE, paying a real coin fee. */
 const FUNDING = 3;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `COL${STAMP}`;
@@ -166,7 +166,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     throw new Error(`No XChain action recorded for ${txid} within `
         + `${Math.round(timeoutMs / 1000)}s. Decoder lag `
         + `${status?.decoder_lag_blocks?.[REGTEST_COIN]}. A lag that does not shrink over two `
-        + 'reads is  wedging the venue, not a wallet defect (§3.7).');
+        + 'reads is wedging the venue, not a wallet defect (§3.7).');
 }
 
 async function waitForBalance(address, tick, want, timeoutMs = 180_000) {
@@ -273,7 +273,7 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(action.lock_mint, 'LOCK_MINT was not written').toBeTruthy();
             expect(action.lock_mint_supply,
                 'LOCK_MINT_SUPPLY was not written, so the 1-of-1 is back to depending on the '
-                + 'cumulative-cap flag day ')
+                + 'cumulative-cap flag day')
                 .toBeTruthy();
             expect(String(action.description),
                 'the image URL did not land in DESCRIPTION (the TIS IMAGE format)')
@@ -320,7 +320,7 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             // 2026-08-17. This venue runs with the gate ON, so a test that only
             // looked for "some refusal" would read green while a mainnet
             // collectible stayed inflatable. Matching the lock's message is
-            // what proves the composer wrote LOCK_MINT_SUPPLY .
+            // what proves the composer wrote LOCK_MINT_SUPPLY.
             const q = await quote(
                 'ISSUE',
                 issueParams({ VERSION: 0, TICK, MAX_SUPPLY: 1, MINT_SUPPLY: 1 }),
@@ -329,7 +329,7 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(q.error || q.status),
                 'the re-ISSUE was not refused by LOCK_MINT_SUPPLY. If this reads "MINT_SUPPLY '
                 + 'exceeds MAX_SUPPLY" the composer stopped writing the flag and the 1-of-1 is '
-                + 'only a 1-of-1 where the cumulative-cap flag day has already passed ')
+                + 'only a 1-of-1 where the cumulative-cap flag day has already passed')
                 .toMatch(/MINT_SUPPLY \(locked\)/i);
         });
 
@@ -343,7 +343,7 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             // nothing else. issue.js backfills blank params from `tokenInfo`
             // (~241), and `getTokenInfo` selects no mint_supply column, so an
             // edit that leaves the field blank stays blank and never reaches
-            // the lock. Were that not so, the flag added under  would
+            // the lock. Were that not so, the flag added under would
             // have quietly frozen the artwork too.
             const q = await quote(
                 'ISSUE',

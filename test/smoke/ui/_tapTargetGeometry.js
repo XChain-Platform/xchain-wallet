@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the arithmetic behind the 24px pointer-target floor, done on
+// The arithmetic behind the 24px pointer-target floor, done on
 // the stylesheet instead of on a rendered page.
 //
 // The defect this exists to end: a control whose height is never stated,

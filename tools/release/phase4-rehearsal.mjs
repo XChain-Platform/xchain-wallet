@@ -9,7 +9,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// row 89. Records how deep a ceremony Phase 4 rehearsal actually got,
+// Records how deep a ceremony Phase 4 rehearsal actually got,
 // and against which commits, so the next stage can tell whether that
 // observation still describes the tooling the ceremony would run today.
 //

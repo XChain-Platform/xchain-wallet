@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  S4: the release workflow's safety properties.
+// Smoke for S4: the release workflow's safety properties.
 //
 // The remotes are shared and a second coder pushes to them. A
 // tag-triggered workflow holding code-signing secrets is a
@@ -93,7 +93,7 @@ for (const [name, block] of jobs) {
     assert.ok(/^\s{4}environment:\s*release-signing\s*$/m.test(block),
         `job '${name}' reads a signing secret and must run in the `
         + 'release-signing environment, whose deployment policy admits only the '
-        + 'release tag pattern (there is no reviewer gate on it: )');
+        + 'release tag pattern (there is no reviewer gate on it)');
 }
 
 // And the environment must actually be used by something, or the check
@@ -104,7 +104,7 @@ assert.ok(gated.length >= 2,
 
 // --- 2b. This file must not claim the controls that do not exist -------
 //
-//  corrected the public page. The same two false claims were also
+// corrected the public page. The same two false claims were also
 // written into this workflow's own header ("required-reviewer approval
 // gate", "tag creation is restricted to the release maintainer by a tag
 // protection rule"), which is worse in one way: a reader who opens
@@ -120,7 +120,7 @@ for (const [claim, re] of [
 ]) {
     const offender = wf.split('\n').find((l) => re.test(l));
     assert.ok(!offender,
-        `release.yml claims ${claim}, which is not in force : ${offender?.trim()}`);
+        `release.yml claims ${claim}, which is not in force: ${offender?.trim()}`);
 }
 
 // --- 3. K1 never reaches a runner --------------------------------------
@@ -194,7 +194,7 @@ for (const [name, block] of jobs) {
 
 // --- 6b. A macOS build step must name a signing identity ---------------
 //
-// : app-builder-lib reads an explicit null identity as "do not
+// App-builder-lib reads an explicit null identity as "do not
 // sign", checked BEFORE it looks at CSC_LINK. So a mac step holding the
 // Developer ID cert and the notarization credentials, and nothing else,
 // signed nothing, notarized nothing, exited 0 and said so in one info
@@ -237,7 +237,7 @@ for (const [name, block] of jobs) {
         assert.ok(/^\s*CSC_IDENTITY_NAME:\s*\S/m.test(step),
             `job '${name}' step '${stepName}' builds the macOS Developer ID channel `
             + 'and names no CSC_IDENTITY_NAME, so which certificate it signs with is '
-            + 'left to the builder config default rather than stated here ');
+            + 'left to the builder config default rather than stated here');
         // Signing without notarizing is its own quiet failure: Gatekeeper
         // rejects an un-notarized signed app on first launch just as hard.
         assert.ok(/APPLE_API_KEY_ID:/.test(step),
@@ -264,7 +264,7 @@ for (const [name, block] of jobs) {
 
 // --- 8. The settings half is written down ------------------------------
 
-//  moved the settings half to the sibling xchain-documentation
+// a later change moved the settings half to the sibling xchain-documentation
 // checkout and rewrote it for a reader verifying a release rather than for
 // the maintainer configuring one, so the exact console labels ("Required
 // reviewers", "tag protection") are gone. The three controls they named are
@@ -341,7 +341,7 @@ if (docsAvailable()) {
     // secret is "only readable by a job that has already cleared the
     // approval gate above" after §1 had been corrected to say there is no
     // such gate, so the page both denied and asserted the same control
-    // (found 2026-08-04,  re-scan).
+    // (found 2026-08-04, re-scan).
     const NEGATED = /\bno\b|\bnot\b|never|cannot|refuses|previously said|would both fail/i;
     const sentences = setup.split(/(?<=[.!?])\s+/);
     for (const [control, mention] of [
@@ -360,7 +360,7 @@ if (docsAvailable()) {
 
     // The verification list is the sharp end of this page: a reader runs it
     // to decide whether to trust a release. Its own count and its bullets
-    // have to agree. They already drifted once - the  artifact
+    // have to agree. They already drifted once - the artifact
     // signature check was appended as a fifth bullet under a sentence still
     // reading "These four", which reads as one step having been dropped
     // silently, on exactly the list where a missing step is the failure.
@@ -385,7 +385,7 @@ if (docsAvailable()) {
         + `xchain-documentation checkout (expected at ${WALLET_DOCS}).`);
 }
 
-// --- 8b. The iOS lane ( §5, S4b) --------------------------------
+// --- 8b. The iOS lane (§5, S4b) --------------------------------
 
 // Two properties, and neither fails visibly when it breaks.
 //
@@ -404,13 +404,13 @@ const ios = jobs.get('mobile-ios');
 
 assert.ok(/XCHAIN_BUILD_PROFILE:\s*store/.test(ios),
     'the iOS lane must build the web shell at the `store` profile, or the ipa '
-    + 'carries the surfaces  §2.3 compiles out');
+    + 'carries the surfaces §2.3 compiles out');
 
 assert.ok(/ASC_KEY_ID:\s*\$\{\{\s*secrets\.APPLE_API_KEY_ID/.test(ios),
     'the iOS lane reads the ASC key id into env, which is what its steps gate on');
 
 // The invariant is about CREDENTIALS, not about the script's name, and saying
-// it that way matters now that `ios-archive.sh` has two callers ( row
+// it that way matters now that `ios-archive.sh` has two callers (row
 // 22): a gated signed one, and an ungated one that passes
 // XCHAIN_IOS_ARCHIVE_UNSIGNED=1 and needs no Apple account at all. The original
 // check read back 600 characters from the FIRST occurrence of the script name,
@@ -453,10 +453,10 @@ assert.ok(!SIGNING_SECRET.test(ci),
 
 // --- 9b. ci.yml ships the docs sibling it is contracted to ship --------
 //
-// . `.ci-siblings` declares xchain-documentation, and since  a
+//`.ci-siblings` declares xchain-documentation, and a
 // declared-but-absent sibling is a REFUSAL rather than a skip - so this
 // workflow is the only thing standing between the release gate and 26 red
-// smokes on every master commit. The credential exists (, 2026-08-05:
+// Smokes on every master commit. The credential exists (2026-08-05:
 // a read-only deploy key on xchain-documentation, private half in the
 // XCHAIN_DOCS_READ_KEY Actions secret), so the failure this guards is no
 // longer "nobody added the secret" but the quieter one: somebody edits this
@@ -562,7 +562,7 @@ for (const file of ['ci.yml', 'mobile.yml', 'release.yml']) {
         + `and this section is now silently checking nothing. Found: ${spaBuildingJobs.join(', ') || '(none)'}`);
 }
 
-// . §6 step 1 says a release tag is pinned to a commit that green
+//. §6 step 1 says a release tag is pinned to a commit that green
 // CI already validated. That was procedure and nothing else, so v0.334.0
 // was cut on a commit whose CI run was cancelled with four jobs red, and
 // the release lane ran green over the top of it. The gate now exists; this
@@ -602,6 +602,6 @@ for (const file of ['ci.yml', 'mobile.yml', 'release.yml']) {
     }
 }
 
-console.log('OK: release CI smoke ( S4: trigger surface, environment gate, no K1 on runners, no auto-publish, '
+console.log('OK: release CI smoke (S4: trigger surface, environment gate, no K1 on runners, no auto-publish,'
     + 'the §6 step-1 validated-commit gate, and every SPA-building workflow raises the Node heap '
     + 'ceiling that killed all three mobile.yml runs)');

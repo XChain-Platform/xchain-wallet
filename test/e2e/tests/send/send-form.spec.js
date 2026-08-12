@@ -10,7 +10,7 @@
 
 // Send form UX (§29): form -> validation -> confirm stage.
 //
-// The destination MUST be checksum-valid for the chain : the
+// The destination MUST be checksum-valid for the chain: the
 // wallet now decodes the address rather than pattern-matching it, so the
 // old `bc1qtestrecipient000...` placeholders these specs used are (very
 // correctly) rejected. Any fixture address here has to be a real one.
@@ -68,7 +68,7 @@ test.describe('send form', () => {
         await expect(page.getByRole('alert').first()).toContainText(/positive/i);
     });
 
-    // : a native-coin send has no memo to reject. The field only ever
+    // A native-coin send has no memo to reject. The field only ever
     // existed as part of an XChain SEND action, and the chain rejects that
     // action outright for a native tick (there is no BTC ledger), so the memo
     // was never recorded or queryable - an input that silently did nothing.
@@ -86,7 +86,7 @@ test.describe('send form', () => {
         await expect(page.getByText('Replace-by-fee')).toBeVisible();
     });
 
-    // : with the `send` slice flag on (it now defaults true), Send goes
+    // With the `send` slice flag on (it now defaults true), Send goes
     // to the single-encode CONFIRM page rather than the legacy review stage.
     // This is the first coverage that drives that page in a real browser; the
     // unit suites mount it, but only here does the composed envelope, the
@@ -99,14 +99,14 @@ test.describe('send form', () => {
         const confirm = page.getByTestId('confirm-modal');
         await expect(confirm).toBeVisible();
         // The intent line ("Send 0.01 BTC on Bitcoin to <addr>") is deliberately
-        // NOT asserted here, and this venue cannot assert it . Since
-        //  removed the caller-supplied intent fallback, that line comes
+        // NOT asserted here, and this venue cannot assert it. Since
+        // a later change removed the caller-supplied intent fallback, that line comes
         // solely from sdk.decoder.describe(), which the dev-mock host does not
         // implement (packages/web/src/hostBridge.js exposes only
         // decodeActionFromPsbt). composeActionForConfirm swallows the resulting
         // TypeError, so decoded is null and the line never renders. Teaching the
         // mock to describe would put a SECOND describer in front of a signing
-        // screen, which is the fidelity trap  warns about. The assertion
+        // screen, which is the fidelity trap warns about. The assertion
         // lives on the regtest venue instead, against the PROD build and the real
         // SDK: confirm-broadcast.regtest.spec.js:82 and :172, and
         // preflight-gate.regtest.spec.js:174. What this venue still owns is
@@ -148,7 +148,7 @@ test.describe('send form', () => {
         await expect(amountField(page)).toHaveValue('0.01');
     });
 
-    test('a failed signing attempt surfaces an error ', async ({ page }) => {
+    test('a failed signing attempt surfaces an error', async ({ page }) => {
         // REGRESSION GUARD. A failing submit on an UNLOCKED software wallet used
         // to vanish: the error surface lived on the password Input, which is not
         // rendered once the session is unlocked, and the forms only showed their

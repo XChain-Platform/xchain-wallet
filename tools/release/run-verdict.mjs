@@ -13,7 +13,7 @@
  *
  *********************************************************************/
 
-// . Turns a CI run's colour into a VERDICT, which is not the same thing.
+// Turns a CI run's colour into a VERDICT, which is not the same thing.
 //
 // A run's `conclusion` aggregates its jobs, so one job that never reached a
 // runner paints the whole run `failure` in exactly the shade a broken assertion
@@ -292,7 +292,7 @@ if (isEntryPoint) {
         .filter(Boolean);
 
     if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
-        console.log(`Classify a CI run into a verdict .
+        console.log(`Classify a CI run into a verdict.
 
 Usage:
   node tools/release/run-verdict.mjs --run <run-id>    [--repo owner/name]

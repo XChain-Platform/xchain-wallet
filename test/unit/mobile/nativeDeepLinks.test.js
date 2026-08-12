@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Native deep-link intake ( S3).
+// Native deep-link intake (S3).
 //
 // Two things are being protected here. The first is the acceptance boundary:
 // a URL that is not one we claim must never reach the parser, and the

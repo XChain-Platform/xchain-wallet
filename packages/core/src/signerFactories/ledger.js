@@ -60,7 +60,7 @@ const LEDGER_IDENTITY_PATH = "m/44'/0'/0'";
 
 // `sdkRegistry` used to be UNWIRED, and without it the signer this factory
 // builds could not sign a PSBT at all: every hardware attempt failed with
-// "requires an sdkRegistry" (, reproduced against a real device).
+// "requires an sdkRegistry" (reproduced against a real device).
 //
 // It looked like an architecture call - the web shell's registry lives in
 // hostBridge.js, while the extension keeps its registry in the background
@@ -74,7 +74,7 @@ const LEDGER_IDENTITY_PATH = "m/44'/0'/0'";
 // So each shell hands over a decompose-only registry built by
 // `walletOnlyRegistry()` below, from the SDK's own WalletUtils. Core does not
 // import xchain-sdk (it takes the SDK by injection everywhere, and the shells
-// own that import - the extension's is the MV3 static one from ), so the
+// own that import - the extension's is the MV3 static one ), so the
 // builder takes the class rather than reaching for it. Nothing it returns can
 // touch the network, which is what makes it safe to construct in the popup:
 // the context slice 1 established has no SDK of its own.
@@ -117,7 +117,7 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
         const app = new Btc({ transport, currency: 'bitcoin' });
 
         // Read through the transport, not the app client: hw-app-btc's `Btc`
-        // class has no `getAppAndVersion` method .
+        // class has no `getAppAndVersion` method.
         let appInfo;
         try {
             appInfo = await readLedgerAppInfo(transport);

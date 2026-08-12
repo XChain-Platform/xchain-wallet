@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// , at the host boundary: Settings -> Network & Endpoints wrote
+// At the host boundary: Settings -> Network & Endpoints wrote
 // `settings.sdkEndpoints` and the summary row said "1 chain custom",
 // but no code path ever handed that record to SDKRegistry, so every
 // request still went to the bundled default. An operator pointing the
@@ -74,7 +74,7 @@ const customEntry = (explorerUrl) => ({
     custom: true,
 });
 
-describe(': saved endpoints reach the SDK registry', () => {
+describe('Saved endpoints reach the SDK registry', () => {
     it('applies a settings.update that carries sdkEndpoints', async () => {
         const { host, sdkRegistry, calls } = makeHost();
         sdkRegistry.get(CHAIN);

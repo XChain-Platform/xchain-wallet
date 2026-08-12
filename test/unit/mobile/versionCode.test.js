@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The store integer, for both stores (rails §2;  reconciled the three
-// definitions that used to disagree). Rewritten from the  S1 version of
+// The store integer, for both stores (rails §2; reconciled the three
+// definitions that used to disagree). Rewritten from the S1 version of
 // this file when that reconciliation landed: the old shape had stable at
 // build 0 with a `-hotfix.N` suffix, and both are gone.
 //
@@ -250,7 +250,7 @@ describe('generated build files', () => {
         const xcconfig = versionXcconfigFor('v0.333.1');
         expect(xcconfig).toContain('MARKETING_VERSION = 0.333.1');
         expect(xcconfig).toContain('CURRENT_PROJECT_VERSION = 3330150');
-        // One number, two stores: this is the drift  existed to close.
+        // One number, two stores: this is the drift existed to close.
         expect(xcconfig).toContain(String(storeVersionFromTag('v0.333.1')));
     });
 

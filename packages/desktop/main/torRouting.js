@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Applying `settings.privacy.torRouting` .
+// Applying `settings.privacy.torRouting`.
 //
 // Three separate egress paths leave the desktop main process, and a
 // toggle that covered two of them would be worse than useless: the user

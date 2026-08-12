@@ -69,7 +69,7 @@
                 // failure the page can see. The relay's own refusals used to
                 // invent their own names (FORBIDDEN / RUNTIME_UNAVAILABLE /
                 // NO_RESPONSE), which a dApp branching on bridge-spec's union
-                // could not match (). The precise reason stays in
+                // could not match. The precise reason stays in
                 // `message`, which is where the spec puts human detail.
                 error: {
                     name: 'BridgeError',
@@ -139,7 +139,6 @@
             // belongs to the previous origin, not this document. This listener
             // is the only check that runs against the page actually loaded, so
             // it is the authoritative gate: drop anything not stamped for us
-            // ().
             if (message.origin !== window.location.origin) return;
             window.postMessage({
                 source: EVENT_SOURCE,

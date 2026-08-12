@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : change-address rotation, proven on a chain rather than at a
+// Change-address rotation, proven on a chain rather than at a
 // function boundary.
 //
 // The row that opened this item was found by DOING it: rotation was

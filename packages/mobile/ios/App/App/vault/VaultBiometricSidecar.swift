@@ -38,7 +38,7 @@ import Foundation
 import LocalAuthentication
 import Security
 
-/// What the JS side needs to describe this device to its owner .
+/// What the JS side needs to describe this device to its owner.
 ///
 /// `detail` is a developer string and stays one; `reasonCode` is the stable
 /// token the shared JS maps to plain language, so this shell and the Android
@@ -105,7 +105,7 @@ final class VaultBiometricSidecar {
     }
 
     /// Face ID and Touch ID are Apple's own names for these, so on this shell
-    /// naming them is accuracy rather than the vendor-guessing  removed
+    /// naming them is accuracy rather than the vendor-guessing a later change removed
     /// from the shared component.
     private static func mechanism(for type: LABiometryType) -> String {
         switch type {

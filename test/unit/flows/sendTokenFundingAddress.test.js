@@ -19,7 +19,7 @@
 // "Error getting utxos: <pubkey> has no matching Script".
 //
 // Found live on BTC regtest driving the dispenser token-paid Buy button, which
-// only became reachable once  un-blanked the pay-to address. The same flow
+// only became reachable once un-blanked the pay-to address. The same flow
 // backs the hardware-wallet send handler (action.send.hw), so this was not
 // limited to dispenser buys.
 

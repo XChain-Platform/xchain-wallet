@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The release-credential expiry clock ( §6, frontier row 121).
+// The release-credential expiry clock (§6, frontier row 121).
 //
 // WHY THIS FILE EXISTS. §6 records four dated credentials and calls the K3
 // certificate's date "a renewal date and not a fact to forget". Nothing read
@@ -13,9 +13,10 @@
 // THE TRAP THIS TOOL REFUSES TO WALK INTO. A hand-maintained list of dates is
 // itself a declaration nothing measures, which is how `expected-artifacts.txt`
 // declared artifact CLASSES and never counted them, certifying half-built
-// releases until . So the declared date is not the authority: each row
-// names the artifact that CARRIES its expiry, and whenever that artifact is
-// reachable this tool reads `notAfter` out of it and fails on any drift.
+// releases until that was caught. So the declared date is not the
+// authority: each row names the artifact that CARRIES its expiry, and
+// whenever that artifact is reachable this tool reads `notAfter` out of
+// it and fails on any drift.
 // Declaring and measuring disagree loudly rather than quietly.
 //
 // WHERE IT CAN AND CANNOT MEASURE. The credential material lives on the

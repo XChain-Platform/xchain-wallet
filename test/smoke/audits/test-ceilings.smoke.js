@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  / : the suite's time ceilings must be sized by the
+// Smoke for: the suite's time ceilings must be sized by the
 // machine running them, not by the machine they were written on.
 //
 // WHAT THIS IS DEFENDING. `ci.yml` was red on master for its last forty runs,
@@ -187,7 +187,7 @@ for (const [file, what] of [
 }
 
 console.log(
-    `OK: test-ceilings smoke (: ${configs.length} vitest config(s) take their fork count `
+    `OK: test-ceilings smoke (${configs.length} vitest config(s) take their fork count`
     + 'from poolSize.js rather than a literal; unit.config.js detects --coverage and exports '
     + 'XCHAIN_TEST_INSTRUMENTED; the multiplier is defined once at '
     + `${factorMatch[1]}x; and the argon2id, import-exports and testing-library ceilings all `

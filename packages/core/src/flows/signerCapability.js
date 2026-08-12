@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// signerCapability ( §6, ): can THIS address actually produce the
+// signerCapability (§6): can THIS address actually produce the
 // signature a Taproot envelope reveal needs?
 //
 // This exists because of the shape of the failure, not for tidiness. An envelope

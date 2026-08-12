@@ -78,7 +78,7 @@ describe('market/orderMath multiplyAmounts', () => {
     });
 });
 
-// : compareAmounts gates whether an underfunded buy may be broadcast,
+// compareAmounts gates whether an underfunded buy may be broadcast,
 // so it has to stay exact at the 8dp end where floats stop distinguishing
 // two different amounts.
 describe('market/orderMath compareAmounts', () => {

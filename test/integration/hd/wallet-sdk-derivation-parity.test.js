@@ -20,7 +20,7 @@
 // so a descriptor edit, SDK bump, or copied-in coin fails CI instead
 // of silently WIF-encoding keys the backend decodes differently.
 //
-// WHERE THE SDK COMES FROM, and it changed under this test ( DD6).
+// WHERE THE SDK COMES FROM, and it changed under this test (DD6).
 // It used to be loaded from a sibling checkout, matching the `link:` target
 // the shells consumed. DD6 moved all three shells to the published
 // `@dankest-llc/xchain-sdk`, and the sibling half of this guard then failed

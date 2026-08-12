@@ -26,8 +26,7 @@
 //     chain + enters the wallet password; the panel encrypts the
 //     labels + contacts payload, broadcasts it as a FILE action, and
 //     reports the txid + payload size. Auto-sync on label change and
-//     fetch-on-restore decryption are tracked in `claude/reports/
-//     xchain-wallet/FOLLOWUPS.md`.
+//     fetch-on-restore decryption are tracked as followups, not yet built.
 
 import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';

@@ -203,7 +203,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         expect(receipt.textContent).not.toMatch(/betting closed while you were confirming/i);
     });
 
-    //  leg (a), applied to the receipt this file introduced. useConfirmAction
+    // leg (a), applied to the receipt this file introduced. useConfirmAction
     // resolves a TRANSIENT post-sign broadcast failure with { queued: true } rather
     // than throwing, so a receipt that keys on "we got a result" reports a bet that
     // never reached the network as placed - the exact shape D-99(a) swept out of

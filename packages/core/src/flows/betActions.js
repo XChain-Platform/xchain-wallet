@@ -85,7 +85,7 @@ function submitBet(opts, builderName, buildInput, summary) {
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
-            // : the native-coin protocol fee. Only the two fee-bearing
+            // The native-coin protocol fee. Only the two fee-bearing
             // formats set it (create, place); resolve and cancel are free by
             // design, so their surfaces leave it undefined and nothing is
             // quoted or paid for them.

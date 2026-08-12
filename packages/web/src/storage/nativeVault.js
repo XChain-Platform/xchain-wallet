@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The `XChainVault` native-plugin contract ( §1, stage S2), and the
+// The `XChainVault` native-plugin contract (§1, stage S2), and the
 // runtime detection that decides whether this device has one.
 //
 // WHY THIS FILE LIVES IN THE WEB SHELL. The mobile shell ships no JavaScript
@@ -20,7 +20,7 @@
 // dependency cycle, since mobile already depends on web for the build order.
 //
 // It is written to be shell-agnostic on purpose: the same plugin name and
-// the same method contract are what 's iOS shell implements over the
+// the same method contract are what that iOS shell implements over the
 // Keychain, so this file is the one place the two native shells agree.
 //
 // The plugin is reached through the `Capacitor` global rather than by
@@ -35,7 +35,7 @@
 
 import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';
 // The shell/plugin probe lives in core so the vault bridge and the clipboard
-// bridge  ask the question the same way. Two hand-rolled copies of a
+// bridge ask the question the same way. Two hand-rolled copies of a
 // duck-type probe is the drift was filed about, and it would show up
 // only on the native shells, which are the ones nobody smoke-runs locally.
 import {
@@ -83,7 +83,7 @@ export function hasNativeVault() {
  * Is this the SHELL, regardless of whether its plugin loaded?
  *
  * Deliberately a separate question from `hasNativeVault()`. Those two used to
- * be one, and the missing distinction is : a native build whose plugin
+ * be one, and the missing distinction is a separate case: a native build whose plugin
  * failed to register answered "no native vault", which reads identically to a
  * browser, so the wallet quietly stored the only copy of the vault in the
  * WebView storage the whole native-vault stage exists to escape. Silent, on a

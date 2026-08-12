@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the §21.4 test-send gate must reach the SCREEN, not just the memo.
+// The §21.4 test-send gate must reach the SCREEN, not just the memo.
 //
 // The gate had been correct for a year and still bought zero protection: its
 // banner and its submit-disable both lived in the legacy `stage === 'review'`
-// branch, and  rerouted every non-watcher send straight from the compose
+// branch, and rerouted every non-watcher send straight from the compose
 // form into the confirm modal. That branch stopped rendering, so a first-ever
 // send of any size sailed through. The pre-existing smoke for this feature is a
 // source grep, which still matched perfectly while the feature was dead.
@@ -94,7 +94,7 @@ const sendButton = () => screen.getByRole('button', { name: /^Send$/ });
 
 afterEach(() => cleanup());
 
-describe('Send: test-send gate reaches the screen ', () => {
+describe('Send: test-send gate reaches the screen', () => {
     it('warns before a large first send to a never-seen address', async () => {
         mount({ thresholdSats: 1 });
         await fillNativeSend();

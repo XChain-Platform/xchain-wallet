@@ -35,8 +35,8 @@ import styles from './BalanceList.module.css';
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
- * @param {boolean} [props.hideSmallBalances]   : `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
- * @param {boolean} [props.showChain]   : name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
+ * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
+ * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
  */
 export function BalanceList({
     rows,
@@ -76,7 +76,7 @@ export function BalanceList({
     const hidden = hiddenKeys
         ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
         : [];
-    // . A row the user explicitly pinned is never dust to them, so the
+    //A row the user explicitly pinned is never dust to them, so the
     // pin wins over the dust threshold; everything else under the threshold
     // moves into its own collapsed section. Collapsed, not dropped: a balance
     // the wallet knows about but will not show anywhere is a support ticket.
@@ -192,7 +192,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
     // in Settings, so repeating it on every row adds noise. Show just the
     // tick symbol; chain family is conveyed by the chain icon.
     //
-    // : that last clause only holds for NATIVE rows. The chain icon is
+    // That last clause only holds for NATIVE rows. The chain icon is
     // rendered under `isNative` below; a token with no published image falls
     // through to a letter chip, which is derived from the tick and therefore
     // identical for the same token on every chain. In a cross-chain list that
@@ -403,7 +403,7 @@ export function detectSpamCandidates(rows) {
     return flagged;
 }
 
-/* . Display dust thresholds in each chain's smallest unit. These decide
+/*. Display dust thresholds in each chain's smallest unit. These decide
  * whether a ROW is worth listing, nothing else: they never gate a send, a fee
  * or a change output, so being a little generous here costs the user nothing.
  * Bitcoin's 546 is the familiar relay dust limit; Litecoin's relay floor sits

@@ -17,7 +17,7 @@ import { LedgerSigner } from '../../../packages/signers-ledger/src/LedgerSigner.
 
 /**
  * BOLOS GET_APP_AND_VERSION bytes: the app name and version arrive on the
- * transport, not from an app-client method (appInfo.js / ).
+ * transport, not from an app-client method (appInfo.js).
  */
 function appInfoBytes(name = 'Bitcoin', version = '2.2.1') {
     const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
@@ -151,7 +151,7 @@ describe('makeLedgerFactory', () => {
         // The signer this factory returns is the exact instance the shells
         // register with signerBridge, and signPsbt needs an SDKRegistry. No
         // shell passes one today, so hardware PSBT signing fails with
-        // "requires an sdkRegistry" . These two pin both halves:
+        // "requires an sdkRegistry". These two pin both halves:
         // the passthrough works, and its absence is what production hits.
         it('passes an sdkRegistry through to the signer when given one', async () => {
             const app = makeValidApp();

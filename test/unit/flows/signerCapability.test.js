@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: signer capability for Taproot envelope reveals ( §6, ).
+// Unit: signer capability for Taproot envelope reveals (§6).
 //
 // The asymmetry is the whole point. A false negative costs the user the envelope
 // and falls back to P2WSH at roughly 2x the bytes. A false POSITIVE funds a

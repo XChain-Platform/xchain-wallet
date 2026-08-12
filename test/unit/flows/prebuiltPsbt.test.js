@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// submitWithSigner.prebuiltPsbt byte-identity ( §5.3.4). The whole
+// submitWithSigner.prebuiltPsbt byte-identity (§5.3.4). The whole
 // point of the single-encode pipeline: the PSBT handed to the signer is
 // EXACTLY the one composeForConfirm built and the modal checked - never a
 // rebuild.

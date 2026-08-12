@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for tools/release/upload-listing-assets.mjs ( row 63, ).
+// Smoke for tools/release/upload-listing-assets.mjs (row 63).
 //
 // The uploader only does anything against live App Store Connect, so what is
 // worth pinning offline is what decides whether an upload is allowed to happen

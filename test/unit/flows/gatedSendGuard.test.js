@@ -329,7 +329,7 @@ describe('gatedSendReadiness', () => {
 });
 
 // --- PC-29 unlock-threshold lane (GATE_MIN_AMOUNT) --------------------
-// Inert until the  flag-day train pins activation heights; these
+// Inert until the flag-day train pins activation heights; these
 // tests force activation through the test-only `_activationHeights`
 // override. Post-activation SEND rule: a pack's key handoff is required
 // only when the destination's POST-SEND balance meets the pack's
@@ -478,7 +478,7 @@ describe('PC-29 unlock-threshold lane', () => {
         expect(gatedGroupThreshold(grp([]))).toBeNull();
     });
 
-    // ── Shared vector fixture ( spec section 6.5) ──────────────────────
+    // ── Shared vector fixture (spec section 6.5) ──────────────────────
     // The same vectors the SDK validator and the indexer's FILE handler run, from a
     // byte-identical file. This wallet is the third implementation of the threshold
     // rules and the only one that compares balances, so the pack-minimum and

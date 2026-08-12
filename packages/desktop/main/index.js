@@ -158,7 +158,7 @@ function forwardDeepLink(event) {
     if (!target.isFocused()) target.focus();
 }
 
-// THE SDK THIS SHELL ACTUALLY USES, and it was the dev mock until .
+// THE SDK THIS SHELL ACTUALLY USES, and it was the dev mock until.
 //
 // The extension and the web shell both build their registry on
 // `createDevMockSdk` synchronously - a service worker has to register its
@@ -210,7 +210,7 @@ function buildRuntime() {
             chainRegistry,
             sdkFactory: REAL_SDK_FACTORY,
         }),
-        // : Tor routing has to take effect on the next request,
+        // Tor routing has to take effect on the next request,
         // not the next launch. The shared host calls this after any
         // settings.update whose patch touches `privacy`.
         onPrivacySettingsChanged: async (settings, { sdkRegistry }) => {
@@ -461,7 +461,7 @@ app.whenReady().then(async () => {
         console.error('[xchain] desktop auto-unlock failed:', err);
     }
 
-    // : re-apply Tor routing as soon as settings are readable.
+    // Re-apply Tor routing as soon as settings are readable.
     // Without this, a user who turned it on, quit, and relaunched would
     // run direct until they happened to toggle it again, with the UI
     // showing it on the whole time. That is the same lie in a new place.
@@ -496,7 +496,7 @@ app.whenReady().then(async () => {
     // returns false in dev). Events relay to every open renderer via
     // IPC so any window can surface the "update available" toast.
     // THE BROADCAST IS FIRE-ONCE AND THE ONLY LISTENER MOUNTS LATER, WHICH
-    // MADE THE WHOLE OFFER UNREACHABLE ( row 148, measured 2026-08-11).
+    // MADE THE WHOLE OFFER UNREACHABLE (row 148, measured 2026-08-11).
     //
     // `checkForUpdates()` below runs at whenReady and resolves within a
     // second or two. `DesktopUpdateBanner` subscribes when it mounts, and it
@@ -529,7 +529,7 @@ app.whenReady().then(async () => {
             return lastUpdaterEvent;
         });
 
-        // THE INSTALL HANDLER IS THE HALF THAT WAS MISSING ( row
+        // THE INSTALL HANDLER IS THE HALF THAT WAS MISSING (row
         // 142). The broadcast above has always fired, into a channel no
         // renderer could subscribe to under contextIsolation, and nothing
         // in the repo ever called `downloadAndInstall`. The app therefore
@@ -596,7 +596,7 @@ app.whenReady().then(async () => {
         }
     });
 
-    // : renderer-driven wipe of the shell's own stores. The
+    // Renderer-driven wipe of the shell's own stores. The
     // renderer's wipeWalletStorage clears localStorage + IndexedDB,
     // neither of which this shell uses, so without this channel both
     // wipe paths (demo exit, Locked "forgot password") are silent

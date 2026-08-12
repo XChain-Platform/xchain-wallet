@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for tools/release/verify-appstore-version.mjs .
+// Smoke for tools/release/verify-appstore-version.mjs.
 //
 // The gate only means anything against live App Store Connect state, so what
 // is worth pinning offline is what decides what an answer MEANS. Those
@@ -275,7 +275,7 @@ assert.ok(
     !deferredOnly.checks.some((c) => c.id === 'age-gambling' && c.state === 'failure'),
     'a standing operator decision must never be a veto - that is how a gate gets routed around',
 );
-assert.match(find(deferredOnly, 'age-gambling')[0].detail, //,
+assert.match(find(deferredOnly, 'age-gambling')[0].detail, /age-gambling declaration/,
     'the note must cite the item, or the next session cannot find the decision');
 
 // --- 10. Config and inconclusive never become a pass ------------------------

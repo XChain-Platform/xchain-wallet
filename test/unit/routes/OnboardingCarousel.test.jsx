@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Behavioural test for Cluster J FOLLOWUP 3 (§25.2): the first-time
-// onboarding explainer carousel . Drives the real component:
+// onboarding explainer carousel. Drives the real component:
 //   - paginated frames advance via Next / Back / dots
 //   - the last frame's "Get started" completes; "Skip" dismisses early
 //   - both call onDone (with completed = true / false)

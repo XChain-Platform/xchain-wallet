@@ -29,7 +29,7 @@
 // from other sources (same-origin policy applies; postMessage within a
 // single window is plain event dispatch).
 //
-// FAILURE SHAPE (). bridge-spec splits the surface in two and this
+// FAILURE SHAPE. bridge-spec splits the surface in two and this
 // shim must respect the split, because a blanket wrap would break half of it:
 //
 //   - connect / signMessage / signAction / signPsbt / coSign / signIn declare

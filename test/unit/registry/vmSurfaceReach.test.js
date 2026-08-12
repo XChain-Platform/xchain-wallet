@@ -1,13 +1,13 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// : the contract surfaces reach every chain the registry says can carry
+// The contract surfaces reach every chain the registry says can carry
 // contracts, and no surface reaches further than its own lane.
 //
 // The flip of BTC_EXCLUSIVE_ACTIONS is only half a change: it does nothing a
 // user can see unless the SURFACES ask the registry rather than pinning a coin.
 // Three of them did pin one - ContractsList's VM_COIN, the shells' shared
-// BTC-address nav gate, and (before ) DeployContractForm - and each would
+// BTC-address nav gate, and (before) DeployContractForm - and each would
 // have kept contracts invisible on LTC/DOGE while the registry advertised them.
 // So this pins the derivation itself, in the same shape the surfaces use.
 
@@ -20,7 +20,7 @@ const vmChains = chainRegistry.supportedChains()
     .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY'))
     .map((d) => d.id);
 
-describe(' contract-surface chain reach', () => {
+describe('contract-surface chain reach', () => {
 
     it('advertises DEPLOY on the Litecoin and Dogecoin chains, not just Bitcoin', () => {
         for (const id of [

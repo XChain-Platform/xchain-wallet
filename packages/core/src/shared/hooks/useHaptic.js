@@ -17,7 +17,7 @@
 //
 // Reduced-motion guard: suppresses every pulse while motion is reduced.
 // Vibration is a motion affordance; users who turn motion off are
-// signalling they don't want involuntary feedback either. : the
+// signalling they don't want involuntary feedback either.: the
 // verdict comes from `useReducedMotion`, which weighs the in-app
 // Settings → Appearance override ("Always reduce" / "Never reduce")
 // ahead of the OS media query. Reading matchMedia directly, as this hook

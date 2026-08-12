@@ -44,15 +44,15 @@ import styles from './BottomTabBar.module.css';
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {boolean} [props.hasBtcAddress]
- * @param {boolean} [props.hasDexSurface]   false only in a build that compiled the DEX surface out ; the row is then absent, not disabled
- * @param {boolean} [props.isSignerMode]   §20 air-gapped signer mode; drops the Send tab and the Receive sheet row 
+ * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the row is then absent, not disabled
+ * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops the Send tab and the Receive sheet row
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
 const PRIMARY_TABS = [
     { id: 'home', label: 'Home', Icon: Icon.HomeIcon, group: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'] },
     { id: 'history', label: 'History', Icon: Icon.HistoryIcon, group: ['history'] },
-    // : `spendable` marks the two rows signer mode promises are gone.
+    // `spendable` marks the two rows signer mode promises are gone.
     { id: 'send', label: 'Send', Icon: Icon.SendIcon, group: ['send'], spendable: true },
     { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, group: ['scan'] },
 ];
@@ -105,14 +105,14 @@ export function BottomTabBar({
     }, [sheetOpen]);
 
     // `requiresDex` is a BUILD fact, not a wallet one: the store profile
-    // compiles the DEX routes out , so the row would point at a view
+    // compiles the DEX routes out, so the row would point at a view
     // that does not exist in this bundle.
     const sheetRows = SHEET_PRIMARY.filter(
         (row) => (!row.requiresBtc || hasBtcAddress)
             && (!row.requiresDex || hasDexSurface)
             && (!row.spendable || !isSignerMode),
     );
-    // : the Wallet Mode screen tells a signer-mode user "Send / receive
+    // The Wallet Mode screen tells a signer-mode user "Send / receive
     // screens are hidden; this wallet does not broadcast". The bottom bar is
     // the whole navigation below 600px, so leaving Send in the thumb row would
     // break that promise on exactly the device most likely to be the signer.

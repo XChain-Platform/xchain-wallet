@@ -89,7 +89,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** ISSUE, DEPLOY and the two ISSUE v6 binds each pay a real coin fee here . */
+/** ISSUE, DEPLOY and the two ISSUE v6 binds each pay a real coin fee here. */
 const FUNDING = 2;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `CTL${STAMP}`;
@@ -684,7 +684,7 @@ async function bindAddressController(page, source, contractIndex) {
     // wrote, so the endpoint served a stub with no `status` and none of the
     // binding's own fields; worse, an INVALID v1 persisted nothing at all, so a
     // refused bind was indistinguishable from one still being processed.
-    // FIXED IN CODE under : the handler is format-aware and reads
+    // FIXED IN CODE under: the handler is format-aware and reads
     // address_controllers, and the indexer writes an audit row for every ADDRESS
     // action, refused ones included. This venue still runs the pre-fix images
     // over a pre-fix index, so the assertion turns on only once the regtest

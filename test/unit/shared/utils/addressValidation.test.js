@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the recipient-address validator used to accept ANY string
+// The recipient-address validator used to accept ANY string
 // containing the substring "devmock", and it ships in the core (non
 // dev-gated) bundle. These tests pin the dev-mock escape hatch to the exact
 // shape mockDeriveAddress produces, so a pasted string that merely mentions

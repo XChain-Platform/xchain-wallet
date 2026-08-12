@@ -11,14 +11,14 @@
 // useNativeFee (PC-51): the one place a form keeps its "pay the protocol
 // fee in the native coin" setting. Every quotable authoring form mounts
 // the same NativeFeeToggle and must thread the SAME flag through up to
-// three submit paths (legacy submit,  compose preview, watcher
+// three submit paths (legacy submit, compose preview, watcher
 // encode-only); before this hook each form re-implemented the state and
 // the `|| undefined` payload normalization, and a form that forgot one
 // path silently dropped the fee mode on that lane. Centralizing here
 // also gives any future quoteNativeFee preview / >1% re-quote rail a
 // single adoption point instead of another ~15-form sweep.
 //
-// : the setting is only an OPT-IN on Bitcoin. Everywhere else the
+// The setting is only an OPT-IN on Bitcoin. Everywhere else the
 // native-coin output IS the protocol fee (registry/nativeFee.js carries the
 // consensus rule), so on those chains this hook forces the flag on and the
 // toggle becomes a statement rather than a choice. Before that, every

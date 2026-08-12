@@ -82,14 +82,14 @@ present and correct, and nothing executed them.
 Two defects are recorded as tests rather than hidden. Both are written so they
 **fail once the bug is fixed**, forcing the exception out along with the fix:
 
-- ** (palette contrast).** The default light theme's semantic colours fail
+- **(palette contrast).** The default light theme's semantic colours fail
   WCAG AA for text: accent `#1E90C7` at 3.57:1, success `#16A34A` at 3.29:1,
   warning `#D97706` at 2.74:1. `tokens.css` already carries AA-compliant
   variants under its forced high-contrast block, so only the default theme is
   non-compliant. The a11y spec quarantines exactly these token colours (every
   other rule, and every other colour, still fails the build) and asserts the
   debt still reproduces.
-- ** (signing is a silent no-op).** In this shell the dev-mock SDK cannot
+- **(signing is a silent no-op).** In this shell the dev-mock SDK cannot
   sign and throws by design, but the rejection is swallowed: "Sign on Bitcoin"
   leaves the confirm stage untouched with no alert, no busy state and not even a
   console error. Marked `test.fail()`, so Playwright still runs it and will fail
@@ -119,7 +119,7 @@ is labelled "Coin", not "Network", so pass the field to `selectVenueChain`), and
 fee-bearing action pays its protocol fee in the native coin, so the venue needs a
 price snapshot for that coin (see below, and it is no longer your job).
 
-## Price state, and why global setup writes to a database 
+## Price state, and why global setup writes to a database
 
 Every USD-priced action (place a bet, issue a token, open a dispenser) is valued
 against the indexer's `price_snapshots`, and a row there is usable for 1800
@@ -151,7 +151,7 @@ Two things about it are worth knowing before you touch it:
   itself"). Neither turns the CHECK off, which is the half that keeps a price
   failure legible.
 
-## Which SDK this venue runs on 
+## Which SDK this venue runs on
 
 The dev config pins the venue with `VITE_XCHAIN_REAL_SDK: '0'` on its
 `webServer`, and `packages/web/src/sdkFactory.js` reads that flag before it

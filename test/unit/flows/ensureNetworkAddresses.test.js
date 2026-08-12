@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : switching Settings > Network used to strand a wallet with no
+// Switching Settings > Network used to strand a wallet with no
 // addresses. Addresses were derived exactly once, at wallet creation, one per
 // `activeChainIds` - which the shells hardcode to the three mainnets - while
 // `activeNetwork` only FILTERED the visible set. After a switch, Receive said
@@ -53,7 +53,7 @@ function harness({ addresses = [], accounts = [{ id: 'acct-1', index: 0 }] } = {
 
 beforeEach(() => receiveAddress.mockReset());
 
-describe(': ensureNetworkAddresses', () => {
+describe('ensureNetworkAddresses', () => {
     it('derives the first address on every chain of the network', async () => {
         receiveAddress.mockResolvedValue({ address: 'bcrt1qexample' });
         const res = await ensureNetworkAddresses(harness());

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: test/e2e/timeout-budget.js - the load-aware Playwright budget .
+// Unit: test/e2e/timeout-budget.js - the load-aware Playwright budget.
 //
 // This is test infrastructure testing test infrastructure, which earns its
 // keep for one reason: the thing it computes is invisible when it is wrong.
@@ -122,7 +122,7 @@ describe('e2e timeout budget', () => {
             expect(budget.timeout).toBe(BASE_TEST_TIMEOUT_MS);
         });
 
-        it('is always at least as generous as the pre- fixed budget', () => {
+        it('is always at least as generous as the pre-fixed budget', () => {
             // The regression this guards: someone retunes the base numbers
             // down and quietly reintroduces the 15s assertion budget that
             // made the suite load-sensitive in the first place.
@@ -157,7 +157,7 @@ describe('e2e timeout budget', () => {
         });
     });
 
-    // . A hosted runner is not CONTENDED, it is small and slow, and
+    //A hosted runner is not CONTENDED, it is small and slow, and
     // load average cannot tell those apart: one Playwright worker on a 4-core
     // runner scores about 1.0x, so the suite handed its tightest budget to its
     // slowest machine and `e2e` came back 2 failed / 8 flaky on waits that pay

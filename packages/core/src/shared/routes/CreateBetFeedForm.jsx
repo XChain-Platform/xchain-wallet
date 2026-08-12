@@ -226,7 +226,7 @@ export function CreateBetFeedForm({
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // : opening a market is fee-bearing (BET v0 is duration-priced over the
+    // Opening a market is fee-bearing (BET v0 is duration-priced over the
     // market's full life), so it needs the same fee lane every other fee-bearing
     // form has. On LTC/DOGE the hook forces it on, because a native-coin output
     // is the only way to pay a protocol fee there: without it the create is
@@ -418,7 +418,7 @@ export function CreateBetFeedForm({
             setPassword('');
         } catch (err) {
             if (isUserRejection(err)) return;
-            // Through the shared mapper : this form's own validation
+            // Through the shared mapper: this form's own validation
             // catches a blank label or tick, but the SDK builder is the last
             // word on the wire rules, and its refusals reached the user as log
             // lines - "betting.createBetFeedParams: ..." (D-118).
@@ -471,7 +471,7 @@ export function CreateBetFeedForm({
                 walletId={walletId}
                 title="Token bets are placed in"
                 networkFilter={coinFromChainId(chainId)}
-                // : BET escrows a TOKEN. The native coin is not a legal
+                // BET escrows a TOKEN. The native coin is not a legal
                 // wager (the indexer answers `invalid: TICK (unknown)`), so
                 // offering it walked a wallet holding only BTC into composing a
                 // whole market that could never index. Proven on the regtest
@@ -509,7 +509,7 @@ export function CreateBetFeedForm({
 
     if (result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -679,7 +679,7 @@ export function CreateBetFeedForm({
 
             {quoteBlock}
 
-            {/* : this form is the one that already quotes its own fee, so
+            {/* This form is the one that already quotes its own fee, so
                 the row states the real answer instead of the chain's rule. Most
                 markets are free (the first 90 days cost nothing), and on LTC the
                 row used to promise a coin payment for every one of them. */}

@@ -19,7 +19,7 @@
 //
 // Static coverage asserts Home.jsx wires listWallets + getWalletBalances,
 // that every shell wires lockWallet, and that messaging.js exposes the
-// full set.  moved both lock paths (idle + manual) out of Home and
+// full set. a later change moved both lock paths (idle + manual) out of Home and
 // into the shells, so Home itself no longer calls lockWallet; the shell
 // mount point is asserted in auto-lock-shell.smoke.js.
 
@@ -64,11 +64,11 @@ for (const call of [
 }
 assert.ok(home.includes('HomeTabs'), 'shared Home.jsx imports HomeTabs');
 
-// : locking is a shell concern now. Home must not carry its own
+// Locking is a shell concern now. Home must not carry its own
 // lock path, and each shell must still have one.
 assert.ok(
     !/messaging\.lockWallet/.test(home),
-    'shared Home.jsx no longer owns a lock path ( moved it to the shells)',
+    'shared Home.jsx no longer owns a lock path (moved it to the shells)',
 );
 for (const rel of [
     ['packages', 'web', 'src', 'App.jsx'],

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Screenshot protection seam ( §1, S4).
+// Screenshot protection seam (§1, S4).
 //
 // The behaviour that matters is the RELEASE, not the protect. Turning
 // FLAG_SECURE on is easy; the bug that bites is turning it off while a

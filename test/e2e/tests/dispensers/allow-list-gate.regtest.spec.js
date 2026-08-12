@@ -320,7 +320,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             listIndex = String(published.action_index);
 
             // The indexer stores a list even when it drops items into
-            // list_items_invalid , so a valid ACTION is not the same as
+            // list_items_invalid, so a valid ACTION is not the same as
             // the MEMBERSHIP being what was asked for.
             const stored = (published.list || published.items || published.members || [])
                 .map((row) => String(typeof row === 'object' ? (row.address ?? row.item ?? '') : row));

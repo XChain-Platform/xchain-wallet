@@ -220,7 +220,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     // Source balance of the dividend ticker, backing the per-unit
     // AmountField's "available" footer. It is NOT the Max: see
-    // `maxPerUnit` below .
+    // `maxPerUnit` below.
     const dividendBalance = useTickBalance({
         messaging,
         walletId,
@@ -293,7 +293,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const eligible = sourceAddr
             ? holders.rows.filter((r) => r.address !== sourceAddr)
             : holders.rows;
-        // : the divisor is exact decimal math, not a float sum. It
+        // The divisor is exact decimal math, not a float sum. It
         // prices the preview AND bounds the Max button, so an ulp of
         // drift here is the difference between a payable rate and one the
         // chain rejects for insufficient funds.
@@ -310,14 +310,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         };
     }, [holders.rows, fromAddress, amount]);
 
-    //  (E2E D-86): AMOUNT is a RATE - dividend tokens per one unit
+    // (E2E D-86): AMOUNT is a RATE - dividend tokens per one unit
     // of the holder-of token - so the whole balance is the wrong
     // dimension for it. Max used to fill the balance, and the form's own
     // summary then quoted a distribution 500x what the address held, with
     // submit still live. The payable ceiling is balance / eligible units,
     // and the eligible set is already resolved one line above for the
     // preview. Same family as D-23 (contract Withdraw sized off the
-    // wallet) and  (Mint sized off holdings, not headroom).
+    // wallet) and (Mint sized off holdings, not headroom).
     const maxPerUnit = useMemo(
         () => perUnitMax({
             balance: dividendBalance,
@@ -355,7 +355,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError('Per-unit amount must be a positive number.');
             return;
         }
-        // : stop a payout the balance cannot cover here, not three
+        // Stop a payout the balance cannot cover here, not three
         // screens later behind a "sign anyway" tick. Only fires when both
         // the projected total and the balance are known, so an explorer
         // hiccup leaves the form ungated.
@@ -387,9 +387,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -397,7 +397,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -453,7 +453,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // A native-fee refusal arrives as NativeFeeForfeitError, whose own message is wire
     // wording ("native-coin fee pre-flight failed (dust): ..."). nativeFeeErrorMessage turns
     // it into the sentence that says what to do about it, and knows the advice differs off
-    // Bitcoin, where there is no XCHAIN lane to fall back to .
+    // Bitcoin, where there is no XCHAIN lane to fall back to.
     function nativeFeeAwareMessage(err) {
         return submitFailureMessage(err, {
             coinTicker,
@@ -560,7 +560,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 />,
             );
         }
-        // : this is the form the campaign proved it on. A queued result
+        // This is the form the campaign proved it on. A queued result
         // means signed and NOT broadcast; "Dividend sent" told a user whose
         // node was briefly unreachable that their holders had been paid.
         if (result?.queued) {
@@ -687,7 +687,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -702,7 +702,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

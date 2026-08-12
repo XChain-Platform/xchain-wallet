@@ -26,7 +26,7 @@ import styles from './MyTokens.module.css';
  * addresses currently OWNS, which is not the same set as the tokens it
  * issued: a TRANSFER moves ownership, so a token this wallet created and
  * handed on drops off the list, and a token someone transferred in shows
- * up here even though this wallet never issued anything ( / D-82,
+ * up here even though this wallet never issued anything (D-82,
  * where every string on the page claimed issuance). Hosts the
  * Issue-new-token affordance, and each row drills into TokenDetail, which
  * carries the owner-only actions (Mint, Destroy, Lock supply, …).

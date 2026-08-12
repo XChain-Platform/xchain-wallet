@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useSettingsRootAttributes . Projects the three display-wide
+// useSettingsRootAttributes. Projects the three display-wide
 // settings onto <html> so CSS and any component can read them without
 // threading props through the whole tree:
 //

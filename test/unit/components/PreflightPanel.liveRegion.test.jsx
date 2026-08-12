@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// PreflightPanel live-region announcement contract ( §5.2.4).
+// PreflightPanel live-region announcement contract (§5.2.4).
 //
 // This is the automatable half of §8.6's "manual screen-reader pass". What a
 // screen reader actually SPEAKS still needs a human with NVDA or VoiceOver;

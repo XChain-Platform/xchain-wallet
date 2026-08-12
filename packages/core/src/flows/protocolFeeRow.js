@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// protocolFeeRow . The words the authoring fee row says, derived from
+// protocolFeeRow. The words the authoring fee row says, derived from
 // what the form actually knows about the fee.
 //
 // The row used to be written as if every action it appears on charges a
-// protocol fee. On LTC/DOGE, where  turns it into a statement rather
+// protocol fee. On LTC/DOGE, where a later change turns it into a statement rather
 // than a choice, that read "Protocol fee is paid in LTC ... The fee is sent
 // on-chain and is not refunded if the network rejects this transaction" on
 // MINT, BROADCAST, DESTROY, SLEEP, SWEEP, LIST create/fork, LINK, PUBLISH,
@@ -102,7 +102,7 @@ export function normalizeProtocolFee(fee) {
  * @param {object} args
  * @param {*} [args.fee]              whatever the form holds; see normalizeProtocolFee
  * @param {string} args.coinTicker    native coin ticker (BTC/LTC/DOGE)
- * @param {boolean} [args.mandatory]  chain has no XCHAIN fee lane 
+ * @param {boolean} [args.mandatory] chain has no XCHAIN fee lane
  * @param {boolean} [args.checked]    native-coin payment selected (Bitcoin only)
  * @param {boolean} [args.unverified] priced without a verdict (DEPLOY/EXECUTE)
  * @returns {{ variant: 'statement'|'toggle', label: string, hint: string }}

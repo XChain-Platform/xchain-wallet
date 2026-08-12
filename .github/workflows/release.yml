@@ -1,6 +1,6 @@
 name: Release
 
-#  S4. Builds every shipped shell's artifacts from a `v*` tag and
+# S4. Builds every shipped shell's artifacts from a `v*` tag and
 # leaves them as run artifacts. It does NOT publish, submit, or sign the
 # release manifest.
 #
@@ -105,7 +105,7 @@ jobs:
       - name: Restore the annotated tag object (checkout flattens it)
         run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
 
-      #  §8, tag control. The remotes are shared with a second coder,
+      # §8, tag control. The remotes are shared with a second coder,
       # so "can push a tag" must not equal "can start the signing machinery".
       # The repository ruleset restricting `v*` creation is the first half
       # and lives in repo settings
@@ -117,7 +117,7 @@ jobs:
       # single point of total compromise.
       #
       # Ships EMPTY and fails closed, the same posture as the pinned update
-      # key in  S5: until the ceremony (stage A) puts a real key here,
+      # key in S5: until the ceremony (stage A) puts a real key here,
       # no release can run at all. That is deliberate. A gate that defaults
       # to "allow" when unconfigured is not a gate.
       - name: Tag must be GPG-signed by the release maintainer
@@ -174,7 +174,7 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building ${VERSION} at $(git rev-parse HEAD)"
 
-      #  §6 STEP 1, AS A GATE. .
+      # §6 STEP 1, AS A GATE.
       #
       # Everything above this line checks the TAG: who signed it, what
       # version it names. None of it checks whether anyone ever validated
@@ -307,7 +307,7 @@ jobs:
       # it per release would orphan the chain.
       STAGING_FEED: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
       # Presence of the Snapcraft store credential IS the "is the Snap
-      # Store channel set up yet" switch ( §16), read at job level so
+      # Store channel set up yet" switch (§16), read at job level so
       # the steps below have one condition - the same shape as MAS_CSC_LINK
       # on the mac job. Generate: `snapcraft export-login - | base64 -w0`.
       SNAP_CSC_LINK: ${{ secrets.SNAP_CSC_LINK }}
@@ -325,7 +325,7 @@ jobs:
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
       # THE LINUX ARTIFACTS ARE BUILT IN THE VERIFIER'S OWN CONTAINER, BY THE
-      # VERIFIER'S OWN SCRIPT , so the two sides share one C
+      # VERIFIER'S OWN SCRIPT, so the two sides share one C
       # toolchain and not merely one Node.
       #
       # This job used to build straight on ubuntu-latest.
@@ -333,7 +333,7 @@ jobs:
       # both really used it, but nothing pinned the C compiler: the
       # reproduction builds in debian:bookworm-slim at a fixed digest, so
       # node-gyp compiled tiny-secp256k1 against a different gcc and glibc
-      # here than there. Measured at v0.334.0 : 186 of the deb's 188
+      # here than there. Measured at v0.334.0: 186 of the deb's 188
       # files reproduced, and the two that did not were `secp256k1.node` and
       # the asar whose header embeds its hash. The published protocol tells a
       # verifier to read a mismatch as possible supply-chain tampering, so the
@@ -359,7 +359,7 @@ jobs:
           XCHAIN_REPRODUCE_IN_PLACE: '1'
         run: bash packages/desktop/scripts/reproduce.sh HEAD "${RUNNER_TEMP}/desktop-linux-repro"
       # The Snap Store package (§16), the THIRD Linux channel and a
-      # committed goal since 2026-08-03 . Same gap this workflow
+      # committed goal since 2026-08-03. Same gap this workflow
       # closed for MAS and AppX: the target exists behind XCHAIN_BUILD_SNAP=1
       # and nothing would ever set it. Gated on the store credential, which
       # does not exist yet (ceremony: Snapcraft account + reserved name), so
@@ -368,7 +368,7 @@ jobs:
       # snapcraft is not on the runner image and an artifact nothing can
       # upload would ride every release, so the credential is the switch.
       # BOTH ARCHES ARE WIRED TO CROSS-BUILD FROM THIS amd64 RUNNER, and the
-      # store credential was never what gated verifying that .
+      # store credential was never what gated verifying that.
       # resolveSnapCredentials() returns an empty map when SNAP_CSC_LINK is
       # unset and throws only on a credential that resolves EMPTY, so a local
       # `snapcraft pack` needs no store account. Only remote-build
@@ -383,7 +383,7 @@ jobs:
       # arm64 cross-build.
       #
       # THE CROSS-BUILD SUCCEEDS, driven 2026-08-06 on a real amd64 host
-      # ( frontier row 43): both `_amd64.snap` and `_arm64.snap` are
+      # (frontier row 43): both `_amd64.snap` and `_arm64.snap` are
       # produced, exit 0, and the arm64 image really carries an aarch64 ELF.
       # Two claims that used to sit here were wrong and are not restored:
       # the stage-packages cross-resolution is not this lane's failure mode
@@ -392,7 +392,7 @@ jobs:
       # and the arch gate is NOT a safety net against the failure that does
       # exist - snapcraft will pack host-arch libraries into an arm64-labelled
       # snap with exit 0, and lib.sh attributes arch by filename substring, so
-      # it would pass (). expected-artifacts.txt's
+      # it would pass. expected-artifacts.txt's
       # `optional *.snap default x64,arm64` still does what it was built for:
       # it passes a lane producing nothing and REFUSES one producing a single
       # arch.
@@ -422,8 +422,8 @@ jobs:
             sudo iptables -I DOCKER-USER -o lxdbr0 -j ACCEPT
           fi
       #
-      # `--linux snap` NARROWS THE TARGET, AND THAT IS NOT TIDINESS
-      # . This step runs on the host, because snapcraft and LXD
+      # `--linux snap` NARROWS THE TARGET, AND THAT IS NOT TIDINESS.
+      # This step runs on the host, because snapcraft and LXD
       # cannot run inside the reproduce image, and it runs AFTER the
       # container build that produced the AppImage and the deb. Left as a
       # full `--linux` build it would repackage those two on the host and
@@ -449,7 +449,7 @@ jobs:
       # Expected URL + channel come from the builder config, not from a
       # literal here: this workflow must never name the feed (see the
       # no-publish guard in test/smoke/audits/release-ci.smoke.js).
-      - name: Assert the packaged feed config ( §7.5)
+      - name: Assert the packaged feed config (§7.5)
         run: node tools/release/update-info.mjs assert-feed packages/desktop/dist
              --from-config packages/desktop/electron-builder.config.cjs
       # The `*.yml` line is the channel pointers (stable-linux.yml and
@@ -467,7 +467,7 @@ jobs:
             packages/desktop/dist/*.yml
           if-no-files-found: error
 
-      #  row 144. THE ONLY STEP IN THIS FILE THAT RUNS WHAT IT BUILT.
+      # Row 144. THE ONLY STEP IN THIS FILE THAT RUNS WHAT IT BUILT.
       #
       # Every other check here reads an artifact: the feed assert parses
       # yaml, the dev-mock gate greps the bundle, the arch gates read ELF
@@ -505,7 +505,7 @@ jobs:
       # Uploaded under its own artifact name and NEVER into the release
       # staging directory, so it cannot reach RELEASE_HASHES or the feed.
       #
-      # Host-built on purpose, unlike the release artifacts above .
+      # Host-built on purpose, unlike the release artifacts above.
       # Nothing publishes a pre-signing hash for a rehearsal build, so there
       # is no reproduction for its C toolchain to break; and it writes to
       # dist-staging, so it cannot touch what the container produced.
@@ -568,7 +568,7 @@ jobs:
           # environment, never repo-level.
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          # Names the signer explicitly . This step once shipped
+          # Names the signer explicitly. This step once shipped
           # unsigned, unnotarized artifacts while reading as configured:
           # `mac.identity` was `CSC_IDENTITY_NAME || null`, and
           # app-builder-lib treats an explicit null as "do not sign",
@@ -631,7 +631,7 @@ jobs:
       # Expected URL + channel come from the builder config, not from a
       # literal here: this workflow must never name the feed (see the
       # no-publish guard in test/smoke/audits/release-ci.smoke.js).
-      - name: Assert the packaged feed config ( §7.5)
+      - name: Assert the packaged feed config (§7.5)
         run: node tools/release/update-info.mjs assert-feed packages/desktop/dist
              --from-config packages/desktop/electron-builder.config.cjs
       # `*.yml` is the channel pointer: stable-mac.yml, one file covering
@@ -645,7 +645,7 @@ jobs:
             packages/desktop/dist/*.yml
           if-no-files-found: error
 
-      #  row 144, and THIS is the lane the row was written from.
+      # Row 144, and THIS is the lane the row was written from.
       #
       # v0.338.0's macOS build was signed with the Developer ID cert,
       # notarized by Apple, stapled, hash-manifested and rehearsed, and it
@@ -686,7 +686,7 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          # Same reason as the production step above : without a
+          # Same reason as the production step above: without a
           # qualifier the rehearsal build is unsigned, and an unsigned zip
           # is exactly what the publisher-match half of the update chain
           # cannot rehearse.
@@ -780,7 +780,7 @@ jobs:
       # Expected URL + channel come from the builder config, not from a
       # literal here: this workflow must never name the feed (see the
       # no-publish guard in test/smoke/audits/release-ci.smoke.js).
-      - name: Assert the packaged feed config ( §7.5)
+      - name: Assert the packaged feed config (§7.5)
         shell: bash
         run: node tools/release/update-info.mjs assert-feed packages/desktop/dist
              --from-config packages/desktop/electron-builder.config.cjs
@@ -827,7 +827,7 @@ jobs:
             packages/desktop/dist-staging/*.yml
           if-no-files-found: error
 
-  # ---- Mobile: iOS ( §5, stage S4b) ----------------------------
+  # ---- Mobile: iOS (§5, stage S4b) ----------------------------
   #
   # Split in two on purpose, because the two halves are blocked by
   # different things:
@@ -911,7 +911,7 @@ jobs:
              -destination 'generic/platform=iOS Simulator'
              CODE_SIGNING_ALLOWED=NO
              build
-      # The ARCHIVE action, on every tag, with or without Apple ( row 22).
+      # The ARCHIVE action, on every tag, with or without Apple (row 22).
       #
       # The simulator build above and the signed archive below cover different
       # things, and the gap between them was where the archive script sat having
@@ -963,7 +963,7 @@ jobs:
           {
             echo "## Release build complete: ${{ needs.verify-tag.outputs.version }}"
             echo
-            echo "Record these in \`claude/reports/wallet-releases/${{ needs.verify-tag.outputs.version }}.md\`:"
+            echo "Record these in this release's record (see tools/release/README.md §6 for where it lives):"
             echo
             echo "| Field | Value |"
             echo "|---|---|"

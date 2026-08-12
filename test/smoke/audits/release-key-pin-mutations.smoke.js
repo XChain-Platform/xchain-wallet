@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Guards the guards .
+// Guards the guards.
 //
 // Three copies of K1's fingerprint have to agree: `SECURITY.md` here,
 // `xchain.io/security/` in the sibling xchain-websites repo, and
@@ -63,7 +63,7 @@ const PAGE_REL = join('xchain.io', 'security', 'index.html');
 
 const sitesAvailable = existsSync(join(SITES_ROOT, SITES_GUARD_REL)) && existsSync(join(SITES_ROOT, PAGE_REL));
 
-/* Same rule the docs sibling learned the hard way in : a sibling that
+/* Same rule the docs sibling learned the hard way in: a sibling that
  * .ci-siblings PROMISES and the checkout does not have is a harness failure,
  * not a skip, because the skip is what let a gate report green having checked
  * nothing. xchain-websites is NOT declared today, so the channel half skips on
@@ -436,7 +436,7 @@ const MODES = [
     },
     {
         /* THE SENTENCE THAT IS PROTECTIVE NOW, which is neither of the two
-         * above . ES5 and ES5b drive the global claim in each of its
+         * above. ES5 and ES5b drive the global claim in each of its
          * states, and between them they leave a gap the project is standing in:
          * a release IS signed, so the global sentence is rightly gone, and yet
          * three of the four lanes are exactly as unsigned as they were the day
@@ -446,7 +446,7 @@ const MODES = [
          *
          * IT EXPIRES BY DESIGN, and that is the whole reason to write it down
          * here rather than trust it. The sentence names the extension, so
-         * publishing the Chrome Web Store listing ( Phase 8) makes it
+         * publishing the Chrome Web Store listing (Phase 8) makes it
          * false, as do the desktop and iOS lanes. Each of those adds its lane
          * to the page's data-release-coverage, the websites guard then demands
          * a sentence naming the lanes that are LEFT, and this mode goes red
@@ -527,7 +527,7 @@ if (failures.length) {
 const channelHalf = sitesChecks === MODES.length
     ? 'each also through the websites publication-channel test'
     : `${sitesChecks} of them also through the websites publication-channel test`;
-console.log(`PASS release-key-pin-mutations.smoke.js (: ${MODES.length} ceremony states driven `
+console.log(`PASS release-key-pin-mutations.smoke.js (${MODES.length} ceremony states driven`
     + `against a fixture tree, ${channelHalf}, and every one left the claimed suite red for the `
     + 'claimed reason and the other suite green)');
 

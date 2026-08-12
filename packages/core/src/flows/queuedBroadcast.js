@@ -212,7 +212,7 @@ export async function drainQueuedBroadcast({
             await sdk.encoder.broadcastTx(existing.txHex);
         } catch (err) {
             const msg = err && err.message ? String(err.message) : String(err);
-            //  §5.3: the SAME permanence split the submit path applies,
+            // The SAME permanence split the submit path applies,
             // applied again on EVERY retry. A queued transaction whose inputs
             // have since been spent can never confirm as signed, and leaving it
             // 'queued' invites the user to press "Broadcast now" forever on

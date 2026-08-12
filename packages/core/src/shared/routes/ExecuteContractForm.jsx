@@ -183,11 +183,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
-    // : EXECUTE is fee-bearing, and this form had no fee lane at all
+    // EXECUTE is fee-bearing, and this form had no fee lane at all
     // because BTC could always settle the protocol fee from an XCHAIN balance.
     // On every other protocol coin there is no XCHAIN lane, so the hook forces
     // the native output on rather than offering a choice that does not exist.
-    // The quote behind it is 's schedule price, which carries no verdict
+    // The quote behind it is that schedule price, which carries no verdict
     // (`valid:null`), hence `unverified` on the row: the amount is exact, the
     // acceptance is not pre-judged, and the fee is spent either way.
     const nativeFee = useNativeFee(chainId);
@@ -229,9 +229,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -239,7 +239,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -484,7 +484,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -622,7 +622,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -637,7 +637,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

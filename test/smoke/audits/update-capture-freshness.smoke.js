@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The archived update-check capture must describe the updater we SHIP
-// ( §7.6).
+// (§7.6).
 //
 // WHY THIS EXISTS. §7.6 is explicit that the download page may state only
 // what a capture SHOWS, not what we believe, and `docs/update-check-capture.json`
@@ -81,7 +81,7 @@ assert.equal(
 );
 
 console.log(
-    'OK: update-capture freshness ( §7.6: the archived update-check '
+    'OK: update-capture freshness (the archived update-check'
     + `capture was taken at the installed electron-updater (${installed}), and `
     + 'records the as-shipped staging id as a constant all-zero UUID)',
 );

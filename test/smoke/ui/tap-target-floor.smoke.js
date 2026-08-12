@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program, slice 2: the pointer-target floor.
+// responsive-first program, slice 2: the pointer-target floor.
 //
 // The wallet is one interface at every width, so it gets ONE answer to
 // "how small may a control be": WCAG 2.2 AA 2.5.8, 24x24 CSS px, held in
@@ -24,7 +24,7 @@
 // one of these files cannot quietly reintroduce a hard-coded 16px without
 // someone reading a red line that says why the number matters.
 //
-// , and read this before trusting a green run here: "sizes from
+// And read this before trusting a green run here: "sizes from
 // the token" is NOT the same claim as "the rendered box clears 24px",
 // and this file stayed green through two controls that missed the floor
 // by a pixel on the CI runner's font. The claim about geometry is made
@@ -91,7 +91,7 @@ assert.ok(/\.trigger:focus-visible \.glyph\s*\{[\s\S]*?outline:/.test(infoTipCss
     'the focus ring is drawn around the dot, not around the padded target box');
 
 console.log(
-    'OK: tap-target-floor smoke ( slice 2: --xc-tap-min = 24px per WCAG 2.2 AA 2.5.8; '
+    'OK: tap-target-floor smoke (slice 2: --xc-tap-min = 24px per WCAG 2.2 AA 2.5.8;'
     + `${CONSUMERS.length} previously-undersized controls size from the token; `
     + 'InfoTip paints a 16px .glyph inside a 24px target and rings the glyph on focus)',
 );

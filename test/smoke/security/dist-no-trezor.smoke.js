@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the T-RSL redistribution gate .
+// Smoke for the T-RSL redistribution gate.
 //
 // tools/build-reproduce/check-no-trezor-dist.sh is a CI build-verify step that
 // greps the three shipped shells' built dist/ for a bundled `@trezor` scope

@@ -30,7 +30,7 @@
     --xc-text-xl: 20px;
     --xc-text-2xl: 24px;
 
-    /* Minimum interactive target ( responsive-first, slice 2).
+    /* Minimum interactive target (responsive-first, slice 2).
      *
      * WCAG 2.2 AA 2.5.8 "Target Size (Minimum)": every pointer target is
      * at least 24x24 CSS px. The wallet is ONE interface at every width,
@@ -55,10 +55,10 @@
     --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
     /* Brand accent (sampled from branding/images/xchain-color-750.png).
-     * : darkened one step from the sampled brand value to clear
+     * Darkened one step from the sampled brand value to clear
      * WCAG AA (4.5:1) as both a white-on-accent button label and as
      * accent-on-white text. The operator ratified the accent hue family
-     * as brand ; this stays in that family, it is just the
+     * as brand; this stays in that family, it is just the
      * shade that was already doing hover duty one step darker. */
     --xc-accent-primary: #1A7BAC;
     --xc-accent-primary-hover: #156690;
@@ -72,17 +72,17 @@
     --xc-border: #E4E7EB;
     --xc-border-strong: #C7CCD4;
     --xc-text: #0F172A;
-    /* : darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
+    /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
-    /* : darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
+    /* Darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
     --xc-warning: #A8500A;
     --xc-warning-bg: rgba(217, 119, 6, 0.10);
     --xc-warning-text: #6E520A;
-    /* : darkened from #16A34A (2.81:1 on its own badge bg) to clear AA.
+    /* Darkened from #16A34A (2.81:1 on its own badge bg) to clear AA.
      * #157A3A measured 4.44:1 against a real composited badge bg
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
@@ -91,7 +91,7 @@
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
 
-    /* : how tall the app shell may be. NOT plain 100dvh, because
+    /* How tall the app shell may be. NOT plain 100dvh, because
      * `body` below pads itself by the top safe-area inset, so a shell that
      * is a full viewport tall starts BELOW the viewport top and therefore
      * ends below its bottom. That overflow is what made the document
@@ -112,7 +112,7 @@
     --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
 }
 
-/* Dark palette. : two triggers, one payload.
+/* Dark palette. Two triggers, one payload.
  *
  *   - the OS asks for dark AND the user has not forced Light
  *   - the user picked Dark in Settings > Appearance, which
@@ -224,7 +224,7 @@
         --xc-focus-ring: rgba(15, 23, 42, 0.85);
     }
 
-    /* : same Light escape hatch as the base palette, so a user on a
+        /* Same Light escape hatch as the base palette, so a user on a
      * dark OS who picked Light gets the light high-contrast values. */
     @media (prefers-color-scheme: dark) {
         :root:not([data-xc-theme="light"]) {
@@ -313,7 +313,7 @@ body {
      *
      * COUPLED to --xc-viewport-h above, and the pair must stay in step: this
      * padding moves the shell's top edge down, so the shell's height has to
-     * come down by the same amount or the document scrolls .
+     * come down by the same amount or the document scrolls.
      *
      * NO bottom inset here on purpose. BottomTabBar and LeftNav already pad
      * themselves by `env(safe-area-inset-bottom)`, and they are pinned to the

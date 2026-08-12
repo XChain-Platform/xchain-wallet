@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// One place that answers "which stores does this device use" ( S2).
+// One place that answers "which stores does this device use" (S2).
 //
 // hostBridge constructs a storage backend and a meta backend at seven call
 // sites (create, import, unlock, session-status, …). Before this file each
@@ -45,7 +45,7 @@ let nativeCache = null;
 /**
  * @returns {boolean}
  * @throws {VaultUnavailableError} on a native shell whose plugin never
- *   registered - a broken build, not a browser .
+ * registered - a broken build, not a browser.
  *
  * The throw is the point. Every other answer this function could give on that
  * device is a downgrade to WebView storage, and the wallet would work
@@ -93,7 +93,7 @@ export function storageBackendName() {
 }
 
 /**
- * Give core's screen guard something to actually do ( §1, S4).
+ * Give core's screen guard something to actually do (§1, S4).
  *
  * Core decides WHICH screens are protected - seed display, key export,
  * mnemonic entry, unlock - and knows nothing about how. This connects that

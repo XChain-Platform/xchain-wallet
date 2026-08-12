@@ -278,7 +278,7 @@ export function CoinpayForm({
             };
             let r;
             if (isWatcherMode) {
-                // : goes through the COINPAY-specific encode route, which
+                // Goes through the COINPAY-specific encode route, which
                 // re-verifies the obligation before building the native output.
                 // The generic buildActionPsbtRequest would happily encode a
                 // payment to whatever payee/amount this screen handed it, and an
@@ -355,7 +355,7 @@ export function CoinpayForm({
 
     if (stage === 'done') {
         const txid = result?.txid;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);

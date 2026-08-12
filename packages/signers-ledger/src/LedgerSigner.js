@@ -65,7 +65,7 @@ import { readLedgerAppInfo } from './appInfo.js';
  * keeping this narrow is what makes the mock surface tiny.
  *
  * Every name here must exist on the real `Btc` prototype. It did not
- * for two releases : the fakes were written from this typedef
+ * for two releases: the fakes were written from this typedef
  * and the typedef from our own call sites, so nothing compared either
  * against the shipped class. `test/unit/signers-ledger/hw-app-btc-surface.test.js`
  * now pins that comparison against the installed package.
@@ -380,7 +380,7 @@ export class LedgerSigner extends Signer {
         }
         const messageHex = messageToHex(message);
         // `signMessage`, not `signMessageNew`: hw-app-btc v10 renamed it, and
-        // the old name is absent from the shipped class .
+        // the old name is absent from the shipped class.
         const sig = await runLedger(this._id, 'signMessage', () =>
             this._app.signMessage(path, messageHex),
         );

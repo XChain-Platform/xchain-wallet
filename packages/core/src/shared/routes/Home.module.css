@@ -87,7 +87,7 @@
     margin: 0 0 var(--xc-space-3);
 }
 
-/* : the "no addresses yet" state carries its own CTA, so it needs
+/* The "no addresses yet" state carries its own CTA, so it needs
    to sit as a block rather than a stray line of muted text. */
 .emptyState {
     display: flex;
@@ -125,7 +125,7 @@
 /* Quick-actions row sits between the total-balance hero and the
    tab strip. Send / Receive / Exchange / More, one equal column each.
    Sized by child count rather than a fixed 4, because a store build
-   drops Exchange  and can drop More too , and a
+   drops Exchange and can drop More too, and a
    fixed 4-column track left the row hanging off the leading edge.
    The HomeTabs wrap is a flex column with `gap: var(--xc-space-3)`;
    negative top-margin shrinks the hero→actions gap to match the
@@ -244,7 +244,7 @@
     color: var(--xc-accent-primary);
 }
 
-/*  row 106: nine buttons, one line, no wrap and no scroll affordance.
+/* row 106: nine buttons, one line, no wrap and no scroll affordance.
    Measured 2026-08-07 in the real desktop app: this row's scrollWidth is 1300
    against a clientWidth of 1048 at EVERY window size (the container is
    width-capped, so widening the window does not help), overflow-x is

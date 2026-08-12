@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §5.6 slice 1: the single-encode ConfirmActionModal wired
+// Smoke for §5.6 slice 1: the single-encode ConfirmActionModal wired
 // into Send.jsx through the HOST boundary. All SDK access is host-side, so
 // compose + tamper + preflight run in the background and reach the React
 // tree over `messaging`. This asserts the whole boundary is connected end to
@@ -76,7 +76,7 @@ const submitActionSrc = read('packages', 'core', 'src', 'flows', 'submitAction.j
 assert.match(submitActionSrc, /prebuiltPsbt,/, 'submitAction forwards prebuiltPsbt to submitWithSigner');
 // §5.3.4: permanence must ride in the error NAME. The messaging envelope
 // carries { name, message } plus a CLOSED allow-list of structured fields
-// (`code` and the three THROTTLED hints bridge-spec declares, ), so
+// (`code` and the three THROTTLED hints bridge-spec declares), so
 // anything outside that list - permanence included - is still dropped at the
 // boundary. Pinned as the allow-list rather than as "name+message only",
 // because the second form would go red the next time a declared field lands
@@ -102,13 +102,13 @@ assert.match(permanenceSrc, /export function broadcastFailureKindFromError/, 'pe
 const sendSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');
 assert.match(sendSrc, /import \{ ActionConfirmScreen \}/, 'renders through the SHARED confirm screen, not a hand-rolled modal copy: that adapter is where the §5.2.5 exact fee and §5.2.3 deltas live');
 assert.match(sendSrc, /useConfirmAction\(\)/, 'uses the confirm hook');
-//  slice 5: the flag is gone; only the watcher carve-out branches.
+// slice 5: the flag is gone; only the watcher carve-out branches.
 assert.match(sendSrc, /if \(!isWatcherMode\) \{/, 'the confirm path is unconditional for anything that signs');
 assert.doesNotMatch(sendSrc, /confirmModalSlices|isConfirmModalSliceEnabled/, 'no slice flag survives');
 assert.match(sendSrc, /messaging\.composeForConfirm\(/, 'compose() calls the host compose route');
 assert.match(sendSrc, /messaging\.preflight\(/, 'preflight streams from the host route');
 assert.match(sendSrc, /const prebuiltPsbt = \{/, 'Approve signs the prebuilt PSBT via sendToken / sendAssetHw');
-// : hardware confirms here too; watcher still branches (it encodes,
+// Hardware confirms here too; watcher still branches (it encodes,
 // it never signs). The §18.5 cross-check has to survive the move onto the
 // shared screen, or a HW gate would be silently dropped.
 assert.match(sendSrc, /if \(!isWatcherMode\)(?! && !isHwSource)/, 'confirm path covers hardware');

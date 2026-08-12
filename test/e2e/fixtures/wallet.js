@@ -77,7 +77,7 @@ export { expect };
 /**
  * The wallet's navigation surface, whichever one the layout is showing.
  *
- *  responsive-first: the layout picks ONE nav surface from its own
+ * responsive-first: the layout picks ONE nav surface from its own
  * measured width (packages/core/src/shared/styles/breakpoints.js). Below
  * 640px `<BottomTabBar>` ("Bottom navigation") owns navigation; from 640px
  * up it is the left rail ("Primary navigation"), labelled from 900px. The
@@ -116,7 +116,7 @@ export function unlockedShell(page) {
 /**
  * Opens Settings, by whichever route this shell offers.
  *
- * : the MV3 popup has no navigation surface. Its entry point is the gear
+ * The MV3 popup has no navigation surface. Its entry point is the gear
  * in Home's balance hero, which is what a real user has; the command palette
  * also lists every Settings section and is kept here as the fallback so this
  * still works if the gear ever moves. Web and desktop use the nav. Same screen
@@ -151,7 +151,7 @@ export async function openSettings(page) {
  * accessible name is the concatenation. An exact match therefore finds
  * the item right up until the wallet has something to tell the user
  * about, which is precisely when a test is most likely to be looking at
- * it. (This bit the  width walk: the same click passed on an empty
+ * it. (This bit the width walk: the same click passed on an empty
  * wallet and hung on a populated one.)
  *
  * Exact first so a name that IS another's prefix cannot be hijacked, then
@@ -202,7 +202,7 @@ export async function gotoSection(page, name) {
     // No nav landmark at all: the MV3 popup. It navigates from Home's quick
     // actions (Send / Receive / Exchange / More) instead of a nav surface.
     // Destinations that are NOT quick actions are not reachable this way; see
-    //  before writing an extension spec that needs one.
+    // before writing an extension spec that needs one.
     if (await clickDestination(page.getByRole('main'), name)) return;
     throw new Error(`no quick action named "${name}" on this screen`);
 }

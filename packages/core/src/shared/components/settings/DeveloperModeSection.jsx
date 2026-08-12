@@ -16,7 +16,7 @@
 //     NetworkEndpointsSection; broader picker application lands in a
 //     follow-up step).
 //   - Learn Mode toggle (`settings.learnMode`). Drives explanatory
-//     copy on confirmation screens.  gave it its first reader:
+// copy on confirmation screens. a later change gave it its first reader:
 //     DisplayPrefsGate stamps it on <html> and <LearnNote> renders the
 //     copy on the standard confirmation surface.
 //   - Auto-approve localhost dApps (`settings.autoApproveLocalhost`).

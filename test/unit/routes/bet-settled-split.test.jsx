@@ -131,7 +131,7 @@ describe('splitFromBets', () => {
         expect(splitFromBets(null)).toEqual([]);
     });
 
-    // Session 25, . Market #1198 was resolved `resolved_void` because it
+    // Session 25,. Market #1198 was resolved `resolved_void` because it
     // held no accepted bets at all, and its page still read "0: Yes 100
     // (100.0%, 1 bet)" - the rejected bet from the deadline race, counted as a
     // stake. A rejected BET is a real transaction that paid real fees and

@@ -23,7 +23,7 @@ import { freezeMotion } from './wallet.js';
 
 export const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-// : the accent/success/warning/muted-text contrast debt this suite
+// The accent/success/warning/muted-text contrast debt this suite
 // used to quarantine is fixed in tokens.css (default light theme darkened
 // to clear AA). No exceptions remain - every color-contrast finding fails
 // the build now.

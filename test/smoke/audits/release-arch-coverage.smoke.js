@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Per-architecture coverage in the release gate ( §8, ).
+// Per-architecture coverage in the release gate (§8).
 //
 // WHAT THIS EXISTS TO STOP, in the words of the defect that caused it.
 // Every desktop release lane read `pnpm -C packages/desktop dist -- --linux
@@ -25,7 +25,7 @@
 // because every question here is about how a NAME classifies, and that is
 // answered by electron-builder's naming rules and not by intent.
 //
-// Two failure directions, and the second is the one  opened:
+// Two failure directions, and the second is the one opened:
 //
 //   MISSING-ARCH   a declared arch has no artifact. The release is half a
 //                  release and the other half's fleet has no download.
@@ -160,7 +160,7 @@ try {
             r.out);
     }
 
-    // --- 2. The combined NSIS installer  ----------------------
+    // --- 2. The combined NSIS installer ----------------------
     //
     // The real one, from the first successful Windows build: 193M holding
     // both arches, un-suffixed. The operator decided on 2026-08-01 to ship
@@ -173,13 +173,13 @@ try {
         check('the combined NSIS installer fails the gate', !r.ok, r.out);
         check('and is reported as unattributable, not as a missing arch',
             /UNATTRIBUTED.*setup-0\.333\.1\.exe/s.test(r.out), r.out);
-        check('and the message names  and both ways out',
-            //.test(r.out) && /multi/.test(r.out), r.out);
+        check('and the message names and both ways out',
+            /combined-installer arch row/.test(r.out) && /multi/.test(r.out), r.out);
     }
 
     // --- 3. `multi` is the declared escape hatch, and only that --------
     //
-    // If  decides to publish the combined installer, one column
+    // If decides to publish the combined installer, one column
     // says so. The point of testing it is that the allowance must not
     // also excuse a MISSING arch: a row declaring `multi` still has to
     // produce both real installers.
@@ -336,7 +336,7 @@ try {
                 `arch column is '${arches}'`);
         }
 
-        // NO row declares `multi` (, operator 2026-08-01: ship only
+        // NO row declares `multi` (operator 2026-08-01: ship only
         // the two per-arch installers). The token exists and is driven in
         // case 3 above, but the moment a committed row carries it, some
         // artifact is being waved through unattributed - and the one
@@ -361,7 +361,7 @@ try {
             'electron-builder.config.cjs'), 'utf8');
         check('nsis.buildUniversalInstaller is off',
             /buildUniversalInstaller:\s*false/.test(cfg),
-            'the un-suffixed both-arch installer would be emitted again ');
+            'the un-suffixed both-arch installer would be emitted again');
     }
 } finally {
     rmSync(work, { recursive: true, force: true });
@@ -373,10 +373,10 @@ if (failures > 0) {
 }
 
 console.log(
-    'OK: release arch-coverage smoke ( §8, : expected-artifacts.txt'
+    'OK: release arch-coverage smoke (§8,: expected-artifacts.txt'
     + ' carries a fourth arch column; dropping either arch of any of the six'
     + ' desktop lanes fails the gate by name; the un-suffixed combined NSIS'
-    + ' installer is suppressed at the source (, operator 2026-08-01) and'
+    + ' installer is suppressed at the source (operator 2026-08-01) and'
     + ' refused as unattributable by this gate if it ever returns, with no'
     + ' committed row declaring the `multi` allowance; a declared `multi` would'
     + ' tolerate such a file without excusing a missing arch; two artifacts'

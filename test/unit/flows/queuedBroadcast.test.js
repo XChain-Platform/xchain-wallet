@@ -208,7 +208,7 @@ describe('drainQueuedBroadcast: in-flight / idempotency guard', () => {
         expect(after.error).toMatch(/network down/);
     });
 
-    //  §5.3: the queue applies the SAME permanence split as the submit
+    // The queue applies the SAME permanence split as the submit
     // path, on every retry. Without it the drain reverted everything to
     // 'queued', so a transaction whose inputs were already spent sat on the
     // rebroadcast surface forever, inviting the user to retry bytes that can

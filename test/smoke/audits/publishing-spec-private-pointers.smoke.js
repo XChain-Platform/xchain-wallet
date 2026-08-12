@@ -8,17 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//. Every store-publishing spec has to carry the operator map its
+//Every store-publishing spec has to carry the operator map its
 // published pages are forbidden to carry, and every pointer on that map has
 // to resolve.
 //
 // WHAT THIS IS A PORT OF. The documentation standard (§34) bars `claude/`
 // paths, XC ids, credentials and store identities from published pages and
-// names the owning SPEC as their home instead.  stripped that material
+// names the owning SPEC as their home instead. stripped that material
 // out of every ceremony page correctly, and on the Chrome lane nothing picked
 // it up: for a day the published page told an operator to "log it in the
 // correspondence log, in full, before responding" and no document anywhere
-// said where that log was.  closed its own instance as spec §4a plus
+// said where that log was. a later change closed its own instance as spec §4a plus
 // §5 of extension-ceremony-collateral.smoke.js.
 //
 // THE CLASS, WHICH IS WHY THIS FILE EXISTS. Measured 2026-08-03: the Android,
@@ -136,7 +136,7 @@ for (const { name, text } of specs) {
     assert.ok(entries.length >= 3,
         `${name}'s private-pointer map lists ${entries.length} pointers, fewer than the three every `
         + 'lane needs (its correspondence log, the incident runbook, the credential-custody rows). A '
-        + 'map that loses an entry is exactly how the  migration lost all of them.');
+        + 'map that loses an entry is exactly how the migration lost all of them.');
 
     maps.set(name, { block, entries });
 }

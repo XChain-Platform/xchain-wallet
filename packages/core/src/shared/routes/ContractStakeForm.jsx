@@ -55,7 +55,7 @@ function extractRows(resp) {
     return [];
 }
 
-// : contract-targeted staking runs on every chain. This form composes
+// Contract-targeted staking runs on every chain. This form composes
 // STAKE v3 / UNSTAKE v1 / DELEGATE v1, and the indexer dispatches those
 // versions to their own handlers BEFORE the `COIN !== 'BTC'` gate, so they
 // carry no coin restriction; capability (validator) staking, which does hit
@@ -200,7 +200,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
 
     // Unstake mode's "available" is the STAKED balance on this contract
     // (per pubkey when one is entered), not the wallet token balance;
-    // it bounds the  optional partial amount.
+    // it bounds the optional partial amount.
     const [stakedAvailable, setStakedAvailable] = useState(/** @type {number | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
@@ -274,7 +274,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             TICK: tick.trim(),
         };
         if (mode === 'stake') p.AMOUNT = amount.trim();
-        // : unstake AMOUNT is an optional strict partial. Empty
+        // Unstake AMOUNT is an optional strict partial. Empty
         // field or the full staked balance keeps the legacy absent-AMOUNT
         // bytes (full sweep); pre-flag-day layers IGNORE a present AMOUNT,
         // so legacy bytes are the safe encoding for a full sweep.
@@ -329,9 +329,9 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
 
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -339,7 +339,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -495,7 +495,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -638,7 +638,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -653,7 +653,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

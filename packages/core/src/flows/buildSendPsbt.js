@@ -126,7 +126,7 @@ export async function buildSendPsbt(opts) {
     });
     if (gatedPlan) actionData = gatedPlan.actionData;
 
-    // : a plain native-coin payment carries no XChain action. The watcher
+    // A plain native-coin payment carries no XChain action. The watcher
     // path builds the same bytes the signer will sign, so it has to make the
     // same choice as the confirm path or the two would disagree about what the
     // transaction is.

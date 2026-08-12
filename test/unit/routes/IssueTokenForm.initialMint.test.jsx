@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the standalone ISSUE form derived BOTH MAX_SUPPLY and
+// The standalone ISSUE form derived BOTH MAX_SUPPLY and
 // MINT_SUPPLY from the single "Supply" box, so every token the wallet
 // created was born fully minted at its own cap: mint headroom exactly 0,
 // and the whole Mint surface unreachable for anything issued here.
@@ -91,7 +91,7 @@ async function composedParams() {
 afterEach(() => cleanup());
 beforeEach(() => { composeForConfirm = undefined; });
 
-describe('IssueTokenForm initial mint ', () => {
+describe('IssueTokenForm initial mint', () => {
     it('leaves mint headroom when the initial mint is below the supply', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '1000' });

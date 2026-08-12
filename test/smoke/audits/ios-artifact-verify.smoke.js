@@ -238,7 +238,7 @@ mustFail('a build with no Version.xcconfig behind it at all',
     { expected: { ...expected, marketingVersion: undefined, buildNumber: undefined } },
     /Version\.xcconfig was missing/);
 
-//  S46. The line above is why the CLI half of this smoke was RED on
+// S46. The line above is why the CLI half of this smoke was RED on
 // every fresh checkout and green in a checkout that had built iOS: the file is
 // generated and git-ignored, the CLI read its expectation from it regardless,
 // and `--marketing-version` / `--build-number` fed only the TAG side, so the

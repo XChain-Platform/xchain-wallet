@@ -270,7 +270,7 @@ export function isDuressMatch(candidate) {
  */
 export function tripDuressIfMatch(candidate) {
     if (!isDuressMatch(candidate)) return false;
-    // Tagged 'duress' so the disclosure policy  keeps Home and Send
+    // Tagged 'duress' so the disclosure policy keeps Home and Send
     // silent about this freeze. Announcing it would hand the observer the
     // cue this whole flow is built to withhold.
     activatePanicMode({ armedBy: PANIC_ARMED_DURESS });

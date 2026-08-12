@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : summary coverage across every protocol ACTION.
+// Summary coverage across every protocol ACTION.
 //
 // The draft-preview describer is what a user reads at a form's review
 // stage, right before the confirm screen. It covered 13 of the 31
@@ -36,7 +36,7 @@ const PROTOCOL_ACTIONS = [
 
 const GENERIC = /No plain-English summary is available/;
 
-describe('decodeAction summary coverage ', () => {
+describe('decodeAction summary coverage', () => {
     for (const action of PROTOCOL_ACTIONS) {
         it(`${action} has a plain-English summary`, () => {
             // Params empty on purpose: a describer must build its summary

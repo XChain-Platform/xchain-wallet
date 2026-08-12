@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : an arm64 verifier gets told which emulator will run,
+// Smoke for: an arm64 verifier gets told which emulator will run,
 // BEFORE the build, instead of a Go traceback twenty minutes in.
 //
 // WHAT THIS IS DEFENDING. All three reproduce lanes pin an amd64-only base

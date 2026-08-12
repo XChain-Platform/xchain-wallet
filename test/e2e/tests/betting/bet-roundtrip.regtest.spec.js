@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  P8 verify line: create -> bet -> resolve, driven entirely through the
+// P8 verify line: create -> bet -> resolve, driven entirely through the
 // wallet UI against the live regtest stack.
 //
 // P8's routes each have unit and smoke coverage, and the SDK/indexer sides have

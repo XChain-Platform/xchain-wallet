@@ -40,7 +40,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -123,9 +123,9 @@ export async function dispenserAction(opts) {
             // SDK states outright that `change` is "deliberately NOT a fallback" for
             // `sourceAddress` (xchain-sdk/src/encoder.js createTx). Passing neither
             // left the encoder resolving UTXOs from the raw `pubkey`, which fails as
-            // "<pubkey> has no matching Script" - the same D-36/ shape found in
+            // "<pubkey> has no matching Script" - the same D-36 shape found in
             // sendToken. It surfaced here only once Refill/Edit/Close became
-            // reachable ; the create lane composes through the confirm modal,
+            // reachable; the create lane composes through the confirm modal,
             // which passes the address, so only these three were affected (D-43).
             change: source.address,
             sourceAddress: source.address,

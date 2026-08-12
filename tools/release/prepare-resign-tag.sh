@@ -14,7 +14,7 @@
 #*********************************************************************
 
 # tools/release/prepare-resign-tag.sh - cut a tag a release can be
-# re-signed from, and PROVE it before handing it over .
+# re-signed from, and PROVE it before handing it over.
 #
 # Usage:
 #   bash tools/release/prepare-resign-tag.sh --tag v0.336.0 \

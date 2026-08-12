@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : restoring an encrypted backup onto a FRESH install.
+// Restoring an encrypted backup onto a FRESH install.
 //
 // The shipping `wallet.importBackup` is registered on the MessageHost, and the
 // host is only built once a vault exists. On a device with no wallet there is
@@ -26,7 +26,7 @@
 //   1. The restore creates the vault, and the vault opens under the NEW device
 //      password afterwards.
 //   2. The restored wallet's SEED opens under that same new password. This is
-//      the  re-key seen from the fresh-install side, and it is what lets
+// the re-key seen from the fresh-install side, and it is what lets
 //      the lane offer a free password choice at all.
 //   3. A wrong wallet password leaves the install FRESH - no meta, no vault
 //      blob, no session - so the user can simply try again. A half-onboarded
@@ -133,7 +133,7 @@ function sourceVaultWith(sealed) {
     };
 }
 
-describe('integration/shells/pre-host fresh-install backup restore ', () => {
+describe('integration/shells/pre-host fresh-install backup restore', () => {
     let exported;
     let deps;
     let storageBackend;
@@ -226,7 +226,7 @@ describe('integration/shells/pre-host fresh-install backup restore ', () => {
     });
 
     it('the restored seed opens under the NEW device password', async () => {
-        // The fresh-install half of . Without the re-key the user would
+        // The fresh-install half. Without the re-key the user would
         // choose a password here, unlock with it, and then be unable to sign.
         await restore();
         const vault = await openAs(NEW_DEVICE_PASSWORD);
@@ -243,7 +243,7 @@ describe('integration/shells/pre-host fresh-install backup restore ', () => {
     });
 
     it('a wrong wallet password leaves the install fresh and retryable', async () => {
-        // : the refusal names the FIELD on the restore screen ("Password
+        // The refusal names the FIELD on the restore screen ("Password
         // of the wallet in this backup"), where it used to describe the role in
         // prose ("the backed-up wallet's password"). Same claim, worded so the
         // user can find the box.

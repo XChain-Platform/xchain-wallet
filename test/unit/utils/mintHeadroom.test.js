@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : mint headroom is min(MAX_MINT, MAX_SUPPLY - supply). The case
+// Mint headroom is min(MAX_MINT, MAX_SUPPLY - supply). The case
 // that made the defect visible is a token exactly at its cap, where the
 // answer has to be a hard '0' and not "whatever you happen to hold".
 

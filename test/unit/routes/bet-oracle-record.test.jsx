@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  P8: the oracle track record, and the link that reaches it.
+// P8: the oracle track record, and the link that reaches it.
 //
 // The wallet shipped every other betting surface with the `bet.oracle` host route
 // registered, the flow written, and BetFeedDetail carrying an `onOpenOracle` prop
@@ -84,7 +84,7 @@ function harness(overrides = {}) {
         betFeeds: (args) => { calls.push({ method: 'betFeeds', args }); return Promise.resolve({ data: MARKETS.slice() }); },
         betFeed: (args) => { calls.push({ method: 'betFeed', args }); return Promise.resolve({ data: [FEED] }); },
         // The SDK returns a projection OBJECT, not a bare amount. Mocked at the
-        // real shape so nothing here quietly re-asserts the  mismatch.
+        // real shape so nothing here quietly re-asserts the mismatch.
         betProjectPayout: () => Promise.resolve({
             payout: '13.86000000', profit: '3.86000000', impliedOdds: '1.38600000',
             total: '14.00000000', winningPool: '5.00000000', fee: '0.14000000',
@@ -121,7 +121,7 @@ async function mount(Component, messaging, props = {}) {
 
 const text = (utils) => utils.container.textContent || '';
 
-describe('OracleRecord ( P8)', () => {
+describe('OracleRecord (P8)', () => {
 
     it('asks the host for THIS address on THIS chain, and lists only its markets', async () => {
         const { messaging, calls } = harness();

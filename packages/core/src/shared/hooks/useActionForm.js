@@ -140,10 +140,10 @@ export function useActionForm({
     // explicit pick, then an `initialFromAddress` (a token/owner context the
     // caller resolved); otherwise the chain's ACTIVE address, the one Home
     // and Send operate on and the one holding the balance on a wallet that
-    // has generated more than one address ( / D-57). Falls back to
+    // has generated more than one address (D-57). Falls back to
     // the newest HD receive-branch address when no active address applies.
     //
-    // DERIVED, not stored . This used to be an effect that wrote
+    // DERIVED, not stored. This used to be an effect that wrote
     // the default into state, which meant the load landed in TWO commits:
     // the first painted the fully loaded form with no source at all - the
     // red "No address on this chain. Use Receive to generate one first."
@@ -175,7 +175,7 @@ export function useActionForm({
         // than leaving it null, so this only holds before the load lands.
         if (!activeByChain) return null;
         // Shared helper: reads change/index from the END of the path, so a
-        // counterwallet-legacy m/0'/C/I wallet resolves too .
+        // counterwallet-legacy m/0'/C/I wallet resolves too.
         const id = preferredSourceId(all, activeByChain[chainId]);
         return all.find((a) => a.id === id) || null;
     }, [chainId, addressesByChain, activeByChain, pickedFromId, initialFromAddress]);

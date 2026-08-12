@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The wire audit: every host the shipped wallet can contact, and on which
-// shell ( §2.6,  §5,  privacy policy).
+// shell (§2.6, §5, privacy policy).
 //
 // This exists because three documents have to agree with each other AND with
 // the code, forever: Apple's privacy nutrition labels, Play's Data safety
@@ -123,7 +123,7 @@ export const WIRE_AUDIT = Object.freeze([
         source: 'packages/core/src/flows/tokenInfo.js (descriptionJsonUrl)',
     },
     {
-        // WIRED 2026-08-02 ( D4). This row used to say the Android feed
+        // WIRED 2026-08-02 (D4). This row used to say the Android feed
         // "has no caller yet" and list `desktop` alone; it now has exactly one
         // caller, and the LANE it runs on is the whole story for a store form.
         //
@@ -160,7 +160,7 @@ export const WIRE_AUDIT = Object.freeze([
     // the next person reading the privacy policy beside the iOS labels can see
     // WHY one names five hosts the other does not.
     //
-    // CORRECTED 2026-08-02 ( S15). These five rows were written when
+    // CORRECTED 2026-08-02 (S15). These five rows were written when
     // their `shells` was `[]`, and `carries`/`control` still described the
     // shells where the request does NOT happen: "nothing on this shell" and
     // "the CSP img-src admits no remote origin". Once `shells` became

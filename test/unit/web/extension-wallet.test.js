@@ -32,7 +32,7 @@ import {
 } from '../../../packages/web/src/extensionWallet.js';
 
 // bridge-spec shapes, not approximations of them: connect answers a
-// ConnectResult union and getBalances answers a Balance[] ().
+// ConnectResult union and getBalances answers a Balance[].
 const CONNECT_SUCCESS = {
     ok: true,
     version: '0.1.0',
@@ -151,7 +151,7 @@ describe('connectExtensionWallet', () => {
         expect(readExtensionWalletPreference()).toBe(false);
     });
 
-    // : the published ConnectResult is a UNION, so a refusal RESOLVES
+    // The published ConnectResult is a UNION, so a refusal RESOLVES
     // with `ok: false`. Persisting on any resolve flipped the web app into
     // extension-wallet mode against a session the wallet never granted.
     for (const refusal of [

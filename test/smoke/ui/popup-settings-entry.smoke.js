@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the MV3 extension must have a Settings surface.
+// The MV3 extension must have a Settings surface.
 //
 // It had none: no `options_page`, no `settings` view in the popup's route
 // union, and `sidepanel.html` mounts the same App - so an extension user could
@@ -53,7 +53,7 @@ assert.ok(
     /unlockedView === 'settings'/.test(popupApp),
     'popup renders a settings view',
 );
-//  appended 'connected-sites' after 'settings', so match the member
+// appended 'connected-sites' after 'settings', so match the member
 // rather than the end of the union.
 assert.ok(
     /\| 'settings'(?: \||\})/.test(popupApp),
@@ -149,7 +149,7 @@ assert.deepEqual(
 assert.ok(settings.length > 0, 'Settings route is readable');
 
 console.log(
-    `OK: popup settings entry smoke (: shared Settings route mounted in the MV3 popup, `
+    `OK: popup settings entry smoke (shared Settings route mounted in the MV3 popup,`
     + `prop-gated hero gear as the visible entry, palette section + help commands restored, `
     + `all ${needed.size} messaging routes Settings calls exported by the popup)`,
 );

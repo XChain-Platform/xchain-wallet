@@ -184,7 +184,7 @@ describe('OracleConsole in watcher mode', () => {
     });
 });
 
-// The outcome pickers announce which side is selected .
+// The outcome pickers announce which side is selected.
 //
 // Both betting surfaces signalled the selected outcome with the button's
 // background colour and nothing else: no aria-pressed, no aria-selected, no

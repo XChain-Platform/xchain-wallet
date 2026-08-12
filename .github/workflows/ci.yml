@@ -52,23 +52,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The docs sibling, which `.ci-siblings` declares and this job did not
-      # ship .
+      # ship.
       #
       # WHY IT MATTERS MORE THAN "some smokes skip". Nineteen docs-coupled
       # smokes take their documented skip when ../xchain-documentation is
-      # absent, and this job is the ONLY thing the release gate reads: 
+      # absent, and this job is the ONLY thing the release gate reads:
       # §6 step 1 (tools/release/verify-validated-commit.mjs) certifies a tag's
       # commit on a green run of this workflow. So every release so far would
       # have been certified by a run in which the three store-ceremony gates,
       # the verify-release and reproducible-builds page gates, and the privacy
-      # gates were never executed. That is 's "a gate that cannot find
+      # gates were never executed. That is the same defect shape as "a gate that cannot find
       # its sibling is indistinguishable from a gate whose sibling is fine",
       # one layer up, at the gate that authorises signing.
       #
       # WHY IT IS CONDITIONAL RATHER THAN UNCONDITIONAL. xchain-documentation
       # is PRIVATE, and the repository-scoped GITHUB_TOKEN cannot read another
       # repository, so this needs its own credential. The credential now EXISTS
-      # (, 2026-08-05): a read-only ed25519 DEPLOY KEY on
+      # (2026-08-05): a read-only ed25519 DEPLOY KEY on
       # xchain-documentation, whose private half is the XCHAIN_DOCS_READ_KEY
       # Actions secret here. The gate is kept anyway, because it is what lets a
       # fork - which has neither the secret nor any way to obtain it - run this
@@ -130,21 +130,21 @@ jobs:
   # it for real with XCHAIN_REQUIRE_SIBLINGS=1, so a descriptor<->SDK drift
   # fails CI.
   #
-  # It no longer recreates a sibling layout. Since  DD6 the SDK is the
+  # It no longer recreates a sibling layout. Since DD6 the SDK is the
   # published @dankest-llc/xchain-sdk, which `pnpm install --frozen-lockfile`
   # brings in at the version a release would sign, so the guard compares the
   # wallet against the SDK it actually ships.
   drift-guards:
     runs-on: ubuntu-latest
     steps:
-      # No sibling checkout: since  DD6 the shells consume the PUBLISHED
+      # No sibling checkout: since DD6 the shells consume the PUBLISHED
       # @dankest-llc/xchain-sdk, so `pnpm install --frozen-lockfile` below
       # installs the exact SDK a release would ship and the parity guard reads
       # that. The step this replaces checked out the private sibling repo with
       # `secrets.XCHAIN_SDK_DEPLOY_KEY`, a secret that has never existed on this
       # repo, so it failed `Not Found` on every push and took the whole job red.
       #
-      # AND THE SUBDIRECTORY WENT WITH IT . This job used to check out
+      # AND THE SUBDIRECTORY WENT WITH IT. This job used to check out
       # into `path: xchain-wallet` so a sibling could sit beside it. With the
       # sibling gone the subdirectory bought nothing and cost the job: with no
       # pnpm project at the runner's root, setup-node's pnpm cache had no store
@@ -167,7 +167,7 @@ jobs:
         env:
           XCHAIN_REQUIRE_SIBLINGS: "1"
         run: pnpm exec vitest run --config test/vitest/integration.config.js test/integration/hd/wallet-sdk-derivation-parity.test.js
-      # Wallet<->hub chain-registry guard . No hub checkout here, and
+      # Wallet<->hub chain-registry guard. No hub checkout here, and
       # that is the point: --check compares bin/chain-registry.sync.json against
       # the bundled descriptors, so a descriptor fix that was never mirrored into
       # xchain-hub/src/chain-registry.json fails on THIS repo's push. Before this,
@@ -297,7 +297,7 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
 
-  # Says what this run actually FOUND, which the run's colour does not .
+  # Says what this run actually FOUND, which the run's colour does not.
   #
   # A run's conclusion aggregates its jobs, so one job that never reached a
   # runner paints the whole run `failure` in the same shade a broken test does.

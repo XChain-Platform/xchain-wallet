@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Build profiles, and the one policy difference that currently defines them
-// (, ; rails §3 owns the names, tools/release records them in
+// (; rails §3 owns the names, tools/release records them in
 // the signed manifest).
 //
 // The property under test is not "the store profile drops an origin". It is

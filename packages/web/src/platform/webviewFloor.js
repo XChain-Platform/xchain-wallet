@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Runtime capability floor for the WebView the wallet is running in
-// ( §3).
+// (§3).
 //
 // TWO TIERS, because the two failure modes deserve different answers:
 //

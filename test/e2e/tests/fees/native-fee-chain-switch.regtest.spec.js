@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign §11.4's owed half: the  mandatory rule when the CHAIN CHANGES
+// Campaign §11.4's owed half: the mandatory rule when the CHAIN CHANGES
 // under a form that is already open.
 //
 // WHAT THE RULE IS. On Bitcoin the protocol fee can be paid from an XCHAIN
 // balance, so paying it in coin is a CHOICE and the row is a toggle. Off
 // Bitcoin there is no XCHAIN lane at all: the native-coin output IS the fee, so
 // `useNativeFee` forces the flag on and the row becomes a statement. Before
-// , a fee-bearing action composed on LTC/DOGE from the default state
+// A fee-bearing action composed on LTC/DOGE from the default state
 // indexed `invalid: insufficient fee (native coin output required)` AFTER
 // paying a real miner fee - the expensive kind of wrong.
 //
@@ -106,12 +106,12 @@ test.describe('the native-fee rule when the chain changes under an open form', (
             // The form is not remounted: only its picker moved. A `mandatory`
             // seeded into state at mount would leave the Bitcoin toggle on
             // screen here, and an action composed from it would pay a miner fee
-            // to be rejected for a missing fee output (the  failure).
+            // to be rejected for a missing fee output (the failure).
             await switchFormChain(main, 'Litecoin');
 
             await expect(main.getByText(STATEMENT_TEXT),
                 'the form still offers Bitcoin\'s choice after switching to Litecoin: `mandatory` was '
-                + 'seeded at mount instead of derived per render ')
+                + 'seeded at mount instead of derived per render')
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByRole('switch', { name: CHOICE_LABEL })
                 .or(main.getByRole('checkbox', { name: CHOICE_LABEL })).first(),

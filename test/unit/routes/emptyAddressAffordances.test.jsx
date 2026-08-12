@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : every "you have no addresses" surface has to offer a way to
+// Every "you have no addresses" surface has to offer a way to
 // get one. Home's hint pointed at Receive, Receive's error pointed
 // nowhere, and the Import-WIF chain picker only listed chains the
 // account already occupied - so an account whose seeding failed had no
@@ -100,7 +100,7 @@ describe('offerableChainIds', () => {
     });
 });
 
-describe(': Home with no addresses', () => {
+describe('Home with no addresses', () => {
     it('offers a generate CTA instead of pointing at Receive', async () => {
         mount(
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
@@ -149,7 +149,7 @@ describe(': Home with no addresses', () => {
     });
 });
 
-describe(': Import WIF chain picker', () => {
+describe('Import WIF chain picker', () => {
     async function openImportForm(messaging) {
         mount(
             <AddressList walletId={WALLET.id} accountId={ACCOUNT.id} onBack={() => {}} />,

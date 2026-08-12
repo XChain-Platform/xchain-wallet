@@ -43,12 +43,12 @@ test.describe('keyboard shortcuts', () => {
     });
 });
 
-// §34.1 rebinding + §34.2 context shortcuts ( residuals).
+// §34.1 rebinding + §34.2 context shortcuts (residuals).
 test.describe('keyboard shortcut residuals', () => {
     test('rebinding Lock wallet in Settings takes effect immediately', async ({ page }) => {
         await createWallet(page);
 
-        // Palette deep-link into Settings -> Keyboard (also proves 's
+        // Palette deep-link into Settings -> Keyboard (also proves that
         // settings-section commands end-to-end).
         await page.keyboard.press('ControlOrMeta+k');
         await page.getByRole('dialog', { name: 'Command palette' })

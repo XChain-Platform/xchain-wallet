@@ -18,7 +18,7 @@ import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
  * balance (the default) or with a native-coin output at the USD equivalent.
  * On every other chain there is no XCHAIN fee lane, so the native-coin output
  * is the only way to pay and `mandatory` turns the row into a plain statement
- * of what will happen . Offering a choice there was worse than
+ * of what will happen. Offering a choice there was worse than
  * useless: unticking it produced a transaction the network rejects for
  * `insufficient fee (native coin output required)` after the miner fee was
  * already spent.
@@ -28,7 +28,7 @@ import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
  * actually paid in coin. Renders nothing when `coinTicker` is empty
  * (custom/unknown chains, which do not offer native-coin fee payment).
  *
- * : the row no longer ASSERTS that this action charges a protocol fee.
+ * The row no longer ASSERTS that this action charges a protocol fee.
  * Most actions it mounts on do not - MINT, BROADCAST, DESTROY, SLEEP, SWEEP,
  * LIST create/fork, LINK, PUBLISH, ATTACH and address preferences have no
  * gas-schedule entry, and ORDER/SWAP/DISPENSER are free under the expiration
@@ -48,7 +48,7 @@ import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
  * the flag as unsupported. Forms hold the state via the useNativeFee hook,
  * which is also what sets `mandatory`.
  *
- * DEPLOY and EXECUTE sit in the denylist too but are NOT unquotable: 
+ * DEPLOY and EXECUTE sit in the denylist too but are NOT unquotable
  * gives them a schedule-priced quote with no verdict (`valid:null`), which is
  * payable, and on LTC/DOGE it is the only way they are payable at all. Their
  * forms pass `unverified` so the row says the amount is exact while acceptance

@@ -15,7 +15,7 @@
 // function (no vault, no SDK, no network), so every shell can call it
 // synchronously while the user is still typing.
 //
-// SCOPE, since : this is the IN-FORM DRAFT PREVIEW describer, and
+// SCOPE,: this is the IN-FORM DRAFT PREVIEW describer, and
 // nothing that signs may read it. The confirm surface describes the
 // action string the host actually COMPOSED, via `sdk.decoder.describe`
 // (confirm-decode-preflight-spec §1.1/§3.2), and the dApp approval
@@ -27,7 +27,7 @@
 // round trip per keystroke is not a preview. `test/smoke/ui/confirm-
 // intent-provenance.smoke.js` holds that boundary.
 //
-// COVERAGE, since : every protocol ACTION, matching the SDK
+// COVERAGE,: every protocol ACTION, matching the SDK
 // describer sentence for sentence. It used to cover 13, so a user
 // reviewing a SWAP, STAKE, VOTE, EXECUTE draft (or any of 14 others)
 // read "No plain-English summary is available for X yet" plus a warning
@@ -173,7 +173,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             };
         }
         // Multi-destroy (v1 repeats TICK/AMOUNT, v2 adds a per-leg MEMO).
-        // : described leg by leg rather than dropped on the generic
+        // Described leg by leg rather than dropped on the generic
         // path, which showed the protocol's most irreversible action as
         // "no plain-English summary available" the moment it burned more
         // than one token.
@@ -246,7 +246,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeBet(p, chainSuffix);
     }
 
-    // . Everything below is a verbatim port of the SDK describer
+    //Everything below is a verbatim port of the SDK describer
     // (`xchain-sdk/src/decoder/describe.js`), summary text included, so the
     // review stage and the confirm screen say the SAME sentence about the
     // same draft. They previously did not: 18 of the 31 protocol actions
@@ -796,7 +796,7 @@ function decodeCallback(p, chainSuffix) {
 }
 
 /**
- * BET decoder ( §11.3 signing). One action name over four formats, so the
+ * BET decoder (§11.3 signing). One action name over four formats, so the
  * summary must name WHICH one is being signed: approving a resolve is not
  * remotely the same act as approving a stake.
  *

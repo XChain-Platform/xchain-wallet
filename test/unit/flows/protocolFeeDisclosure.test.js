@@ -1,11 +1,11 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// : the XCHAIN-lane protocol-fee line for the confirm screen.
+// The XCHAIN-lane protocol-fee line for the confirm screen.
 //
 // The fee the wallet charges in its DEFAULT payment mode was the one cost the
-// confirm screen never showed: the native lane quotes its fee (and 
-// prices it into the deltas), while the XCHAIN lane quoted nothing. 
+// confirm screen never showed: the native lane quotes its fee (and
+// prices it into the deltas), while the XCHAIN lane quoted nothing.
 // made `/preflight` echo the fee record the dry-run already staged, so the
 // number is on `report.quote.xchainFee` for every confirm; these are the rules
 // for turning it into a line, including the four cases where the honest answer
@@ -55,7 +55,7 @@ describe('xchainProtocolFeeLine', () => {
     });
 
     it('stays silent when the fee is being paid in the native coin', () => {
-        //  already shows that fee as a coin debit; a second line here
+        // already shows that fee as a coin debit; a second line here
         // would read as a second, separate charge.
         expect(xchainProtocolFeeLine({
             report: reportWith('0.50000000'),
@@ -64,7 +64,7 @@ describe('xchainProtocolFeeLine', () => {
     });
 
     it('stays silent on the deferred-fee (chunk) lane, where only the quote is set', () => {
-        //  moves the fee output to the reveal tx, so `protocolFeeSats`
+        // a later change moves the fee output to the reveal tx, so `protocolFeeSats`
         // can be null while the action still pays natively.
         expect(xchainProtocolFeeLine({
             report: reportWith('0.50000000'),
@@ -72,7 +72,7 @@ describe('xchainProtocolFeeLine', () => {
         })).toBeNull();
     });
 
-    it('stays silent when there is no report, or a report from a pre- explorer', () => {
+    it('stays silent when there is no report, or a report from a pre-explorer', () => {
         expect(xchainProtocolFeeLine({ report: null })).toBeNull();
         expect(xchainProtocolFeeLine({ report: { verdict: 'pass', findings: [], quote: null } })).toBeNull();
         // Legacy /feequote answers carry no xchainFee at all.
@@ -91,11 +91,11 @@ describe('xchainProtocolFeeLine', () => {
         expect(xchainProtocolFeeLine({ report: reportWith('0') })).toBeNull();
     });
 
-    // . The report is best-effort: the SDK's Tier-1 dry run has a 4s
+    //The report is best-effort: the SDK's Tier-1 dry run has a 4s
     // budget and the wallet drops the verdict when the indexer misses it, which
-    // used to take this line down too - back to 's screen, on a venue
+    // used to take this line down too - back to that screen, on a venue
     // that was merely busy. Measured in the wallet e2e campaign §11.1.
-    describe('when the dry run did not answer ', () => {
+    describe('when the dry run did not answer', () => {
         it('falls back to the quote the composed envelope carries', () => {
             const line = xchainProtocolFeeLine({ report: null, composed: { xchainFee: '1.00000000' } });
             expect(line?.amount).toBe('1');
@@ -106,7 +106,7 @@ describe('xchainProtocolFeeLine', () => {
             expect(xchainProtocolFeeLine({
                 report: reportWith(null), composed: { xchainFee: '0.50000000' },
             })?.amount).toBe('0.5');
-            // And on a pre- explorer, whose report carries no fee field.
+            // And on a pre-explorer, whose report carries no fee field.
             expect(xchainProtocolFeeLine({
                 report: { quote: { supported: true } }, composed: { xchainFee: '0.50000000' },
             })?.amount).toBe('0.5');

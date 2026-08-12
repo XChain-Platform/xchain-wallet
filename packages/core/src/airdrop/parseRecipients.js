@@ -24,7 +24,7 @@
 // structured split the UI renders: valid / invalid / duplicates /
 // wrongNetwork.
 //
-// : pass the ACTIVE chain and every candidate is decoded against
+// Pass the ACTIVE chain and every candidate is decoded against
 // THAT coin+network's address parameters, the same check Send makes on
 // its destination. Without it the form only tested length + charset, so
 // a mainnet address pasted into a regtest wallet counted as valid all
@@ -196,7 +196,7 @@ export function classifyRecipients(candidates, chain) {
  * Compare the recipient list the wallet believes it published against the
  * list the chain actually stored, once the LIST action has been indexed.
  *
- * 's second half: the parser check is client-side, so it can still
+ * that second half: the parser check is client-side, so it can still
  * be wrong (an older wallet build, a chain rule the wallet does not model
  * yet). The indexer silently drops items it rejects into
  * `list_items_invalid` and marks the LIST action itself valid, so the

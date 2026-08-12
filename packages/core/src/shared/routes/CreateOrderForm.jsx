@@ -69,7 +69,7 @@ const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(
  * the PC-16 auto-pay checkbox arms unattended settlement of the resulting
  * obligation (software signers only). Signs through the shared
  * software/HW/watcher lanes (orderAction / orderActionHw / watcher
- * encode-only) with the  single-encode confirm page for software.
+ * encode-only) with the single-encode confirm page for software.
  *
  * Same-chain only in v0 (GIVE_COIN = GET_COIN = the posting chain's coin),
  * matching PlaceOrderPanel; cross-chain GET (validator-federated) is a
@@ -230,7 +230,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     }, [coinTicker, giveType, giveTick, giveAmount, giveOwnership, getType, getTick, getAmount, getOwnership, getAddress, expMode, expInput, allowListIdx, blockListIdx, memo]);
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -320,7 +320,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
-                // : re-price the native-coin protocol fee at Approve.
+                // Re-price the native-coin protocol fee at Approve.
                 // The output was sized at compose, and the amount consensus
                 // requires moves inversely with the coin price, so a move while
                 // the confirm screen sits open leaves it short - which the
@@ -412,7 +412,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
-        // : signed but not broadcast. No order exists to match yet, so
+        // Signed but not broadcast. No order exists to match yet, so
         // the auto-pay note below would be describing a thing that is not
         // on the chain.
         if (result?.queued) {

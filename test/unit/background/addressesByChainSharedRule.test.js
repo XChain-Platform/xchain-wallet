@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// . `flows/_importedAddressIds.js` exists because the "imported
+//`flows/_importedAddressIds.js` exists because the "imported
 // WIF addresses carry accountId=null" rule (§11.3.3) had already shipped
 // wrong five times in five files (D-54, D-63, D-65 x2, D-66). Its header
 // calls itself "the one place that knows the rule" - and it was not:
@@ -36,7 +36,7 @@ vi.mock('../../../packages/core/src/flows/_importedAddressIds.js', () => ({
 
 const { makeHost, byChain, addressesOn } = await import('./_addressesByChainFixture.js');
 
-describe(': addresses.byChain reads the imported-key rule, never restates it', () => {
+describe('Addresses.byChain reads the imported-key rule, never restates it', () => {
     it('lists no imported address when the shared resolver returns none', async () => {
         // The wallet record still says addr-wif is imported. Only the
         // resolver changed, so an inline re-read of `importedKeys` keeps

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §3: the PRE-BUNDLE capability floor.
+// The PRE-BUNDLE capability floor.
 //
 // Found by running the app for the first time on an API 26 emulator
 // (2026-08-01): the Android 8 stock WebView is Chromium 58, which ignores

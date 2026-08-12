@@ -60,7 +60,7 @@
 
 set -euo pipefail
 
-# THE FLAG WAS NOT IGNORED, IT WAS CONSUMED . The only positional
+# THE FLAG WAS NOT IGNORED, IT WAS CONSUMED. The only positional
 # this script takes is a Docker platform, so `emulation-preflight.sh --help`
 # ran the whole decision table against a target platform literally named
 # `--help` and printed
@@ -80,7 +80,7 @@ case "${1:-}" in
         cat <<'USAGE'
 emulation-preflight.sh - can this host actually execute the amd64
 reproducible build, or will it die minutes in inside the bundler?
-( reproducible-build lane.)
+(reproducible-build lane.)
 
 Usage:
   bash tools/release/emulation-preflight.sh [platform]

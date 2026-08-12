@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// quoteMaxSendable : Max priced by the encoder that builds the send.
+// quoteMaxSendable: Max priced by the encoder that builds the send.
 //
 // THE NUMBERS IN THIS FILE ARE THE MEASURED ONES. BTC regtest, 2026-07-29, one
 // address holding exactly 50,000,000 sats: Max offered 49,998,500 (balance

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  (a): the PC-52 multi-recipient SEND, driven through the real Send
+// (a): the PC-52 multi-recipient SEND, driven through the real Send
 // form against a real chain, with the chain asked what happened.
 //
 // PC-52 met the §14 rule-1 gate with `tools/regtest/multiSendRoundtrip.cjs`,
@@ -34,7 +34,7 @@
 // 2. EACH LEG CREDITED EXACTLY ONCE. The amounts are deliberately UNEQUAL
 //    (7 / 3 / 1), and the read-back asserts an exact delta per address. Equal
 //    amounts would make a doubled leg and a mis-ordered leg indistinguishable
-//    from success, which is precisely the  double-pay shape.
+// from success, which is precisely the double-pay shape.
 // 3. THE SENDER PAID THE SUM, ONCE. 11 XCHAIN leaves, not 7 and not 33.
 //
 // The recipient addresses are PINNED, so on a shared chain they accumulate
@@ -234,7 +234,7 @@ test.describe('multi-recipient SEND on regtest', () => {
             // §5.2.1-2 for a list, and the reason this step is asserted at all:
             // the intent is described from the COMPOSED action, and describing
             // a repeated-field SEND as if it were a single one named the first
-            // recipient while paying two more people . The summary now
+            // recipient while paying two more people. The summary now
             // states the total, the chain and the count, and every leg is
             // itemised below it.
             const intent = page.getByTestId('action-intent');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The one place the update feed is wired to anything ( §6, D4).
+// The one place the update feed is wired to anything (§6, D4).
 //
 // `directUpdateCheck.js` is the hardened client; `installOrigin.js` is the
 // lane question; core's `flows/directUpdate.js` is the seam the UI reads. This

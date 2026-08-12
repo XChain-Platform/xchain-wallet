@@ -36,7 +36,7 @@
 // and coinpayAction's pending_coinpay re-check.
 //
 // Reservation: before signing, a hold for payee amount + estimated
-// network fee goes into the shared reservation ledger  so a
+// network fee goes into the shared reservation ledger so a
 // user-initiated send cannot race the auto-payment out of its funds.
 // The hold releases only when the obligation leaves pending (fulfilled
 // by anyone / expired) or the payment tx is indexed - broadcast alone
@@ -113,7 +113,7 @@ export class CoinpayAutopayWatcher {
      * @param {(walletId: string) => (object | null)} deps.getSigner
      *   pre-unlocked SoftwareSigner lookup (SignerPool.get); null = cannot sign
      * @param {{ reserve: Function, release: Function }} [deps.reservationLedger]
-     *   the host-shared  ledger; optional so tests / degraded shells run without it
+     * the host-shared ledger; optional so tests / degraded shells run without it
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
      * @param {'desktop' | 'extension' | 'web'} deps.shellKind
      * @param {number} [deps.intervalMs]

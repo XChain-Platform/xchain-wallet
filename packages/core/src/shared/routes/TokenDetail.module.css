@@ -44,7 +44,7 @@
     align-items: center;
     gap: var(--xc-space-1);
     font-family: inherit;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
 }
@@ -692,7 +692,7 @@
     font-family: inherit;
     flex: 1 1 0;
     text-align: center;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : which chains can ONLY pay a protocol fee in the native coin.
+// Which chains can ONLY pay a protocol fee in the native coin.
 //
 // The protocol fee is normally debited from an XCHAIN balance. Paying it with
 // a native-coin output instead is an OPTION on Bitcoin and the ONLY option

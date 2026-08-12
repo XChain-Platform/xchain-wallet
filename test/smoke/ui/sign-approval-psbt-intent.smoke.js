@@ -61,7 +61,7 @@ assert.doesNotMatch(signSrc, /function truncate\(/, 'the now-unused truncate hel
 
 // --- 4. Decoded intent renders, gated on signPsbt ------------------------
 
-//  slice 5: the window's local PsbtIntentSummary is DELETED. The
+// slice 5: the window's local PsbtIntentSummary is DELETED. The
 // approval surface now renders core's <PsbtIntentPanel>, the same component
 // the in-wallet PSBT variant uses, so these properties are asserted where
 // they now live. Two copies of "what does this transaction do to my money"

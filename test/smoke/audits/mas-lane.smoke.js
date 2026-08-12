@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §13: the Mac App Store lane.
+// Smoke for §13: the Mac App Store lane.
 //
 // WHAT THIS IS DEFENDING. The App Store channel differs from the
 // direct-download one in ways that DO NOT FAIL THE BUILD - they fail at
@@ -175,7 +175,7 @@ assert.equal(config.mac.hardenedRuntime, true, 'the direct-download channel keep
 
 // --- 4b. The identity, which is the instance of the trap that shipped --
 //
-// . `mac.identity` is null on any machine that was handed no signing
+//`mac.identity` is null on any machine that was handed no signing
 // certificate, and app-builder-lib's `macPackager.sign` returns on a null
 // identity BEFORE `createMasInstaller`, the only thing that emits a .pkg.
 // The store build must not inherit that null. It logs, exits 0,
@@ -362,7 +362,7 @@ try {
     }
 }
 
-// --- 8. Listing screenshots ( row 95) ---------------------------
+// --- 8. Listing screenshots (row 95) ---------------------------
 //
 // Apple refuses a listing with no screenshot, and until 2026-08-07 this repo
 // could neither produce nor check one of the desktop shell: the listing tools
@@ -408,7 +408,7 @@ assert.deepEqual(
 );
 
 console.log(
-    'OK: MAS lane smoke ( §13: build/entitlements.mas{,.inherit}.plist exist and are well-formed; the '
+    'OK: MAS lane smoke (build/entitlements.mas{,.inherit}.plist exist and are well-formed; the'
         + 'store build declares com.apple.security.app-sandbox plus exactly network.client, device.usb (Ledger/'
         + 'Trezor over WebHID) and files.user-selected, and carries no hardened-runtime or network.server keys; '
         + 'child bundles inherit the sandbox rather than re-declaring it; the mas config block explicitly '

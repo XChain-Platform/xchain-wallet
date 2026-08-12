@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the Approve-time native-coin fee re-check.
+// The Approve-time native-coin fee re-check.
 //
 // The measured case (wallet E2E session 22, LTC regtest): an ISSUE composed at
 // LTC/USD 100 attached a 0.02 LTC fee output; the price halved before Approve,

@@ -71,7 +71,7 @@ export function AboutSection() {
     // settings route can render, so this cannot go stale within a session.
     const [updateLane] = useState(() => hasDirectUpdateLane());
     const [updateCheck, setUpdateCheck] = useState(() => isUpdateNoticeEnabled());
-    // : both diagnostic paths (copy + preview) are retryable by
+    // Both diagnostic paths (copy + preview) are retryable by
     // re-running the same fetch, so the error surface offers a one-click
     // "Try again" against whichever action last failed.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
@@ -135,7 +135,7 @@ export function AboutSection() {
             <Row label="Update channel">
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
             </Row>
-            {/*  §6 / D4: only a directly-installed build has to look
+            {/* §6 / D4: only a directly-installed build has to look
                 after its own updates, and only there is there a switch to
                 show. Every other shell is updated by a store, the browser or
                 electron-updater, and `hasDirectUpdateLane()` is false, so
@@ -310,7 +310,7 @@ function DocLink({ path, label }) {
     // bundle (LICENSE.md / NOTICE.md / SECURITY.md) are repo-relative and
     // are still shown literally, since there is nothing to open. The
     // verification docs now live on the hosted documentation site
-    // , so an absolute URL is rendered as a real link the user
+    //, so an absolute URL is rendered as a real link the user
     // can follow instead of a path they would have to go hunting for.
     const isUrl = typeof path === 'string' && /^https?:\/\//.test(path);
     const style = {

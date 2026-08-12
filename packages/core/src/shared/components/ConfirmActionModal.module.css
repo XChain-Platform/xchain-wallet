@@ -1,4 +1,4 @@
-/* ConfirmActionModal ( §5.1-5.2), page form.
+/* ConfirmActionModal (§5.1-5.2), page form.
    Approve/Reject flow inline at the end of the content, like every other
    form's action row, rather than docking to the viewport bottom. The
    §5.2.7 reachability property still holds: this is an ordinary page, so

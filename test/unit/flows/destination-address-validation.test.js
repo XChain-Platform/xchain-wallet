@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression : SEND / SWEEP must not build a PSBT for a destination
+// Regression: SEND / SWEEP must not build a PSBT for a destination
 // that isn't a valid address on the chain being broadcast to.
 //
 // Before this, the only destination check was a leading-character guess in

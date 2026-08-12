@@ -41,7 +41,7 @@ assert.ok(!existsSync(join(sharedRoutes, 'ContractStakedPositions.jsx')),
 assert.ok(/export function StakingList\b/.test(listSrc),
     'StakingList is a named export');
 
-// 2.  two-lane chain reach. Contract staking (STAKE v3 / UNSTAKE v1 /
+// 2. two-lane chain reach. Contract staking (STAKE v3 / UNSTAKE v1 /
 // DELEGATE v1) runs on every chain the registry advertises STAKE on, because
 // the indexer dispatches those versions ahead of its `COIN !== 'BTC'` gate.
 // Validator (capability) staking, its delegations, and the rewards COLLECT

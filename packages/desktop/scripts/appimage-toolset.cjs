@@ -14,7 +14,7 @@
 
 // Builds a shimmed copy of electron-builder's AppImage toolset whose
 // `mksquashfs` is scripts/mksquashfs-deterministic.cjs, and points
-// electron-builder at it via APPIMAGE_TOOLS_PATH ( DD7).
+// electron-builder at it via APPIMAGE_TOOLS_PATH (DD7).
 //
 // The one interesting design point is WHERE this runs. It is called from
 // the `beforePack` hook in electron-builder.config.cjs, which

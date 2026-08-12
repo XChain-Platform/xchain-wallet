@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  entity search: tokens, connected sites, settings sections, help
+// entity search: tokens, connected sites, settings sections, help
 // topics, and the txid/date "search history" free-form intent.
 
 import { describe, it, expect, vi } from 'vitest';
@@ -86,7 +86,7 @@ describe('settingsSectionsToCommands', () => {
         expect(backup.title).toBe('Settings → Backup');
         backup.run();
         expect(openSettings).toHaveBeenCalledWith('backup');
-        // The keyboard section (new in ) is reachable too.
+        // The keyboard section is reachable too.
         expect(cmds.some((c) => c.id === 'settings-keyboard')).toBe(true);
     });
 });

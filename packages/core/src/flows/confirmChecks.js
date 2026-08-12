@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Single-encode pipeline tamper checks ( §5.3.2-3).
+// Single-encode pipeline tamper checks (§5.3.2-3).
 //
 // composeForConfirm builds exactly ONE PSBT before the modal opens; the
 // user previews it and submitWithSigner signs it byte-identically. Two
@@ -68,7 +68,7 @@ function isOpReturnOutput(out) {
 const P2SH_TYPES = new Set(['p2sh', 'p2sh-p2wpkh', 'p2sh-p2wsh']);
 const P2WSH_TYPES = new Set(['p2wsh']);
 
-// Exact satoshi/koinu equality for the tamper checks ().
+// Exact satoshi/koinu equality for the tamper checks.
 //
 // The SDK's decomposePsbt already hands the wallet exact values: a JS number below
 // 2^53 and a decimal STRING above it, because a PSBT value is a BigInt. Comparing
@@ -116,7 +116,7 @@ export function sameSats(a, b) {
  */
 export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, actionByteLen }) {
     // Values are carried through UNCOERCED: pre-rounding the expected side with Number()
-    // reintroduced the >2^53 collapse sameSats exists to close ().
+    // reintroduced the >2^53 collapse sameSats exists to close.
     const addressed = (Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
         address: String(o.address),
         value: o.value,
@@ -204,7 +204,7 @@ const CHUNK_PAYLOAD_BYTES = { P2SH: 476, P2WSH: 476, MULTISIGN: 60 };
  * How many carrier outputs the chosen encoding legitimately emits for an
  * action of `actionByteLen` bytes.
  *
- * D-24 : the encoder splits a P2SH/P2WSH/MULTISIGN payload that exceeds
+ * D-24: the encoder splits a P2SH/P2WSH/MULTISIGN payload that exceeds
  * one on-chain chunk across MULTIPLE data-carrier outputs (one per chunk), but
  * the tamper check formerly allowed exactly one - so any real contract DEPLOY
  * (or a large FILE / gated publish) was falsely flagged "outputs you did not

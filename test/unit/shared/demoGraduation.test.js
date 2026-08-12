@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: demo-mode exit primitives .
+// Unit: demo-mode exit primitives.
 //
 // Leg 2 of the demo funnel: the vault has ONE password. A real wallet
 // created from inside the demo lands in a vault whose master key comes

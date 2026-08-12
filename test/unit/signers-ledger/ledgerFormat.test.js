@@ -189,7 +189,7 @@ describe('toLedgerCreatePayment', () => {
     // A minimal but REAL previous transaction: one input, one 1000-sat
     // p2wpkh output. Ledger derives the outpoint it signs from these
     // bytes, so a decomposed input that lacks them cannot be signed
-    // ; the fixture carries them the way a hydrated input does.
+    //; the fixture carries them the way a hydrated input does.
     const PREV_TX_HEX = '01000000010000000000000000000000000000000000000000000000000000000000000000'
         + 'ffffffff00ffffffff01e803000000000000160014'
         + 'b'.repeat(40) + '00000000';
@@ -244,7 +244,7 @@ describe('toLedgerCreatePayment', () => {
     // The device takes the outpoint from the prev tx it is handed, so a
     // synthesized stand-in makes it sign a spend of an outpoint that does
     // not exist. This refused to be silent only after a real device was
-    // driven ; before that it produced a fully-formed, unbroadcastable
+    // driven; before that it produced a fully-formed, unbroadcastable
     // transaction.
     it('refuses a witnessUtxo-only input rather than synthesizing a prev tx', () => {
         expect(() => toLedgerCreatePayment({

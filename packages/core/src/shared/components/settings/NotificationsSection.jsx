@@ -197,7 +197,7 @@ export function NotificationsSection({ walletId } = {}) {
 }
 
 /**
- * : Do-not-disturb window. When on, every notification kind above
+ * Do-not-disturb window. When on, every notification kind above
  * (including price alerts) is suppressed while the local clock is inside
  * [start, end); an end before start wraps past midnight (e.g. 22:00-08:00).
  * Delivery is dropped, not queued: nothing catches up once the window ends.

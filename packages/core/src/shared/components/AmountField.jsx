@@ -26,7 +26,7 @@ import styles from './AmountField.module.css';
  * @param {string} props.amount                              canonical coin-scale amount (always)
  * @param {string} [props.fiatAmount]                        raw text in the fiat input mode; ignored when `amountInputMode === 'coin'`
  * @param {string} [props.tick]                              ticker shown in the label when in coin mode (e.g. 'BTC')
- * @param {{ fiatCurrency?: string, rate?: number } | null} [props.fiatRate]   rate for ONE UNIT OF `tick`, not for the chain coin (: `useTickFiatRate` returns exactly this). When null, the fiat toggle and the ≈ preview are hidden, which is the correct render for a tick nothing can price.
+ * @param {{ fiatCurrency?: string, rate?: number } | null} [props.fiatRate] rate for ONE UNIT OF `tick`, not for the chain coin (`useTickFiatRate` returns exactly this). When null, the fiat toggle and the ≈ preview are hidden, which is the correct render for a tick nothing can price.
  * @param {string} [props.fiatCurrency]                      fallback fiat code when `fiatRate.fiatCurrency` is missing
  * @param {'coin' | 'fiat'} [props.amountInputMode]
  * @param {(rawValue: string, cursorPos: number | null) => void} props.onAmountFieldChange
@@ -34,7 +34,7 @@ import styles from './AmountField.module.css';
  * @param {import('react').RefObject<HTMLInputElement>} [props.inputRef]
  * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
  * @param {boolean} [props.maxDisabled]                      grey out the Max button (e.g. while balance is loading)
- * @param {boolean} [props.maxBusy]                          the Max amount is being priced (: a native-coin Max is an encoder round trip, not arithmetic). Marks the button busy and refuses a second click while the first is in flight.
+ * @param {boolean} [props.maxBusy] the Max amount is being priced (a native-coin Max is an encoder round trip, not arithmetic). Marks the button busy and refuses a second click while the first is in flight.
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  * @param {string} [props.hint]                           hint line under the input, forwarded to Input
  * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.

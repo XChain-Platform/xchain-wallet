@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the wallet's OWN contract DEPLOY + EXECUTE broadcast path, driven end
+// The wallet's OWN contract DEPLOY + EXECUTE broadcast path, driven end
 // to end against the live regtest stack.
 //
 // The Contracts area had been exercised only on its READ side - the list, the
@@ -22,7 +22,7 @@
 //
 // That gap is not cosmetic. DEPLOY is the wallet's largest single action by a
 // wide margin (the entire source rides in one param), and it is the action that
-// took the encoder's non-base58 chunk lane down  and blew the confirm
+// took the encoder's non-base58 chunk lane down and blew the confirm
 // pipeline's own size gate (D-24). Both are fixed; neither had ever been shown
 // working from the wallet against a real node, which is what this spec is for.
 //
@@ -99,7 +99,7 @@ async function explorerJson(path) {
     return res.json();
 }
 
-/** The wallet's shared confirm surface , used by both forms here. */
+/** The wallet's shared confirm surface, used by both forms here. */
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });

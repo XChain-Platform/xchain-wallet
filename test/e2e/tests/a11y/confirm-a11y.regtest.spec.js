@@ -18,7 +18,7 @@
 // WHY IT LIVES ON THE REGTEST VENUE. The confirm page only exists after a
 // successful compose, and the dev shell cannot compose: its resolver now
 // loads the REAL SDK (vite pre-bundles `xchain-sdk` into `.vite/deps`, so
-// the dynamic import that  documented as failing now succeeds), which
+// the dynamic import that documented as failing now succeeds), which
 // then points at mainnet explorers the test browser cannot reach, and every
 // compose ends in "Couldn't send. The network is unreachable." The regtest
 // venue serves a production build against a chain that answers, so the

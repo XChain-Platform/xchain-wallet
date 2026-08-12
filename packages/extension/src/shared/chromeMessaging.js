@@ -19,7 +19,7 @@
 // Kept here (not in `src/popup/` or `src/approval/`) so both entries
 // can import the same implementation without depending on each other.
 //
-// : this is also where the extension drops stale tick metadata. The
+// This is also where the extension drops stale tick metadata. The
 // flows run in the service worker, a different JS realm from the page holding
 // the `useTokenInfo` cache, so `submitAction`'s own invalidation never reaches
 // it. Every `action.*` route that resolves here invalidates the ticks its

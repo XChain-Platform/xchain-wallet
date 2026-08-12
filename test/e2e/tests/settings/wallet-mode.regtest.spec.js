@@ -15,14 +15,14 @@
 // picking Signer says "Sign transactions pasted in from a watcher wallet.
 // **Send / receive screens are hidden; this wallet does not broadcast.**" That
 // is not a description of a preference, it is a statement about what the wallet
-// will no longer do - the same shape as the Tor toggle in , which offered
+// will no longer do - the same shape as the Tor toggle in, which offered
 // a protection the wallet could not provide. So this spec asserts the promise
 // rather than the setting: a mode that persists perfectly while Send stays one
 // click away has not been applied, it has been recorded.
 //
 // That distinction is this area's documented failure mode, twice over: D-70
 // (theme / reduced motion / hide-small-balances persist and apply nothing) and
-// D-91 /  (endpoint overrides persist and nothing reads them). The method
+// D-91 (endpoint overrides persist and nothing reads them). The method
 // that separates the two cases is the one used here - change it, RELOAD, then
 // check both that the control kept the value and that the behaviour changed.
 // Either check alone is ambiguous.

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The native vault seam ( S2), tested against a fake plugin.
+// The native vault seam (S2), tested against a fake plugin.
 //
 // ONE PROPERTY MATTERS MORE THAN THE REST and most of this file is about it:
 // `load()` may return null ONLY when the device genuinely has no wallet.

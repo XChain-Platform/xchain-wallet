@@ -12,7 +12,7 @@
 // build scaffolding. Asserts that every ingredient required for
 // Level-2 reproducibility is in place. The actual run-twice-and-
 // compare verification has to happen on a fresh dev machine before
-// v1.0.0 GA. See claude/reports/specs/2026-04-24_repro-build.md.
+// v1.0.0 GA.
 //
 // Rules checked:
 //   1. Dockerfile pins the base image by sha256 digest (not just tag).
@@ -33,11 +33,11 @@
 //      therefore that same image, and installs nothing on the runner first.
 //      Node was pinned for both sides and the C compiler was not, so the
 //      native addon and the asar embedding its hash could never reproduce
-//      (, measured as : 186 of 188 files matched). The compile
+// (measured: 186 of 188 files matched). The compile
 //      happens during `pnpm install`, not during packaging, which is why a
 //      host install in that job is a rule here rather than a style note.
 //  13. The reproducible-builds doc documents the verification protocol.
-//      That doc left this repo in  and now lives in the sibling
+// That doc left this repo in and now lives in the sibling
 //      xchain-documentation checkout, published at
 //      https://docs.xchain.io/components/wallet/reproducible-builds. When the
 //      sibling is absent (an isolated single-repo CI checkout) the three doc
@@ -115,7 +115,7 @@ export function runReproBuildAudit() {
     // %at; committer date differs from author date on any rebase or amend
     // (10 of the last 200 commits here), and the two sides then stamp
     // different mtimes into the asar, so the reproduction cannot match and
-    // the published protocol reads that as possible tampering .
+    // the published protocol reads that as possible tampering.
     out.push(rule('reproduce.sh-derives-source-date-epoch-from-git',
         reproSh !== null && /git log -1 --pretty=%at/.test(reproSh),
         'reproduce.sh must derive SOURCE_DATE_EPOCH from the commit AUTHOR date '

@@ -54,7 +54,7 @@ const {
 
 // The open app's name/version comes off the TRANSPORT as raw BOLOS
 // GET_APP_AND_VERSION bytes, not from an app-client method: the real
-// hw-app-btc `Btc` class has no getAppAndVersion . Layout is
+// hw-app-btc `Btc` class has no getAppAndVersion. Layout is
 // format, then length-prefixed name, version and flags.
 function makeMockTransport({ name = 'Bitcoin', version = '2.2.3', send } = {}) {
     const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
@@ -248,7 +248,7 @@ const segwitDecomposed = {
             // A real previous transaction, because Ledger takes the outpoint
             // it signs from these bytes. An input carrying only a
             // witnessUtxo is now REFUSED rather than signed against a
-            // synthesized stand-in that hashes to a different txid .
+            // synthesized stand-in that hashes to a different txid.
             nonWitnessUtxoHex: MINIMAL_PREV_TX_HEX,
             witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
             redeemScriptHex: null,
@@ -560,7 +560,7 @@ for (const sym of [
     );
 }
 
-// --- 13. every shell hands the paired signer an sdkRegistry  ---
+// --- 13. every shell hands the paired signer an sdkRegistry ---
 //
 // Defect 4: makeLedgerFactory is the ONLY construction site, and no shell
 // passed one, so every hardware PSBT attempt threw "requires an sdkRegistry" -
@@ -579,10 +579,10 @@ for (const [label, rel] of [
 ]) {
     const src = readFileSync(join(wsRoot, ...rel), 'utf8');
     assert.match(src, /sdkRegistry:\s*walletOnlyRegistry\(/,
-        `${label} must hand the paired Ledger signer an sdkRegistry (: none did, so no hardware PSBT could be signed)`);
+        `${label} must hand the paired Ledger signer an sdkRegistry (none did, so no hardware PSBT could be signed)`);
     // The deep module path, not the package index: importing the index puts it
     // in the popup graph, which makes the worker's fallback import() a real
-    // dynamic chunk it cannot execute . The sdk-wiring smoke asserts
+    // dynamic chunk it cannot execute. The sdk-wiring smoke asserts
     // the artifact; this asserts the cause, where the fix is readable.
     assert.match(src, /from 'xchain-sdk\/src\/wallet\.js'/,
         `${label} must import the wallet MODULE, not the package index`);

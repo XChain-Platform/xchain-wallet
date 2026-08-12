@@ -210,7 +210,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     }, [isTick, resumeBlockValue, ticker, memo]);
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -261,7 +261,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
-                // : re-price the native-coin protocol fee at Approve.
+                // Re-price the native-coin protocol fee at Approve.
                 // The output was sized at compose, and the amount consensus
                 // requires moves inversely with the coin price, so a move while
                 // the confirm screen sits open leaves it short - which the
@@ -367,7 +367,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
-        // : signed but not broadcast, which is the exact opposite of
+        // Signed but not broadcast, which is the exact opposite of
         // what "<noun> broadcast" claims.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what={titleNoun.toLowerCase()} />);

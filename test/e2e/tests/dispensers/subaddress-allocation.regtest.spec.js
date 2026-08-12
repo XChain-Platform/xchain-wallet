@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : LIVE regtest verification of the dispenser SUB-ADDRESS flow.
+// LIVE regtest verification of the dispenser SUB-ADDRESS flow.
 //
 // WHAT WAS ACTUALLY UNCOVERED, and why the neighbouring spec does not count.
 // `buy-funding.regtest.spec.js` drives dispensers, but it opens them from an

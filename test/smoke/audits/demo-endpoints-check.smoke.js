@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for tools/release/verify-demo-endpoints.mjs ( §2.1).
+// Smoke for tools/release/verify-demo-endpoints.mjs (§2.1).
 //
 // The script asks whether a store reviewer can reach the endpoints the
 // scripted demo sends them to. It only runs against production, so the parts
@@ -27,7 +27,7 @@
 //    a reviewer would actually experience.
 // 3. Inconclusive never becomes a pass, and a failure outranks it. Same rule
 //    as verify-privacy-url.mjs, with 403 deliberately on the OTHER side: on
-//    these hosts a 403 is coming back, which is the whole reason
+// these hosts a 403 is the bot-block coming back, which is the whole reason
 //    this file exists.
 
 import { strict as assert } from 'node:assert';
@@ -86,12 +86,12 @@ const hubProbe = { service: 'hub', coin: 'TBTC' };
 // The two blocks this gate was written for, each named so the reader of a red
 // run does not have to rediscover the cause.
 const blocked = classifyProbe(explorerProbe, { status: 403, body: '' });
-assert.equal(blocked.state, 'failure', 'a 403 is a failure, not an inconclusive: it is  returning');
-assert.match(blocked.detail, //, 'the 403 detail names the item');
+assert.equal(blocked.state, 'failure', 'a 403 is a failure, not an inconclusive: it is returning');
+assert.match(blocked.detail, /cannot load a balance/, 'the 403 detail says what a reviewer would see');
 
 const limited = classifyProbe(explorerProbe, { status: 429, body: '' });
 assert.equal(limited.state, 'failure');
-assert.match(limited.detail, //, 'the 429 detail names the rate-limit item');
+assert.match(limited.detail, /below one wallet cold-open/, 'the 429 detail names the limit it hit');
 
 assert.equal(classifyProbe(explorerProbe, { status: 502, body: '' }).state, 'failure');
 assert.equal(
@@ -194,7 +194,7 @@ assert.ok(
 // testnet chains live on 2026-08-06 while TDOGE's indexer trailed its decoder
 // by 756,703 blocks with a 32-day-old newest block, and TLTC's newest block was
 // 38 hours old. A demo wallet funded on either would have shown the reviewer an
-// empty balance screen - the same failure  fixed one layer up, where the
+// empty balance screen - the same failure a later change fixed one layer up, where the
 // notes sent the reviewer to a network the demo phrase was not funded on.
 
 const NOW = 1_786_000_000_000;
@@ -671,7 +671,7 @@ assert.ok(fullRun); // the run itself must complete without throwing on this fix
 
 const HUB_LANDING_PAGE = '<!DOCTYPE html><html><body>XChain Hub</body></html>';
 const productionShapedHub = {
-    // Exactly what origin-host serves today, measured: the GET is HTML with no
+    // Exactly what the origin serves today, measured: the GET is HTML with no
     // ACAO at all, the POST is JSON-RPC with the shell origin echoed, and the
     // preflight is row 70's repaired 204.
     'GET https://hub.example/': jsonReply(HUB_LANDING_PAGE, {}),
@@ -844,7 +844,7 @@ assert.equal(
 // --- 4. The burst, which is the only thing that can see a rate limit ----
 //
 // One request per host cannot trip a 0.5 req/sec limit; a wallet opening on
-// three chains is not one request .
+// three chains is not one request.
 const burstProbes = demoProbesFor('testnet', FAKE);
 const burstBlocked = await burstProbe(burstProbes, { fetchImpl: reply('', 429), timeoutMs: 100, count: 4 });
 assert.equal(burstBlocked.blocked, 4, 'every 429 in the burst is counted');
@@ -863,8 +863,8 @@ assert.ok(
 );
 
 console.log(
-    'OK: demo-endpoint gate smoke ( §2.1: probe list derived from the shipped testnet descriptors and'
-    + ' deduplicated; 403 is a failure that names  and 429 one that names ; a 200 is not a pass on'
+    'OK: demo-endpoint gate smoke (probe list derived from the shipped testnet descriptors and'
+    + ' deduplicated; 403 is a failure that names and 429 one that names; a 200 is not a pass on'
     + ' its own, since the hub signature, the explorer available-networks map and the encoder tracker-sync flag'
     + ' each turn a healthy-looking response into the failure a reviewer would hit; inconclusive never becomes a'
     + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit; the encoder'

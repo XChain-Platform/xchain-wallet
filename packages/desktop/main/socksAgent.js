@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SOCKS5 routing for the desktop shell .
+// SOCKS5 routing for the desktop shell.
 //
 // WHY THIS EXISTS. Settings has offered a "Tor routing" toggle since
 // before this file: "Route SDK requests through a local Tor SOCKS5

@@ -86,7 +86,7 @@ export async function runExample(): Promise<ExampleReport> {
         // `reparsed && validate(...)`, an unparseable challenge yielded null and
         // read as "no validation failure": the extension emitted ISO timestamps
         // where the spec declares epoch ms, so parseSignInChallenge returned null
-        // for every real sign-in and this example still reported ok ().
+        // for every real sign-in and this example still reported ok.
         const reparsed = parseSignInChallenge(signIn.challenge);
         report.signInOk = reparsed !== null &&
             validateSignInChallenge(reparsed, {

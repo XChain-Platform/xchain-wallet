@@ -31,7 +31,7 @@ const wsRoot = join(here, '..', '..');                        // .../xchain-wall
 
 /**
  * Say ONCE, before anything runs, when this checkout is the kind of venue that
- * produces failures which are not in the code ( frontier row 73).
+ * produces failures which are not in the code (frontier row 73).
  *
  * Measured on 2026-08-08 in a linked worktree: the suite came back 28 / 441
  * failed, then 4, then 2, and every one of those was the venue rather than the
@@ -111,7 +111,7 @@ function* walkSmokes(dir) {
 const smokes = [...walkSmokes(here)];
 
 // Name the docs checkout these smokes are about to read, once, before any of
-// them runs . Two dozen of them assert on the sibling's CONTENT, and
+// them runs. Two dozen of them assert on the sibling's CONTENT, and
 // it is a shared long-lived tree, so its ordinary uncommitted-and-behind state
 // silently moves verdicts in both directions. The venue notes above describe
 // the same hazard for THIS process; the flag is what keeps every child smoke
@@ -121,7 +121,7 @@ noteDocsTreeState();
 process.env.XCHAIN_DOCS_TREE_NOTED = '1';
 
 // Name the node_modules tree the workspace specifiers resolve through when it
-// belongs to a different checkout . A borrowed node_modules makes a
+// belongs to a different checkout. A borrowed node_modules makes a
 // run a hybrid of two trees, which is how a correct signer bridge was measured
 // red at an origin/master worktree and filed as a regression. Said here because
 // the smokes are separate processes and cannot see each other's notice; the

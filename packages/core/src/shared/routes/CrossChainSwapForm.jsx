@@ -260,9 +260,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
-    //  / PC-51: a cross-chain SWAP is composed and paid on the GIVE
+    // PC-51: a cross-chain SWAP is composed and paid on the GIVE
     // chain, so that is the chain whose native-fee rule applies. Off Bitcoin
-    // the native-coin output IS the protocol fee ; without it the SWAP
+    // the native-coin output IS the protocol fee; without it the SWAP
     // confirms and the indexer rejects it "insufficient fee (native coin output
     // required)" while this form reports the swap as open.
     const nativeFee = useNativeFee(giveChainId);
@@ -353,8 +353,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 },
                 params,
                 ...(feePerKb != null ? { feePerKb } : {}),
-                //  / PC-51: off Bitcoin the native-coin output IS the
-                // protocol fee . `flag` is true or undefined, never
+                // PC-51: off Bitcoin the native-coin output IS the
+                // protocol fee. `flag` is true or undefined, never
                 // false, so this leaves the Bitcoin payload untouched.
                 payFeeInNativeCoin: nativeFee.flag,
             };
@@ -364,7 +364,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     chainId: giveChainId,
                     from: base.from,
                     actionData: { action: 'SWAP', params },
-                    // : the flag must reach COMPOSE too, so the
+                    // The flag must reach COMPOSE too, so the
                     // FEE_DESTINATION output sits inside the PSBT the user
                     // approves. This lane does NOT go through `base`, and a
                     // form that threads only the submit path silently drops
@@ -384,9 +384,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            // : a native-fee refusal arrives as wire wording ("native-coin
+            // A native-fee refusal arrives as wire wording ("native-coin
             // fee pre-flight failed (dust): ...") which is not a sentence anyone
-            // can act on. Now that this form has a native-fee lane  it
+            // can act on. Now that this form has a native-fee lane it
             // needs the same mapping every other swept form uses.
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
                 coinTicker: giveTicker || '',
@@ -752,7 +752,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            {/* : off Bitcoin this is mandatory, so it renders as a
+            {/* Off Bitcoin this is mandatory, so it renders as a
                 disclosure rather than a choice - the same treatment every other
                 ORDER/SWAP authoring surface gives it. */}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />

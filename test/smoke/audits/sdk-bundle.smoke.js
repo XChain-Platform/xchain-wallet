@@ -133,7 +133,7 @@ for (const [shell, viteConfigPath, pkgPath] of [
         assert.ok(
             // Object form (`ws: wsBrowserShim`) or array form
             // (`{ find: 'ws', replacement: wsBrowserShim }`): the web config uses
-            // the second since  added regex finds for the surface swaps.
+            // the second added regex finds for the surface swaps.
             new RegExp(
                 `\\b${mod}:\\s*${mod}BrowserShim`
                 + `|find: '${mod}', replacement: ${mod}BrowserShim`,
@@ -150,7 +150,7 @@ for (const [shell, viteConfigPath, pkgPath] of [
     assert.match(
         pkg.dependencies?.['xchain-sdk'] || '',
         /^npm:@dankest-llc\/xchain-sdk@\d+\.\d+\.\d+$/,
-        `${shell} depends on xchain-sdk as an EXACT registry alias (npm:@dankest-llc/xchain-sdk@X.Y.Z). 'link:' is refused:  D8 moved dev linking into node_modules (pnpm run sdk:link) so a committed manifest cannot un-pin the SDK a release is signed over`,
+        `${shell} depends on xchain-sdk as an EXACT registry alias (npm:@dankest-llc/xchain-sdk@X.Y.Z). 'link:' is refused: D8 moved dev linking into node_modules (pnpm run sdk:link) so a committed manifest cannot un-pin the SDK a release is signed over`,
     );
     assert.match(
         pkg.devDependencies?.['vite-plugin-node-polyfills'] || '',
@@ -180,23 +180,23 @@ for (const [shell, path] of [
     );
 }
 
-// : the WEB shell no longer decides its venue by catching the import.
+// The WEB shell no longer decides its venue by catching the import.
 // It reads the venue off the environment first, so the mock cannot be reached
 // by a bundling change - and a failed real-SDK load is an error, not a quiet
 // downgrade to fabricated balances. The old fallback warning is gone with it,
 // which is why the release gate's web-side evidence is the mock IMPLEMENTATION
-// markers ("Dev SDK stub" / "devmockpsbt", ), checked in section 6.
+// markers ("Dev SDK stub" / "devmockpsbt"), checked in section 6.
 const webFactorySrc = readFileSync(join(web, 'src', 'sdkFactory.js'), 'utf8');
 assert.ok(
     /export function selectSdkVenue/.test(webFactorySrc),
-    'web sdkFactory chooses its venue from the environment ',
+    'web sdkFactory chooses its venue from the environment',
 );
 assert.ok(
     !/falling back to dev-mock SDK/.test(webFactorySrc),
-    'web sdkFactory has no silent fallback left to warn about ',
+    'web sdkFactory has no silent fallback left to warn about',
 );
 
-// The extension resolver keeps the injected-class fallback (: a service
+// The extension resolver keeps the injected-class fallback (a service
 // worker cannot dynamic-import), so its warning string still ships and the
 // release gate still greps for it.
 const extFactorySrc = readFileSync(join(ext, 'src', 'background', 'sdkFactory.js'), 'utf8');

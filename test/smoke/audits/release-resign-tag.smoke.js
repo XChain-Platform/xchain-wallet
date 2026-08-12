@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : correcting a signed manifest that says a gate ran when it did not.
+// Correcting a signed manifest that says a gate ran when it did not.
 //
 // `sign.sh` reads TWO trees. Its scripts come from whichever checkout invoked
 // it; `check-no-dev-mock.sh`, `shipped-lanes.txt` and `expected-artifacts.txt`

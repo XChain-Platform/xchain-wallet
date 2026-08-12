@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  DD7: the AppImage reproduces byte-for-byte.
+// Smoke for DD7: the AppImage reproduces byte-for-byte.
 //
 // WHAT THIS IS DEFENDING. The AppImage was the one shipped artifact that
 // did not reproduce, and the reason was a single u32 in the squashfs
@@ -267,7 +267,7 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
     assert.equal(
         sha256(outA),
         sha256(outB),
-        'two builds one second apart are byte-identical (this is the defect  DD7 opened on)',
+        'two builds one second apart are byte-identical (this is the defect DD7 opened on)',
     );
 
     // 5. Dev builds: pass-through, and demonstrably NOT patched.
@@ -308,7 +308,7 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
     assert.notEqual(badArgs.status, 0, 'an unrecognised argument shape fails the build');
 
     console.log(
-        'OK: AppImage determinism smoke ( DD7: electron-builder config declares a linux-only '
+        'OK: AppImage determinism smoke (DD7: electron-builder config declares a linux-only'
             + 'beforePack hook; the hook materializes a shimmed AppImage toolset and exports '
             + 'APPIMAGE_TOOLS_PATH; an operator-supplied toolset is shimmed rather than discarded and a '
             + 'shim is never double-shimmed; the installed mksquashfs wrapper pins BOTH clocks - the '

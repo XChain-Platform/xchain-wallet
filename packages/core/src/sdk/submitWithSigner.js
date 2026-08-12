@@ -106,7 +106,7 @@ export class BroadcastFailedError extends Error {
  * @property {SubmitEncoderOpts} encoderOpts
  * @property {import('../signers/Signer.js').Signer} signer
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
- * @property {PrebuiltPsbt} [prebuiltPsbt]    single-encode pipeline: when set, skip
+ * @property {PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: when set, skip
  *                                           createAction + encoder.createTx and sign THIS PSBT
  *                                           byte-identically (the one composeForConfirm built,
  *                                           the modal previewed, and the tamper checks passed).
@@ -170,14 +170,14 @@ export async function submitWithSigner({
         );
     }
 
-    //  single-encode pipeline: when the caller supplies a prebuilt PSBT
+    // single-encode pipeline: when the caller supplies a prebuilt PSBT
     // (composeForConfirm's output, already previewed + tamper-checked), skip
     // createAction and encoder.createTx entirely and sign THAT PSBT byte-
     // identically. The atomic createAction->createTx->sign path below is the
     // legacy behaviour; both converge at Step 3.
     let createResult, effectiveEncoderOpts, encoded, preflight;
     let bareNativePayment = false;
-    // : set when the native-fee output has been moved off the phase-1
+    // Set when the native-fee output has been moved off the phase-1
     // commit and on to the phase-2 reveal, which is the transaction the
     // indexer validates the protocol fee against.
     let deferredNativeFeeOutput = null;
@@ -203,7 +203,7 @@ export async function submitWithSigner({
         preflight = { quote: null };
         // ...EXCEPT on the two-phase lane, where composeForConfirm deliberately
         // left the protocol fee OFF the previewed PSBT because it belongs on the
-        // reveal . It hands the output along so this path can attach it
+        // reveal. It hands the output along so this path can attach it
         // without re-quoting, and so the previewed bytes stay exactly what the
         // §5.3.2 output-set check verified.
         deferredNativeFeeOutput = prebuiltPsbt.deferredFeeOutput || null;
@@ -215,7 +215,7 @@ export async function submitWithSigner({
     } else {
         // Step 1: create action string (no network call, just formatting).
         onProgress('creating', { action: actionData.action });
-        // : a plain native-coin payment has no XChain action to create.
+        // A plain native-coin payment has no XChain action to create.
         // This atomic path must agree with composeForConfirm, or the same send
         // would produce different bytes depending on which route built it.
         bareNativePayment = isBareNativePayment(actionData, chainRegistry?.get(chainId));
@@ -251,7 +251,7 @@ export async function submitWithSigner({
         });
         effectiveEncoderOpts = oraclePreflight.encoderOpts;
 
-        // Step 1d : the native-fee output must be EMITTED on the
+        // Step 1d: the native-fee output must be EMITTED on the
         // transaction that carries the ACTION. The indexer validates the
         // protocol fee against that transaction's outputs
         // (`data['TX_OUTPUTS']`), and on the two-phase lane that is the phase-2
@@ -261,7 +261,7 @@ export async function submitWithSigner({
         // that was every DEPLOY plus every large FILE, gated publish and
         // multi-recipient SEND.
         //
-        // : it is nonetheless PASSED to the phase-1 build below, always.
+        // It is nonetheless PASSED to the phase-1 build below, always.
         // The encoder skips emitting a customOutput on a P2SH/P2WSH funding tx
         // but folds its value and reveal-side byte cost into the script output,
         // and that reservation is what pays for it on the reveal. Withholding
@@ -270,7 +270,7 @@ export async function submitWithSigner({
 
         // Step 2: encode to PSBT via the encoder service.
         onProgress('encoding', { actionString: bareNativePayment ? null : createResult.actionString });
-        // : a build that fails here fails BEFORE signing, and the
+        // A build that fails here fails BEFORE signing, and the
         // pre-flight quote is the amount the user is short. Stamp it on so the
         // form's message can say how much, not just that something is missing.
         try {
@@ -318,7 +318,7 @@ export async function submitWithSigner({
         }
     };
 
-    //  §6 / : a TAPROOT envelope comes back as a PAIR from this one
+    // A TAPROOT envelope comes back as a PAIR from this one
     // call, and the ORDER is the safety property, not merely completing both. §6:
     // "the reveal must be signable before the commit is broadcast; anything else
     // manufactures a stranded-funds event, not an error message". So the reveal is
@@ -367,7 +367,7 @@ export async function submitWithSigner({
     // (and ultimately the §49.5 queued-broadcast surface) can recover
     // the signed hex instead of losing it on a network blip.
     //
-    // AWAITED, unlike every other progress call in this file (). This is
+    // AWAITED, unlike every other progress call in this file. This is
     // the one phase whose handler writes the DURABLE PendingTx row that says a
     // transaction may be on the network (submitAction's composedOnProgress puts
     // status 'broadcasting'). Fired and forgotten, that write races the broadcast,
@@ -445,7 +445,7 @@ export async function submitWithSigner({
             change: effectiveEncoderOpts.change,
             fee: effectiveEncoderOpts.fee,
             feePerKb: effectiveEncoderOpts.feePerKb,
-            // : the protocol fee rides the REVEAL, the transaction that
+            // The protocol fee rides the REVEAL, the transaction that
             // carries the action and therefore the one the indexer checks.
             // spendP2sh has always accepted customOutputs (xchain-sdk
             // encoder.js); the wallet simply never passed any. It is the WHOLE
@@ -457,7 +457,7 @@ export async function submitWithSigner({
             psbtHex: spendResult.psbt,
             chainId,
             signingPaths: expandSigningPaths(spendResult.psbt),
-            // : the reveal spends non-standard P2SH/P2WSH data-carrier outputs
+            // The reveal spends non-standard P2SH/P2WSH data-carrier outputs
             // that need the SDK's reveal finalizer, not the default single-sig one
             // (otherwise "Can not finalize input #0"). signingPaths still resolves the
             // signing key; the software signer signs+custom-finalizes every input.
@@ -490,7 +490,7 @@ export async function submitWithSigner({
         signed: finalSigned,
         indexed: null,
         nativeFeeQuote: preflight.quote,
-        //  §8 / : what compression ACTUALLY did, reported by the
+        // What compression ACTUALLY did, reported by the
         // encoder rather than inferred here. With the default ON a caller cannot
         // tell from its own request whether the bytes were compressed, and the
         // wallet has to show the real on-chain size. Shape:

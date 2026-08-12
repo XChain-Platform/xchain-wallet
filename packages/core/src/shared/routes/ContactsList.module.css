@@ -383,7 +383,7 @@
     margin-inline-start: auto;
     margin-inline-end: calc(-1 * var(--xc-space-1));
     flex: 0 0 auto;
-    /* : 22x22 was two pixels under the WCAG 2.2 AA 2.5.8 pointer-target
+    /* 22x22 was two pixels under the WCAG 2.2 AA 2.5.8 pointer-target
        floor, and this button deletes an address, so it is the last one that
        should be hard to hit. */
     width: var(--xc-tap-min);

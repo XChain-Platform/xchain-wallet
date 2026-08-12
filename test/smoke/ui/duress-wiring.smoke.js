@@ -95,7 +95,7 @@ assert.match(
     /Passphrases do not match/,
     'mismatch error copy present',
 );
-// : errors surface via <StatusMessage variant="error"> (role="alert"
+// Errors surface via <StatusMessage variant="error"> (role="alert"
 // at runtime). The storage-write failure records a "Try again" retry; the
 // validation messages leave retryRef null so no misleading button renders.
 assert.match(rowSrc, /<StatusMessage\s+variant="error"/, 'errors surface via StatusMessage variant=error (role=alert)');

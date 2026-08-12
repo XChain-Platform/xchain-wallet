@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  smoke: idle auto-lock is mounted at the SHELL level, not in a route.
+// smoke: idle auto-lock is mounted at the SHELL level, not in a route.
 //
 // History. v0.204.0 wired `useAutoLock` for popup + web; v0.205.0 made it
 // settings-driven; Cluster O FOLLOWUP 1 added desktop. All three lived in
 // Home.jsx, which is only one of ~113 views the shells can render, so
 // navigating to Send / Receive / History / Settings unmounted Home and the
 // hook's effect cleanup cancelled the pending timer. A wallet left on those
-// screens never locked.  hoists the whole decision into
+// screens never locked. hoists the whole decision into
 // `useAutoLockPolicy`, called from each shell's AppInner above the view
 // switch, where nothing but a shell teardown can unmount it.
 //
@@ -108,7 +108,7 @@ for (const file of walkSources(join(wsRoot, 'packages', 'core', 'src', 'shared',
     const rel = file.slice(wsRoot.length + 1);
     assert.ok(
         !/\buseAutoLock(Policy)?\s*\(/.test(src),
-        `${rel} must not call auto-lock hooks; routes unmount on navigation `,
+        `${rel} must not call auto-lock hooks; routes unmount on navigation`,
     );
 }
 
@@ -134,7 +134,7 @@ assert.ok(
 );
 
 console.log(
-    'OK: auto-lock shell smoke (; useAutoLock has one call site inside '
+    'OK: auto-lock shell smoke (; useAutoLock has one call site inside'
     + 'useAutoLockPolicy, all three shells call it above their view switch, no '
     + 'route touches it, activity listeners + SW backstop intact)',
 );

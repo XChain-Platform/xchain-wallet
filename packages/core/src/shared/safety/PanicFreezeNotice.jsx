@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// React binding for the panic-mode disclosure policy . The policy
+// React binding for the panic-mode disclosure policy. The policy
 // itself is pure and lives in panicNotice.js; this file only decides when to
 // re-read the persisted freeze and how to draw it.
 //

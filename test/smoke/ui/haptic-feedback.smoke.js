@@ -57,7 +57,7 @@ assert.ok(/navigator\.vibrate\(/.test(hookSrc),
 
 // 4. Reduced-motion is honoured via the shared resolver, which weighs the
 //    in-app Settings > Appearance override ahead of the OS media query
-//    (: reading matchMedia here ignored "Always reduce" outright).
+// (reading matchMedia here ignored "Always reduce" outright).
 assert.ok(
     /useReducedMotion\(\)/.test(hookSrc),
     'useHaptic resolves reduced motion through useReducedMotion',

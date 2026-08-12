@@ -189,7 +189,7 @@ export class PriceAlertWatcher {
         const coin = coinDisplayName(alert.chainId);
         const target = formatTarget(alert.targetFiat, alert.fiatCurrency);
         const dir = alert.direction === 'above' ? 'rose above' : 'fell below';
-        //  quiet hours: the threshold still fires and the alert is
+        // quiet hours: the threshold still fires and the alert is
         // still marked triggered (one-shot semantics unchanged), but the
         // OS/browser notification itself is suppressed during the DND
         // window. Re-arming after quiet hours behaves exactly like

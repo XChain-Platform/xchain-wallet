@@ -244,7 +244,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // rejects a missing COIN network as invalid); same-chain orders
         // always carry the panel's own chain, matching SwapForm.
         //
-        // : this hardcoded same-coin pair IS the wallet's ORDER
+        // This hardcoded same-coin pair IS the wallet's ORDER
         // boundary. The wire allows GIVE_COIN != GET_COIN (a cross-chain
         // order escrows the GIVE side locally and settles through the
         // validator federation via CROSS_SETTLE, ORDER.md "Notes"), and
@@ -252,8 +252,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // carry it. What is missing is authoring UI: no give-chain /
         // get-chain split exists for ORDER the way CrossChainSwapForm has
         // one for SWAP, and no GET_ADDRESS is resolved on a second chain.
-        // Cross-chain trading from the wallet is SWAP-only. Boundary doc:
-        // claude/components/xchain-wallet/ORDER-CROSS-CHAIN-BOUNDARY.md.
+        // Cross-chain trading from the wallet is SWAP-only.
         const p = { VERSION: '0', GIVE_COIN: coinTicker, GET_COIN: coinTicker };
         if (side === 'buy') {
             p.GIVE_TICK = tick2;
@@ -276,7 +275,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         return p;
     }
 
-    //  §5.6 slice 3: software orders compose ONE PSBT host-side and
+    // §5.6 slice 3: software orders compose ONE PSBT host-side and
     // confirm it on the shared confirm page; hardware + watcher keep the
     // legacy review stage (they need their own signing gates).
     // (isWatcherMode is read above for the auto-pay eligibility gate.)
@@ -284,7 +283,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -444,7 +443,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
-        // : a queued result is SIGNED and not broadcast. This panel is
+        // A queued result is SIGNED and not broadcast. This panel is
         // inline rather than a screen, so it keeps its own frame and only
         // swaps the copy; "Place another" is deliberately not offered, since
         // a signed copy already exists (the §5.3.4 double-broadcast trap).
@@ -630,7 +629,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         );
     }
 
-    //  confirm page, rendered in place of the panel (the same
+    // confirm page, rendered in place of the panel (the same
     // substitution the review stage above already does); form state stays
     // intact behind it, so Reject returns the user to their filled-in order.
     if (actionConfirm.open) {
@@ -645,7 +644,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? fromAddress : null}
                 hwStatus={hwStatus}

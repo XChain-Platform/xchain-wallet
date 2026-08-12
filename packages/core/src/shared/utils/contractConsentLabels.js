@@ -82,7 +82,7 @@ export const KNOWN_ACTION_TYPES = /** @type {readonly string[]} */ ([
 
 // The guard above only listed what SHOULD be mapped, so it could not
 // catch the drift it was written to catch: ADDRESS and BET both entered
-// COMMON_ACTIONS with their authoring forms (PC-32, ) and neither
+// COMMON_ACTIONS with their authoring forms (PC-32) and neither
 // got a verb, which the consent panel rendered as the bare opcode "It
 // can bet." Naming the gap is what makes it assertable, so the unit test
 // requires this to be empty and a new authorable action fails there

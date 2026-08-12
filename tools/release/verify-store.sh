@@ -13,7 +13,7 @@
 #
 #*********************************************************************
 
-# tools/release/verify-store.sh - post-publish verification ( §4).
+# tools/release/verify-store.sh - post-publish verification (§4).
 #
 # Downloads-adjacent, not a downloader: this script does NOT reach out to
 # the Chrome Web Store itself. There is no documented, supported API for

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Taproot envelope commit-recovery records ( §3.5, ).
+// Taproot envelope commit-recovery records (§3.5).
 //
 // §3.5, verbatim on the requirement: "Before broadcasting a commit, the wallet
 // durably persists {commit outpoint, internal key derivation path, tapleaf

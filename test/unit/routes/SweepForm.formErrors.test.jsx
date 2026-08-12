@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / D-58: SweepForm's form-level error survived the edit that
+// D-58: SweepForm's form-level error survived the edit that
 // answered it. Submit a bad destination, correct it (or empty the
 // field), and the stale red line stayed up until the next submit - so
 // an EMPTY destination sat under "This is not a valid Bitcoin regtest
@@ -101,8 +101,8 @@ async function mountSweep() {
     // before a source existed, and the next line -
     // `expect(q.submit().disabled).toBe(false)` - was a race against a render
     // rather than an assertion about behaviour. It won that race on every dev
-    // box and lost it on the `coverage` job and on the devhost CI venue,
-    // where it read as the  fix having regressed .
+    // box and lost it on the `coverage` job and on the CI runner,
+    // where it read as the fix having regressed.
     //
     // The window itself is gone: useActionForm now derives the default source
     // in the same render that receives the addresses, so there is no longer a
@@ -111,7 +111,7 @@ async function mountSweep() {
     // what these cases need is a submittable form, and saying so is cheap.
     //
     // Nothing in this file wants a disabled button: both cases assert `false`,
-    // because the whole point of  / D-58 is that an empty destination
+    // because the whole point of D-58 is that an empty destination
     // errors with a reason instead of presenting a dead control. So "loaded"
     // for this file means the form is ready to be submitted.
     await waitFor(() => {
@@ -134,7 +134,7 @@ function labelledInput(container, labelText) {
 
 afterEach(() => cleanup());
 
-describe('SweepForm form-level errors ( / D-58)', () => {
+describe('SweepForm form-level errors (D-58)', () => {
     it('an empty destination errors with the reason instead of a dead button', async () => {
         const q = await mountSweep();
 

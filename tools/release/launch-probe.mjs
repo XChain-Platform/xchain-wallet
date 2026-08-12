@@ -10,7 +10,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/launch-probe.mjs - does the packaged app actually START?
-// ( row 144.) Every other release gate READS an artifact. This one
+// (row 144.) Every other release gate READS an artifact. This one
 // RUNS it.
 //
 // WHY THIS EXISTS, AND IT IS NOT HYPOTHETICAL. v0.338.0 was built, signed
@@ -357,7 +357,7 @@ export async function launchAndWatch(cmd, args, { timeoutMs = 8000, env = proces
  * Read from the FILE rather than inferred from the artifact's name, because
  * the decision it feeds - whether this host needs Rosetta to run it - must
  * not be answered by a filename that could be wrong. lib.sh's arch gate
- * already documents that a name is not evidence ().
+ * already documents that a name is not evidence.
  *
  * Returns 'arm64' | 'x64' | 'universal' | null (not a Mach-O).
  */
@@ -857,7 +857,7 @@ export async function run(dir, { releaseSet = 'release', timeoutMs = 8000, expec
 
 const invokedDirectly = process.argv[1] && process.argv[1].endsWith('launch-probe.mjs');
 
-const USAGE = `launch-probe.mjs - does the packaged app actually START? ( row 144.)
+const USAGE = `launch-probe.mjs - does the packaged app actually START? (row 144.)
 
 Every other release gate reads an artifact. This one runs it: it launches the
 packaged app for the CURRENT HOST platform in a throwaway profile, waits, and

@@ -10,7 +10,7 @@
 
 // Regression: bridge.signAction consumes the shape bridge-spec PUBLISHES.
 //
-// . `SendActionParams` (packages/bridge-spec/src/index.ts:219-225)
+//`SendActionParams` (packages/bridge-spec/src/index.ts:219-225)
 // declares fromAddress / toAddress / asset / amountRaw; the handler authorized
 // `params.from` and spread the request straight into sendToken, whose contract
 // is from / to / tick / amount with `from` a resolved address record. A

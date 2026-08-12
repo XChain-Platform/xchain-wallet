@@ -29,7 +29,7 @@ const EXT_PKG = path.resolve(HERE, '../../packages/extension');
 export default async function globalSetup() {
     await assertVenueReachable();
 
-    // , and this venue needs it for the same reason the web one does:
+    // And this venue needs it for the same reason the web one does:
     // `reservation-race.extension.spec.js` mints and sends XCHAIN, and both
     // legs pay a USD-priced protocol fee. Without a usable snapshot the run
     // dies inside the confirm screen on copy that reads like a wallet bug.

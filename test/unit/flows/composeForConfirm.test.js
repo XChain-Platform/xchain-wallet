@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// composeForConfirm single-encode pipeline ( §5.3.1).
+// composeForConfirm single-encode pipeline (§5.3.1).
 
 import { describe, it, expect, vi } from 'vitest';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
@@ -71,7 +71,7 @@ describe('composeForConfirm', () => {
         await expect(composeForConfirm(BASE_ARGS(h))).rejects.toThrow(/encoder not initialized/);
     });
 
-    // . The §5.3.2 check-3 verifier fails CLOSED when it gets no scripts,
+    //The §5.3.2 check-3 verifier fails CLOSED when it gets no scripts,
     // so dropping them here did not weaken a check, it made every chunk-lane
     // action impossible to send: a three-recipient SEND is past one OP_RETURN,
     // takes the P2SH lane, and the confirm pipeline rejected it as tampered
@@ -97,14 +97,14 @@ describe('composeForConfirm', () => {
     });
 });
 
-// : a plain native-coin payment carries no XChain action.
+// A plain native-coin payment carries no XChain action.
 //
 // It used to compose `SEND|0|BTC|...`, which the indexer rejects outright (it
 // has no native-coin ledger, so the TICK is unknown). That cost an output on
 // every send and, once the pre-flight dry-run became reachable, surfaced as a
 // "Will likely fail" verdict that disabled Approve on the wallet's most common
 // operation. A payment with nothing to say is now just a payment.
-describe('composeForConfirm bare native payments ', () => {
+describe('composeForConfirm bare native payments', () => {
     const NATIVE_ARGS = (h, params = {}) => ({
         ...BASE_ARGS(h),
         actionData: {
@@ -158,7 +158,7 @@ describe('composeForConfirm bare native payments ', () => {
     });
 });
 
-// : a BET composed on a chain where the native coin is the ONLY fee lane.
+// A BET composed on a chain where the native coin is the ONLY fee lane.
 //
 // This is the ledger's verify line one layer below the chain: compose a BET with
 // the native-fee mode on and confirm a FEE_DESTINATION output is present in the
@@ -166,7 +166,7 @@ describe('composeForConfirm bare native payments ', () => {
 // bytes, rather than added at submit time: the confirm page previews and the
 // tamper check verifies exactly these outputs, so a fee output that appeared
 // later would either be invisible to the user or read as tampering.
-describe('composeForConfirm native-coin protocol fee ( BET on LTC)', () => {
+describe('composeForConfirm native-coin protocol fee (BET on LTC)', () => {
     const FEE_DEST = 'rltc1qfeedestination';
 
     function betHarness({ quote } = {}) {
@@ -230,8 +230,8 @@ describe('composeForConfirm native-coin protocol fee ( BET on LTC)', () => {
     });
 });
 
-//  / : where the native-coin protocol fee output goes on the
-// two-phase (chunk) lane, and - the half  found - where it must still be
+// Where the native-coin protocol fee output goes on the
+// two-phase (chunk) lane, and - the half found - where it must still be
 // declared so the reveal can afford it.
 //
 // The reveal's only inputs are the commit's script outputs, and the encoder
@@ -241,7 +241,7 @@ describe('composeForConfirm native-coin protocol fee ( BET on LTC)', () => {
 // reveal could not balance: measured on litecoin-regtest as "Outputs are
 // spending more than Inputs" at a ~0.069 LTC quote. It hid on dogecoin-regtest
 // only because 2084 sats fitted the commit's incidental slack.
-describe('composeForConfirm native-fee placement on the chunk lane ', () => {
+describe('composeForConfirm native-fee placement on the chunk lane', () => {
     const FEE_DEST = 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls';
     const FEE_SATS = 6946667;
 

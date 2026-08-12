@@ -7,7 +7,7 @@
     line-height: 1;
 }
 
-/*  slice 2: the dot stays 16px, the TARGET is 24px.
+/* slice 2: the dot stays 16px, the TARGET is 24px.
  *
  * A 16x16 help dot is under the WCAG 2.2 AA floor (2.5.8) and misses on a
  * touch screen. Growing the dot itself would shout for attention it does

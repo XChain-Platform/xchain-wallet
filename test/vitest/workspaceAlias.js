@@ -12,7 +12,7 @@
 // THIS checkout, instead of letting it resolve through
 // `node_modules/@xchain-wallet/*`.
 //
-// Why this matters for the gate : those links are pnpm's, not
+// Why this matters for the gate: those links are pnpm's, not
 // git's. Nothing in the repo describes them, so a `pnpm install` run from
 // a different root, a second checkout on the same machine, or a stale
 // store can leave a link pointing at another copy of `packages/core`.

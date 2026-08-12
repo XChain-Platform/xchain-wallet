@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// tools/regtest/xc1178SmtMemoRepoison.mjs - 's venue proof.
+// tools/regtest/smtMemoRepoisonProof.mjs - that venue proof.
 //
 // WHAT THIS ANSWERS THAT A UNIT TEST CANNOT
 //
-// 's fix (`xchain-indexer` 297c7cb) clears `_smtTickNameCache` /
+// that fix (`xchain-indexer` 297c7cb) clears `_smtTickNameCache` /
 // `_smtAddressNameCache` in the `finally` of every transaction ABORT, and
 // `test/unit/actions.dryRunSmtMemoInvalidation.test.js` pins the coupling
-// against a real Database. 's verify clause is a different question: it
+// against a real Database. that verify clause is a different question: it
 // asks whether the LTC REGTEST VENUE, the deployed process, still wedges. Only
 // the venue can answer that, so this driver asks it.
 //
@@ -43,10 +43,10 @@
 //
 // VENUE
 //
-// Run it on devhost, where the encoder / miner / explorer ports are local and
+// Run it on the regtest host, where the encoder / miner / explorer ports are local and
 // ~/Sites is the same NFS path as the Mac:
 //
-//   ssh devhost 'cd ~/Sites/XChain-Platform/xchain-wallet && \
+//   ssh localhost 'cd ~/Sites/XChain-Platform/xchain-wallet && \
 //     node tools/regtest/xc1178SmtMemoRepoison.mjs litecoin-regtest'
 //
 // RECOVERY. A pre-fix run leaves the indexer wedged on the block it refused.
@@ -107,7 +107,7 @@ async function venueHealth() {
 function wedgeMessage(health) {
     return `WEDGED: the indexer is at block ${health.indexed} while the decoder is at `
         + `${health.decoded} (lag ${health.lag}) and is not advancing. On a PRE-FIX venue that is `
-        + ' reproducing: check `docker logs --tail 40 xchain-node-'
+        + 'reproducing: check `docker logs --tail 40 xchain-node-'
         + `${cfg.regtestCoin === 'RLTC' ? 'litecoin' : 'dogecoin'}-regtest-xchain-indexer` + '` '
         + 'for a repeating balances touched-set guard, and restart that one container to recover.';
 }
@@ -162,7 +162,7 @@ async function main() {
     console.log(`venue: indexed block ${health.indexed}, lag ${health.lag}`);
 
     // A fee-bearing action needs a current oracle price, now and in several
-    // minutes' time, or the legs below fail on the oracle .
+    // minutes' time, or the legs below fail on the oracle.
     const priced = await venue.seedPrices();
     console.log(`price: ${priced.reason || (priced.seeded ? 'reseeded' : 'ok')}`);
 

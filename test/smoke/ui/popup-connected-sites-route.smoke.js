@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the MV3 popup needs Connected Sites as its own screen.
+// The MV3 popup needs Connected Sites as its own screen.
 //
-//  gave the popup a Settings route and, with it, the only path to
+// a later change gave the popup a Settings route and, with it, the only path to
 // dApp permissions: Settings -> Connected Sites, one level deeper than
 // the other shells put it. Two things fell out of that. The palette's
 // static `nav-connected-sites` command navigated to a route the popup's
@@ -128,7 +128,7 @@ assert.ok(
 );
 
 console.log(
-    'OK: popup connected-sites route smoke (: shared ConnectedSites route over the shared '
+    'OK: popup connected-sites route smoke (shared ConnectedSites route over the shared'
     + 'section, mounted standalone in the MV3 popup, section deep-link redirected to it, '
     + 'palette site commands and nav command no longer dead-ended)',
 );

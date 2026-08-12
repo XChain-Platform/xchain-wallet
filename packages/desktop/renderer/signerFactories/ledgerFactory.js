@@ -21,14 +21,14 @@
 // (Electron's default-deny behavior under `contextIsolation: true`).
 
 import { makeLedgerFactory, walletOnlyRegistry } from '@xchain-wallet/core/signerFactories';
-//  + : import the wallet MODULE, not the package index.
+// +: import the wallet MODULE, not the package index.
 //
 // The signer needs only WalletUtils (decomposePsbt + txidOf, both pure). Going
 // through 'xchain-sdk' pulls the package INDEX into the popup graph, which
 // makes it shared between the popup and the service-worker entries - and a
 // shared index means the bundler emits sdkFactory's fallback `import()` as a
 // real dynamic chunk in the worker build, which ServiceWorkerGlobalScope
-// cannot execute. That is exactly how  shipped, and the sdk-wiring
+// cannot execute. That is exactly how a later change shipped, and the sdk-wiring
 // smoke's artifact-level assertion caught it here.
 //
 // The deep path keeps that boundary intact: the worker's dynamic import still
@@ -81,7 +81,7 @@ export async function pairLedgerSigner({
             const mod = await appLoader();
             return mod?.default ?? mod;
         },
-        // : see the extension binding. signPsbt needs decomposePsbt +
+        // See the extension binding. signPsbt needs decomposePsbt +
         // txidOf and nothing else, both pure, so the renderer builds a registry
         // that can answer those and nothing more.
         sdkRegistry: walletOnlyRegistry(WalletUtils),

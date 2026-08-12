@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Subresource Integrity for the web SPA build ( / G-SRI).
+// Subresource Integrity for the web SPA build (G-SRI).
 //
 // The CSP (src/csp.js) says WHERE scripts may come from ('self'). It says
 // nothing about WHAT those scripts contain. For a self-custodial wallet, the
@@ -27,7 +27,7 @@
 // (a) an asset host that is no longer independently trusted, which matters
 // because assets are the part most likely to sit on a CDN, and (b) a build whose
 // output can be verified byte-for-byte against a published hash by anyone
-// (pairs with the reproducible-build work, ).
+// (pairs with the reproducible-build work).
 //
 // Node-side build code: `node:crypto` is intentional here and never reaches the
 // browser bundle.

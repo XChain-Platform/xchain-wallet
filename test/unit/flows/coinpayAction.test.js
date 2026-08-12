@@ -37,7 +37,7 @@ describe('flows/coinpayAction coinAmount guard', () => {
             .rejects.toThrow(/positive number/);
     });
 
-    it('accepts a >2^53-1 amount as an exact decimal string ', async () => {
+    it('accepts a >2^53-1 amount as an exact decimal string', async () => {
         // 90071992547409910 koinu ~= 900,719,925 DOGE, past
         // Number.MAX_SAFE_INTEGER. The encoder/SDK now carry it exactly, so
         // the guard admits the string form: it clears every amount guard and

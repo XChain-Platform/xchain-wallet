@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §3.4 and §5: the Chrome Web Store listing pack.
+// Smoke for §3.4 and §5: the Chrome Web Store listing pack.
 //
 // THREE documents describe the extension's permissions and its
 // content-script reach, and only one of them is executable:
@@ -19,7 +19,7 @@
 //   release/extension/chrome-web-store.md,            <- pasted into the
 //     "Listing collateral"                               CWS console
 //
-//  moved the latter two into the sibling xchain-documentation
+// a later change moved the latter two into the sibling xchain-documentation
 // checkout (the old uppercase listing-pack file is now the "Listing
 // collateral" half of chrome-web-store.md), so this whole gate skips,
 // loudly, when that checkout is absent.
@@ -330,6 +330,6 @@ assert.deepEqual(actualSizes, statedSizes,
     + 'screenshot at a changed viewport blocks a submission that is otherwise ready.');
 const dimensionsChecked = actualSizes.length;
 
-console.log(`OK: extension listing-pack smoke ( §3.4/§5: ${declared.length} permissions justified in both `
+console.log(`OK: extension listing-pack smoke (§3.4/§5: ${declared.length} permissions justified in both`
     + `documents, ${manifestMatches.size} content-script matches agreeing across three files, summary `
     + `${summary.length}/${limit} chars, ${dimensionsChecked} assets at the stated sizes)`);

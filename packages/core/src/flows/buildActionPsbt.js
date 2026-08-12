@@ -39,7 +39,7 @@ import { isChunkEncoding } from './nativeFeeLane.js';
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction
- * that this lane cannot produce .
+ * that this lane cannot produce.
  *
  * A typed error rather than a bare string so a form can recognise it: the
  * remedy is "compose this from the wallet holding the key", not "try again".
@@ -131,7 +131,7 @@ export async function buildActionPsbt(opts) {
         encoderOpts: opts.encoderOpts || {},
         source: source.address,
     });
-    // Oracle usage fee : the watcher/unsigned path composes the same output the
+    // Oracle usage fee: the watcher/unsigned path composes the same output the
     // signing path does, so an air-gapped Mode B dispenser is not silently unpayable.
     const oraclePreflight = await applyOracleFeePreflight({
         sdk,
@@ -145,7 +145,7 @@ export async function buildActionPsbt(opts) {
         level: 'info',
         message: `createTx action=${opts.actionData.action} chain=${opts.chainId}`,
     });
-    // : carry the quoted protocol fee out with a failed build, so the
+    // Carry the quoted protocol fee out with a failed build, so the
     // "this address has nothing to spend" sentence can name the amount.
     let encoded;
     try {
@@ -177,7 +177,7 @@ export async function buildActionPsbt(opts) {
         message: `createTx ok action=${opts.actionData.action} encoding=${encoded.encoding}`,
     });
 
-    // : this whole flow is the WATCHER / air-gapped lane - all three of its
+    // This whole flow is the WATCHER / air-gapped lane - all three of its
     // callers are encode-only (`action.psbt`, buildCoinpayPsbtRequest,
     // buildGatedPublishPsbtRequest) - and it can only ever produce ONE
     // transaction. A P2SH/P2WSH encoding needs two: the commit this built, which

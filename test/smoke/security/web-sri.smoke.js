@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the web SPA build stamps Subresource Integrity hashes.
+// Smoke for: the web SPA build stamps Subresource Integrity hashes.
 //
 // The CSP (web-csp.smoke.js) pins WHERE scripts may come from. This pins WHAT
 // they contain: index.html carries a sha384 of every script/stylesheet it loads,

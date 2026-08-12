@@ -66,7 +66,7 @@ usage() {
     cat <<'USAGE'
 verify-release-key.sh - prove the release signing key actually works, by
 driving the real signing pipeline end to end against a throwaway tag and a
-throwaway artifact set ( key ceremony).
+throwaway artifact set (key ceremony).
 
 Usage:
   bash tools/release/verify-release-key.sh --key <FINGERPRINT>
@@ -100,7 +100,7 @@ USAGE
 #
 #   verify-release-key.sh: unknown argument: --help
 #
-# and exit 1 . This tool is typed by an operator holding the one
+# and exit 1. This tool is typed by an operator holding the one
 # key in the project that cannot be quietly redone, immediately after an
 # offline ceremony, and its first answer must not be a refusal.
 while [ $# -gt 0 ]; do

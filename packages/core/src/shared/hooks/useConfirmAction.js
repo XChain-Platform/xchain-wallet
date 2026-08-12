@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useConfirmAction ( §5.1, §5.3.5).
+// useConfirmAction (§5.1, §5.3.5).
 //
 // Drives the single-encode confirm pipeline. All SDK work is HOST-side
 // (the React tree only reaches the host over `messaging`): the injected
@@ -16,7 +16,7 @@
 // and resolves with an already-verified ComposedAction; `preflight` runs
 // sdk.preflight in the background. The hook itself is a pure UI state
 // machine: compose PRE-OPEN, open the modal, stream pre-flight, and on
-// Approve re-check staleness (and, , the native-coin protocol fee this
+// Approve re-check staleness (and,, the native-coin protocol fee this
 // PSBT already pays) before signing the byte-identical PSBT. One
 // modal per window, enforced by a module-level singleton (React context
 // would miss independently-mounted trees). Each invocation owns one
@@ -105,7 +105,7 @@ export function useConfirmAction() {
         if (o && o.reservationLedger && o.reservationId) {
             Promise.resolve(o.reservationLedger.release(o.reservationId)).catch(() => {});
         }
-        //  §5.4: drop the stored confirm on EVERY terminal state, which
+        // Drop the stored confirm on EVERY terminal state, which
         // is what this single teardown covers - approve, reject, error, and
         // the unmount of a form navigated away from mid-confirm. Mandatory
         // rather than tidy-up: a session that outlives its confirm offers the
@@ -154,12 +154,12 @@ export function useConfirmAction() {
      * @param {{ tick?: string, amount?: string }} [args.reserve]  the amount to reserve at Approve
      * @param {(psbtHex: string) => Promise<{verdict: string, spent: Array<object>}>} [args.checkInputs]  §4.6 input-liveness probe (messaging.checkInputLiveness)
      * @param {(req: { actionString: string, source?: string }) => Promise<object>} [args.requoteNativeFee]
-     *    Approve-time native-fee re-quote (messaging.requoteNativeFee).
+     * Approve-time native-fee re-quote (messaging.requoteNativeFee).
      *   Called only when the composed action actually attaches a native-coin
      *   fee output; a composed amount outside the fresh band interrupts
      *   instead of signing.
      * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
-     * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session]   §5.4 confirm-session store
+     * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session] §5.4 confirm-session store
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
      *   How to finish this confirm WITHOUT its originating form. Supplying it is
      *   what opts the surface into persistence: `software`/`hardware` are
@@ -216,7 +216,7 @@ export function useConfirmAction() {
                 setComposing(false);
                 setPhase('preflighting'); // MODAL OPENS HERE
 
-                //  §5.4: persist the composed confirm the moment it is on
+                // Persist the composed confirm the moment it is on
                 // screen, before pre-flight, because the hazard it protects
                 // against (the popup closing on focus loss) is likeliest while
                 // the user waits for exactly that. Persisted only when the
@@ -232,7 +232,7 @@ export function useConfirmAction() {
                 // it lands. Best-effort: any failure (or no preflight backend)
                 // goes ready with a null report so the user can still proceed.
                 if (typeof args.preflight !== 'function') { setPhase('ready'); return; }
-                // : a bare native-coin payment has no XChain action, so
+                // A bare native-coin payment has no XChain action, so
                 // there is nothing to pre-flight. Asking anyway is not merely
                 // wasteful - the indexer would be handed a SEND for a tick it
                 // has no ledger for and would rightly call it invalid, which is
@@ -335,7 +335,7 @@ export function useConfirmAction() {
             }
         } catch { /* re-check best-effort: proceed under the old report */ }
 
-        //  §4.6, the third Approve-time re-check: is the native-coin
+        // §4.6, the third Approve-time re-check: is the native-coin
         // protocol fee this PSBT already pays still the amount the chain will
         // accept? The output was sized at COMPOSE, and the amount consensus
         // requires moves INVERSELY with the coin's USD price, so an adverse
@@ -382,7 +382,7 @@ export function useConfirmAction() {
         // approve() again for the SAME composed PSBT, and re-reserving would
         // both double-count the amount and orphan the first id (teardown only
         // releases the last one).
-        // : when the caller did not name what it spends, derive it from
+        // When the caller did not name what it spends, derive it from
         // the projected balances the compose envelope already carries. That
         // gives every form migrated via useActionConfirmFlow the same
         // two-window protection Send has, without 24 forms each declaring a
@@ -483,7 +483,7 @@ function makeSessionId() {
 }
 
 /**
- * Write the confirm session ( §5.4). Best-effort by design: the store is
+ * Write the confirm session (§5.4). Best-effort by design: the store is
  * a convenience over a re-entry, so a storage hiccup must never interrupt a
  * confirm the user is standing in front of.
  */
@@ -497,7 +497,7 @@ function persistSession(args, id, built, report) {
         // Stored as messaging METHOD NAMES plus a request body, never a
         // closure: a stored confirm has to be approvable without its
         // originating form, and the resume surface allow-lists the names it
-        // will call ('s builder-name precedent).
+        // will call (that builder-name precedent).
         dispatch: args.resume,
         createdAt: Date.now(),
     })).catch(() => {});
@@ -528,7 +528,7 @@ export function isCredentialFailure(err) {
  *
  * Exported because the extension's approval window is a SEPARATE React root
  * that renders <PreflightPanel> without running this hook's state machine
- * ( §5.6 slice 4). Two implementations of "may the user sign this" is
+ * (§5.6 slice 4). Two implementations of "may the user sign this" is
  * exactly the drift that would let one surface honour an override rule the
  * other ignores, so both read this one.
  *

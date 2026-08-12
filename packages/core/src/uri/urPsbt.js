@@ -44,7 +44,7 @@ import { crc32 } from './psbtQr.js';
 export const UR_PREFIX = 'ur:';
 export const UR_PSBT_TYPE = 'crypto-psbt';
 
-// Input bounds ( §1, S3: the mobile camera lane).
+// Input bounds (§1, S3: the mobile camera lane).
 //
 // EVERY NUMBER BELOW ARRIVES FROM A QR CODE SOMEONE ELSE PRINTED. That is
 // the whole point of the air-gapped lane: the user points a camera at a

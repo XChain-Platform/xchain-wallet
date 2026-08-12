@@ -10,7 +10,7 @@
 
 // Fuzz: `xchain:` deep-link parser invariants.
 //
-//  §3.6 (Chrome Web Store publishing spec). The extension popup
+// §3.6 (Chrome Web Store publishing spec). The extension popup
 // boots from `popup.html?uri=<uri>` and the scan route feeds the same
 // parser from a camera QR, so `parseXchainUri` is the wallet's widest
 // untrusted-string surface: whatever survives it lands in Send / Receive
@@ -197,7 +197,7 @@ describe('fuzz/xchain-uri', () => {
         );
     });
 
-    //  §3.6 finding 1: hardenUriIntentText is the fix for the audit's
+    // §3.6 finding 1: hardenUriIntentText is the fix for the audit's
     // "deep-link fields skip the repo's own display hardening" finding.
     // Every shell applies it at the boundary where a parsed intent becomes
     // prefill state, so these properties run it here too rather than only

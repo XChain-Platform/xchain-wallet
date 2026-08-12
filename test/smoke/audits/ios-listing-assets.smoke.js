@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the App Store listing images ( §6, frontier row 63).
+// Smoke for the App Store listing images (§6, frontier row 63).
 //
 // WHAT THIS IS DEFENDING, and it is not tidiness. On 2026-08-07 the eight
 // images live on the iOS listing were found to depict a build 18 shared-UI
@@ -109,7 +109,7 @@ for (const asset of iosSet.assets) {
         tracked.has(`packages/mobile/screenshots/${asset.name}`),
         `packages/mobile/screenshots/${asset.name} is not tracked by git. These are published store `
         + 'collateral, not build output: an untracked listing image exists on one disk, in no history, and '
-        + 'nothing can say which build it depicts ',
+        + 'nothing can say which build it depicts',
     );
 }
 assert.ok(
@@ -125,7 +125,7 @@ assert.ok(
 // `--no-index` is load-bearing and was found by trying to break this check:
 // without it, check-ignore consults the index first and reports any TRACKED
 // path as not-ignored, whatever the rules say. Restoring the exact
-// `/packages/mobile/screenshots` line that caused  left this assertion
+// `/packages/mobile/screenshots` line that caused a later change left this assertion
 // green, because by then the images were tracked - a guard that cannot fail,
 // certifying the one thing it was written to catch. With --no-index the rules
 // are read on their own terms and the restored line goes red.
@@ -140,7 +140,7 @@ const ignored = (relPath) => {
 assert.equal(
     ignored('packages/mobile/screenshots/iphone-17-pro-max/01-balances.png'),
     false,
-    'a listing screenshot is ignored again. That single .gitignore line is the whole of : it reads '
+    'a listing screenshot is ignored again. That single.gitignore line is the whole: it reads'
     + 'like a leftover from when these were build output, which they were until they were uploaded to a store',
 );
 // The harness debris around them SHOULD still be ignored: a multi-megabyte
@@ -153,7 +153,7 @@ assert.equal(
 );
 
 console.log(
-    'OK: iOS listing-assets smoke ( §6 / : the App Store set names a capture script and covers '
+    'OK: iOS listing-assets smoke (the App Store set names a capture script and covers'
     + `both idioms with the same ${scenesOf('iphone-17-pro-max').length} scenes; all ${iosSet.assets.length} `
     + `images are pinned to ${pin.pin.capturedFrom.commit.slice(0, 8)} (v${pin.pin.capturedFrom.version}), still `
     + 'hash to what the capture recorded, and sit on one of the two canvases App Store Connect accepts; and '

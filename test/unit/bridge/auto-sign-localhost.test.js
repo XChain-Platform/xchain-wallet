@@ -128,7 +128,7 @@ beforeEach(() => {
 // specifier to the same file this test mocked. When it does not, vi.mock is
 // a silent no-op and the real signing flows run: the spies stay at zero and
 // the failures read as bridge bugs. Assert the wiring once, up front, so a
-// resolution drift names itself .
+// resolution drift names itself.
 // Deliberately reached by relative path, not by the specifier the mock is
 // keyed on: that is the whole point. This path can only mean core in THIS
 // checkout, so if the bare specifier resolved anywhere else the two are

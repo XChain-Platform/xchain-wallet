@@ -60,7 +60,7 @@ if (!existsSync(join(webDist, 'index.html'))) {
 }
 
 // Which feature set the bundle we are about to wrap was built with
-// . This package compiles nothing: it copies the web
+//This package compiles nothing: it copies the web
 // dist verbatim, so the profile is a property of a build that already
 // happened somewhere else, and the only honest way to know it is the stamp
 // the web build wrote into the dist.
@@ -79,7 +79,7 @@ const stagedProfile = existsSync(stampPath)
 // caller says otherwise, because that is what every store artifact must
 // carry and an unset variable must never widen a gate.
 //
-// It is a variable at all because of : the direct-download lane now
+// It is a variable at all because: the direct-download lane now
 // has a SECOND APK built at the `default` profile, for the audience that
 // avoids Play deliberately and was getting Play's review restrictions
 // anyway. Until this line a release tag hard-required `store`, so that

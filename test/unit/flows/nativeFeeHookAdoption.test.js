@@ -9,11 +9,11 @@
 // PC-51 / §11.3: every fee-bearing surface holds the fee mode through useNativeFee.
 //
 // The hook exists because the flag has to reach up to three submit paths - the legacy
-// sign path, the  compose preview, and the watcher encode-only path - and a form
+// sign path, the compose preview, and the watcher encode-only path - and a form
 // that threaded it through two of them dropped it silently on the third: the action
 // composed, broadcast, and then indexed `invalid: insufficient fee (native coin output
 // required)` AFTER the miner fee was spent. The hook is also what derives `mandatory`
-// per render, which is what makes switching chains mid-form re-derive the  rule
+// per render, which is what makes switching chains mid-form re-derive the rule
 // instead of carrying a stale seeded value.
 //
 // A form that re-implements the flag with its own useState looks identical on screen and
@@ -62,7 +62,7 @@ describe('§11.3: the fee mode is held by useNativeFee on every surface that off
         it(`${rel} takes the fee mode from the hook`, () => {
             expect(src, `${rel} mounts NativeFeeToggle without calling useNativeFee. The flag has to `
                 + 'reach the legacy sign path, the confirm preview AND the watcher encode-only path, '
-                + 'and `mandatory` has to be derived per render so a chain switch re-derives . '
+                + 'and `mandatory` has to be derived per render so a chain switch re-derives.'
                 + 'A local copy silently drops one of those.').toMatch(/useNativeFee/);
             expect(LOCAL_FLAG_NAMED.test(src) || LOCAL_FLAG_STATE.test(src),
                 `${rel} appears to hold the native-fee flag in its own useState alongside the hook.`)

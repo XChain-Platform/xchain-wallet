@@ -18,7 +18,7 @@
 //     those) and otherwise matches the request as a semver RANGE, which
 //     is what ConnectOpts.requiredBridgeVersion is specified to be. The
 //     helper used exact-string matching, so it refused every dApp that
-//     wrote its requirement the documented way (). Pinned by
+// wrote its requirement the documented way. Pinned by
 //     behaviour here, not by regex: a range matcher has cases.
 //   - The BRIDGE_VERSION_MISMATCH error code is declared in the
 //     BridgeErrorCode union.
@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-// The RUNTIME values moved to runtime.js : the desktop MAIN process
+// The RUNTIME values moved to runtime.js: the desktop MAIN process
 // loads this package out of app.asar unbundled, and Node refuses to strip
 // types from anything under node_modules, so a .ts-only entry point crashed
 // the packaged app at startup. index.ts re-exports them and remains the
@@ -82,7 +82,7 @@ assert.match(
 );
 // The handler must read the option name the spec publishes. Reading
 // `req.bridgeVersion` meant a compliant dApp's requiredBridgeVersion arrived as
-// undefined and negotiation was skipped for every one of them ().
+// undefined and negotiation was skipped for every one of them.
 assert.match(
     handlersSrc,
     /const requiredBridgeVersion = req\.requiredBridgeVersion \?\? req\.bridgeVersion;/,
@@ -100,7 +100,7 @@ assert.doesNotMatch(
 );
 // connect's two return paths (existing grant + fresh grant) now build their
 // answer through ONE ConnectSuccess builder, so version + supportedVersions
-// cannot diverge between them by construction (). Both still report
+// cannot diverge between them by construction. Both still report
 // the WALLET's version: requiredBridgeVersion is a range, so echoing the
 // request back would report a range where a version is declared.
 const connectReturns = handlersSrc.match(/return connectSuccess\(/g) || [];

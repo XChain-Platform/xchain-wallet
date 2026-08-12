@@ -19,7 +19,7 @@
 //   - "WebSocket is not a constructor": the bundler hands a CJS consumer an
 //     interop wrapper around this ESM namespace, not the class. Both export
 //     shapes therefore have to be constructible on their own.
-//   - : `getAugmentedNamespace()` copies namespace KEYS onto a
+// -: `getAugmentedNamespace()` copies namespace KEYS onto a
 //     constructible function, and static class properties are not namespace
 //     keys - so `WebSocket.OPEN` came out undefined, every
 //     `readyState === WebSocket.OPEN` guard was permanently false, and the SDK
@@ -97,7 +97,7 @@ describe('shims/ws-browser', () => {
     });
 
     it('carries the readyState constants as own static properties', () => {
-        // 's other half. These are what a `readyState === WebSocket.OPEN`
+        // that other half. These are what a `readyState === WebSocket.OPEN`
         // guard compares against; when they were dropped the comparison was
         // false forever and frames vanished on an open socket.
         expect(BrowserWsShimDefault.CONNECTING).toBe(0);

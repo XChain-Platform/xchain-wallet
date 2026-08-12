@@ -101,7 +101,7 @@ assert.ok(
 
 // --- 4. Chain gating + empty states -----------------------------------
 
-//  flipped this from a pin to a ban. The gate has ONE home,
+// a later change flipped this from a pin to a ban. The gate has ONE home,
 // registry/actions.js BTC_EXCLUSIVE_ACTIONS; a private VM_COIN copy here is
 // what made the browse surface miss the day contracts opened to LTC/DOGE, so
 // the constant must not come back.
@@ -261,7 +261,7 @@ for (const [shell, msgPath] of [
 
 // --- 7. App.jsx wiring + contract-chain gate --------------------------
 
-// : the Contracts nav came off the shared BTC-address hook and on to
+// The Contracts nav came off the shared BTC-address hook and on to
 // useVmAddressesPresent, which asks the registry which chains advertise DEPLOY.
 // The shared hook is still right for Staking / multisig / co-signer accounts,
 // which stay Bitcoin-exclusive, so both hooks are expected in these files - the

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PsbtConfirmScreen ( §5.5, PSBT variant adapter).
+// PsbtConfirmScreen (§5.5, PSBT variant adapter).
 //
 // The sibling of <ActionConfirmScreen> for surfaces whose INPUT is a PSBT
 // the wallet did not build (Sign transaction, dApp signPsbt, co-signer).
@@ -128,7 +128,7 @@ export function PsbtConfirmScreen({
             )}
             credentialsReady={signerReady || password.length > 0}
             credentials={signerReady ? (
-                // : panic mode freezes signPsbtFlow too, so this note is
+                // Panic mode freezes signPsbtFlow too, so this note is
                 // a claim the wallet cannot honour while a freeze is on.
                 <SigningReadyNote>
                     <p className={hintClassName}>

@@ -7,7 +7,7 @@
 
     - com.apple.security.cs.allow-jit: TRUE, and the sentence it replaced
       ("false. We don't JIT any code") shipped a macOS build that cannot
-      start at all ( row 143). Electron IS V8, and V8 JITs: under
+      start at all (row 143). Electron IS V8, and V8 JITs: under
       the hardened runtime without this entitlement it cannot reserve
       executable memory, and the process dies before any of our code runs
       with "Fatal process out of memory: Failed to reserve virtual memory

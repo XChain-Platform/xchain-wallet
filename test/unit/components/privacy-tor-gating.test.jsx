@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / : the Tor toggle must not be OPERABLE where it cannot
+// The Tor toggle must not be OPERABLE where it cannot
 // work, and the shells that cannot work it say so out loud.
 //
 // The gate is a runtime conditional, not build-time dead-code
@@ -17,7 +17,7 @@
 // proxy, which is exactly what a source-level grep cannot tell you. This
 // renders the real component both ways.
 //
-// Operator ruling on  (2026-08-11) chose the disclosure over the
+// Operator ruling on (2026-08-11) chose the disclosure over the
 // silence: web and extension carry an explicit
 // not-available-on-this-platform state rather than dropping the row.
 

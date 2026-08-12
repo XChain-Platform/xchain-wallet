@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the §5.4 confirm-session store must have a PRODUCTION
+// Smoke for: the §5.4 confirm-session store must have a PRODUCTION
 // caller, not just a unit test.
 //
 // This is the whole reason the item existed. `confirmActionSessionStorage.js`
@@ -39,7 +39,7 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 const host = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
 
 assert.match(host, /confirmSessionStorage\.putSession\(/,
-    'putSession must have a production caller (: it had none)');
+    'putSession must have a production caller (it had none)');
 assert.match(host, /confirmSessionStorage\.loadSessions\(/,
     'loadSessions must have a production caller');
 assert.match(host, /confirmSessionStorage\.removeSession\(/,
@@ -70,7 +70,7 @@ assert.match(host, /reservationStoreFrom\(confirmSessionStorage\)/,
 // A stored confirm has to be approvable without its originating form, and a
 // closure cannot be persisted. It rides as a messaging METHOD NAME, which must
 // be allow-listed on use for the same reason `action.vote.composeForConfirm`
-// allow-lists its builder name : an attacker-supplied name would
+// allow-lists its builder name: an attacker-supplied name would
 // otherwise select an arbitrary host route.
 
 assert.match(host, /dispatch/,
@@ -168,7 +168,7 @@ assert.match(airdrop, /txidPath/,
     'the follow-up must receive the broadcast txid it could not know in advance');
 
 console.log(
-    'OK: confirm session wiring smoke (: putSession/loadSessions/removeSession all have production '
+    'OK: confirm session wiring smoke (putSession/loadSessions/removeSession all have production'
     + 'callers in createBackgroundHost; put/list/clear routes registered; clear is mandatory so a stale session '
     + 'cannot invite a re-approve of an already-broadcast tx; reservations and sessions share one storage.session '
     + 'adapter; the dispatch descriptor crosses the boundary as an allow-listable name, not a closure; the CLIENT '

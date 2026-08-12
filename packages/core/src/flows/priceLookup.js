@@ -10,7 +10,7 @@
 
 // Price lookup: §45 PRICE-oracle fiat rates for native coins.
 //
-// Source selection (decided 2026-07-17, ): the hub's on-chain
+// Source selection (decided 2026-07-17): the hub's on-chain
 // PRICE oracle is the primary source, consumed through the explorer
 // API's hub-mirrored `price_snapshots` table (finalized consensus
 // rounds). CoinGecko is the fallback, used only when the oracle feed
@@ -104,7 +104,7 @@ function resolveFetch() {
 // user is currently on (a regtest BTC balance is still priced as BTC,
 // matching priceOracle.js's chain-id mapping).
 function explorerUrlForCoin(chainCoin) {
-    // : the explorer base is bare (no coin) by design; every explorer
+    // The explorer base is bare (no coin) by design; every explorer
     // request must carry the coin path segment. This is the coin's MAINNET
     // code (== tickerForCoin, no network prefix) since the oracle is queried
     // from mainnet. Applied to the descriptor base AND any configured override,
@@ -205,7 +205,7 @@ export function configureFiatRateSource(next = {}) {
 
 /**
  * Refresh the fiat-rate cache for the given coin families. Oracle
- * first, CoinGecko fallback per §45 / . Coins whose cached rate
+ * first, CoinGecko fallback per §45. Coins whose cached rate
  * is younger than REFRESH_TTL_MS are skipped unless `force`. A total
  * failure keeps any prior cached rate (better a slightly old price
  * than a blank one mid-session).
@@ -314,11 +314,11 @@ export function subscribeFiatRates(fn) {
     return () => listeners.delete(fn);
 }
 
-// --- Per-tick (token) rates,  ---------------------------------
+// --- Per-tick (token) rates, ---------------------------------
 //
 // Everything above prices a COIN FAMILY. A token amount is a different
 // question with a different answer, and answering it with the coin's
-// rate is the defect  exists to kill: 50,000 XCHAIN priced at the
+// rate is the defect exists to kill: 50,000 XCHAIN priced at the
 // BTC rate renders as billions of dollars, in the same confident
 // "≈ $X.XX" styling a correct number would use.
 //

@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : three display defects the session-20 wallet E2E pass found on the
+// Three display defects the session-20 wallet E2E pass found on the
 // betting surfaces, pinned at the level a user meets them.
 //
 //   (a) a market denominated in a 0-decimal token showed its pool as
@@ -348,7 +348,7 @@ describe('(c) MyBets names each row\'s outcome', () => {
         expect(utils.container.textContent).toContain('Backed outcome 1');
     });
 
-    // Session 25, . The deadline race put a REJECTED bet in this list and
+    // Session 25,. The deadline race put a REJECTED bet in this list and
     // it read "Backed "No" (outcome 1) · staked 100 XCHAIN" under a raw
     // lowercase `invalid` pill in the same colour as a live position. Nothing
     // was staked: the chain refused the action. What it did cost is the fees.

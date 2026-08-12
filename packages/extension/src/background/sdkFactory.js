@@ -11,7 +11,7 @@
 // Extension-side SDKFactory resolver: mirrors packages/web/src/sdkFactory.js.
 //
 // The SDK class is INJECTED by the caller (background.js passes the one from
-// ./sdkStatic.js). : this resolver used to `await import('xchain-sdk')`
+//./sdkStatic.js).: this resolver used to `await import('xchain-sdk')`
 // itself, which can never succeed in a service worker - see sdkStatic.js for
 // the full account. The dynamic path survives only for callers that supply no
 // class, i.e. Node harnesses running this file outside a bundler; the shipped
@@ -35,7 +35,7 @@ let warned = false;
  */
 export async function resolveSdkFactory(opts) {
     const { devMockFactory } = opts ?? {};
-    // In production builds the dev mock is dead-code-eliminated  and
+    // In production builds the dev mock is dead-code-eliminated and
     // the background passes null; the PROD branch below throws before the
     // fallback would ever be used, so only require it where it can run.
     if (typeof devMockFactory !== 'function' && !import.meta.env?.PROD) {

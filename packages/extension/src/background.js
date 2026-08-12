@@ -45,7 +45,7 @@ import {
     createDevMockSdk as createDevMockSdkImpl,
     resolveSdkFactory,
 } from './background/index.js';
-// : NOT re-exported through the barrel above. A static `import` is the
+// NOT re-exported through the barrel above. A static `import` is the
 // only way a service worker can load the SDK (`import()` is disallowed on
 // ServiceWorkerGlobalScope), and keeping it off the barrel is what lets the
 // Node smokes go on importing sdkFactory.js without an installed SDK.
@@ -96,14 +96,14 @@ try {
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 } catch { /* never block worker boot */ }
 
-// : gate the dev mock on `import.meta.env?.PROD` (statically
+// Gate the dev mock on `import.meta.env?.PROD` (statically
 // replaced by Vite) so a production build dead-code-eliminates the mock
 // implementation entirely; check-no-dev-mock.sh greps dist/ for it. The
 // `?.` keeps this Node-safe for the smoke harness, where import.meta.env
 // is undefined and the mock stays available.
 const createDevMockSdk = import.meta.env?.PROD ? null : createDevMockSdkImpl;
 
-// /: pre-resolution placeholder for PRODUCTION builds, where
+// Pre-resolution placeholder for PRODUCTION builds, where
 // the dev mock is compiled out. Throws loudly on any call instead of
 // serving fabricated data. Mirrors packages/web/src/hostBridge.js.
 function makeLoadingSdkSurface() {
@@ -144,7 +144,7 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk,
         return result.source;
     })
     .catch((err) => {
-        // : never swallow the production refusal (see the web shell's
+        // Never swallow the production refusal (see the web shell's
         // hostBridge.js for the full rationale). In production, log and
         // re-throw so `sdkResolved` consumers see the failure; the registry
         // stays on the throwing placeholder. In dev / Node harnesses the

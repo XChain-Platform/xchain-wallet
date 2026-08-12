@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PRE-BUNDLE capability floor ( §3).
+// PRE-BUNDLE capability floor (§3).
 //
 // WHY THIS FILE EXISTS, since it duplicates part of
 // src/platform/webviewFloor.js and that duplication is deliberate:

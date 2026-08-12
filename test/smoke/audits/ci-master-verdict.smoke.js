@@ -12,7 +12,7 @@
 // able to SAY what it found.
 //
 // Part 1 (the policy). The release gate
-// (tools/release/verify-validated-commit.mjs,  §6 step 1) requires a run
+// (tools/release/verify-validated-commit.mjs, §6 step 1) requires a run
 // of ci.yml on the EXACT tag commit that is both `completed` and `success`. It
 // has no skip switch, by design. A cancelled run is therefore not a neutral
 // outcome: it leaves that commit permanently unreleasable, because a tag names
@@ -23,13 +23,13 @@
 // this repo, so pushes routinely arrive faster than CI completes and each one
 // killed the previous commit's verdict. Measured 2026-08-03 across the last 40
 // master runs: 30 cancelled, 9 failed, 1 success. Finding a green commit to tag
-// had become luck rather than process, and  spent days reading as "CI is
+// had become luck rather than process, and spent days reading as "CI is
 // red" when a large part of it was "CI was never allowed to finish".
 //
 // Cancellation is still correct off master, where only the newest push matters
 // and runner minutes are the only thing at stake.
 //
-// Part 2 (the reading, ). Fixing the policy did not fix the reading. A
+// Part 2 (the reading). Fixing the policy did not fix the reading. A
 // run's `conclusion` aggregates its jobs, so a job that never reached a runner
 // still paints the run `failure` in the same shade a broken test does:
 //
@@ -98,7 +98,7 @@ const value = cancel[1].trim();
 
 assert.notEqual(value, 'true',
     'ci.yml sets `cancel-in-progress: true`, which cancels superseded runs ON MASTER TOO. That is '
-    + 'the exact configuration that made 30 of 40 master runs cancel and left  with no '
+    + 'the exact configuration that made 30 of 40 master runs cancel and left with no'
     + 'releasable commit: the release gate requires a COMPLETED, SUCCESSFUL ci.yml run on the tag '
     + 'commit, and a cancelled run can never become one. Gate the flag on the ref instead:\n'
     + "  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}");

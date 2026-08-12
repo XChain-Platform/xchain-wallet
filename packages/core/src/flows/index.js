@@ -17,7 +17,7 @@ export {
 // Same reason: `addresses.byChain` in the extension's background host is
 // the query AddressList actually reads, so it needs the imported-WIF rule
 // as much as any flow does. Exporting it here is what keeps that host from
-// growing a sixth private copy of the rule .
+// growing a sixth private copy of the rule.
 export { importedAddressIdsFor } from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
 export { createAccount } from './createAccount.js';
@@ -55,7 +55,7 @@ export {
 export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { createReservationLedger } from './reservationLedger.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
-// §20.5 / : watcher + signer auto-pairing over a shared seed.
+// §20.5: watcher + signer auto-pairing over a shared seed.
 export {
     PARTNER_PAIRING_VERSION,
     PARTNER_PAIRING_KIND,
@@ -416,7 +416,7 @@ export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
 export { getSettings, updateSettings } from './settings.js';
 export { removeWallet } from './removeWallet.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
-// : derive the first address per chain when the active network changes,
+// Derive the first address per chain when the active network changes,
 // so switching networks cannot strand a wallet with no addresses.
 export { ensureNetworkAddresses } from './ensureNetworkAddresses.js';
 export { unconfirmedPendingDeltas } from './pendingDeltas.js';
@@ -426,7 +426,7 @@ export {
     NotHardwareAddressError,
 } from './verifyReceiveAddress.js';
 export { dispenserAddress } from './dispenserAddress.js';
-// : Settings > Privacy "fresh change address for every send".
+// Settings > Privacy "fresh change address for every send".
 export {
     resolveChangeAddress,
     deriveChangeAddress,
@@ -478,7 +478,7 @@ export {
     BackupSeedPasswordError,
     BACKUP_PAYLOAD_VERSION,
 } from './backupFile.js';
-// : shells render the restore screen's copy, so they need the same
+// Shells render the restore screen's copy, so they need the same
 // labels and the same failure classification core throws against.
 export {
     RESTORE_PASSWORD_INTRO,
@@ -593,13 +593,13 @@ export { classifyBroadcastFailure } from './broadcastPermanence.js';
 // the "which addresses do I have to ask" question are pure, so both live here
 // and are unit-testable without a chain.
 export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLiveness.js';
-// : which transaction carries the native-coin protocol fee.
+// Which transaction carries the native-coin protocol fee.
 export {
     nativeFeeOutputOf,
     isChunkEncoding,
     withoutCustomOutput,
 } from './nativeFeeLane.js';
-// : the Approve-time re-check of an already-sized native-coin fee. The
+// The Approve-time re-check of an already-sized native-coin fee. The
 // host route owns the quote fetch; the band comparison and its sentence are
 // pure, so they live here and are unit-testable without a chain.
 export {
@@ -610,7 +610,7 @@ export {
     nativeFeeRequoteMessage,
     satsFromNativeDecimal,
 } from './nativeFeeRequote.js';
-//  §5.4: finishing a stored confirm away from the form that made it.
+// Finishing a stored confirm away from the form that made it.
 export {
     RESUMABLE_DISPATCH_METHODS,
     RESUMABLE_AFTER_METHODS,
@@ -706,7 +706,7 @@ export {
     isChainOnActiveNetwork,
     filterChainIdsByActiveNetwork,
 } from './effectiveNetwork.js';
-// : seed a newly added wallet/account from the vault's active chain
+// Seed a newly added wallet/account from the vault's active chain
 // set, so adding a wallet on regtest/testnet cannot mint an inert wallet
 // whose only addresses are on a network the user is not looking at.
 export {

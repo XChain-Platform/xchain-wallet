@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// App Store screenshot harness ( §6, ).
+// App Store screenshot harness (§6).
 //
 // The listing needs an iPhone set AND an iPad set, and for a universal app a
 // missing iPad set BLOCKS submission rather than merely degrading the listing.
@@ -19,7 +19,7 @@
 //
 // 1. The harness drives the REAL app through its REAL onboarding. There is no
 //    launch argument that seeds a wallet and no branch in the app keyed on
-//    being tested, because  §2.1 forbids any build that behaves
+// being tested, because §2.1 forbids any build that behaves
 //    differently when it believes it is under review, and a screenshot
 //    harness does not get an exception. The side benefit is that a broken
 //    first-run flow fails here before it fails in front of a reviewer.
@@ -143,7 +143,7 @@ final class ScreenshotTests: XCTestCase {
         // This loop used to break on `accept.isHittable`, and it passed for a
         // reason that had nothing to do with scrolling: the app shell used to
         // overhang the bottom of the screen by the top safe-area inset
-        // , so the footer holding Accept started off-screen, the
+        //, so the footer holding Accept started off-screen, the
         // button was not hittable, and the swipes that went looking for it
         // scrolled the terms to the end as a side effect. Fixing the layout
         // put Accept on screen from the first frame, the loop broke before
@@ -276,7 +276,7 @@ final class ScreenshotTests: XCTestCase {
 
     /// Move the demo wallet onto the MAIN networks before anything is shot.
     ///
-    /// WHY THIS EXISTS (,  frontier row 63 / dq-7). Demo mode
+    /// WHY THIS EXISTS (frontier row 63 / dq-7). Demo mode
     /// registers all nine chains and lands on `activeNetwork: 'regtest'`,
     /// which was invisible in a screenshot until a shared-UI change started
     /// rendering a network suffix for any non-mainnet chain. Every coin row

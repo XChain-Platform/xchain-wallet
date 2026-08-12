@@ -10,8 +10,8 @@
 # only when some OTHER repo's gate run happens to have left a checkout at the
 # venue's work/xchain-documentation, and then the byte-identity guard silently
 # compares against that leftover revision instead of canonical. Observed exactly
-# that way : a wallet push failed on devhost against a docs sibling one
-# commit stale, while the same suite was green locally and had passed on test-host.
+# that way: a wallet push failed on a CI runner against a docs sibling one
+# commit stale, while the same suite was green locally and had passed on another runner.
 # Declaring it makes the harness ship the canonical origin/master copy and rm -rf
 # any leftover, so the guard runs against the single source of truth.
 xchain-sdk

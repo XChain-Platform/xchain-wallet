@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// UR input bounds ( §1, added with the S3 mobile camera lane).
+// UR input bounds (§1, added with the S3 mobile camera lane).
 //
 // The threat is specific and cheap to mount: the air-gapped lane exists so a
 // user can point their camera at a QR code someone handed them. A multi-part

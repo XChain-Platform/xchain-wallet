@@ -22,7 +22,7 @@
 // When the quote is good we size the FEE_DESTINATION output to `requiredFeeSats` so the on-chain
 // check lands inside the tolerance band.
 //
-//  added a THIRD answer, `valid === null` (`staticQuote:true, validated:false`): the VM
+// a later change added a THIRD answer, `valid === null` (`staticQuote:true, validated:false`): the VM
 // actions (DEPLOY/EXECUTE) are priced from the indexer's gas schedule WITHOUT a dry-run, because
 // the public pre-flight will not run caller-supplied VM code. The fee is authoritative, so the
 // output can be sized and the transaction broadcast; what was never judged is whether the action
@@ -58,7 +58,7 @@ export class NativeFeeForfeitError extends Error {
 /**
  * The sentence to show a user when a NativeFeeForfeitError stopped their submission.
  *
- * : the advice depends on whether the chain HAS another fee lane. On Bitcoin the fee can
+ * The advice depends on whether the chain HAS another fee lane. On Bitcoin the fee can
  * fall back to an XCHAIN balance, so "turn it off" is a real fix. On LTC/DOGE the native-coin
  * output is the only way to pay a protocol fee, so telling the user to turn it off would send
  * them to build a transaction the network rejects outright.
@@ -121,7 +121,7 @@ const PRICE_REJECTION = /price|oracle|stale/i;
  * The sentence for an `ORACLE_ADDRESS (...)` verdict, or null when the verdict is
  * not one.
  *
- * These come from the  oracle usage fee a Mode B dispenser owes its price
+ * These come from the oracle usage fee a Mode B dispenser owes its price
  * publisher, and they reach this function rather than oracleFeePreflight's own
  * error because the indexer's dry run performs that check too: on a chain where
  * the coin fee is the only lane, the native-fee quote refuses first and the
@@ -191,7 +191,7 @@ function forfeitReason(err) {
 /**
  * The caveat a form must show when its action is priced WITHOUT a verdict (`valid:null`).
  *
- * : DEPLOY and EXECUTE are the two actions in that class. Every other action's quote
+ * DEPLOY and EXECUTE are the two actions in that class. Every other action's quote
  * carries an accept/reject verdict, so "the quote came back good" also means "the indexer would
  * have taken it"; for these two it only means "this is the amount". The fee is spent on
  * broadcast either way, so the difference is entirely the user's to price in, and hiding it

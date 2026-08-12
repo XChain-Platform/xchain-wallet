@@ -11,9 +11,9 @@
 // PC-28 encoding-aware size limits. The pinned strings and worked
 // examples below were verified against the REAL xchain-sdk
 // (FormatSelector.serialize, messaging.eciesEncryptBytes) and real
-// bitcoinjs script.compile in the 2026-07-25 offline verification run
-// (claude/reports build note); if the SDK's serializer or the ECIES
-// envelope ever changes shape, these pins catch the drift.
+// bitcoinjs script.compile in the 2026-07-25 offline verification run;
+// if the SDK's serializer or the ECIES envelope ever changes shape,
+// these pins catch the drift.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -57,7 +57,7 @@ describe('publicFileActionString (mirror of SDK FormatSelector.serialize)', () =
     });
 });
 
-describe('COMPRESSION marker accounting ( §5.1)', () => {
+describe('COMPRESSION marker accounting (§5.1)', () => {
     it('setting COMPRESSION re-materializes the trimmed optional fields', () => {
         expect(publicFileActionString({ name: 'a.png', type: 'image/png', compression: '1' }))
             .toBe('FILE|0|a.png|image/png|||||||1');
@@ -75,7 +75,7 @@ describe('COMPRESSION marker accounting ( §5.1)', () => {
     it('[REGRESSION] the old cap admitted a barely-compressible file the encoder rejects', () => {
         // The encoder compresses by DEFAULT and keeps the result only if it is
         // smaller (§5.2), so a file that compresses by less than the marker costs
-        // grows the compiled action on net. At the pre- cap of 8166 that
+        // grows the compiled action on net. At the pre-cap of 8166 that
         // compiled to 8196 and was refused at the ceiling; the marker-aware cap
         // leaves room for it. This is the band the old number could not see.
         const meta = { name: 'a.png', type: 'image/png' };
@@ -88,7 +88,7 @@ describe('COMPRESSION marker accounting ( §5.1)', () => {
 
 describe('maxPublicFileBytes', () => {
     it('computes the exact budget for the pinned example, allowing for COMPRESSION', () => {
-        //  §5.1: the budget must survive the encoder appending COMPRESSION,
+        // The budget must survive the encoder appending COMPRESSION,
         // which re-materializes the trimmed optional fields:
         // 'FILE|0|a.png|image/png' (22) -> 'FILE|0|a.png|image/png|||||||1' (30).
         // 8192 - (30 + 1-byte prefix) = 8161 for the raw push -> 8158 + 3-byte prefix.

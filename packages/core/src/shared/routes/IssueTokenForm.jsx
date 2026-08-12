@@ -87,7 +87,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const [ticker, setTicker] = useState('');
     const [supply, setSupply] = useState('');
-    // Blank means "mint the whole supply now" . Kept as its own
+    // Blank means "mint the whole supply now". Kept as its own
     // string so an explicit 0 stays distinguishable from an untouched field.
     const [initialMint, setInitialMint] = useState('');
     // Optional per-transaction MINT cap (ISSUE v0 MAX_MINT). Blank omits the
@@ -246,7 +246,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (supply) {
             const s = String(supply).trim();
             p.MAX_SUPPLY = s;
-            // : MAX_SUPPLY is the cap, MINT_SUPPLY is how much of it
+            // MAX_SUPPLY is the cap, MINT_SUPPLY is how much of it
             // exists the moment the token is created. Deriving both from the
             // one "Supply" box made every wallet-issued token born at its own
             // cap with zero mint headroom, which made the whole Mint surface
@@ -311,7 +311,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError('Supply must be a positive number.');
             return;
         }
-        // : an initial mint above the cap is rejected outright by the
+        // An initial mint above the cap is rejected outright by the
         // indexer (issue.js), which costs the user the fee and the token, so
         // it is caught here rather than at broadcast.
         const mintText = initialMint.trim();
@@ -357,8 +357,8 @@ export function IssueTokenForm({ walletId, onBack }) {
     // takes the resulting unsigned PSBT to a Signer-mode wallet.
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the path composes ONE PSBT host-side
-    // and confirms it on the shared confirm page. : hardware comes
+    // (§5.6 slice 2): the path composes ONE PSBT host-side
+    // and confirms it on the shared confirm page.: hardware comes
     // through here too - it was excluded, which sent the users most likely
     // to care about verification down the legacy rebuild-on-Approve path
     // with no output-set tamper check, while the confirm page's own
@@ -528,7 +528,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 />,
             );
         }
-        // : signed but not broadcast, so the token does not exist yet.
+        // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="issuance" />);
         }
@@ -651,7 +651,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -666,7 +666,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

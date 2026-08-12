@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// MV3 confirm-modal session persistence ( §5.4).
+// MV3 confirm-modal session persistence (§5.4).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {

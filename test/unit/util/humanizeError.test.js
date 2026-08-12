@@ -32,7 +32,7 @@ describe('humanizeError', () => {
         expect(out.message).to.match(/network rejected/i);
     });
 
-    // : a dust rejection is the one member of the `rejected` family the
+    // A dust rejection is the one member of the `rejected` family the
     // user can actually fix, and the generic sentence named neither the amount
     // nor the floor, so retrying the same amount was the obvious next move.
     // Measured live: a 109-sat Bitcoin send got signed, was refused at relay,

@@ -1,4 +1,4 @@
-/* ActionIntentSummary ( §5.2.2-3). The plain-English intent the user
+/* ActionIntentSummary (§5.2.2-3). The plain-English intent the user
    is authorizing, plus the balance deltas. This is the primary thing being
    read before money moves, so the summary outranks everything else in the
    modal body and long values wrap rather than truncate. */

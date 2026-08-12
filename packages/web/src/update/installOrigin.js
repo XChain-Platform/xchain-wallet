@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Which lane installed this copy of the app ( §6, D4).
+// Which lane installed this copy of the app (§6, D4).
 //
 // One question, asked of the native shell: is anything keeping this install up
 // to date? The answer gates the update notice and nothing else.

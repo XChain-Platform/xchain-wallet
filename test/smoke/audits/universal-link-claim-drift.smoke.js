@@ -30,7 +30,7 @@
 //   claim WIDER than the parser  -> the OS takes the URL away from the browser
 //       and hands it to an app that drops it. The app surfaces on its default
 //       view, the page never loads, and nothing anywhere reports an error. This
-//       is the shape found on the Android side, where the claim read
+// is the shape found on the Android side, where the claim read
 //       `/wallet` and swallowed the `/wallet/privacy/` and `/wallet/support/`
 //       URLs that BOTH store listings publish - so a reviewer tapping the
 //       privacy link from the listing got the wallet instead of the policy.
@@ -39,10 +39,10 @@
 //       nothing broken in either file.
 //   claim moved with no page under it -> `https://xchain.io/wallet/link/...`
 //       returns 404 to every device without the app. That was the live state
-//       when  was found.
+// when was found.
 //
 // Universal Links are one of the six native integrations that answer App Store
-// guideline 4.2 ( §2.1), so this is not cosmetic: a reviewer taps a link
+// guideline 4.2 (§2.1), so this is not cosmetic: a reviewer taps a link
 // and watches the minimum-functionality defence fail in front of them.
 //
 // WHY THE ASSERTIONS ARE BEHAVIOURAL. Comparing the two constants as strings
@@ -216,7 +216,7 @@ assert.ok(
 );
 
 console.log(
-    `OK: universal-link claim drift (: the association's ${claimed} and the SPA's ${parserPrefix} cover the`
+    `OK: universal-link claim drift (the association's ${claimed} and the SPA's ${parserPrefix} cover the`
     + ' same URLs, checked by Apple\'s own wildcard rule against the real parser and not by comparing strings; the'
     + ' Android manifest claims the same range; the store listings\' privacy, support and download URLs are'
     + ' claimed by neither side; the native intake gate is not narrower than the claim; the claimed path has a'

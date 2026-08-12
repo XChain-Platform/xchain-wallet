@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: flows/priceLookup:  oracle-primary / CoinGecko-fallback
+// Unit: flows/priceLookup: oracle-primary / CoinGecko-fallback
 // source selection, cache semantics, and the sync getFiatRate contract.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

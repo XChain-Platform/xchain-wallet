@@ -13,7 +13,7 @@
  *********************************************************************/
 
 // test/smoke/audits/cws-upload.smoke.js - the Chrome Web Store upload tool
-// refuses everything it should ( D4, row 6).
+// refuses everything it should (D4, row 6).
 //
 // WHAT THIS IS PROTECTING, because it is not the upload.
 //
@@ -234,7 +234,7 @@ function run(args, env = {}) {
         'FAIL: a commented line was read as a manifest row.');
 }
 
-console.log('OK: cws-upload smoke ( D4: --help exits 0 and names its credentials, no credential value '
+console.log('OK: cws-upload smoke (D4: --help exits 0 and names its credentials, no credential value'
     + 'is ever printed, blank credentials count as missing, public publish needs saying twice, unknown '
     + 'targets and arguments refuse rather than guess, and the provenance gate refuses a missing manifest, '
     + 'an unsigned one, an unlisted artifact and tampered bytes)');

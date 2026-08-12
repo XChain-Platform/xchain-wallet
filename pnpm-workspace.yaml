@@ -54,7 +54,7 @@ supportedArchitectures:
 # effective configuration flips silently the day anyone bumps pnpm. That
 # is not hypothetical: pnpm-lock.yaml's own `overrides:` block records
 # package.json's values verbatim, which is how it was proven that the
-# package.json copy is the live one today ( stage 3).
+# package.json copy is the live one today.
 #
 # Both copies must therefore stay IDENTICAL, and
 # test/smoke/audits/pnpm-config-parity.smoke.js fails the build if they
@@ -88,7 +88,7 @@ overrides:
   # pnpm-config-parity.smoke.js fails the build if they drift.
   fast-uri: ^3.1.5
 
-#  §8: "lifecycle scripts disabled or allowlisted". This is the
+# "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall
 # blocked, so a newly-added or compromised transitive dependency cannot run
 # arbitrary code at install time on a release runner.

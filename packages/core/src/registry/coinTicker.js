@@ -45,7 +45,7 @@ export function isProtocolCoinTicker(ticker) {
     return PROTOCOL_TICKERS.has(String(ticker || '').toUpperCase());
 }
 
-// : the coin-path segment the platform routes explorer requests by, e.g.
+// The coin-path segment the platform routes explorer requests by, e.g.
 // bitcoin-mainnet -> BTC, bitcoin-testnet -> TBTC, dogecoin-regtest -> RDOGE.
 // Mirrors xchain-sdk endpoints.coinPrefix + explorer.js COIN_PREFIX_MAP. The
 // explorer BASE url is bare (no coin) by design - the SDK explorer client and

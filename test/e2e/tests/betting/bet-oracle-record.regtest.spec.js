@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  /  P8: the oracle track record, rendered against a LIVE explorer.
+// P8: the oracle track record, rendered against a LIVE explorer.
 //
 // This is the last unverified leg of the betting spec. OracleRecord has 12 unit
 // tests and a shell-wiring smoke, but every one of them answers the host from a
@@ -79,7 +79,7 @@ function rows(payload) {
  * Pick a market whose oracle is worth rendering.
  *
  * Preference order is deliberate: an oracle that has been PAID exercises the
- * fees-earned branch that  added, which is the newest and least-covered
+ * fees-earned branch that a later change added, which is the newest and least-covered
  * code on the page. Falling back to any market at all keeps the spec runnable on
  * a freshly wiped chain, where it still covers counts, the market list and the
  * caveat.
@@ -217,7 +217,7 @@ test.describe('BET oracle record against a live explorer', () => {
                 await expect(main.getByText(/never been paid a fee/i)).toBeVisible();
                 return;
             }
-            // 's identity filter is what makes this number the oracle's OWN
+            // that identity filter is what makes this number the oracle's OWN
             // income rather than every credit it ever received, so asserting the
             // exact figure is asserting that filter end to end.
             for (const f of fees) {

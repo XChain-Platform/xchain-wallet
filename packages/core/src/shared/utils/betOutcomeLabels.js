@@ -37,7 +37,7 @@ import { neutralizeControlText } from './textHardening.js';
 // The bidi/zero-width/control/whitespace half of that (everything except
 // the quote rewrite and the length cap, which are specific to a label
 // spliced into a quoted span of fixed width) is shared with the deep-link
-// hardening this module's  sibling added: see
+// hardening this module's sibling added: see
 // `shared/utils/textHardening.js`.
 
 // Long enough for a real outcome name ("Home team wins in regulation"),

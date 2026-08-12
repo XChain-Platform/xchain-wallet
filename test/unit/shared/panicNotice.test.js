@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : panic mode's disclosure policy.
+// Panic mode's disclosure policy.
 //
 // The freeze itself was already proven end to end (session 17): signing is
 // refused at assertSigningAllowed and nothing reaches the chain. What was

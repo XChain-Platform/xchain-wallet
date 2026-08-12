@@ -123,7 +123,7 @@ describe('SIWX challenge origin binding (§43.6 v2)', () => {
         );
     });
 
-    // . bridge.signIn used to re-implement the wire format inline with
+    //. bridge.signIn used to re-implement the wire format inline with
     // an array join, which drifted off the contract in two directions at once:
     // no reserved-separator guard (a page-supplied appId could inject
     // pseudo-fields ahead of the wallet-stamped origin) and ISO-string

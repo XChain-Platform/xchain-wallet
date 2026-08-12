@@ -51,7 +51,7 @@ describe('exactSatsFromDecimalString (send-risk gate conversion)', () => {
     });
 });
 
-// : onMax and onSendSmallTest previously round-tripped through
+// onMax and onSendSmallTest previously round-tripped through
 // parseFloat/toFixed, drifting whole sats on large DOGE balances and
 // emitting scientific notation ('1e-8') for one-sat amounts.
 describe('exactSatsBigIntFromDecimalString (Max sweep / small-test arithmetic)', () => {

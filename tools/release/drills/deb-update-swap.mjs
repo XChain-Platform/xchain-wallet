@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// DRILL: watch a real .deb update install itself ( §5, §7.5).
+// DRILL: watch a real .deb update install itself (§5, §7.5).
 //
 // WHY THIS EXISTS. The `.deb` was recorded as notify-only for months, on
 // the belief that electron-updater's deb path "needs privilege escalation
@@ -64,7 +64,7 @@ import { join } from 'node:path';
 const require = createRequire(import.meta.url);
 
 const USAGE = `deb-update-swap.mjs - DRILL: watch a real .deb update install itself
-( §5, §7.5).
+(§5, §7.5).
 
 Usage:
   node tools/release/drills/deb-update-swap.mjs <artifact-dir>
@@ -89,7 +89,7 @@ Environment:
 `;
 
 // FIRST, because the sole positional here is a directory this drill INSTALLS
-// FROM . Unhandled, `--help` became the artifact directory: outside a
+// FROM. Unhandled, `--help` became the artifact directory: outside a
 // container the disposability guard below happened to catch it, and inside one
 // - which is exactly where this drill is meant to run - it would have been
 // read as a real artifact set. An unrecognized flag must never become the

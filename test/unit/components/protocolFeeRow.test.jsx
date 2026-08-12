@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the two surfaces that render a simulation must name the protocol
+// The two surfaces that render a simulation must name the protocol
 // fee as itself. Labelling it "Network fee" would be a second wrong number on
 // the screen whose whole job is telling the user what the action costs, and
 // dropping it leaves the fee undisclosed while the miner fee is quoted to

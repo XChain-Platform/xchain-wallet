@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 /**
- * Security: .npmrc hygiene (, review-store #2232)
+ * Security:.npmrc hygiene (review-store #2232)
  *
  * The repo .npmrc is committed, so whatever lands in it reaches every clone and
  * every CI runner. Two accidents are cheap to make and invisible in review:

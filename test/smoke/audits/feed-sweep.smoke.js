@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §7.2: the feed sweep, driven against a real tree.
+// Smoke for §7.2: the feed sweep, driven against a real tree.
 //
 // Two failure modes are being guarded here and they pull in opposite
 // directions, which is the whole difficulty. The sweep has to SEE the

@@ -13,7 +13,7 @@
 // Three records are read on the Locked screen, before the vault password
 // exists: the failed-attempt ladder, the duress passphrase hash, and the
 // panic-mode freeze. They cannot go in the vault (it is not open yet), which
-// is why they were in localStorage.  §3 is the reason they cannot STAY
+// is why they were in localStorage. §3 is the reason they cannot STAY
 // there on a native shell: WebView storage is evictable, and each of these
 // fails silently when it disappears.
 //

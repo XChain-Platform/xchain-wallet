@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Biometric-unlock provider for the native shells ( §1, stage S2).
+// Biometric-unlock provider for the native shells (§1, stage S2).
 //
 // Core's default provider is WebAuthn + PRF. Inside an Android WebView there
 // is no platform authenticator to call, so that provider correctly reports
@@ -55,7 +55,7 @@ let enrolledCache = false;
 
 /**
  * Plain-language reasons, keyed on the stable `reasonCode` the native halves
- * emit . The native `detail` beside it is a developer string
+ * emit. The native `detail` beside it is a developer string
  * ("no biometric enrolled", an `NSError` localizedDescription) and is NEVER
  * shown: it is for logs. What the user reads is composed here, in the one
  * place both native shells share, so Android and iOS cannot drift into

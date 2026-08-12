@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The reproducible build's PACKAGED manifest ( DD7).
+// The reproducible build's PACKAGED manifest (DD7).
 //
 // WHAT CHANGED AND WHY. `reproduce.sh` used to run electron-builder in
 // `--dir` mode and hash the unpacked directory trees, while both
@@ -196,7 +196,7 @@ if (failures > 0) {
 }
 
 console.log(
-    'OK: packaged-manifest smoke ( DD7: the reproduce path builds the PACKAGED'
+    'OK: packaged-manifest smoke (DD7: the reproduce path builds the PACKAGED'
     + ' Linux artifacts, so its manifest carries the filenames the release publishes'
     + ' and the documented comparison can actually succeed; coverage is asserted per'
     + ' format per arch, so a short manifest cannot verify clean; the untokened x64'

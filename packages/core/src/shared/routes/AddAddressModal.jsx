@@ -19,7 +19,7 @@
 // a separate branch.
 //
 // The coin list is the union of the account's own chains and the chains
-// active on the current network . Building it from the account's
+// active on the current network. Building it from the account's
 // chains alone made the screen a dead end for an account with none: no
 // options, so no way to derive a first address anywhere.
 //
@@ -44,7 +44,7 @@ const MAX_ADDRESSES = 25;
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]              active account; new addresses are scoped to it
- * @param {string[]} props.chainIds               the chains the account is already on; the coin options are these UNION the chains active on the current network 
+ * @param {string[]} props.chainIds the chains the account is already on; the coin options are these UNION the chains active on the current network
  * @param {() => void} props.onClose
  * @param {(count: number) => void} [props.onGenerated]   called after a successful batch
  */
@@ -81,7 +81,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     const { settings } = useSettings();
 
     // Coin options: the chains the account is already on, PLUS every chain
-    // active on the current network . Offering only occupied chains
+    // active on the current network. Offering only occupied chains
     // meant an account with no addresses had no options at all - "No chains
     // are active for this account yet." with a Close button, and no other
     // surface could break the tie. An account can only get its first address
@@ -94,7 +94,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     // Which type to pre-select depends on the WALLET, not just the chain:
     // a counterwallet-legacy wallet holds its balances on p2pkh, so
     // offering the chain's modern default would default a migrating user
-    // into an address format their old wallet never showed them .
+    // into an address format their old wallet never showed them.
     const [walletFormat, setWalletFormat] = useState(undefined);
     useEffect(() => {
         let live = true;
@@ -278,7 +278,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                         <div className={styles.actions}>
                             {/* The label carries a count ("Generate 3"), so matching it by
                                 text needs a regex that quietly also matches the wrong
-                                button the day another Generate appears . */}
+                                button the day another Generate appears. */}
                             <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !effectiveChainId}
                                 data-testid="add-address-generate">
                                 {generateLabel}

@@ -13,7 +13,7 @@
 // a tag and get the maintainer's pre-signing bytes, and it says why that
 // works: "the toolchain version is part of the output". The promise is
 // therefore only as good as the weakest pin behind it, and the pins live
-// in four separate files that nothing was holding together. ( §51.)
+// in four separate files that nothing was holding together. (§51.)
 //
 // What was actually there, all four found by reading the path end to end
 // rather than by any failing test:
@@ -228,7 +228,7 @@ const pkg = JSON.parse(read('package.json'));
     assert.ok(!/run dist:unpacked/.test(buildSh),
         'build.sh must not go back to --dir mode: an unpacked manifest shares no filename '
         + 'with the published release manifest, so the documented comparison cannot succeed '
-        + '( DD7).');
+        + '(DD7).');
 }
 
 // ------------------------- the `--` that ate every architecture flag
@@ -377,7 +377,7 @@ for (const pkg of ['extension', 'web']) {
 // `desktop-linux` was `runs-on: ubuntu-latest` with no container while the
 // reproduction builds in debian:bookworm-slim at a fixed digest, so
 // node-gyp compiled tiny-secp256k1 against a different gcc and glibc on
-// each side. Measured on the real v0.334.0 deb : 186 of 188 files
+// each side. Measured on the real v0.334.0 deb: 186 of 188 files
 // reproduced, and the two that did not were `secp256k1.node` and the asar
 // whose header embeds its hash.
 //
@@ -496,7 +496,7 @@ function jobBlock(name) {
 // FIXED `-e` list that did not carry it, so the container could only ever
 // produce a production set. Meanwhile a rehearsal built OUTSIDE the
 // container carries no compiled tiny-secp256k1, and xr_check_payload_native
-// in tools/release/lib.sh now refuses exactly that (). So the only
+// in tools/release/lib.sh now refuses exactly that  . So the only
 // rehearsal a maintainer could build was correctly refused, and the only
 // build path that satisfies the gate could not bake the staging feed: §7.5
 // was unreachable, with every check in this file green.
@@ -591,7 +591,7 @@ function jobBlock(name) {
         + 'electron-builder.config.cjs selects the §7.5 rehearsal variant off that variable '
         + 'at build time, so without it the container can only produce a production set - '
         + 'and a rehearsal built outside the container has no compiled tiny-secp256k1, which '
-        + 'xr_check_payload_native in tools/release/lib.sh refuses (). Between the '
+        + 'xr_check_payload_native in tools/release/lib.sh refuses (). Between the'
         + 'two, §7.5 has no build path at all.');
     assert.equal(set[idx - 1], '-e',
         'the forwarded XCHAIN_STAGING_FEED_URL is not preceded by `-e`, so docker reads it '
@@ -616,7 +616,7 @@ function jobBlock(name) {
     assert.equal((reproduceSh.match(/^docker run /gm) || []).length, 1,
         'reproduce.sh has more than one `docker run`. The in-place mode the release lane '
         + 'uses and the worktree mode a verifier uses must share ONE container invocation, '
-        + 'or the lane and the verification drift apart exactly as they did before .');
+        + 'or the lane and the verification drift apart exactly as they did before.');
 }
 
 // ------- home 7: the rehearsal has to be MANIFESTED from its own directory

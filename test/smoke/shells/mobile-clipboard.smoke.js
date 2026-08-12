@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SSC-4 clipboard hygiene, held to its two native halves .
+// SSC-4 clipboard hygiene, held to its two native halves.
 //
 // Neither the Swift nor the Java below is compiled by this repo's CI, and the
 // contract between them and the SPA is a set of STRINGS: a plugin name or a
@@ -22,7 +22,7 @@
 // way `mobile-ios-vault.smoke.js` does for the vault, and additionally checks
 // the two native halves against EACH OTHER: they implement one contract for one
 // wallet, and a method present on one shell only is a shell-specific bug that
-// no amount of testing the other shell would find ().
+// no amount of testing the other shell would find  .
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -144,7 +144,7 @@ assert.ok(
 );
 
 console.log(
-    'OK: mobile clipboard smoke (SSC-4 / : one plugin name across JS + Swift + Java,'
+    'OK: mobile clipboard smoke (SSC-4: one plugin name across JS + Swift + Java,'
     + ' write/clear implemented and declared on both shells, registered on both'
     + ' (iOS also in the pbxproj Sources phase), iOS localOnly + expirationDate,'
     + ' Android EXTRA_IS_SENSITIVE + clearPrimaryClip, and the JS refusal that keeps a'

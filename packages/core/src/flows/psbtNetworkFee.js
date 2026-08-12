@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5.2.5: the EXACT network fee of the composed transaction.
+// The EXACT network fee of the composed transaction.
 //
 // The confirm surface must show the fee of the PSBT that will broadcast, not
 // a rate-table estimate: the whole point of the single-encode pipeline is that
@@ -42,7 +42,7 @@ export function exactNetworkFeeSats(decomposed) {
     return fee >= 0 ? fee : null;
 }
 
-// : on the P2SH/P2WSH chunk lanes an action is TWO transactions, and
+// On the P2SH/P2WSH chunk lanes an action is TWO transactions, and
 // `exactNetworkFeeSats` above can only ever see the first one. Measured
 // on-chain (wallet E2E session 20, BET market #1160): the confirm screen said
 // 0.00000546 BTC and the chain took 0.00001092, because the funding tx paid

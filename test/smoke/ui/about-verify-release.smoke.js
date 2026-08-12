@@ -11,7 +11,7 @@
 // Smoke for §13 / Cluster T FOLLOWUP 2: the release-verification recipe
 // surfaced from Settings → About.
 //
-//  moved the wallet's prose docs to the xchain-documentation repo
+// a later change moved the wallet's prose docs to the xchain-documentation repo
 // and published them at docs.xchain.io, so the constant is now a URL the
 // About panel can actually open rather than a repo-relative path.
 //

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Shell integration: the Electron preload contract (G164 / ).
+// Shell integration: the Electron preload contract (G164).
 //
 // `packages/desktop/preload.cjs` is the ONLY thing the desktop renderer can
 // reach main through (§9.3.2: contextIsolation on, nodeIntegration off, keys
@@ -155,7 +155,7 @@ const BRIDGE_WORLDS = [
     'xchainWalletWindow',
     'xchainWalletRegistry',
     'xchainWalletSignerBridge',
-    //  row 142. A fifth world is a widening of the renderer's
+    // row 142. A fifth world is a widening of the renderer's
     // privileged surface, so it is declared here deliberately rather than
     // discovered: this list existing is what made adding it a decision.
     'xchainWalletUpdater',
@@ -183,7 +183,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
     // would reproduce that silence with a name attached.
     // `getState` is the third half, and it is not a convenience: subscribing
     // alone cannot see an offer main made before this renderer existed, which
-    // on a locked install is every offer there has ever been ( row 148).
+    // on a locked install is every offer there has ever been (row 148).
     it('gives the renderer every half of the update path, and only those', () => {
         const pre = runPreload();
         const updater = pre.worlds.get('xchainWalletUpdater');
@@ -223,12 +223,12 @@ describe('desktop preload: the renderer sandbox surface', () => {
         await win.openDetached({ initialView: 'history' });
         await registry.getRemoteDescriptors();
         signer.postMessage({ kind: 'announce', signerIds: [] });
-        //  row 142: the install call is walked here specifically so
+        // row 142: the install call is walked here specifically so
         // the agreement check below covers it. A preload that invoked a
         // channel main never registered would be the same failure the
         // update path already had - a call with nothing at the other end.
         await updater.install();
-        //  row 148: walked for the same reason install is. The state
+        // row 148: walked for the same reason install is. The state
         // channel is what a mounting banner asks on, so a preload invoking a
         // channel main never registered would put the offer back out of
         // reach in a way that looks wired up from the renderer side.
@@ -297,7 +297,7 @@ describe('desktop preload: request/response bridge', () => {
     });
 });
 
-describe('desktop preload: wipeStorage stays un-aimable ', () => {
+describe('desktop preload: wipeStorage stays un-aimable', () => {
     it('invokes with the channel and NO arguments, whatever the caller passes', async () => {
         const pre = runPreload();
         pre.setReply(async () => ({ ok: true, cleared: ['storage'] }));

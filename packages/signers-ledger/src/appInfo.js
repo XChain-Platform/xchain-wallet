@@ -15,7 +15,7 @@
 // standalone helper taking a transport. Every call site here used to
 // call `app.getAppAndVersion()`, which is `undefined` on the real
 // class, so the whole Ledger lane threw `TypeError` on first contact
-// with hardware . Verified against Speculos running Bitcoin
+// with hardware. Verified against Speculos running Bitcoin
 // app 2.5.0: `typeof app.getAppAndVersion === 'undefined'`.
 //
 // The device call is BOLOS `GET_APP_AND_VERSION` (CLA 0xB0, INS 0x01),

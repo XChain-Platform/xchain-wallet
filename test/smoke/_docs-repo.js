@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Locates the wallet's prose documentation, which  moved OUT of this
+// Locates the wallet's prose documentation, which a later change moved OUT of this
 // repo and into the sibling `xchain-documentation` checkout, published at
 // https://docs.xchain.io/components/wallet/.
 //
@@ -17,7 +17,7 @@
 // emits). Those assertions are worth keeping, so they follow the docs across
 // the repo boundary rather than being deleted.
 //
-// DECLARED-AND-MISSING IS A FAILURE, NOT A SKIP .
+// DECLARED-AND-MISSING IS A FAILURE, NOT A SKIP.
 //
 // This used to skip whenever the sibling was absent, on the reasoning that an
 // isolated single-repo checkout legitimately has no siblings. That made the
@@ -39,7 +39,7 @@
 //
 // Not a `*.smoke.js` file, so the runner does not try to execute it.
 
-// A PRESENT SIBLING IS NOT THE SAME AS A CURRENT ONE ( frontier row
+// A PRESENT SIBLING IS NOT THE SAME AS A CURRENT ONE (frontier row
 // 123).
 //
 // Everything above is about whether the slot is filled. What it never asked is
@@ -247,10 +247,10 @@ export function docsAvailable() {
     if (v.status === 'skip') return false;
     console.error(`FAIL: the wallet docs sibling is DECLARED in .ci-siblings but unreachable.\n`
         + `  ${v.reason}\n`
-        + '   moved the wallet docs to the sibling xchain-documentation repo, and this\n'
+        + '  moved the wallet docs to the sibling xchain-documentation repo, and this\n'
         + '  repo declares it in .ci-siblings, so the CI harness is contracted to ship it.\n'
         + '  Skipping here would report GREEN on documentation parity that nothing checked\n'
-        + '  (: a push from a linked worktree shipped the WRONG repo into this slot).\n'
+        + '  (a push from a linked worktree shipped the WRONG repo into this slot).\n'
         + '  Fix the checkout: clone xchain-documentation beside this repo, or set\n'
         + '  XCHAIN_DOCS_ROOT. To accept an unverified docs surface, set XCHAIN_DOCS_OPTIONAL=1.');
     process.exit(1);
@@ -270,7 +270,7 @@ export function readDoc(...parts) {
 export function skipUnlessDocs(smokeName) {
     if (docsAvailable()) return;
     console.log(`SKIP: ${smokeName} - the wallet docs are not in this checkout. `
-        + ' moved them to the sibling xchain-documentation repo '
+        + 'moved them to the sibling xchain-documentation repo'
         + `(expected at ${WALLET_DOCS}); clone it beside this one, or set `
         + 'XCHAIN_DOCS_ROOT, to run this gate.');
     process.exit(0);

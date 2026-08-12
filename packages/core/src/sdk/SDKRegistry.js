@@ -21,7 +21,7 @@
  * @property {string} explorerUrl       fully-formed URL
  * @property {string} encoderUrl
  * @property {string} hubUrl
- * @property {number} [timeout]     per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
+ * @property {number} [timeout] per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
  * @property {{ maxRetries: number, baseDelay: number, maxDelay: number }} [retry]
  */
 
@@ -73,7 +73,7 @@ const ENDPOINT_FIELDS = Object.freeze([
 ]);
 
 /**
- *  (§49 offline/degraded mode): bounded network patience for every
+ * (§49 offline/degraded mode): bounded network patience for every
  * SDK instance the wallet creates. xchain-sdk's own defaults are tuned
  * for servers: a 30s per-request timeout times 4 attempts (1 try + 3
  * retries) with exponential backoff is over two minutes of silence PER
@@ -115,7 +115,7 @@ export class SDKRegistry {
         this._networkOptions = {
             timeout: networkOptions.timeout ?? DEFAULT_SDK_NETWORK_OPTIONS.timeout,
             retry: { ...DEFAULT_SDK_NETWORK_OPTIONS.retry, ...(networkOptions.retry ?? {}) },
-            // : `pool` carries the connection agents through to
+            // `pool` carries the connection agents through to
             // xchain-sdk's HTTP clients. The desktop shell puts SOCKS5
             // agents here when Tor routing is on, which is the only way
             // the toggle can reach the SDK's own sockets. Undefined
@@ -193,7 +193,7 @@ export class SDKRegistry {
     }
 
     /**
-     * : adopt the operator's Settings -> Network & Endpoints record
+     * Adopt the operator's Settings -> Network & Endpoints record
      * as the live override set. This is what makes the panel real: before
      * it existed the setting persisted, the summary row said "1 chain
      * custom", and every SDK instance kept talking to the bundled
@@ -234,7 +234,7 @@ export class SDKRegistry {
             explorerUrl: overrideUrl(over.explorerUrl) ?? joinEndpoint(d.explorer),
             encoderUrl: overrideUrl(over.encoderUrl) ?? joinEndpoint(d.encoder),
             hubUrl: overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub),
-            // Bounded network patience : the real XChainSDK honors
+            // Bounded network patience: the real XChainSDK honors
             // `timeout` + `retry` per client; the dev mock ignores them.
             timeout: this._networkOptions.timeout,
             retry: this._networkOptions.retry,
@@ -244,7 +244,7 @@ export class SDKRegistry {
 
     /**
      * Swap the connection agents and drop every cached SDK instance so the
-     * next `get()` dials through the new ones .
+     * next `get()` dials through the new ones.
      *
      * Dropping the instances is the point, not housekeeping: xchain-sdk
      * builds its axios client once per instance, so a live instance would
@@ -263,7 +263,7 @@ export class SDKRegistry {
 /**
  * Recombine a descriptor endpoint into the URL the SDK is handed.
  *
- * Exported  so the Settings editor can seed its draft with the
+ * Exported so the Settings editor can seed its draft with the
  * exact string the registry would otherwise use. Seeding from
  * `defaultUrl` alone dropped the port off every non-standard endpoint,
  * and the editor then saved that truncated value over all three fields.
@@ -299,7 +299,7 @@ function sameOverride(a, b) {
  *  - `custom !== true` is the editor's reset state, so it is skipped
  *    outright.
  *  - a value equal to the chain's own default is not an override.
- *  -  heal: records written by the pre-fix editor carry the bare
+ * - heal: records written by the pre-fix editor carry the bare
  *    `defaultUrl` with the port stripped ("http://localhost" where the
  *    default is "http://localhost:10000"). That is the seeding bug
  *    speaking, not the operator, and honouring it would point a live

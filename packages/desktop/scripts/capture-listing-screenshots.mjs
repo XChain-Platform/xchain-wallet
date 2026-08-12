@@ -9,7 +9,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §13 / frontier row 95: Mac App Store listing screenshots.
+// §13 / frontier row 95: Mac App Store listing screenshots.
 //
 // Apple refuses a listing with no screenshot, and until this file existed
 // nothing in this repo could produce or check a picture of the DESKTOP shell:
@@ -53,7 +53,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 // Answered before the heavy imports, and deliberately so: the extension
-// capture script learned this the expensive way ( row 50). An ES module
+// capture script learned this the expensive way (row 50). An ES module
 // evaluates every static import before its first statement, so a --help that
 // lives below a `@playwright/test` import is a --help that dies with a
 // module-not-found stack in any tree without node_modules - and one that lives

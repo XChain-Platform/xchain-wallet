@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MV3 confirm-modal persistence ( §5.4).
+// MV3 confirm-modal persistence (§5.4).
 //
 // Chrome may kill the MV3 service worker after ~30s perceived idle - shorter
 // than reading warnings + typing a password + waking a hardware device. The

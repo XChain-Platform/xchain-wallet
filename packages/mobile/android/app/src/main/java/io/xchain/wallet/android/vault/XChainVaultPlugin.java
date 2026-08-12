@@ -28,7 +28,7 @@ import java.util.Arrays;
 import java.util.concurrent.Executor;
 
 /**
- * The {@code XChainVault} bridge ( stage S2). The JS contract and its
+ * The {@code XChainVault} bridge (stage S2). The JS contract and its
  * reasoning live in {@code packages/web/src/storage/nativeVault.js}.
  *
  * THE BRIDGE IS THE ATTACK SURFACE. Any script running in the WebView can
@@ -116,7 +116,7 @@ public class XChainVaultPlugin extends Plugin {
     // Read on the Locked screen, before the vault password exists, so they
     // cannot live in the vault; and not in WebView storage either, because
     // every one of them fails SILENTLY when that store is cleared or evicted
-    // ( §3). Their own slot rather than a corner of the meta record,
+    // (§3). Their own slot rather than a corner of the meta record,
     // so a guard write can never corrupt the kdfParams a wallet needs to open.
     // -----------------------------------------------------------------
 
@@ -148,7 +148,7 @@ public class XChainVaultPlugin extends Plugin {
         reply.put("available", status.available);
         reply.put("enrolled", status.enrolled);
         reply.put("detail", status.detail);
-        // : the code is what the JS maps to plain language; `detail`
+        // The code is what the JS maps to plain language; `detail`
         // stays a developer string and is never shown to a user.
         reply.put("reasonCode", status.reasonCode);
         reply.put("mechanism", status.mechanism);

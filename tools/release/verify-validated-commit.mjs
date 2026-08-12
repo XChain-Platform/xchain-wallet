@@ -13,7 +13,7 @@
  *
  *********************************************************************/
 
-//  §6 step 1, as a gate instead of a sentence. .
+// §6 step 1, as a gate instead of a sentence.
 //
 // WHY THIS EXISTS. The rails say a release tag is pinned to a commit that
 // green CI plus a green prod-build regtest e2e already validated. That was
@@ -56,7 +56,7 @@
 const REQUIRED_DEFAULT = 'ci.yml';
 
 function fail(message) {
-    process.stderr.write(`\nRELEASE GATE REFUSED ( §6 step 1)\n\n${message}\n\n`);
+    process.stderr.write(`\nRELEASE GATE REFUSED (§6 step 1)\n\n${message}\n\n`);
     process.exit(1);
 }
 
@@ -72,7 +72,7 @@ function arg(name) {
 // release had been rejected. During a release that is not a cosmetic
 // difference.
 if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
-    console.log(`Release gate ( §6 step 1): refuse a tag whose commit has no green
+    console.log(`Release gate (§6 step 1): refuse a tag whose commit has no green
 run of every required workflow.
 
 Usage:
@@ -132,7 +132,7 @@ async function api(path) {
         // The header above promises that "API unreachable" is a refusal.
         // It was not: an unreachable host threw out of fetch and the gate
         // died with a stack trace, which in a workflow reads as the tool
-        // being broken rather than the release being refused.  S41.
+        // being broken rather than the release being refused. S41.
         fail(`Cannot reach the GitHub API at ${apiUrl} (${e.message}).\n\n`
             + 'Not knowing whether a commit was validated is a refusal, never a\n'
             + 'pass, so this is a REFUSAL and not a tool fault. Check network\n'
@@ -156,7 +156,7 @@ const problems = [];
 const evidence = [];
 const diagnoses = [];
 
-//  S41. The verdict below was always right and the ADVICE under it was
+// S41. The verdict below was always right and the ADVICE under it was
 // not. A red run got one sentence - "make CI green on this exact commit" -
 // which assumes the suite ran and something in it failed. On 2026-08-07 the
 // tip of wallet `master` refused here while every one of the run's six jobs

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Update notice for direct-APK installs ( §6, D4 decided 2026-07-31).
+// Update notice for direct-APK installs (§6, D4 decided 2026-07-31).
 //
 // Play installs update themselves. A direct install has no such path, so
 // without this a user who sideloaded the APK - deliberately, because they
@@ -184,7 +184,7 @@ export function isUpdateCheckEnabled(storage = safeStorage()) {
 
 export const UPDATE_FEED_URL = FEED_URL;
 export const UPDATE_CHECK_INTERVAL_MS = CHECK_INTERVAL_MS;
-// Exported for the §7.5 direct-lane rehearsal . An oversized feed
+// Exported for the §7.5 direct-lane rehearsal. An oversized feed
 // makes this module return null, which a phone cannot tell apart from being
 // offline; the rehearsal has to be able to, so it needs the cap rather than
 // a second copy of the number.

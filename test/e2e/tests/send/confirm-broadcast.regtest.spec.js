@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / spec §8.6 scenario 1: the confirm surface, all the way to a
+// spec §8.6 scenario 1: the confirm surface, all the way to a
 // real broadcast on a real chain.
 //
 // This is the only automated coverage that exercises the single-encode
@@ -102,7 +102,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         expect(from, 'deltas rendered no before/after pair').toBeTruthy();
         expect(Number(from) - Number(to)).toBeCloseTo(Number(SEND_BTC) + fee, 8);
 
-        // : there is NO pre-flight panel here, and its absence is the
+        // There is NO pre-flight panel here, and its absence is the
         // point. A plain native payment carries no XChain action, so there is
         // nothing to dry-run; the panel used to render "Will likely fail"
         // because the wallet was asking the indexer to validate a SEND for a
@@ -115,7 +115,7 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         // Approvable outright: no "Sign anyway" override, because there is no
         // failure to override. This is what regressed users' most common
-        // operation before .
+        // operation before.
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
         await page.getByTestId('confirm-approve').click();
@@ -139,7 +139,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         const utxo = await waitForConfirmedUtxo(REGTEST_DESTINATION, txid);
         expect(Number(utxo.amount)).toBeCloseTo(Number(SEND_BTC), 8);
 
-        // : and it went out as an ORDINARY payment. Checking only that
+        // And it went out as an ORDINARY payment. Checking only that
         // the money arrived would pass just as happily on the old behaviour,
         // which also delivered the coin - alongside an action the chain
         // recorded as invalid.
@@ -165,7 +165,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // would not reach a clean, approvable confirm page.
         // A fresh compose really ran: the intent is rebuilt from the newly
         // composed action string, and the pre-flight round trip completed
-        // again. (Approve's enabled-ness is NOT the probe here -  leaves
+        // again. (Approve's enabled-ness is NOT the probe here - a later change leaves
         // it gated behind the override for native sends.)
         await mainButton(page, 'Send').click();
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
@@ -174,7 +174,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     });
 
-    // Was a pinned known-defect (test.fail) until  landed; now a plain
+    // Was a pinned known-defect (test.fail) until landed; now a plain
     // regression guard. Kept as its own case because the failure it watches for
     // is silent: the payment still works, so only the verdict reveals it.
     //
@@ -190,7 +190,7 @@ test.describe('confirm -> broadcast on regtest', () => {
     // exactly the training-users-to-click-through failure mode §4.2's
     // false-block invariant exists to prevent.
     //
-    // This went unseen because no venue had Tier 1 configured until .
+    // This went unseen because no venue had Tier 1 configured until.
     test('a valid native-coin send is never reported as likely to fail', async ({ page }) => {
         await toField(page).fill(REGTEST_DESTINATION);
         await amountField(page).fill(SEND_BTC);
@@ -200,7 +200,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
         await expect(page.getByText(/Will likely fail/i)).toHaveCount(0);
 
-        // 's browser leg, stated outright rather than left implied by
+        // that browser leg, stated outright rather than left implied by
         // the panel's absence above. "Could not verify (N)" is PreflightPanel's
         // `unverified` disclosure, and it is the OTHER way a good payment can
         // be made to look doubtful: not a fail verdict, but a confirm page

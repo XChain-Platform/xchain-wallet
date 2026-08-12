@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Resuming a stored confirm ( §5.4).
+// Resuming a stored confirm (§5.4).
 //
 // Two invariants carry the weight here, and both are about what a session may
 // NOT do: dispatch a method nobody allow-listed, and carry a credential.

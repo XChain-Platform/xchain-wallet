@@ -51,7 +51,7 @@
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
-    /*  slice 2: the search field's own box was 19px tall, under the
+    /* slice 2: the search field's own box was 19px tall, under the
        24px pointer-target floor. It is the palette's only text entry and
        the first thing a touch user reaches for. */
     min-height: var(--xc-tap-min);

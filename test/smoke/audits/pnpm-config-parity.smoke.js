@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // pnpm settings live in THREE homes, and which one is read flips on a pnpm
-// major. ( §8.)
+// major. (§8.)
 //
 // pnpm 9 read `pnpm.*` from the root package.json and ignored
 // pnpm-workspace.yaml's equivalents. pnpm 10 reversed it: it reads the
@@ -269,7 +269,7 @@ const npmrc = parseNpmrc(read('.npmrc'));
     assert.ok(/^pnpm@11\./.test(pkg.packageManager || ''),
         `packageManager is pinned to pnpm 11.x (found "${pkg.packageManager}"). `
         + 'On a major bump, re-verify which config home pnpm reads before trusting either: '
-        + '9 read package.json, 10 moved to pnpm-workspace.y also stopped reading .npmrc.');
+        + '9 read package.json, 10 moved to pnpm-workspace.yaml, 11 also stopped reading .npmrc.');
 }
 
 console.log('pnpm-config-parity smoke: ok');

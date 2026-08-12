@@ -27,7 +27,7 @@ import local from './StakingList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// : the two staking lanes have different chain reach, so this
+// The two staking lanes have different chain reach, so this
 // list scans them separately rather than scoping the whole page to one
 // coin.
 //
@@ -79,7 +79,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const isFull = variant === 'full';
 
     // Chains whose protocol accepts the contract-staking lane, i.e. every
-    // chain the registry advertises STAKE on ( put STAKE into the
+    // chain the registry advertises STAKE on (put STAKE into the
     // shared set), and the Bitcoin subset that also has the validator lane.
     const stakingChainIds = useMemo(
         () => chainRegistry.supportedChains()
@@ -185,7 +185,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     errors: /** @type {string[]} */ ([]),
                 };
                 // Validator lane: real errors surface (non-blocking banner).
-                // : skipped entirely off Bitcoin, where the capability
+                // Skipped entirely off Bitcoin, where the capability
                 // versions are coin-gated and these reads can only ever come
                 // back empty.
                 const isValidatorChain = validatorChainIds.has(cid);
@@ -211,7 +211,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             .then((r) => { out.rewardClaims = extractRows(r); })
                             .catch(() => {}),
                     ] : []),
-                    // Contract lane: runs on EVERY staking chain .
+                    // Contract lane: runs on EVERY staking chain.
                     // Endpoints are a Phase 7 follow-up and throw for live
                     // wallets; degrade silently to empty.
                     messaging.getContractStakesForAddress({ chainId: cid, address: addr })

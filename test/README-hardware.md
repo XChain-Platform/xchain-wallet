@@ -6,8 +6,8 @@ skips loudly when the emulator is not configured, so it never turns into
 a silently-green test.
 
 ```
-SPECULOS_API_URL=http://devhost:5012 \
-SPECULOS_TESTNET_API_URL=http://devhost:5011 \
+SPECULOS_API_URL=http://localhost:5012 \
+SPECULOS_TESTNET_API_URL=http://localhost:5011 \
 pnpm test:hardware:ledger
 ```
 
@@ -19,7 +19,7 @@ library, so for two releases they asserted an API that does not exist:
 `app.getAppAndVersion()` (never a method on `Btc`, only a standalone
 helper taking a transport) and `app.signMessageNew()` (renamed to
 `signMessage` in hw-app-btc v10). Both threw `TypeError` on first contact
-with hardware while the whole suite stayed green .
+with hardware while the whole suite stayed green.
 
 `test/unit/signers-ledger/hw-app-btc-surface.test.js` now catches that
 class of drift offline by extracting the app-client calls from the source
@@ -29,7 +29,7 @@ end-to-end counterpart: it proves the device actually answers.
 ## Standing up Speculos
 
 Speculos publishes arm64, so it runs natively on both Apple Silicon and
-the devhost VM.
+the shared regtest VM.
 
 ```
 docker run -d --name xchain-speculos \

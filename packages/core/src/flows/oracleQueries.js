@@ -12,7 +12,7 @@
 // oracle publishes a TOKEN price in a fiat currency; oracle-priced
 // DISPENSERs (Mode B) then cross-convert it through the validator
 // federation's COIN/FIAT snapshot to settle a bare coin payment.
-// See claude/specs/DISPENSER_ORACLE_FIAT_PRICE_PLAN.md §2, §5.2.
+// See the dispenser oracle fiat-price plan §2, §5.2.
 //
 // Two facts drive every rule in here, and both surprise people:
 //

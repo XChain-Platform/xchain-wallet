@@ -10,7 +10,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/manifest-diff.mjs - structural manifest.json compare
-// ( §4 "Post-publish verification"), used by verify-store.sh.
+// (§4 "Post-publish verification"), used by verify-store.sh.
 //
 // The Chrome Web Store rewrites manifest.json on publish: it injects
 // `update_url` (the store's update-check endpoint) and `key` (the
@@ -40,7 +40,7 @@ import { readFileSync } from 'node:fs';
 
 const DEFAULT_IGNORE = ['update_url', 'key'];
 
-const USAGE = `manifest-diff.mjs - structural manifest.json compare ( §4
+const USAGE = `manifest-diff.mjs - structural manifest.json compare (§4
 post-publish verification). The comparison primitive behind verify-store.sh.
 
 Usage:
@@ -86,7 +86,7 @@ function parseArgs(argv) {
             ignore = raw.split(',').map((s) => s.trim()).filter(Boolean);
             i++;
         } else if (arg === '--help' || arg === '-h') {
-            // One line was not enough . It named the arguments and
+            // One line was not enough. It named the arguments and
             // nothing else, so it could not answer the question an operator
             // running verify-store.sh actually has when a diff comes back
             // non-empty: which keys are supposed to differ, and what does a

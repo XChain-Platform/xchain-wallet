@@ -61,7 +61,7 @@ const wsRoot = join(here, '..', '..', '..');
 
 // --- 1. Runbook exists ------------------------------------------------
 
-//  moved the runbook to the sibling xchain-documentation checkout.
+// a later change moved the runbook to the sibling xchain-documentation checkout.
 skipUnlessDocs('bridge-e2e smoke');
 const runbook = readDoc('release', 'extension', 'test-dapp-runbook.md');
 // Phrases, not filenames: the port reworded the runbook's worked example
@@ -231,7 +231,7 @@ async function autoApprove(host, fakeWindows, result) {
         canSignAction: {},
     });
     const conn = await connectPromise;
-    // The bridge-spec ConnectSuccess envelope (): an `ok` flag,
+    // The bridge-spec ConnectSuccess envelope: an `ok` flag,
     // Account RECORDS under `accounts`, and the granted SitePermissions.
     assert.equal(conn.ok, true, 'connect answers the ConnectSuccess envelope');
     assert.equal(conn.chains[0], 'bitcoin-regtest');
@@ -298,7 +298,7 @@ async function autoApprove(host, fakeWindows, result) {
         params: { tick: 'NEWCOIN', quantity: '1000000' },
     });
     // bridge-spec's UnsupportedActionResult: an `ok: false` envelope carrying
-    // the wallet's current action list ().
+    // the wallet's current action list.
     assert.equal(issueResp.ok, false);
     assert.equal(issueResp.error, 'UNSUPPORTED_ACTION');
     assert.deepEqual(issueResp.supportedActions, ['SEND', 'SWEEP']);
@@ -427,16 +427,16 @@ async function autoApprove(host, fakeWindows, result) {
     );
 }
 
-// --- 7. : switching the active network seeds per-chain fees -----
+// --- 7.: switching the active network seeds per-chain fees -----
 
 {
-    // Regression for . `settings.setActiveNetwork` used to flip
+    // Regression for. `settings.setActiveNetwork` used to flip
     // activeNetwork + derive addresses but NEVER seed settings.fees for the
     // target network's chains, so on regtest the fee-derived active-chain set
     // (Object.keys(settings.fees) filtered by activeNetwork) was empty, and
     // useReachability -> reachability.check mapped empty -> 'offline', showing
     // a false "You're offline" that suppressed the confirm pre-flight. This is
-    // the extension's ONLY path to regtest (no Settings UI, ), so it bit
+    // the extension's ONLY path to regtest (no Settings UI), so it bit
     // every second popup. Assert the host route now seeds the network's chains.
     const { host, vault, wallet } = await buildStack();
 
@@ -449,7 +449,7 @@ async function autoApprove(host, fakeWindows, result) {
     for (const chainId of regtestChains) {
         assert.ok(
             settings.fees && settings.fees[chainId],
-            `settings.setActiveNetwork must seed settings.fees[${chainId}] `,
+            `settings.setActiveNetwork must seed settings.fees[${chainId}]`,
         );
     }
 
@@ -458,7 +458,7 @@ async function autoApprove(host, fakeWindows, result) {
     for (const chainId of regtestChains) {
         assert.ok(
             persisted.fees && persisted.fees[chainId],
-            `seeded fees[${chainId}] must be persisted to the vault `,
+            `seeded fees[${chainId}] must be persisted to the vault`,
         );
     }
     assert.equal(persisted.activeNetwork, 'regtest');

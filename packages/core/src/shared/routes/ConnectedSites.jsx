@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Connected Sites as a top-level screen.
+// Connected Sites as a top-level screen.
 //
 // `ConnectedSitesSection` is the §35.1 / §43.5 panel body. Until now the
 // only way to see it was Settings -> Connected Sites, i.e. a drilldown

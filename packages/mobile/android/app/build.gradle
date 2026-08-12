@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 // versionCode / versionName come from the release tag, never from this file
-// and never from a build counter ( §7; the formula and its reasoning
+// and never from a build counter (§7; the formula and its reasoning
 // live in ../../scripts/version.js). `pnpm --filter @xchain-wallet/mobile
 // build` writes version.properties next to this project as part of staging
 // the web assets.
@@ -23,7 +23,7 @@ def versionProps = new Properties()
 versionPropsFile.withInputStream { versionProps.load(it) }
 
 // The APK must contain the bundle that was staged, not the one that happened
-// to be lying in assets/public .
+// to be lying in assets/public.
 //
 // Staging into `packages/mobile/www` puts nothing into the APK. Capacitor
 // copies that directory to `app/src/main/assets/public` in a SEPARATE step
@@ -88,7 +88,7 @@ android {
     }
     buildTypes {
         release {
-            // R8 DECISION, PINNED ( §7): OFF, and this is the decision,
+            // R8 DECISION, PINNED (§7): OFF, and this is the decision,
             // not a default nobody looked at.
             //
             // The app's logic is JavaScript inside a WebView. R8 would shrink
@@ -125,7 +125,7 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-    // BiometricPrompt ( S2). androidx.biometric is the supported path
+    // BiometricPrompt (S2). androidx.biometric is the supported path
     // to a Class-3 prompt bound to a Keystore CryptoObject; the platform
     // FingerprintManager it replaces is deprecated and cannot express the
     // per-use authorization this design depends on.

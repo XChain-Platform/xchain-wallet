@@ -33,7 +33,7 @@ function activeState(nowMs = Date.now()) {
         activatedAt: nowMs,
         expiresAt: nowMs + DEFAULT_DURATION_MS,
         durationMs: DEFAULT_DURATION_MS,
-        // : an active record carries how it was armed, because the
+        // An active record carries how it was armed, because the
         // disclosure policy on Home / Send / the sign screen turns on it.
         armedBy: 'self',
     };
@@ -60,7 +60,7 @@ describe('panic-mode persistence', () => {
     });
 
     it('hydrates a record written before provenance existed as duress-armed', async () => {
-        // : a legacy record has no `armedBy`. The freeze still applies;
+        // A legacy record has no `armedBy`. The freeze still applies;
         // what we cannot do is announce it on Home, because we have no way to
         // know it was not the duress passphrase that armed it.
         const { activatedAt, expiresAt, durationMs } = activeState();

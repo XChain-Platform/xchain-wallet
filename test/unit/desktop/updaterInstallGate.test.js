@@ -12,7 +12,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  S5 /  §5: the verified install is the ONLY install.
+// S5 §5: the verified install is the ONLY install.
 //
 // `updater.js` has claimed since it was written that `downloadAndInstall()`
 // is the only path to an install, "because there is no second path at all".

@@ -23,7 +23,7 @@
 //   - kdfParams live in `localStorage` via WebMetaBackend so the
 //     unlock flow can derive the master key before touching the
 //     IndexedDB ciphertext. Running inside the Capacitor shell, both
-//     stores move behind the native vault plugin instead ( S2,
+// stores move behind the native vault plugin instead (S2,
 //     storage/backends.js); WebView storage is evictable, and on a
 //     shell with `allowBackup=false` that blob is the only copy of the
 //     vault that exists.
@@ -85,7 +85,7 @@ const webDiagnosticContext = async () => ({
 });
 // Which stores this device uses is decided once, in backends.js: IndexedDB +
 // localStorage in a browser, the native plugin when the same bundle is running
-// inside the Capacitor shell ( S2). Every site below asks rather than
+// inside the Capacitor shell (S2). Every site below asks rather than
 // constructing a backend directly, because a mixture - creating into one store
 // and reading from the other - presents as "no wallet on this device".
 import {
@@ -113,7 +113,7 @@ const chainRegistry = registryLib.defaultRegistry();
 // records. Signing / broadcast / WIF-import throw loudly; those
 // paths have no non-SDK implementation.
 //
-// : the whole mock is gated on `import.meta.env?.PROD`, which Vite
+// The whole mock is gated on `import.meta.env?.PROD`, which Vite
 // statically replaces, so a production build dead-code-eliminates the
 // entire implementation (and the devFakeBalances dataset it pulls in).
 // That is what makes tools/build-reproduce/check-no-dev-mock.sh's grep
@@ -155,7 +155,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // so the fake-balance dataset can return chain-appropriate values.
     const chainId = constructorOpts?.network || 'bitcoin-mainnet';
 
-    //  dev-mock "PSBT": a marker-prefixed JSON blob (browser-safe, no
+    // dev-mock "PSBT": a marker-prefixed JSON blob (browser-safe, no
     // Buffer) so encoder.createTx, wallet.decomposePsbt, and
     // decoder.decodeActionFromPsbt round-trip the SAME structure and the
     // confirm-pipeline tamper check stays self-consistent in the dev shell.
@@ -179,13 +179,13 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         get(_target, prop) {
             if (typeof prop !== 'string') return undefined;
             if (prop === 'getBalances') {
-                // : return the EXPLORER's `/balances/` wire shape
+                // Return the EXPLORER's `/balances/` wire shape
                 // (`{ data: [...] }`), not the pre-shaped `{ native, tokens }`
                 // object. D-6 moved normalization into
                 // `flows/balances.js#tokensFromBalances`, which reads
                 // `balResp.data` and silently yields [] for anything else - so
                 // the dev shell rendered "No coins yet" on every wallet, and
-                // the command palette had no token rows to search ('s
+                // the command palette had no token rows to search (that
                 // spec is what caught it). The mock was simply left behind by
                 // that refactor.
                 return async (address /* , opts */) => ({
@@ -308,7 +308,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             },
             broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
             importWIF() { throw new Error('Dev SDK stub: WIF import requires the real xchain-sdk'); },
-            // : the confirm pipeline's tamper check decomposes the PSBT
+            // The confirm pipeline's tamper check decomposes the PSBT
             // host-side. The dev mock builds its "PSBT" as a marker-prefixed
             // JSON blob (encodeMockPsbt below), so decompose just parses it
             // back - self-consistent with encoder.createTx + decodeActionFromPsbt.
@@ -316,7 +316,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 return decodeMockPsbt(psbtHex);
             },
         },
-        //  confirm pipeline: createAction + encoder.createTx + preflight +
+        // confirm pipeline: createAction + encoder.createTx + preflight +
         // decodeActionFromPsbt so the single-encode modal can OPEN, tamper-check,
         // and pre-flight in the dev shell (the real SDK isn't reachable here).
         // Signing still throws by design (see wallet.signPsbt), so Approve fails
@@ -341,7 +341,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                     || sdkLib.mockDeriveAddress(chainId, 'p2wpkh', pubkey);
                 const outputs = [
                     // Inline OP_RETURN action carrier (zero value) - but ONLY
-                    // when there is an action. : a plain native-coin
+                    // when there is an action.: a plain native-coin
                     // payment carries none, and the real encoder now emits no
                     // nulldata output for it. A mock that kept emitting one
                     // would fail the output-set tamper check (which expects no
@@ -426,7 +426,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     });
 };
 
-// /: pre-resolution placeholder for PRODUCTION builds, where
+// Pre-resolution placeholder for PRODUCTION builds, where
 // the dev mock is compiled out. Any SDK call that lands before the real
 // factory swaps in (or after it failed to load) throws loudly instead of
 // serving fabricated data. Callable-and-traversable so both
@@ -473,12 +473,12 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
         return result.source;
     })
     .catch((err) => {
-        // : never swallow the production refusal. sdkFactory.js throws
+        // Never swallow the production refusal. sdkFactory.js throws
         // precisely so a shipped wallet cannot silently run without the real
         // SDK; discarding that here (the old `.catch(() => 'dev-mock')`) left
         // the registry on the mock with no symptom.
         //
-        // : the dev branch that returned 'dev-mock' here is gone too.
+        // The dev branch that returned 'dev-mock' here is gone too.
         // resolveSdkFactory now picks its venue up front and only rejects when
         // the venue it was TOLD to use could not be built - asking for the real
         // SDK and quietly getting fake balances instead is the exact failure
@@ -714,7 +714,7 @@ function stopNotifications() {
  * @returns {Promise<{ hasWallet: boolean, hasSession: boolean, state: 'no-wallet' | 'locked' | 'unlocked' }>}
  */
 export async function getSessionStatus() {
-    // Boot hook for the native shells ( S2). This is the first thing
+    // Boot hook for the native shells (S2). This is the first thing
     // the app awaits, and it runs again on every refresh, which is what keeps
     // the biometric enrollment flag honest after the user enrolls, disables,
     // or re-registers a fingerprint in system settings. No-op in a browser.
@@ -728,7 +728,7 @@ export async function getSessionStatus() {
         // resolves answers "no lockout, no duress, no freeze" - the
         // permissive answer to all three.
         await installNativeGuardPersistence();
-        //  §6 / D4. Asks the native shell which lane installed this
+        // §6 / D4. Asks the native shell which lane installed this
         // build and installs the update-notice provider ONLY for a direct
         // APK. A browser, the extension, the desktop app, an iOS build and a
         // Play install all answer "not this lane" and get no provider, which
@@ -915,7 +915,7 @@ export async function importMnemonicLocal(req) {
         startNotifications();
         await meta.save({ kdfParams });
         // `walletId` rides along because the fresh-install caller may need to
-        // keep working with the wallet it just made: the  pairing lane
+        // keep working with the wallet it just made: the pairing lane
         // imports the shared phrase here and then asks the host to derive that
         // wallet's pairing payload, which is addressed BY id. Without it the
         // lane imported the phrase and then dead-ended on "the shell returned
@@ -927,7 +927,7 @@ export async function importMnemonicLocal(req) {
 }
 
 /**
- * : restore an encrypted §19.4 backup onto a FRESH install.
+ * Restore an encrypted §19.4 backup onto a FRESH install.
  *
  * Web twin of the extension/desktop pre-host `wallet.importBackup.fresh`.
  * `importBackupRequest` goes through the in-page host, and on a device with no
@@ -935,7 +935,7 @@ export async function importMnemonicLocal(req) {
  * This creates the vault under the new device password first, then runs the
  * same core merge.
  *
- * Three secrets, three different things : `password` is what this
+ * Three secrets, three different things: `password` is what this
  * browser will unlock with from now on, `backupPassword` opens the file, and
  * `walletPassword` opens the backed-up wallet's own seal. The user may pick a
  * genuinely new `password` because `importBackupFile` re-keys the restored
@@ -1124,7 +1124,7 @@ export async function sendMessage(type, request) {
     const response = await host.handle({ type, request });
     if (response.ok) return response.result;
     // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding
-    // with name+message alone dropped them ().
+    // with name+message alone dropped them.
     throw hydrateEnvelopeError(response.error);
 }
 

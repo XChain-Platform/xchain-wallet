@@ -324,7 +324,7 @@ test.describe('scan and classify (§24.3)', () => {
                 .toBe(true);
         });
 
-        await test.step(': a scanned PSBT arrives IN the Sign panel', async () => {
+        await test.step('A scanned PSBT arrives IN the Sign panel', async () => {
             // This step was written as a pin on the broken behaviour and is now the
             // real assertion. Before the fix, \`ScanRoute\` emitted
             // \`{ kind: 'psbt', psbtHex }\`, every shell's handler called

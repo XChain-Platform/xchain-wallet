@@ -42,7 +42,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 const chainRegistry = registryLib.defaultRegistry();
 
 // Which chains this form may deploy on, asked of the registry instead of
-// pinned to a coin here . The gate has ONE home,
+// pinned to a coin here. The gate has ONE home,
 // registry/actions.js BTC_EXCLUSIVE_ACTIONS, which today keeps DEPLOY on
 // Bitcoin; a second hard-coded copy in this form would mean the day the
 // registry opens contracts to LTC/DOGE, the form silently does not. Same
@@ -75,8 +75,7 @@ const DEPLOY_CHAIN_COINS = [...new Set(DEPLOY_CHAINS.map((d) => d.coin))]
  * ships a plain textarea as the minimal authoring surface, routes the
  * validate / size / suggest-gas helpers through the SDK, and defers
  * the Monaco editor integration (its bundle weight + CDN trust
- * posture need their own discussion) to a follow-up captured in
- * `claude/reports/specs/2026-04-24_phase4-monaco-editor.md`.
+ * posture need their own discussion) to a follow-up.
  *
  * Hex-encoding of the source happens inside the SDK validator chain;
  * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
@@ -201,11 +200,11 @@ export function DeployContractForm({ walletId, onBack }) {
     const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
-    // : DEPLOY is fee-bearing, and this form had no fee lane at all
+    // DEPLOY is fee-bearing, and this form had no fee lane at all
     // because BTC could always settle the protocol fee from an XCHAIN balance.
     // On every other protocol coin there is no XCHAIN lane, so the hook forces
     // the native output on rather than offering a choice that does not exist.
-    // The quote behind it is 's schedule price, which carries no verdict
+    // The quote behind it is that schedule price, which carries no verdict
     // (`valid:null`), hence `unverified` on the row: the amount is exact, the
     // acceptance is not pre-judged, and the fee is spent either way.
     const nativeFee = useNativeFee(chainId);
@@ -418,9 +417,9 @@ export function DeployContractForm({ walletId, onBack }) {
 
     const { isWatcherMode } = useWalletMode();
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
-    // included . Watcher mode still branches: it encodes, it
+    // included. Watcher mode still branches: it encodes, it
     // never signs.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
@@ -428,7 +427,7 @@ export function DeployContractForm({ walletId, onBack }) {
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -594,7 +593,7 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     /**
-     * Put a resumed deploy's phase-2 fields back on screen .
+     * Put a resumed deploy's phase-2 fields back on screen.
      *
      * The flow assembles from `record.assembleParams`, so the form must show the
      * same values or the review screen describes a different transaction than
@@ -653,7 +652,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -817,7 +816,7 @@ export function DeployContractForm({ walletId, onBack }) {
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -832,7 +831,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}
@@ -904,7 +903,7 @@ export function DeployContractForm({ walletId, onBack }) {
             {resumable.length > 0 ? (
                 <div className={styles.warnings}>
                     {resumable.map((r) => {
-                        // : count a chunk as SENT on its txid, not only on
+                        // Count a chunk as SENT on its txid, not only on
                         // its action_index. The index is written after the
                         // indexer answers; the txid at broadcast. Counting
                         // indexes alone made the banner read "0 of 2" over a
@@ -933,7 +932,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                             setResumeId(r.id);
                                             setValidation(null);
                                             setSizeInfo(null);
-                                            // : restore the rest of the plan, not just the
+                                            // Restore the rest of the plan, not just the
                                             // source. The flow now assembles phase 2 from the
                                             // record, so leaving these fields blank would show a
                                             // review screen that disagrees with the transaction

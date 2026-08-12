@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The DEX surface, ABSENT (;  §2.3).
+// The DEX surface, ABSENT (; §2.3).
 //
 // `vite.config.js` swaps `dex.jsx` for this file when the build profile hides
 // the `dex` surface, so this is the module a mobile store build actually runs.

@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// D-75 / : ManageToken's "You hold" read 0 for every token because it
+// D-75: ManageToken's "You hold" read 0 for every token because it
 // parsed a flat row array (or a `rows` / `data` envelope) while
 // getWalletBalances resolves to `Record<chainId, entry[]>`. These cases pin
 // the shape the call actually returns - the fixtures below are the real

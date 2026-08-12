@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for the PRICE v1 oracle usage fee pre-flight .
+// Unit tests for the PRICE v1 oracle usage fee pre-flight.
 //
 // A Mode B dispenser (ORACLE_ADDRESS set) must carry a native-coin output paying the
 // oracle operator, sized from the escrow it adds, or the indexer rejects the create.

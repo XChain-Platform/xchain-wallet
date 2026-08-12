@@ -12,7 +12,7 @@
 // counterwallet-legacy path (m/0'/change/index) resolve. Reading change at
 // the fixed position [4] matched nothing on a legacy wallet, which made
 // every action form report "No address on this chain" for a wallet that was
-// funded and had three addresses .
+// funded and had three addresses.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -59,7 +59,7 @@ describe('newestHdExternalId', () => {
     });
 
     it('picks the highest index on a counterwallet-legacy wallet', () => {
-        // Before  this returned null: no path had a segment at [4],
+        // Before this returned null: no path had a segment at [4],
         // so the whole set was filtered away and the form showed the
         // "no address on this chain" error on a funded wallet.
         const id = newestHdExternalId([

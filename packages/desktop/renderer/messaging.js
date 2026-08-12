@@ -46,7 +46,7 @@ export function importMnemonic(opts) {
 }
 
 /**
- * : restore an encrypted backup onto a FRESH install (no vault yet).
+ * Restore an encrypted backup onto a FRESH install (no vault yet).
  * Pre-host, and named apart from `importBackupRequest` because that one adds
  * a wallet to an OPEN vault through the host - a host a fresh install has not
  * built yet.
@@ -193,7 +193,7 @@ export function buildSendPsbtRequest(opts) {
 }
 
 /**
- *  §5.3: host half of the single-encode pipeline. Compose the ONE
+ * Host half of the single-encode pipeline. Compose the ONE
  * PSBT the ConfirmActionModal previews and signs, resolve fee + ADS, and
  * run the tamper check host-side. Resolves with a serializable, tamper-
  * verified ComposedAction; rejects on tamper / compose failure.
@@ -204,7 +204,7 @@ export function composeForConfirm(opts) {
 }
 
 /**
- * : the amount the Max button may offer on a native-coin send, priced by
+ * The amount the Max button may offer on a native-coin send, priced by
  * the encoder that will build the transaction rather than by a static assumed
  * vsize. Resolves null when the encoder could not be made to answer, which the
  * form reads as "keep the tier estimate".
@@ -217,7 +217,7 @@ export function quoteMaxSendable(opts) {
 }
 
 /**
- *  §4: run sdk.preflight host-side and return the report.
+ * Run sdk.preflight host-side and return the report.
  * @param {{ chainId: string, actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: 'report'|'enforce'|'local' }} opts
  */
 export function preflight(opts) {
@@ -225,7 +225,7 @@ export function preflight(opts) {
 }
 
 /**
- *  §4.7: register / release an in-flight approval reservation on the
+ * Register / release an in-flight approval reservation on the
  * host-shared ledger so concurrent confirm flows net each other.
  * @param {{ id: string, chainId: string, tick: string, amount: string }} opts
  */
@@ -238,7 +238,7 @@ export function releaseReservation(opts) {
 }
 
 /**
- *  §4.6: are the coins the held PSBT spends still unspent? The other
+ * Are the coins the held PSBT spends still unspent? The other
  * half of the Approve-time re-check, and the gate a RESUMED confirm (§5.4)
  * must pass before it may be approved at all - a stored session is by
  * construction the oldest PSBT in the wallet.
@@ -254,7 +254,7 @@ export function checkInputLiveness(opts) {
 }
 
 /**
- * : re-price a composed action's native-coin protocol fee at Approve
+ * Re-price a composed action's native-coin protocol fee at Approve
  * time. The fee output was sized at COMPOSE from an oracle price, and the
  * amount consensus requires moves inversely with the coin price, so a move of
  * a little over 5 % while the confirm screen sits open leaves the attached
@@ -271,7 +271,7 @@ export function requoteNativeFee(opts) {
 }
 
 /**
- *  §5.4: persist the in-flight confirm so a popup CLOSE (which MV3 does
+ * Persist the in-flight confirm so a popup CLOSE (which MV3 does
  * on every focus loss, including the one a hardware prompt causes) costs a tap
  * instead of re-entering the whole form. Stored in `chrome.storage.session`,
  * so it dies with the browser session; a no-op on shells without one.
@@ -282,13 +282,13 @@ export function putConfirmSession(opts) {
     return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
 }
 
-/** : the stored confirms, for the Home resume card. */
+/** The stored confirms, for the Home resume card. */
 export function listConfirmSessions() {
     return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
 }
 
 /**
- * : drop a stored confirm. Called on EVERY terminal state, not as
+ * Drop a stored confirm. Called on EVERY terminal state, not as
  * tidy-up: a session outliving its confirm invites a re-approve of a
  * transaction that may already be signed and broadcast (§5.3.4).
  *
@@ -316,7 +316,7 @@ export function broadcastSignedTxRequest(opts) {
 }
 
 /**
- * §20.5 / : export this wallet's pairing payload (account-level
+ * §20.5: export this wallet's pairing payload (account-level
  * PUBLIC key material only) for its watcher/signer partner to scan.
  * @param {{ walletId: string, walletMode?: 'watcher' | 'signer', password?: string, bip39Passphrase?: string, label?: string, chainIds?: string[] }} opts
  */
@@ -325,7 +325,7 @@ export function pairingPayloadRequest(opts) {
 }
 
 /**
- * §20.5 / : verify the partner's payload against this wallet and
+ * §20.5: verify the partner's payload against this wallet and
  * persist the pairing.
  * @param {{ walletId: string, walletMode?: 'watcher' | 'signer', partner: string | object, password?: string, bip39Passphrase?: string, label?: string }} opts
  */
@@ -334,7 +334,7 @@ export function pairPartnerRequest(opts) {
 }
 
 /**
- * §20.5 / : forget the paired partner wallet.
+ * §20.5: forget the paired partner wallet.
  */
 export function unpairPartnerRequest() {
     return /** @type {any} */ (sendMessage('pairing.unpair', {}));
@@ -1331,7 +1331,7 @@ export function editOrderHw(opts) { return /** @type {any} */ (sendMessage('acti
 export function coinpayAction(opts) { return /** @type {any} */ (sendMessage('action.coinpay', opts)); }
 /** @param {object} opts */
 export function coinpayActionHw(opts) { return /** @type {any} */ (sendMessage('action.coinpay.hw', opts)); }
-// Watcher-mode COINPAY : verifies the obligation, then encodes. Use this
+// Watcher-mode COINPAY: verifies the obligation, then encodes. Use this
 // rather than buildActionPsbtRequest, which would skip the verification.
 /** @param {object} opts */
 export function buildCoinpayPsbtRequest(opts) { return /** @type {any} */ (sendMessage('action.coinpay.psbt', opts)); }
@@ -1383,11 +1383,11 @@ export function signerReady(opts) { return /** @type {any} */ (sendMessage('wall
 // §41.7.3 Compose
 /** @param {object} opts */
 export function messageAction(opts) { return /** @type {any} */ (sendMessage('action.message', opts)); }
-/**  §5.6 slice 3: encrypt host-side, then compose the one PSBT over that ciphertext. */
-// : compose a VOTE through the SDK's own sdk.voting.*Params builder
+/** §5.6 slice 3: encrypt host-side, then compose the one PSBT over that ciphertext. */
+// Compose a VOTE through the SDK's own sdk.voting.*Params builder
 // host-side, so the confirm page previews the wire params the encoder will
 // actually see instead of a client-side mirror of that encoding.
-// : switch network AND derive the first address on each of its chains,
+// Switch network AND derive the first address on each of its chains,
 // so a switch cannot leave the wallet with no addresses and no way to make one.
 export function setActiveNetwork(opts) {
     return /** @type {any} */ (sendMessage('settings.setActiveNetwork', opts));
@@ -1523,7 +1523,7 @@ export function getNativePricesRequest(opts) {
 }
 
 // ---------------------------------------------------------------------
-//  row 105: the calls this file's own header promised and did not
+// row 105: the calls this file's own header promised and did not
 // have.
 //
 // Measured 2026-08-07 by driving the real app for the first time (which

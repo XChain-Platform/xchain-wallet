@@ -59,7 +59,7 @@ assert.ok(/label="Signing public key"/.test(formSrc),
 assert.ok(/SIGNING_PUBKEY:\s*signingPubkey\.trim/.test(formSrc),
     'StakingActionForm passes SIGNING_PUBKEY in action params');
 
-//  partial claim/unstake: the Amount field is editable (real
+// partial claim/unstake: the Amount field is editable (real
 // change handler, not a pinned no-op) and a strict partial threads
 // AMOUNT into the action params; a full-balance submit keeps the
 // legacy absent-AMOUNT bytes.
@@ -121,7 +121,7 @@ await assert.rejects(
     'collectAction guards params',
 );
 
-//  optional AMOUNT guards: present => positive decimal.
+// optional AMOUNT guards: present => positive decimal.
 await assert.rejects(
     async () => flows.unstakeAction({ params: { SIGNING_PUBKEY: 'a'.repeat(64), AMOUNT: '-1' } }),
     /AMOUNT must be a positive decimal/,
@@ -213,5 +213,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake +  partial amount editing/threading + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
+    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + partial amount editing/threading + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
 );

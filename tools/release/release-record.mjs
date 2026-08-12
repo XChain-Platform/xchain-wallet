@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/release-record.mjs - the §6 release record: open it,
-// require it, and prove every release tag has one .
+// require it, and prove every release tag has one.
 //
 // THE RULE THIS ENFORCES. §6 says the per-release record is instantiated
 // from `claude/reports/wallet-releases/TEMPLATE.md` at the START of a
@@ -39,8 +39,8 @@
 // instantiate. That boundary is real and cannot be gated away: an
 // isolated single-repo CI checkout has no platform repo above it, so the
 // smoke half SKIPS there, loudly, exactly as the wallet's docs-parity
-// smokes do since  moved the prose out. What that costs is honest
-// to state: GitHub CI cannot enforce this. What it does not cost is the
+// smokes do since the prose moved out of this repo. What that costs is
+// honest to state: GitHub CI cannot enforce this. What it does not cost is the
 // gate, because publish.sh runs on the release machine, which is a full
 // monorepo working tree, and there it is a hard refusal.
 //
@@ -233,7 +233,7 @@ export function openRecord(tag, { manager = '', today = new Date() } = {}) {
 
 /**
  * Ask the one authoritative source for the store integer rather than
- * restating §2's formula here.  found four variants of that
+ * restating §2's formula here. A prior audit found four variants of that
  * formula in the wild; a fifth is not wanted. A missing or broken script
  * leaves the line as the template wrote it rather than guessing.
  */
@@ -269,7 +269,7 @@ const gitOut = (repo, args) => {
  * version is refused by release.yml's verify-tag gate and can therefore
  * never have produced a release, so demanding an account of it would
  * demand an account of something that never shipped - and would wedge
- * this gate on a malformed tag  instead of on the missing record
+ * this gate on a malformed tag instead of on the missing record
  * it exists to catch. Those tags are reported, loudly, and belong to
  * verify-tag. Faking a pass by this rule means bumping every
  * version-bearing file and committing it, which is a release.
@@ -439,7 +439,7 @@ function main(argv) {
                 + 'START of a release, from TEMPLATE.md, and closed by step 8:\n'
                 + '  node tools/release/release-record.mjs open --tag vX.Y.Z\n'
                 + 'v0.334.0 shipped without one and had to be reconstructed a day later\n'
-                + 'from a CI summary job, which is why this is a gate .\n',
+                + 'from a CI summary job, which is why this is a gate.\n',
             );
             return 1;
         }

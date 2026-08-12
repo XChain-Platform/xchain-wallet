@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  row 144: a release must not be able to ship a build
+// Smoke for row 144: a release must not be able to ship a build
 // that DIES AT LAUNCH while every other gate reports green.
 //
 // v0.338.0 did exactly that. It was signed with the Developer ID cert,
@@ -586,7 +586,7 @@ if (process.platform === 'darwin') {
     const signSrc = readFileSync(join(root, 'tools/release/sign.sh'), 'utf8');
     const lines = signSrc.split('\n');
     const lineOf = (rx) => lines.findIndex((l) => rx.test(l));
-    // Both gates are resolved into a variable before they run , so
+    // Both gates are resolved into a variable before they run, so
     // a release older than a check runs this checkout's copy with the
     // substitution named, instead of dying on `node` with MODULE_NOT_FOUND
     // from a tag that never carried the file. The resolution is asserted

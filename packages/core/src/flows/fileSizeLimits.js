@@ -40,12 +40,12 @@
 export const MAX_COMPILED_ACTION_BYTES = 8192;
 
 /**
- * Taproot-envelope payload ceiling ( §4). Vendored byte-equal from
+ * Taproot-envelope payload ceiling (§4). Vendored byte-equal from
  * xchain-documentation/protocol/constants.js ENVELOPE_MAX_PAYLOAD.
  *
  * It is DERIVED FROM WEIGHT, not chosen as a round number: the binding limit is
  * Bitcoin Core's MAX_STANDARD_TX_WEIGHT of 400,000 WU, and 400,000 payload bytes
- * build a 402,789 WU reveal that no node relays . Do not tidy it.
+ * build a 402,789 WU reveal that no node relays. Do not tidy it.
  *
  * It is measured on the SAME compiled stream as the 8192 above (the action push
  * plus the rawData push): §3.2 pins the reassembled envelope payload as
@@ -140,7 +140,7 @@ export function publicFileActionString({ name, type, title, memo, compression })
         typeof title === 'string' ? title.trim() : '',
         typeof memo === 'string' ? memo : '',
     ];
-    //  §5.1: COMPRESSION is the TENTH field. Setting it re-materializes every
+    // COMPRESSION is the TENTH field. Setting it re-materializes every
     // optional field before it as an empty separator, because the trailing-empty
     // trim stops at the last non-empty value. So `FILE|0|N|T` becomes
     // `FILE|0|N|T|||||||1`. The marker therefore costs SIX TO EIGHT bytes, not

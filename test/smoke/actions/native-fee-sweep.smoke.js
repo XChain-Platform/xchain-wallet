@@ -34,7 +34,7 @@ const SWEEP_FORMS = [
     'DestroyForm.jsx', 'LinkForm.jsx', 'SleepForm.jsx',
     'PublishFileForm.jsx', 'AttachContentForm.jsx', 'OracleForm.jsx',
     'CallbackForm.jsx', 'SweepForm.jsx', 'TokenAdminForm.jsx',
-    // , added 2026-08-01. It was on NEITHER list, so this smoke passed
+    // Added 2026-08-01. It was on NEITHER list, so this smoke passed
     // while the one authoring surface for an ownership sale composed ORDER and
     // DISPENSER with no fee output at all: on LTC/DOGE the transaction
     // confirmed and the indexer answered "insufficient fee (native coin output
@@ -48,7 +48,7 @@ for (const f of SWEEP_FORMS) {
     assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
     assert.match(src, /<NativeFeeToggle/, `${f} renders the toggle`);
     assert.match(src, /payFeeInNativeCoin: nativeFee\.flag/, `${f} threads nativeFee.flag into its payloads`);
-    // : the spread is what carries `mandatory` to the toggle; hand-picking
+    // The spread is what carries `mandatory` to the toggle; hand-picking
     // checked/onChange instead would silently drop it and re-open the opt-in on
     // a chain that has no other fee lane.
     assert.match(src, /\{\.\.\.nativeFee\.toggleProps\}/, `${f} spreads the whole toggleProps`);
@@ -68,12 +68,12 @@ for (const [dir, f] of MIGRATED) {
         src, /useState\(false\);?\s*\/\/.*native/i,
         `${f} no longer hand-rolls the toggle state`,
     );
-    // : a form that hides `mandatory` would render an unticked opt-in on
+    // A form that hides `mandatory` would render an unticked opt-in on
     // LTC/DOGE, which is the pre-fix bug wearing the post-fix hook.
     assert.match(src, /mandatory=\{nativeFeeMandatory\}/, `${f} passes mandatory to the toggle`);
 }
 
-// ---- : no form may call the hook without naming its chain ----
+// ----: no form may call the hook without naming its chain ----
 // A bare useNativeFee() cannot know whether the native fee is an opt-in (BTC)
 // or the only fee lane (LTC/DOGE), so it defaults to Bitcoin's answer and every
 // fee-bearing action composed on LTC/DOGE indexes `insufficient fee (native
@@ -117,7 +117,7 @@ assert.doesNotMatch(
 
 // A form "explains a refused native-fee quote in chain-aware wording" if it
 // calls nativeFeeErrorMessage with the chain context, OR if it routes its catch
-// through submitFailureMessage - the  helper whose whole purpose is to be
+// through submitFailureMessage - the helper whose whole purpose is to be
 // the one place a form turns a failed submit into a sentence, and which calls
 // nativeFeeErrorMessage with exactly those options. Pinning only the literal
 // call would fail a form for adopting the helper, which is backwards: D-118
@@ -126,7 +126,7 @@ assert.doesNotMatch(
 //
 // WIDENED AGAIN (D-121): the first widening still pinned the ARGUMENT LAYOUT -
 // it required `coinTicker, mandatory: nativeFee.mandatory` on one line, so the
-//  sweep failed this smoke by adopting the same helper with the argument
+// sweep failed this smoke by adopting the same helper with the argument
 // object spread over separate lines. That is a whitespace opinion wearing a
 // correctness assertion, and it punishes exactly the change the rule wants.
 // What is actually being asserted is: the catch hands `err` to a mapper that
@@ -135,7 +135,7 @@ assert.doesNotMatch(
 const CHAIN_AWARE_REFUSAL =
     /(?:nativeFeeErrorMessage|submitFailureMessage)\(\s*err,\s*\{[\s\S]{0,200}?\bcoinTicker\b[\s\S]{0,200}?\bmandatory:\s*nativeFee\.mandatory/;
 
-// ---- : the BET lane, which the PC-51 sweep never covered ----
+// ----: the BET lane, which the PC-51 sweep never covered ----
 //
 // BET is fee-bearing on two of its four formats and sits in COMMON_ACTIONS, so
 // it is offered on LTC/DOGE, where the native output is the ONLY fee lane. Its
@@ -172,7 +172,7 @@ for (const f of BET_FORMS) {
 const oracleConsole = routes('OracleConsole.jsx');
 assert.doesNotMatch(oracleConsole, /<NativeFeeToggle/,
     'OracleConsole (resolve/cancel, both free) has no toggle');
-assert.match(oracleConsole, //,
+assert.match(oracleConsole, /No native-fee lane here on purpose/,
     'OracleConsole records WHY it has no toggle, so a later sweep does not add one');
 
 assert.match(
@@ -193,11 +193,11 @@ assert.match(
     );
 }
 
-// ---- : the contract lane (DEPLOY/EXECUTE) ----
+// ----: the contract lane (DEPLOY/EXECUTE) ----
 //
 // These two were the last fee-bearing forms with no lane at all, for a reason
 // that expired: BTC could always settle their fee from an XCHAIN balance, and
-// they were unquotable everywhere else.  gave them a schedule-priced
+// they were unquotable everywhere else. a later change gave them a schedule-priced
 // quote with no verdict (`valid:null`), which is payable, so the lane has to
 // exist BEFORE BTC_EXCLUSIVE_ACTIONS can open them to LTC/DOGE, where the
 // native output is the only fee lane there is.
@@ -255,7 +255,7 @@ for (const f of ['deployAction.js', 'executeAction.js', 'deployChunked.js']) {
 assert.doesNotMatch(
     read('packages', 'core', 'src', 'shared', 'components', 'NativeFeeToggle.jsx'),
     /denied set \{DEPLOY, EXECUTE/,
-    'NativeFeeToggle no longer lists DEPLOY/EXECUTE as unquotable ( prices them)',
+    'NativeFeeToggle no longer lists DEPLOY/EXECUTE as unquotable (prices them)',
 );
 
 // ---- the gated (BATCH) lane stays toggle-free: BATCH is fee-quote DENIED ----
@@ -264,7 +264,7 @@ assert.doesNotMatch(gated, /<NativeFeeToggle/, 'GatedPublishForm (BATCH lane) ha
 const batchComposer = routes('BatchComposerForm.jsx');
 assert.doesNotMatch(batchComposer, /<NativeFeeToggle/, 'BatchComposerForm (BATCH) has no toggle');
 
-// ---- DISCOVERY GUARD : a curated list can only ever miss the NEXT
+// ---- DISCOVERY GUARD: a curated list can only ever miss the NEXT
 // omission, which is exactly how SellOwnershipForm survived the PC-51 sweep and
 // §11.3's audit of it. Rather than trust the lists above to stay complete, scan
 // every route for one that BUILDS a quotable action payload and does not thread
@@ -292,7 +292,7 @@ for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
     assert.match(
         src, /payFeeInNativeCoin/,
         `${file} builds a quotable action but never threads payFeeInNativeCoin. Off Bitcoin the `
-        + 'native-coin fee is MANDATORY , so the action confirms on chain and is then '
+        + 'native-coin fee is MANDATORY, so the action confirms on chain and is then'
         + 'rejected "insufficient fee (native coin output required)" while the form reports '
         + 'success. Give it the useNativeFee treatment, or add it to EXEMPT with a reason.',
     );
@@ -306,7 +306,7 @@ for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
 // (`base`), the hardware lane, and the watcher encode-only lane, which does
 // NOT go through `base` and takes its options as `encoderOpts` instead.
 //
-// That gap is not hypothetical, and neither is the scope choice. 
+// That gap is not hypothetical, and neither is the scope choice.
 // fixed SellOwnershipForm by threading the submit path and mounting the
 // toggle; the file therefore contained the string, the sweep went green, and
 // the watcher lane still composed a PSBT with no fee output. Worse, that form
@@ -338,6 +338,6 @@ for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
 }
 
 console.log(
-    'native-fee-sweep smoke: all assertions passed (PC-51 sweep +  mandatory-chain '
-    + 'derivation +  BET lane, form/flow/host +  contract lane +  discovery)',
+    'native-fee-sweep smoke: all assertions passed (PC-51 sweep + mandatory-chain'
+    + 'derivation + BET lane, form/flow/host + contract lane + discovery)',
 );

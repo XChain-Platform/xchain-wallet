@@ -15,9 +15,7 @@
 // while core wallet flows keep running in the background service
 // worker.
 //
-// Wire protocol
-// -------------
-// The transport function the shim takes has the shape:
+// Wire protocol: the transport function the shim takes has the shape:
 //
 //   async transport({ op: string, payload: object }) -> any
 //
@@ -33,8 +31,7 @@
 //     wrong-app), transport returns `{ status, detail }` for `getStatus`
 //     and throws for `signPsbt` / `signMessage`.
 //
-// Ops
-// ---
+// Ops:
 //
 //   status                    -> SignerStatus
 //   getAddresses(params)      -> DerivedAddress[]
@@ -47,9 +44,8 @@
 // instance by this shim's `id` (see §signingRegistry, shell-level)
 // and calling the matching method.
 //
-// Why not just call the signer from the renderer?
-// -----------------------------------------------
-// Every existing action flow (sendToken, issueToken, mintToken, ...)
+// Why not just call the signer from the renderer? Every existing action
+// flow (sendToken, issueToken, mintToken, ...)
 // runs in the background: it reads the vault, resolves chain state,
 // assembles the PSBT via xchain-sdk, and broadcasts. Moving all of
 // that to the renderer for HW-signed transactions would fork the code
@@ -121,7 +117,7 @@ export class RemoteSigner extends Signer {
     }
 
     async signPsbt(params) {
-        //  §6 / : a Taproot envelope reveal is a BIP341 script-path
+        // A Taproot envelope reveal is a BIP341 script-path
         // spend, and no shipping hardware firmware signs one through this transport.
         // Refuse HERE rather than let it travel and fail at the device: by then the
         // caller may already have broadcast the commit, and §6 is explicit that

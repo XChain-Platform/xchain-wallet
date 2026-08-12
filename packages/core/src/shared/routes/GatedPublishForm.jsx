@@ -73,7 +73,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const [packChoice, setPackChoice] = useState('new');
     // PC-29 unlock threshold (GATE_MIN_AMOUNT). The field only renders
     // once the extension is ACTIVE on this chain: scheduled height from
-    // the flows activation map (null everywhere until the  train
+    // the flows activation map (null everywhere until the train
     // is assembled, so the pre-train fast path costs nothing), then the
     // live indexer watermark decides. The flow re-checks activation at
     // compose time either way.

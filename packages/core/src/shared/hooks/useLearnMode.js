@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useLearnMode . Reads `settings.learnMode` off the <html>
+// useLearnMode. Reads `settings.learnMode` off the <html>
 // attribute that DisplayPrefsGate stamps, rather than through the settings
 // context.
 //

@@ -23,7 +23,7 @@
 //                    only be cleared via OS settings, by design.)
 //
 // This component names NO vendor and NO browser API, and a smoke test
-// enforces that . It used to hardcode two desktop-platform brand
+// enforces that. It used to hardcode two desktop-platform brand
 // names and explain unavailability in terms of the browser credential API,
 // which on a phone is wrong twice over: neither brand is what the device
 // does, and the true reason there is usually "nothing is enrolled yet" - a
@@ -56,7 +56,7 @@ export function BiometricRow() {
     const [password, setPassword] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    // : re-run the pairing attempt on the recorded action. Biometric
+    // Re-run the pairing attempt on the recorded action. Biometric
     // registration failures (prompt timeout, user-cancelled the OS dialog,
     // transient provider error) are always retryable with the same password
     // still in the field, so the error surface offers a one-click "Try again".

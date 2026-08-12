@@ -25,7 +25,7 @@
 	     untrusted input: it is validated and confirmed by the user before any
 	     signing flow, exactly like a scanned QR. Every link WE publish is an
 	     https Universal Link instead, because those are domain-attested
-	     ( §4). Never encode a secret in either. -->
+	     (§4). Never encode a secret in either. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -41,7 +41,7 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<!-- Export compliance ( §2.5): the wallet uses standard cryptography
+	<!-- Export compliance (§2.5): the wallet uses standard cryptography
 	     only, which is exempt, so the upload does not have to answer the question
 	     each time. This is a declaration, not a formality: it carries an ANNUAL
 	     self-classification report, and France wants its own filing if the app is

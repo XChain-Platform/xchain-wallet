@@ -13,7 +13,7 @@
 // activation height.
 //
 // GATE_MIN_AMOUNT is a DECIDED protocol extension (operator, 2026-07-24;
-// claude/specs/XCHAIN_WALLET_COVERAGE_SPEC.md §5 PC-29): an optional
+// wallet coverage spec §5 PC-29): an optional
 // unlock-threshold field appended to FILE format 0's tail, plus a SEND
 // rule change (the paired key-handoff MESSAGE is required only when the
 // destination's post-send balance of the gate tick meets the threshold;
@@ -26,7 +26,7 @@
 // indexer/encoder/SDK legs it round-trips against all ship PC-29
 // ungated at HEAD. Height 0 is the active-from-genesis idiom already
 // used across xchain-indexer/src/stateHash.js. That decision retires
-// the  coordinated train for testnet only.
+// the coordinated train for testnet only.
 //
 // MAINNET and REGTEST stay null. Mainnet has real pre-extension history
 // and still needs a pinned coordinated height. Regtest stays null
@@ -115,7 +115,7 @@ export async function resolveGateMinAmountActive({ chainId, getBlockHeight, heig
 // ---------------------------------------------------------------------------
 // PC-42: the two binding-poll flag-days.
 //
-// Unlike GATE_MIN_AMOUNT above, these are NOT waiting on the  train and
+// Unlike GATE_MIN_AMOUNT above, these are NOT waiting on the train and
 // are NOT block heights. Both are already scheduled in the indexer
 // (xchain-indexer/src/protocol_changes.js) as BLOCK-TIMESTAMP gates, with real
 // values: mainnet 1786060800 (2026-08-07), testnet and regtest 0, i.e. live

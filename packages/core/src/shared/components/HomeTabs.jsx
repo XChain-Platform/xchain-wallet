@@ -56,7 +56,7 @@ import styles from './HomeTabs.module.css';
  * @param {string} [props.multisigChainId]
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
- * @param {boolean} [props.hideSmallBalances]   : `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
+ * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  */
 export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings }) {
     const [active, setActive] = useState('coins');

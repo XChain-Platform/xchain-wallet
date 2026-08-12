@@ -12,7 +12,7 @@
  *
  *********************************************************************/
 
-//  §3 caching / . Holds tools/release/verify-edge-cache.mjs
+// §3 caching. Holds tools/release/verify-edge-cache.mjs
 // to its verdicts WITHOUT a network, which is the only way the branch
 // that matters can be tested at all: "a 404 must not score as a pass"
 // can only be exercised live while nothing is published, and the moment
@@ -111,5 +111,5 @@ for (const cfCache of ['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATI
         'an unpublished artifact proves nothing either way');
 }
 
-console.log('OK: edge cache contract smoke ( §3 / : a 404 is UNPROVEN, never a pass; '
+console.log('OK: edge cache contract smoke (a 404 is UNPROVEN, never a pass;'
     + 'MISS and EXPIRED are as fatal as HIT; the origin and the edge are both required)');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Input liveness ( §4.6, ).
+// Input liveness (§4.6).
 //
 // §4.6 has said since v3 that the Approve-time re-check "also validates the
 // held PSBT's inputs are still unspent (utxo query); spent inputs ⇒ interrupt

@@ -11,7 +11,7 @@
 
 // tools/release/verify-listing-assets.mjs - answers what the four Chrome Web
 // Store listing assets SHOW, which is a different question from whether they
-// exist at the sizes the store form accepts ( §5, row 42).
+// exist at the sizes the store form accepts (§5, row 42).
 //
 // WHY THIS EXISTS, AND WHAT IT WOULD HAVE CAUGHT. The listing-pack smoke
 // re-reads every asset's pixel dimensions out of its PNG header, and the
@@ -100,7 +100,7 @@ const ASSET_DIR = path.join(REPO_ROOT, 'packages/extension/docs/listing-assets')
 const PIN_PATH = path.join(ASSET_DIR, 'capture-pin.json');
 const MAS_ASSET_DIR = path.join(REPO_ROOT, 'packages/desktop/docs/listing-assets');
 
-//  row 95: Apple's accepted macOS screenshot canvases. A listing image
+// Row 95: Apple's accepted macOS screenshot canvases. A listing image
 // at any other size is refused by App Store Connect at upload, which is a slow
 // and manual way to find out, so the capture asserts it as it writes and the
 // verifier re-reads it from the PNG header rather than trusting the capture.
@@ -176,7 +176,7 @@ export const ASSETS = [
 ];
 
 /**
- * The Mac App Store listing images ( §13, frontier row 95).
+ * The Mac App Store listing images (§13, frontier row 95).
  *
  * WHY A SECOND SET RATHER THAN A SECOND TOOL. Apple refuses a listing with no
  * screenshot exactly as Google and Chrome do, and until 2026-08-07 nothing in
@@ -222,7 +222,7 @@ export const MAS_ASSETS = [
 ];
 
 /**
- * The App Store listing images ( §6, frontier row 63).
+ * The App Store listing images (§6, frontier row 63).
  *
  * WHY A THIRD SET AND NOT A THIRD TOOL: the same reason as the Mac App Store
  * one above, and this lane is the reason the question came up. On 2026-08-07

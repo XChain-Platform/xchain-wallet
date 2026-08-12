@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : Add-address built its coin list from "the chains the account
+// Add-address built its coin list from "the chains the account
 // is already on", so an account with zero addresses got zero options -
 // "No chains are active for this account yet." and a Close button. You
 // could only add an address on a chain you already occupied, which made
@@ -43,7 +43,7 @@ function renderModal(messaging, props = {}) {
     );
 }
 
-describe(': Add address on an account with no addresses', () => {
+describe('Add address on an account with no addresses', () => {
     it('offers the chains active on the current network', async () => {
         const messaging = {
             getSettings: async () => REGTEST_SETTINGS,

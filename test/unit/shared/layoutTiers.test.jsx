@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program, slice 1.
+// responsive-first program, slice 1.
 //
 // The bug this locks down: the shell carried two width thresholds that
 // disagreed (JS flipped the web variant at 640px, CSS collapsed the
@@ -27,7 +27,7 @@ import {
 } from '../../../packages/core/src/shared/styles/breakpoints.js';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 
-describe('layout tiers ', () => {
+describe('layout tiers', () => {
     describe('tierForWidth()', () => {
         it('maps representative device widths to the intended tier', () => {
             // 360 is the Chrome extension popup / small-phone width called

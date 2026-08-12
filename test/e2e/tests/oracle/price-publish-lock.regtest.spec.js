@@ -23,7 +23,7 @@
 //     tokens = (coin_paid x coin_fiat_price) / token_fiat_price
 //
 // and the dispenser's opener pays the oracle operator a USAGE FEE up front, as
-// a real native-coin output inside the DISPENSER transaction .
+// a real native-coin output inside the DISPENSER transaction.
 //
 // THE CONSTRAINT THAT SHAPES THIS SPEC, and it is a consensus rule rather than
 // a harness limit: every PRICE v1 publish is inert for 24 HOURS. The hub sets
@@ -79,7 +79,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** The publish and the mint both pay a real coin protocol fee here . */
+/** The publish and the mint both pay a real coin protocol fee here. */
 const FUNDING = 2;
 /** The token the quote prices. Free-mintable on regtest, which is the point. */
 const TICK = 'XCHAIN';

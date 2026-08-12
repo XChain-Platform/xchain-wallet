@@ -1,4 +1,4 @@
-# The Electron CVE clock, actually running ( §9, ).
+# The Electron CVE clock, actually running (§9).
 #
 # WHY THIS FILE EXISTS. §9 owns the security-patch cadence for a wallet that
 # ships a browser engine, and `tools/release/electron-cadence.mjs` turned that

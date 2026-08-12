@@ -28,7 +28,7 @@
 //  10. permissions-minimal           - no broad/host permissions without
 //                                      justification file
 //  11. permissions-frozen            - manifest.permissions equals the
-//                                      pinned allowlist ( §6)
+// pinned allowlist (§6)
 //  12. host-permissions-frozen       - manifest.host_permissions equals
 //                                      the pinned allowlist
 //  13. content-script-matches-frozen - the (single) content_scripts
@@ -44,7 +44,7 @@
 // Content-script `matches` inherit wallet-bridge scope (§51) and are
 // considered justified.
 //
-// Rules 11-14 are the manifest-freeze gate ( §6, stage S4). 11-13
+// Rules 11-14 are the manifest-freeze gate (§6, stage S4). 11-13
 // compare against packages/extension/docs/manifest-freeze.json, a pinned
 // allowlist checked into the same repo: any drift in permissions,
 // host_permissions, or content-script matches fails CI. Rule 14 does NOT
@@ -201,7 +201,7 @@ export function runExtensionManifestAudit() {
             : `broad host_permissions flagged: ${JSON.stringify(broad)} (document justification before reinstating)`,
     });
 
-    // --- Manifest-freeze gate ( §6) -------------------------------
+    // --- Manifest-freeze gate (§6) -------------------------------
     const freeze = readJSON(manifestFreezePath);
     const manifestPerms = manifest.permissions || [];
     const manifestHostPerms = manifest.host_permissions || [];

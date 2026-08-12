@@ -106,7 +106,7 @@ export function humanizeError(err, verb = 'complete this') {
         cause = 'backend_behind';
         message = `Couldn't ${verb}. The service is still catching up with the chain. Try again in a few minutes.`;
     } else if (/\bdust\b/.test(hay)) {
-        // : a dust rejection is the one member of the `rejected` family the user can
+        // A dust rejection is the one member of the `rejected` family the user can
         // fix, and "the network rejected this transaction" told them nothing, so the same
         // amount was the obvious thing to retry. The cause key stays `rejected` because
         // that is still what happened; only the sentence changes. The wallet now refuses a

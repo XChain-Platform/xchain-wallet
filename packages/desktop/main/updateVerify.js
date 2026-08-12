@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Update-manifest verification ( S5, decision D5).
+// Update-manifest verification (S5, decision D5).
 //
 // THE HOLE THIS CLOSES. electron-updater downloads an artifact and
 // checks its SHA512 against the channel pointer (`stable-linux.yml` and
-// friends;  §7.1). On Windows and macOS the OS
+// friends; §7.1). On Windows and macOS the OS
 // code-signature check is a genuine second factor, so a bad binary is
 // caught even if the feed lies. On Linux there is no such factor: the
 // AppImage is unsigned, and the hash it is checked against is served
@@ -46,13 +46,13 @@
 // authentic returns { ok: false }. There is no "could not check, carry
 // on" branch, because that branch is the vulnerability restated.
 //
-// THE CHANNEL POINTER IS THE SECOND UNAUTHENTICATED INPUT .
+// THE CHANNEL POINTER IS THE SECOND UNAUTHENTICATED INPUT.
 // Everything above authenticates the BYTES that were downloaded. Nothing
 // authenticated the file that decided which bytes to download: the
 // channel pointer (`stable-linux.yml` and friends) is fetched over TLS
 // Cloudflare terminates, and every value inside it is internally
 // consistent by construction, because whoever serves the binary serves
-// its sha512 too.  §7.2 accepted that residual for launch; this is
+// its sha512 too. §7.2 accepted that residual for launch; this is
 // the deferred half.
 //
 // COVERED, NOT SIGNED-IN-PLACE, AND THE DIFFERENCE IS DELIBERATE. The
@@ -84,7 +84,7 @@ import * as openpgp from 'openpgp';
 /**
  * The maintainer's release public key (K1), ASCII-armored.
  *
- * EMPTY UNTIL THE KEY CEREMONY RUNS ( S3). While it is empty every
+ * EMPTY UNTIL THE KEY CEREMONY RUNS (S3). While it is empty every
  * verification fails with `update-key-not-pinned`, so the desktop app
  * cannot self-update. That is correct rather than unfortunate: there are
  * no signed releases to update to yet either (G180), and the ordering is
@@ -232,7 +232,7 @@ function normalizeName(name) {
  *
  * `<channel><osSuffix><archSuffix>.yml`, where osSuffix is empty on
  * Windows, `-mac` on macOS and `-linux` on Linux, and archSuffix appears
- * only on non-x64 Linux ( §7.1, pinned upstream by
+ * only on non-x64 Linux (§7.1, pinned upstream by
  * `tools/release/update-info.mjs`). The name is DERIVED rather than read
  * off the feed on purpose: the whole point is to fetch the same pointer
  * electron-updater fetched, and a name taken from anything the feed says
@@ -442,7 +442,7 @@ export async function verifyDownloadedUpdate({
     });
     if (!artifact.ok) return { ok: false, reason: artifact.reason };
 
-    // And last, the file that chose all of the above . Required,
+    // And last, the file that chose all of the above. Required,
     // not optional: an absent pointer is the one an attacker serves, so
     // treating "none supplied" as "nothing to check" would hand them the
     // branch this whole file exists to remove.
@@ -500,7 +500,7 @@ export async function verifyDownloadedArtifact({
         return { ok: false, reason: `manifest describes ${parsed.header.tag}, not ${tag}` };
     }
 
-    // A PARTIAL manifest is never an update authority . sign.sh
+    // A PARTIAL manifest is never an update authority. sign.sh
     // --lane signs one lane's artifacts on their own, and such a manifest
     // is legitimate - it just cannot speak for the desktop lane, which it
     // was never gated against. The hash lookup below would refuse it

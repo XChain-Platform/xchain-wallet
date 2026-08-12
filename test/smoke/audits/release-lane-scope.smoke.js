@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Per-lane (partial) release signing .
+// Per-lane (partial) release signing.
 //
 // WHAT THIS EXISTS TO MAKE POSSIBLE. sign.sh signs ONE manifest for a
 // whole release, and the artifact-set gate in front of it demands every
@@ -300,7 +300,7 @@ try {
         check('...gates the artifact set against the SCOPED list',
             /xr_check_expected "\$INPUT_DIR" "\$GATE_EXPECTED"/.test(sign), 'wrong list');
         // The signature gate is resolved into a variable before it runs
-        // (: a release predating an executable check gets this
+        // (a release predating an executable check gets this
         // checkout's copy, announced, instead of a MODULE_NOT_FOUND stack
         // trace), so the path and the arguments are on two lines now. What
         // this case is about is unchanged and still checked: the SCOPED
@@ -324,7 +324,7 @@ try {
     //      the flag's label; the lane NAMES beside it were a hand-copied
     //      list and went stale the moment a row was added. Measured
     //      2026-08-07: `shipped-lanes.txt` had carried an `extension` row
-    //      since  while this help still read "(android, ios, mas,
+    // while this help still read "(android, ios, mas,
     //      msstore, snap)", so an operator reading it to find the lane
     //      name for the Chrome ceremony - whose ONLY signing path is
     //      `--lane extension` - was told that lane did not exist, and
@@ -470,7 +470,7 @@ if (failures > 0) {
 
 assert.ok(true);
 console.log(
-    'OK: release lane-scope smoke ( / : sign.sh --lane derives a'
+    'OK: release lane-scope smoke (sign.sh --lane derives a'
     + ' partial-release scope from shipped-lanes.txt, so a lane whose artifacts'
     + ' are ready can be signed and published without the other lanes being'
     + ' built - and the artifact-set gate keeps every tooth it had: inside the'

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// THE RUNTIME HALF OF THE BRIDGE SPEC, IN PLAIN JS .
+// THE RUNTIME HALF OF THE BRIDGE SPEC, IN PLAIN JS.
 //
 // Everything else in this package is types, which erase at build time and
 // therefore cost a consumer nothing. These nine values do not erase, and
@@ -58,7 +58,7 @@ export const BRIDGE_SUPPORTED_VERSIONS = ['0.1.0'];
  * @returns {boolean} true when at least one supported version satisfies the
  * requested RANGE. `ConnectOpts.requiredBridgeVersion` is specified as a semver
  * range ('^0.1.0'), not an exact version, so exact-string matching refused every
- * compatible dApp that wrote its requirement the documented way ().
+ * compatible dApp that wrote its requirement the documented way.
  * Empty / non-string requests pass through (the connect handler falls back to
  * BRIDGE_SPEC_VERSION as the assumed version).
  *
@@ -136,7 +136,7 @@ function satisfiesTerm(target, term) {
 // wallet emitted twelve internal codes the union never contained
 // (CHAIN_NOT_PERMITTED, ADDRESS_NOT_PERMITTED, MISSING_ORIGIN, ...) and a dApp
 // branching on `error` the way the spec tells it to fell through every case
-// (). The wallet now maps its internal vocabulary onto this list
+//The wallet now maps its internal vocabulary onto this list
 // before anything reaches the page, and a dApp written in plain JS can use it
 // to validate a code it was handed.
 //

@@ -25,7 +25,7 @@
 // So this gate keeps its job and changes its subject. It no longer proves
 // that a second copy exists here; it proves the ONE copy over there did not
 // get de-operationalized. That is the failure this file was created for:
-// 's port rendered the ceremony as evergreen public prose and, as
+// that port rendered the ceremony as evergreen public prose and, as
 // measured at the time, the page carried 0 of the runbook's 40 checkable
 // steps, 0 of its 8 fenced command blocks, and none of the public-identity
 // values the trader declaration publishes. An operator cannot transcribe
@@ -212,7 +212,7 @@ assert.ok(citations > 0,
 // --- 5. The private pointers the public page is forbidden to carry ------
 //
 // S23's finding. The docs standard bars claude/ paths, XC ids and store
-// identities from published pages and names the  spec as their home
+// identities from published pages and names the spec as their home
 // instead. The migration stripped them out of the ceremony page correctly and
 // nothing picked them up, so for a day the page told an operator to "log it in
 // the correspondence log, in full, before responding" and no document anywhere
@@ -250,7 +250,7 @@ if (existsSync(specPath)) {
     const spec = readFileSync(specPath, 'utf8');
     const start = spec.indexOf('## 4a. The private pointers');
     assert.ok(start !== -1,
-        'the  spec no longer has a "## 4a. The private pointers" block. That block is where the '
+        'the spec no longer has a "## 4a. The private pointers" block. That block is where the'
         + 'docs standard puts the operator map the published ceremony page is forbidden to carry: the '
         + 'correspondence log, the incident runbook, the K7 custody row. If it moved, repoint this '
         + 'gate in the same change; if it was deleted, the operator has no map on a rejection clock.');
@@ -268,7 +268,7 @@ if (existsSync(specPath)) {
     }
 
     assert.equal(missing.length, 0,
-        `the  spec's §4a private-pointer map names paths that do not exist:\n  `
+        `the spec's §4a private-pointer map names paths that do not exist:\n`
         + `${missing.join('\n  ')}\n`
         + 'This block exists because the published ceremony page cannot name these, so it is the only '
         + 'place an operator can find them. It named a correspondence log deleted three days earlier '
@@ -286,7 +286,7 @@ if (existsSync(specPath)) {
 // to being a live map; the frontier table above it is not, and it is the
 // table an operator actually reads to learn what is left. It has rotted
 // twice in two stages: S23 found row 3 naming docs/BRIDGE.md, deleted by
-// , and S24 found ROW 1 - the row that IS the goal - still telling an
+// And S24 found ROW 1 - the row that IS the goal - still telling an
 // operator to execute SUBMISSION-RUNBOOK.md, which the operator's own
 // one-home ruling deleted at S22, out of this very gate's subject line.
 //
@@ -304,7 +304,7 @@ if (existsSync(specPath)) {
     const fStart = spec.indexOf('<!-- BUILD-SPEC:FRONTIER');
     const fEnd = spec.indexOf('<!-- /BUILD-SPEC:FRONTIER', fStart + 1);
     assert.ok(fStart !== -1 && fEnd > fStart,
-        'the  spec has no BUILD-SPEC:FRONTIER block. That block is the spec\'s own record of '
+        'the spec has no BUILD-SPEC:FRONTIER block. That block is the spec\'s own record of'
         + 'what is left and who owns each row; without it the goal state lives nowhere.');
 
     for (const line of spec.slice(fStart, fEnd).split('\n')) {
@@ -329,12 +329,12 @@ if (existsSync(specPath)) {
     // wallet-repo documents the one-home ruling deleted. Derived from this
     // gate's own CEREMONY constant, so a future move repoints both together.
     assert.ok(goalRow,
-        'the  frontier has no live row 1. Row 1 is the console ceremony, which IS the goal of '
+        'the frontier has no live row 1. Row 1 is the console ceremony, which IS the goal of'
         + 'this spec; if it closed, the goal is reached and the spec should say so.');
 
     const ceremonyDoc = CEREMONY[CEREMONY.length - 1];
     assert.ok(goalRow.includes(ceremonyDoc),
-        `the  frontier's goal row does not name ${ceremonyDoc}, the document that actually `
+        `the frontier's goal row does not name ${ceremonyDoc}, the document that actually`
         + 'carries the ceremony. This row is the one an operator reads to find out what to execute, '
         + 'and it pointed at the deleted wallet-repo runbook for two stages after the one-home ruling.');
 
@@ -359,7 +359,7 @@ if (existsSync(specPath)) {
 
     const range = `Phases ${Math.min(...phases)}-${Math.max(...phases)}`;
     assert.ok(goalRow.includes(range),
-        `the  frontier's goal row does not say "${range}", which is the phase range the ceremony `
+        `the frontier's goal row does not say "${range}", which is the phase range the ceremony`
         + `page actually carries (${phases.length} phase headings). It said "Phases 1-8" while the `
         + 'page began at Phase 0: Preconditions, so the row understated the ceremony by a whole phase.');
 
@@ -385,14 +385,14 @@ if (existsSync(specPath)) {
     }
 
     assert.equal(dead.length, 0,
-        `live rows of the  frontier cite paths that do not exist:\n  ${dead.join('\n  ')}\n`
+        `live rows of the frontier cite paths that do not exist:\n ${dead.join('\n ')}\n`
         + 'The frontier is what a later stage, or the operator, reads to find out what is left. A live '
         + 'row pointing at a deleted file is how two stages in a row lost the thing they were about.');
 }
 
 // --- 7. The pre-migration translation map has to translate --------------
 //
-//  moved this spec's documents out from under it, and rather than
+// a later change moved this spec's documents out from under it, and rather than
 // rewrite every citation in a history-bearing spec, §32 answers with a rule:
 // "where a step still cites a pre-migration path, read it as the new home",
 // followed by the map. That is a sound choice, and it makes the map the ONLY
@@ -417,7 +417,7 @@ if (existsSync(specPath)) {
     const spec = readFileSync(specPath, 'utf8');
     const start = spec.indexOf('**Reading older text in this spec**');
     assert.ok(start !== -1,
-        'the  spec no longer has its "Reading older text in this spec" block. That block is the '
+        'the spec no longer has its "Reading older text in this spec" block. That block is the'
         + 'rule that lets the spec keep citing pre-migration paths without rewriting its own history; '
         + 'without it, every older citation in the file resolves to nothing.');
 
@@ -431,7 +431,7 @@ if (existsSync(specPath)) {
     }
 
     assert.equal(unresolved.length, 0,
-        `the  spec's pre-migration translation map points at docs-repo pages that do not `
+        `the spec's pre-migration translation map points at docs-repo pages that do not`
         + `exist:\n  ${unresolved.join('\n  ')}\n`
         + 'Every older citation in this spec resolves through this map and nowhere else, so a stale '
         + 'right-hand side breaks all of them at once and silently.');
@@ -454,7 +454,7 @@ if (existsSync(specPath)) {
 // Phase 6 tells the operator to record the store-assigned extension ID into
 // the bridge documentation "wherever it documents chrome-extension://<id>/...
 // (currently a placeholder <id>)". Measured 2026-08-03: the page contained no
-// occurrence of chrome-extension:// at all. 's port had genericized the
+// occurrence of chrome-extension:// at all. that port had genericized the
 // sentence that carried it ("real windows owned by the wallet's own origin"),
 // which reads perfectly well and quietly deleted the only thing the ceremony
 // step was aiming at. Section 4 stayed green throughout, because the LINK was
@@ -728,11 +728,11 @@ assert.ok(/release-artifacts|the artifact being uploaded/i.test(auditBlock.slice
 // asked how to invoke it. `--help` is what people type when a command refuses
 // them, which is exactly when a release ceremony is already going badly.
 //
-// TWO THINGS CHANGED HERE ON 2026-08-04 (), and each closes a hole
+// TWO THINGS CHANGED HERE ON 2026-08-04  , and each closes a hole
 // that a passing run of the previous cut had proved it could not see.
 //
 // (a) THE SUBJECT IS THE DIRECTORY, NOT THE PAGES. The previous cut harvested
-//     tool names out of the two ceremony pages plus the  spec frontier,
+// tool names out of the two ceremony pages plus the spec frontier,
 //     which had two consequences. It covered only the Chrome subset, leaving
 //     the mobile and desktop lanes unchecked - nine scripts with NO `--help`
 //     handling at all, which is the more dangerous half. And the frontier half
@@ -809,7 +809,7 @@ const releaseScripts = SCRIPT_DIRS.flatMap(walkScripts).sort();
 
 // The floor is 29: the scripts COMMITTED at HEAD on 2026-08-04, when every one
 // of them was driven and made to pass. It was briefly written as 28, before
-// emulation-preflight.sh's own --help landed in c54af492 () and made
+// emulation-preflight.sh's own --help landed in c54af492  and made
 // it tracked; the number is re-derived from `git ls-files` rather than from
 // what happens to be sitting in the worktree, because the venue gates the
 // COMMITTED tree. A floor taken from uncommitted neighbours (release-record.mjs
@@ -944,7 +944,7 @@ if (existsSync(specPath)) {
     const open = spec.indexOf('<!-- BUILD-SPEC:FRONTIER');
     const close = spec.indexOf('<!-- /BUILD-SPEC:FRONTIER');
     assert.ok(open !== -1 && close > open,
-        'the  spec has no delimited BUILD-SPEC:FRONTIER block any more. That block is the one '
+        'the spec has no delimited BUILD-SPEC:FRONTIER block any more. That block is the one'
         + 'place the goal\'s own state is tracked, deliberately in the spec rather than in a sidecar '
         + 'so it cannot drift from it. If it was renamed, repoint this gate in the same change.');
 
@@ -953,13 +953,13 @@ if (existsSync(specPath)) {
     const rows = new Set([...spec.matchAll(/^\| S(\d{1,2}) \|/gm)].map((m) => Number(m[1])));
 
     assert.ok(named.length >= 1,
-        'no build stage is named anywhere in the  frontier block. Every stage since S19 has '
+        'no build stage is named anywhere in the frontier block. Every stage since S19 has'
         + 'reasoned from what an earlier one measured; a frontier that names none has lost the record '
         + 'this spec argues from. This check must not pass vacuously on zero.');
 
     const unlisted = named.filter((n) => !rows.has(n)).sort((a, b) => a - b);
     assert.equal(unlisted.length, 0,
-        `the  frontier reasons from stages that §9's stage table has no row for: `
+        `the frontier reasons from stages that §9's stage table has no row for:`
         + `${unlisted.map((n) => `S${n}`).join(', ')}. §9 is the model/effort plan the staged-build `
         + 'protocol reads at a stage boundary, and the only account of a stage a reader who skipped the '
         + 'frontier will find. Add the row in the same change as the frontier edit, the way S24 had to '
@@ -976,18 +976,18 @@ if (existsSync(specPath)) {
     // this derivable at all.
     const statusAt = spec.indexOf('**Status:');
     assert.ok(statusAt !== -1,
-        'the  spec has no `**Status:` paragraph. It is the dated, stage-labelled headline a '
+        'the spec has no `**Status:` paragraph. It is the dated, stage-labelled headline a'
         + 'reader meets before anything else; the convention exists because an undated one read as '
         + 'current for two stages while being two stages wrong.');
 
     const stageInStatus = spec.slice(statusAt, statusAt + 400).match(/after S(\d{1,2})\b/);
     assert.ok(stageInStatus,
-        'the  spec\'s headline `**Status:` paragraph no longer says which stage it is current as '
+        'the spec\'s headline `**Status:` paragraph no longer says which stage it is current as'
         + 'of. "after S<n>" is what makes it checkable; without it, staleness is invisible again.');
 
     const latest = Math.max(...named);
     assert.equal(Number(stageInStatus[1]), latest,
-        `the  spec's headline status paragraph says it is current after S${stageInStatus[1]}, but `
+        `the spec's headline status paragraph says it is current after S${stageInStatus[1]}, but`
         + `the frontier below it reasons as far as S${latest}. That paragraph is the first thing a `
         + 'reader meets and the last thing a stage remembers to update: S24 fixed it by hand after it '
         + 'had been two stages stale, and S25 left it stale again the same day.');
@@ -1165,8 +1165,8 @@ assert.ok(monitorSteps.length >= 2,
     + 'one) and they are easy to collapse into one. Row 31 exists because only the first was ever '
     + `asked. Found ${monitorSteps.length} step(s).`);
 
-//  S45, row 79. There is now a THIRD question, and it arrived from
-// another lane rather than from this one. Since c1779605  the same
+// S45, row 79. There is now a THIRD question, and it arrived from
+// another lane rather than from this one. Since c1779605 the same
 // script carries a Play lane, and that lane is ARMED on the monitoring host
 // with `--no-chrome`, so a crontab listing shows `store-version-monitor.mjs`
 // scheduled and firing while no Chrome item is being watched at all. The
@@ -1324,7 +1324,7 @@ if (!existsSync(keyPinPath)) {
 }
 
 // --- 16b. Phase 4b has to check WHICH KEY signed, not that a signature -----
-//          was good ( S37).
+// was good (S37).
 //
 // This is section 16's other half and it was missing for as long as the
 // phase existed. Section 16 holds the page to the note proving a key was
@@ -1363,9 +1363,9 @@ assert.ok(/signer ok/.test(phase4),
 // exist. Measured 2026-08-06 against the real v0.336.0 release zip:
 // `XCHAIN_BUILD_PROFILE: store` appears exactly once in release.yml, on the
 // mobile lane, so the artifact bound for the Chrome Web Store is a `default`
-// build carrying the DEX surfaces  compiles out of a store build - and
+// build carrying the DEX surfaces compiles out of a store build - and
 // it carried no stamp saying so, while the web shell has stamped its own
-// bundle since .
+// bundle.
 //
 // The step is worth checking rather than trusting because of WHEN it runs:
 // Chrome assigns a permanent extension ID to whatever is uploaded first, and

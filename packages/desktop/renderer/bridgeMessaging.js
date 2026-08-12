@@ -16,7 +16,7 @@
 // Keep this file free of React imports. The React layer consumes
 // these helpers via `messaging.js` (the popup/web parity module).
 //
-// : desktop runs its flows in the Electron MAIN process, a different
+// Desktop runs its flows in the Electron MAIN process, a different
 // realm from the renderer holding the `useTokenInfo` cache, so
 // `submitAction`'s own invalidation never reaches it. Every `action.*` route
 // that resolves here drops the tick records its request named, matching what
@@ -48,7 +48,7 @@ export async function sendMessage(type, request) {
         }
         return response.result;
     }
-    // : the MAIN process runs the SAME bridge handlers the extension
+    // The MAIN process runs the SAME bridge handlers the extension
     // service worker does (createDesktopMessageHost wraps createBackgroundHost,
     // which loads bridge/handlers.js out of app.asar), so its envelope now
     // carries `code` and the THROTTLED hints. Rebuilding the Error by hand here

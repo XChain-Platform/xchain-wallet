@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// . The arithmetic and the wording behind `seedPrices()`, with no I/O in
+//The arithmetic and the wording behind `seedPrices()`, with no I/O in
 // it, so the parts that are easy to get quietly wrong can be pinned by a unit
 // test instead of by a 90-second run against a shared chain.
 //
@@ -19,7 +19,7 @@
 // for `ORACLE_MAX_PRICE_AGE_SECONDS` (1800s) after the timestamp it carries.
 // Nothing on this venue publishes those rows: they are written by
 // `OracleConsensus`, i.e. a validator federation, and no regtest stack runs one.
-// So until  the wallet's regtest specs simply inherited whatever the last
+// So until the wallet's regtest specs simply inherited whatever the last
 // person to hand-seed had left behind, and three sessions were lost to that -
 // one to a sentinel that had expired, one to re-seeding on a seven-minute timer
 // for its whole length.
@@ -60,10 +60,10 @@
 // Two clocks therefore have to be satisfied at once, and on this stack they
 // disagree by hours (a concurrent session's `setmocktime` leaves BTC and DOGE
 // frozen well behind wall clock):
-//   - the PRE-FLIGHT reads at the tip's block time ( anchors the whole
+// - the PRE-FLIGHT reads at the tip's block time (anchors the whole
 //     price read on the quoted block's own time, so the older campaign note
 //     that "/feequote measures staleness against wall clock" is no longer true
-//     at HEAD - it was measured before  landed);
+// at HEAD - it was measured before landed);
 //   - the ON-CHAIN check reads at the time of the block that carries the
 //     action, which on a chain whose clock tracks wall time is ~now.
 // So seed BOTH: the lower round numbers at the tip's time, the highest at wall
@@ -116,7 +116,7 @@ export const XCHAIN_USD_PRICE = '2.00000000';
  *                 Litecoin's 5460-sat dust floor and is refused outright, so
  *                 betting is unusable on LTC; $30 puts the fee at 6667 sats and
  *                 the same bet indexes valid (break-even is ~$36.6). The verify
- *                 case for  is a Litecoin bet, so this number is what
+ * case for is a Litecoin bet, so this number is what
  *                 makes it pass.
  *   DOGE     0.1  a realistic price leaves ~20x of headroom, because a
  *                 USD-denominated fee buys more sats per cent on a cheap coin.
@@ -133,7 +133,7 @@ export const VENUE_PRICE = Object.freeze({
  *
  * Reusing them is the whole point. Selection takes the highest round number, so
  * a synthetic row outranks every derived round forever, and suppressing new
- * seeds cannot retract rows an earlier run already wrote (, found
+ * Seeds cannot retract rows an earlier run already wrote (found
  * shadowing BTC regtest at $2.00 while the hub had derived ~12.90). The e2e
  * tree keeps one list of every synthetic round in existence
  * (`xchainPriceConstants.SEED_SENTINEL_ROUNDS`) precisely so `clearSeedSentinels`
@@ -184,7 +184,7 @@ export const ORACLE_MAX_PRICE_AGE_SECONDS = 1800;
  * How much of that window a run insists on having LEFT before it accepts a
  * venue as already priced.
  *
- * Not a style preference, and the reason it is this large is . A quote
+ * Not a style preference, and the reason it is this large is a separate case. A quote
  * that answers at global setup is not the same claim as a quote that will still
  * answer at the approve step several minutes later, and off Bitcoin the gap
  * between those two claims is not bounded by wall clock: LTC and DOGE mine only
@@ -233,7 +233,7 @@ export function selectedSnapshot(rows, coinPair, chainTime) {
  * SHARED between suites that disagree about what a coin is worth.
  * `xchain-e2e-test` seeds LTC/USD at 100000 for its own fee arithmetic while
  * this fixture wants 30, both write the same synthetic rounds, and whichever
- * suite ran last wins. Found by , where a controllerPolicy run on LTC left
+ * suite ran last wins. Found, where a controllerPolicy run on LTC left
  * 100000 behind and the next wallet bet died with a protocol fee of 0.00000002
  * LTC, which is dust the network will not relay. That reads as a wallet bug and
  * is not one, so the fixture repairs its own number instead of inheriting it.
@@ -370,7 +370,7 @@ export function planSeedRows({ regtestCoin, existingRounds = {}, chainTime, wall
  * Reads a `/api/feequote` body and says whether the venue can price an action
  * right now.
  *
- * This is the whole verification side of , and it is deliberately the
+ * This is the whole verification side, and it is deliberately the
  * PUBLIC endpoint: it asks the venue the same question the wallet is about to
  * ask, over the same transport, with no credentials. A pre-flight that answers
  * with both prices is proof; anything else is the named reason a fee-bearing
@@ -511,7 +511,7 @@ export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
 }
 
 function sshHostHint() {
-    return (typeof process !== 'undefined' && process.env && process.env.XC_REGTEST_SSH_HOST) || 'jdog@devhost';
+    return (typeof process !== 'undefined' && process.env && process.env.XC_REGTEST_SSH_HOST) || 'jdog@localhost';
 }
 
 /**

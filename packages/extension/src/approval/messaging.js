@@ -118,7 +118,7 @@ export function parsePsbt(opts) {
 }
 
 /**
- * Run sdk.preflight for a dApp-supplied action, HOST-side ( §5.6 slice 4).
+ * Run sdk.preflight for a dApp-supplied action, HOST-side (§5.6 slice 4).
  *
  * §4.8: pre-flight is NOT a bridge method - a dApp that could call it directly
  * could binary-search the user's balances. It runs only inside an approval
@@ -135,7 +135,7 @@ export function preflight(opts) {
 
 /**
  * Describe a dApp-supplied (or co-sign-decoded) action in plain English,
- * HOST-side, via `sdk.decoder.describe` ( §3.2).
+ * HOST-side, via `sdk.decoder.describe` (§3.2).
  *
  * The approval window has no compose step, so it cannot take its intent
  * from `composeActionForConfirm` the way in-wallet forms do - and it was

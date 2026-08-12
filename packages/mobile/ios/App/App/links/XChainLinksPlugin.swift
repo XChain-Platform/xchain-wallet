@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// `XChainLinks`, the iOS half of deep-link intake ( §3; contract and
-// Android twin in  §1, stage S3).
+// `XChainLinks`, the iOS half of deep-link intake (§3; contract and
+// Android twin in §1, stage S3).
 //
 // The contract is defined once, in the SPA, at
 // packages/web/src/deeplinks/nativeDeepLinks.js: one method, `takePendingLink`,

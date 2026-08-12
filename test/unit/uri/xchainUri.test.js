@@ -144,7 +144,7 @@ describe('parseXchainUri execute action', () => {
     });
 });
 
-//  §3.6 finding 1: the extension QA checklist's deep-link audit found
+// §3.6 finding 1: the extension QA checklist's deep-link audit found
 // that memo/tick/method/params reach an editable form field carrying
 // whatever a link put there - U+202E and a CRLF survive into memo, a NUL
 // survives into tick. `hardenUriIntentText` is the fix, applied by every

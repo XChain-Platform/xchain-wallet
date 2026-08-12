@@ -31,13 +31,13 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 // 240px bitmap, never mind a camera. Past this threshold the code goes out
 // as an ANIMATED sequence of §20.3 XCW chunks instead of one dense frame.
 // It is a switch-over point, not a cap: nothing is suppressed above it.
-//  - a default wallet has three mainnet chains and lands at ~1907
+// - a default wallet has three mainnet chains and lands at ~1907
 // characters, so the chunked path is the ORDINARY one, not the exception,
 // and the QR is the only mechanism an air-gapped pair has.
 const MAX_QR_CHARS = 1200;
 
 /**
- * §20.5 / : the watcher + signer auto-pairing lane.
+ * §20.5: the watcher + signer auto-pairing lane.
  *
  * Both halves of an air-gapped pair are the SAME recovery phrase restored
  * twice: one wallet online in `watcher` mode, one offline in `signer`

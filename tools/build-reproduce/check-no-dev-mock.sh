@@ -27,7 +27,7 @@
 #      because CI never built, so dist/ never existed. The sdkFactories now
 #      refuse the fallback under `import.meta.env.PROD` (statically replaced by
 #      Vite), so a production build eliminates that branch.
-#   2. : grepping only the three WARNING strings was a false green. The
+# 2.: grepping only the three WARNING strings was a false green. The
 #      mock IMPLEMENTATION (createDevMockSdk) was referenced from live code
 #      paths (the initial SDKRegistry factory + the devMockFactory argument),
 #      so it could never be dead-code-eliminated and shipped in every build
@@ -49,7 +49,7 @@
 # Runs in CI post-build via:
 #   .github/workflows/ci.yml (build job)
 #
-# THE THIRD TIME THIS GATE WAS A FALSE GREEN ( S33), and unlike the two
+# THE THIRD TIME THIS GATE WAS A FALSE GREEN (S33), and unlike the two
 # above it was not the marker set that was wrong - it was the SUBJECT.
 #
 # The gate scans the repo's `dist/` trees. The documented way to sign a
@@ -147,7 +147,7 @@ done
 # made this gate unsatisfiable for desktop - the third repeat of the failure
 # this file's header already documents twice.
 #
-#  §6: desktop was missing entirely. `packages/desktop/renderer/dist`
+# Desktop was missing entirely. `packages/desktop/renderer/dist`
 # is the executable renderer bundle; `packages/desktop/dist` is
 # electron-builder's INSTALLER output (asar + platform binaries) and is not
 # a source tree to grep.
@@ -241,7 +241,7 @@ if [ -n "$ARTIFACT_DIR" ]; then
     # THE `.deb` AND NOT THE AppImage, deliberately. An AppImage is an ELF
     # launcher with a squashfs appended; reading it needs unsquashfs or a
     # Linux host to run `--appimage-extract` on, and signing happens on a
-    # Mac that has neither (the same constraint 's payload-arch
+    # Mac that has neither (the same constraint that payload-arch
     # check ran into). Both Linux artifacts are built from one renderer
     # output in one electron-builder run, so the `.deb` answers for both,
     # and UPDATE_CAPABLE_TARGET puts a `.deb` in every staging set there
@@ -335,7 +335,7 @@ if [ -n "$ARTIFACT_DIR" ]; then
         SCAN_TARGETS+=("$UNPACK_ROOT/desktop-mac|SDKWalletError,MULTISIG_DERIVE_FAILED|$(basename "$mac_zip")|positive-only")
     fi
 
-    # THE ANDROID LANE, WHICH THIS GATE COULD NOT READ AT ALL .
+    # THE ANDROID LANE, WHICH THIS GATE COULD NOT READ AT ALL.
     #
     # Measured 2026-08-07 with the real `.aab`/`.apk` staged alone: the
     # loop above collected zero targets, `scanned` stayed 0, and the gate
@@ -368,7 +368,7 @@ if [ -n "$ARTIFACT_DIR" ]; then
     # EVERY android artifact in the set is opened, not one of them. The
     # ceremony derives the universal APK from the AAB it signs, so those
     # two carry one build - but `xchain-wallet-v*-full.apk` is a SECOND
-    # build at the `default` profile , and "derived from" is a
+    # build at the `default` profile, and "derived from" is a
     # claim about a build, while the staged bytes are here to be read.
     while IFS= read -r android_artifact; do
         [ -n "$android_artifact" ] || continue
@@ -431,7 +431,7 @@ MARKERS=(
     "xchain-sdk unavailable"
     "falling back to dev-mock SDK"
     "DO NOT USE FOR MAINNET"
-    # Mock implementation strings ( - the mock itself, not its warning):
+    # Mock implementation strings (the mock itself, not its warning):
     "Dev SDK stub"
     "devmockpsbt"
     # Fixture-content strings: the dev-mock's DATA, which the two marker sets
@@ -449,7 +449,7 @@ MARKERS=(
     "The original meme cash on Counterparty."
 )
 
-#  positive check: absence of the mock proves nothing if the REAL SDK
+# positive check: absence of the mock proves nothing if the REAL SDK
 # also failed to bundle (the wallet would then run on a throwing placeholder).
 # The literals live in the SCAN_TARGETS table above, per target, because
 # which SDK modules a shell pulls in is a property of that shell.
@@ -481,7 +481,7 @@ for entry in "${SCAN_TARGETS[@]+"${SCAN_TARGETS[@]}"}"; do
     # What an installer CAN answer is the positive half - is the real SDK in
     # there - and that is kept. Whether the mock is WIRED is a source
     # property, and sdk-wiring.smoke.js asserts it for all three shells,
-    # which is where  is actually held.
+    # which is where is actually held.
     scan_mode=""
     case "$rest" in *"|positive-only") scan_mode="positive-only"; label="${label%|positive-only}" ;; esac
     if [ ! -d "$dir" ]; then

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : which DIRECTION the listing capture sits in relative to
+// Smoke for: which DIRECTION the listing capture sits in relative to
 // the ref being submitted.
 //
 // verify-listing-assets.mjs asks `git log pin..target` over each asset's

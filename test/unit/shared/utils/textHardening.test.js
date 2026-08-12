@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-//  §3.6: the general-purpose neutralizer `betOutcomeLabels.js`'s
+// The general-purpose neutralizer `betOutcomeLabels.js`'s
 // `safeOutcomeLabel` and `uri/xchainUri.js`'s `hardenUriIntentText` both
 // build on. Codepoints are constructed via String.fromCharCode rather than
 // embedded as literal characters or \u escapes in this file's source, so

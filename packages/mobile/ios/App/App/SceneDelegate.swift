@@ -14,7 +14,7 @@
 // plain `CAPBridgeViewController`, so the STORYBOARD's class is not what runs:
 // this code path wins. Pointing the storyboard at MainViewController and
 // stopping there produced an app that looked correctly wired and never
-// registered the vault plugin - and by  that failure is silent, ending
+// registered the vault plugin - and that failure is silent, ending
 // with the wallet quietly storing itself in WebView storage. The storyboard and
 // this line have to agree, and the smoke asserts both.
 //
@@ -70,7 +70,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         // Custom-scheme delivery. `xchain:` payloads are untrusted input and are
-        // validated in the SPA before anything acts on them ( §4); this
+        // validated in the SPA before anything acts on them (§4); this
         // hands them over, it does not vouch for them.
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
 
@@ -80,7 +80,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        // Universal Links, domain-attested by the association file .
+        // Universal Links, domain-attested by the association file.
         // Still validated in the SPA, on exactly the same footing.
         SceneDelegateProxy.shared.scene(scene, continue: userActivity)
 

@@ -87,7 +87,7 @@ describe('crypto/hd', () => {
         });
     });
 
-    //  / §20.5: the pairing lane hands an account-level xpub to the
+    // §20.5: the pairing lane hands an account-level xpub to the
     // partner wallet, so the wrapper must neuter (never leak xprv).
     describe('accountXpub', () => {
         it('returns the account-level extended PUBLIC key', () => {

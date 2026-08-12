@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : every package ships at the root's version.
+// Smoke for: every package ships at the root's version.
 //
 // The README's Versioning section states the rule and gives its purpose:
 // every shell's About screen shows its own package.json version "so users
@@ -114,7 +114,7 @@ assert.equal(declared[1], rootVersion,
 // --- 4. The documented exemption ---------------------------------------
 //
 // test/e2e is a private harness: never published, never installed, so its
-// version identifies nothing. That is a decision (, 2026-08-01), so
+// Version identifies nothing. That is a decision (2026-08-01), so
 // it is recorded in the README rather than merely being true, and checked
 // here in both directions so it cannot rot into an unexplained exception.
 
@@ -139,13 +139,13 @@ assert.ok(/ships? at the same version number/.test(readme),
 
 // --- 5. The prose copies of the version --------------------------------
 //
-// . The lockstep set is 14 files, and until now this check covered
+//The lockstep set is 14 files, and until now this check covered
 // 12 of them: the ten package.json files, the manifest and buildInfo. The
 // two it did not cover are the two a human reads first, README.md's version
 // badge and its Status line, and both spell the number out in prose where
 // nothing derives it.
 //
-// That gap is the shape of the defect  was filed for. A signed
+// That gap is the shape of the defect was filed for. A signed
 // `v0.335.0` tag was cut against a tree in which every file still declared
 // 0.334.0, so the tag named a version no file in the repo claimed, and
 // release.yml's tag-versus-package.json gate is the only thing that caught
@@ -195,7 +195,7 @@ if (!isPrerelease) {
         + 'release context; a bump that skips it ships a version with no recorded contents.');
 
     // The heading is the SHAPE of the record. This is the substance, and
-    // until /S39 nothing anywhere asked for it: a section consisting
+    // until S39 nothing anywhere asked for it: a section consisting
     // of a heading and nothing else satisfied the assertion above, passed
     // every gate in this repo, and shipped a release whose contents are
     // undocumented at the exact moment the tag makes them permanent. That
@@ -218,7 +218,7 @@ if (!isPrerelease) {
         + 'is the raw material), or run tools/release/bump-version.mjs, which promotes them from Unreleased.');
 }
 
-console.log(`OK: version-lockstep smoke (/: ${members.length} packages + the store-facing `
+console.log(`OK: version-lockstep smoke (${members.length} packages + the store-facing`
     + `manifest.json + the user-facing buildInfo.js + README's badge and Status line all at ${rootVersion}`
     + `${isPrerelease ? '; prerelease, so no CHANGELOG section is required' : `, with a CHANGELOG section carrying ${entryCount} entries`}`
     + '; test/e2e exempt and documented)');

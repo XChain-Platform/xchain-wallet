@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : a fee-bearing form must map NativeFeeForfeitError on EVERY path it can take.
+// A fee-bearing form must map NativeFeeForfeitError on EVERY path it can take.
 //
 // Found by driving Create-token on Litecoin regtest (campaign §11.4): the form showed
 // "native-coin fee pre-flight failed (dust): 0.00002000 is below the dust threshold" - the
 // error's own wire wording - while DividendForm, refusing for the identical reason on the
 // identical venue, showed the sentence a user can act on. The difference was not whether the
 // form knew about nativeFeeErrorMessage: TokenWizard imports it and maps it correctly in
-// handleSign. It maps it on the LEGACY sign path only, and the  confirm path - the one
+// handleSign. It maps it on the LEGACY sign path only, and the confirm path - the one
 // the wallet takes - had a bare `setFormError(err?.message)`.
 //
 // So "the file references nativeFeeErrorMessage" is NOT the invariant; a read-derived audit
@@ -80,11 +80,11 @@ function catchBlocks(src) {
 
 const HANDLES_A_SUBMIT = /isUserRejection\(|UserRejectedError|InvalidPasswordError|user-rejected/;
 const WRITES_FORM_ERROR = /setFormError|setSubmitError/;
-// The inline ternary most forms use, the shared helper the  sweep introduced, or a
+// The inline ternary most forms use, the shared helper the sweep introduced, or a
 // form-local wrapper around either (DividendForm's nativeFeeAwareMessage).
 const MAPS = /submitFailureMessage|nativeFeeErrorMessage|nativeFeeAwareMessage/;
 
-describe(': native-fee refusals are translated on every submit path', () => {
+describe('Native-fee refusals are translated on every submit path', () => {
     const forms = feeBearingForms();
 
     it('finds the fee-bearing forms to check (guards against an empty sweep)', () => {

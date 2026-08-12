@@ -12,7 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.util.Collections;
 
 /**
- * SSC-1 / : refuse Capacitor's native cross-origin HTTP proxy.
+ * SSC-1: refuse Capacitor's native cross-origin HTTP proxy.
  *
  * <p>WHAT THIS BLOCKS, measured on an API 36 emulator 2026-08-01 from ordinary
  * page script, before this class existed:
@@ -26,7 +26,7 @@ import java.util.Collections;
  * that path prefix BEFORE it consults its own URI matcher, pulls the target out
  * of the {@code u} query parameter, and fetches it with an
  * {@code HttpURLConnection}. Nothing gates it: not a plugin, not a config
- * switch, not the plugin registry. So the  removal of
+ * switch, not the plugin registry. So the removal of
  * {@code CapacitorHttp}/{@code CapacitorCookies} from the bridge registry left
  * this wide open, and the same measurement that proved the registry closed
  * would have kept passing.

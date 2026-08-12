@@ -17,7 +17,7 @@
 // argument, so EVERY retry of a signed-but-unbroadcast transaction
 // failed with that developer string and the transaction stayed queued
 // with no way out. Measured on an Android emulator against the LTC
-// regtest venue ( SSC-6): the signed tx survived process death
+// regtest venue (SSC-6): the signed tx survived process death
 // exactly as designed, and then could not be broadcast at all.
 //
 // It survived every existing gate because the wallet's own suites stub

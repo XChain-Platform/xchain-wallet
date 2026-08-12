@@ -11,7 +11,7 @@
 // Static guard: no form carries a bottom "Back" button that just repeats the
 // header chevron, and no wizard loses its in-form step-back.
 //
-// WHY THIS EXISTS 
+// WHY THIS EXISTS
 // ------------------------
 // Watching the E2E runs, forms kept showing a Back button at the bottom of
 // the screen while the page header already carried a back chevron wired to

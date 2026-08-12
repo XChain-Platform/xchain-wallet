@@ -17,7 +17,7 @@
 // Both are applied by DisplayPrefsGate, which stamps them on <html> as
 // `data-xc-theme` / `data-xc-reduced-motion`; tokens.css keys the palette
 // and the motion switch off those attributes and `useReducedMotion` gives
-// JS-driven animations the same verdict. Before  both selectors wrote
+// JS-driven animations the same verdict. Before both selectors wrote
 // a value that nothing read, so the app just followed the OS.
 //
 // Deferred:

@@ -335,7 +335,7 @@ describe('empty migration maps (contact, connectedSite, pendingTx, etc.)', () =>
         expect(Object.keys(connectedSiteMigrations)).toHaveLength(0);
     });
 
-    it('pendingTxMigrations registers the v1 → v2 step ', () => {
+    it('pendingTxMigrations registers the v1 → v2 step', () => {
         expect(Object.keys(pendingTxMigrations)).toEqual(['1']);
     });
 
@@ -385,7 +385,7 @@ describe('migrateConnectedSite (no-op)', () => {
     });
 });
 
-describe('migratePendingTx v1 → v2 ( additive amount fields)', () => {
+describe('migratePendingTx v1 → v2 (additive amount fields)', () => {
     it('upgrades a v1 record to v2, seeding null amount fields', () => {
         const r = migratePendingTx({ schemaVersion: 1, action: 'SEND', txid: 'abc' });
         expect(r.schemaVersion).toBe(2);

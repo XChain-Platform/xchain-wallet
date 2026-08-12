@@ -53,7 +53,7 @@ bash tools/build-reproduce/check-no-dev-mock.sh
 # published RELEASE_HASHES.txt. Mismatches indicate build-environment
 # drift (toolchain pinning bug) or supply-chain tampering.
 #
-# No node_modules filter here, deliberately . See the extension
+# No node_modules filter here, deliberately. See the extension
 # twin for the full reason: inside a `dist/` tree that pattern can only
 # match a dependency payload the artifact ships, and on desktop it silently
 # dropped 112 such files including a compiled native binary. Measured

@@ -8,17 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the third and last instance of the  gap - an authoring
+// The third and last instance of the gap - an authoring
 // surface that composes a quotable action and never threads the native-coin
 // fee mode - and the only one of the three that could be driven on chain.
 //
 // THE DEFECT, EXACTLY. `DispenserDetail` submits DISPENSER updates from three
 // places (refill v2, edit v2, close v1) and threaded `payFeeInNativeCoin`
 // through none of them. Off Bitcoin that flag is not a preference: the
-// native-coin output IS the protocol fee , so an action that owes one
+// native-coin output IS the protocol fee, so an action that owes one
 // and carries none CONFIRMS on chain, costs a miner fee, and is then recorded
 // `invalid: insufficient fee (native coin output required)` - while the screen
-// says the edit was submitted. Same shape as  (SellOwnershipForm), which
+// says the edit was submitted. Same shape (SellOwnershipForm), which
 // was proven that way on Litecoin minutes apart.
 //
 // WHICH EDIT ACTUALLY OWES A FEE, because the item was overstated twice before
@@ -152,7 +152,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         const row = (list?.data || []).find((r) => r.tx_hash === txid);
         // Details are fetched only for an index the LIST returned: a
         // speculative GET on an index that does not exist yet is memoized
-        // blank for the life of the explorer process (D-127/, §3.6).
+        // blank for the life of the explorer process (D-127, §3.6).
         if (row) return explorerJson(`action/${row.action_index}`);
         await mineIfBehind();
         await new Promise((r) => setTimeout(r, 2_000));
@@ -382,20 +382,20 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(xchainFee);
             expect(Number(quote.requiredFeeSats),
                 'the coin-denominated fee quotes at zero sats, so this venue cannot test the '
-                + ' lane at all - check the seeded coin price (campaign §3.2)')
+                + 'lane at all - check the seeded coin price (campaign §3.2)')
                 .toBeGreaterThan(0);
 
             const done = await waitForIndexedAction(await submitExpirationEdit(page, dispenserIndex, to));
 
-            //  itself. Before the fix the wallet composed this edit with
+            // itself. Before the fix the wallet composed this edit with
             // no native-coin output, so it confirmed on chain and the indexer
             // recorded exactly this refusal while the screen said "Edit
             // submitted" - the transaction is real either way, only the verdict
             // differs.
             expect(String(done.status),
                 'the chain refused the extension. `insufficient fee (native coin output '
-                + 'required)` here IS : the edit carried no protocol-fee output, which '
-                + 'off Bitcoin is mandatory ')
+                + 'required)` here IS: the edit carried no protocol-fee output, which'
+                + 'off Bitcoin is mandatory')
                 .toBe('valid');
 
             const fee = done.fee || {};

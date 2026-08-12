@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 //
-// Client-side FILE payload inflation ( spec Part B), wallet side.
+// Client-side FILE payload inflation (spec Part B), wallet side.
 //
 // The wallet is the ONLY layer that can inflate a gated payload: compression
 // happens before encryption (§5.4), so the serving layer (which holds no key)
@@ -32,7 +32,7 @@ import {
 const ORIGINAL = Buffer.from('gated wallet payload. '.repeat(400), 'utf8');
 const DEFLATED = zlib.deflateRawSync(ORIGINAL);
 
-describe('payloadCompression ( Part B)', () => {
+describe('payloadCompression (Part B)', () => {
 
     describe('compressionFieldOf', () => {
         it('reads the field from a FILE v0 action string', () => {
@@ -204,7 +204,7 @@ describe('payloadCompression ( Part B)', () => {
         it('what the SDK compressed-then-encrypted, the wallet decrypts-then-inflates', async () => {
             // Mirrors the real pipeline: SDK composes (compress -> encrypt),
             // wallet consumes (decrypt -> inflate).
-            // By package name first : the SDK is a registry
+            // By package name first: the SDK is a registry
             // dependency now, so this resolves out of node_modules on every
             // machine. It used to read four levels up to a sibling checkout
             // and quietly `return` where there was none, which meant this
@@ -213,7 +213,7 @@ describe('payloadCompression ( Part B)', () => {
             // fallback.
             //
             // RESOLVED AT RUNTIME, NOT THROUGH A LITERAL SPECIFIER
-            // . The fallback used to be a literal
+            //The fallback used to be a literal
             // `import('../../../../xchain-sdk/...')`, and a literal
             // specifier is exactly what Vite STATICALLY ANALYSES at
             // transform time. So on the machines the fallback exists for

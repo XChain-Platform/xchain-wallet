@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // test/smoke/_docs-repo.js decides whether ~20 docs-coupled smokes run, skip,
-// or fail. : it used to SKIP whenever the sibling checkout was absent,
+// or fail.: it used to SKIP whenever the sibling checkout was absent,
 // which made a broken CI harness (a push from a linked worktree shipped the
 // WRONG repository into the xchain-documentation slot) indistinguishable from a
 // healthy one: every docs smoke skipped and the gate reported GREEN.
@@ -108,7 +108,7 @@ describe('docs sibling guard @regression', () => {
         expect(r.stdout).toBe('false');
     });
 
-    // --- the tree the assertions actually read ( frontier row 123) ---
+    // --- the tree the assertions actually read (frontier row 123) ---
     //
     // Present is not the same as current. These are shared checkouts, and on
     // 2026-08-08 the same smoke at the same commit was RED against the sibling

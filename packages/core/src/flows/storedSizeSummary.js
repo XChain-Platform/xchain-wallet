@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// storedSizeSummary ( §8, ): what the file ACTUALLY cost on chain.
+// storedSizeSummary (§8): what the file ACTUALLY cost on chain.
 //
 // Compression is on by default, so the bytes that land are routinely a fraction
 // of the file the user picked, and the user has no way to know that from their

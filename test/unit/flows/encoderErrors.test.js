@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : every SDK encoder code must reach the user as a sentence, not as the
+// Every SDK encoder code must reach the user as a sentence, not as the
 // wire wording. The live finding was a DOGE address with no DOGE being told
 // "no spendable UTXOs found for the funding address".
 
@@ -211,7 +211,7 @@ describe('annotateEncoderFeeRequirement', () => {
 });
 
 describe('submitFailureMessage adopts the encoder mapper', () => {
-    it('translates the live  failure instead of showing the fallback', () => {
+    it('translates the live failure instead of showing the fallback', () => {
         const err = annotateEncoderFeeRequirement(
             sdkEncoderError('NO_UTXOS', 'no spendable UTXOs found for the funding address'),
             { requiredFeeNative: '20.00000000' },

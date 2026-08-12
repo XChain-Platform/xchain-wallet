@@ -46,12 +46,12 @@ const SEND_BTC = '0.1';
 
 test.describe('MV3 service-worker kill during confirm (extension)', () => {
 
-    // Venue-gated on  (the regtest DB is refusing every per-service
+    // Venue-gated on (the regtest DB is refusing every per-service
     // user), not on anything in the wallet: the path up to funding is verified
     // in a real packaged extension. Enabled rather than fixme'd because the
     // extension config's global setup fails loudly on an unreachable venue.
     //
-    // Expect this to report on  when it first runs: §5.4's confirm-side
+    // Expect this to report on when it first runs: §5.4's confirm-side
     // session persistence is implemented and unit-tested but has no production
     // caller, so the rehydrate arm of the assertion below is not wired yet.
     test('a kill mid-modal either rehydrates or fails loudly, never hangs', async ({ context, page }) => {

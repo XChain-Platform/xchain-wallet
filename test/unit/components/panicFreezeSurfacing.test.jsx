@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  regression guard, rendered.
+// regression guard, rendered.
 //
 // The defect: with signing frozen by panic mode, the confirm screen still
 // said "Wallet unlocked. No password needed." -- the opposite of what was
@@ -77,7 +77,7 @@ describe('SignCredentials under a signing freeze', () => {
         expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
     });
 
-    it('still surfaces submitError while frozen ( must not regress)', () => {
+    it('still surfaces submitError while frozen (must not regress)', () => {
         activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
         render(
             <SignCredentials

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// StorageBackend + meta backend for the native mobile shells ( S2).
+// StorageBackend + meta backend for the native mobile shells (S2).
 //
 // WHAT THIS REPLACES AND WHY IT IS NOT OPTIONAL. Wrapped in Capacitor, the
 // SPA's IndexedDB and localStorage are WebView storage: Android's WebView
@@ -115,7 +115,7 @@ export class CapacitorMetaBackend {
  * that is the same constraint that put them in localStorage in the first
  * place. And it must not stay in localStorage on a native shell, because
  * WebView storage is the one store on this platform the wallet does not
- * control the lifetime of ( §3): losing it resets the brute-force
+ * control the lifetime of (§3): losing it resets the brute-force
  * delay ladder to zero and silently disarms a duress passphrase the user
  * believes is armed.
  *

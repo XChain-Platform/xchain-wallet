@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// composeActionForConfirm ( §5.3): the HOST half of the single-encode
+// composeActionForConfirm (§5.3): the HOST half of the single-encode
 // pipeline. Wraps composeForConfirm and runs the tamper check host-side
 // (decomposePsbt + decodeActionFromPsbt live here), returning a serializable,
 // already-verified ComposedAction. A tamper throws.
@@ -29,7 +29,7 @@ function makeHarness({ outputs, decoded, inputs } = {}) {
         },
         decoder: {
             decodeActionStringFromPsbt: vi.fn(() => decoded || { ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
-            // : the intent is described by the SDK, so the double is the
+            // The intent is described by the SDK, so the double is the
             // SDK's describer. Deliberately NOT a copy of the real wording -
             // a stub that imitates product copy invites assertions that pass on
             // the stub's phrasing; this one only echoes what it was handed, so
@@ -104,7 +104,7 @@ describe('composeActionForConfirm', () => {
     });
 
     // §1.1 / §5.2.2. The decisive case: the caller's params and the composed
-    // action string DISAGREE. That is the  mirror-drift hazard - a form
+    // action string DISAGREE. That is the mirror-drift hazard - a form
     // that hand-builds wire params can produce a self-consistent PSBT for the
     // wrong action, and the previous surface would have described the form's
     // version of events while signing the encoder's. The intent must state
@@ -126,7 +126,7 @@ describe('composeActionForConfirm', () => {
         expect(composed.decoded.summary).not.toContain('JDOG');
     });
 
-    // : the describer itself is the SDK's (§3.2), not the wallet's own
+    // The describer itself is the SDK's (§3.2), not the wallet's own
     // copy. Two implementations of "what does this action say" is two things to
     // drift, and the wallet copy had already fallen behind: it described 13
     // actions to the SDK's 30, so ORDER, SWAP, STAKE, VOTE, DEPLOY and the rest
@@ -172,7 +172,7 @@ describe('composeActionForConfirm', () => {
         expect(composed.tamperVerified).toBe(true);
     });
 
-    // . `networkFeeSats` is inputs-minus-outputs, so a protocol fee paid
+    //`networkFeeSats` is inputs-minus-outputs, so a protocol fee paid
     // as an OUTPUT is excluded from it by construction - and the confirm screen
     // was projecting that number as the whole cost. The quote that sized the
     // output is already on the envelope, so the projection can use it.
@@ -236,11 +236,11 @@ describe('composeActionForConfirm', () => {
         expect(composed.simulation.deltas.some((d) => d.isProtocolFee)).toBe(false);
     });
 
-    // . The confirm screen's XCHAIN-lane fee line used to have exactly
+    //The confirm screen's XCHAIN-lane fee line used to have exactly
     // one source, the Tier-1 dry-run report - which is best-effort and drops
-    // out on a busy venue, taking the fee statement with it and leaving 's
+    // out on a busy venue, taking the fee statement with it and leaving that
     // screen behind. So the envelope carries the wallet's own quote too.
-    describe('the XCHAIN-lane protocol fee on the envelope ', () => {
+    describe('the XCHAIN-lane protocol fee on the envelope', () => {
         const quoting = (quote) => {
             const h = makeHarness({ inputs: [{ value: 5000 }] });
             h.sdk.quoteNativeFee = vi.fn(async () => quote);
@@ -272,7 +272,7 @@ describe('composeActionForConfirm', () => {
         });
 
         it('stays null on a zero fee, a refused quote, or no quote endpoint', async () => {
-            // Zero is the  failure in the other direction: an action that
+            // Zero is the failure in the other direction: an action that
             // charges nothing must not be told it charges something.
             expect((await composeActionForConfirm(ARGS(
                 quoting({ supported: true, valid: true, xchainFee: '0.00000000' }),
@@ -301,7 +301,7 @@ describe('composeActionForConfirm', () => {
         });
 
         it('does not quote a bare native payment', async () => {
-            // : no XChain action, so no protocol fee to state - and this
+            // No XChain action, so no protocol fee to state - and this
             // is the wallet's commonest operation, so it pays no round trip.
             // A bare payment carries no OP_RETURN, so the harness's outputs are
             // the payment and the change; the default carrier output would fail
@@ -361,7 +361,7 @@ describe('composeActionForConfirm', () => {
     });
 });
 
-// : the P2SH/P2WSH chunk lanes, which check 2 skips and check 3 owns.
+// The P2SH/P2WSH chunk lanes, which check 2 skips and check 3 owns.
 //
 // Found by driving a three-recipient SEND through the real form on regtest: the
 // action is past one OP_RETURN, so the encoder picks P2SH, and the confirm

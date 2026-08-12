@@ -25,7 +25,7 @@
 // `test/smoke/shells/mobile-ios-shell.smoke.js` asserts this file registers
 // the plugin, because a green build proves nothing about it.
 //
-// It also carries the SSC-1  bridge hardening, which has TWO halves
+// It also carries the SSC-1 bridge hardening, which has TWO halves
 // because the native HTTP surface turned out to have two doors.
 
 import Capacitor
@@ -36,12 +36,12 @@ class MainViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(XChainVaultPlugin())
-        // SSC-4 . Same silent-failure shape as the vault: without
+        // SSC-4. Same silent-failure shape as the vault: without
         // this line the SPA finds no clipboard plugin, and a sensitive copy
         // then REFUSES rather than leaking to Universal Clipboard - visible,
         // but only as a copy button that stops working.
         bridge?.registerPluginInstance(XChainClipboardPlugin())
-        // Deep links ( §3). Third instance of the same silent shape: with
+        // Deep links (§3). Third instance of the same silent shape: with
         // this line missing, `linksPlugin()` in nativeDeepLinks.js finds nothing
         // and `subscribeToNativeDeepLinks` returns a no-op, so a tapped
         // Universal Link opens the app on its default view and the payload is

@@ -91,7 +91,7 @@ assert.ok(
     /ipcRenderer\.invoke\(/.test(preload),
     'preload uses ipcRenderer.invoke: not .send (we need a Promise reply)',
 );
-// --- The update bridge, both halves ( row 142) -------------------
+// --- The update bridge, both halves (row 142) -------------------
 //
 // THE ABSENCE THIS PINS SHIPPED. main broadcast `xchain:updater` for weeks
 // into a channel no renderer could subscribe to under contextIsolation,
@@ -121,7 +121,7 @@ assert.ok(
         'main actually calls downloadAndInstall(): the update path is reachable, not merely wired',
     );
 
-    // --- The offer has to survive being made too early ( row 148) ---
+    // --- The offer has to survive being made too early (row 148) ---
     //
     // Row 142's two halves were both present and the offer was STILL
     // unreachable. Main checks the feed at whenReady; the banner exists only
@@ -175,7 +175,7 @@ assert.ok(
     'messageHost.js reuses createBackgroundHost from extension: §9.3.2 "core runs unmodified across shells"',
 );
 // THIS ASSERTION USED TO REQUIRE THE OPPOSITE, AND THE OPPOSITE WAS THE BUG
-// . It read: "messageHost.js imports from the extension package via
+//It read: "messageHost.js imports from the extension package via
 // cross-package relative path". That convention resolves under Node in the
 // source tree, which is all a smoke sees - but `main/` is packed at the ROOT
 // of app.asar, so `../../extension/...` resolves at runtime to
@@ -339,7 +339,7 @@ assert.ok(
     /response\.ok/.test(bridgeSrc) && /response\.error/.test(bridgeSrc),
     'bridgeMessaging branches on response.ok / response.error to convert to resolve/reject',
 );
-// : the rebuild moved into MessageHost's own hydrateEnvelopeError, so
+// The rebuild moved into MessageHost's own hydrateEnvelopeError, so
 // the typed NAME and the structured fields (`code` and the THROTTLED hints)
 // survive the IPC hop together, in every shell, instead of the desktop copy
 // drifting from the extension's.

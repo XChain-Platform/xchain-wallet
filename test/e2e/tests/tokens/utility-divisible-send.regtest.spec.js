@@ -79,7 +79,7 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** The ISSUE pays a real coin fee ; the sends are free. */
+/** The ISSUE pays a real coin fee; the sends are free. */
 const FUNDING = 3;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `UTL${STAMP}`;
@@ -150,7 +150,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         + `${Math.round(timeoutMs / 1000)}s. chain_tip `
         + `${status?.chain_tip?.[REGTEST_COIN]} vs last_block `
         + `${status?.last_block?.[REGTEST_COIN]}. A last_block frozen below the tip across two `
-        + 'reads is  wedging the venue, not a wallet defect - and decoder_health stays '
+        + 'reads is wedging the venue, not a wallet defect - and decoder_health stays'
         + '"healthy" throughout, so do not read that instead (§3.7).');
 }
 

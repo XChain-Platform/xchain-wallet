@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// QueuedResultPanel ( leg a): the done screen for a transaction that
+// QueuedResultPanel (leg a): the done screen for a transaction that
 // was SIGNED but never reached the network.
 //
 // useConfirmAction deliberately ends a TRANSIENT post-sign broadcast failure

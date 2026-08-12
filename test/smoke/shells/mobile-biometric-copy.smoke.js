@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the biometric reason vocabulary, across three languages.
+// The biometric reason vocabulary, across three languages.
 //
 // The shared settings row no longer composes its own explanation of why
 // biometric unlock is unavailable; the device does, via a stable `reasonCode`

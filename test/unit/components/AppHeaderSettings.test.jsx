@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the account/wallet switcher is promoted into the persistent
+// The account/wallet switcher is promoted into the persistent
 // AppHeader. Before this, HeaderSettingsButton was defined but never
 // rendered anywhere, so switching account meant a walk through
 // Settings -> Accounts (advanced). These guards pin both halves: the
@@ -28,7 +28,7 @@ const COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 
 const gear = () => screen.queryByRole('button', { name: 'Settings' });
 
-describe('AppHeader settings gear ', () => {
+describe('AppHeader settings gear', () => {
     it('renders no gear when no picker and no network filter are wired', () => {
         render(<AppHeader onMenuOpen={() => {}} onLock={() => {}} />);
         expect(gear()).toBeNull();

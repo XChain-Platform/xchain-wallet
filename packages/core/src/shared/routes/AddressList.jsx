@@ -285,7 +285,7 @@ export function AddressList({
     // default", and `effectiveWifAddressType` below resolves that default at
     // render time. Seeding it eagerly is what produced D-64's wrong default,
     // because the wallet format that decides the answer arrives after the
-    // first render (same trap AddAddressModal hit in ).
+    // first render (the same trap AddAddressModal hit).
     const [wifAddressType, setWifAddressType] = useState('');
     const [wifWarningAck, setWifWarningAck] = useState(false);
     const [wifBusy, setWifBusy] = useState(false);
@@ -295,7 +295,7 @@ export function AddressList({
     // D-64: which address type to pre-select depends on the WALLET, not just
     // the chain. A counterwallet-legacy wallet keeps its balances on p2pkh,
     // so offering the chain's modern default sat this form on P2WPKH while
-    // the sibling Add-address modal - fixed for exactly this in  - sat
+    // the sibling Add-address modal - fixed for exactly this in - sat
     // on P2PKH. Two screens in one app disagreeing about a migrating user's
     // address format is the defect; the answer is the same resolver.
     const [walletFormat, setWalletFormat] = useState(undefined);
@@ -420,9 +420,9 @@ export function AddressList({
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // : the Import-WIF chain picker offered only the chains the
+    // The Import-WIF chain picker offered only the chains the
     // account already occupies, so an account with no addresses had no
-    // chain to import onto - the same dead end  fixed for Add
+    // chain to import onto - the same dead end a later change fixed for Add
     // address. Import is the recovery route when derivation is not an
     // option (a paper key, a swept address), so it has to reach every
     // chain the wallet is live on.
@@ -775,7 +775,7 @@ export function AddressList({
         const openXchain = () => {
             const base = d?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
             if (!base) return;
-            // : the explorer base is bare; append the coin path segment.
+            // The explorer base is bare; append the coin path segment.
             const code = explorerCoinCode(d);
             const path = code ? `/${code}/address/${selected.address}` : `/address/${selected.address}`;
             try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
@@ -934,7 +934,7 @@ export function AddressList({
                             addressable without hand-maintaining a list. Before it, a spec
                             reading a field had to find the label text and walk to its
                             sibling by xpath, which silently reads the WRONG field the day
-                            someone wraps the value in another element . */}
+                            someone wraps the value in another element. */}
                         {fields.map((f) => (
                             <div key={f.label} className={local.detailField}>
                                 <div className={local.detailLabel}>

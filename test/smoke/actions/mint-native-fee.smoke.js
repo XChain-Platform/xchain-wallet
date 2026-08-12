@@ -10,7 +10,7 @@
 
 // Smoke for PC-51: MINT joins the native-coin fee-payment surfaces. Asserts
 // MintForm mounts the shared NativeFeeToggle and plumbs payFeeInNativeCoin
-// into BOTH submit paths (the  compose preview + the legacy submit),
+// into BOTH submit paths (the compose preview + the legacy submit),
 // and that the mintToken flow forwards it into encoderOpts.
 
 import { strict as assert } from 'node:assert';

@@ -273,7 +273,7 @@ export class NotificationService {
 
         if (!plan) return;
 
-        //  quiet hours: suppress delivery (not queue/defer - the
+        // quiet hours: suppress delivery (not queue/defer - the
         // underlying explorer event isn't replayed) during the user's
         // configured DND window. Checked last, after the per-kind flag,
         // so quiet hours never masks a legitimately-off notification kind

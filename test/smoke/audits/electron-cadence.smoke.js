@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §9: the Electron CVE clock has a mechanism, and the
+// Smoke for §9: the Electron CVE clock has a mechanism, and the
 // mechanism is right.
 //
 // WHY. §9 owns the security-patch cadence for a wallet that ships a

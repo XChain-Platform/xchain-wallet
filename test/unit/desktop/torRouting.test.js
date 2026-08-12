@@ -15,7 +15,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Tor routing, which the wallet promised and did not do.
+// Tor routing, which the wallet promised and did not do.
 //
 // The toggle existed, said "Route SDK requests through a local Tor
 // SOCKS5 proxy when available", and had no consumer anywhere in the

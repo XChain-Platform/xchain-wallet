@@ -50,7 +50,7 @@ export const ADDRESS_PARAMS = {
 // "bc1qdevmock<hex>" (see sdk/devMockAddresses.js). Accept them so the
 // validator doesn't reject every address while running on the stub.
 //
-// : this used to be a bare /devmock/i substring test, which ships in the
+// This used to be a bare /devmock/i substring test, which ships in the
 // core (non-dev-gated) bundle and so let a production user paste any string
 // containing "devmock" past the recipient check. `isDevMockAddress` matches the
 // full generated shape (known prefix + up to 24 lowercase hex chars, anchored),

@@ -27,11 +27,11 @@
 // tablet in landscape and every desktop window the user is likely to
 // keep open sits above.
 //
-// : the number itself is no longer defined here. It is the shell's
+// The number itself is no longer defined here. It is the shell's
 // `rail` breakpoint, and it lives in core's shared/styles/breakpoints.js
 // alongside the other tier boundaries so a move stays in one place.
 //
-// : THE URL IS THE ONLY OVERRIDE CHANNEL. This used to fall back to
+// THE URL IS THE ONLY OVERRIDE CHANNEL. This used to fall back to
 // a `localStorage` copy, and that copy is what made the web wallet render
 // at extension-popup width on a 1489px desktop: `sidebar` and `extension`
 // pin a fixed 375/360px preview frame (DevVariantShell.module.css), the
@@ -67,7 +67,7 @@ function readUrlOverride() {
  *
  * Erase, not ignore: a browser already carrying `sidebar` recovers on its
  * next load without the user ever learning the words "local storage"
- * . Idempotent and safe where storage is unavailable.
+ *Idempotent and safe where storage is unavailable.
  *
  * @returns {boolean} whether a stored override was found and removed
  */
@@ -93,7 +93,7 @@ function autoVariant() {
  * The variant this navigation runs in.
  *
  * Two sources only: the `variant` query parameter, and the viewport. A
- * stored override is not a source (see the  note in the header); it
+ * stored override is not a source (see the note in the header); it
  * is swept on the way past so a trapped browser heals itself.
  *
  * @returns {{ variant: 'small' | 'full' | 'sidebar' | 'extension', source: 'url' | 'auto', viewportPx: number }}

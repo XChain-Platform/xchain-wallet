@@ -126,7 +126,7 @@ function markAccepted() {
  * @param {() => void} [props.onCreate]
  * @param {() => void} [props.onImport]
  * @param {() => void} [props.onImportFromFreeWallet]
- * @param {() => void} [props.onPairPartner]          §20.5 / : enters the watcher/signer pairing lane (shared recovery phrase across two devices)
+ * @param {() => void} [props.onPairPartner] §20.5: enters the watcher/signer pairing lane (shared recovery phrase across two devices)
  * @param {() => void} [props.onDemoEntered]          fires after the demo wallet persists; caller refreshes App state into the unlocked tree
  * @param {() => void} [props.onBack]                 rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
  * @param {'fresh' | 'add'} [props.mode]              'fresh' = no wallet on the device; 'add' = adds to an already-open vault. Defaults to 'fresh'.
@@ -137,7 +137,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const isFull = variant === 'full';
     const [demoBusy, setDemoBusy] = useState(false);
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
-    //  leg 2: adding to a vault the demo created would put a real
+    // leg 2: adding to a vault the demo created would put a real
     // wallet behind the demo's throwaway password. Graduate out first.
     const [graduated, setGraduated] = useState(false);
     const [gradBusy, setGradBusy] = useState(/** @type {string | null} */ (null));
@@ -263,7 +263,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         }
     }
 
-    //  leg 2. The vault has ONE password: `meta.kdfParams` is
+    // leg 2. The vault has ONE password: `meta.kdfParams` is
     // written when the vault is created and the master key that opens
     // every record inside it comes from that password alone. In the demo
     // funnel the vault was created by the demo, so a wallet added here
@@ -532,7 +532,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     From FreeWallet
                 </Button>
                 {/*
-                  §20.5 / : the fourth lane. Create / Import both make a
+                  §20.5: the fourth lane. Create / Import both make a
                   standalone `full` wallet; this one makes HALF of an
                   air-gapped pair, so it needs its own entry point rather than
                   a post-hoc mode flip in Settings that nothing verifies.

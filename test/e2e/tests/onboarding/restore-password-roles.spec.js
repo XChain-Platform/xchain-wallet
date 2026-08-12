@@ -6,12 +6,12 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// : a restore that refuses a password says WHICH password it wanted.
+// A restore that refuses a password says WHICH password it wanted.
 //
 // THE DEFECT, as reported. The restore screen asks for three passwords at once
-// (§19.4 / ): the one that opens the backup FILE, the one the backed-up
+// (§19.4): the one that opens the backup FILE, the one the backed-up
 // WALLET used on the device it came from, and the one THIS DEVICE unlocks
-// with.  shipped the mechanism that needs all three and left the copy
+// with. a later change shipped the mechanism that needs all three and left the copy
 // alone, so every refusal came back as "wrong password or tampered file". Two
 // of those three are passwords the user still uses, so the likeliest mistake
 // on this screen is not a typo at all: it is a correct password in the wrong
@@ -144,7 +144,7 @@ function restoreError(page) {
     return page.getByRole('alert').first();
 }
 
-test.describe('restore: which of the three passwords is it asking for ', () => {
+test.describe('restore: which of the three passwords is it asking for', () => {
     test('the screen names all three before anything is typed', async ({ page }) => {
         await openRestoreScreen(page, await buildEnvelope());
 

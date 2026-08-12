@@ -28,10 +28,10 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { contentSecurityPolicyFor } from './src/csp.js';
-// Which feature set this build carries . Resolved once,
+// Which feature set this build carries. Resolved once,
 // here, so the CSP and the stamp written into the dist cannot disagree.
 import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buildProfile.js';
-// Which SURFACES this profile carries . The registry is data; the two
+// Which SURFACES this profile carries. The registry is data; the two
 // pieces below are the mechanism that acts on it.
 import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 
@@ -39,7 +39,7 @@ const BUILD_PROFILE = resolveBuildProfile();
 const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
 
 // Swap each hidden surface's module for its inert twin, so the surface's route
-// components are never imported and never reach the bundle ( §2.3: the
+// Components are never imported and never reach the bundle (the
 // store-hidden surfaces are COMPILED OUT, not switched off - a surface that can
 // be switched back on is a guideline 2.3.1 hidden feature). The regex covers the
 // whole specifier so the replacement is the absolute path, not a suffix graft,
@@ -57,7 +57,7 @@ const surfaceAliases = HIDDEN_SURFACES.map((surface) => ({
 // those route components. A second import added anywhere (a shared index, a
 // lazy route, a helper reaching for one component) would put the whole surface
 // back into a `store` bundle while every label still said it was absent - a
-// false claim inside a signed manifest, which  exists to prevent. So the
+// false claim inside a signed manifest, which the compile-out exists to prevent. So the
 // build refuses rather than shipping it, and says which module and which
 // importer did it.
 const surfaceGuardPlugin = {
@@ -81,7 +81,7 @@ const surfaceGuardPlugin = {
                         + ` ${JSON.stringify(surface)} surface, but ${mod} was imported`
                         + ` by ${importer ?? '<entry>'}. Only src/surfaces/${surface}.jsx`
                         + ' may import it, and that module is aliased away in this'
-                        + ' profile. See src/surfaces/registry.js .',
+                        + ' profile. See src/surfaces/registry.js.',
                     );
                 }
             }
@@ -89,7 +89,7 @@ const surfaceGuardPlugin = {
         return null;
     },
 };
-// Subresource Integrity . The CSP says WHERE scripts may come from; SRI
+// Subresource Integrity. The CSP says WHERE scripts may come from; SRI
 // pins WHAT they contain, so a tampered bundle on the asset host cannot execute
 // in a page that holds the user's decrypted seed. Build-only, like the CSP.
 import { sriPlugin } from './sri.js';
@@ -105,6 +105,9 @@ import { sriPlugin } from './sri.js';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1';
+// Extra Host header to allow when demoing the dev server over a LAN, since
+// Vite otherwise rejects any Host it doesn't recognize.
+const devAllowedHost = process.env.VITE_DEV_ALLOWED_HOST || null;
 
 // Dev-only convenience: rewrite a bare `/style-guide` to `/style-guide/`
 // so Vite picks up the multi-page entry at packages/web/style-guide/
@@ -145,7 +148,7 @@ const cspPlugin = {
                 tag: 'meta',
                 attrs: {
                     'http-equiv': 'Content-Security-Policy',
-                    // Profile-aware : the mobile store build drops the
+                    // Profile-aware: the mobile store build drops the
                     // Trezor origins, which no WebView can reach anyway, rather
                     // than shipping a permanently-allowed remote script origin
                     // for a feature it does not have.
@@ -166,7 +169,7 @@ const cspPlugin = {
     // `packages/mobile` copies this dist VERBATIM rather than compiling its
     // own, so the profile has to travel INSIDE the bundle. Without it there is
     // nothing to stop a `default` bundle being wrapped in a store artifact and
-    // labelled `store` in a signed manifest .
+    // labelled `store` in a signed manifest.
     generateBundle() {
         this.emitFile({
             type: 'asset',
@@ -188,7 +191,7 @@ const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
 
-// : vite-plugin-node-polyfills rewrites Buffer/process/global
+// Vite-plugin-node-polyfills rewrites Buffer/process/global
 // references inside transformed CJS to bare
 // `vite-plugin-node-polyfills/shims/*` specifiers. Those resolve fine for
 // packages under this project's node_modules, but xchain-sdk is a `link:`
@@ -241,7 +244,7 @@ const polyfillShimResolver = {
 // which would 504 the SDK in the browser. Resolve the real file from the
 // SDK's own context and alias the bare subpath to it below.
 //
-// RESOLVED THROUGH node_modules, NOT through a sibling directory .
+// RESOLVED THROUGH node_modules, NOT through a sibling directory.
 // This read `../../../xchain-sdk/package.json`, a path three levels above
 // the wallet root, so a build needed the SDK checked out beside the wallet
 // and every CI lane died here: `release.yml` clones only this repo. The
@@ -273,7 +276,7 @@ export default defineConfig({
             // for connection pooling; browser manages its own pool, so
             // our tiny no-op shim avoids pulling in stream-http (~30 KB).
             { find: 'http', replacement: httpBrowserShim },
-            // : the same client constructors pick
+            // The same client constructors pick
             // `require('https').Agent` whenever the endpoint URL is
             // https (every mainnet default). Without this alias the
             // externalized `https` module has no Agent, so constructing
@@ -297,10 +300,10 @@ export default defineConfig({
     // dep optimizer makes esbuild do the CJS -> ESM transform properly
     // (verified: .vite/deps/xchain-sdk.js is ~5 MB, carries the real decoder +
     // preflight code, and contains zero literal requires). That is G163 /
-    // 's root cause.
+    // that root cause.
     //
     // NOTE this covers the DEV SERVER only, which is what Playwright drives.
-    // The production `vite build` path is handled separately :
+    // The production `vite build` path is handled separately:
     // build.commonjsOptions.include below plus polyfillShimResolver above.
     //
     // GATED: opt in with VITE_XCHAIN_REAL_SDK=1. Unconditionally pre-bundling
@@ -309,9 +312,9 @@ export default defineConfig({
     // - measured: the send spec passes in 12s on the dev-mock and times out
     // after 7min on the real SDK against a half-configured regtest stack. So
     // the real SDK is opt-in until the wallet degrades gracefully on an
-    // unreachable backend (that hang is its own defect, ).
+    // unreachable backend (that hang is its own defect).
     //
-    // : `exclude` is the other half of that gate. Vite's dep SCANNER
+    // `exclude` is the other half of that gate. Vite's dep SCANNER
     // finds the bare `import('xchain-sdk')` in src/sdkFactory.js on its own and
     // pre-bundles it whether or not it is listed in `include` - which is how
     // the dev shell silently acquired a working real SDK (pointed at mainnet
@@ -322,7 +325,7 @@ export default defineConfig({
     //
     // The DEEP entry is listed in both branches and is not part of that gate.
     // packages/extension/src/signers/ledgerFactory.js imports
-    // `xchain-sdk/src/wallet.js` directly (: keeping the SDK index out of
+    // `xchain-sdk/src/wallet.js` directly (keeping the SDK index out of
     // the popup graph), and the web shell pulls that module in through
     // createBackgroundHost. Vite pre-bundles per ENTRY, and a linked workspace
     // package is source rather than a dependency, so listing the package alone
@@ -345,14 +348,14 @@ export default defineConfig({
         // on the iOS store build (2026-08-02): 22 MB of .map in a 27 MB
         // payload, every one carrying `sourcesContent`, so the ipa was ~5x its
         // necessary size to deliver a debugging aid no store build can use -
-        // Web Inspector is off in Release (, §4).
+        // Web Inspector is off in Release (§4).
         //
         // The other two shells already answered this, and answered it the same
         // way: packages/desktop and packages/extension both set sourcemap
         // false. The web shell is the outlier, and the mobile shells inherited
         // the outlier by bundling its output rather than by deciding anything.
         sourcemap: BUILD_PROFILE !== 'store',
-        //  (prod half of G163): Rollup's commonjs pass defaults to
+        // (prod half of G163): Rollup's commonjs pass defaults to
         // /node_modules/ only, and the `link:`-resolved xchain-sdk lives
         // outside every node_modules dir, so without this include the
         // emitted chunk kept literal require() calls, threw in the browser,
@@ -369,16 +372,17 @@ export default defineConfig({
     server: {
         port: 5173,
         host: '0.0.0.0',
-        // `devhost` is the dev VM hostname used to demo the wallet over the
-        // LAN; Vite blocks unlisted Host headers, so it has to be allowed here.
-        // Reach it over HTTPS (VITE_HTTPS=1) so the non-localhost origin is still
-        // a secure context for crypto.subtle (see the secure-context note above).
-        allowedHosts: ['localhost', '127.0.0.1', 'devhost'],
+        // Vite blocks unlisted Host headers, so a LAN dev host has to be
+        // allowed explicitly; set VITE_DEV_ALLOWED_HOST to demo over the LAN
+        // instead of localhost. Reach it over HTTPS (VITE_HTTPS=1) so the
+        // non-localhost origin is still a secure context for crypto.subtle
+        // (see the secure-context note above).
+        allowedHosts: devAllowedHost ? ['localhost', '127.0.0.1', devAllowedHost] : ['localhost', '127.0.0.1'],
     },
     preview: {
         port: 4173,
         host: '0.0.0.0',
-        allowedHosts: ['localhost', '127.0.0.1', 'devhost'],
+        allowedHosts: devAllowedHost ? ['localhost', '127.0.0.1', devAllowedHost] : ['localhost', '127.0.0.1'],
     },
     plugins: [
         polyfillShimResolver,

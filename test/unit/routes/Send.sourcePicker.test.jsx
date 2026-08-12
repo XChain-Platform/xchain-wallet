@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Send was the only action form with no source picker.
+// Send was the only action form with no source picker.
 //
 // Found by a failed access-list run on Litecoin regtest. A wallet with three
 // addresses on the chain had issued its token from the NEWEST one, because that
@@ -123,7 +123,7 @@ async function selectToken() {
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-describe('Send: the funding address is shown and changeable ', () => {
+describe('Send: the funding address is shown and changeable', () => {
     it('renders the funding address on the compose form, defaulted to the active one', async () => {
         mount();
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));

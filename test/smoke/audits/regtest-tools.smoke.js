@@ -75,7 +75,7 @@ assert.ok(/set -euo pipefail/.test(bootstrap), 'bootstrap.sh has strict-mode gua
 assert.ok(/XCHAIN_REGTEST_BASE_URL/.test(bootstrap),
     'bootstrap.sh reads the canonical base-URL env var');
 assert.ok(/XCHAIN_REGTEST_PROBE_TIMEOUT_MS/.test(bootstrap),
-    'bootstrap.sh honours the per-probe timeout env var ');
+    'bootstrap.sh honours the per-probe timeout env var');
 assert.ok(!/--max-time [0-9]/.test(bootstrap),
     'every bootstrap.sh probe bound derives from the env var, none is hard-coded');
 // The service classes the wallet SDK actually talks to appear in the
@@ -93,7 +93,7 @@ for (const svc of [
         `bootstrap.sh probes ${svc}`);
 }
 // The explorer probe additionally content-checks decoder wiring (the
-// reachable-but-unwired failure mode from G163/).
+// reachable-but-unwired failure mode from G163).
 assert.ok(/decoder_health/.test(bootstrap),
     'bootstrap.sh asserts the explorer decoder-wiring status, not just reachability');
 assert.ok(/xchain-node\.sh start/.test(bootstrap),
@@ -118,7 +118,7 @@ assert.ok(/XCHAIN_PLATFORM_DIR/.test(down),
 // Both runtime cases below aim at an address that black-holes packets,
 // so their cost is the probe bound times the number of probes, not the
 // speed of a refusal. Left at the default that cost ~84s of a serial,
-// silent pre-push gate and got the gate killed as hung ; the
+// silent pre-push gate and got the gate killed as hung; the
 // short override buys the same failure path in about two seconds. The
 // elapsed assertions are the regression guard: they fail long before
 // spawnSync's own timeout, and they name the cause when they do.

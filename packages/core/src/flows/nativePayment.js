@@ -53,7 +53,7 @@ function satsStringFromDecimal(raw) {
 /**
  * Is this compose request a plain native-coin payment with no XChain content?
  *
- * . Such a send is an ordinary BTC/LTC/DOGE payment: the value moves in a
+ *Such a send is an ordinary BTC/LTC/DOGE payment: the value moves in a
  * real output, and the SEND action that used to ride along with it carried
  * nothing the chain would accept. The indexer rejects any TICK absent from the
  * ticks table and there is no native token, so every one of those actions was

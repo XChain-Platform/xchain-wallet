@@ -22,13 +22,13 @@
 // those three agreeing while the third differs is a defect, and only the third
 // is authoritative.
 //
-// DRIVEN OFF BITCOIN on purpose, and it is not the usual reason. Here 
+// DRIVEN OFF BITCOIN on purpose, and it is not the usual reason. Here
 // makes the coin output the only way to pay, so the create fee is a REAL
 // on-chain payment that shows up in the payer's balance to the satoshi; on
 // Bitcoin the default lane debits an XCHAIN balance, which is a different (and
 // currently unmeasurable - §3.7) measurement.
 //
-//   LEG 1, THE FREE MARKET, which is the ordinary case and the one  was
+// LEG 1, THE FREE MARKET, which is the ordinary case and the one was
 //     about: a market whose whole life fits inside the 90 free days costs
 //     nothing. The form must say so, the confirm screen must state no protocol
 //     fee and project no fee row, and the chain must charge only the miner. A
@@ -234,7 +234,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
 
     test.beforeAll(() => {
         test.skip(REGTEST_COIN === 'RBTC',
-            'the create fee is measured where  forces the coin lane, so it lands in the payer '
+            'the create fee is measured where forces the coin lane, so it lands in the payer'
             + 'balance; run with XC_REGTEST_COIN=RLTC or RDOGE');
     });
 

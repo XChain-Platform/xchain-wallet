@@ -91,7 +91,7 @@ describe('decimalToBaseUnits', () => {
         expect(decimalToBaseUnits('0.00000001')).toBe(1n);
     });
 
-    it('survives past-2^53 amounts exactly ( class)', () => {
+    it('survives past-2^53 amounts exactly (class)', () => {
         // 1.3e18 koinu ≈ the DOGE supply; Number would round this.
         expect(decimalToBaseUnits('13000000000.00000001'))
             .toBe(1_300_000_000_000_000_001n);

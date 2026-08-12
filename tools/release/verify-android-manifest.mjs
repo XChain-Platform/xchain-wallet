@@ -10,7 +10,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/verify-android-manifest.mjs - assert the manifest facts of a
-// BUILT Android bundle ( §5, §7).
+// BUILT Android bundle (§5, §7).
 //
 // Usage:
 //     bundletool dump manifest --bundle=app-release.aab > merged.xml
@@ -57,7 +57,7 @@ const args = process.argv.slice(2);
 // being written.
 const USAGE = `usage: verify-android-manifest.mjs <merged-manifest.xml> [--version-code N]
 
-Asserts the manifest facts of a BUILT Android bundle ( section 5, section 7):
+Asserts the manifest facts of a BUILT Android bundle (section 5, section 7):
 exactly one exported component and that it is MainActivity, allowBackup and
 usesCleartextTraffic both false, the exact permission set, and the App Link path
 claim, which is derived from WEB_LINK_PREFIX in the SPA's parser rather than
@@ -157,14 +157,14 @@ if (JSON.stringify(actualPermissions) !== JSON.stringify(expectedSorted)) {
 // --- 4. The App Link claim ----------------------------------------------
 //
 // assetlinks.json carries no paths, so this one attribute is the ENTIRE
-// Android-side scope of the claim.'s drift smoke pins the source
+// Android-side scope of the claim. A drift smoke pins the source
 // across both repos and is the right gate for the rule; it cannot see a
 // library merging in a claim of its own, and it never ran against an artifact.
 //
 // A claim WIDER than the parser means the OS takes the URL away from the
 // browser and hands it to an app that discards it: the wallet surfaces on its
-// default view, the page never loads, and nothing reports an error.
-// found exactly that - the claim read `/wallet` and swallowed
+// default view, the page never loads, and nothing reports an error. That
+// happened exactly this way: the claim read `/wallet` and swallowed
 // `https://xchain.io/wallet/privacy/` and `/wallet/support/`, the privacy and
 // support URLs the Play and App Store listings publish themselves, so anyone
 // with the wallet installed who tapped Privacy Policy from the store listing

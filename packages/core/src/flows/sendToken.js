@@ -83,7 +83,7 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {number} [fee]                           absolute sats
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {import('../signers/Signer.js').Signer} [signer]    pre-built signer (RemoteSigner for HW)
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
@@ -121,7 +121,7 @@ export async function sendToken(opts) {
     // BATCH(SEND, MESSAGE-with-key) or the indexer rejects it. The guard
     // rewrites actionData when it applies and throws typed errors when the
     // send cannot be composed validly (no keys / recipient has no pubkey).
-    // Skipped on the prebuilt path: the  confirm pipeline already ran
+    // Skipped on the prebuilt path: the confirm pipeline already ran
     // it at compose time and these bytes must not be rebuilt. Multi-leg sends
     // never reach it (assertNoGatedLegs refused any gated tick above).
     let actionData = { action: 'SEND', params };

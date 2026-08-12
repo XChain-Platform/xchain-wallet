@@ -443,7 +443,7 @@ describe('simulateAction', () => {
         });
     });
 
-    // : the confirm screen understated every fee-bearing action because
+    // The confirm screen understated every fee-bearing action because
     // the simulator only ever debited the MINER fee. The numbers below are the
     // ones measured on regtest in wallet E2E session 19 (D-85): the same ISSUE,
     // in each fee-payment mode, projected against what the chain actually did.

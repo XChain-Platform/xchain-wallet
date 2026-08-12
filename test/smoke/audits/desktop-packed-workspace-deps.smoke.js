@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §8 / : every workspace package the desktop MAIN
+// Smoke for §8: every workspace package the desktop MAIN
 // process can reach must be a declared dependency of packages/desktop.
 //
 // WHAT THIS IS DEFENDING, and it is not hypothetical. The packaged desktop
@@ -187,7 +187,7 @@ for (const [name, importer] of reached) {
         + `import graph reaches it (via ${importer}), but electron-builder packs only `
         + `the declared production tree, so it would be ABSENT from app.asar and the `
         + `app would die at startup with ERR_MODULE_NOT_FOUND. This is exactly how the `
-        + `packaged build was broken at every version until .`,
+        + `packaged build was broken at every version until.`,
     );
 }
 
@@ -251,7 +251,7 @@ assert.equal(
 }
 
 console.log(
-    `OK: desktop packed-workspace-deps smoke (: walked ${seen.size} main-process file(s) from `
+    `OK: desktop packed-workspace-deps smoke (walked ${seen.size} main-process file(s) from`
     + `${entryPoints.length} entry point(s); every workspace package the graph reaches `
     + `[${[...reached.keys()].sort().join(', ') || 'none'}] is a declared dependency of packages/desktop, so `
     + `electron-builder packs it into app.asar. This is the static half of §8's missing packaged-app launch `

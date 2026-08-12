@@ -37,7 +37,7 @@ import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js'
 import { resolveChangeAddress } from './changeAddress.js';
 
 /**
- *  / §4.7: the single-tick debit a SEND moves, for the concurrent-window
+ * §4.7: the single-tick debit a SEND moves, for the concurrent-window
  * pending-delta netting (§28.4 pendingTx v2 tick/amount fields). Only a
  * single-leg SEND has an unambiguous token debit; a multi-leg SEND, or any
  * non-SEND action, returns null (nets nothing) - the same conservatism
@@ -76,7 +76,7 @@ export function sendDeltaFromAction(actionData) {
  * @property {string} chainId
  * @property {{ action: string, params: object }} actionData
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} encoderOpts
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]    single-encode pipeline: sign this exact PSBT (composeForConfirm's output, already previewed + tamper-checked) byte-identically instead of rebuilding it.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact PSBT (composeForConfirm's output, already previewed + tamper-checked) byte-identically instead of rebuilding it.
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
  * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet entirely (no password KDF) and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
  * @property {PendingTxMeta} [pendingTxMeta]     when set, the flow persists + updates a PendingTx record
@@ -148,7 +148,7 @@ export async function submitAction({
     // on every transition; it also observes onProgress phase events.
     let pending = null;
     if (pendingTxMeta) {
-        //  / §4.7: record the single-tick debit this tx moves so a
+        // §4.7: record the single-tick debit this tx moves so a
         // concurrent approval window's pre-flight can net it (via the shared
         // pendingTx store) once the reservation releases at broadcast. Mirrors
         // reserveFromSimulation's conservatism - only a single-leg SEND has an
@@ -222,7 +222,7 @@ export async function submitAction({
             sdkRegistry,
         });
 
-    //  change-address rotation. The signer is the first thing in this
+    // change-address rotation. The signer is the first thing in this
     // flow that can derive a key, so this is the earliest point a fresh
     // internal address exists; it is also still before any encoding, so the
     // PSBT is built against the rotated address rather than patched after.
@@ -262,7 +262,7 @@ export async function submitAction({
                 chainRegistry,
                 chainId,
                 actionData,
-                // : when a prebuilt PSBT is supplied, submitWithSigner
+                // When a prebuilt PSBT is supplied, submitWithSigner
                 // skips createAction + encoder.createTx and signs it byte-
                 // identically, so the ADS donation already folded into that
                 // PSBT at compose time is what broadcasts. The re-fold into
@@ -284,7 +284,7 @@ export async function submitAction({
             // the optional onBroadcastFailure callback so the host can
             // also push to its in-process queue surface.
             if (err instanceof BroadcastFailedError) {
-                //  §5.3.4: split the post-sign broadcast failure on
+                // Split the post-sign broadcast failure on
                 // PERMANENCE. A PERMANENT rejection (inputs spent/missing, or
                 // a confirmed conflict) can never confirm as-is: mark the
                 // PendingTx `failed` (never queued) so the modal offers a
@@ -356,7 +356,7 @@ export async function submitAction({
         }
     }
 
-    // : the broadcast landed, so any cached metadata for the ticks this
+    // The broadcast landed, so any cached metadata for the ticks this
     // action names now describes the token as it was BEFORE the action. Drop
     // those records here rather than at each call site: every issuer action
     // (ISSUE, and so ownership transfer, description and mint settings; MINT;
@@ -424,7 +424,7 @@ export async function submitAction({
     return {
         ...result,
         pendingTxId: pending?.id ?? null,
-        // : the address the change actually paid, so a caller can say so
+        // The address the change actually paid, so a caller can say so
         // (and so a test can assert the rotation rather than infer it).
         changeAddress: encoderOptsForSubmit?.change ?? null,
         changeRotated: changeRotation?.rotated === true,

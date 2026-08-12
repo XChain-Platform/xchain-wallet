@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the copy for the three passwords a restore asks for.
+// The copy for the three passwords a restore asks for.
 //
 // A restore is the only screen in the wallet that asks for three different
-// passwords at once (§19.4 / ):
+// passwords at once (§19.4):
 //
 //   file     opens the backup FILE's envelope
 //   wallet   opens the backed-up WALLET's seed / imported keys
 //   device   what the restored wallet is re-sealed under here
 //
-// The mechanism shipped with ; the copy did not. Every failure came
+// The mechanism shipped; the copy did not. Every failure came
 // back saying "wrong password" without saying WHICH of the three it meant, so
 // a password that is perfectly correct in one role reads as a failure when it
 // is typed into another. The user has no way to tell a typo from a mix-up, and

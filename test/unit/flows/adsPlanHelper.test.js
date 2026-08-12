@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// applyAdsPlanToEncoderOpts ( §5.3.1 ADS extraction). The refactor
+// applyAdsPlanToEncoderOpts (§5.3.1 ADS extraction). The refactor
 // that hoists the donation-output merge out of submitAction so
 // composeForConfirm resolves it pre-modal, side-effect-free.
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A native shell whose vault plugin never registered .
+// A native shell whose vault plugin never registered.
 //
 // The bug this locks out was silent by construction. `hasNativeVault()` is a
 // duck-type probe, and ANY miss - Capacitor global absent, `isNativePlatform`

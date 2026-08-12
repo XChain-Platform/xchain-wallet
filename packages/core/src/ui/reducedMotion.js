@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Reduced-motion resolution .
+// Reduced-motion resolution.
 //
 // Two inputs decide whether motion is reduced:
 //

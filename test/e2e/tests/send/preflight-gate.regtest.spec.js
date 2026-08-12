@@ -136,7 +136,7 @@ test.describe('pre-flight gate on regtest', () => {
         await composeTokenSend(page, UNAFFORDABLE);
 
         // §5.2.4: the verdict chip, from a REAL dry-run. Tier 1 was
-        // unreachable on every venue until , so this had never once
+        // unreachable on every venue until, so this had never once
         // been observed rendering a fail.
         const chip = page.getByTestId('preflight-chip');
         await expect(chip).toHaveText('Will likely fail');

@@ -1,4 +1,4 @@
-# Android build health for the Capacitor shell ( §7).
+# Android build health for the Capacitor shell (§7).
 #
 # THIS WORKFLOW SHIPS NOTHING. It proves the native project still builds and
 # that the version numbers still derive from the tag; every artifact it uploads

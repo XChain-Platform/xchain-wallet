@@ -136,7 +136,7 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
                 }}
             >
                 {/* The painted dot. The button around it is bigger than
-                    the dot on purpose ( slice 2: 24px minimum tap
+                    the dot on purpose (slice 2: 24px minimum tap
                     target), so the glyph carries the circle. */}
                 <span className={styles.glyph} aria-hidden="true">?</span>
             </button>

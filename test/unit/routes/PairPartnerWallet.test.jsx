@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Behavioural test for the §20.5 /  watcher <-> signer pairing lane.
+// Behavioural test for the §20.5 watcher <-> signer pairing lane.
 //
 // Drives the real component through role -> seed -> exchange -> done and
 // asserts the wiring that the flow-level unit test cannot see: that the
@@ -160,7 +160,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(screen.getByText('XCW-PAIR:ZmFrZQ')).toBeInTheDocument();
     });
 
-    // : a default wallet has three mainnet chains and a ~1900-character
+    // A default wallet has three mainnet chains and a ~1900-character
     // pairing code, which is past what one QR frame can carry. The lane used to
     // answer that by drawing NO QR and telling the user to copy text - across an
     // air gap, which is the one thing that has no clipboard. It now chunks.

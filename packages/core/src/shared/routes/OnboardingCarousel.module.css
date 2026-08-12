@@ -32,7 +32,7 @@
     color: var(--xc-text-muted);
     cursor: pointer;
     border-radius: var(--xc-radius-sm);
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;
@@ -116,7 +116,7 @@
 }
 
 /*
- * : these are real tap targets (each one jumps to a step), and at
+ * These are real tap targets (each one jumps to a step), and at
  * 8x8 they were a third of the WCAG 2.2 AA 2.5.8 floor. Widening the pip
  * itself would turn the pagination into a row of blobs, so the button
  * grows to the floor and hands its paint to a ::before pip - the same

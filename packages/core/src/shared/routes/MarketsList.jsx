@@ -402,7 +402,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
                     color: starred ? 'var(--xc-accent-primary)' : 'var(--xc-text-muted)',
                     padding: 0,
                     lineHeight: 1,
-                    //  slice 2: the star glyph paints ~18px, under the
+                    // slice 2: the star glyph paints ~18px, under the
                     // 24px pointer-target floor. Centre it in a target-sized
                     // box so the row looks the same and the star is hittable.
                     display: 'inline-flex',

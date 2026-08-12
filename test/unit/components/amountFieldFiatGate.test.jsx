@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// , the other half. `fiatRateForTick` returns null for a token, and the
+// The other half. `fiatRateForTick` returns null for a token, and the
 // whole fix rests on null meaning "render no fiat at all" in AmountField. That
 // contract is documented in a JSDoc line and nowhere else, so it is pinned here:
 // if a future edit made a null rate render "≈ 0.00 USD" or kept the unit toggle
@@ -33,7 +33,7 @@ function mount(props) {
     }));
 }
 
-describe('AmountField fiat gate ', () => {
+describe('AmountField fiat gate', () => {
     it('shows the approximate value and the unit toggle when a rate is supplied', () => {
         const u = mount({ fiatRate: RATE });
         expect(u.getByRole('button', { name: /switch input to usd/i })).toBeTruthy();

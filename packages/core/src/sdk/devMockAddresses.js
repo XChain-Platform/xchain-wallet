@@ -47,7 +47,7 @@ const MOCK_PREFIXES = Object.freeze(
 // up to MOCK_TAIL_LENGTH lowercase hex characters, and nothing else.
 // Deliberately NOT a substring search: this recognizer is consulted by the
 // production address validator, so a bare /devmock/ test would let any
-// pasted string containing that word through as a "valid" address .
+// pasted string containing that word through as a "valid" address.
 // Case-sensitive on purpose - the prefixes carry meaningful case ('Ldevmock'
 // vs 'ldevmock'), and only the tail is lowercased at build time.
 const MOCK_ADDRESS_RE = new RegExp(

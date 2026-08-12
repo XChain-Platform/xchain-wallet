@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Store-hidden surfaces (;  §2.3).
+// Store-hidden surfaces (; §2.3).
 //
 // The `store` profile is what a mobile app-store build is cut from, and its
 // defining property is not a label: the review-hidden surfaces are COMPILED
@@ -76,7 +76,7 @@ describe('the surface registry', () => {
     });
 
     it('hides the DEX surface in `store` and nothing in `default`', () => {
-        // D2 ( §9) is still open; this is the spec's recommendation,
+        // D2 (§9) is still open; this is the spec's recommendation,
         // and answering it the other way is deleting one line in the registry.
         expect(hiddenSurfacesFor('store')).toEqual(['dex']);
         expect(hiddenSurfacesFor('default')).toEqual([]);
@@ -123,7 +123,7 @@ describe('the hidden twin', () => {
     it('imports nothing, which is the entire mechanism', () => {
         // An import here would drag the surface back into the store bundle
         // while every label still said it was absent - the false claim in a
-        // signed manifest that 's gate exists to prevent.
+        // signed manifest that that gate exists to prevent.
         const src = readFileSync(join(surfacesDir, 'dex.hidden.jsx'), 'utf8');
         expect(src).not.toMatch(/^\s*import\s/m);
         expect(src).not.toMatch(/\bimport\s*\(/);

@@ -172,7 +172,7 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
     // Decrypt. GCM auth tag mismatch surfaces as a typed SDK error.
     const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
 
-    // Inflate AFTER decrypt ( spec §5.4). Gated payloads are compressed
+    // Inflate AFTER decrypt (spec §5.4). Gated payloads are compressed
     // before encryption, so this is the only place the original bytes can be
     // recovered: the serving layer holds no key and never inflates ciphertext.
     // Fail-closed: an invalid stream or a tripped ratio guard yields the

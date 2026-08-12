@@ -28,7 +28,7 @@
 //       --config=playwright.regtest.config.js tests/dex/order-lifecycle.regtest.spec.js
 //
 // It runs on any venue, but Bitcoin's regtest indexer is wedged at block 10818
-// (campaign §3.7 / ), and every assertion here is a question for the
+// (campaign §3.7), and every assertion here is a question for the
 // indexer, so RLTC is where it can actually answer.
 //
 // THE PAIR IS DELIBERATE: GIVE a token, GET native coin. That is the side the
@@ -90,7 +90,7 @@ async function mineIfPending() {
 /**
  * The indexed action for a txid, found in the LIST rather than by probing an
  * index: a speculative `GET /api/action/<index>` before the indexer writes its
- * row poisons that index permanently (§3.6 / ).
+ * row poisons that index permanently (§3.6).
  */
 async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;

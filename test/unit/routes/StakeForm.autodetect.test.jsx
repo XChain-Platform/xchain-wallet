@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Behavioural test for the STAKE form's new-vs-top-up auto-detect
-// . The stake-form smoke only greps the source for the string
+//The stake-form smoke only greps the source for the string
 // `messaging.getStakesForAddress`; it never proves the detection effect
 // actually fires, calls the indexer with the right args, aggregates the
 // source's existing valid stake, or flips the mode radio. This drives

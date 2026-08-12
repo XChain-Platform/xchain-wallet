@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// maxSendable : what "Max" is allowed to mean on a native-coin send.
+// maxSendable: what "Max" is allowed to mean on a native-coin send.
 //
 // THE DEFECT THIS EXISTS FOR, measured on BTC regtest 2026-07-29 from an
 // address holding exactly 50,000,000 sats: Max offered 49,998,500, the
@@ -51,7 +51,7 @@
 // (XChainEncoder.js, RESERVATION_TTL_MS - "the success path keeps its
 // reservations on purpose"), so pricing Max with a build that works would lock
 // the address against the very send Max is preparing. A build that THROWS hands
-// every claim straight back . Pricing through the refusal is therefore
+// every claim straight back. Pricing through the refusal is therefore
 // the only round trip that leaves the address exactly as it found it.
 //
 // It also never invents a number: every path that cannot reach those three

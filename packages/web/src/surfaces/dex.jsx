@@ -18,7 +18,7 @@
 // MySwapsView, CrossChainSwapForm and MarketActivity never enter the bundle at
 // all. The alternative - a boolean the app checks - leaves the code in the
 // artifact and relies on a bundler happening to shake it out, which is not
-// something a signed manifest can claim ( §2.3, ).
+// something a signed manifest can claim (§2.3).
 //
 // Consequences of that choice, both deliberate:
 //   - This is the ONLY module allowed to import a DEX route component. A

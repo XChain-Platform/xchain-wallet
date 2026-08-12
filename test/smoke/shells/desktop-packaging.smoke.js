@@ -28,7 +28,7 @@
 //      - mac / win / linux targets present with expected shape.
 //      - Signing fields are env-var-driven: mac.identity is the team
 //        qualifier whenever a certificate was supplied, and null only
-//        when one was not .
+// when one was not.
 //      - publish is electron-updater generic provider pointing at
 //        downloads.xchain.io.
 //
@@ -159,7 +159,7 @@ assert.equal(
     'macOS entitlements point at build/entitlements.mac.plist',
 );
 
-// --- The signed app has to be able to START ( row 143) ----------
+// --- The signed app has to be able to START (row 143) ----------
 //
 // THIS SHIPPED. `com.apple.security.cs.allow-jit` was false, on a comment
 // that said "We don't JIT any code" - and Electron is V8, which does. A
@@ -192,7 +192,7 @@ assert.equal(
         'the wider of the two memory entitlements stays off: allow-jit alone was proven sufficient',
     );
 }
-// --- The direct-download signing identity  -------------------
+// --- The direct-download signing identity -------------------
 //
 // `mac.identity` was `CSC_IDENTITY_NAME || null`, and the only non-null
 // source of it anywhere was one env line in each of release.yml's two
@@ -200,7 +200,7 @@ assert.equal(
 // `qualifier === null` and returns BEFORE it looks at CSC_LINK and before
 // `notarizeIfProvided`, so deleting either line signed nothing, notarized
 // nothing, exited 0, and shipped correctly named installers that Gatekeeper
-// blocks on every user's machine.  guards the workflow lines; these
+// blocks on every user's machine. guards the workflow lines; these
 // assert the config no longer depends on them.
 assert.equal(
     loadConfig(NO_SIGNING_ENV).mac.identity,
@@ -231,7 +231,7 @@ assert.ok(
     'macOS dmg target configured',
 );
 
-// --- The disk image is signed and notarized too ( row 140) ------
+// --- The disk image is signed and notarized too (row 140) ------
 //
 // v0.338.0 published a .dmg containing a signed, notarized, stapled app
 // inside a container `codesign` called "not signed at all", because
@@ -274,7 +274,7 @@ assert.equal(
 assert.ok(config.win, 'win target config present');
 
 // electron-builder v26 moved signtool settings into `win.signtoolOptions`
-// ( stage 2). Read from whichever signing block this build selected:
+// (stage 2). Read from whichever signing block this build selected:
 // with Azure env vars set the config emits `azureSignOptions` instead, and
 // the two are mutually exclusive. Both carry publisherName, because it is
 // what electron-updater matches an update's publisher against.
@@ -300,7 +300,7 @@ assert.ok(
 //
 // None of these was set, and the lane had never been run to find out: CI
 // is not configured, and the reproduce container uses `--dir`, which
-// packages nothing. Running a real packaged build (, 2026-08-01)
+// Packages nothing. Running a real packaged build (2026-08-01)
 // failed three times in a row, each time on a different one of these.
 // `*.AppImage` and `*.deb` are REQUIRED rows in expected-artifacts.txt,
 // so each of these is a launch blocker for Linux, not a nicety.
@@ -554,7 +554,7 @@ assert.ok(
     /NODE_VERSION=\d/.test(dockerfile),
     'Dockerfile pins NODE_VERSION',
 );
-// Arch-suffixed since : the container is amd64-only (matching the
+// Arch-suffixed: the container is amd64-only (matching the
 // amd64 release runner it must produce identical bytes to), and the hash
 // is per tarball. That the value agrees with tools/release/toolchain.json
 // and with the release lanes is a separate, stricter check in
@@ -597,7 +597,7 @@ const reproduceSh = readFileSync(join(desktop, 'scripts', 'reproduce.sh'), 'utf8
 // %ct is the COMMITTER date and diverges from %at on any rebase or
 // amend; the release lane injects %at, so the two sides stamped
 // different mtimes into the asar and the reproduction could not match
-// . The version pin lives in tools/release/toolchain.json and
+//The version pin lives in tools/release/toolchain.json and
 // reproducible-toolchain.smoke.js holds both sides to it.
 assert.ok(
     /git log -1 --pretty=%at/.test(reproduceSh),
@@ -677,7 +677,7 @@ for (const [name, sources] of Object.entries(EXPECTED_RENDERER_CSP)) {
 
 // --- 8. The desktop reproducible-build recipe -------------------------
 //
-//  moved it out of this package and into the sibling
+// a later change moved it out of this package and into the sibling
 // xchain-documentation checkout, where it is the "Desktop" section of
 // components/wallet/reproducible-builds.md. The recipe is still what the
 // scripts in this package are checked against, so the assertion followed it

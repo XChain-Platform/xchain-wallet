@@ -150,7 +150,7 @@ describe('PriceAlertWatcher', () => {
         expect(notify).toHaveBeenCalledTimes(2);
     });
 
-    it('suppresses the OS notification during quiet hours but still marks the alert triggered ', async () => {
+    it('suppresses the OS notification during quiet hours but still marks the alert triggered', async () => {
         const { watcher, notify, markTriggered } = makeWatcher({
             price: 71000,
             settings: {

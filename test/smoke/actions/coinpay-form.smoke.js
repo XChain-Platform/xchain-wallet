@@ -213,7 +213,7 @@ for (const [shell, pkgPath] of [
 ]) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
     assert.match(pkg.dependencies['xchain-sdk'], /^npm:@dankest-llc\/xchain-sdk@\d+\.\d+\.\d+$/,
-        `${shell} depends on xchain-sdk as an EXACT registry alias (npm:@dankest-llc/xchain-sdk@X.Y.Z). 'link:' is refused:  D8 moved dev linking into node_modules (pnpm run sdk:link) so a committed manifest cannot un-pin the SDK a release is signed over`);
+        `${shell} depends on xchain-sdk as an EXACT registry alias (npm:@dankest-llc/xchain-sdk@X.Y.Z). 'link:' is refused: D8 moved dev linking into node_modules (pnpm run sdk:link) so a committed manifest cannot un-pin the SDK a release is signed over`);
 }
 
 console.log(

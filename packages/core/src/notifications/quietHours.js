@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// isWithinQuietHours:  DND scheduling. Shared by NotificationService
+// isWithinQuietHours: DND scheduling. Shared by NotificationService
 // and PriceAlertWatcher so both delivery paths honor the same window with
 // identical wrap-past-midnight semantics. Pure function of the settings
 // record + a clock, so both callers (and tests) can pin `atDate`.

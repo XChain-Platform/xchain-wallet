@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §7.1: channel-pointer naming and classification.
+// Smoke for §7.1: channel-pointer naming and classification.
 //
 // The failure this guards is the quietest one in the whole release path.
 // If the feed serves update-info files under names the installed wallets
@@ -210,7 +210,7 @@ assert.deepEqual(
         assert.ok(!/downloads\.xchain\.io/.test(lane),
             `desktop-${name} does not name the feed URL`);
 
-        //  §7.5 rehearsal variant. Built from the SAME lane so it
+        // §7.5 rehearsal variant. Built from the SAME lane so it
         // uses the same toolchain and the same signing identity, into its
         // own output directory, and uploaded under its own artifact name so
         // it can never be mistaken for release output.
@@ -225,7 +225,7 @@ assert.deepEqual(
     }
 }
 
-//  §8 hard rules that live in this file.
+// §8 hard rules that live in this file.
 {
     const wf = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
 
@@ -247,7 +247,7 @@ assert.deepEqual(
     // until someone confirms the new one pins the clock too. That is the
     // point: a lane added without the pin is unreproducible, and nothing
     // else about it looks wrong. Bumped 4 -> 5 for the iOS lane
-    // ( §5, S4b), which pins it.
+    // (§5, S4b), which pins it.
     const laneCount = (wf.match(/Pin SOURCE_DATE_EPOCH to the tag commit/g) || []).length;
     assert.equal(laneCount, 5,
         'all five build lanes pin SOURCE_DATE_EPOCH (unsigned, linux, macos, windows, ios)');

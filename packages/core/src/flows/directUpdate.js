@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The update-notice seam for shells that have a lane nobody updates for them
-// ( §6, D4 decided 2026-07-31).
+// (§6, D4 decided 2026-07-31).
 //
 // WHY THIS IS A SEAM AND NOT A CALL. Every shell in this repo except one is
 // updated by something else: the browser reloads, the extension is updated by

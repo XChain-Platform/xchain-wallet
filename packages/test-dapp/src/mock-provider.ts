@@ -266,7 +266,7 @@ export class MockXChainProvider implements XChainProvider {
         // No actionIndex: a real wallet resolves signAction at BROADCAST and
         // the index is assigned later by the indexer, so the field is optional
         // and a mock that always sends one teaches dApp authors to depend on
-        // something the production bridge cannot give them ().
+        // something the production bridge cannot give them.
         return {
             ok: true,
             chainId: params.chainId,

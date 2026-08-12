@@ -166,7 +166,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     // screen decodes what was actually composed. Params are derived once per
     // flow and handed to both compose and submit.
     //
-    // No native-fee lane here on purpose : resolve (v3) and cancel (v1)
+    // No native-fee lane here on purpose: resolve (v3) and cancel (v1)
     // are FREE by protocol design, because every credit they emit was pre-funded
     // when the bet was placed. Only the two fee-bearing formats carry the toggle
     // (create in CreateBetFeedForm, place in BetFeedDetail); adding it here would
@@ -204,7 +204,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             load();
         } catch (err) {
             if (isUserRejection(err)) return;
-            // Resolve and cancel are not fee-bearing , so this form has
+            // Resolve and cancel are not fee-bearing, so this form has
             // no native-fee lane to describe - but it can still be handed an SDK
             // params-builder refusal, and those read as log lines until they go
             // through the shared mapper (D-118).
@@ -266,7 +266,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             {result ? (
                 <div className={styles.card} data-testid="oracle-result">
                     <p className={styles.summary}>
-                        {/*  leg (a): signed and NOT broadcast. An oracle told "result sent"
+                        {/* leg (a): signed and NOT broadcast. An oracle told "result sent"
                             for a transaction still sitting in the queue would wait out its own
                             refund window, which costs it the market. */}
                         {result.queued

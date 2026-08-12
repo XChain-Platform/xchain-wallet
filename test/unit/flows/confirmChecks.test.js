@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Single-encode pipeline tamper checks ( §5.3.2-3).
+// Single-encode pipeline tamper checks (§5.3.2-3).
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -55,7 +55,7 @@ describe('confirmChecks', () => {
             expect(res.ok).toBe(false);
         });
 
-        // Exact satoshi comparison (). DOGE clears 2^53 koinu at ~90M DOGE, and
+        // Exact satoshi comparison. DOGE clears 2^53 koinu at ~90M DOGE, and
         // `s.value === Number(out.value)` collapsed 9007199254740992 and ...993 onto the
         // same double, so a one-koinu mutation still matched its expected slot.
         it('a one-koinu mutation above 2^53 is tamper, not a match', () => {
@@ -141,7 +141,7 @@ describe('confirmChecks', () => {
             expect(res.ok).toBe(false);
         });
 
-        // D-24 : a real contract DEPLOY spreads its base64 CODE across
+        // D-24: a real contract DEPLOY spreads its base64 CODE across
         // several P2SH data-carrier outputs (one per ~476-byte chunk). The
         // allowance is derived from the action size so all legitimate chunk
         // carriers pass, while an EXTRA carrier beyond the count is still tamper.

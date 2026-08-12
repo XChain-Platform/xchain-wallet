@@ -1,13 +1,13 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// : which transaction carries the native-coin protocol fee.
+// Which transaction carries the native-coin protocol fee.
 //
 // The defect this guards was silent and expensive: the fee rode the phase-1
 // commit while the indexer checks the phase-2 reveal, so on LTC/DOGE (where
 // native is the only fee lane) every chunked action paid and was rejected.
 //
-//  then found the second half: the output has to be HANDED to the phase-1
+// then found the second half: the output has to be HANDED to the phase-1
 // build even though it is emitted on phase 2, because the reveal spends only
 // the commit's outputs and the encoder sizes them from the customOutputs it was
 // given. Placement therefore moved off a size prediction and on to the encoding

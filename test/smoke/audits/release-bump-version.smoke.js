@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  /  / : tools/release/bump-version.mjs.
+// Smoke for: tools/release/bump-version.mjs.
 //
 // version-lockstep.smoke.js checks the RESULT of a bump against the tree it
 // runs in, which is the right check and cannot be the only one: it can only
@@ -101,7 +101,7 @@ const make = (changelog) => { const d = scaffold(changelog); trees.push(d); retu
 try {
     // --- 1. --help answers without touching the tree ---------------------
     //
-    //  row 24: an operator-facing tool that answers "how do I use
+    // row 24: an operator-facing tool that answers "how do I use
     // you" with its own failure vocabulary is unusable at exactly the
     // moment it is typed. This one parses --help before it reads anything.
 
@@ -184,7 +184,7 @@ try {
     assert.equal(readFileSync(join(dryTree, 'CHANGELOG.md'), 'utf8'), CHANGELOG_WITH_ENTRIES,
         '--dry-run rewrote the CHANGELOG');
 
-    console.log('OK: release bump-version smoke (//: --help is side-effect free, '
+    console.log('OK: release bump-version smoke (--help is side-effect free,'
         + `the bump reaches ${PACKAGES.length + 1} package.json files plus the manifest pair, WALLET_VERSION `
         + "and README's two prose copies, the Unreleased section is promoted with its entries, and an empty "
         + 'Unreleased, a repeat bump, a non-semver version and --dry-run all write nothing)');

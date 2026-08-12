@@ -2,7 +2,7 @@
 # Copyright © 2025–2026 Dankest, LLC
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# App Store screenshot harness driver ( §6, ).
+# App Store screenshot harness driver (§6).
 #
 # Produces the iPhone AND iPad listing sets. For a universal app a missing
 # iPad set BLOCKS submission, so both idioms run by default and a partial run
@@ -69,7 +69,7 @@ fi
 profile="$(tr -d '[:space:]' < "$stamp")"
 if [ "$profile" != "store" ]; then
     echo "screenshots: staged bundle is profile '$profile', refusing to shoot a listing set." >&2
-    echo "  A '$profile' build carries the review-hidden surfaces ( §2.3)." >&2
+    echo "  A '$profile' build carries the review-hidden surfaces (§2.3)." >&2
     echo "  Re-run without SKIP_BUILD=1, or stage a store build by hand:" >&2
     echo "    XCHAIN_BUILD_PROFILE=store pnpm --filter @xchain-wallet/web build" >&2
     echo "    pnpm --filter @xchain-wallet/mobile sync:ios" >&2
@@ -177,7 +177,7 @@ echo "Before these go in a listing: no real recovery phrase, no mainnet address 
 # holds, three of those commits changing what these very scenes render. Apple's
 # 2.3.3 accurate-metadata rule makes that a rejection class. The pin is written
 # HERE, rather than by hand afterwards, because a pin that was not written by a
-# capture is a claim about a capture nobody watched (,  row 63).
+# Capture is a claim about a capture nobody watched (row 63).
 echo
 echo "screenshots: pinning the set to $(git -C "$repo" rev-parse --short HEAD)"
 node "$repo/tools/release/verify-listing-assets.mjs" --set ios --write --how capture

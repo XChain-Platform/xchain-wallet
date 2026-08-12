@@ -77,8 +77,8 @@ export function resolvePreflightPrivacy(settings) {
 
 // §17.7.1 / G028: clipboard auto-clear bounds. 0 disables auto-clear.
 //
-// DORMANT since  (operator ruling a, 2026-08-11). ViewPrivateKey
-// was the only reader and  made key material uncopyable, so the
+// DORMANT (operator ruling a, 2026-08-11). ViewPrivateKey
+// was the only reader and a later change made key material uncopyable, so the
 // Settings Privacy control that wrote this value was removed rather than
 // left standing as a promise nothing kept. The field and these bounds
 // stay: stored settings already carry the key, so deleting it would be a
@@ -153,11 +153,11 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant: ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant: per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant: `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
- * @property {{ walletMode: 'watcher' | 'signer', label: string, keySetId: string, keys: object[], sharedChainIds: string[], pairedAt: string } | null} [partnerPairing]   v2-tolerant:  / §20.5. The verified other half of a watcher/signer pair, holding that partner's account-level PUBLIC key set (never any seed or private key). Written only by `flows.pairPartner` after `verifyPartnerPairing` proves both halves derive from one recovery phrase. null / absent = unpaired, which is the only valid state for a `full` wallet.
+ * @property {{ walletMode: 'watcher' | 'signer', label: string, keySetId: string, keys: object[], sharedChainIds: string[], pairedAt: string } | null} [partnerPairing] v2-tolerant: §20.5. The verified other half of a watcher/signer pair, holding that partner's account-level PUBLIC key set (never any seed or private key). Written only by `flows.pairPartner` after `verifyPartnerPairing` proves both halves derive from one recovery phrase. null / absent = unpaired, which is the only valid state for a `full` wallet.
  * @property {typeof NETWORKS[number]} [activeNetwork]                                                     v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
  * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
- * @property {boolean} [showFiatInHistory]                                                                   v2-tolerant: . When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
- * @property {{ enabled: boolean, start: string, end: string }} [quietHours]                                 v2-tolerant: . Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
+ * @property {boolean} [showFiatInHistory] v2-tolerant. When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
+ * @property {{ enabled: boolean, start: string, end: string }} [quietHours] v2-tolerant. Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
  */
 
 // Form-draft retention (surfaced in Settings > Privacy, Cluster P FU 6).
@@ -200,7 +200,7 @@ export const SIGN_THROTTLE_BURST_MAX = 1000;
 export const SIGN_THROTTLE_WINDOW_MS_MIN = 1_000;
 export const SIGN_THROTTLE_WINDOW_MS_MAX = 24 * 60 * 60 * 1000;
 
-// Quiet hours : 'HH:MM' 24h local-time strings only. Kept narrow
+// Quiet hours: 'HH:MM' 24h local-time strings only. Kept narrow
 // (no seconds, no timezone) since the UI is a plain <input type="time">.
 export const QUIET_HOURS_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const QUIET_HOURS_DEFAULT = Object.freeze({ enabled: false, start: '22:00', end: '08:00' });
@@ -498,11 +498,11 @@ export function validateSettings(record) {
             'must be an array of origin strings',
         );
     }
-    //  slice 5: `confirmModalSlices` is GONE. The confirm pipeline is
+    // slice 5: `confirmModalSlices` is GONE. The confirm pipeline is
     // unconditional, so the field is neither read nor validated. An existing
     // vault may still carry it; the validator checks named fields rather than
     // rejecting unknown ones, so a leftover key is inert.
-    // v2-tolerant ( §4.8): pre-flight privacy mode.
+    // v2-tolerant (§4.8): pre-flight privacy mode.
     if (r.preflightPrivacy !== undefined) {
         check(
             errors,
@@ -553,7 +553,7 @@ export function validateSettings(record) {
             `must be one of ${WALLET_MODES.join(', ')}`,
         );
     }
-    //  / §20.5: the verified watcher<->signer partner record.
+    // §20.5: the verified watcher<->signer partner record.
     // Shape-checked only (no re-derivation of keyIds): `pairPartner` is the
     // sole writer and it validates the payload cryptographically before the
     // record ever reaches here. The point of this check is that a corrupt

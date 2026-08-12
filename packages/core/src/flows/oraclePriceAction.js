@@ -12,7 +12,7 @@
 // (VERSION|COIN|TICK|FIAT|VALUE|FEE|MEMO, protocol doc PRICE.md).
 //
 // Permissionless: any address may publish, no stake required. What it
-// buys the publisher is the  oracle usage fee, paid up front as a
+// buys the publisher is the oracle usage fee, paid up front as a
 // real coin output by whoever opens a Mode B dispenser against this
 // address, at FEE x the dispenser's projected total proceeds.
 //
@@ -47,7 +47,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
- * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically instead of rebuilding.
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -108,7 +108,7 @@ export async function oraclePriceAction(opts) {
             //     with a raw SQL error, which the wallet then reports as
             //     "the LTC fee price is temporarily unavailable" - so PRICE
             //     could not be published at all on a chain where the coin fee
-            //     is the only lane . D-146.
+            // is the only lane. D-146.
             //   - the encoder's UTXO selection, which cannot turn a bare
             //     pubkey into a script ("has no matching Script"): the D-7
             //     family, same two lines advancedAction.js carries.

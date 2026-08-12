@@ -1,4 +1,4 @@
-# Tools the CI gate checks for on a venue before it runs this suite .
+# Tools the CI gate checks for on a venue before it runs this suite.
 #
 # The list is DERIVED from the suite by ci-gate.sh (it reads the spawn calls in
 # test/ and reports zip, tar, gpg, ssh and pnpm). This file only CORRECTS that
@@ -9,10 +9,10 @@
 # smoke runs sign.sh, whose pre-sign dev-mock gate
 # (tools/build-reproduce/check-no-dev-mock.sh) unpacks the staged extension zip,
 # and the scan does not follow a shell script the suite executes through bash.
-# `zip` missing from test-host on 2026-08-06 is what filed ; `unzip` is the
-# same gap one call deeper. tar needs no line here: the suite spawns it directly.
+# `zip` missing from a CI runner on 2026-08-06 is what surfaced this gap; `unzip`
+# is the same gap one call deeper. tar needs no line here: the suite spawns it directly.
 unzip
-# ditto is a FALSE POSITIVE from the scan ( row 144). It is Apple's own
+# ditto is a FALSE POSITIVE from the scan (row 144). It is Apple's own
 # archiver, it exists only on macOS, and every call to it in
 # release-launch-probe.smoke.js sits behind a `process.platform === 'darwin'`
 # guard - the Linux venue drives the AppImage lane instead and never spawns it.

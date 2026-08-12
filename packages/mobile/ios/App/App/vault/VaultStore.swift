@@ -96,7 +96,7 @@ final class VaultStore {
             )
         }
 
-        // Keep the vault out of iCloud and Finder backups ( §4; the
+        // Keep the vault out of iCloud and Finder backups (§4; the
         // Android twin is allowBackup="false"). Not a belt-and-braces nicety:
         // the key that opens these files is `ThisDeviceOnly`, so a backup could
         // only ever restore ciphertext onto a device with no way to read it -
@@ -214,7 +214,7 @@ final class VaultStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
             kSecAttrAccount as String: account,
-            // Pinned by  §4 and not an implementation choice: the
+            // Pinned §4 and not an implementation choice: the
             // wallet is foreground-only, so no weaker accessibility class is
             // authorised, and `ThisDeviceOnly` is what keeps vault key
             // material out of iCloud Keychain. `kSecAttrSynchronizable` is

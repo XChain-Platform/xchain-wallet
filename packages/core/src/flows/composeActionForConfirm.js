@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// composeActionForConfirm ( §5.3): the HOST half of the single-
+// composeActionForConfirm (§5.3): the HOST half of the single-
 // encode pipeline. Every SDK primitive the confirm pipeline needs -
 // createAction, the encoder, the vault (for ADS settings), decomposePsbt,
 // and decodeActionFromPsbt - lives host-side (the React tree only ever
@@ -75,7 +75,7 @@ export async function composeActionForConfirm({
             .catch(() => null)
         : Promise.resolve(null);
 
-    // : the XCHAIN lane's own protocol-fee quote, for the confirm
+    // The XCHAIN lane's own protocol-fee quote, for the confirm
     // screen's disclosure line.
     //
     // That line used to read only `report.quote.xchainFee`, i.e. the fee record
@@ -83,7 +83,7 @@ export async function composeActionForConfirm({
     // 4000ms budget and the wallet drops the verdict when the indexer misses
     // it. So on a merely busy venue the fee silently stopped being disclosed
     // and the screen went back to quoting the miner fee alone, which is
-    // 's screen. Measured twice in one hour on the same action (campaign
+    // that screen. Measured twice in one hour on the same action (campaign
     // §11.1).
     //
     // Asked here, concurrently, from the same `/feequote` call the NATIVE lane
@@ -92,7 +92,7 @@ export async function composeActionForConfirm({
     // discloses its fee as a coin debit and must not also state it in XCHAIN.
     // Pre-rejected to null: a fee the wallet cannot quote is a line it does not
     // draw, never a compose that fails.
-    // Skipped for a bare native payment for the same reason  skips the
+    // Skipped for a bare native payment for the same reason a later change skips the
     // dry run on one: there is no XChain action to price, and asking anyway
     // spends a round trip on the wallet's commonest operation.
     const quotable = source
@@ -118,7 +118,7 @@ export async function composeActionForConfirm({
     // for the fee; null when an input value is missing from the PSBT, in which
     // case the UI falls back to its estimate and says so.
     //
-    // : totalNetworkFeeSats, not exactNetworkFeeSats, because a chunk-lane
+    // totalNetworkFeeSats, not exactNetworkFeeSats, because a chunk-lane
     // action is TWO transactions and this PSBT is only the first. The reveal's
     // miner fee is pre-funded by the carrier outputs this PSBT creates, so it is
     // knowable here and belongs in the number the user is asked to approve.
@@ -129,7 +129,7 @@ export async function composeActionForConfirm({
         ownAddresses: own,
         // The reveal re-emits the native-coin protocol fee as a real output, so
         // that slice of the carrier value is not miner fee. It is the protocol
-        // fee's job to surface it , not this number's.
+        // fee's job to surface it, not this number's.
         revealOutputSats: Number(composed.quote?.requiredFeeSats) || 0,
     });
     assertNoTamper({
@@ -166,7 +166,7 @@ export async function composeActionForConfirm({
     // the exact fee from above, so the projected coin delta matches the fee the
     // user is shown. Best-effort: any failure leaves `simulation` null and the
     // section simply does not render, exactly as before.
-    // : a bare native payment has no action string to parse. Its
+    // A bare native payment has no action string to parse. Its
     // canonical source is the payment output itself, and the output-set
     // tamper check above has already proven the PSBT matches exactly the
     // outputs these params produced - so they are as canonical here as a
@@ -188,12 +188,12 @@ export async function composeActionForConfirm({
     // the "renders from form state or a caller's claimed intent" that §1
     // forbids - and the deltas' own comment claimed intent already read one
     // canonical source with them. Describing what was actually composed makes
-    // that true, and makes it true ONCE instead of per form: the  VOTE
+    // that true, and makes it true ONCE instead of per form: the VOTE
     // mirror and the MESSAGE ciphertext both needed bespoke fixes to keep the
     // rendered intent honest, and a surface that describes the composed bytes
     // needs none.
     //
-    // : described by `sdk.decoder.describe`, not by the wallet's own
+    // Described by `sdk.decoder.describe`, not by the wallet's own
     // copy of it. §3.2 promoted the describer to the SDK precisely so the
     // words a signer reads come from the same library that parsed the bytes,
     // and a second implementation is a second thing to drift: the SDK's
@@ -219,7 +219,7 @@ export async function composeActionForConfirm({
         decoded = null;
     }
 
-    // : the miner fee is not the whole cost. A fee-bearing action
+    // The miner fee is not the whole cost. A fee-bearing action
     // (ISSUE, the BET_* and VM_* families, per-recipient AIRDROP/DIVIDEND)
     // also pays a protocol fee, and `networkFeeSats` cannot see it: in
     // native-coin mode it is an extra OUTPUT to FEE_DESTINATION, and
@@ -233,7 +233,7 @@ export async function composeActionForConfirm({
         ? { amount: satsToCoinDecimal(protocolFeeSats) }
         : null;
 
-    // , and only for the disclosure LINE: the XCHAIN-lane fee is not fed
+    // And only for the disclosure LINE: the XCHAIN-lane fee is not fed
     // to the simulator above. The projection folds a fee into a balance row,
     // and in this lane the debit is contingent on acceptance rather than spent
     // on broadcast, so it belongs in a sentence that can say so. Kept as the
@@ -288,7 +288,7 @@ export async function composeActionForConfirm({
         // correct action would fail. A field the popup cannot see may as well
         // not exist.
         payFeeInNativeCoin: !!composed.payFeeInNativeCoin,
-        // : the protocol fee output the two-phase lane moved to the
+        // The protocol fee output the two-phase lane moved to the
         // reveal. Rides the envelope so the form can hand it back on Approve
         // and the submit path attaches it without re-quoting.
         deferredFeeOutput: composed.deferredFeeOutput || null,
@@ -301,11 +301,11 @@ export async function composeActionForConfirm({
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
         // does not carry every input value. Never a rate estimate.
         networkFeeSats,
-        // : the action's own protocol fee in the chain's smallest unit,
+        // The action's own protocol fee in the chain's smallest unit,
         // when it is being paid in the native coin and therefore known. Null
         // in XCHAIN-fee mode, which pays no coin output.
         protocolFeeSats: protocolFee ? protocolFeeSats : null,
-        // : the same fee in XCHAIN, when THAT is the lane paying it. The
+        // The same fee in XCHAIN, when THAT is the lane paying it. The
         // confirm screen's disclosure line prefers the dry run's own staged fee
         // record and falls back to this, so the fee stays on screen when the
         // dry run does not answer. Null in native mode and whenever the quote
@@ -340,7 +340,7 @@ export async function composeActionForConfirm({
  *     are priced from the gas schedule without a dry run) - so those DO get a
  *     line, and the unverified-ness is already stated elsewhere on the screen;
  *   - a zero fee, i.e. the action genuinely charges nothing. Saying so would be
- *     the opposite failure to  and just as wrong .
+ * the opposite failure and just as wrong.
  */
 async function quoteXchainFee({ sdkRegistry, chainId, actionData, source, signal }) {
     const sdk = sdkRegistry.get(chainId);

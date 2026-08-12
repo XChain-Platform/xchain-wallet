@@ -8,19 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// protocolFeeDisclosure . The confirm screen's XCHAIN-lane
+// protocolFeeDisclosure. The confirm screen's XCHAIN-lane
 // protocol-fee line.
 //
 // A fee-bearing action (ISSUE, the BET_* and VM_* families, per-recipient
 // AIRDROP/DIVIDEND) charges a protocol fee on top of the miner fee, and the
 // confirm screen disclosed it in exactly one of the two payment lanes. In
 // NATIVE-coin mode the fee rides as an output to FEE_DESTINATION, the wallet
-// quotes it to size that output, and  folds that number into the
+// quotes it to size that output, and folds that number into the
 // projection. In the DEFAULT XCHAIN mode nothing was quoted, so the fee was
 // invisible: the screen priced the miner fee to eight decimals and said
 // nothing about the larger of the two charges.
 //
-// The number now arrives for free.  made `/preflight` echo the fee
+// The number now arrives for free. a later change made `/preflight` echo the fee
 // record the dry-run already staged, and the SDK lands it at
 // `report.quote.xchainFee` on every confirm (an XCHAIN-denominated decimal
 // string, 8dp, in EVERY payment mode - the fee row is always
@@ -31,12 +31,12 @@
 // the same fee as a native-coin debit, and adding an XCHAIN line beside it
 // would read as a second, separate charge.
 //
-// : the report is NOT the only source, because it is best-effort. The
+// The report is NOT the only source, because it is best-effort. The
 // SDK's Tier-1 dry run has a 4-second budget and the wallet drops the verdict
 // when the indexer misses it (the panel says "the network dry-run was
 // unavailable ... relying on client checks"), which used to take the fee line
 // down with it - the confirm screen fell all the way back to quoting the miner
-// fee to eight decimals with the larger charge unmentioned, i.e. 's
+// fee to eight decimals with the larger charge unmentioned, i.e. that
 // screen, on a venue that was merely busy. Measured in the wallet e2e campaign
 // §11.1: same action, same wallet, one run stated the fee and the next did not.
 // So the composed envelope now carries the wallet's OWN fee quote
@@ -61,7 +61,7 @@ export const PROTOCOL_FEE_TICK = 'XCHAIN';
  * Null in four cases, each deliberate:
  *   - the fee is being paid in the native coin (the composed envelope carries
  *     a quote), where it is already disclosed as a native debit;
- *   - NEITHER source knows the fee: no report (or one from a pre-
+ * - NEITHER source knows the fee: no report (or one from a pre-
  *     explorer, whose legacy `/feequote` answers carry no `xchainFee`) AND no
  *     quote on the composed envelope. The wallet must not imply zero;
  *   - both sources answer null, which means the dry-run was rejected before the
@@ -72,7 +72,7 @@ export const PROTOCOL_FEE_TICK = 'XCHAIN';
  * The report is preferred where it has an answer: it is the fee record the
  * dry-run itself staged for these exact bytes. The envelope's quote is the
  * fallback, and the reason it exists is that the report is allowed to be
- * missing .
+ * missing.
  *
  * @param {object} [args]
  * @param {{ quote?: { xchainFee?: string|number|null } | null } | null} [args.report]
@@ -110,7 +110,7 @@ export function xchainProtocolFeeLine({ report, composed } = {}) {
  * Is this composed action paying its protocol fee in the native coin?
  *
  * Read off the QUOTE, not off `protocolFeeSats`: the two-phase chunk lane
- *  defers the fee output to the reveal transaction, and only the
+ * defers the fee output to the reveal transaction, and only the
  * quote is present on both lanes. Either field being a positive number means
  * a native-coin fee output exists somewhere in this action, so the native
  * disclosure owns the line.

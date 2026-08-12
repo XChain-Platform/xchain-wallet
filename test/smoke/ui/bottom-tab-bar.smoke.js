@@ -110,7 +110,7 @@ assert.ok(
     /FullLayoutWithNav\(\{ nav, bottomBar(?:, header)?, children \}\)/.test(navJsxSrc),
     'FullLayoutWithNav exposes a bottomBar slot',
 );
-// : the slot's contents are now filtered through the layout tier
+// The slot's contents are now filtered through the layout tier
 // (`bar` is bottomBar on the compact tier, null above it), so the rendered
 // expression is the tier-resolved value rather than the raw prop.
 assert.ok(/const bar = showsBottomBar\(tier\) \? bottomBar : null;/.test(navJsxSrc),
@@ -150,7 +150,7 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         /import\s*\{\s*BottomTabBar\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/components\/BottomTabBar\.jsx'/.test(src),
         `${label} App imports BottomTabBar`,
     );
-    // : shells hand the slot in unconditionally and the layout decides,
+    // Shells hand the slot in unconditionally and the layout decides,
     // but keep the window wide enough to also accept a legacy inline guard.
     assert.ok(/bottomBar=\{[\s\S]{0,200}<BottomTabBar/.test(src),
         `${label} App passes <BottomTabBar> into FullLayoutWithNav.bottomBar`);

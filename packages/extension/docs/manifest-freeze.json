@@ -1,6 +1,6 @@
 {
     "_readme": [
-        " §6 manifest-freeze allowlist. Read by packages/core/scripts/extension-manifest-audit.js",
+        "§6 manifest-freeze allowlist. Read by packages/core/scripts/extension-manifest-audit.js",
         "(rules permissions-frozen, host-permissions-frozen, content-script-matches-frozen), which runs",
         "in test/smoke/audits/extension-manifest-audit.smoke.js and therefore in `pnpm test:smoke` on",
         "every CI run. Any drift in manifest.json's permissions, host_permissions, or content-script",

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  ( §4.7): derive what an action spends, so a second approval
+// (§4.7): derive what an action spends, so a second approval
 // window can be told about it.
 //
 // Two properties matter more than the happy path:

@@ -15,10 +15,10 @@
 //
 //   - Both shells expose a `resolveSdkFactory` that produces the real
 //     factory via `adaptXChainSDK`. The web shell loads the SDK with a
-//     dynamic import (legal in a page); the extension CANNOT (:
+// Dynamic import (legal in a page); the extension CANNOT (
 //     `import()` is disallowed on ServiceWorkerGlobalScope) and injects a
 //     statically imported class instead.
-//   - : WHICH SDK runs is read off the environment before anything is
+// -: WHICH SDK runs is read off the environment before anything is
 //     imported. Dev/test run the dev-mock factory (one console.warn, naming
 //     the opt-in flag); production, and dev with VITE_XCHAIN_REAL_SDK=1, run
 //     the real one and REFUSE to substitute the mock if it fails to load.
@@ -58,19 +58,19 @@ assert.ok(
     /console\.warn/.test(webFactory),
     'web sdkFactory warns when it serves the dev mock',
 );
-// : the venue must be decided from the environment BEFORE anything is
+// The venue must be decided from the environment BEFORE anything is
 // imported. It used to be decided by catching the import failure, so the day
 // Vite learned to pre-bundle the linked CJS SDK the dev shell silently moved
 // to the real SDK (against unreachable mainnet explorers) and five e2e specs
 // went red. A catch block must never hand back the mock again.
 assert.ok(
     /export function selectSdkVenue/.test(webFactory),
-    'web sdkFactory selects its venue from the environment ',
+    'web sdkFactory selects its venue from the environment',
 );
 const webCatchBody = webFactory.slice(webFactory.indexOf('} catch (err) {'));
 assert.ok(
     webCatchBody.length > 0 && !/devMockFactory/.test(webCatchBody),
-    'web sdkFactory never resolves to the dev mock from a catch branch ',
+    'web sdkFactory never resolves to the dev mock from a catch branch',
 );
 
 const extFactory = readFileSync(
@@ -86,7 +86,7 @@ assert.ok(
     'extension sdkFactory exports createDevMockSdk for the background to use as fallback',
 );
 
-// : the extension resolver must NOT load the SDK itself. `import()` is
+// The extension resolver must NOT load the SDK itself. `import()` is
 // disallowed on ServiceWorkerGlobalScope by the HTML specification, so the
 // dynamic import that used to live here always rejected in the packaged
 // extension and the wallet could not create, sign, or serve data at all.
@@ -136,7 +136,7 @@ assert.ok(
 );
 assert.ok(
     /resolveSdkFactory\(\{ devMockFactory: createDevMockSdk, XChainSDK \}\)/.test(background),
-    'background wires dev mock as the resolver fallback AND injects the statically imported SDK ',
+    'background wires dev mock as the resolver fallback AND injects the statically imported SDK',
 );
 assert.ok(
     /^import \{ XChainSDK \} from '\.\/background\/sdkStatic\.js';$/m.test(background),
@@ -154,7 +154,7 @@ const extPkg = JSON.parse(
 assert.ok(webPkg.dependencies?.['xchain-sdk'], 'web depends on xchain-sdk');
 assert.ok(extPkg.dependencies?.['xchain-sdk'], 'extension depends on xchain-sdk');
 
-// --- 3. resolveSdkFactory venue selection  --------------------
+// --- 3. resolveSdkFactory venue selection --------------------
 
 // The resolver runs whichever SDK the ENVIRONMENT names, and the SDK import
 // is injectable here so the two venues can be exercised without an installed
@@ -257,9 +257,9 @@ try {
 }
 assert.ok(threw, 'resolveSdkFactory rejects when no devMockFactory passed');
 
-// --- 5. /556/557 production-safety invariants -------------------
+// --- 5. 556/557 production-safety invariants -------------------
 
-// : the dev-mock implementations must be gated on import.meta.env
+// The dev-mock implementations must be gated on import.meta.env
 // PROD so a production build dead-code-eliminates them; otherwise
 // check-no-dev-mock.sh's implementation grep is a false green.
 assert.ok(
@@ -271,7 +271,7 @@ assert.ok(
     'background PROD-gates createDevMockSdk for dead-code elimination',
 );
 
-// : sdkResolved must NOT swallow the production refusal thrown by
+// sdkResolved must NOT swallow the production refusal thrown by
 // resolveSdkFactory; the old `.catch(() => 'dev-mock')` left the registry
 // silently on the mock. The catch must re-throw under PROD.
 for (const [name, src] of [['hostBridge', hostBridge], ['background', background]]) {
@@ -296,8 +296,8 @@ for (const [name, src] of [['hostBridge', hostBridge], ['background', background
     );
 }
 
-// : the release gate must grep for the mock IMPLEMENTATION, not just
-// the fallback warning strings, and  positively require SDK-unique
+// The release gate must grep for the mock IMPLEMENTATION, not just
+// the fallback warning strings, and positively require SDK-unique
 // literals so "SDK failed to bundle at all" cannot pass either.
 const gate = readFileSync(
     join(wsRoot, 'tools', 'build-reproduce', 'check-no-dev-mock.sh'),
@@ -309,7 +309,7 @@ for (const marker of ['Dev SDK stub', 'devmockpsbt']) {
         `check-no-dev-mock.sh checks mock-implementation marker: ${marker}`,
     );
 }
-//  §6: the positive SDK-unique markers moved into a per-target
+// The positive SDK-unique markers moved into a per-target
 // table, because the desktop renderer imports xchain-sdk/src/wallet.js
 // directly and never pulls in the package index, so the index-only
 // literals below are legitimately absent there. Asserted per target
@@ -328,7 +328,7 @@ assert.ok(desktopRow, 'check-no-dev-mock.sh scans the desktop renderer bundle');
 assert.ok(/SDKWalletError/.test(desktopRow),
     'desktop renderer requires a wallet-module SDK marker (it has no package index)');
 
-// --- The DESKTOP MAIN process wires the real SDK  -------------
+// --- The DESKTOP MAIN process wires the real SDK -------------
 //
 // Everything above this line is about bundles, and the defect it missed was
 // about wiring. The extension and the web shell build their registry on the
@@ -370,7 +370,7 @@ assert.ok(/SDKWalletError/.test(desktopRow),
     );
 }
 
-// : both shell Vite configs must give the link:-resolved SDK the CJS
+// Both shell Vite configs must give the link:-resolved SDK the CJS
 // transform (commonjsOptions.include) and resolve the polyfill shim +
 // SDK-repl specifiers the transform surfaces.
 for (const shell of ['web', 'extension']) {
@@ -392,7 +392,7 @@ for (const shell of ['web', 'extension']) {
     );
 }
 
-// : the dev server's pre-bundling must hang off the SAME flag as the
+// The dev server's pre-bundling must hang off the SAME flag as the
 // venue, in BOTH directions. Vite's scanner finds the bare import('xchain-sdk')
 // by itself, so without an explicit `exclude` the dev shell acquires a working
 // real SDK (aimed at mainnet explorers) whether anyone asked for it or not.
@@ -402,7 +402,7 @@ const webCfg = readFileSync(
 );
 // Asserted on the PACKAGE specifier rather than on the whole array literal,
 // because the include list legitimately carries a second entry (below) and the
-// invariant  protects is only about `xchain-sdk` itself: pre-bundled when
+// invariant protects is only about `xchain-sdk` itself: pre-bundled when
 // the flag is set, explicitly excluded when it is not.
 const optimizeDepsBlock = /optimizeDeps:[\s\S]*?,\n    build:/.exec(webCfg)?.[0] || '';
 assert.ok(optimizeDepsBlock, 'web vite config has an optimizeDeps block');
@@ -419,14 +419,14 @@ assert.ok(
 );
 assert.ok(
     !/include:\s*\[[^\]]*'xchain-sdk'\s*[,\]]/.test(flagOffBranch),
-    'web vite config never pre-bundles the xchain-sdk PACKAGE off the flag ',
+    'web vite config never pre-bundles the xchain-sdk PACKAGE off the flag',
 );
 assert.ok(
     /VITE_XCHAIN_REAL_SDK/.test(webCfg),
     'web vite config gates SDK pre-bundling on VITE_XCHAIN_REAL_SDK',
 );
-// D-88 /  (wallet E2E session 19): ledgerFactory.js imports
-// `xchain-sdk/src/wallet.js` directly (, keeping the SDK index out of the
+// D-88 (wallet E2E session 19): ledgerFactory.js imports
+// `xchain-sdk/src/wallet.js` directly (keeping the SDK index out of the
 // popup graph) and the web shell pulls it in through createBackgroundHost.
 // Vite pre-bundles per ENTRY, so naming only the package leaves that CJS file
 // served raw over /@fs and it throws `require is not defined` before React
@@ -448,10 +448,10 @@ const e2eCfg = readFileSync(
 );
 assert.ok(
     /VITE_XCHAIN_REAL_SDK:\s*'0'/.test(e2eCfg),
-    'the dev-server e2e config pins the dev-mock venue explicitly ',
+    'the dev-server e2e config pins the dev-mock venue explicitly',
 );
 
-// --- 6. : the worker bundle must contain no dynamic import ------
+// --- 6.: the worker bundle must contain no dynamic import ------
 
 // Behavioural half: an injected class is used verbatim and the dynamic
 // import is never attempted. Passing the key as undefined must NOT silently
@@ -480,7 +480,7 @@ assert.equal(
 // Structural half: the BUILT service worker must load every dependency
 // statically. This is the artifact-level pin - the source can look right
 // while the bundler still emits an `import("./chunks/...")` the worker is
-// forbidden to execute, which is exactly how  shipped. Skipped when
+// forbidden to execute, which is exactly how a later change shipped. Skipped when
 // dist/ is absent so the smoke stays runnable without a build.
 const bgDist = join(wsRoot, 'packages', 'extension', 'dist', 'background.js');
 if (existsSync(bgDist)) {
@@ -508,5 +508,5 @@ if (existsSync(bgDist)) {
 }
 
 console.log(
-    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved,  venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK,  static worker SDK)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK, static worker SDK)',
 );

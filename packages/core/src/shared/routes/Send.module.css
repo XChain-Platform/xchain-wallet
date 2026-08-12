@@ -114,7 +114,7 @@
     color: var(--xc-text-muted);
     list-style: revert;
     padding: var(--xc-space-1) 0;
-    /*  slice 2: the "Advanced" disclosure measured 21px tall. It is
+    /* slice 2: the "Advanced" disclosure measured 21px tall. It is
        full-width already, so only the block axis needs the tap floor. */
     display: list-item;
     min-height: var(--xc-tap-min);
@@ -225,7 +225,7 @@
     font-weight: 600;
     cursor: pointer;
     min-width: 44px;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;
@@ -383,7 +383,7 @@
     color: var(--xc-text-muted);
     cursor: pointer;
     font-size: var(--xc-text-xs);
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
 }
@@ -422,7 +422,7 @@
     font-size: var(--xc-text-xs);
     font-weight: 700;
     cursor: pointer;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
 }
@@ -589,7 +589,7 @@
     font-family: inherit;
     text-decoration: underline;
     padding: var(--xc-space-1) 0;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;

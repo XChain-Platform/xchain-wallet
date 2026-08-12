@@ -10,7 +10,7 @@
 
 // Smoke for §55 / G179: the wallet glossary.
 //
-//  moved it to the sibling xchain-documentation checkout
+// a later change moved it to the sibling xchain-documentation checkout
 // (components/wallet/glossary.md), published at
 // https://docs.xchain.io/components/wallet/glossary. The vocabulary it
 // pins is this codebase's, so the assertions followed it across rather

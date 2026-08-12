@@ -238,7 +238,7 @@ export function TokenWizard({ walletId, onBack }) {
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
-    //  ( §5.6 slice 2): the wizard is software-only, so the
+    // (§5.6 slice 2): the wizard is software-only, so the
     // slice flag alone decides between the shared confirm page and the
     // legacy preview + sign stages.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
@@ -366,7 +366,7 @@ export function TokenWizard({ walletId, onBack }) {
         setStage('preview');
     }
 
-    //  ( §5.6 slice 2): the wizard's details step goes straight
+    // (§5.6 slice 2): the wizard's details step goes straight
     // to the shared confirm page, skipping its own preview + sign stages.
     // Compose + tamper-check + pre-flight run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
@@ -477,7 +477,7 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<p className={styles.hint}>Loading…</p>);
     }
 
-    //  confirm page, rendered in place of the wizard step (the overlay
+    // confirm page, rendered in place of the wizard step (the overlay
     // modal didn't fit small/mobile viewports); wizard state stays intact.
     if (actionConfirm.open) {
         return (
@@ -611,7 +611,7 @@ export function TokenWizard({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
-        // : signed but not broadcast, so the token does not exist yet.
+        // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(<QueuedResultPanel onDone={onBack} what="token creation" />);
         }
@@ -718,7 +718,7 @@ export function TokenWizard({ walletId, onBack }) {
  *               non-divisible + LOCK_MAX_SUPPLY + LOCK_MINT +
  *               LOCK_MINT_SUPPLY. The third lock is what makes the 1-of-1
  *               the token's own promise rather than a protocol flag day's
- *               : a re-ISSUE carrying MINT_SUPPLY is refused
+ *: a re-ISSUE carrying MINT_SUPPLY is refused
  *               `MINT_SUPPLY (locked)` on every chain, at every block.
  *               Image URL goes into DESCRIPTION (the JDOG protocol example). Full
  *               FILE + BATCH path is deferred past Phase 2 (BATCH bans
@@ -754,7 +754,7 @@ const TEMPLATE_COMPOSERS = {
         seedSupply(p, form);
         p.LOCK_MAX_SUPPLY = '1';
         p.LOCK_MINT = '1';
-        // : the third inflation path. See the collectible composer
+        // The third inflation path. See the collectible composer
         // below for why LOCK_MAX_SUPPLY + LOCK_MINT alone do not make a
         // supply fixed, and why this template writes the third lock.
         p.LOCK_MINT_SUPPLY = '1';
@@ -785,7 +785,7 @@ const TEMPLATE_COMPOSERS = {
         p.MINT_SUPPLY = '1';
         p.LOCK_MAX_SUPPLY = '1';
         p.LOCK_MINT = '1';
-        // . LOCK_MAX_SUPPLY freezes the cap and LOCK_MINT closes the
+        //LOCK_MAX_SUPPLY freezes the cap and LOCK_MINT closes the
         // MINT action, but MINT_SUPPLY is credited on EVERY valid ISSUE, not
         // only the first, and a re-ISSUE that restates the cap unchanged
         // never trips the locked-cap check. Without this third lock the

@@ -14,7 +14,7 @@
  *********************************************************************/
 
 // tools/release/cws-upload.mjs - upload a release zip to the Chrome Web
-// Store through the store's own API ( D4).
+// Store through the store's own API (D4).
 //
 // WHY THIS EXISTS, AND WHY IT REFUSES MORE THAN IT DOES.
 //

@@ -139,7 +139,7 @@ assert.match(
     'Unsupported state rendered',
 );
 
-// : shared UI names no vendor and no API. This row is rendered on
+// Shared UI names no vendor and no API. This row is rendered on
 // Android and iOS as well as in a browser, and it used to tell a phone user
 // about Touch ID, Windows Hello, WebAuthn and PRF - three of which are not
 // what their device does and the fourth of which they have no way to act on.
@@ -163,7 +163,7 @@ assert.match(
     /password\.length === 0/,
     'Enable form requires password',
 );
-// : errors surface via <StatusMessage variant="error"> (role="alert"
+// Errors surface via <StatusMessage variant="error"> (role="alert"
 // at runtime) with a one-click "Try again" recovery that re-runs the
 // registration attempt.
 assert.match(

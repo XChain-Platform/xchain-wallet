@@ -16,13 +16,13 @@
 // nothing; when it matches, the seller's tokens stay escrowed and the coin side
 // owes a CoinPay payment on a deadline. Auto-pay is the wallet promising to make
 // that payment unattended. The PAYING half needs a match and is blocked behind
-// D-135/ (the venue refuses to compose an order that fills on arrival), but
+// D-135 (the venue refuses to compose an order that fills on arrival), but
 // the ARMING half - the consent, the acknowledgement gate, the per-order
 // revocation - needs no counterparty at all and had never been driven.
 //
 // THE ORDER GETS A FRESHLY ISSUED TOKEN ON ITS GET SIDE, deliberately: a mirror
 // of any order already open on this shared venue would MATCH on arrival, and this
-// spec would then be blocked on someone else's leftovers as well as on .
+// spec would then be blocked on someone else's leftovers as well as on.
 // A tick minted by this run has no counterparty by construction.
 //
 // RUN IT ON LITECOIN:

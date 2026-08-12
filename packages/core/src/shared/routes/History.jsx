@@ -131,7 +131,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         /** @type {number | null} */ (null),
     );
     const [loadingChains, setLoadingChains] = useState(/** @type {Set<string>} */ (new Set()));
-    //  / §28.3 "Indexed" timeline stage: per-chain indexer watermark
+    // §28.3 "Indexed" timeline stage: per-chain indexer watermark
     // (latest processed block index) keyed by chainId. Fetched once per
     // loaded chain via messaging.getIndexerWatermark; threaded into the
     // TxStatusTimeline so a confirmed row can show whether the indexer has
@@ -384,7 +384,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return tips;
     }, [entries]);
 
-    //  / §28.3: fetch the indexer watermark (latest processed block)
+    // §28.3: fetch the indexer watermark (latest processed block)
     // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
     // indexer progress rather than the confirmed-implies-indexed fallback.
     // Best-effort: a null/failed watermark for a chain is simply omitted, and
@@ -449,7 +449,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const proofSettings = useSettings();
     const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
         && !flowsLib.isDemoWallet(walletId);
-    // : History-local fiat toggle, persisted on the Settings record
+    // History-local fiat toggle, persisted on the Settings record
     // (same nested-patch pattern as the other §35 settings writes) so the
     // choice survives navigation and syncs across shells.
     const showFiatInHistory = Boolean(proofSettings.settings?.showFiatInHistory);
@@ -984,11 +984,11 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
-    // : fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
+    // Fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
     // returns null for anything that isn't unambiguously a native-coin SEND
     // (in particular, a token SEND carrying a non-native tick), so a token
     // amount never gets priced against the coin's rate - the exact bug this
-    // deliberately avoids replicating ( in the old numbering).
+    // deliberately avoids replicating (in the old numbering).
     const nativeAmount = showFiatInHistory ? nativeAmountFieldOf(entry) : null;
     const entryCoin = coinOfChainId(entry?.chainId);
     const fiatRate = useFiatRate({
@@ -1480,7 +1480,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
         <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
     )]);
 
-    // : fiat-display toggle. Only rendered when the caller resolved a
+    // Fiat-display toggle. Only rendered when the caller resolved a
     // native-coin amount for this entry (see nativeAmountFieldOf) - token
     // amounts never reach here, so there's no coin-rate-on-token bug to
     // replicate.
@@ -2110,7 +2110,7 @@ function coinOfChainId(chainId) {
     return coin || null;
 }
 
-// : coin family -> native ticker, used to gate the History fiat
+// Coin family -> native ticker, used to gate the History fiat
 // toggle to genuinely native-coin amounts.
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
 
@@ -2118,7 +2118,7 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC
  * Resolve a numeric native-coin amount for `entry`, or `null` when the
  * amount can't be trusted to price against the chain's own coin rate.
  *
- * IMPORTANT ( / old-numbering ): a SEND action carries a
+ * IMPORTANT (old-numbering): a SEND action carries a
  * `tick` for BOTH native-coin sends and token sends. Only a SEND whose
  * `tick` is absent or matches the chain's own native ticker (BTC/DOGE/LTC)
  * is a native-coin movement; a token SEND (tick = a protocol asset ticker)

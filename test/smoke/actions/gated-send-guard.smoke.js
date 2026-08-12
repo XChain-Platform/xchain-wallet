@@ -10,7 +10,7 @@
 
 // Smoke for PC-26 (gated SEND guard + key-recovery scan): every
 // SEND-composing flow routes through prepareGatedSend (sendToken,
-// buildSendPsbt, the  composeForConfirm SEND branch); the scan
+// buildSendPsbt, the composeForConfirm SEND branch); the scan
 // persists recovered keys to the vault; Send.jsx surfaces
 // ready/partial/blocked states with the recovery affordance; the
 // non-SEND give-side flows warn (never block); Advanced warns loudly.

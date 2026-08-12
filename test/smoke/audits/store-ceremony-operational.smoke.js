@@ -55,7 +55,7 @@ const FLOORS = {
             + 'ceremony invocation, two manifest dumps, the two Phase 0 preflight scripts, the '
             + 'permission set, the asset-links build, the App Links check, the publisher, the '
             + 'signature one-liner, the shipped-lanes flip and the character count. Raised from '
-            + '9/12 by , which added the trader block an operator transcribes and the step '
+            + '9/12, which added the trader block an operator transcribes and the step'
             + 'that ticks it off. The page carries more than this today; the floor moves only by '
             + 'what a change actually put there, so it cannot be propped up by a neighbour\'s '
             + 'uncommitted work',
@@ -87,7 +87,7 @@ const FLOORS = {
     'release/mobile/ios-app-store.md': {
         steps: 44,
         blocks: 5,
-        note: 'GAP CLOSED 2026-08-03 . The port left this page at 0/0 and the pre-migration '
+        note: 'GAP CLOSED 2026-08-03. The port left this page at 0/0 and the pre-migration'
             + 'runbook it came from had no checkable steps either, so this is the ceremony made '
             + 'operational rather than restored: the phases were already right and were not '
             + 'followable. The five blocks are the privacy-URL check, the archive and export '
@@ -289,7 +289,7 @@ const IRREVERSIBLE = {
         [/version ?code/i, 'the version code, which Play accepts exactly once'],
         [/never be rotated|can never be rotated/i, 'that the direct-distribution key cannot be rotated'],
     ],
-    // Added 2026-08-03 with the iOS ceremony . Same rule as Android's,
+    // Added 2026-08-03 with the iOS ceremony. Same rule as Android's,
     // and the page could not be held to it while it had no steps to hold.
     'release/mobile/ios-app-store.md': [
         [/io\.xchain\.wallet\.ios/, 'the bundle identifier, pinned publicly the moment the app record exists'],
@@ -352,7 +352,7 @@ const CEREMONY_TOOLCHAINS = {
     },
     'prepare-resign-tag.sh': {
         enforce: false,
-        note: ': cuts the tag a published release is RE-SIGNED from. Its only requirement is '
+        note: 'Cuts the tag a published release is RE-SIGNED from. Its only requirement is'
             + 'git, on a machine that is already a checkout of this repo - the script reads its own '
             + 'location to find the source tree, so an operator cannot reach it without git. '
             + 'Documented in tools/release/README.md ("Re-signing a release that was already '

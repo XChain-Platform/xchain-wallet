@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  D1 /  §6c: one trader identity, every store.
+// Smoke for D1 §6c: one trader identity, every store.
 //
 // Every major store forces a trader/non-trader declaration under the EU
 // DSA, and declaring as a trader publishes the entity name, postal
@@ -18,7 +18,7 @@
 // notices.
 //
 // The trader-identity doc is the single set of values. This checks that the
-// store documents agree with it.  moved all of them into the sibling
+// store documents agree with it. a later change moved all of them into the sibling
 // xchain-documentation checkout, under components/wallet/, so the scan
 // crosses the repo boundary and skips loudly when that checkout is absent.
 //
@@ -173,7 +173,7 @@ for (const doc of traderDocs) {
 }
 
 // No floor on surfacesChecked any more, and that is the point rather than a
-// weakening. 's port stopped duplicating the trader VALUES into the
+// weakening. that port stopped duplicating the trader VALUES into the
 // per-store runbooks: they now say "use the same contact details across
 // every listing" and link the record. There is nothing left to drift, which
 // is the state this check was trying to enforce. The loop above still runs,
@@ -224,6 +224,6 @@ assert.ok(/trader identity/i.test(walletIndex),
     + 'form finds a declaration of record the index does not name, which is how the duplicate copies '
     + 'started.');
 
-console.log(`OK: store trader-identity smoke ( D1: ${traderDocs.length} store documents, `
+console.log(`OK: store trader-identity smoke (D1: ${traderDocs.length} store documents,`
     + `${surfacesChecked} transcribable surfaces, ${scanned} document-wide scans, all agreeing with `
     + `${RECORD_PATH})`);

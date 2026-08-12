@@ -34,7 +34,7 @@
     font-weight: 600;
     padding: 2px var(--xc-space-3);
     cursor: pointer;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;
@@ -62,7 +62,7 @@
     font-size: var(--xc-text-xs);
     padding: 2px var(--xc-space-2);
     cursor: pointer;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     display: inline-flex;

@@ -119,14 +119,14 @@ assert.equal(payload.pendingTxs[0].fromAddress, 'bc1qb',
 
 const bg = readFileSync(bgPath, 'utf8');
 // The window is generous because this is a source-text assertion inside a
-// handler that grows:  added walletPassword / devicePassword forwarding
+// handler that grows: a later change added walletPassword / devicePassword forwarding
 // between the two anchors and pushed `mode` past a 400-char bound, which reads
 // as "mode is no longer forwarded" when nothing about mode changed.
 assert.ok(
     /wallet\.importBackup'[\s\S]{0,900}mode:\s*req\?\.\s*mode/m.test(bg),
     'createBackgroundHost forwards req.mode into importBackupFile',
 );
-// : and the two re-key passwords ride the same handler. Without them a
+// And the two re-key passwords ride the same handler. Without them a
 // restored wallet is sealed under the password it left its old device with.
 assert.ok(
     /wallet\.importBackup'[\s\S]{0,900}walletPassword:\s*req\?\.\s*walletPassword/m.test(bg),

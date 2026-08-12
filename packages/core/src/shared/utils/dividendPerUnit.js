@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : a DIVIDEND's AMOUNT is a RATE - dividend tokens paid per one
+// A DIVIDEND's AMOUNT is a RATE - dividend tokens paid per one
 // unit of the holder-of token - so the wallet balance is the wrong
 // DIMENSION for it, not merely the wrong quantity. Dropping the whole
 // balance in (what the Max button used to do) proposes a payout of
@@ -19,7 +19,7 @@
 //
 // AIRDROP has the same shape and shares this math: its AMOUNT is per
 // RECIPIENT, so the divisor is the recipient count instead of the units
-// held, and Max had the identical whole-balance bug (same , found
+// held, and Max had the identical whole-balance bug (same, found
 // as the second half of E2E D-86). `perUnitMax` is written in terms of
 // "balance / divisor", not dividends, for that reason.
 //

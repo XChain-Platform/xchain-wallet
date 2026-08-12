@@ -210,7 +210,7 @@ async function defaultEncoderProbe(sdk) {
  * venue removed: encoder and explorer reported Network Error, the hub reported
  * "reachable", and a device with no connectivity at all told the user "partly
  * unavailable; some features may not work" instead of "can't reach the
- * network" ( SSC-6 session,).
+ * network" (SSC-6 session,).
  *
  * @type {ServiceProbe}
  */

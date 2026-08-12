@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// In-flight approval reservation ledger ( §4.7).
+// In-flight approval reservation ledger (§4.7).
 //
 // approvalBroker intentionally allows N concurrent approval WINDOWS. Two
 // windows can each pass pre-flight against the SAME balance and both be
@@ -48,7 +48,7 @@
 import { sumDecimalStrings } from '../shared/utils/amountFormat.js';
 
 // Plain fixed-point form of a reservation amount, or null when it is not a number
-// at all ().
+// at all.
 //
 // sumDecimalStrings SKIPS any value that is not already plain decimal, and a skipped
 // reservation is a reservation missing from the delta, i.e. exactly the understated
@@ -56,7 +56,7 @@ import { sumDecimalStrings } from '../shared/utils/amountFormat.js';
 // in: useConfirmAction reserves `String(reserve.amount)`, and a JS number small enough
 // (1e-8) or large enough stringifies to an exponent.
 // Netted for a tick that holds a reservation whose amount is not a number at all
-// (). Deliberately larger than any balance the guard can be handed - the SDK
+//Deliberately larger than any balance the guard can be handed - the SDK
 // caps MAX_SUPPLY at 1e21 - so the effective balance goes negative and the
 // concurrent-spend check reports a shortfall instead of clearing the spend.
 //
@@ -166,7 +166,7 @@ export function createReservationLedger({ store } = {}) {
          */
         async localDeltas(chainId, excludeId) {
             await ensureHydrated();
-            // Exact decimal accumulation, not float (). Token amounts carry up to
+            // Exact decimal accumulation, not float. Token amounts carry up to
             // 18 fractional places and integers past 2^53, so `+ Number(r.amount)` dropped
             // small reservations and rounded large ones. The netted total is what the
             // concurrent window subtracts from its balance, so an understated sum is a

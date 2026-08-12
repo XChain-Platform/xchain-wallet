@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the DIRECT lane's §7.5 rehearsal .
+// Smoke for the DIRECT lane's §7.5 rehearsal.
 //
-// The desktop rehearsal has had a harness since  stage 5 and the
+// The desktop rehearsal has had a harness stage 5 and the
 // direct APK lane had none, which is the whole defect: `rehearsal-matrix.mjs`
 // declared eight lanes, all of them electron-updater, so "every update lane
 // is rehearsed" was true of a set that did not contain the one shipped
@@ -59,7 +59,7 @@ const APK = `xchain-wallet-v${VERSION}.apk`;
 const AAB = `xchain-wallet-android-v${VERSION}.aab`;
 
 const LANE = DIRECT_LANES.find((l) => l.id === 'android-direct');
-assert.ok(LANE, 'the matrix must declare the android-direct lane;  is the row that adds it');
+assert.ok(LANE, 'the matrix must declare the android-direct lane; is the row that adds it');
 
 // A SHORT prefix on purpose: GNUPGHOME below holds gpg-agent's unix socket,
 // and a macOS temp dir plus a descriptive name overruns the ~104-byte

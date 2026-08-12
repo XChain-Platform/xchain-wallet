@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program, slice 1: one interface across every
+// responsive-first program, slice 1: one interface across every
 // width, with one place that owns the breakpoints.
 //
 // The regression this guards against is concrete. The shell used to hold
@@ -84,7 +84,7 @@ assert.ok(
 assert.ok(/export const THRESHOLD_PX = TIER_RAIL_MIN_PX;/.test(devVariantSrc),
     'web variant threshold IS the shared rail breakpoint, not a second copy');
 
-// --- 2b. no persisted variant override  ------------------------
+// --- 2b. no persisted variant override ------------------------
 //
 // The dev-preview frames pin a fixed 360/375px column. A copy of the
 // chosen variant used to live in localStorage, which is how the live web
@@ -179,5 +179,5 @@ for (const [label, appPath] of [
 }
 
 console.log(
-    'OK: responsive-layout-tiers smoke ( slice 1: shared/styles/breakpoints.js owns the 640/900 tier boundaries + tierForWidth/showsSidebar/showsBottomBar; useLayoutTier measures the container via getBoundingClientRect + ResizeObserver with a viewport fallback; FullLayoutWithNav publishes data-xc-tier and mounts exactly one nav surface; LeftNav CSS is tier-keyed with no viewport media query and clips rail labels instead of removing them; web + desktop hand both slots to the layout; : no persisted variant override, and resolveVariant sweeps a legacy one)',
+    'OK: responsive-layout-tiers smoke (slice 1: shared/styles/breakpoints.js owns the 640/900 tier boundaries + tierForWidth/showsSidebar/showsBottomBar; useLayoutTier measures the container via getBoundingClientRect + ResizeObserver with a viewport fallback; FullLayoutWithNav publishes data-xc-tier and mounts exactly one nav surface; LeftNav CSS is tier-keyed with no viewport media query and clips rail labels instead of removing them; web + desktop hand both slots to the layout;: no persisted variant override, and resolveVariant sweeps a legacy one)',
 );

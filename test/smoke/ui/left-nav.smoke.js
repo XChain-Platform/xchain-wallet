@@ -19,7 +19,7 @@
 //      BITCOIN_ACTIONS); active row gets aria-current="page".
 //   4. CSS module declares a 220px sidebar, collapses it on the compact
 //      layout tier and narrows it to a 64px rail on the rail tier
-//      , and overrides --xc-screen-h on the main pane.
+//, and overrides --xc-screen-h on the main pane.
 //   5. web + desktop App.jsx import LeftNav + FullLayoutWithNav and
 //      wrap the unlocked-route render tree in <FullLayoutWithNav>.
 //      Extension popup is intentionally untouched (always compact).
@@ -88,7 +88,7 @@ assert.ok(/onOpenWalletPicker[\s\S]*?walletSwitcher/.test(navSrc),
 const cssSrc = readFileSync(cssPath, 'utf8');
 assert.ok(/\.sidebar\s*\{[\s\S]*?flex:\s*0 0 220px/.test(cssSrc),
     '.sidebar reserves a 220px column');
-// : the collapse is keyed on the layout tier that FullLayoutWithNav
+// The collapse is keyed on the layout tier that FullLayoutWithNav
 // measures, not on a viewport media query, so a 360px popup or preview frame
 // inside a wide window collapses too.
 assert.ok(/\.layout\[data-xc-tier='compact'\]\s+\.sidebar\s*\{[\s\S]*?display:\s*none/.test(cssSrc),

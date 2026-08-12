@@ -36,7 +36,7 @@ assert.ok(!/autopay/i.test(view), 'no auto-pay toggle (SWAP settles atomically)'
 
 // ---- 3-shell App wiring ----
 // The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
-// rather than inline in App.jsx : a store-profile build swaps that
+// rather than inline in App.jsx: a store-profile build swaps that
 // module for a twin that imports nothing, which is how the surface is
 // compiled out. The two files together are that shell's wiring, so read them
 // as one - asserting on App.jsx alone would go green on a shell that has no

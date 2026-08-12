@@ -342,7 +342,7 @@ export function tearDownHost(runtime) {
  */
 
 /**
- * : clear every wallet store the desktop shell owns, so a wipe
+ * Clear every wallet store the desktop shell owns, so a wipe
  * from the renderer actually lands.
  *
  * The renderer's `wipeWalletStorage` can only reach localStorage and

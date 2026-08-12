@@ -285,14 +285,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
     }), [coinTicker, giveTick, giveOwnership, giveAmount, getTick, getOwnership, getAmount, getAddress, expMode, expInput, allowListIdx, blockListIdx, memo]);
 
-    //  ( §5.6 slice 2): the software path composes ONE PSBT
+    // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page; hardware +
     // watcher keep the legacy review stage.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
-    // : hardware signs the SAME prebuilt PSBT through the same host
+    // Hardware signs the SAME prebuilt PSBT through the same host
     // flow, with the device standing in for the password.
     const submitConfirmed = useConfirmSubmit({
         messaging,
@@ -464,7 +464,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     if (stage === 'done') {
         const txid = result?.txid;
-        // : a queued result is SIGNED and not broadcast. The confirm
+        // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
@@ -600,7 +600,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // --- Form screen ----------------------------------------------------
     const chainIds = Object.keys(addressesByChain || {});
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -614,7 +614,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? fromAddress : null}
                 hwStatus={hwStatus}

@@ -17,7 +17,7 @@
 // password. The password is independent of the wallet-unlock password.
 //
 // `importBackupFile` decrypts an envelope, RE-KEYS the wallet's sealed
-// key material under this device's password ( - see
+// key material under this device's password (see
 // `rekeyWalletRecord`; without it a restored wallet still opens only
 // under the password it had on the device it left, and fails silently at
 // the first signature), then merges the contents into the live vault.
@@ -75,7 +75,7 @@ export class BackupConflictError extends Error {
 }
 
 /**
- * : the re-key could not open the backed-up wallet's own seal.
+ * The re-key could not open the backed-up wallet's own seal.
  *
  * Distinct from a bad envelope password on purpose. If the envelope had
  * not already opened we would never reach here, so "wrong password" on
@@ -86,7 +86,7 @@ export class BackupConflictError extends Error {
 export class BackupSeedPasswordError extends Error {
     /** @param {string} what   'seed' | 'imported key' */
     constructor(what) {
-        // : the copy names the field, not the function. The user is
+        // The copy names the field, not the function. The user is
         // looking at three password boxes, and this one is about the middle
         // one; a message that opens with `importBackupFile:` tells them which
         // function failed and nothing about which box to fix.
@@ -207,7 +207,7 @@ export async function exportBackupFile({
  * @property {string | object} fileContent                 raw JSON string or parsed envelope
  * @property {string} password                             opens the ENVELOPE (the backup file's own password)
  * @property {string} [walletPassword]                     opens the backed-up WALLET's seal; required
- *                                                          whenever the payload carries key material 
+ * whenever the payload carries key material
  * @property {string} [devicePassword]                     what the restored wallet is re-sealed under, i.e.
  *                                                          the password this device unlocks with
  * @property {'overwrite' | 'preserve' | 'error'} [onConflict]  default 'error'
@@ -225,7 +225,7 @@ export async function exportBackupFile({
  * @property {string} walletId                             imported wallet id
  * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }} writes
  * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }} skipped
- * @property {boolean} rekeyed                             : the wallet's seal was moved to this
+ * @property {boolean} rekeyed: the wallet's seal was moved to this
  *                                                          device's password (false only when the record
  *                                                          carried no sealed key material at all)
  */
@@ -273,7 +273,7 @@ export async function importBackupFile({
         throw new Error('importBackupFile: payload missing wallet record');
     }
 
-    // : re-seal the wallet's key material under this device's
+    // Re-seal the wallet's key material under this device's
     // password BEFORE anything is written. Doing it here rather than at
     // the shell means a seal we cannot open fails at RESTORE time, with
     // a message naming which password is wrong, instead of at the user's
@@ -378,8 +378,8 @@ export class BackupPointerUnresolvedError extends Error {
  *          backup-pointer URI string (parsed here) or an already-parsed
  *          `BackupPointer` from `detectQrContent` / `parseBackupPointer`.
  * @property {string} password                             backup password (NOT the wallet-unlock password)
- * @property {string} [walletPassword]                     : opens the backed-up wallet's own seal
- * @property {string} [devicePassword]                     : what it is re-sealed under here
+ * @property {string} [walletPassword]: opens the backed-up wallet's own seal
+ * @property {string} [devicePassword]: what it is re-sealed under here
  * @property {(pointer: import('../uri/backupPointer.js').BackupPointer) => Promise<string | object> | string | object} resolveBackupContent
  *          shell-injected resolver that turns the pointer's `location`
  *          into the raw §19.4 envelope (a JSON string or parsed object).
@@ -553,7 +553,7 @@ export function remintIdentifiers(decoded) {
 }
 
 /**
- * : re-seal a restored wallet's key material under THIS device's
+ * Re-seal a restored wallet's key material under THIS device's
  * password.
  *
  * The §19.4 envelope carries the wallet record verbatim - `encryptedSeed`,
@@ -596,7 +596,7 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     );
     if (!hasSeed && sealedKeys.length === 0) return false;
 
-    // : each of these says which BOX on the restore screen is empty.
+    // Each of these says which BOX on the restore screen is empty.
     // They used to name the parameter (`walletPassword is required`), which is
     // the one thing on screen the user cannot see.
     if (typeof walletPassword !== 'string' || walletPassword.length === 0) {

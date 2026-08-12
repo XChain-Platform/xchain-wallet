@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// §20.5 /  smoke: the watcher <-> signer pairing lane stays wired
+// §20.5 smoke: the watcher <-> signer pairing lane stays wired
 // end to end across the host and all three shells.
 //
 // The behaviour is covered by test/unit/flows/pairPartner.test.js and
@@ -148,12 +148,12 @@ for (const [name, rel] of appShells) {
 
 // --- 6. The fresh-install import hands back a wallet id ---------------
 //
-// . Sections 1-5 all passed while the lane was DEAD: the onboarding
+//Sections 1-5 all passed while the lane was DEAD: the onboarding
 // entry imports the shared recovery phrase itself, and every shell's
 // fresh-install import returned `{ format, walletName }` with no id, so the
 // route stopped at "The wallet imported but the shell returned no wallet id"
 // with the wallet already created. Five layers of wiring were correct and the
-// button still went nowhere - which is the same shape as  and the same
+// button still went nowhere - which is the same shape and the same
 // lesson: a static check cannot see a missing FIELD in a returned object.
 //
 // So this section is a ROT GUARD, not a proof. The proof is

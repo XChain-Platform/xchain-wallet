@@ -17,7 +17,7 @@
 //      generic summary + "no plain-English" warning.
 //   2. Static wiring: core/src/index.js re-exports the decoder
 //      namespace; the extension's SignApproval.jsx describes a dApp's
-//      action through the `action.describe` HOST route (: the SDK's
+// Action through the `action.describe` HOST route (the SDK's
 //      hardened describer, not this local one) and renders its warnings.
 //
 // This local describer survives only as the in-form DRAFT preview for
@@ -110,7 +110,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 1e. The generic fallback.  gave every protocol ACTION a
+// 1e. The generic fallback. a later change gave every protocol ACTION a
 // describer, so this can no longer be probed with a real action (it used
 // to use ORDER, which now reads "Create order on Bitcoin: give ..."). An
 // action name outside the protocol is the only case that should still
@@ -131,7 +131,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.equal(d.details.length, 4, 'fallback pretty-prints every param');
 }
 
-// 1e-bis. ORDER and SWAP, the two actions D-16/ caught rendering
+// 1e-bis. ORDER and SWAP, the two actions D-16 caught rendering
 // that fallback on a signing surface, now read as sentences.
 {
     const order = decoderLib.decodeAction({
@@ -342,7 +342,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2i. DESTROY multi-version. : it used to fall through to the
+// 2i. DESTROY multi-version.: it used to fall through to the
 //     generic describer, so the protocol's most irreversible action lost
 //     its plain-English summary as soon as it burned a second token. It
 //     is described leg by leg now and still leads with irreversibility.
@@ -584,7 +584,7 @@ const sign = readFileSync(
     join(ext, 'src', 'approval', 'kinds', 'SignApproval.jsx'),
     'utf8',
 );
-//  §3.2/§3.5: the approval window describes through the SDK, on the
+// §3.2/§3.5: the approval window describes through the SDK, on the
 // host, and no longer through this local describer. Inverted deliberately
 // rather than deleted: these params are the one set on any signing surface
 // an ATTACKER wrote, the local describer applies none of §3.5's hardening

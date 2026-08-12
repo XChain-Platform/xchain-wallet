@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// submitFailureMessage : the one place an authoring form turns a
+// submitFailureMessage: the one place an authoring form turns a
 // failed submit into a sentence.
 //
 // Two error shapes were reaching users as wire wording, on dozens of forms:
@@ -18,12 +18,12 @@
 //     ("native-coin fee pre-flight failed (dust): 0.00002000 is below the
 //     dust threshold"); nativeFeeErrorMessage is the sentence that says what
 //     to do about it, and knows the advice differs off Bitcoin, where there
-//     is no XCHAIN lane to fall back to .
+// is no XCHAIN lane to fall back to.
 //
 //   SDKEncoderError - the xchain-sdk encoder client refused or could not
 //     complete the build, BEFORE anything was signed. Its message is written
 //     for a developer ("no spendable UTXOs found for the funding address"), and
-//     until  every one of its ten codes reached users as-is;
+// until every one of its ten codes reached users as-is;
 //     encoderErrorMessage is the sentence for each of them.
 //
 //   BroadcastFailedTransientError - the transaction IS signed and sitting in
@@ -40,8 +40,8 @@
 //
 // The per-PATH point, which is the whole reason this exists: a form that
 // imports the right helper and calls it on ONE of its submit paths is still
-// broken on the other.  found six forms that mapped the native-fee
-// error in handleSign and not in the  confirm path the wallet actually
+// broken on the other. found six forms that mapped the native-fee
+// error in handleSign and not in the confirm path the wallet actually
 // takes. Routing every path through one helper is what makes "did this form
 // get swept?" a question with one answer.
 
@@ -69,7 +69,7 @@ export function isNativeFeeForfeit(err) {
 }
 
 /**
- * A watcher-lane refusal for an action the encoder chunked .
+ * A watcher-lane refusal for an action the encoder chunked.
  *
  * Keyed on `name` and then on the message, for the same boundary-survival
  * reason `isNativeFeeForfeit` is: the popup receives only `{ name, message }`
@@ -111,7 +111,7 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
  * @param {string} [opts.coinTicker]   native coin of the chain being submitted on (BTC/LTC/DOGE)
  * @param {boolean} [opts.mandatory]   chain has no XCHAIN fee lane (useNativeFee's `mandatory`)
  * @param {string|number} [opts.requiredNative]  native-coin protocol fee, when the caller holds
- *                                     the quote; otherwise read off the error 
+ * the quote; otherwise read off the error
  * @param {string} [opts.fallback]     the form's own copy for everything else
  * @returns {string}
  */

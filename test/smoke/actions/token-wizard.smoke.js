@@ -120,7 +120,7 @@ assert.ok(
     memeBlock[0].includes("DECIMALS = '0'"),
     'meme composer is non-divisible',
 );
-// : the third lock. LOCK_MAX_SUPPLY + LOCK_MINT leave MINT_SUPPLY
+// The third lock. LOCK_MAX_SUPPLY + LOCK_MINT leave MINT_SUPPLY
 // re-issuable, so without this the template's "fixed supply" rests on the
 // indexer's ISSUE_MINT_SUPPLY_CUMULATIVE_CAP flag day rather than on the token.
 assert.ok(
@@ -134,7 +134,7 @@ assert.ok(
     /MAX_SUPPLY\s*=\s*'1'/.test(collBlock[0]),
     'collectible composer pins MAX_SUPPLY=1',
 );
-// : all three locks, or the 1-of-1 is only a 1-of-1 on a chain whose
+// All three locks, or the 1-of-1 is only a 1-of-1 on a chain whose
 // cumulative-cap flag day has already passed.
 for (const flag of ['LOCK_MAX_SUPPLY', 'LOCK_MINT', 'LOCK_MINT_SUPPLY']) {
     assert.ok(

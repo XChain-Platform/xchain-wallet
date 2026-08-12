@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the authoring fee row must not announce a protocol fee on an action
+// The authoring fee row must not announce a protocol fee on an action
 // that has none. Most actions the row mounts on are unpriced (no gas-schedule
 // entry) or free in the ordinary case (ORDER/SWAP/DISPENSER under the
 // expiration free-days rule), and on LTC/DOGE the row asserted a coin payment
@@ -91,7 +91,7 @@ describe('protocolFeeRowCopy', () => {
         for (const mandatory of [true, false]) {
             const copy = protocolFeeRowCopy({ fee: { free: true }, coinTicker: 'LTC', mandatory });
             // Even on Bitcoin: a switch between two ways of paying nothing is
-            // the other half of the  finding.
+            // the other half of the finding.
             expect(copy.variant).toBe('statement');
             expect(copy.label).toBe('This action has no protocol fee');
             expect(copy.hint).not.toMatch(/not refunded/i);
@@ -115,7 +115,7 @@ describe('protocolFeeRowCopy', () => {
         expect(copy.label).toBe('Pay protocol fee in BTC instead of XCHAIN');
     });
 
-    // : DEPLOY/EXECUTE are priced without a verdict, and the extra
+    // DEPLOY/EXECUTE are priced without a verdict, and the extra
     // sentence belongs only where coin is actually being spent.
     it('appends the unverified notice only when the fee is paid in coin', () => {
         const mandatory = protocolFeeRowCopy({ coinTicker: 'LTC', mandatory: true, unverified: true });

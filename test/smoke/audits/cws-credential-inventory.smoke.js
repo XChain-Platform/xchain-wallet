@@ -14,7 +14,7 @@
 
 // test/smoke/audits/cws-credential-inventory.smoke.js - the Chrome Web Store
 // API credential has a key-inventory row of its own, with custody, rotation
-// and compromise rules, before one is ever issued .
+// and compromise rules, before one is ever issued.
 //
 // WHY A TEST FOR A PARAGRAPH IN A SPEC.
 //
@@ -115,7 +115,7 @@ const apiRows = rows.filter((r) => /cws-upload/.test(r.consumedBy));
 assert.equal(apiRows.length, 1,
     'exactly one §4 row names cws-upload.mjs as its consumer; found '
     + `${apiRows.length} (${apiRows.map((r) => r.id).join(', ') || 'none'}). The Chrome Web Store `
-    + 'API credential can publish to the store, so it is a key and needs a key row ');
+    + 'API credential can publish to the store, so it is a key and needs a key row');
 const api = apiRows[0];
 assert.notEqual(api.id, 'K7',
     'the API credential is not the K7 human account row: a bearer token that bypasses that '

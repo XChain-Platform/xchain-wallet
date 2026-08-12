@@ -94,7 +94,7 @@ export function useExtensionWallet() {
         try {
             // bridge-spec's ConnectResult is a union: a user-rejected connect,
             // a blocked origin and a version mismatch all RESOLVE with
-            // `ok: false` rather than throwing (). Reading "did not
+            // `ok: false` rather than throwing. Reading "did not
             // throw" as success switched the app into extension-wallet mode on
             // a refusal, and the banner reported no error at all.
             const result = await connectExtensionWallet();

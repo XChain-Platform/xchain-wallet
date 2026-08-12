@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/electron-cadence.mjs - is the Chromium we ship still
-// getting security fixes? ( §9.)
+// getting security fixes? (§9.)
 //
 // WHY THIS EXISTS. §9 owns the CVE clock for a wallet that ships a
 // browser engine, and it owned it in prose: "Electron pinned to major 41
@@ -176,7 +176,7 @@ async function fetchPackument(fetchImpl = fetch) {
 }
 
 const USAGE = `electron-cadence.mjs - is the Chromium we ship still getting security
-fixes? ( §9, the CVE clock for a wallet that ships a browser engine.)
+fixes? (§9, the CVE clock for a wallet that ships a browser engine.)
 
 Usage:
   node tools/release/electron-cadence.mjs [--json] [--offline <packument.json>]
@@ -202,7 +202,7 @@ Exit codes (house convention, verify-privacy-url.mjs):
 
 async function main(argv) {
     // Before the registry fetch. Unhandled, `--help` ran the whole live
-    // network assessment and exited with a CVE verdict .
+    // network assessment and exited with a CVE verdict.
     if (argv.some((a) => a === '--help' || a === '-h')) {
         process.stdout.write(USAGE);
         return 0;

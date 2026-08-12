@@ -12,7 +12,7 @@
 //
 //*********************************************************************
 
-// Notarizes and staples the .dmg itself ( row 140).
+// Notarizes and staples the.dmg itself (row 140).
 //
 // THE DEFECT THIS EXISTS FOR, measured on the published v0.338.0 bytes
 // rather than reasoned about: the app INSIDE the disk image was signed,
@@ -43,7 +43,7 @@
 // machine performs.
 //
 // FAIL-CLOSED, deliberately. Every step here throws on failure. The whole
-// family of defects this row belongs to (, row 139, and the
+// Family of defects this row belongs to (row 139, and the
 // `dmg.sign` default above) is "signing step skipped, exit 0, artifact
 // ships looking correct", so a notarization that cannot run must stop the
 // build rather than leave a dmg that only LOOKS distributable. The one

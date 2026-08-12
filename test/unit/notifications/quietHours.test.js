@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: isWithinQuietHours -  DND window, shared by the two
+// Unit: isWithinQuietHours - DND window, shared by the two
 // notification delivery choke points.
 
 import { describe, it, expect } from 'vitest';

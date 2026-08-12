@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
-// SSC-4 : every copy in the wallet goes through one path, so a
+// SSC-4: every copy in the wallet goes through one path, so a
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
 import { copyText } from '../shared/clipboard.js';

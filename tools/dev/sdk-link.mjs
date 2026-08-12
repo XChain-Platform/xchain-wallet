@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Swap the installed xchain-sdk for a symlink to a local checkout, and back.
 //
-//  /  D8. The three shells depend on the SDK as a REGISTRY
+// D8. The three shells depend on the SDK as a REGISTRY
 // package (`xchain-sdk: npm:@dankest-llc/xchain-sdk@<version>`), because
 // that is the only form that pins which SDK went into a signed release,
 // installs on a runner holding nothing but this repo, and gives a

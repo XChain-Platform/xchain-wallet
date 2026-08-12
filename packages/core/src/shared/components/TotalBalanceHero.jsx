@@ -122,7 +122,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen
                     ) : null}
                 </span>
                 <div className={styles.actions}>
-                    {/* : shells with no navigation surface need a
+                    {/* Shells with no navigation surface need a
                         VISIBLE way into Settings. Only the MV3 popup passes
                         this (web and desktop reach Settings from the nav
                         rail), so nothing changes for them. Prop-gated rather

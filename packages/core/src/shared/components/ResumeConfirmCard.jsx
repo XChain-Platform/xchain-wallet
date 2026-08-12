@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ResumeConfirmCard ( §5.4). Home's offer to finish a confirm the
+// ResumeConfirmCard (§5.4). Home's offer to finish a confirm the
 // popup closed on, in the same slot and shape as the pending-airdrop and
 // payment-due cards that already live there.
 //

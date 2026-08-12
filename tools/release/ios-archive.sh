@@ -2,7 +2,7 @@
 # Copyright © 2025–2026 Dankest, LLC
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Archive the iOS shell for distribution ( §5, stage S4b).
+# Archive the iOS shell for distribution (§5, stage S4b).
 #
 # Signing is CLOUD-MANAGED: rather than installing a distribution
 # certificate and provisioning profile onto the runner, xcodebuild is
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 # ANSWERED BEFORE THE CREDENTIAL CHECKS, and that ordering is the whole
-# point . `--help` used to fall through to the `${APPLE_API_KEY:?}`
+# point. `--help` used to fall through to the `${APPLE_API_KEY:?}`
 # guard below, so asking this script how to invoke it was answered with
 #
 #   ios-archive.sh: line 52: APPLE_API_KEY: APPLE_API_KEY (the .p8 contents)
@@ -35,7 +35,7 @@ set -euo pipefail
 case "${1:-}" in
     -h|--help)
         cat <<'USAGE'
-ios-archive.sh - archive the iOS shell for distribution ( §5).
+ios-archive.sh - archive the iOS shell for distribution (§5).
 
 Usage:
   bash tools/release/ios-archive.sh              # signed, needs the API key
@@ -68,7 +68,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 project="$here/packages/mobile/ios/App/App.xcodeproj"
 archive="$here/packages/mobile/ios/build/App.xcarchive"
 
-# UNSIGNED MODE, and why a release script has one ( row 22).
+# UNSIGNED MODE, and why a release script has one (row 22).
 #
 # Everything below was gated behind an Apple Developer Program account that
 # does not exist yet, so this script had NEVER RUN ONCE - and the day it first
@@ -166,11 +166,11 @@ if [ ! -d "$app" ]; then
     exit 1
 fi
 
-# And what is INSIDE it . Until this, the only fact this script
+# And what is INSIDE it. Until this, the only fact this script
 # established about the thing it built was that a directory of the right name
 # existed: not the bundle id, not the version pair, not the Universal Link
 # entitlement the signature actually carries. That is the state the Android
-# bundle was in until.
+# bundle was in.
 #
 # It runs here rather than only before export so a defect is attributed to the
 # archive that carries it. ios-export.sh checks the archive again before

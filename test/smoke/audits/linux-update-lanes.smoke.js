@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §5: which Linux formats auto-update, and which updater
+// Smoke for §5: which Linux formats auto-update, and which updater
 // a Linux build actually gets.
 //
 // WHAT WENT WRONG, AND WHY A TEST IS THE RIGHT ANSWER. The claim "the .deb

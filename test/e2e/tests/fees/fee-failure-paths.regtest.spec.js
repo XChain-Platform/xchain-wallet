@@ -13,14 +13,14 @@
 //
 // THE EXPENSIVE FAILURE MODE THIS EXISTS FOR, in the campaign's own words: an
 // action that fails consensus AFTER paying a real miner fee. That is what the
-//  bug did on LTC/DOGE, and it is why every step below ends by asking the
+// bug did on LTC/DOGE, and it is why every step below ends by asking the
 // CHAIN whether anything moved rather than asking the screen. A refusal that
 // broadcasts nothing costs the user nothing; a refusal that broadcasts first is
 // the same defect wearing a polite sentence.
 //
 // BITCOIN, deliberately. Bitcoin is the only chain with two lanes: the protocol
 // fee is debited from an XCHAIN balance by default and paid as a coin output
-// only when the user opts in. Off Bitcoin  makes the coin output
+// only when the user opts in. Off Bitcoin a later change makes the coin output
 // mandatory, so the XCHAIN-lane half of this spec has nowhere to run.
 //
 //   LANE 1 (XCHAIN mode, no XCHAIN): the wallet must not treat "I hold no
@@ -32,7 +32,7 @@
 //   LANE 2 (native mode, not enough coin): the fee is a real output, so a payer
 //     that cannot fund it cannot build the transaction at all. This must fail
 //     at COMPOSE, with a sentence rather than an encoder's developer wording
-//     , and nothing may reach the mempool.
+//, and nothing may reach the mempool.
 //
 // The two lanes are driven from ONE address in a deliberate order - lane 2 while
 // it is nearly empty, lane 1 after it is funded - because that is what makes
@@ -40,7 +40,7 @@
 // let a lane pass for the wrong reason.
 //
 // PRE-FLIGHT: ISSUE is priced, so the venue needs a usable BTC/USD snapshot
-// (§3.2, ). The step below asks the venue for the quote FIRST and fails
+// (§3.2). The step below asks the venue for the quote FIRST and fails
 // naming the seed, so a stale oracle can never be mistaken for the refusal this
 // spec is about - which on this spec would be a false PASS, since both lanes
 // assert that something was refused.
@@ -65,7 +65,7 @@ const TICK_XCHAIN = `FEX${STAMP}`;
 
 // Enough to hold utxos and pay a miner fee, and nowhere near the ~2,000 sats a
 // priced action's coin fee costs at this venue's seeded prices. Deliberately not
-// zero: an EMPTY address takes the NO_UTXOS path, which  already words,
+// zero: an EMPTY address takes the NO_UTXOS path, which already words,
 // and this lane is about the payer who has SOME coin and still cannot cover the
 // fee - the case that path never sees.
 const DUST_FUNDING = 0.00001;
@@ -209,7 +209,7 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await expectNothingSpent(source, funded, 'lane 2');
 
             // The wording is the assertion, not decoration: this sentence is what
-            //  exists to guarantee. It must not be the SDK's developer
+            // exists to guarantee. It must not be the SDK's developer
             // wording, and it must name the coin shortfall rather than blaming
             // the price feed (the D-111 mistake, in the opposite direction).
             expect(said, 'the refusal is the encoder\'s developer wording, not a sentence')

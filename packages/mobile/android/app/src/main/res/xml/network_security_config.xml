@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Release network policy ( §7). Cleartext is refused everywhere, with
+  Release network policy (§7). Cleartext is refused everywhere, with
   no per-domain exception: this app talks to indexers, a hub, a price oracle
   and a broadcast endpoint, and every one of them is a place where a
   downgrade to http would put a user's addresses and their intent to spend

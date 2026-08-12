@@ -18,9 +18,9 @@
 //      locked, send).
 //   3. Each scan asserts `violations` is empty (not just "no crash").
 //   6. The confirm surface is scanned on the REGTEST venue, in both §4.2
-//      verdict states at both widths ( §8.6). It cannot live in the
+// verdict states at both widths (§8.6). It cannot live in the
 //      dev suite: the confirm page needs a successful compose, which the
-//      dev shell can no longer do .
+// dev shell can no longer do.
 //   4. WCAG 2.1 A + AA tags are the target severity.
 //   5. README documents the a11y spec.
 
@@ -87,13 +87,13 @@ assert.ok(
     'scan helper expects an empty violations array',
 );
 
-// The  palette contrast debt this suite used to quarantine is fixed
+// The palette contrast debt this suite used to quarantine is fixed
 // (tokens.css default light theme now clears AA), so the quarantine and its
 // self-retiring anchor test are gone. Guard against a silent regression
 // back to a wholesale rule bypass instead.
 assert.ok(
     !/KNOWN_CONTRAST_DEBT/.test(harness + spec),
-    'the  contrast quarantine was removed once the palette was fixed',
+    'the contrast quarantine was removed once the palette was fixed',
 );
 assert.ok(
     !/disableRules|withRules\(/.test(harness + spec),
@@ -113,7 +113,7 @@ for (const tag of ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']) {
     assert.ok(harness.includes(tag), `the scan harness targets ${tag}`);
 }
 
-// --- 6. The confirm surface ( §8.6 "axe-core popup + full") ----
+// --- 6. The confirm surface (§8.6 "axe-core popup + full") ----
 
 // This is the screen every signature passes through, and it went unscanned
 // while coverage stopped at the Send FORM. Both verdict states matter: only

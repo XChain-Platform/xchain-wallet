@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  §5.6 slice 3: the two surfaces that adopt a NON-action confirm
+// §5.6 slice 3: the two surfaces that adopt a NON-action confirm
 // variant. Neither composes anything (the PSBT and the message already
 // exist), so what this pins is that they route through the shared confirm
 // page rather than signing straight from the form, and that the page's

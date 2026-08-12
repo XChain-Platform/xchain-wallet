@@ -13,7 +13,7 @@ import { useMessaging } from '../useMessaging.js';
 
 /**
  * BIP44 accounts of a wallet, ordered by hardened index. Shell chrome
- * (the AppHeader gear, ) needs the account's label to show "what
+ * (the AppHeader gear) needs the account's label to show "what
  * is active" without owning a fetch of its own, and the list is a
  * local-store read, so re-resolving it per consumer is cheap.
  *

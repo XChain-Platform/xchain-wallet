@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Panic-mode disclosure policy .
+// Panic-mode disclosure policy.
 //
 // The freeze itself is enforced in `flows/panicMode.js` and works: signing is
 // refused at `assertSigningAllowed`. The defect this module fixes is that the

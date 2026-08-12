@@ -23,7 +23,7 @@
 # other did not, verify.sh would report a mismatch on a perfectly good
 # release, or worse, pass one that sign.sh had not actually covered.
 #
-# Manifest format ( §6 hardening):
+# Manifest format (§6 hardening):
 #
 #     # XChain Wallet release manifest
 #     # manifest-version: 2
@@ -37,10 +37,10 @@
 #     <sha256>  ./xchain-wallet-web-v0.333.1.tar.gz
 #     ...
 #
-# Version 2 added the profile lines . A build profile is which
+# Version 2 added the profile lines. A build profile is which
 # SET OF FEATURES was compiled in, and v1 has exactly two: `default`
 # (web, desktop, extension) and `store` (the mobile store builds, which
-# compile OUT the surfaces the app-store review posture hides, 
+# compile OUT the surfaces the app-store review posture hides, per
 # §2.3). Two artifacts of one tag can therefore contain different code,
 # and a record whose whole job is to prove what shipped could not say
 # which was which. The mapping is one profile per artifact, taken from
@@ -63,7 +63,7 @@
 # true statement about behaviour: `bash tools/release/lib.sh --help` defined
 # every function below and exited 0 with no output, which is the exact shape
 # the §13 gate now refuses - a script that answers a question by doing
-# something and returning success . A sourced-only file is still a
+# something and returning success. A sourced-only file is still a
 # file an operator can find and run, and the useful answer to running it is
 # "you cannot; here is what sources me".
 #
@@ -107,7 +107,7 @@ xr_sha256_cmd() {
 }
 
 # Absolute path to update-info.mjs, which owns the one definition of
-# "is this file a channel pointer" ( §7.1). Resolved from this
+# "is this file a channel pointer" (§7.1). Resolved from this
 # file's own location so sourcing from any cwd works.
 xr_update_info_js() {
     local here
@@ -172,12 +172,12 @@ xr_list_update_info() {
     node "$js" pointers "$dir" 2>/dev/null | sed 's|^|./|'
 }
 
-# The build profiles a release may contain (; rails §3 owns the
+# The build profiles a release may contain (rails §3 owns the
 # list). Adding a third is a spec change, not an implementation choice,
 # because every reader of a manifest has to know what the name means.
 XR_PROFILES=(default store)
 
-# The RELEASE SETS a declaration row can belong to ( §7.5, ).
+# The RELEASE SETS a declaration row can belong to (§7.5).
 #
 # A row's `status` column says both whether the artifact is demanded AND
 # which set demands it. `required`/`optional` describe a PRODUCTION
@@ -309,7 +309,7 @@ xr_profile_for() {
 #
 # Recording a profile is not producing one. The compile-time flags that
 # make a `store` build differ from a `default` one are not written yet
-# ( §2.3, first one named by ), so writing `store` into a
+# (§2.3), so writing `store` into a
 # signed, append-only record today would be a FALSE claim: a verifier would
 # read it as "the review-hidden surfaces are absent" from a build that
 # still contains them. That is worse than saying nothing, so it fails shut
@@ -330,7 +330,7 @@ xr_assert_store_profile_buildable() {
         echo "release/lib.sh: this release stages a store-profile artifact, but the" >&2
         echo "  store build profile is not implemented (tools/release/store-profile-status.txt" >&2
         echo "  reads '${status:-<unreadable>}'). Signing would record a feature set the" >&2
-        echo "  build does not actually have. See  /  §2.3." >&2
+        echo "  build does not actually have. See §2.3." >&2
         return 1
     fi
 }
@@ -338,7 +338,7 @@ xr_assert_store_profile_buildable() {
 # Write "$dir/RELEASE_HASHES.txt" with the signed header + sorted hashes.
 # Args: dir tag tag_commit built_utc dev_mock_gate_state [expected_file] [lanes]
 #
-# `lanes` is set only for a PARTIAL release (, sign.sh --lane) and
+# `lanes` is set only for a PARTIAL release (sign.sh --lane) and
 # writes two header fields, `coverage: partial` and `lanes: <names>`. A
 # full release writes neither, so a manifest that says nothing about
 # coverage is a full one - and since the signature covers these bytes,
@@ -429,7 +429,7 @@ xr_write_manifest() {
 # Check that a manifest's profile lines account for its artifacts exactly
 # once each, and name only declared profiles.
 #
-# This is the read side of  and needs no repo: the claim is inside
+# This is the read side of the profile field and needs no repo: the claim is inside
 # the signed bytes. What it catches is the case the field exists for, an
 # artifact quietly added to (or dropped from) a release whose feature set
 # the header still describes as before.
@@ -462,7 +462,7 @@ xr_check_profiles() {
 
     if [[ ${#covered[@]} -eq 0 ]]; then
         echo "verify: manifest carries no profile lines, so it does not say which" >&2
-        echo "  feature set each artifact was built with (manifest-version 2, )." >&2
+        echo "  feature set each artifact was built with (manifest-version 2)." >&2
         return 1
     fi
 
@@ -499,7 +499,7 @@ xr_header_field() {
     sed -n "s/^# ${field}: //p" "$manifest" | head -1
 }
 
-# Which RELEASE a tag names, with any re-sign suffix stripped .
+# Which RELEASE a tag names, with any re-sign suffix stripped.
 #
 # A re-sign tag is `<release tag>-resign<N>`: the release tag's tree with
 # the release TOOLING corrected and nothing else, cut so that a manifest
@@ -591,13 +591,13 @@ xr_assert_wellformed() {
 }
 
 # What the arch column may say. The first four are architectures; the
-# shipped matrix is x64 + arm64 ( §2) and the other two are here so
+# shipped matrix is x64 + arm64 (§2) and the other two are here so
 # that the day DD1 adds armv7l, or DD3 flips macOS to a universal binary,
 # the change is one column rather than a code change.
 #
 # `multi` is not an architecture. It names an artifact that carries MORE
 # THAN ONE arch and therefore belongs to no lane - electron-builder's
-# combined NSIS installer is the only one we have seen . It is an
+# combined NSIS installer is the only one we have seen. It is an
 # ALLOWANCE, never a requirement: a row may declare it to say "an
 # un-suffixed combined artifact here is deliberate", and the gate then
 # tolerates one, but it never demands one, because a combined artifact is
@@ -638,8 +638,8 @@ xr_is_arch_token() {
 # The exception was removed rather than left as a harmless backstop,
 # because it stopped being harmless the moment it stopped being true: an
 # un-suffixed AppImage now means the forced name was LOST, which is the
-# same class of event as the combined NSIS installer reappearing
-# (). Inferring x64 would wave that through; refusing to
+# same class of event as the combined NSIS installer reappearing.
+# Inferring x64 would wave that through; refusing to
 # attribute it fails the release loudly, which is what the paragraph above
 # says the empty answer is for.
 #
@@ -707,7 +707,7 @@ xr_arch_triplet() {
 # THE GATE USED TO ANSWER THIS FROM THE FILENAME ALONE, and on 2026-08-06 a
 # probe showed what that misses: snapcraft packed x86-64 libraries into a
 # snap whose own meta/snap.yaml declared `architectures: [arm64]`, exit 0,
-# no warning (). Filename, metadata and payload all have to agree,
+# no warning. Filename, metadata and payload all have to agree,
 # and only the payload is the thing a user's machine has to execute. An
 # arm64-labelled artifact full of x86-64 code installs, passes every hash
 # and signature check we have, and cannot start.
@@ -755,7 +755,7 @@ xr_check_payload_arch() {
                 # what it did not check, by name.
                 echo "PAYLOAD-ARCH-UNCHECKED  '${name#./}' was NOT checked: unsquashfs is not on" >&2
                 echo "              this host, and a snap's declared architecture is not" >&2
-                echo "              evidence of its contents (). Install it" >&2
+                echo "              evidence of its contents. Install it" >&2
                 echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
                 echo "              have this artifact checked." >&2
             elif ! listing="$(unsquashfs -l "$f" 2>/dev/null)"; then
@@ -808,8 +808,8 @@ xr_check_payload_arch() {
 
 # Scan a package's FILE LISTING for another architecture's library
 # directory. A payload carrying `x86_64-linux-gnu/` is carrying x86-64 code,
-# whatever its label says, and this is the check that caught's
-# arm64-labelled snap (180 such paths).
+# whatever its label says, and this is the check that caught an
+# arm64-labelled snap carrying x86-64 code (180 such paths).
 #
 # It takes the listing as text rather than opening the package itself, so it
 # can be driven without unsquashfs, dpkg-deb, or a 120MB fixture. That is not
@@ -832,7 +832,7 @@ xr_check_foreign_triplets() {
             echo "PAYLOAD-ARCH  '$name' is named $arch and carries $found path(s) under" >&2
             echo "              $foreign, which is another architecture's library" >&2
             echo "              directory. snapcraft will cross-build a package like this" >&2
-            echo "              and exit 0 (); the machine that installs it" >&2
+            echo "              and exit 0; the machine that installs it" >&2
             echo "              cannot run it." >&2
             problems=$((problems + 1))
         fi
@@ -844,9 +844,9 @@ xr_check_foreign_triplets() {
 # Does a Linux artifact's payload carry the compiled native addon that a
 # Linux install of this app produces?
 #
-# MEASURED ON REAL ARTIFACTS, NOT REASONED (). The §7.5 rehearsal
+# MEASURED ON REAL ARTIFACTS, NOT REASONED. The §7.5 rehearsal
 # `.deb` built on the release Mac parses to 93 payload entries with zero
-# `.node` files in them;'s CI artifact for the same app carries 188
+# `.node` files in them; a CI artifact for the same app carries 188
 # and includes
 # `resources/app.asar.unpacked/node_modules/tiny-secp256k1/build/Release/secp256k1.node`.
 # The rehearsal therefore rehearses a bundle no release ever publishes, which
@@ -903,7 +903,7 @@ xr_check_payload_native() {
                 # names what it did not check instead of going quiet.
                 echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: unsquashfs is" >&2
                 echo "              not on this host, and an AppImage's payload is a squashfs" >&2
-                echo "              image nothing else here can read (). Install it" >&2
+                echo "              image nothing else here can read. Install it" >&2
                 echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
                 echo "              have this artifact checked." >&2
                 echo 0
@@ -924,7 +924,7 @@ xr_check_payload_native() {
             fi
             ;;
         *)
-            # Every other format is out of scope. measured the Linux
+            # Every other format is out of scope. A measured probe found the Linux
             # lane's divergence; what a .dmg or an .exe ought to carry is a
             # rule nobody has driven, and guessing it here would gate a
             # release on an assumption.
@@ -940,9 +940,9 @@ xr_check_payload_native() {
             echo "PAYLOAD-NATIVE  '${name#./}' carries no compiled addon: nothing under" >&2
             echo "              resources/app.asar.unpacked/ ends in .node. A Linux install" >&2
             echo "              compiles tiny-secp256k1 and the release lane's own artifact" >&2
-            echo "              ships secp256k1.node (), so a payload without one" >&2
+            echo "              ships secp256k1.node, so a payload without one" >&2
             echo "              was built where that addon never compiled and is running" >&2
-            echo "              the package's JS fallback ()." >&2
+            echo "              the package's JS fallback." >&2
             problems=$((problems + 1))
         fi
     fi
@@ -973,7 +973,7 @@ xr_check_payload_arches() {
         n="$(xr_check_payload_arch "$dir" "$name" "$arch")"
         problems=$((problems + n))
         # The same set answers a second question, and the §7.5 rehearsal got
-        # it wrong (): does the payload carry the addon a Linux
+        # it wrong: does the payload carry the addon a Linux
         # install compiles? Tallied apart from the arch count so each gate
         # reports the defect it actually found.
         n="$(xr_check_payload_native "$dir" "$name")"
@@ -993,7 +993,7 @@ xr_check_payload_arches() {
         echo "release/lib.sh: payload-native gate FAILED ($native problem(s))." >&2
         echo "  A Linux payload with no compiled addon was built where that" >&2
         echo "  addon never compiled, and tiny-secp256k1 falls back to JS with" >&2
-        echo "  nothing said (). Build the set the release lane builds" >&2
+        echo "  nothing said. Build the set the release lane builds" >&2
         echo "  it in, rather than publishing a rehearsal of a different bundle." >&2
     fi
 
@@ -1049,7 +1049,8 @@ xr_check_arch_row() {
             echo "              fleet it is for. electron-builder emits an un-suffixed" >&2
             echo "              COMBINED NSIS installer holding both arches, and the" >&2
             echo "              generated stable.yml points every Windows client at it" >&2
-            echo "              . Decide it rather than ship it: stop emitting" >&2
+            echo "              (combined-installer arch row). Decide it rather than" >&2
+            echo "              ship it: stop emitting" >&2
             echo "              the file, or add 'multi' to this row's arch column to" >&2
             echo "              declare it deliberate." >&2
             problems=$((problems + 1))
@@ -1114,7 +1115,7 @@ xr_check_arch_row() {
             echo "MISSING-ARCH  pattern '$pattern' has no $a artifact (declared: $archspec)." >&2
             echo "              The glob matches the other architecture happily, which is" >&2
             echo "              how a release that built ONE arch passed this gate before" >&2
-            echo "              ( §8). That release leaves every $a install with no" >&2
+            echo "              (§8). That release leaves every $a install with no" >&2
             echo "              download and no update, and writes no ${a}-suffixed" >&2
             echo "              channel pointer for anything to fetch." >&2
             problems=$((problems + 1))
@@ -1135,12 +1136,12 @@ xr_check_arch_row() {
 # into the release's trust root.
 #
 # THE THIRD DIRECTION IS PER-ARCHITECTURE, and it was missing until
-# 2026-08-01 ( §8). The globs are extension-shaped on purpose, so
+# 2026-08-01 (§8). The globs are extension-shaped on purpose, so
 # `*.dmg` is satisfied by ONE dmg: a release that built x64 and silently
 # dropped arm64 - which is exactly what the `--` argv bug did to all six
 # lanes - passed this gate with a clean manifest. The arch column closes
 # it, and catches the opposite defect too: an artifact that belongs to no
-# architecture at all .
+# architecture at all.
 #
 # Args: dir expected_file [release_set] [staging_os]
 #
@@ -1351,11 +1352,11 @@ xr_check_expected() {
 # becomes live the day one of them DOES ship: has a lane that already has
 # users silently dropped out of this release?
 #
-# The gap is real and it is the  §8 shape one level up. Nothing
+# The gap is real and it is the §8 shape one level up. Nothing
 # about a first upload edits expected-artifacts.txt, so the release AFTER
 # the first Android release could omit the Android pair and produce a
 # manifest that is internally perfect while leaving every direct-APK
-# install without the fix it was told to expect.  §6 states the
+# install without the fix it was told to expect. §6 states the
 # invariant ("never let the direct lane lag"); this is the mechanism.
 #
 # Fail-shut in both directions, because a gate that reads a stale or
@@ -1363,7 +1364,7 @@ xr_check_expected() {
 # an unknown status, a glob that no expected-artifacts row declares, and
 # an `optional` row that no lane claims are all hard failures.
 #
-# A FOURTH ARGUMENT NARROWS IT TO A PARTIAL RELEASE . When a
+# A FOURTH ARGUMENT NARROWS IT TO A PARTIAL RELEASE. When a
 # release covers only some lanes - the Android pair signed on its own
 # while the desktop lanes are not built - the parity question is asked of
 # the lanes in that scope and of nothing else, because a lane the release
@@ -1462,7 +1463,7 @@ xr_check_shipped_lanes() {
                 echo "                 Users of that lane are already installed and" >&2
                 echo "                 expect this version. Shipping without it is not" >&2
                 echo "                 a smaller release, it is a lane left behind on a" >&2
-                echo "                 version nothing will ever update ( §6)." >&2
+                echo "                 version nothing will ever update (§6)." >&2
                 echo "                 If the lane is genuinely being retired, say so in" >&2
                 echo "                 $lanes rather than here." >&2
                 failures=$((failures + 1))
@@ -1505,7 +1506,7 @@ xr_check_shipped_lanes() {
 }
 
 # Restrict an expected-artifact list to the lanes a PARTIAL release covers,
-# and print the restricted list on stdout .
+# and print the restricted list on stdout.
 #
 # WHY A PARTIAL RELEASE EXISTS AT ALL. sign.sh signs one manifest for a
 # whole release and xr_check_expected demands every `required` row - web,
@@ -1619,7 +1620,7 @@ xr_lane_scope() {
 
     # THE ROW IS COPIED, NOT REBUILT, and that is load-bearing. An earlier
     # version parsed four columns and re-emitted them, which silently
-    # dropped the fifth (the signature class, ) - so a scoped release
+    # dropped the fifth (the signature class) - so a scoped release
     # reached verify-signatures.mjs with every artifact declaring no class
     # at all. That is this file's own recurring defect, a gate that cannot
     # fail on a column it was never told about, committed by the very

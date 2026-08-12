@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  ( §4.7): what does this action spend, so a SECOND approval
+// (§4.7): what does this action spend, so a SECOND approval
 // window can be told about it?
 //
 // The reservation ledger closes the two-windows-same-balance race:

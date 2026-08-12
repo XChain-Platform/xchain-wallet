@@ -27,7 +27,7 @@ import handlersSource from '../../../packages/extension/src/bridge/handlers.js?r
 //
 // Anchored on the CALL, not on `return <flow>(`: the flow result is now shaped
 // into the bridge-spec SignActionResult before it leaves the handler
-// (), so the call site is `const submitted = await sendToken({…})`.
+//, so the call site is `const submitted = await sendToken({…})`.
 // The guard is on the argument object's key order either way.
 function flowCallBody(flowName) {
     const m = handlersSource.match(

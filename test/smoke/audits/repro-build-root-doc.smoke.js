@@ -11,7 +11,7 @@
 // Smoke for §13 / G015: the project-wide reproducible-builds doc.
 //
 // The doc used to be four files: a root orientation doc plus one deep
-// recipe per shell under `packages/*/REPRODUCIBLE_BUILDS.md`. 
+// recipe per shell under `packages/*/REPRODUCIBLE_BUILDS.md`.
 // merged all four into one page in the sibling xchain-documentation
 // checkout (components/wallet/reproducible-builds.md), with the per-shell
 // recipes as sections of it, published at

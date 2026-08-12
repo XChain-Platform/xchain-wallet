@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/regtest/deployNativeFee.mjs -  leg 1.
+// tools/regtest/deployNativeFee.mjs - leg 1.
 //
 // Drives a WALLET-COMPOSED contract DEPLOY that pays the protocol fee with a
 // native-coin output, on a chain that has no XCHAIN lane (LTC / DOGE regtest),
@@ -10,12 +10,12 @@
 // The SDK e2e lane attaches its native-fee output from a test helper
 // (`test/sdk/sdkHelper.js`). The wallet does not: `submitWithSigner` runs
 // `applyNativeFeePreflight`, which quotes the indexer and sizes a
-// FEE_DESTINATION output itself. That wallet-side sizing is the code 
+// FEE_DESTINATION output itself. That wallet-side sizing is the code
 // is actually asking about, so this driver calls `submitWithSigner` directly -
 // the same function every wallet form reaches on Approve - with a throwaway
 // WIF-backed signer standing in for the vault.
 //
-// WHAT IT FOUND 
+// WHAT IT FOUND
 //
 // The wallet folds the FEE_DESTINATION output into the phase-1 createTx call,
 // and passes NO customOutputs to spendP2sh - but a chunked action puts the
@@ -32,16 +32,16 @@
 //
 // VENUE
 //
-// Run it on devhost, where the encoder/miner ports are local and ~/Sites is
+// Run it on the regtest host, where the encoder/miner ports are local and ~/Sites is
 // the same NFS path as the Mac:
 //
-//   ssh devhost 'cd ~/Sites/XChain-Platform/xchain-wallet && \
+//   ssh localhost 'cd ~/Sites/XChain-Platform/xchain-wallet && \
 //     node tools/regtest/deployNativeFee.mjs litecoin-regtest'
 //
 // From the Mac it needs tunnels for the chain's encoder + miner ports.
 //
 // LTC/DOGE regtest indexers run with HUB_DB_NAME unset, so they read their own
-// never-refreshed price_snapshots . A hand-seeded row is only usable
+// never-refreshed price_snapshots. A hand-seeded row is only usable
 // inside ORACLE_MAX_PRICE_AGE_SECONDS (1800s) of the block time, so a venue that
 // worked an hour ago answers "no current oracle price for LTC/USD (missing or
 // stale beyond 1800s)" at the pre-flight. That is the guardrail refusing before
@@ -75,7 +75,7 @@ const EXPLORER = process.env.XCHAIN_EXPLORER_URL || 'http://localhost:18080';
 const chainId = process.argv[2] || 'litecoin-regtest';
 // --confirm drives the CONFIRM path (compose -> preview -> approve a prebuilt
 // PSBT), which is the one every wallet form actually takes; without it the
-// driver takes the direct-submit path.  had to be fixed on BOTH, and
+// driver takes the direct-submit path. had to be fixed on BOTH, and
 // only one can be exercised per run, so both are drivable here.
 const viaConfirm = process.argv.includes('--confirm');
 const cfg = CHAINS[chainId];
@@ -189,7 +189,7 @@ async function main() {
 
     // The wallet's Signer interface, backed by a raw WIF instead of the vault.
     const signer = {
-        // Mirrors SoftwareSigner.signPsbt, including the  branch: a
+        // Mirrors SoftwareSigner.signPsbt, including the branch: a
         // chunked DEPLOY's phase-2 reveal spends data-carrier outputs whose
         // redeem script the default single-sig finalizer cannot finalize
         // ("Can not finalize input #0"), so it needs the SDK's reveal
@@ -237,7 +237,7 @@ async function main() {
 
     // The CONFIRM path: compose + tamper-check host-side, then approve the
     // PREBUILT psbt. That is the exact pair of steps a form takes, and it is a
-    // different branch of submitWithSigner from the direct path, so  had
+    // different branch of submitWithSigner from the direct path, so had
     // to be fixed in both. The vault is stubbed to default settings because the
     // only thing compose reads from it is the ADS donation snapshot.
     let prebuiltPsbt;

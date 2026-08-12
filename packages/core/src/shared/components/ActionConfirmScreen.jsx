@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ActionConfirmScreen . Thin adapter that binds a form's
+// ActionConfirmScreen. Thin adapter that binds a form's
 // useActionConfirmFlow state to <ConfirmActionModal> and renders the
 // credentials block every software action form shares: an optional
 // form-specific gate (e.g. DestroyForm's typed DESTROY) followed by
@@ -51,7 +51,7 @@ function nativeTickerFor(chainId) {
  * @param {import('react').ReactNode} [props.extraCredentials]   form-specific gate rendered above the password
  * @param {string} [props.hintClassName]
  * @param {object|null} [props.simulation]
- * @param {object} [props.hwSource]      : the source address record when it is a
+ * @param {object} [props.hwSource]: the source address record when it is a
  *   HARDWARE signer. Supplying it swaps the password field for <HwSignBlock> (§5.1) and
  *   gates Approve on the device being available, so hardware signers get the same
  *   single-encode surface (and its output-set tamper check) as software ones instead of
@@ -67,7 +67,7 @@ function nativeTickerFor(chainId) {
  * @param {string|null} [props.hwRequireExplicitConfirmReason]
  * @param {(confirmed: boolean) => void} [props.onHwConfirmedChange]
  * @param {boolean} [props.hwExplicitConfirmed]        the caller's tick state
- * @param {string[]} [props.outcomeLabels]   : a BET market's outcome labels, in
+ * @param {string[]} [props.outcomeLabels]: a BET market's outcome labels, in
  *   wire order. The composed bytes carry the outcome as an index, so the host's decode
  *   can only say "outcome 0"; supplying the market's own labels NAMES that index
  *   without replacing it. Display-only annotation, and the only caller-supplied text
@@ -143,7 +143,7 @@ export function ActionConfirmScreen({
             // the same parsed action string the deltas read (through
             // sdk.decoder.describe), so the two provably agree.
             //
-            // : there is no caller-supplied fallback any more, and the
+            // There is no caller-supplied fallback any more, and the
             // absence is the point. A caller may legitimately have a better
             // SIMULATION than the generic one; no caller can have a better
             // account of what the encoder built than the encoder's own output.
@@ -179,7 +179,7 @@ export function ActionConfirmScreen({
                             onConfirmedChange={onHwConfirmedChange}
                         />
                     ) : signerReady ? (
-                        // : this is the last screen before Approve & Sign,
+                        // This is the last screen before Approve & Sign,
                         // and panic mode makes "no password needed" a claim the
                         // wallet cannot honour. SigningReadyNote withdraws it
                         // whenever signing is frozen, and explains why only for

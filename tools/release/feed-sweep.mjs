@@ -9,13 +9,13 @@
 // contact legal@dankest.llc.
 
 // tools/release/feed-sweep.mjs - does the feed still hold what we signed?
-// ( §7.2, stage 4.) Runs by cron ON the feed host, over the local
+// (§7.2, stage 4.) Runs by cron ON the feed host, over the local
 // tree; it never fetches, so a compromised edge cannot answer for it.
 //
 // WHAT THIS IS, STATED PLAINLY. It is a FORENSIC RECORD, not a detection
 // control. §7.2 asks for an alert on any change to feed objects outside a
 // release window, and there is no receiving channel for one yet (the
-//  alert-channel decision, the  watchdog gap). Until there
+// alert-channel decision and the watchdog gap it left open). Until there
 // is, this writes a timestamped log that gets read at releases and at
 // incidents. Calling it a control before something reads it would be the
 // more comfortable lie.
@@ -271,7 +271,7 @@ export function sweep(root, options = {}) {
 
             manifestCount += 1;
             const { tag, entries } = parseManifest(full);
-            // The RELEASE, not the signature . A re-sign tag
+            // The RELEASE, not the signature. A re-sign tag
             // (`v0.336.0-resign1`) is the release tag's tree with the release
             // tooling corrected and nothing else, cut because the dev-mock gate
             // that stamps the manifest header comes from the tag and so cannot
@@ -371,7 +371,7 @@ export function sweep(root, options = {}) {
 const USAGE = `usage: feed-sweep.mjs --root <feed root> [--gpg-key <fingerprint>] [--json]
 
 Validates every object under a release feed against the UNION of the
-signed manifests published beside them ( §7.2). Runs on the feed
+signed manifests published beside them (§7.2). Runs on the feed
 host, over the local tree, by cron:
 
   30 * * * * /usr/bin/node /opt/xchain/feed-sweep.mjs \\

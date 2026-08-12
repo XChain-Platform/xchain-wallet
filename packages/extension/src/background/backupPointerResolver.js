@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // §15.4 backup-pointer resolver, extracted from createBackgroundHost so
-// the PRE-HOST fresh-install restore  can use the same one. A
+// the PRE-HOST fresh-install restore can use the same one. A
 // fresh install has no vault, so it never reaches the host, and a second
 // copy of this function is exactly how the two lanes drift on which
 // schemes they are willing to fetch.

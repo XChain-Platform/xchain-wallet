@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  regression. The native-coin fee used to be a plain opt-in that
+// regression. The native-coin fee used to be a plain opt-in that
 // started OFF on every chain, which is only correct on Bitcoin. On LTC/DOGE
 // the indexer rejects a fee-bearing action that carries no FEE_DESTINATION
 // output (`insufficient fee (native coin output required)`), so the old
@@ -91,7 +91,7 @@ describe('useNativeFee', () => {
     });
 });
 
-describe('default form state through the submit preflight ', () => {
+describe('default form state through the submit preflight', () => {
     it('builds the FEE_DESTINATION output on LTC without the user touching anything', async () => {
         const { result } = renderHook(() => useNativeFee('litecoin-regtest'));
         const sdk = quotingSdk();

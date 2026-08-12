@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// LearnNote . The read side of Settings > Developer Mode > Learn
+// LearnNote. The read side of Settings > Developer Mode > Learn
 // Mode, which promises "explanatory copy on confirmation screens for users
 // new to bitcoin / XChain mechanics" and, until now, delivered none.
 //

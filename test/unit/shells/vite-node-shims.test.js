@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  guard: both browser shells must shim `http` AND `https` to the
+// guard: both browser shells must shim `http` AND `https` to the
 // no-op Agent module. xchain-sdk's explorer/encoder clients pick
 // `require('https').Agent` for any https endpoint (every mainnet
 // default); with only `http` aliased, constructing the real SDK threw
@@ -31,7 +31,7 @@ const CONFIGS = [
  * The replacement for an exact-string alias, from either shape Vite accepts.
  *
  * The web config moved to the array form when the build-profile surface swaps
- * arrived : those are regex finds, which the object form cannot hold.
+ * arrived: those are regex finds, which the object form cannot hold.
  * The two forms mean the same thing to Rollup, so this asserts the guarantee
  * rather than the notation - the previous version read `alias.http` and went
  * green-to-undefined the moment the shape changed, which is the failure mode
@@ -53,6 +53,6 @@ describe.each(CONFIGS)('%s shell vite config', (_name, path) => {
         const http = aliasFor(alias, 'http');
         const https = aliasFor(alias, 'https');
         expect(http, 'http alias missing').toMatch(/http-browser\.js$/);
-        expect(https, 'https alias missing ').toBe(http);
+        expect(https, 'https alias missing').toBe(http);
     });
 });

@@ -60,7 +60,7 @@ assert.ok(
 // don't accidentally grab the earlier saveContact catch block, which grew
 // when Send.jsx was refactored and moved above the submit handler.
 // Window widened from 1500 to 2200: the handleSubmit catch block grew when
-//  added plain-language error humanizing (humanizeError) alongside
+// a later change added plain-language error humanizing (humanizeError) alongside
 // the existing user-cancel / bad-password branches.
 const catchBlockMatch = send.match(/\}\s*catch\s*\(\s*err\s*\)\s*\{\s*\n\s+const isBadPassword[\s\S]{0,2200}?\n\s{4,8}\}/);
 assert.ok(catchBlockMatch, 'Send.jsx still has a catch (err) block in handleSubmit');

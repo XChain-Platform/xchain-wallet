@@ -25,7 +25,7 @@ import { DisplayPrefsGate } from './DisplayPrefsGate.jsx';
  * Cluster R FOLLOWUP 4: also mounts <LocaleSync /> so a saved
  * `settings.language` rehydrates the live i18n locale on cold start.
  *
- * : and <DisplayPrefsGate />, which stamps the theme, reduced-motion
+ * And <DisplayPrefsGate />, which stamps the theme, reduced-motion
  * and learn-mode settings onto <html> for CSS and components to read.
  *
  * @param {object} props

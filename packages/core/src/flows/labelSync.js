@@ -424,7 +424,7 @@ export async function publishLabelsNow({
             // refuses with "Transaction would burn significant satoshis as
             // fees. Please provide a change address.", so Publish labels was a
             // dead end on every chain. `submitAction` only ROTATES a change
-            // address that is already present  - it never supplies one -
+            // address that is already present - it never supplies one -
             // so nothing downstream covered the omission. Note what the
             // encoder's guard was actually preventing: with no change output
             // the entire funding UTXO beyond the data outputs is miner fee.

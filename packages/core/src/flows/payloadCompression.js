@@ -12,7 +12,7 @@
  *
  **********************************************************************
  *
- * Client-side FILE payload inflation ( spec Part B), wallet side.
+ * Client-side FILE payload inflation (spec Part B), wallet side.
  *
  * The wallet only needs this for TOKEN-GATED files. For a public FILE the
  * explorer already inflates on serve, so anything fetched through the raw

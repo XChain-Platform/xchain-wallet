@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the §6 release record is a precondition, not a
+// Smoke for: the §6 release record is a precondition, not a
 // convention.
 //
 // WHAT WENT WRONG. §6 says the per-release record is instantiated from
@@ -43,7 +43,7 @@
 // repo one level above this one, which an isolated single-repo CI
 // checkout does not have. The last section therefore SKIPS loudly when
 // the records directory is absent, exactly as the docs-parity smokes
-// have since . What that costs: GitHub CI cannot enforce the
+// have. What that costs: GitHub CI cannot enforce the
 // step-1 half. What it does not cost: the step-5 half, because
 // publish.sh runs on the release machine, which is a full monorepo tree.
 
@@ -108,7 +108,7 @@ const cleanups = [() => rmSync(scratch, { recursive: true, force: true })];
 
 // `tag.gpgsign = true` is set globally on the release machine, so a bare
 // `git tag` in a fixture repo fails for want of a message and creates
-// nothing . Neutralised per invocation rather than trusted to
+// nothing. Neutralised per invocation rather than trusted to
 // ambient config.
 const GIT_CLEAN = [
     '-c', 'user.email=smoke@example.invalid',
@@ -136,7 +136,7 @@ as you go. It is the §6 checklist instantiated for one release: the
 facts a later reader needs when something goes wrong, in the order they
 become known.
 
-**Item:** 
+**Item:**
 
 ---
 
@@ -255,7 +255,7 @@ try {
     r = runTool(['coverage', '--repo', repoA], coverEmpty);
     assert.equal(r.status, 1, 'coverage fails when a release tag has no record');
     assert.ok(/⬜ v0\.400\.0/.test(r.stdout), 'the missing tag is listed');
-    assert.ok(//.test(r.stdout), 'the summary cites the item this gate came from');
+    assert.ok(/which is why this is a gate/.test(r.stdout), 'the summary says why this is a gate');
 
     // ------------------------------------- coverage: the same tag, recorded
     const coverFull = makeRecordsDir('cover-full');
@@ -280,7 +280,7 @@ try {
     // v0.335.0 in the real repo is exactly this: a signed tag on a commit
     // whose package.json still reads 0.334.0. release.yml's verify-tag
     // refuses it, so it can never have produced a release, and demanding
-    // an account of it would wedge THIS gate on a stray tag 
+    // an account of it would wedge THIS gate on a stray tag
     // instead of on the missing record it exists to catch. Reported, not
     // fatal.
     const repoStray = makeRepo('repoStray', { version: '0.400.0', tags: ['v0.400.0', 'v0.402.0'] });
@@ -316,10 +316,10 @@ try {
             assert.ok(/release-record\.mjs open --tag/.test(spec),
                 '§6 names the command that opens the record, not a manual copy');
             // Anchored to the precondition sentence rather than to the bare
-            // finding id: §6 already cited  in its run log while step
+            // finding id: §6 already cited in its run log while step
             // 1 still said "copy its TEMPLATE.md", so a bare id match passed
             // against exactly the wording this is here to prevent.
-            assert.ok(/It is a precondition, not a convention \(\\)/.test(spec),
+            assert.ok(/It is a precondition, not a convention/.test(spec),
                 '§6 says the record is a precondition rather than a convention');
             assert.ok(/publish\.sh` refuses a production publish without an instantiated §6 release record/.test(spec),
                 'step 5 states the publish-side refusal alongside the rehearsal one');

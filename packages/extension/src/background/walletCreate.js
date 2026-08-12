@@ -197,7 +197,7 @@ export async function handleWalletImport(request, deps) {
     }
     // `walletId` rides along for the same reason the host-registered
     // `wallet.import` returns a whole wallet record: a fresh-install caller may
-    // have more to do with the wallet it just made. The  pairing lane
+    // have more to do with the wallet it just made. The pairing lane
     // imports the shared phrase here and then asks the host for that wallet's
     // pairing payload, addressed BY id; without it the lane dead-ended after
     // the wallet already existed.
@@ -205,14 +205,14 @@ export async function handleWalletImport(request, deps) {
 }
 
 /**
- * : restore an encrypted §19.4 backup onto a FRESH install.
+ * Restore an encrypted §19.4 backup onto a FRESH install.
  *
  * The shipping `wallet.importBackup` is host-registered, and the host is only
  * built once a vault exists - so on a device with no wallet the restore lane
  * had nothing to talk to. This is its pre-host twin: it creates the vault
  * under the new device password first, then runs the same core merge.
  *
- * Three secrets arrive, and they are three different things :
+ * Three secrets arrive, and they are three different things:
  *
  *   password         the password THIS device will unlock with from now on
  *   backupPassword   opens the backup file's envelope

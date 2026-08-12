@@ -46,7 +46,7 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 // Separator between the parts the form packs into one MEMO slot (the optional
-// UTC timestamp and the message body). : this used to be ' | ', and '|'
+// UTC timestamp and the message body).: this used to be ' | ', and '|'
 // is the protocol's own field delimiter - the SDK refuses a MEMO containing
 // one, so ticking the wallet's own timestamp box made the action unsendable
 // with an error naming a field the UI never shows. The separator is cosmetic;
@@ -218,7 +218,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         if (feed && body) memoParts.push(body);
         const memo = memoParts.join(MEMO_PART_SEPARATOR);
 
-        // : the version has to follow the fields that are actually
+        // The version has to follow the fields that are actually
         // populated. Only v1/v2/v3 carry a MEMO slot (v0 is
         // VERSION|MESSAGE|VALUE), so selecting on VALUE and FEE alone dropped a
         // typed body on the floor - encoded, paid for, and reported as sent,
@@ -241,7 +241,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         return p;
     }, [feedName, text, value, feedFee, includeTimestamp]);
 
-    //  ( §5.6 slice 2): software broadcasts go through the
+    // (§5.6 slice 2): software broadcasts go through the
     // single-encode confirm page; hardware + watcher keep the legacy
     // review stage. Declared before the `isHwSource`/`isWatcherMode`
     // consts below only for readability: `singleEncode` is computed
@@ -249,7 +249,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
 
     const decoded = useMemo(() => {
-        //  residual (§5.6 slice 5): the confirm page renders the intent
+        // residual (§5.6 slice 5): the confirm page renders the intent
         // the HOST described from the composed action string
         // (`composed.decoded`), so this local describer serves the LEGACY
         // review stage only - the watcher, demo and locked-ECDH path. It used
@@ -286,7 +286,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 return;
             }
         }
-        //  sibling case: a user-typed delimiter. The wallet no longer
+        // sibling case: a user-typed delimiter. The wallet no longer
         // inserts one itself, but a pipe or semicolon in either text field is
         // still unsendable, and the compose call reports that in protocol
         // field names nobody outside this file recognises.
@@ -312,7 +312,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    //  pilot: hardware signers now go through the confirm page too. They
+    // pilot: hardware signers now go through the confirm page too. They
     // were excluded, which meant the users most likely to care about
     // verification got the LEGACY rebuild-on-Approve path with no output-set
     // tamper check - and the modal's own hardware note tells them this screen is
@@ -477,7 +477,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 />,
             );
         }
-        // : signed, but the broadcast leg never landed. The confirm
+        // Signed, but the broadcast leg never landed. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch it renders as a completed broadcast.
         if (result?.queued) {
@@ -582,7 +582,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         );
     }
 
-    //  confirm page, rendered in place of the form (the overlay modal
+    // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
         return (
@@ -597,7 +597,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                // : hardware swaps the password field for the device block
+                // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}

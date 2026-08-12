@@ -10,7 +10,7 @@
 
 // A store ceremony is transcribed by hand, so it has to CARRY the values.
 //
-// THE DEFECT THIS WAS WRITTEN FOR . 's port rendered the store
+// THE DEFECT THIS WAS WRITTEN FOR. that port rendered the store
 // documents as evergreen public prose, and prose deduplicates: the per-store
 // pages stopped naming the trader entity, address, email and phone and said
 // "use the same contact details published on the other listings" with a link to
@@ -20,7 +20,7 @@
 // to publish permanently; they type what is in front of them, and what is not
 // in front of them they guess or leave blank.
 //
-//  fixed it for Chrome. The sibling sweep then measured the same thing
+// a later change fixed it for Chrome. The sibling sweep then measured the same thing
 // on mobile with the store-trader-identity smoke's OWN definition of a
 // transcribable surface: the four pre-migration mobile documents carried four
 // such surfaces between them and the ported tree carried one. That is the third
@@ -84,16 +84,16 @@ for (const field of [...PUBLISHED, ...ADDRESS_REST]) {
 const TRANSCRIBES = {
     'release/extension/chrome-web-store.md': {
         transcribes: true,
-        note: 'restored by  after the docs port scrubbed the values; the worked example',
+        note: 'restored after the docs port scrubbed the values; the worked example',
     },
     'release/mobile/android-play.md': {
         transcribes: true,
-        note: 'restored 2026-08-03  from the pre-migration PLAY_LISTING block, sanitized: '
+        note: 'restored 2026-08-03 from the pre-migration PLAY_LISTING block, sanitized:'
             + 'the operator-security reasoning behind the number stays in the private spec',
     },
     'release/mobile/ios-app-store.md': {
         transcribes: true,
-        note: 'restored 2026-08-03 ; the ported page had the trader row and none of the values',
+        note: 'restored 2026-08-03; the ported page had the trader row and none of the values',
     },
     // ---- DECLARED NON-TRANSCRIBERS ------------------------------------
     //
@@ -315,7 +315,7 @@ assert.ok(citations > 0,
     + 'checking anything. These ceremonies tell an operator to run commands out of this repo; if they '
     + 'stopped doing that, rewrite this section rather than deleting it.');
 
-console.log(`OK: store identity-transcription smoke (: ${storePages.length} release pages `
+console.log(`OK: store identity-transcription smoke (${storePages.length} release pages`
     + `enumerated, all declared; ${surfaces} carrying a transcribable block with all `
     + `${PUBLISHED.length} published values traced to ${RECORD}; ${phones} phone mention(s) checked; `
     + `${citations} cited wallet-repo paths resolved across the repo boundary)`);

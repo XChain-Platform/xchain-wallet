@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  responsive-first program, slice 1: the single source of truth for
+// responsive-first program, slice 1: the single source of truth for
 // the wallet shell's layout breakpoints.
 //
 // WHY THIS FILE EXISTS

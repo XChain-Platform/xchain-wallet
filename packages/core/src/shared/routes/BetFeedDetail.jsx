@@ -218,7 +218,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // : placing a bet is fee-bearing (BET v2 pre-funds one payout credit),
+    // Placing a bet is fee-bearing (BET v2 pre-funds one payout credit),
     // so it carries the same fee lane as every other fee-bearing action. On
     // LTC/DOGE the hook forces it on: there is no XCHAIN fee lane on those
     // chains, so a bet placed without the native output is broadcast, costs a
@@ -293,7 +293,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     // Compose through the SDK's own placeBetParams builder, host-side. A
     // client-side wire mirror would be SIGNED rather than caught, and for BET the
     // stakes are literal: a place-bet and a resolve differ on the wire only by
-    // AMOUNT ('s rule, sharper here).
+    // AMOUNT (that rule, sharper here).
     async function placeBet() {
         if (!fromAddress) { setFormError('No address on this chain to bet from.'); return; }
         setFormError(null);
@@ -322,7 +322,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             reload();
         } catch (err) {
             if (isUserRejection(err)) return;
-            // Through the shared mapper , not a hand-rolled ternary:
+            // Through the shared mapper, not a hand-rolled ternary:
             // the native-fee branch was the only one this form translated, so
             // an SDK params-builder refusal reached the user as the builder's
             // own log line - "betting.placeBetParams: amount must be a positive
@@ -529,7 +529,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                 an answer to "what would I win". Payout, profit and odds all come
                                 back from the same SDK call that settlement's arithmetic follows.
                                 Zero is called out in words because it is the case the abstract
-                                rounding warning below is really about . */}
+                                rounding warning below is really about. */}
                             {projected ? (
                                 <div className={styles.hint} data-testid="bet-projection">
                                     {Number(projected.payout) > 0 ? (
@@ -598,7 +598,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             {result ? (
                 <div className={styles.card} data-testid="bet-result">
                     <p className={styles.summary}>
-                        {/*  leg (a): a queued result is SIGNED and not broadcast, so
+                        {/* leg (a): a queued result is SIGNED and not broadcast, so
                             "Bet placed" would claim the one thing that has not happened. */}
                         {result?.queued
                             ? 'Signed, but your bet could not reach the network just now. It is queued '

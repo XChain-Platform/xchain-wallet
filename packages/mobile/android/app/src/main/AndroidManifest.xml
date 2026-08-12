@@ -4,7 +4,7 @@
 
     <!--
       allowBackup="false" is the single most consequential attribute in this
-      file ( §1). Android's default would ship the vault ciphertext
+      file (§1). Android's default would ship the vault ciphertext
       into Google cloud backup, and carry settings, contacts and connected
       sites there effectively in the clear. The Keystore key that decrypts
       the vault does not transfer, so the restored copy would be
@@ -39,7 +39,7 @@
             </intent-filter>
 
             <!--
-              App Links ( §1, S3). autoVerify makes Android fetch
+              App Links (§1, S3). autoVerify makes Android fetch
               https://xchain.io/.well-known/assetlinks.json at install and
               route these links to us without a chooser. That file must list,
               under this one applicationId, the SHA-256 fingerprints of every
@@ -136,7 +136,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!--
-      Biometric unlock ( S2). Both are normal-protection: granted at
+      Biometric unlock (S2). Both are normal-protection: granted at
       install, no runtime prompt, no review weight beyond appearing in the
       listing's permission list.
 

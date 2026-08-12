@@ -16,7 +16,7 @@
 // device API that does not exist: `app.getAppAndVersion()` (never a
 // method, only a standalone helper) and `app.signMessageNew()` (renamed
 // to `signMessage` in hw-app-btc v10). Both threw TypeError on first
-// contact with real hardware and every unit test stayed green .
+// contact with real hardware and every unit test stayed green.
 //
 // A fake can only be as correct as the surface it is modelled on, so
 // this file models nothing: it reads the installed package.
@@ -103,13 +103,13 @@ describe('@ledgerhq/hw-app-btc surface the wallet depends on', () => {
     });
 });
 
-//  defect 4: `makeLedgerFactory` never passed an sdkRegistry, and it is
+// defect 4: `makeLedgerFactory` never passed an sdkRegistry, and it is
 // the only construction site, so EVERY hardware PSBT attempt threw "requires an
 // sdkRegistry". It looked like an architecture call - which shell's registry? -
 // until you look at what the signer asks for: decomposePsbt and txidOf, both
 // pure parsing. `walletOnlyRegistry` is the answer to that question, and these
 // pin the two properties that make it safe to build in a popup.
-describe('walletOnlyRegistry ', () => {
+describe('walletOnlyRegistry', () => {
 
     it('answers per chainId and caches the instance', async () => {
         const { walletOnlyRegistry } = await import('../../../packages/core/src/signerFactories/ledger.js');

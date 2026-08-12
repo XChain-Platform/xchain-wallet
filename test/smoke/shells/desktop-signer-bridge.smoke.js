@@ -27,7 +27,7 @@
 
 import { strict as assert } from 'node:assert';
 
-// OBSERVE THE REGISTRY THROUGH THE SUBJECT'S OWN SPECIFIER .
+// OBSERVE THE REGISTRY THROUGH THE SUBJECT'S OWN SPECIFIER.
 //
 // The signerBridge registry is a process-wide singleton, so this smoke proves
 // nothing unless it reads the exact module instance the listener writes to.
@@ -40,7 +40,7 @@ import { strict as assert } from 'node:assert';
 // copy while a relative import here reads this worktree's copy, and every
 // registration assertion below fails as if the bridge were unwired.
 //
-// That is not hypothetical. It is what produced : measured 2026-08-06
+// That is not hypothetical. It is what produced: measured 2026-08-06
 // at a throwaway origin/master worktree, this suite and
 // desktop-security-hardening.smoke.js were the two reds in a 431-suite run,
 // and the bridge was correct the whole time. Re-measured 2026-08-09, the same

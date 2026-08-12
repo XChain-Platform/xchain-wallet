@@ -46,7 +46,7 @@ const STORAGE_KEY = 'xchain-wallet:panic';
 /** The localStorage key, exported so the native shells can migrate off it. */
 export const PANIC_STORAGE_KEY = STORAGE_KEY;
 
-// How the freeze was armed . This is NOT a security control; it is
+// How the freeze was armed. This is NOT a security control; it is
 // the input to the disclosure policy in `shared/safety/panicNotice.js`:
 //   'self'    the user armed it deliberately from Settings -> Safety, so the
 //             wallet may say so plainly on Home and Send.

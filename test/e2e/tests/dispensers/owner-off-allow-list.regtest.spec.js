@@ -285,7 +285,7 @@ async function payCoin(page, to, amount) {
  * Publishes an address LIST and returns its action index, asserting the stored
  * MEMBERSHIP rather than trusting the action's verdict.
  *
- * : the indexer marks a LIST valid while dropping items it rejects into
+ * The indexer marks a LIST valid while dropping items it rejects into
  * `list_items_invalid`, so "the LIST is valid" is not "the list holds what was
  * asked for" - and on this spec a silently-dropped member would turn the
  * control into a second copy of the trap.

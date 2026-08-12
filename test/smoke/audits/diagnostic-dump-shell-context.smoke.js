@@ -84,7 +84,7 @@ assert.ok(
 );
 // Counted against the call sites themselves rather than a hardcoded number.
 // The invariant is "every host the web shell builds carries the diagnostic
-// context", and a literal count goes stale the moment a lane is added: 
+// context", and a literal count goes stale the moment a lane is added
 // added a fourth (the fresh-install backup restore) and this read as a
 // regression in a file it never touched.
 const webHostBuilds = (webHost.match(/createBackgroundHost\(\{/g) || []).length;

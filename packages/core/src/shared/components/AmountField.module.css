@@ -84,7 +84,7 @@
     gap: var(--xc-space-1);
     background: transparent;
     border: none;
-    /*  slice 2: the fiat/coin swap is a daily control that measured
+    /* slice 2: the fiat/coin swap is a daily control that measured
        14px tall. Padding (not a fixed height) so the text stays where it
        sits and only the target grows to the 24px floor. */
     padding: var(--xc-space-1) 0;

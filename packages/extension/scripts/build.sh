@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-# Before the SOURCE_DATE_EPOCH guard . This is the in-container
+# Before the SOURCE_DATE_EPOCH guard. This is the in-container
 # half of the reproducible build, so the person most likely to type
 # `--help` at it is a verifier who has just found it in the Dockerfile and
 # wants to know whether they are supposed to run it directly. Answering
@@ -80,7 +80,7 @@ bash tools/build-reproduce/check-no-dev-mock.sh
 # Note: this is the PRE-STORE unpacked bundle. The published .crx is
 # re-packaged + re-signed by the Chrome Web Store and will not match.
 #
-# No node_modules filter here, deliberately . The desktop twin
+# No node_modules filter here, deliberately. The desktop twin
 # carried `-not -path '*/node_modules/*'` and it silently dropped 112
 # SHIPPED files from its manifest, including a compiled native binary,
 # because inside a `dist/` tree the only thing that pattern can match is a
@@ -88,7 +88,7 @@ bash tools/build-reproduce/check-no-dev-mock.sh
 # such paths today - measured against the real v0.334.0 zip: 45 files, zero
 # matches - so removing the filter changes nothing now and removes the trap
 # for whatever ships one later. These two lanes have already been found
-# carrying each other's defects byte for byte once ().
+# carrying each other's defects byte for byte once  .
 cd /workspace/packages/extension/dist
 find . -type f -print0 \
     | sort -z \

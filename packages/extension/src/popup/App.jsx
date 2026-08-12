@@ -45,14 +45,14 @@ import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm
 import { WalletPicker } from '@xchain-wallet/core/shared/routes/WalletPicker.jsx';
 import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.jsx';
 import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
-// : the extension had NO Settings surface at all - no options page, no
+// The extension had NO Settings surface at all - no options page, no
 // route here, and the side panel mounts this same App - so an extension user
 // could not switch networks, turn on Developer Mode, manage connected sites,
 // or reach the pre-flight privacy control that the confirm spec (§4.8) makes a
 // requirement. The host already registered every route Settings calls; only
 // the mount was missing, so this is the shared core screen, not a popup fork.
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
-// : dApp permissions are a destination of their own in the popup, not
+// dApp permissions are a destination of their own in the popup, not
 // a drilldown nested inside Settings. Same shared section body, own header.
 import { ConnectedSites } from '@xchain-wallet/core/shared/routes/ConnectedSites.jsx';
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
@@ -189,7 +189,7 @@ export function App() {
 
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
-    // : a demo graduation wipes the vault and reloads, so the lane
+    // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
@@ -254,7 +254,7 @@ function AppInner() {
     const [sweepCtx, setSweepCtx] = useState(
         /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
     );
-    //  §5.4: the stored confirm the user chose to finish, held whole
+    // The stored confirm the user chose to finish, held whole
     // rather than by id so the resume screen never re-reads a store the popup
     // may have cleared underneath it.
     const [resumeConfirmSession, setResumeConfirmSession] = useState(
@@ -299,7 +299,7 @@ function AppInner() {
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
-    // : the transaction a scan just produced, handed to the Sign panel so
+    // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
@@ -323,7 +323,7 @@ function AppInner() {
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
-    // : the wallet RECORDS, not just the active id. `<Settings>` renders
+    // The wallet RECORDS, not just the active id. `<Settings>` renders
     // the wallet's name and gates its account row on the object, so an id
     // alone would show "No wallet" on a perfectly good wallet.
     const [wallets, setWallets] = useState(/** @type {Array<{id: string, name: string}>} */ ([]));
@@ -406,7 +406,7 @@ function AppInner() {
                 setStatus({
                     state: 'error',
                     error: err?.message || String(err),
-                    // : a vault that EXISTS and will not open gets a
+                    // A vault that EXISTS and will not open gets a
                     // screen of its own, and which of the three it is decides
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
@@ -432,7 +432,7 @@ function AppInner() {
             // a chainId; without it intent.chainId is always undefined, which
             // Send tolerated but contract routes cannot.
             //
-            //  §3.6: `hardenUriIntentText` neutralizes the free-text
+            // `hardenUriIntentText` neutralizes the free-text
             // fields (memo/tick/method/params) before they ever become
             // prefill state, since this is the first point a query-string
             // value from a `web+xchain:` click becomes something the popup
@@ -568,14 +568,14 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // Two gates, because the lanes stopped agreeing . Staking,
+    // Two gates, because the lanes stopped agreeing. Staking,
     // multisig and co-signer accounts are still Bitcoin-exclusive; the §42.2
     // Contracts nav follows the registry, which now advertises DEPLOY on
     // LTC/DOGE as well. One shared hook would have opened all of them.
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
     const hasVmAddress = useVmAddressesPresent(activeWalletId);
     const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
-    // : the wallet-mode gate on the spend surfaces. Signer mode
+    // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
     const { isSignerMode } = useWalletMode();
@@ -601,8 +601,8 @@ function AppInner() {
         binding: settings?.keyboard?.bindings?.['command-palette'],
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
-    //  entity search: token balances join contacts in the palette's
-    // searchable surface.  added connected sites, which the popup used
+    // entity search: token balances join contacts in the palette's
+    // searchable surface. a later change added connected sites, which the popup used
     // to omit for want of a view to send them to. Same lazy contract for all
     // three: loaded on each open, and a failed load just leaves that group
     // out of the results.
@@ -625,8 +625,8 @@ function AppInner() {
             .catch(() => { /* palette still works without sites */ });
         return () => { cancelled = true; };
     }, [palette.open, status.state, activeWalletId, activeAccountId]);
-    // : deep-link into a Settings section, mirroring the web shell.
-    // : 'connected-sites' is the exception - it has a top-level route,
+    // Deep-link into a Settings section, mirroring the web shell.
+    // 'connected-sites' is the exception - it has a top-level route,
     // so send it there rather than one level down inside Settings.
     const openSettingsSection = (sectionId) => {
         if (sectionId === 'connected-sites') {
@@ -653,11 +653,11 @@ function AppInner() {
             hasGovernanceAddress,
             isSignerMode,
         }),
-        // : token rows open TokenDetail with the full ref the row
-        // carries. : settings-section and settings-backed help commands
+        // Token rows open TokenDetail with the full ref the row
+        // carries.: settings-section and settings-backed help commands
         // are no longer omitted - the popup HAS a Settings route now, and
         // these are its entry points in a shell with no navigation surface.
-        // : connected sites land on the popup's own Connected Sites
+        // Connected sites land on the popup's own Connected Sites
         // route, so the "Sites" palette category works here too.
         ...balancesToCommands(paletteTokenRows, {
             openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
@@ -672,7 +672,7 @@ function AppInner() {
     ];
     // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send resolves
     // the chain from the first available when the prefill carries none). A
-    // txid/date-shaped query offers "search history" .
+    // txid/date-shaped query offers "search history".
     const paletteParseQuery = (q) => parseFreeformCommands(q, {
         composeSend: ({ amount, tick }) => {
             setSendPrefill({ amount, tick });
@@ -698,7 +698,7 @@ function AppInner() {
         },
     });
 
-    //  / §26: idle auto-lock. Mounted HERE, above the view switch,
+    // §26: idle auto-lock. Mounted HERE, above the view switch,
     // so one timer spans the whole unlocked session. It used to live in
     // Home.jsx, and since exactly one route renders at a time, navigating
     // to Send / Receive / History / Settings unmounted Home and cancelled
@@ -744,7 +744,7 @@ function AppInner() {
                     />
                 );
             }
-            // §20.5 / : watcher/signer pairing lane. Fresh-install
+            // §20.5: watcher/signer pairing lane. Fresh-install
             // only: it imports the shared recovery phrase itself, so the
             // add-wallet-to-an-open-vault path below does not offer it.
             if (onboardingStep === 'pair-partner') {
@@ -2093,7 +2093,7 @@ function AppInner() {
                 );
             }
             if (unlockedView === 'connected-sites') {
-                // : a top-level screen, not a Settings drilldown. Back
+                // A top-level screen, not a Settings drilldown. Back
                 // returns Home because that is where the popup entered from;
                 // the Settings row into the same panel still exists for users
                 // who go looking under Settings.
@@ -2276,7 +2276,7 @@ function AppInner() {
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
                         onCommandPalette={palette.openPalette}
-                        // : the popup's only VISIBLE route into Settings.
+                        // The popup's only VISIBLE route into Settings.
                         // Web and desktop deliberately pass nothing here: they
                         // reach Settings from the nav rail, and a second entry
                         // in the hero would be duplicate chrome.

@@ -40,7 +40,7 @@ import { neutralizeControlText } from '../shared/utils/textHardening.js';
 const PATH_PREFIX = 'xchain://';
 const BIP21_PREFIX = 'xchain:';
 
-// Shape 4, the web link ( §3, ). `https://xchain.io/wallet/link/…?uri=<encoded xchain: URI>`
+// Shape 4, the web link (§3). `https://xchain.io/wallet/link/…?uri=<encoded xchain: URI>`
 // is what a mobile shell is actually handed when the user taps a link: iOS
 // Universal Links and Android App Links both deliver the ORIGINAL https URL,
 // not a scheme URI. Without this branch that URL reached the parser and came

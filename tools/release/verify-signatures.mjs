@@ -10,7 +10,7 @@
 // contact legal@dankest.llc.
 
 // tools/release/verify-signatures.mjs - does each staged artifact actually
-// carry the OS code signature its row says it should? (, the goal
+// carry the OS code signature its row says it should? (The goal
 // sentence: "every desktop user ... can install a SIGNED build".)
 //
 // WHY THIS EXISTS, AND IT IS NOT HYPOTHETICAL. Windows signing is selected
@@ -33,12 +33,12 @@
 // architectures; `sign.sh` then hashes them into a K1-signed manifest, and
 // K1 attests the BYTES, not the publisher - a manifest over unsigned
 // installers verifies perfectly. This is the same defect family as the
-// arch gate before  ("declared classes and never counted") and
+// earlier arch gate ("declared classes and never counted") and
 // row 32's floor of 0: a gate that never asks a question cannot fail it.
 //
 // THE COST OF SHIPPING ONE UNSIGNED RELEASE IS NOT ONE BAD RELEASE.
-//   - Every install shows the "unknown developer" warning that 
-//     records as an explicit operator requirement not to have.
+//   - Every install shows the "unknown developer" warning that is
+//     recorded as an explicit operator requirement not to have.
 //   - electron-updater refuses an update whose signed publisher does not
 //     match the installed app's publisher. `WIN_PUBLISHER` is described in
 //     the config as "effectively a wire format". An unsigned release
@@ -65,7 +65,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { basename } from 'node:path';
 
 /**
- * Which release set each status token belongs to ( §7.5, ).
+ * Which release set each status token belongs to (§7.5).
  * Mirrors `xr_set_for_status` in lib.sh; the two files read the same
  * declaration and must agree about what a status means, or one of them
  * gates a row the other ignores.
@@ -131,10 +131,10 @@ export const SIGNATURE_CLASSES = {
     // not own (apksigner). Declared so the row is not silently `none`.
     'deferred-android': {
         verify: false,
-        what: 'APK/AAB signing is \'s lane (apksigner); declared here, checked there',
+        what: 'APK/AAB signing is a separate lane (apksigner); declared here, checked there',
     },
     // The disk image itself, which is a DIFFERENT artifact from the app
-    // inside it and fails differently ( row 140).
+    // inside it and fails differently (row 140).
     //
     // THIS CLASS REPLACES `codesign-unverified`, whose text asserted the
     // very thing that turned out to be false. It read "Apple-signed disk
@@ -347,7 +347,7 @@ export function parseExpected(text, releaseSet = 'release') {
         // vanished from this checker without a word - and this file's own
         // header explains why that shape is the one to refuse: a column
         // silently discarded leaves the row ungated with nothing able to
-        // notice. The staging rows  are exactly the case that
+        // notice. The staging rows are exactly the case that
         // would have hit it: they parse fine in lib.sh and would have
         // been invisible here, so a rehearsal set could have been signed
         // with no signature class checked at all.
@@ -470,7 +470,7 @@ const invokedDirectly = process.argv[1]
     && process.argv[1].endsWith('verify-signatures.mjs');
 
 const USAGE = `verify-signatures.mjs - does each staged artifact actually carry the OS
-code signature its row in expected-artifacts.txt declares? ( §12.)
+code signature its row in expected-artifacts.txt declares? (§12.)
 
 Usage:
   node tools/release/verify-signatures.mjs <artifact-dir> <expected-artifacts.txt>
@@ -493,8 +493,8 @@ Exit codes:
 
 // The usage answer comes before the argument reads, not after them: the bare
 // arity check below exits 2 with its own vocabulary, which is precisely the
-// "a tool answers --help with its own failure" defect  exists to
-// remove. Guarded on invokedDirectly so an importer never sees either.
+// "a tool answers --help with its own failure" defect this guards against.
+// Guarded on invokedDirectly so an importer never sees either.
 if (invokedDirectly && process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
     process.stdout.write(USAGE);
     process.exit(0);

@@ -1,4 +1,4 @@
-/* PreflightPanel ( §5.2.4). Verdict chip + findings grouped by
+/* PreflightPanel (§5.2.4). Verdict chip + findings grouped by
    severity. Severity is never colour-only: the chip carries its own words
    ("Looks good" / "Review warnings" / "Will likely fail") and findings are
    list items, so the panel still reads correctly to a screen reader and
@@ -45,7 +45,7 @@
     border: 1px solid var(--xc-danger);
 }
 
-/* . A pass with no network answer must not wear the success colour: the
+/*. A pass with no network answer must not wear the success colour: the
    chip words change too ("Local checks only"), so this is never colour-only. */
 .chip_unreached {
     background: var(--xc-bg-muted);
@@ -136,7 +136,7 @@
     font-weight: 600;
     cursor: pointer;
     padding-block: var(--xc-space-1);
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
 }
@@ -148,7 +148,7 @@
 
 .unverifiedList summary {
     cursor: pointer;
-    /* : state the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
     align-content: center;

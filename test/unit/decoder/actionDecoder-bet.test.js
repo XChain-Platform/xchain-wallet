@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  P8: SignApproval decode for BET. One action name carries four formats,
+// P8: SignApproval decode for BET. One action name carries four formats,
 // so the decisive property is that the confirm screen names WHICH format is
 // being signed and surfaces that format's irreversibility.
 

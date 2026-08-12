@@ -106,7 +106,7 @@ assert.match(form, /gatedMultiSendBlock/, 'the form mirrors the gated refusal be
 assert.match(form, /recipientNovel = sendLegs\.some\(/,
     'the HW cross-check treats ANY novel recipient as novel, not just the first');
 
-// --- 5. The live UI round trip exists and asks the CHAIN ( residual a) --
+// --- 5. The live UI round trip exists and asks the CHAIN (residual a) --
 //
 // PC-52 shipped with an SDK-driven drill (tools/regtest/multiSendRoundtrip.cjs)
 // that proves the FLOW composes and broadcasts, and mounted-component tests

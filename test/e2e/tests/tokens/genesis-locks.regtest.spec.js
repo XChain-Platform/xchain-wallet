@@ -17,7 +17,7 @@
 // ("Freezes DESCRIPTION. The token metadata can never be edited again"), and
 // the whole claim rests on a chain rule nothing in this campaign has ever
 // tested from the genesis side. Session 20 drove locking as a LATER admin edit
-// and found the opposite of a working feature - D-92/, where
+// and found the opposite of a working feature - D-92, where
 // `isValidLock` read a NULL prior as "already locked" and refused a lock on
 // every one of the 108 ticks whose genesis omitted the flags. The fix is gated
 // behind LOCK_NULL_PRIOR_UNSET. Setting the flag at genesis is the path that
@@ -431,7 +431,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe('valid');
         });
 
-        await test.step('THE SUCCESSFUL LOCK, owed since Session 20 and blocked on ', async () => {
+        await test.step('THE SUCCESSFUL LOCK, owed since Session 20 and blocked on', async () => {
             // D-92 left this leg undriven with a stated blocker: `isValidLock`
             // read a NULL prior as "already locked", so a LOCK on any token
             // whose genesis omitted the flags was refused with "<FIELD>
@@ -474,7 +474,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const locked = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(locked.status),
                 'the chain refused a LOCK on a token whose genesis DID carry lock fields - if this '
-                + 'is "DESCRIPTION (locked)" on a flag that was never locked,  has regressed')
+                + 'is "DESCRIPTION (locked)" on a flag that was never locked, has regressed')
                 .toBe('valid');
             await waitForTokenField(
                 (t) => t?.locks?.description, true, 'LOCK_DESCRIPTION', MINTABLE_TICK,

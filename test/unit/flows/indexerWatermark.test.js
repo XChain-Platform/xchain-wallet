@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit:  / §28.3 "Indexed" timeline stage. `indexerWatermark` reads
+// Unit: §28.3 "Indexed" timeline stage. `indexerWatermark` reads
 // the explorer /status report and returns the latest block the indexer has
 // processed for the chain's coin. It prefers the SDK's own coin prefix,
 // falls back to the highest last_block across coins when the prefix is

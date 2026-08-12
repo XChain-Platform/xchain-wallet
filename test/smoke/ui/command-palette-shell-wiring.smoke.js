@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §33 command-palette shell wiring .
+// §33 command-palette shell wiring.
 //
 // The Playwright E2E suite drives the WEB shell only, so it cannot catch a
 // regression that drops the palette from the extension popup or desktop
@@ -26,7 +26,7 @@
 // Plus visible triggers: web via AppHeader.onCommandPalette, desktop via
 // LeftNav.onCommandPalette. The extension popup has no shared header/nav, so
 // its palette is reachable by Cmd/Ctrl+K only (a visible popup trigger is a
-// tracked  follow-up); its wiring is still pinned above.
+// tracked follow-up); its wiring is still pinned above.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -49,7 +49,7 @@ const registrySrc = read(`${moduleDir}/commandRegistry.js`);
 assert.ok(/export function buildCommands\b/.test(registrySrc), 'buildCommands is exported');
 assert.ok(/export function contactsToCommands\b/.test(registrySrc), 'contactsToCommands is exported');
 for (const fn of ['balancesToCommands', 'sitesToCommands', 'settingsSectionsToCommands', 'helpToCommands']) {
-    assert.ok(new RegExp(`export function ${fn}\\b`).test(registrySrc), `${fn} is exported ( entity search)`);
+    assert.ok(new RegExp(`export function ${fn}\\b`).test(registrySrc), `${fn} is exported (entity search)`);
 }
 
 // --- every shell App mounts the palette ---------------------------------
@@ -108,7 +108,7 @@ for (const [label, path] of Object.entries(shells)) {
     assert.ok(/<ShortcutHelp\b[\s\S]{0,120}?open=\{shortcutHelpOpen\}/.test(src),
         `${label} App mounts <ShortcutHelp> wired to shortcutHelpOpen`);
 
-    // : txid/date queries offer a history search in every shell.
+    // Txid/date queries offer a history search in every shell.
     assert.ok(/searchHistory:\s*\(query\)\s*=>/.test(src),
         `${label} App supplies a searchHistory handler for txid/date queries`);
     // §34.1: user overrides thread into the dispatcher + help modal.
@@ -120,7 +120,7 @@ for (const [label, path] of Object.entries(shells)) {
         `${label} App threads the palette binding override into useCommandPalette`);
 }
 
-// ---  entity search per shell --------------------------------------
+// --- entity search per shell --------------------------------------
 // Tokens: every shell opens TokenDetail with the row ref (desktop gained the
 // 'token-detail' route + Home onSelectToken in ).
 for (const label of ['web', 'extension popup', 'desktop']) {
@@ -129,7 +129,7 @@ for (const label of ['web', 'extension popup', 'desktop']) {
     assert.ok(/openToken:\s*\(tok\)\s*=>\s*\{\s*setTokenDetailRef\(tok\);\s*setUnlockedView\('token-detail'\)/.test(src),
         `${label} App's openToken sets the full token ref and opens token-detail`);
 }
-//  desktop parity: token-detail route mounted and Home rows clickable.
+// desktop parity: token-detail route mounted and Home rows clickable.
 {
     const src = read(shells.desktop);
     assert.ok(/unlockedView === 'token-detail' && activeWalletId && tokenDetailRef/.test(src),
@@ -152,7 +152,7 @@ for (const label of ['web', 'desktop']) {
 assert.ok(/helpToCommands\(/.test(read(shells['extension popup'])),
     'extension popup App folds help topics into the palette');
 assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells['extension popup'])),
-    'extension popup App wires the visible Home palette trigger ');
+    'extension popup App wires the visible Home palette trigger');
 
 // The popup trigger renders from TotalBalanceHero (threaded Home -> HomeTabs).
 const hero = read('packages/core/src/shared/components/TotalBalanceHero.jsx');
@@ -200,4 +200,4 @@ assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.web)),
 assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.desktop)),
     'desktop App wires the LeftNav palette trigger');
 
-console.log('OK: command-palette shell wiring (§33 / + §34 : core module present; web + extension popup + desktop each import, install the Cmd/Ctrl+K hook gated on unlocked, build commands, and mount <CommandPalette>; entity search + settings deep-links + popup trigger wired per shell; rebinding overrides threaded; §34.2 context shortcuts mounted in History/Send/Home)');
+console.log('OK: command-palette shell wiring (§33 + §34: core module present; web + extension popup + desktop each import, install the Cmd/Ctrl+K hook gated on unlocked, build commands, and mount <CommandPalette>; entity search + settings deep-links + popup trigger wired per shell; rebinding overrides threaded; §34.2 context shortcuts mounted in History/Send/Home)');

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : signer mode PROMISES a removed capability, so the promise is
+// Signer mode PROMISES a removed capability, so the promise is
 // what gets tested.
 //
 // The Wallet Mode settings screen says, when the user picks Signer:
 // "Sign transactions pasted in from a watcher wallet. Send / receive
 // screens are hidden; this wallet does not broadcast." That sentence is
-// the same class as the Tor toggle in  - it is not a description of
+// the same class as the Tor toggle in - it is not a description of
 // a preference, it is a statement about what the wallet will no longer
 // do, made on the screen where a user deliberately chooses to be safe.
 // An air-gapped-signer user who believes send is gone may treat the

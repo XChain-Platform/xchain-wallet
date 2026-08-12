@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression ( / F4): COINPAY must re-derive the obligation at sign time.
+// Regression (F4): COINPAY must re-derive the obligation at sign time.
 //
 // A COINPAY carries a native-coin output paying `payeeAddress` `coinAmount`.
 // Both values were fetched by an indexer query, hydrated into form state, and
@@ -152,7 +152,7 @@ describe('coinpayAction: refuses to sign an unverified payment', () => {
     });
 });
 
-// : the air-gapped watcher build used to call the GENERIC buildActionPsbt
+// The air-gapped watcher build used to call the GENERIC buildActionPsbt
 // with customOutputs straight from form state, so it was the one COINPAY route
 // that skipped verification entirely. An air-gapped signer only ever sees the
 // outputs it is handed, so an unverified watcher build is a signed payment to

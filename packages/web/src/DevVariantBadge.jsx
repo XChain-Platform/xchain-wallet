@@ -51,7 +51,7 @@ function clampToViewport(p, el) {
  *   extension  : Chrome extension toolbar popup (360x600 fixed; no bottom tab bar, drawer only)
  *
  * A forced variant lives in the `variant` query parameter and nowhere
- * else, so it lasts exactly as long as the URL does .
+ * else, so it lasts exactly as long as the URL does.
  *
  * Drag the grip (⠿) on the left to reposition; the chosen position
  * persists in localStorage and survives reload. Default position is

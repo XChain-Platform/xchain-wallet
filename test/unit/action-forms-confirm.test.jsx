@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Preview-to-Confirm migration spec for the action forms.
+// Preview-to-Confirm migration spec for the action forms.
 //
 // routes-render.test.jsx Layer 4 pins the pilot pair (MintForm /
 // DestroyForm). This file is the same behavioural spec for every form
-// migrated off its hand-rolled Preview/review stage onto the 
+// migrated off its hand-rolled Preview/review stage onto the
 // single-encode pipeline, and it is what keeps the migration honest:
 //
 //   1. on the SOFTWARE path the primary button carries the action verb,
@@ -68,7 +68,7 @@ const HD_ADDRESS = Object.freeze({
     signerId: 'signer-1',
 });
 
-// : the same address, paired to a device. Hardware signers used to be
+// The same address, paired to a device. Hardware signers used to be
 // excluded from the confirm pipeline, which handed the users most likely to
 // care about verification the legacy rebuild-on-Approve path with no
 // output-set tamper check.
@@ -139,7 +139,7 @@ function recordingMessaging(overrides = {}) {
             calls.push({ method: 'composeForConfirm', args });
             return Promise.resolve({ ...COMPOSED });
         },
-        // : VOTE composes through the SDK's own sdk.voting.*Params
+        // VOTE composes through the SDK's own sdk.voting.*Params
         // builder, host-side. The stub stands in for that builder and
         // echoes the wire params back as `voteParams`, which is what the
         // confirm page decodes its intent from.
@@ -184,7 +184,7 @@ async function drainMicrotasks(rounds = 12) {
  */
 async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false }) {
     const { messagingOverrides, ...formProps } = props;
-    // : the same drive, sourced from a paired device instead of an HD
+    // The same drive, sourced from a paired device instead of an HD
     // key. Auto-select only picks `source === 'hd'`, so the hardware address
     // is named explicitly, as a user would via the source picker, and the
     // device reports ready - that, not a typed password, is what gates
@@ -267,7 +267,7 @@ const pickToken = (tick) => (utils) => {
     fireEvent.click(row);
 };
 
-describe(': action forms confirm via the single-encode pipeline', () => {
+describe('Action forms confirm via the single-encode pipeline', () => {
     it('CreatePollForm composes VOTE v0 and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: CreatePollForm,
@@ -279,7 +279,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
                 setValue(utils, 'Option 1', 'No');
             },
         });
-        // : VOTE's wire encoding belongs to sdk.voting.createPollParams,
+        // VOTE's wire encoding belongs to sdk.voting.createPollParams,
         // which lives host-side, so the form hands over the UI-level input and
         // the HOST builds the params the encoder sees. The generic route must
         // NOT be used: it would compose a client-side mirror of that encoding,
@@ -348,7 +348,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
     });
 
     it('StakingActionForm (unstake) composes UNSTAKE and signs the prebuilt PSBT', async () => {
-        // Seed one staked position so the  editable Amount field has
+        // Seed one staked position so the editable Amount field has
         // an available balance; a partial entry must thread AMOUNT through.
         const { calls } = await driveThroughConfirm({
             Form: StakingActionForm,
@@ -584,7 +584,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
                     setValue(utils, /^Per-recipient amount/, '5');
                     const box = utils.container.querySelector('textarea');
                     if (!box) throw new Error('no recipients textarea');
-                    // Real bitcoin-mainnet addresses:  made the
+                    // Real bitcoin-mainnet addresses: a later change made the
                     // recipient parser network-aware, so placeholder strings
                     // are now skipped (that is the whole point of the fix).
                     fireEvent.change(box, {
@@ -690,7 +690,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         });
     });
 
-    // : hardware signers were excluded from the confirm pipeline, so the
+    // Hardware signers were excluded from the confirm pipeline, so the
     // users most likely to care about verification got the legacy
     // rebuild-on-Approve path with no output-set tamper check - while the
     // modal's own hardware note tells them this screen is where action intent
@@ -755,7 +755,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         expect(calls.some((c) => c.method === 'broadcastAction')).toBe(false);
     });
 
-    // ---  §5.6 slice 3 (bespoke flows) --------------------------------
+    // --- §5.6 slice 3 (bespoke flows) --------------------------------
 
     it('PlaceOrderPanel composes ORDER and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
@@ -783,7 +783,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
         expect(submit.args.params).toMatchObject({ GIVE_AMOUNT: '10', GET_AMOUNT: '5' });
     });
 
-    // : casting a ballot was the last signing surface still on the
+    // Casting a ballot was the last signing surface still on the
     // legacy stage machine, where submitWithSigner rebuilds the PSBT on
     // Approve. Ballots are token-weighted governance; leaving them without
     // the tamper check and pre-flight panel every other action gets was a
@@ -818,7 +818,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
     });
 });
 
-// : the same spec, driven from a paired device.
+// The same spec, driven from a paired device.
 //
 // Every migrated form gated its confirm path on `!isHwSource`, so hardware
 // users fell back to the LEGACY review stage where submitWithSigner REBUILDS
@@ -832,7 +832,7 @@ describe(': action forms confirm via the single-encode pipeline', () => {
 // for a HW source, it shows NO password field (readiness is the device), and
 // Approve dispatches the `.hw` lane carrying the SAME prebuilt PSBT - never the
 // software lane, which would try to sign with a password that was never typed.
-describe(': hardware signers confirm on the single-encode surface', () => {
+describe('Hardware signers confirm on the single-encode surface', () => {
     /** Forms whose source can be named at mount, so a device can be the payer. */
     const HW_CASES = [
         {
@@ -907,14 +907,14 @@ describe(': hardware signers confirm on the single-encode surface', () => {
 // ciphertext params back on Approve. Re-encrypting on Approve would sign
 // different bytes than the ones previewed, so that passthrough IS the
 // single-encode guarantee here and is what this spec pins.
-describe(' §5.6 slice 3: ComposeMessage confirms the encrypted MESSAGE', () => {
+describe('§5.6 slice 3: ComposeMessage confirms the encrypted MESSAGE', () => {
     const ENCRYPTED_PARAMS = Object.freeze({
         VERSION: '2',
         COIN: 'BTC',
         // `devmock` addresses are the validator's sanctioned test placeholder
         // (sdk/devMockAddresses.isDevMockAddress), so this exercises the real
         // MESSAGE any-network recipient rule without pinning a live address.
-        // : the tail must be the real generated shape (lowercase hex);
+        // The tail must be the real generated shape (lowercase hex);
         // the validator no longer takes any string mentioning "devmock".
         DESTINATION: 'bc1qdevmock02aabbcc',
         ENCRYPTED_MESSAGE: 'deadbeefciphertext',

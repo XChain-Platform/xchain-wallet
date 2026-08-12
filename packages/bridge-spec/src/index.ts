@@ -28,7 +28,7 @@
 // here, so this stays the single public entry point. They are plain JS
 // because the desktop MAIN process loads this package out of app.asar with
 // no bundler, and Node refuses to strip types from anything under
-// node_modules . See the header of runtime.js.
+// node_modules. See the header of runtime.js.
 export {
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
@@ -140,7 +140,7 @@ export interface SitePermissions {
 // This union and the `BRIDGE_ERROR_CODES` runtime array in runtime.js are one
 // contract in two syntaxes. Edit them together: a wallet can only check what
 // it puts on the wire against the runtime copy, and for a while it checked
-// nothing at all and shipped twelve codes that are not here ().
+// nothing at all and shipped twelve codes that are not here.
 export type BridgeErrorCode =
     | 'USER_REJECTED'
     | 'NOT_CONNECTED'
@@ -206,7 +206,7 @@ export interface SignMessageParams {
     // on the site's per-chain permission before it prompts, and the signing
     // scheme itself is chain-specific. Omitted here, a request built from this
     // type failed MISSING_CHAIN_ID before the user ever saw an approval
-    // (); the type was the incomplete side, not the handler.
+    //; the type was the incomplete side, not the handler.
     chainId: ChainId;
     address: string;
     message: string;
@@ -267,7 +267,7 @@ export interface SignActionSuccess {
     // index is assigned later, by the indexer, once a block carries the
     // transaction. Declared required, it forced every wallet into one of two
     // lies: block the call until a confirmation arrives, or invent a number
-    // (). dApps that need the index look it up from `txid` against an
+    //. dApps that need the index look it up from `txid` against an
     // explorer once the transaction confirms; a wallet that already knows it
     // (a resubmission of an indexed action, say) still sends it.
     actionIndex?: number;

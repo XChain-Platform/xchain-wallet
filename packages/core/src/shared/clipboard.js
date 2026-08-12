@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // SSC-4, clipboard hygiene: the one path every copy in the wallet goes through
-// (; the contract is  §1.1, the iOS mechanics  §4).
+// (; the contract is a separate case §1.1, the iOS mechanics §4).
 //
 // WHAT WAS WRONG. The shared UI copied through `navigator.clipboard`, which in
 // a WebView writes to the ordinary system pasteboard with no sensitivity
@@ -31,7 +31,7 @@
 // plugin did not register, a sensitive copy FAILS. It does not quietly fall
 // back to `navigator.clipboard`, because that fallback is the exact leak this
 // exists to prevent, and it would be invisible: the copy would appear to work.
-// That is 's lesson applied to the second bridge - a native build
+// That is that lesson applied to the second bridge - a native build
 // missing its plugin is a broken build, not a lesser one.
 //
 // A browser is a different case and is treated as one: web, desktop and the

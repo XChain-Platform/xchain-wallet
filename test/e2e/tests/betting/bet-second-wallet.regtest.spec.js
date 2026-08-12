@@ -42,7 +42,7 @@
 // rather than two addresses in one seed. WHAT IS STILL OWED: one clean
 // end-to-end pass. Three separate runs were stopped by three different things,
 // none of them this spec's subject - a real wallet defect it found on the way
-// (, the reload that changed which wallet signs; fixed), an expired LTC
+// (the reload that changed which wallet signs; fixed), an expired LTC
 // price sentinel, and finally "no spendable UTXOs found for the funding
 // address" when a concurrent session began driving Litecoin as well. Re-run it
 // on a quiet chain with the price sentinel kept fresh (campaign §3.5).

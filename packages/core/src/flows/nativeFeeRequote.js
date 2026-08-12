@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// nativeFeeRequote : the Approve-time re-check of a native-coin
+// nativeFeeRequote: the Approve-time re-check of a native-coin
 // protocol fee.
 //
 // A native-coin fee is a REAL output to FEE_DESTINATION, sized at COMPOSE

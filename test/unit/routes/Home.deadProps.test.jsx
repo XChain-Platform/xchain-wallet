@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : Home accepted an `extraActions` array, documented it as "§40+
+// Home accepted an `extraActions` array, documented it as "§40+
 // entries surfaced in the small-mode pancake drawer", destructured it,
 // and then never rendered it. The web shell dutifully built 24 real
 // entries for it on every render. A documented prop with no consumer

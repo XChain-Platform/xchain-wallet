@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Broadcast-failure permanence classifier ( §5.3.4).
+// Broadcast-failure permanence classifier (§5.3.4).
 
 import { describe, it, expect } from 'vitest';
 import {

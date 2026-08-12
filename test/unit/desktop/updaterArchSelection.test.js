@@ -12,7 +12,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  DD4: does electron-updater pick the RIGHT architecture's artifact?
+// DD4: does electron-updater pick the RIGHT architecture's artifact?
 //
 // This is the half of DD4 that needs no hardware. The spec asks for an
 // arm64 device to smoke "the updater picks the arm64 artifact from the yml,

@@ -1,6 +1,6 @@
 # Play listing assets
 
-Generated 2026-08-01 ( §8). The STRINGS live in the listing-collateral
+Generated 2026-08-01 (§8). The STRINGS live in the listing-collateral
 section of the [Play submission doc](https://docs.xchain.io/components/wallet/release/mobile/android-play)
 and are the source of truth; this directory holds only the images.
 

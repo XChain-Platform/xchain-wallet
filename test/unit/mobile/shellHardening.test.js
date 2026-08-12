@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// WebView floor + direct-update check ( S4).
+// WebView floor + direct-update check (S4).
 //
 // The floor tests are about the SPLIT: a missing crypto primitive must stop
 // the wallet, and an old-but-working engine must not. Getting that backwards

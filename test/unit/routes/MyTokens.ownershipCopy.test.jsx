@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-//  / D-82: "My Tokens" is scoped to OWNERSHIP (getOwnedTokens ->
+// D-82: "My Tokens" is scoped to OWNERSHIP (getOwnedTokens ->
 // getTokens(address, 'address'), which the explorer filters
 // `WHERE m.owner_id = ?`) while every string on the page claimed
 // ISSUANCE. One transfer proved both halves false at once: the wallet
@@ -59,7 +59,7 @@ function mountMyTokens({ tokens }) {
 
 afterEach(() => cleanup());
 
-describe('My Tokens copy matches its ownership query ( / D-82)', () => {
+describe('My Tokens copy matches its ownership query (D-82)', () => {
     it('the empty state talks about owning, not issuing', async () => {
         const container = mountMyTokens({ tokens: [] });
 

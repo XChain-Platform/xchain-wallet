@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for  §5.6 slice 4: the dApp-approval window reuses the confirm
+// Smoke for §5.6 slice 4: the dApp-approval window reuses the confirm
 // surface's panels.
 //
 // The point of the slice is that a dApp request and a hand-signed one verify
@@ -189,7 +189,7 @@ assert.doesNotMatch(
 );
 
 console.log(
-    'OK: sign-approval confirm-reuse smoke ( §5.6 slice 4: PsbtIntentPanel + '
+    'OK: sign-approval confirm-reuse smoke (§5.6 slice 4: PsbtIntentPanel +'
     + 'PreflightPanel + ActionIntentSummary reused from core; modal shell deliberately '
     + 'not nested; preflight host-side and absent from bridge-spec; shared '
     + 'canApproveWithReport gate; new gates additive; reason-keyed refusal; '

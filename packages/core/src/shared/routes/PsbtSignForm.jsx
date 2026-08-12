@@ -160,7 +160,7 @@ export function normalizePsbtInput(raw) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {string} [props.initialPsbt]   : a transaction the shell already has, e.g. one just scanned off a QR. Seeds the paste box so the user does not have to fetch it again through the channel the scan replaced.
+ * @param {string} [props.initialPsbt]: a transaction the shell already has, e.g. one just scanned off a QR. Seeds the paste box so the user does not have to fetch it again through the channel the scan replaced.
  */
 export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const { messaging, shell } = useMessaging();
@@ -175,7 +175,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [addressId, setAddressId] = useState(/** @type {string | null} */ (null));
-    // : seeded from `initialPsbt` at mount. The user still reviews the
+    // Seeded from `initialPsbt` at mount. The user still reviews the
     // decoded action and types their password, so a scanned transaction is a
     // proposal in the box, never a signature - which is why prefilling it is
     // consistent with this route refusing to auto-import secret material.
@@ -186,7 +186,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [parseError, setParseError] = useState(/** @type {string | null} */ (null));
     const [parsing, setParsing] = useState(false);
-    //  §5.5: the XChain action decoded from the pasted PSBT (best-effort;
+    // The XChain action decoded from the pasted PSBT (best-effort;
     // `null` + a reason is a state the confirm page renders loudly, and it is
     // what the fail-closed refusal rule keys on).
     const [parsedAction, setParsedAction] = useState(/** @type {any | null} */ (null));
@@ -409,7 +409,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             .then((res) => {
                 if (cancelled) return;
                 setDecomposed(res?.decomposed || null);
-                //  §5.5: the action carried inside, when it decodes.
+                // The action carried inside, when it decodes.
                 // Additive on the host side, so an older shell simply reports
                 // no action and the confirm page renders its loud
                 // "could not read the action" state.
@@ -499,7 +499,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         [addressOptions],
     );
 
-    //  §5.6 slice 3: software signing goes through the shared confirm
+    // §5.6 slice 3: software signing goes through the shared confirm
     // page in its PSBT variant (§5.5). Hardware keeps the legacy inline flow -
     // <HwSignBlock> is its own signing gate and device-dependent.
     //
@@ -995,7 +995,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     ) : null}
                 </div>
             ) : signerReady ? (
-                // : withdraw the "ready to sign" claim while panic mode
+                // Withdraw the "ready to sign" claim while panic mode
                 // has signing frozen.
                 <SigningReadyNote>
                     <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
@@ -1037,7 +1037,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         </form>
     );
 
-    //  §5.5 confirm page (PSBT variant), rendered in place of the form.
+    // §5.5 confirm page (PSBT variant), rendered in place of the form.
     // The pasted blob and every picker stay intact behind it, so Reject drops
     // the user back exactly where they were.
     if (isConfirmOpenPhase(confirmAction.phase)) {

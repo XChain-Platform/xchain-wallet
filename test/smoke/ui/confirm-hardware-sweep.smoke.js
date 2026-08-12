@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : hardware signers reach the  confirm surface.
+// Smoke for: hardware signers reach the confirm surface.
 //
 // Every form migrated onto the single-encode pipeline originally gated its
 // confirm path on `!isHwSource` (or `!hw`), so a hardware source fell back to
@@ -130,7 +130,7 @@ assert.equal(
 );
 
 console.log(
-    `OK: confirm hardware sweep smoke (: useConfirmSubmit dispatches HW/software with no password on the device lane; `
+    `OK: confirm hardware sweep smoke (useConfirmSubmit dispatches HW/software with no password on the device lane;`
     + `ActionConfirmScreen swaps the password field for HwSignBlock and keeps the §18.5 cross-check gating Approve; `
     + `${covered.length} migrated forms carry no !isHwSource confirm gate and all wire hwSource)`,
 );

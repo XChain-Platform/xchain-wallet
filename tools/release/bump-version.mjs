@@ -10,14 +10,14 @@
 // contact legal@dankest.llc.
 
 // tools/release/bump-version.mjs - write the release version into every
-// place that declares it, in one pass ( §6 step 1, , ).
+// place that declares it, in one pass (§6 step 1).
 //
 // WHY THIS EXISTS, and it is the half of the lockstep rule that was never
 // built. `test/smoke/audits/version-lockstep.smoke.js` CHECKS that sixteen
 // places agree; nothing PRODUCED that agreement, so every release bump has
 // been sixteen hand edits made from a list held in somebody's head. It has
-// already gone wrong the expensive way:  records a signed `v0.335.0`
-// tag cut against a tree in which every file still declared 0.334.0, caught
+// already gone wrong the expensive way: a signed `v0.335.0` tag was once
+// cut against a tree in which every file still declared 0.334.0, caught
 // only by release.yml's tag-versus-package.json gate at the cost of a red
 // release run on an irreversible artifact.
 //
@@ -75,7 +75,7 @@ function usage() {
 }
 
 // --help before anything else reads the tree, so the tool can always say
-// what it is even where it cannot run ( row 24: a tool answering
+// what it is even where it cannot run (row 24: a tool answering
 // "how do I use you" with its own failure vocabulary).
 const argv = process.argv.slice(2);
 if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -151,8 +151,8 @@ for (const rel of packageFiles) {
 // --- 2. The store-facing copy -------------------------------------------
 //
 // The manifest is what the Chrome Web Store reads and displays, and it is
-// the number the publish log and the rogue-publish monitor are keyed on
-// . version_name is optional in MV3 and user-visible when present.
+// the number the publish log and the rogue-publish monitor are keyed on.
+// version_name is optional in MV3 and user-visible when present.
 
 {
     const rel = 'packages/extension/manifest.json';
@@ -260,5 +260,5 @@ if (!dryRun) {
     process.stdout.write(`\nWrote ${writes.size} file(s). Now:\n`
         + '  node test/smoke/audits/version-lockstep.smoke.js\n'
         + `  node tools/release/release-record.mjs open --tag v${target}\n`
-        + '  then green CI on the bump commit BEFORE the tag is cut ( §6 step 1)\n');
+        + '  then green CI on the bump commit BEFORE the tag is cut (§6 step 1)\n');
 }

@@ -76,7 +76,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const isFull = variant === 'full';
     const { showToast } = useToast();
     const { settings } = useSettings();
-    // : the Wallet Mode screen promises the receive screen is hidden in
+    // The Wallet Mode screen promises the receive screen is hidden in
     // signer mode. Refused here as well as in the nav, because the palette and
     // `xchain:` URI intents both reach this route without a nav click.
     const { isSignerMode } = useWalletMode();
@@ -97,11 +97,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    // : "the account holds no address anywhere" is a state, not an
+    // "the account holds no address anywhere" is a state, not an
     // error. It used to render as a red alert string and nothing else, so
     // Receive - the very screen Home tells you to use to generate one -
     // dead-ended. It now carries the cure: a CTA onto Add addresses,
-    // whose coin list reaches past the (empty) occupied set .
+    // whose coin list reaches past the (empty) occupied set.
     // Unreachable while seeding works; this is the fallback surface for
     // when it doesn't.
     const [noAddresses, setNoAddresses] = useState(false);
@@ -317,7 +317,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const native = nativeTickerFor(activeChainId ? chainRegistry.get(activeChainId) : null);
         return native ? t === native : false;
     }, [reqTick, activeChainId]);
-    // Oracle-primary with CoinGecko fallback (§45, ); the
+    // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatRate = useFiatRate({
         chainCoin: isNativeRequest && activeChainId
@@ -513,7 +513,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             titleIcon={<Icon.ReceiveIcon />}
         />
     );
-    // §20 / : signer mode hides the receive surface, as its own hint
+    // §20: signer mode hides the receive surface, as its own hint
     // says. Named the way back, since the mode is a setting the user chose.
     if (isSignerMode) {
         return (

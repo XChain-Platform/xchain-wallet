@@ -46,7 +46,7 @@ export function DuressPassphraseRow() {
     const [pass, setPass] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    // : only the storage-write failure is retryable by re-running with
+    // Only the storage-write failure is retryable by re-running with
     // the same inputs. The validation messages ("pick a passphrase", "do not
     // match") are fixed by editing a field, so those leave retryRef null and
     // the alert renders without a misleading "Try again" button.
