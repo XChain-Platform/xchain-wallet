@@ -72,7 +72,7 @@ import { join, dirname, resolve as resolvePath } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-import { pointerNameFor } from './update-info.mjs';
+import { pointerNameFor, readPublishConfig } from './update-info.mjs';
 import {
     LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS,
 } from './rehearsal-matrix.mjs';
@@ -661,52 +661,132 @@ const LANE_NAME_TO_OS = { mac: 'darwin', linux: 'linux', windows: 'win32' };
  * unsatisfiable by construction, and the waiver written for exactly that
  * situation did not fire because it was reading the wrong fact.
  *
- * The fact it should read is what the previous tag actually SHIPPED, which
- * shipped-lanes.txt declares at that tag. A lane flips to SHIPPED in the
- * commit that records its first release, so "SHIPPED at the previous tag"
- * is precisely "there is an earlier build of this lane to update from".
+ * WHERE THE FACT COMES FROM, AND WHY IT IS NO LONGER shipped-lanes.txt.
+ * This read the previous tag's roster and asked which lanes said SHIPPED,
+ * on the reasoning that a lane flips to SHIPPED in the commit recording
+ * its first release. That reasoning is sound and the file does not obey
+ * it: the flip is a human step, and for v0.338.0 - the release that put
+ * mac and Linux on the feed - it landed AFTER the tag was cut. So the
+ * frozen v0.338.0 roster says `mac NOT-SHIPPED` and `linux NOT-SHIPPED`
+ * about the very release that shipped them, and at v0.339.0 this function
+ * waived the swap for BOTH desktop OSes and `assert` exited 0. Measured,
+ * not theorised ( frontier row 147): the waiver fired on a false
+ * premise for the first release that had a real predecessor to swap from,
+ * which is the one case the gate exists for.
  *
- * FAIL-SHUT, like everything else here: if the previous tag's roster
- * cannot be read, NOTHING is treated as bootstrap and every OS keeps its
- * swap requirement. An unreadable file must never be the sentence that
- * waives a gate.
+ * The defect is structural rather than clerical. A roster at tag N is a
+ * DECLARATION made before N is published, so it can only describe N's own
+ * lanes if somebody remembers; and no gate can check that memory, because
+ * the thing it would check against is the publish that has not happened.
  *
- * The parse takes only the first two fields, so it reads a roster written
- * before the FEED column existed  exactly as it reads one after.
+ * So the fact is read from the FEED instead: the previous tag's published
+ * `RELEASE_HASHES/<tag>.txt` lists exactly the artifacts that reached
+ * users, K1-signed, and its absence is exactly "that tag published
+ * nothing". That is not a declaration anybody has to maintain - it is the
+ * publication itself, and it cannot disagree with what users can install.
  *
- * @returns {{oses: string[], reason: string}}
+ * FAIL-SHUT, like everything else here, and now in the direction that
+ * matters: if the manifest cannot be read for any reason OTHER than a
+ * clean 404, NOTHING is treated as bootstrap and every OS keeps its swap
+ * requirement. A network blip must never be the sentence that waives a
+ * gate. A 404 is not a blip: it is the feed saying the tag published no
+ * manifest, which is the bootstrap case itself.
+ *
+ * @returns {Promise<{oses: string[], reason: string}>}
  */
-export function bootstrapOsesAt({ repo, previousTag, run = gitRun }) {
+export async function bootstrapOsesAt({ previousTag, prodFeedBase, fetchImpl = fetch }) {
     const desktopOses = [...new Set(Object.values(LANE_NAME_TO_OS))];
     if (!previousTag) {
         return { oses: desktopOses, reason: 'no previous release: no lane has a published predecessor' };
     }
-    let roster;
+    if (!prodFeedBase) {
+        return {
+            oses: [],
+            reason: 'no production feed base was resolved, so what '
+                + `${previousTag} published is unknown; no lane is treated as bootstrap`,
+        };
+    }
+    let published;
     try {
-        roster = run(repo, ['show', `${previousTag}:tools/release/shipped-lanes.txt`]);
+        published = await publishedOsesAt({ previousTag, prodFeedBase, fetchImpl });
     } catch (err) {
         return {
             oses: [],
-            reason: `could not read shipped-lanes.txt at ${previousTag} `
+            reason: `could not read the published manifest for ${previousTag} `
                 + `(${String(err?.message || err)}); no lane is treated as bootstrap`,
         };
     }
-    const shipped = new Set();
-    for (const line of roster.split('\n')) {
-        const t = line.trim();
-        if (!t || t.startsWith('#')) continue;
-        const [name, status] = t.split(/\s+/);
-        const os = LANE_NAME_TO_OS[name];
-        if (os && status === 'SHIPPED') shipped.add(os);
-    }
-    const oses = desktopOses.filter((os) => !shipped.has(os));
+    const oses = desktopOses.filter((os) => !published.oses.has(os));
     return {
         oses,
         reason: oses.length
-            ? `${previousTag} published no ${oses.join(', ')} artifact, so those lanes have `
-              + 'nothing to update FROM'
-            : `${previousTag} published every desktop lane`,
+            ? `${previousTag} published no ${oses.join(', ')} artifact (read from `
+              + `${published.source}), so those lanes have nothing to update FROM`
+            : `${previousTag} published every desktop lane (read from ${published.source})`,
     };
+}
+
+/**
+ * The production feed base, taken from the desktop builder config.
+ *
+ * Evaluated with XCHAIN_STAGING_FEED_URL cleared, because that variable is
+ * what makes the config answer with the STAGING feed (§7.5): a rehearsal
+ * run has every reason to have it set in the environment, and reading the
+ * staging feed here would ask the staging tree what production published.
+ *
+ * The config names the DESKTOP directory (`.../wallet/desktop/`) because
+ * that is where the channel pointers and installers live, but
+ * `RELEASE_HASHES/` sits one level up at the feed ROOT, shared with every
+ * other lane - the same root/desktop distinction that makes `run --feed`
+ * 404 all eight lanes when it is handed the desktop directory. So the
+ * trailing `desktop/` is dropped here, once, rather than by each caller.
+ *
+ * Returns null rather than throwing, so an unreadable config reaches
+ * `bootstrapOsesAt`'s fail-shut branch instead of aborting the run.
+ *
+ * @returns {string|null}
+ */
+export function resolveProdFeed(repo) {
+    const saved = process.env.XCHAIN_STAGING_FEED_URL;
+    try {
+        delete process.env.XCHAIN_STAGING_FEED_URL;
+        const { url } = readPublishConfig(join(repo, 'packages/desktop/electron-builder.config.cjs'));
+        return String(url).replace(/\/+$/, '').replace(/\/desktop$/, '');
+    } catch {
+        return null;
+    } finally {
+        if (saved !== undefined) process.env.XCHAIN_STAGING_FEED_URL = saved;
+    }
+}
+
+/**
+ * Which desktop OSes a published tag actually put on the production feed.
+ *
+ * Reads the tag's own signed release manifest, which is the only record of
+ * a publish that nobody has to remember to update. Artifact names are
+ * mapped to OSes by `osesInRelease`, the same mapping the release in hand
+ * is scoped with, so "what the previous release shipped" and "what this
+ * release ships" are answered by one rule rather than two.
+ *
+ * A 404 means the tag published no manifest at all. Every other non-OK
+ * status throws, so the caller can fail shut rather than read an error
+ * page as an empty release.
+ *
+ * @returns {Promise<{oses: Set<string>, source: string}>}
+ */
+export async function publishedOsesAt({ previousTag, prodFeedBase, fetchImpl = fetch }) {
+    const url = `${String(prodFeedBase).replace(/\/+$/, '')}/RELEASE_HASHES/${previousTag}.txt`;
+    const res = await fetchImpl(url);
+    if (res.status === 404) return { oses: new Set(), source: `${url} (404, nothing published)` };
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    const text = await res.text();
+    // sha256sum format: `<hash>  ./<name>`. `#` lines are the header.
+    const names = text.split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'))
+        .map((l) => l.split(/\s+/).slice(1).join(' '))
+        .filter(Boolean);
+    return { oses: osesInRelease(names) || new Set(), source: url };
 }
 
 /**
@@ -1091,7 +1171,13 @@ async function main(argv) {
 
         const previousTag = flag(argv, '--previous-tag') ?? resolvePrevious(repo, tag);
         const requirement = swapRequirement({ repo, tag, previousTag });
-        const bootstrap = bootstrapOsesAt({ repo, previousTag });
+        // The PRODUCTION feed, which is where a previous release's manifest
+        // lives - deliberately not `--feed`, which is the staging one this
+        // rehearsal probes. Read from the builder config rather than kept as
+        // a second literal here, because the config is what the shipped app
+        // bakes and a copy would be free to drift from it.
+        const prodFeedBase = flag(argv, '--prod-feed') || resolveProdFeed(repo);
+        const bootstrap = await bootstrapOsesAt({ previousTag, prodFeedBase });
 
         const lanes = [];
         for (const lane of LANES) {
