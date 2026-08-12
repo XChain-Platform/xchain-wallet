@@ -625,19 +625,55 @@ const html = readFileSync(join(desktop, 'renderer', 'index.html'), 'utf8');
 const cspMatch = html.match(/Content-Security-Policy[^>]*content="([^"]+)"/);
 assert.ok(cspMatch, 'renderer/index.html declares CSP via meta tag');
 const csp = cspMatch[1];
-assert.ok(/default-src 'self'/.test(csp), "CSP defaults to 'self'");
-assert.ok(
-    /script-src 'self' https:\/\/connect\.trezor\.io/.test(csp),
-    'CSP allow-lists connect.trezor.io in script-src for the hosted Trezor Connect build (no bundled @trezor/*)',
+
+// PARSED, not substring-matched. Every assertion below used to be a /regex/
+// against the raw policy text, and a regex cannot tell `script-src 'self'
+// https://connect.trezor.io` from the same directive with an attacker origin
+// appended: the documented prefix still matches, so a widened renderer CSP
+// shipped green. Splitting the policy into directive -> sources and comparing
+// source-for-source is the only form of this check that can fail.
+const rendererCsp = Object.fromEntries(
+    csp
+        .split(';')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+            const [name, ...sources] = part.split(/\s+/);
+            return [name, sources];
+        }),
 );
-assert.ok(
-    /frame-src https:\/\/connect\.trezor\.io/.test(csp),
-    'CSP explicitly allow-lists connect.trezor.io for the Trezor iframe',
+
+// Written out rather than read back from index.html, which would be the file
+// checking itself. The renderer's policy is hand-maintained (the web shell's
+// comes from packages/web/src/csp.js), so this literal is its only reviewer.
+const EXPECTED_RENDERER_CSP = {
+    'default-src': ["'self'"],
+    'script-src': ["'self'", 'https://connect.trezor.io'],
+    'style-src': ["'self'", "'unsafe-inline'"],
+    'img-src': ["'self'", 'data:', 'blob:'],
+    'connect-src': ["'self'"],
+    'frame-src': ['https://connect.trezor.io'],
+};
+
+assert.deepEqual(
+    Object.keys(rendererCsp).sort(),
+    Object.keys(EXPECTED_RENDERER_CSP).sort(),
+    'renderer CSP declares exactly the expected directives (a dropped one falls back to default-src)',
 );
-assert.ok(
-    /connect-src 'self'/.test(csp),
-    "connect-src stays 'self': the wallet's own code never fetches from connect.trezor.io",
-);
+for (const [name, sources] of Object.entries(EXPECTED_RENDERER_CSP)) {
+    assert.deepEqual(
+        rendererCsp[name],
+        sources,
+        `renderer CSP ${name} must be exactly [${sources.join(' ')}];`
+        + ` got [${(rendererCsp[name] ?? []).join(' ')}]`,
+    );
+}
+
+// The two allowances that are deliberate, restated so the deepEqual above is
+// read as a decision rather than as whatever the file happened to say:
+// connect.trezor.io is allowed in script-src and frame-src for the hosted
+// Trezor Connect build and its signing iframe (no bundled @trezor/*), and
+// connect-src stays 'self' because the wallet's own code never fetches from it.
 
 // --- 8. The desktop reproducible-build recipe -------------------------
 //

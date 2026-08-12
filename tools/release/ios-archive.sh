@@ -179,6 +179,14 @@ fi
 verify_args=(--stage archive)
 if [ -n "$unsigned" ]; then
     verify_args+=(--unsigned)
+else
+    # The team this script asked for above, handed to the verifier so the
+    # SIGNATURE is held against the request. Cloud signing picks the profile and
+    # the profile's team is the portal's answer, so DEVELOPMENT_TEAM is a
+    # request and not a guarantee. Only in the signed lane: the unsigned archive
+    # carries no entitlements to compare, and APPLE_TEAM_ID is not required
+    # there.
+    verify_args+=(--team-id "$APPLE_TEAM_ID")
 fi
 if ! node "$here/tools/release/verify-ios-artifact.mjs" "$app" "${verify_args[@]}"; then
     echo "ios-archive: the archive does not carry what the project pins; it is not exportable" >&2

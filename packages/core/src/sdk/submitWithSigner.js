@@ -366,7 +366,17 @@ export async function submitWithSigner({
     // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction
     // (and ultimately the §49.5 queued-broadcast surface) can recover
     // the signed hex instead of losing it on a network blip.
-    onProgress('broadcasting', { txid: signed.txid });
+    //
+    // AWAITED, unlike every other progress call in this file (). This is
+    // the one phase whose handler writes the DURABLE PendingTx row that says a
+    // transaction may be on the network (submitAction's composedOnProgress puts
+    // status 'broadcasting'). Fired and forgotten, that write races the broadcast,
+    // so a crash in between leaves a durable record claiming nothing was ever sent
+    // while the network already holds the tx. Awaiting it restores the same rule
+    // recordPendingCommit states above: the record precedes the effect, and a
+    // record that cannot be written stops the effect (the rejection propagates to
+    // submitAction, which marks the row 'failed' - no money has moved yet).
+    await onProgress('broadcasting', { txid: signed.txid });
     try {
         await encoder.broadcastTx(signed.txHex);
     } catch (err) {

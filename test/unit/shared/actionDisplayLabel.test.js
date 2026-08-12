@@ -34,6 +34,20 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('DEPLOY')).toBe('Publish contract');
     });
 
+    it('maps validator and mirror-injected verbs, not the recased opcode', () => {
+        expect(actionDisplayLabel('ANCHOR')).toBe('Network checkpoint');
+        expect(actionDisplayLabel('ATTEST')).toBe('Validator attestation');
+        expect(actionDisplayLabel('NODEPROOF')).toBe('Node proof');
+        expect(actionDisplayLabel('SLASH')).toBe('Validator penalty');
+        expect(actionDisplayLabel('XCALL')).toBe('Cross-chain call');
+        expect(actionDisplayLabel('XEXEC')).toBe('Cross-chain execution');
+        expect(actionDisplayLabel('CROSS_SETTLE')).toBe('Cross-chain settlement');
+        // The Title-Case fallback used to produce these; assert it no longer does.
+        expect(actionDisplayLabel('XCALL')).not.toBe('Xcall');
+        expect(actionDisplayLabel('NODEPROOF')).not.toBe('Nodeproof');
+        expect(actionDisplayLabel('CROSS_SETTLE')).not.toBe('Cross settle');
+    });
+
     it('maps both LINK and CROSSCHAIN to the same cross-chain label', () => {
         expect(actionDisplayLabel('LINK')).toBe('Cross-chain');
         expect(actionDisplayLabel('CROSSCHAIN')).toBe('Cross-chain');

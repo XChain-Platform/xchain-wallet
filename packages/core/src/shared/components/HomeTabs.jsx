@@ -238,7 +238,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     ) : (
                         <Placeholder
                             title="Recent activity"
-                            body="Sends, receives, sign events, broadcasts, multisig rounds, and approval grants surface here in reverse-chronological order. Wiring lands next; for now the Pancake → History entry shows the full chronological feed."
+                            body="Sends, receives, sign events, broadcasts, multisig rounds, and approval grants will surface here, newest first. For the full chronological feed today, open History from the Pancake menu."
                         />
                     )
                 ) : null}

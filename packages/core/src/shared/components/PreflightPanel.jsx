@@ -30,6 +30,29 @@ const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
 // component importing the SDK (#3935). Adds no runtime import, no bundle weight.
 export const TIER1_NOTICE_CODES = Object.freeze({ DRYRUN_VALID, DRYRUN_UNAVAILABLE });
 
+// The preflight report schema version this panel is WRITTEN AGAINST ().
+//
+// The report contract is additive-only by convention, and the SDK's own
+// constants.js says so while noting the rule "has no enforcement point": this
+// panel reads `verdict`, `findings[].severity`, `findings[].code`,
+// `findings[].overridable`, `findings[]._downgradedBy`, `restricted`,
+// `stateHeight` and `unverified` straight off the report and never looks at
+// `report.schemaVersion`. So a bump that changed what any of those MEAN would
+// be processed silently under v1 assumptions.
+//
+// This literal is that enforcement point, and it is deliberately build-time
+// rather than a runtime check. The panel cannot read the version from the SDK
+// (same reason the Tier-1 codes above are literals: it renders inside the
+// extension approval root and must stay out of that bundle), and a runtime
+// degrade path would be UX for a state that cannot occur - the wallet ships one
+// lockfile-pinned SDK, so the report always comes from the version it was built
+// against. What CAN happen is an SDK bump landing without anyone re-reading this
+// file, and the parity test in test/unit/components/PreflightPanel.tier1Notice.test.jsx
+// fails exactly then. Match this to a new REPORT_SCHEMA_VERSION only after
+// re-reviewing every field listed above; matching it to silence the test is the
+// one thing that turns the gate back into the gap it replaced.
+export const SUPPORTED_SCHEMA_VERSION = 1;
+
 // Plain-language copy for the Tier-1 notices. The SDK messages are written
 // for a report reader ("relying on client checks"); this surface is read by
 // someone about to sign. The SDK's own text still renders underneath the

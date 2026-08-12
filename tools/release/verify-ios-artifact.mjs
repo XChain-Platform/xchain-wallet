@@ -14,7 +14,8 @@
 //
 // Usage:
 //     node tools/release/verify-ios-artifact.mjs <App.app|*.ipa> --stage archive|export
-//         [--marketing-version 0.336.0] [--build-number 3360050] [--unsigned]
+//         [--marketing-version 0.336.0] [--build-number 3360050] [--team-id ABCDE12345]
+//         [--unsigned]
 //
 // WHY THIS EXISTS, AND WHY IT IS NOT A RENAME OF THE ANDROID ONE.
 //
@@ -49,6 +50,26 @@
 // Swift package, a Capacitor plugin or a portal-side App ID capability adding
 // something to the shipped app that no file here requests.
 //
+// THE TEAM ID ARRIVES BY FLAG, BECAUSE NO FILE HERE HOLDS IT. The signing team
+// is the one expectation this repo cannot derive: ios-archive.sh signs with
+// DEVELOPMENT_TEAM="$APPLE_TEAM_ID", an environment value, and the authority it
+// is meant to agree with - the appID pinned into the published
+// apple-app-site-association - lives in xchain-websites, which release.yml's
+// mobile-ios job does not check out. So --team-id carries the same build input
+// the ceremony signed with, and the checks below state plainly what that does
+// and does not cover. It catches the SIGNATURE disagreeing with what the
+// ceremony asked for, which cloud signing can produce on its own: provisioning
+// updates pick a profile, and the profile's team is the portal's answer rather
+// than the flag's. It does NOT catch a $APPLE_TEAM_ID that is itself wrong
+// against the AASA pin; reconciling the input to that pin is a separate control
+// at a separate place, and the pass line says so rather than reading
+// as a check against the pin.
+//
+// The two entitlement values are also held against EACH OTHER whether or not a
+// team id is supplied, because that comparison needs no external authority at
+// all and a signature whose application-identifier prefix disagrees with its
+// own team-identifier is malformed however it was requested.
+//
 // The assertions are a pure function of plain objects (runChecks) and the
 // plist extraction is the CLI's business, so the guard can be shown broken
 // artifacts on any platform while the real artifacts only exist on a Mac.
@@ -64,6 +85,11 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 // Added by the signing identity on every build, so it is present in artifacts
 // whose source entitlements never mention it. The only such key: anything else
 // appearing without a source request is the capability-creep case below.
+//
+// Exempt from the capability-creep NAME check only. Its VALUE is asserted in
+// runChecks, against the application-identifier prefix always and against the
+// supplied --team-id when there is one; being signing-added is why no source
+// file requests it, not a reason to trust what it says.
 const SIGNING_ADDED_ENTITLEMENTS = new Set(['com.apple.developer.team-identifier']);
 
 /**
@@ -182,6 +208,9 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * @param {'archive'|'export'} args.stage
  * @param {object} args.expected result of readExpectations
  * @param {boolean} [args.unsigned] the caller declared an unsigned lane build
+ * @param {string} [args.teamId] the Apple Developer Team ID the ceremony asked
+ *   xcodebuild to sign for ($APPLE_TEAM_ID). Undefined when the caller supplied
+ *   none, which is reported as unchecked rather than passed over in silence.
  * @param {string} [args.taggedVersion] marketing version the release tag derives
  * @param {string} [args.taggedBuild] build number the release tag derives
  * @param {'xcconfig'|'flags'} [args.versionSource] where the expected version
@@ -192,7 +221,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * @returns {{failures: string[], passes: string[]}}
  */
 export function runChecks({
-    info, entitlements, profile, stage, expected, unsigned = false, taggedVersion, taggedBuild,
+    info, entitlements, profile, stage, expected, unsigned = false, teamId, taggedVersion, taggedBuild,
     versionSource = 'xcconfig',
 }) {
     const failures = [];
@@ -274,6 +303,51 @@ export function runChecks({
             fail(`application-identifier is ${JSON.stringify(appId)}, which does not end with .${expected.bundleId}`,
                 'The signature was issued for a different app id than the bundle carries, which is how '
                 + 'a build signed against the wrong App ID record reaches an upload before Apple rejects it.');
+        }
+
+        // The Team ID half of the same string, which nothing read until
+        //: `<TEAM>.<bundle id>` is one appID and the suffix check
+        // above only ever saw the second half. The AASA publishes the WHOLE
+        // appID, so a build signed under another team keeps the right bundle id
+        // and still loses Universal Links, silently and only on devices.
+        const signedTeam = entitlements['com.apple.developer.team-identifier'];
+        const dot = typeof appId === 'string' ? appId.indexOf('.') : -1;
+        const appIdTeam = dot > 0 ? appId.slice(0, dot) : undefined;
+
+        // Needs no external authority, so it runs on every signed artifact: the
+        // two values are written by one signing identity and disagreeing is
+        // malformed however the build was requested.
+        if (appIdTeam === undefined || typeof signedTeam !== 'string') {
+            fail(`the signature carries application-identifier ${JSON.stringify(appId)} and `
+                + `com.apple.developer.team-identifier ${JSON.stringify(signedTeam)}`,
+                'Every signed build carries both, and the pair is what names the team the app belongs '
+                + 'to. One of them missing means these entitlements did not come off a real signature.');
+        } else if (appIdTeam !== signedTeam) {
+            fail(`application-identifier is prefixed ${appIdTeam} and com.apple.developer.team-identifier is ${signedTeam}`,
+                'One signature cannot belong to two teams. A pair that disagrees is a rewritten or '
+                + 'merged entitlement set, and neither value can then be trusted as the app\'s team.');
+        } else {
+            pass(`both entitlements name team ${signedTeam}`);
+        }
+
+        // Against the build input, when the ceremony passed one. Stated as
+        // "what the ceremony asked for" rather than as agreement with the
+        // published AASA, which this repo cannot see: a pass line claiming the
+        // pin would be the same value agreeing with itself, the shape of
+        // evidence this file refuses everywhere else.
+        if (teamId === undefined) {
+            pass('SKIPPED: the signed Team ID was not held against any requested team, because no '
+                + '--team-id was supplied (the release ceremony passes $APPLE_TEAM_ID)');
+        } else if (appIdTeam === teamId && signedTeam === teamId) {
+            pass(`the signed team is ${teamId}, which is the team the ceremony asked xcodebuild for `
+                + '(this does NOT check that team against the published AASA appID)');
+        } else {
+            fail(`the artifact is signed for team ${JSON.stringify(signedTeam ?? appIdTeam)} and the ceremony asked for ${teamId}`,
+                'The published apple-app-site-association names one <TEAM>.<bundle id> appID, so an app '
+                + 'signed under a different team is not the app the association claims: iOS silently '
+                + 'stops opening https links in it and nothing anywhere reports an error. Cloud signing '
+                + 'chooses the profile, so the team the portal hands back can differ from the one asked '
+                + 'for without any file in this repo changing.');
         }
 
         const domains = entitlements['com.apple.developer.associated-domains'];
@@ -493,7 +567,7 @@ function locateApp(target, scratch) {
     return join(payload, apps[0]);
 }
 
-const VALUE_FLAGS = new Set(['stage', 'tag', 'marketing-version', 'build-number']);
+const VALUE_FLAGS = new Set(['stage', 'tag', 'marketing-version', 'build-number', 'team-id']);
 
 // The tag is what the release lane actually holds, and rails §2 owns the
 // formula turning it into the two numbers. Imported rather than reimplemented:
@@ -541,6 +615,12 @@ Options:
                            against the tag and not only against Version.xcconfig
   --marketing-version X.Y.Z, --build-number N
                            the same two numbers, given directly
+  --team-id ABCDE12345     the Apple Developer Team ID the ceremony signed for
+                           (\$APPLE_TEAM_ID), so both signed entitlement values
+                           are held against it. Omitted, the signed team is
+                           reported as UNCHECKED rather than passed over. This
+                           is the requested team, not the appID the published
+                           apple-app-site-association pins
   --unsigned               the caller archived without a signing identity, so
                            the entitlement checks are reported as skipped rather
                            than failing. Never accepted at the export stage
@@ -566,7 +646,8 @@ async function main(argv) {
     if (!artifact || !stage) {
         console.error(
             'usage: verify-ios-artifact.mjs <App.app|*.ipa> --stage archive|export\n'
-            + '           [--tag vX.Y.Z] [--marketing-version X.Y.Z] [--build-number N] [--unsigned]',
+            + '           [--tag vX.Y.Z] [--marketing-version X.Y.Z] [--build-number N]\n'
+            + '           [--team-id ABCDE12345] [--unsigned]',
         );
         return 2;
     }
@@ -594,6 +675,7 @@ async function main(argv) {
             expected,
             versionSource,
             unsigned: values.unsigned === true,
+            teamId: values['team-id'],
             taggedVersion: values['marketing-version'] ?? derived.taggedVersion,
             taggedBuild: values['build-number'] ?? derived.taggedBuild,
         });

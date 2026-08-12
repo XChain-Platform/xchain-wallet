@@ -66,10 +66,18 @@ export function createBridgeEventBroadcaster(deps = {}) {
             }
             if (tabOrigin !== origin) continue;
             try {
+                // The check above reads a URL SNAPSHOT while delivery is bound
+                // to a mutable tab id, so a tab that navigates between the
+                // query and the send hands the NEW origin's content script the
+                // old origin's event (accountsChanged carries account ids and
+                // names). Stamp the intended origin: the receiver always runs
+                // against the document actually loaded and can drop what was
+                // never meant for it ().
                 tabs.sendMessage(tab.id, {
                     type: EVENT_MESSAGE_TYPE,
                     event,
                     payload,
+                    origin,
                 });
             } catch (_err) {
                 // Tab discarded mid-fire; best-effort delivery.

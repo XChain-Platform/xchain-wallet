@@ -23,9 +23,19 @@
 //   - JSXText nodes:           <span>Hello</span>          → flagged
 //   - JSXAttribute "literal"   <input placeholder="x" />   → flagged for
 //     attributes whose names are user-visible: aria-label,
-//     aria-description, aria-roledescription, alt, title, placeholder,
-//     label, hint, caption, tooltip (the USER_FACING_ATTRS set below is
-//     the authority; keep this list in step with it).
+//     aria-description, aria-roledescription, aria-valuetext, alt,
+//     title, placeholder, label, hint, caption, tooltip, heading,
+//     emptyText, actionLabel, backLabel
+//     (the USER_FACING_ATTRS set below is the authority; keep this list
+//     in step with it). The last four are component props rather than
+//     DOM attributes: shipping components render copy through them, so
+//     a DOM-only set left that copy out of the translator index.
+//   - JSXAttribute template   <img alt={`QR for ${addr}`} />  → flagged
+//     for those same attribute names when any static chunk of the
+//     template is non-trivial. A `Literal`-only test read the static
+//     English in an interpolated aria-label as invisible, so that copy
+//     never reached the translator index. Pure-interpolation templates
+//     like {`${a}/${b}`} stay silent: every static chunk is trivial.
 //   - JSXExpressionContainer holding a Literal, in JSX content:
 //                              <span>{'literal'}</span>    → flagged.
 //     An attribute's container is covered by the JSXAttribute case, so
@@ -36,15 +46,18 @@
 //   - Empty / whitespace-only strings.
 //   - Strings shorter than `minLength` (default 2), abbreviations like
 //     "&" or ":" are punctuation.
-//   - Strings made up entirely of digits / punctuation / one ASCII
-//     letter (e.g. "•", "-", "0x", "1d"). Catches version chips,
-//     status dots, etc.
+//   - Strings made up entirely of whitespace / digits / punctuation /
+//     symbols (e.g. "•", "-", "123"). Catches separator glyphs and
+//     status dots. The filter has NO letter allowance, so a technical
+//     token carrying one ("0x", "1d", "v2") is non-trivial and IS
+//     flagged; the smoke test pins those three.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
 //   - Technical attributes that never render to humans: `className`,
 //     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
 //     `on*`, and every `aria-*` outside USER_FACING_ATTRS (so
-//     `aria-label`, `aria-description` and `aria-roledescription` stay
-//     checked while `aria-labelledby`, `aria-hidden` and the rest do not).
+//     `aria-label`, `aria-description`, `aria-roledescription` and
+//     `aria-valuetext` stay checked while `aria-labelledby`,
+//     `aria-hidden` and the rest do not).
 //   - Files matching `ignoreFiles` glob list (defaults exclude
 //     `*.smoke.js`, `test/**`, `*.test.js`, `*.test.jsx`,
 //     `tools/**`, `claude/**`).
@@ -62,6 +75,9 @@ const USER_FACING_ATTRS = new Set([
     'aria-label',
     'aria-description',
     'aria-roledescription',
+    // Assistive text a screen reader speaks in place of a slider's raw
+    // value. The generic aria-* sweep read it as technical plumbing.
+    'aria-valuetext',
     'alt',
     'title',
     'placeholder',
@@ -69,6 +85,15 @@ const USER_FACING_ATTRS = new Set([
     'hint',
     'caption',
     'tooltip',
+    // Component props, not DOM attributes. Shipping components render copy
+    // through these (SideEditor heading, ChainGroup emptyText, the settings
+    // and empty-state rows' actionLabel, PageHeader backLabel), and a
+    // DOM-only set let it escape. Only props whose value reaches a user
+    // verbatim belong here; a prop that merely names a key does not.
+    'heading',
+    'emptyText',
+    'actionLabel',
+    'backLabel',
 ]);
 
 const TECHNICAL_ATTR_PREFIXES = ['data-', 'on'];
@@ -135,8 +160,8 @@ function isTechnicalAttr(name) {
     for (const prefix of TECHNICAL_ATTR_PREFIXES) {
         if (name.startsWith(prefix)) return true;
     }
-    // aria-* is mostly technical except for aria-label / aria-description /
-    // aria-roledescription.
+    // aria-* is mostly technical except for the USER_FACING_ATTRS members
+    // (aria-label, aria-description, aria-roledescription, aria-valuetext).
     if (name.startsWith('aria-') && !USER_FACING_ATTRS.has(name)) return true;
     return false;
 }
@@ -154,6 +179,28 @@ export function isTrivialString(value, allow = [], minLength = 2) {
     if (/^[\s\d\p{P}\p{S}]+$/u.test(trimmed)) return true;
     if (allow.includes(trimmed)) return true;
     return false;
+}
+
+/**
+ * Return the first non-trivial static chunk of a TemplateLiteral, or null.
+ *
+ * A template's static English lives in `quasis[].value.cooked`, so testing
+ * only `Literal` nodes let interpolated copy through. Judging each chunk
+ * with the same triviality filter keeps a pure-interpolation template such
+ * as `${a}/${b}` silent for free: its chunks are "", "/" and "".
+ *
+ * @param {object} node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {string | null}
+ */
+export function templateCopy(node, allow = [], minLength = 2) {
+    if (node?.type !== 'TemplateLiteral') return null;
+    for (const quasi of node.quasis ?? []) {
+        const text = quasi?.value?.cooked ?? quasi?.value?.raw ?? '';
+        if (!isTrivialString(text, allow, minLength)) return text;
+    }
+    return null;
 }
 
 /**
@@ -202,6 +249,15 @@ export function findViolations(node, options = {}) {
                         node: v.expression,
                         message: `Inline ${attrName}={"${truncate(v.expression.value)}"} should use t('key').`,
                     });
+                } else if (v?.type === 'JSXExpressionContainer'
+                        && v.expression?.type === 'TemplateLiteral') {
+                    const copy = templateCopy(v.expression, allow, minLength);
+                    if (copy !== null) {
+                        out.push({
+                            node: v.expression,
+                            message: `Inline ${attrName}={\`${truncate(copy)}\`} should use t('key') with placeholders.`,
+                        });
+                    }
                 }
             }
             // Recurse inside non-flagged attributes too; JSX expression
@@ -286,6 +342,14 @@ function create(context) {
                 && typeof v.expression.value === 'string'
                 && !isTrivialString(v.expression.value, allow, minLength)) {
                 context.report({ node: v.expression, message: `Inline ${attrName} string should use t('key')` });
+            }
+            // Static English inside an interpolated value, e.g.
+            // aria-label={`Allow ${name}`}. Mirrors the findViolations
+            // branch; the two attribute paths must stay in step.
+            if (v?.type === 'JSXExpressionContainer'
+                && v.expression?.type === 'TemplateLiteral'
+                && templateCopy(v.expression, allow, minLength) !== null) {
+                context.report({ node: v.expression, message: `Inline ${attrName} template copy should use t('key') with placeholders` });
             }
         },
         JSXExpressionContainer(node) {

@@ -353,6 +353,19 @@ MARKERS=(
     # Mock implementation strings ( - the mock itself, not its warning):
     "Dev SDK stub"
     "devmockpsbt"
+    # Fixture-content strings: the dev-mock's DATA, which the two marker sets
+    # above do not name. packages/web/src/hostBridge.js imports every helper
+    # from ./devFakeBalances.js at module top level, ABOVE both of its
+    # `import.meta.env?.PROD` guards, so that module stays out of a production
+    # bundle only because it happens to be side-effect-free and Rollup can
+    # tree-shake it - not because the import is gated. Give the fixtures their
+    # own markers so a future top-level side effect there fails this gate
+    # instead of shipping past it. Three literals, one from the native-balance
+    # table and two from the 40-token list, because a partial leak may retain
+    # only one of those tables.
+    "The native coin of the Bitcoin network."
+    "Iconic 2016 collectible card series."
+    "The original meme cash on Counterparty."
 )
 
 #  positive check: absence of the mock proves nothing if the REAL SDK

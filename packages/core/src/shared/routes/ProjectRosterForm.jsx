@@ -571,10 +571,16 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>List action</dt>
-                    <dd className={styles.detailsValue}>#{listActionIndex}</dd>
-                    <dt className={styles.detailsLabel}>Project created in action</dt>
-                    <dd className={styles.detailsValue}>#{issueActionIndex}</dd>
+                    <dt className={styles.detailsLabel}>Token-list record</dt>
+                    <dd className={styles.detailsValue}>
+                        On-chain
+                        <span className={styles.detailsRef}>#{listActionIndex}</span>
+                    </dd>
+                    <dt className={styles.detailsLabel}>Project creation record</dt>
+                    <dd className={styles.detailsValue}>
+                        On-chain
+                        <span className={styles.detailsRef}>#{issueActionIndex}</span>
+                    </dd>
                 </dl>
                 {ownerMismatch ? (
                     <div role="alert" className={styles.warnings}>

@@ -169,6 +169,24 @@
     word-break: break-word;
 }
 
+/* Secondary technical identifier trailing a plain-language details value
+   (the on-chain action number a confirmation row points at). Muted and
+   smaller so the row reads as a description first. */
+.detailsRef {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin-inline-start: var(--xc-space-1);
+}
+
+/* Plain-language gloss under a details value that must stay raw because the
+   user is signing that exact string. */
+.detailsNote {
+    display: block;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin-top: calc(var(--xc-space-1) / 2);
+}
+
 .warnings {
     border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
     background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);

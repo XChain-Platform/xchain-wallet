@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage , Icon} from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const { progressSummary, pendingCosignerPubkeys } = schemas.multisigSigningSession;
@@ -100,7 +101,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             const list = await messaging.listMultisigSigningSessions({ walletId });
             setSessions(Array.isArray(list) ? list : []);
         } catch (err) {
-            fail(err?.message || 'Failed to load multisig sessions.', refreshList);
+            console.error('Multisig sessions list failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Failed to load multisig sessions.'), refreshList);
             setSessions([]);
         }
     }, [walletId, messaging, fail]);
@@ -110,7 +112,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             const session = await messaging.getMultisigSigningSession({ sessionId: id });
             setActive(session);
         } catch (err) {
-            fail(err?.message || 'Failed to load session.', () => refreshActive(id));
+            console.error('Multisig session load failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Failed to load session.'), () => refreshActive(id));
         }
     }, [messaging, fail]);
 
@@ -131,7 +134,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshActive(active.id);
             await refreshList();
         } catch (err) {
-            fail(err?.message || 'Aggregate failed.', handleAggregate);
+            console.error('Multisig aggregate failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Aggregate failed.'), handleAggregate);
         } finally {
             setBusy(false);
         }
@@ -146,7 +150,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshActive(active.id);
             await refreshList();
         } catch (err) {
-            fail(err?.message || 'Cancel failed.', handleCancel);
+            console.error('Multisig cancel failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Cancel failed.'), handleCancel);
         } finally {
             setBusy(false);
         }
@@ -206,7 +211,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
         } catch (e) {
             // Surface in the UI rather than crashing; sessions with
             // malformed state still let the user cancel them.
-            return { error: e?.message || String(e) };
+            console.error('Multisig QR envelope build failed:', e); // eslint-disable-line no-console
+            return { error: userFacingMessage(e, 'Could not build the transaction QR for this session.') };
         }
     }, [active]);
 
@@ -272,7 +278,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {
-            fail(err?.message || 'Failed to apply scanned contribution.', null);
+            console.error('Multisig scanned contribution failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Failed to apply scanned contribution.'), null);
         } finally {
             setBusy(false);
         }
@@ -295,7 +302,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshActive(active.id);
             await refreshList();
         } catch (err) {
-            fail(err?.message || 'Local-signing failed.', handleSignLocally);
+            console.error('Multisig local signing failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Local-signing failed.'), handleSignLocally);
         } finally {
             setBusy(false);
         }
@@ -333,7 +341,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
         try {
             envelope = decodeMultisigEnvelope(state.psbt);
         } catch (e) {
-            fail(e?.message || 'Failed to parse envelope.', null);
+            console.error('Multisig envelope decode failed:', e); // eslint-disable-line no-console
+            fail(userFacingMessage(e, 'Failed to parse envelope.'), null);
             setBusy(false);
             return;
         }
@@ -369,7 +378,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {
-            fail(err?.message || 'Failed to apply contribution.', handlePasteSubmit);
+            console.error('Multisig contribution apply failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
         } finally {
             setBusy(false);
         }

@@ -68,6 +68,40 @@ function isOpReturnOutput(out) {
 const P2SH_TYPES = new Set(['p2sh', 'p2sh-p2wpkh', 'p2sh-p2wsh']);
 const P2WSH_TYPES = new Set(['p2wsh']);
 
+// Exact satoshi/koinu equality for the tamper checks ().
+//
+// The SDK's decomposePsbt already hands the wallet exact values: a JS number below
+// 2^53 and a decimal STRING above it, because a PSBT value is a BigInt. Comparing
+// with `a === Number(b)` threw that exactness away, and DOGE clears 2^53 koinu at
+// ~90M DOGE, so two distinct amounts (9007199254740992 and ...993) collapsed to the
+// same double and a one-koinu output mutation still matched its expected slot.
+//
+// Non-integer and unsafe-double inputs normalize to null, which never compares equal.
+// That is deliberate: a value the wallet cannot represent exactly is a value the user
+// cannot have approved exactly, so the output falls through to the tamper branch
+// rather than matching on a rounded guess.
+function toSats(v) {
+    if (typeof v === 'bigint') return v;
+    if (typeof v === 'number') return Number.isSafeInteger(v) ? BigInt(v) : null;
+    if (typeof v === 'string') {
+        const s = v.trim();
+        return /^-?\d+$/.test(s) ? BigInt(s) : null;
+    }
+    return null;
+}
+
+/**
+ * Are these two satoshi values the same exact integer amount?
+ * @param {number|string|bigint} a
+ * @param {number|string|bigint} b
+ * @returns {boolean}
+ */
+export function sameSats(a, b) {
+    const x = toSats(a);
+    const y = toSats(b);
+    return x !== null && y !== null && x === y;
+}
+
 /**
  * Build the expected-output matcher set for a composed action PSBT.
  * The final encoderOpts.customOutputs already folds the native-fee
@@ -77,16 +111,18 @@ const P2WSH_TYPES = new Set(['p2wsh']);
  * @param {Object} args
  * @param {Array<{ address: string, value: number|string }>} [args.customOutputs]
  * @param {string} args.encoding   'OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN'
- * @param {{ address: string|null, value: number }|null} [args.adsOutput]   the resolved ADS donation, when present (hidden from display)
- * @returns {{ addressed: Array<{ address: string, value: number, isAds: boolean }>, encoding: string }}
+ * @param {{ address: string|null, value: number|string }|null} [args.adsOutput]   the resolved ADS donation, when present (hidden from display)
+ * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string }}
  */
 export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, actionByteLen }) {
+    // Values are carried through UNCOERCED: pre-rounding the expected side with Number()
+    // reintroduced the >2^53 collapse sameSats exists to close ().
     const addressed = (Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
         address: String(o.address),
-        value: Number(o.value),
+        value: o.value,
         // Flag the ADS output so the modal can whitelist-but-not-display it.
         isAds: !!(adsOutput && String(o.address) === String(adsOutput.address) &&
-            Number(o.value) === Number(adsOutput.value)),
+            sameSats(o.value, adsOutput.value)),
     }));
     const enc = String(encoding || '').toUpperCase();
     return { addressed, encoding: enc, carrierAllowance: expectedCarrierAllowance(enc, actionByteLen) };
@@ -124,7 +160,7 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
         const out = outputs[i];
 
         // 1. An expected addressed output (custom / fee / ADS): address AND value.
-        const slot = addressed.find((s) => !s.consumed && s.address === out.address && s.value === Number(out.value));
+        const slot = addressed.find((s) => !s.consumed && s.address === out.address && sameSats(s.value, out.value));
         if (slot) { slot.consumed = true; continue; }
 
         // 2. The action carrier for the chosen encoding.
@@ -137,7 +173,9 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
         if (out.address && own.has(out.address)) continue;
 
         // 4. Anything else is a tamper.
-        unexpected.push({ index: i, address: out.address, value: Number(out.value), scriptType: out.scriptType });
+        // Report the value uncoerced: the tamper report names the amount the user is being
+        // asked to sign, and Number() on a >2^53 string would print a rounded one.
+        unexpected.push({ index: i, address: out.address, value: out.value, scriptType: out.scriptType });
     }
 
     return { ok: unexpected.length === 0, unexpected };

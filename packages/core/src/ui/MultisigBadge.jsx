@@ -30,7 +30,10 @@ export function MultisigBadge({ threshold, cosignerCount, scheme, size = 'md' })
     }
     const tag = SCHEME_TAG[scheme] || scheme;
     const tone = SCHEME_TONE[scheme] || SCHEME_TONE['p2wsh-multisig'];
-    const aria = `${threshold} of ${cosignerCount} multisig (${SCHEME_DESCRIPTION[scheme] || scheme})`;
+    // The visible tag is a plain word; the protocol abbreviation rides in the
+    // aria/title so a reader reconciling against another wallet still gets it.
+    const code = SCHEME_CODE[scheme];
+    const aria = `${threshold} of ${cosignerCount} multisig (${SCHEME_DESCRIPTION[scheme] || scheme}${code ? `, ${code}` : ''})`;
     const padX = size === 'sm' ? '0.25rem' : '0.4rem';
     const padY = size === 'sm' ? '0.05rem' : '0.1rem';
     const fontSize = size === 'sm' ? '0.7rem' : '0.78rem';
@@ -62,7 +65,18 @@ export function MultisigBadge({ threshold, cosignerCount, scheme, size = 'md' })
     );
 }
 
+// Visible tag: the compact form of SCHEME_DESCRIPTION below, not the
+// script-level opcode. P2SH/P2WSH name a script template, which no
+// non-technical holder reads; the address-family word does the same
+// distinguishing work and matches what other wallets label address types.
 const SCHEME_TAG = {
+    'p2sh-multisig':  'Classic',
+    'p2wsh-multisig': 'SegWit',
+    'taproot-musig2': 'Taproot',
+};
+
+// Advanced detail, surfaced only through the badge's aria-label/title.
+const SCHEME_CODE = {
     'p2sh-multisig':  'P2SH',
     'p2wsh-multisig': 'P2WSH',
     'taproot-musig2': 'MuSig2',

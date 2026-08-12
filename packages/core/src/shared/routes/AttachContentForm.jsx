@@ -758,7 +758,10 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dt className={styles.detailsLabel}>Document</dt>
                     <dd className={styles.detailsValue}>{String(tick).toUpperCase()}.json</dd>
                     <dt className={styles.detailsLabel}>Artwork referenced</dt>
-                    <dd className={styles.detailsValue}>#{fileActionIndex} ({fileMeta.name})</dd>
+                    <dd className={styles.detailsValue}>
+                        {fileMeta.name}
+                        <span className={styles.detailsRef}>#{fileActionIndex}</span>
+                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -812,7 +815,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>New description</dt>
-                    <dd className={styles.detailsValue}>action:{tisActionIndex}</dd>
+                    {/* The raw string stays visible: this is the exact value being
+                        signed onto the chain, not a label. The gloss explains it
+                        rather than replacing it (XC review #4386). */}
+                    <dd className={styles.detailsValue}>
+                        action:{tisActionIndex}
+                        <span className={styles.detailsNote}>
+                            Points the description at this token&apos;s on-chain info record.
+                        </span>
+                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -953,10 +964,16 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>File action</dt>
-                    <dd className={styles.detailsValue}>#{fileActionIndex}</dd>
-                    <dt className={styles.detailsLabel}>Token created in action</dt>
-                    <dd className={styles.detailsValue}>#{issueActionIndex}</dd>
+                    <dt className={styles.detailsLabel}>Artwork file record</dt>
+                    <dd className={styles.detailsValue}>
+                        On-chain
+                        <span className={styles.detailsRef}>#{fileActionIndex}</span>
+                    </dd>
+                    <dt className={styles.detailsLabel}>Token creation record</dt>
+                    <dd className={styles.detailsValue}>
+                        On-chain
+                        <span className={styles.detailsRef}>#{issueActionIndex}</span>
+                    </dd>
                 </dl>
                 {ownerMismatch ? (
                     <div role="alert" className={styles.warnings}>

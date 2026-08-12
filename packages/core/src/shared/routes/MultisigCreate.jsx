@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, ChainBadge, ChainPicker, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -123,7 +124,8 @@ export function MultisigCreate({ walletId, onBack }) {
                 setChainId(btcWithAddresses);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet addresses.');
+                console.error('MultisigCreate: load wallet addresses failed:', err); // eslint-disable-line no-console
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, btcChainIds, messaging]);
@@ -219,7 +221,8 @@ export function MultisigCreate({ walletId, onBack }) {
             setResult(r);
             setStage('done');
         } catch (err) {
-            setSubmitError(err?.message || 'Failed to create multisig configuration.');
+            console.error('MultisigCreate: create multisig failed:', err); // eslint-disable-line no-console
+            setSubmitError(userFacingMessage(err, 'Failed to create multisig configuration.'));
             setStage('compose');
         }
     }
@@ -267,16 +270,11 @@ export function MultisigCreate({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         {config?.threshold} of {config?.cosigners?.length}
                     </dd>
-                    <dt className={styles.detailsLabel}>scriptTemplate</dt>
-                    <dd className={styles.detailsValue} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: '0.75rem', wordBreak: 'break-all' }}>
-                        {config?.scriptTemplate || 'N/A'}
-                    </dd>
                 </dl>
                 <p className={styles.hint}>
-                    Address derivation, transaction construction, QR transport, and
-                    HW MuSig2 wiring land in Steps 18–22. The persisted
-                    `MultisigConfig` is the structural prerequisite; later
-                    steps consume it.
+                    The shared address now appears on the Receive screen. Spending
+                    from it opens a signing session where each cosigner approves in
+                    turn, in the app or by scanning the round's QR code.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>

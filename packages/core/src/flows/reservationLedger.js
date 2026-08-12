@@ -45,6 +45,42 @@
  * @property {(entries: Reservation[]) => Promise<void> | void} save
  */
 
+import { sumDecimalStrings } from '../shared/utils/amountFormat.js';
+
+// Plain fixed-point form of a reservation amount, or null when it is not a number
+// at all ().
+//
+// sumDecimalStrings SKIPS any value that is not already plain decimal, and a skipped
+// reservation is a reservation missing from the delta, i.e. exactly the understated
+// guard this replaced float addition to fix. Scientific notation is the realistic way
+// in: useConfirmAction reserves `String(reserve.amount)`, and a JS number small enough
+// (1e-8) or large enough stringifies to an exponent.
+// Netted for a tick that holds a reservation whose amount is not a number at all
+// (). Deliberately larger than any balance the guard can be handed - the SDK
+// caps MAX_SUPPLY at 1e21 - so the effective balance goes negative and the
+// concurrent-spend check reports a shortfall instead of clearing the spend.
+//
+// Dropping the entry instead fails OPEN, which is the understated guard this finding is
+// about in a harder form. Throwing is not the alternative it looks like: useConfirmAction
+// CATCHES a preflight rejection and goes ready with a null report, so raising here would
+// remove the guard rather than close it. Same rule as the #4311 tamper check - a money
+// value the wallet cannot represent exactly falls to the blocking branch, never matches
+// on a guess.
+const UNREADABLE_RESERVATION = '1000000000000000000000000000000';
+
+function toPlainDecimal(raw) {
+    const s = String(raw).trim();
+    if (/^-?\d+(\.\d+)?$/.test(s)) return s;
+    const m = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(s);
+    if (!m) return null;
+    const [, sign, int, frac = '', expText] = m;
+    const digits = int + frac;
+    const point = int.length + parseInt(expText, 10);
+    if (point <= 0) return sign + '0.' + '0'.repeat(-point) + digits;
+    if (point >= digits.length) return sign + digits + '0'.repeat(point - digits.length);
+    return sign + digits.slice(0, point) + '.' + digits.slice(point);
+}
+
 /**
  * Create a reservation ledger. Pass a `store` (async load/save) to back
  * it with chrome.storage.session on the extension; omit it for the pure
@@ -130,13 +166,21 @@ export function createReservationLedger({ store } = {}) {
          */
         async localDeltas(chainId, excludeId) {
             await ensureHydrated();
-            /** @type {Record<string, number>} */
+            // Exact decimal accumulation, not float (). Token amounts carry up to
+            // 18 fractional places and integers past 2^53, so `+ Number(r.amount)` dropped
+            // small reservations and rounded large ones. The netted total is what the
+            // concurrent window subtracts from its balance, so an understated sum is a
+            // silently weakened double-spend guard.
+            /** @type {Record<string, string[]>} */
             const byTick = {};
             for (const r of mem) {
                 if (r.chainId !== chainId || r.id === excludeId) continue;
-                byTick[r.tick] = (byTick[r.tick] || 0) + Number(r.amount);
+                const amount = toPlainDecimal(r.amount);
+                (byTick[r.tick] ||= []).push(amount === null ? UNREADABLE_RESERVATION : amount);
             }
-            return Object.entries(byTick).map(([tick, amount]) => ({ tick, amount: String(amount) }));
+            return Object.entries(byTick).map(([tick, amounts]) => ({
+                tick, amount: sumDecimalStrings(amounts),
+            }));
         },
 
         /** All current reservations (for tests / diagnostics). */

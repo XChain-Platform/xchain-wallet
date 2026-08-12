@@ -920,12 +920,12 @@ function renderTemplateStage({ onPick }) {
                             onClick={() => t.interactive && onPick(t.id)}
                             disabled={!t.interactive}
                             aria-disabled={!t.interactive}
-                            title={t.interactive ? undefined : 'Dedicated form ships in Phase 2 Step 6. Use Custom today.'}
+                            title={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
                         >
                             <span className={styles.templateName}>{t.name}</span>
                             <span className={styles.templateTag}>{t.tagline}</span>
                             {!t.interactive ? (
-                                <span className={styles.templateSoon}>Use Custom (dedicated form ships in Step 6)</span>
+                                <span className={styles.templateSoon}>Use the Custom template for now</span>
                             ) : null}
                         </button>
                     </li>

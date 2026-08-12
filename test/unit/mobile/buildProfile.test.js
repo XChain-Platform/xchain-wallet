@@ -51,6 +51,65 @@ describe('the profiles themselves', () => {
     });
 });
 
+// The whole policy, written out rather than imported. Importing DIRECTIVES to
+// check DIRECTIVES is a tautology that passes for any value it happens to hold;
+// these literals are a SECOND copy that a widening has to be made in twice, on
+// purpose, so an added origin shows up as a failing diff and gets read by a
+// human before it ships. Every subset assertion below this is a convenience;
+// this is the one that actually holds the wallet's main XSS boundary.
+const DEFAULT_POLICY = {
+    'default-src': ["'self'"],
+    'script-src': ["'self'", 'https://connect.trezor.io'],
+    'style-src': ["'self'", "'unsafe-inline'"],
+    'frame-src': ["'self'", 'https://connect.trezor.io'],
+    'img-src': ["'self'", 'data:', 'blob:'],
+    'font-src': ["'self'", 'data:'],
+    'connect-src': [
+        "'self'",
+        'https:',
+        'wss:',
+        'http://localhost:*',
+        'http://127.0.0.1:*',
+        'ws://localhost:*',
+        'ws://127.0.0.1:*',
+    ],
+    'worker-src': ["'self'", 'blob:'],
+    'object-src': ["'none'"],
+    'base-uri': ["'none'"],
+    'form-action': ["'none'"],
+    'frame-ancestors': ["'none'"],
+};
+
+const STORE_POLICY = {
+    ...DEFAULT_POLICY,
+    'script-src': ["'self'"],
+    'frame-src': ["'self'"],
+};
+
+describe('the exact policy each profile ships', () => {
+    it('pins the default profile source-for-source', () => {
+        // A subset check (toContain) says a known origin is still allowed; it
+        // says nothing about an origin somebody ADDED. This is the assertion a
+        // new remote script/frame origin has to get past.
+        expect(directivesFor('default')).toEqual(DEFAULT_POLICY);
+    });
+
+    it('pins the store profile source-for-source', () => {
+        expect(directivesFor('store')).toEqual(STORE_POLICY);
+    });
+
+    it('serializes to exactly those directives, in that order', () => {
+        // The map is what the code reasons about; this string is what a browser
+        // enforces, and cspMetaTag embeds it verbatim.
+        const serialize = (policy) => Object.entries(policy)
+            .map(([name, values]) => `${name} ${values.join(' ')}`)
+            .join('; ');
+        expect(contentSecurityPolicyFor('default')).toBe(serialize(DEFAULT_POLICY));
+        expect(contentSecurityPolicyFor('store')).toBe(serialize(STORE_POLICY));
+        expect(CONTENT_SECURITY_POLICY).toBe(serialize(DEFAULT_POLICY));
+    });
+});
+
 describe('the store profile CSP', () => {
     it('drops the Trezor origins the default build needs', () => {
         // No WebHID in a WKWebView or an Android WebView, so the hardware

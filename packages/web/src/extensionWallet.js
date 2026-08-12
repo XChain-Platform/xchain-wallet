@@ -127,8 +127,11 @@ export function isExtensionWalletEnabled() {
  * absent or the user rejects the connect prompt (the caller surfaces
  * that on the banner without persisting anything).
  *
- * @param {object} [opts] connect options forwarded to the provider
- *   (e.g. `{ chains, accounts }`); see §43.2.
+ * @param {object} [opts] connect options forwarded to the provider, named as
+ *   bridge-spec's ConnectOpts declares them: `{ requestedChains,
+ *   requiredBridgeVersion, appName, appIcon }`. This doc said `{ chains,
+ *   accounts }`, which documented the handler's mistake rather than the
+ *   contract (); the handler still accepts the legacy names.
  * @returns {Promise<any>} the provider's connect result
  */
 export async function connectExtensionWallet(opts = {}) {

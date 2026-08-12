@@ -23,6 +23,7 @@ import {
     NATIVE_FEE_UNVERIFIED_NOTICE,
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { humanizeDeployDiagnostic, humanizeGasRationale } from '../utils/deployDiagnostic.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -311,7 +312,10 @@ export function DeployContractForm({ walletId, onBack }) {
             constructorParams: constructorParams.trim() || undefined,
         })
             .then((p) => { if (!cancelled) setPlan(p); })
-            .catch((e) => { if (!cancelled) setPlanError(e?.message || 'Could not size this contract.'); });
+            // The planner reports an over-budget contract as
+            // "…exceeds MAX_DEPLOY_CHUNKS (16)"; deployDiagnostic restates the
+            // SDK constant as a limit the author can act on (XC #4374).
+            .catch((e) => { if (!cancelled) setPlanError(humanizeDeployDiagnostic(e).message || 'Could not size this contract.'); });
         return () => { cancelled = true; };
     }, [messaging, chainId, code, gasLimit, suggestedGas, constructorParams]);
 
@@ -336,10 +340,10 @@ export function DeployContractForm({ walletId, onBack }) {
             if (res?.valid) {
                 setValidation({ ok: true, msg: 'Syntax OK.', warnings: res.warnings });
             } else {
-                setValidation({ ok: false, msg: res?.error || 'Validation failed.' });
+                setValidation({ ok: false, msg: humanizeDeployDiagnostic(res?.error).message || 'Validation failed.' });
             }
         } catch (e) {
-            setValidation({ ok: false, msg: e?.message || 'Validation failed.' });
+            setValidation({ ok: false, msg: humanizeDeployDiagnostic(e).message || 'Validation failed.' });
         }
     }
 
@@ -738,10 +742,14 @@ export function DeployContractForm({ walletId, onBack }) {
                         <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
                     </div>
                 ) : null}
+                {/* Lint advisories are already written for a contract author
+                    (line number, symbol, prescribed fix), so deployDiagnostic
+                    passes them through and rewrites only the ones stated in SDK
+                    internals (XC #4374). */}
                 {validation?.warnings && validation.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {validation.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i} className={styles.warning}>{humanizeDeployDiagnostic(w).message}</p>
                         ))}
                     </div>
                 ) : null}
@@ -1056,7 +1064,11 @@ export function DeployContractForm({ walletId, onBack }) {
                 <p className={styles.summary}>
                     Suggested gas limit: {suggestedGas}
                     {gasLimit !== String(suggestedGas) ? ' (applied)' : ''}
-                    {suggestedRationale ? ` (${suggestedRationale})` : ''}
+                    {/* The SDK's rationale is a raw count dump ("… 1 indexed
+                        for, charged 2x/iteration …"); restate it in plain
+                        counts, keeping the raw string when the shape moves
+                        upstream (XC #4374). */}
+                    {suggestedRationale ? ` (${humanizeGasRationale(suggestedRationale) || suggestedRationale})` : ''}
                 </p>
             ) : null}
 
