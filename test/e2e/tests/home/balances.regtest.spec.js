@@ -69,6 +69,7 @@ import {
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
 import { VENUE_PRICE } from '../../fixtures/priceSeed.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -252,7 +253,7 @@ test.describe('Home balances against the chain', () => {
         // internals.
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
-        await expect(unlockedShell(page)).toBeVisible({ timeout: 60_000 });
+        await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
     });
 
     test('the funded coin row states the chain\'s balance, to the satoshi', async ({ page }) => {
@@ -304,7 +305,7 @@ test.describe('Home balances against the chain', () => {
             .toBe(CHAINS.length);
 
         await gotoSection(page, 'Home');
-        await expect(unlockedShell(page)).toBeVisible({ timeout: 60_000 });
+        await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 
         for (const chain of CHAINS) {
             const onChain = await chainConfirmed(chain.coin, addresses[chain.chainId]);
