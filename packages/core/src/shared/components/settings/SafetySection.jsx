@@ -109,7 +109,7 @@ export function SafetySection() {
             <DuressPassphraseRow />
             <ToggleRow
                 label="Auto-arm panic mode"
-                hint="Reserved. Duress-passphrase / shortcut auto-arming lands in a follow-up step. The persisted preference is honoured when that wiring ships; the Activate button above always works regardless."
+                hint="Not available yet: panic mode cannot arm itself from a duress passphrase or shortcut. Your choice here is saved and will apply once it can. The Activate button above always works."
                 checked={Boolean(settings.panicMode?.enabled)}
                 onChange={(v) => {
                     update({ panicMode: { enabled: v } }).catch((err) => {

@@ -55,13 +55,78 @@ export const BRIDGE_SUPPORTED_VERSIONS = ['0.1.0'];
 
 /**
  * @param {unknown} requested
- * @returns {boolean} true when the requested bridge version is one this
- * wallet supports. Empty / non-string requests pass through (the connect
- * handler will fall back to BRIDGE_SPEC_VERSION as the assumed version).
+ * @returns {boolean} true when at least one supported version satisfies the
+ * requested RANGE. `ConnectOpts.requiredBridgeVersion` is specified as a semver
+ * range ('^0.1.0'), not an exact version, so exact-string matching refused every
+ * compatible dApp that wrote its requirement the documented way ().
+ * Empty / non-string requests pass through (the connect handler falls back to
+ * BRIDGE_SPEC_VERSION as the assumed version).
+ *
+ * Ranges are matched in-package rather than through `semver`: bridge-spec is the
+ * dependency-free contract third parties import, and the grammar a bridge
+ * version needs is small.
  */
 export function isBridgeVersionSupported(requested) {
     if (typeof requested !== 'string' || requested.length === 0) return true;
-    return BRIDGE_SUPPORTED_VERSIONS.includes(requested);
+    const range = requested.trim();
+    if (range === '*' || range === 'x') return true;
+    return BRIDGE_SUPPORTED_VERSIONS.some((version) => satisfiesRange(version, range));
+}
+
+/** Parse 'MAJOR.MINOR.PATCH' (prerelease/build suffixes ignored). */
+function parseVersion(value) {
+    const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(value).trim());
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+/** -1 / 0 / 1, comparing two parsed version triples. */
+function compareVersions(a, b) {
+    for (let i = 0; i < 3; i += 1) {
+        if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    return 0;
+}
+
+/**
+ * Match one concrete version against one range. Supported grammar: exact,
+ * `^` (caret, 0.x-aware: the leftmost non-zero component is the one pinned),
+ * `~` (patch-level), and the `>= > <= <` comparators. Whitespace- or
+ * comma-separated terms are ANDed; `||` alternatives are ORed. An unparseable
+ * range fails closed, which surfaces as BRIDGE_VERSION_MISMATCH rather than a
+ * silent accept.
+ */
+function satisfiesRange(version, range) {
+    const target = parseVersion(version);
+    if (!target) return false;
+    return range.split('||').some((alternative) => {
+        const terms = alternative.split(/[\s,]+/).filter(Boolean);
+        if (terms.length === 0) return false;
+        return terms.every((term) => satisfiesTerm(target, term));
+    });
+}
+
+function satisfiesTerm(target, term) {
+    const m = /^(\^|~|>=|<=|>|<|=)?\s*v?(.+)$/.exec(term);
+    if (!m) return false;
+    const operator = m[1] ?? '=';
+    const bound = parseVersion(m[2]);
+    if (!bound) return false;
+    const cmp = compareVersions(target, bound);
+    if (operator === '=') return cmp === 0;
+    if (operator === '>') return cmp > 0;
+    if (operator === '>=') return cmp >= 0;
+    if (operator === '<') return cmp < 0;
+    if (operator === '<=') return cmp <= 0;
+    if (cmp < 0) return false;
+    if (operator === '~') {
+        return target[0] === bound[0] && target[1] === bound[1];
+    }
+    // Caret. Below 1.0.0 a minor bump is breaking, and below 0.1.0 a patch
+    // bump is, so the pinned component is the leftmost non-zero one.
+    if (bound[0] !== 0) return target[0] === bound[0];
+    if (bound[1] !== 0) return target[0] === 0 && target[1] === bound[1];
+    return target[0] === 0 && target[1] === 0 && target[2] === bound[2];
 }
 
 // Version of the Sign-in with XChain challenge format (§43.6).

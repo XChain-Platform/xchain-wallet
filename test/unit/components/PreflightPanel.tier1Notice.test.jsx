@@ -31,10 +31,43 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { PreflightPanel, TIER1_NOTICE_CODES } from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
-// Test-only import. The panel itself must not reach for the SDK; see the
-// parity case at the bottom of this file.
-import preflightConstants from '../../../../xchain-sdk/src/preflight/constants.js';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { PreflightPanel, TIER1_NOTICE_CODES, SUPPORTED_SCHEMA_VERSION }
+    from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
+
+// WHERE THE SDK COMES FROM, and it is not a sibling any more ().
+//
+// This was a top-level `import ... from '../../../../xchain-sdk/src/preflight/constants.js'`,
+// four levels up, i.e. a checkout sitting BESIDE the wallet. That path exists on
+// a developer box working both repos and nowhere else: the `test` job in
+// .github/workflows/ci.yml checks out this repository alone, and since  DD6
+// the shells consume the published `@dankest-llc/xchain-sdk` instead. An
+// unresolvable static import is a vitest COLLECTION error, so the whole 
+// regression file - every rendering case below, not just the parity ones - died
+// before a single assertion ran, and took `pnpm test:unit` red with it.
+//
+// Resolved at runtime instead, through the same `xchain-sdk` alias the shells
+// import, which reads the SDK the wallet actually SHIPS. A sibling checkout is
+// still honoured when one is present so working across both repos locally keeps
+// behaving as before. This is verbatim the pattern
+// test/integration/hd/wallet-sdk-derivation-parity.test.js already uses, down to
+// the XCHAIN_REQUIRE_SIBLINGS escape below; the path depth is identical.
+const here = dirname(fileURLToPath(import.meta.url));
+const requireFromCore = createRequire(join(here, '..', '..', '..', 'packages', 'core', 'package.json'));
+const sdkFile = (...parts) => {
+    const spec = `xchain-sdk/${parts.join('/')}`;
+    try {
+        return requireFromCore.resolve(spec);
+    } catch {
+        const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
+        return existsSync(sibling) ? sibling : null;
+    }
+};
+const constantsPath = sdkFile('src', 'preflight', 'constants.js');
+const preflightConstants = constantsPath === null ? null : createRequire(import.meta.url)(constantsPath);
 
 afterEach(cleanup);
 
@@ -220,6 +253,36 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
         expect(chip().className).toMatch(/chip_unreached/);
     });
 
+});
+
+// Everything the panel hand-copies from the SDK, pinned against the SDK. The
+// panel imports nothing from it at runtime (extension bundle), so these literals
+// are the whole contract and nothing but a test can hold them to it.
+//
+// Its own describe because it is the only block here that needs the SDK
+// resolved, so the absent-SDK gate below can cover exactly these cases and leave
+// the rendering suite above running unconditionally.
+describe('PreflightPanel <-> xchain-sdk contract', () => {
+    if (preflightConstants === null) {
+        // House convention (test/integration/hd/wallet-sdk-derivation-parity.test.js,
+        // test/unit/ActionManifestConformance.test.js): skip when the SDK cannot be
+        // resolved, UNLESS XCHAIN_REQUIRE_SIBLINGS=1, which the cross-repo drift job
+        // sets and which then fails loud. A guard allowed to vanish silently is the
+        // failure mode the guard exists to catch.
+        it('contract guard requires the xchain-sdk package', (ctx) => {
+            if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {
+                throw new Error(
+                    'xchain-sdk could not be resolved, either as the published package via the ' +
+                    '`xchain-sdk` alias or as a sibling checkout. This block pins PreflightPanel\'s ' +
+                    'hand-copied Tier-1 codes and report schema version against the SDK and must ' +
+                    'run with the SDK present; XCHAIN_REQUIRE_SIBLINGS=1 was set but it is absent.'
+                );
+            }
+            ctx.skip();
+        });
+        return;
+    }
+
     // The panel duplicates the two Tier-1 codes as literals on purpose: it is
     // rendered by the extension approval root and must not pull the SDK into
     // that bundle. So the parity lives here, where importing the SDK is free
@@ -237,5 +300,22 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
         for (const code of Object.values(TIER1_NOTICE_CODES)) {
             expect(registry).toContain(code);
         }
+    });
+
+    // : the panel interprets the report's fields and never reads
+    // report.schemaVersion, and the SDK's constants.js says in as many words that
+    // the additive-only rule "has no enforcement point". This is that point. It
+    // fires on an SDK bump, which is the moment a human has to re-read the panel's
+    // field handling; see SUPPORTED_SCHEMA_VERSION in PreflightPanel.jsx for why
+    // the enforcement is build-time and not a runtime degrade path.
+    it('is written against the SDK report schema version the SDK still emits', () => {
+        expect(SUPPORTED_SCHEMA_VERSION).toBe(preflightConstants.REPORT_SCHEMA_VERSION);
+    });
+
+    // The pin is only worth having while the panel's fixtures are the shape the
+    // SDK actually stamps. A report carrying some other version would mean the
+    // fixtures above stopped describing reality, so assert the two agree.
+    it('renders fixtures stamped with the supported schema version', () => {
+        expect(reportWith('pass').schemaVersion).toBe(SUPPORTED_SCHEMA_VERSION);
     });
 });

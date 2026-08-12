@@ -60,6 +60,22 @@ describe('addIntegrityAttributes', () => {
         expect(html.match(/crossorigin/g)).toHaveLength(2);
     });
 
+    it('adds integrity + crossorigin to a modulepreload link', () => {
+        // The matcher's third arm, and the only one nothing covered. Vite emits
+        // <link rel="modulepreload"> for chunks it wants fetched early, so those
+        // bytes are executable weight that arrives BEFORE the tag importing
+        // them. Dropping `modulepreload` from wantsIntegrity would strip SRI
+        // from exactly that path and still pass every other test in this file.
+        const preloaded = 'export const vendor = 2;';
+        const { html, hashed } = addIntegrityAttributes(
+            '<link rel="modulepreload" href="/assets/vendor.js">',
+            () => preloaded,
+        );
+        expect(hashed).toEqual(['/assets/vendor.js']);
+        expect(html).toContain(`integrity="${sha384(preloaded)}"`);
+        expect(html.match(/crossorigin/g)).toHaveLength(1);
+    });
+
     it('leaves a favicon link alone', () => {
         // An integrity attr on a favicon buys nothing and is a deploy footgun.
         const { html, hashed } = addIntegrityAttributes(

@@ -28,11 +28,71 @@ const viteSrc = readFileSync(viteConfigPath, 'utf8');
 
 // --- 1. The policy locks down the XSS-defining directives ----------------
 
-assert.match(CONTENT_SECURITY_POLICY, /default-src 'self'/, "default-src is 'self'");
-assert.match(CONTENT_SECURITY_POLICY, /script-src 'self'/, "script-src is 'self'");
-assert.match(CONTENT_SECURITY_POLICY, /object-src 'none'/, "object-src is 'none'");
-assert.match(CONTENT_SECURITY_POLICY, /base-uri 'none'/, "base-uri is 'none'");
-assert.match(CONTENT_SECURITY_POLICY, /frame-ancestors 'none'/, "frame-ancestors is 'none'");
+// Parse before asserting. A substring match answers "is this text in there",
+// which is the wrong question for a CSP: `object-src 'none' https://evil.example`
+// matches /object-src 'none'/ and is not object-src 'none' at all. Every widening
+// this file exists to catch is invisible to a substring, so the policy is split
+// into a directive -> sources map and each directive compared source-for-source.
+const parsePolicy = (policy) => Object.fromEntries(
+    policy
+        .split(';')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+            const [name, ...sources] = part.split(/\s+/);
+            return [name, sources];
+        }),
+);
+
+// Written out rather than imported from csp.js: importing the table to check the
+// table passes for whatever the table happens to say. This second copy makes a
+// widening a two-place edit that shows up as a failing diff.
+const EXPECTED_DIRECTIVES = {
+    'default-src': ["'self'"],
+    'script-src': ["'self'", 'https://connect.trezor.io'],
+    'style-src': ["'self'", "'unsafe-inline'"],
+    'frame-src': ["'self'", 'https://connect.trezor.io'],
+    'img-src': ["'self'", 'data:', 'blob:'],
+    'font-src': ["'self'", 'data:'],
+    'connect-src': [
+        "'self'",
+        'https:',
+        'wss:',
+        'http://localhost:*',
+        'http://127.0.0.1:*',
+        'ws://localhost:*',
+        'ws://127.0.0.1:*',
+    ],
+    'worker-src': ["'self'", 'blob:'],
+    'object-src': ["'none'"],
+    'base-uri': ["'none'"],
+    'form-action': ["'none'"],
+    'frame-ancestors': ["'none'"],
+};
+
+const shipped = parsePolicy(CONTENT_SECURITY_POLICY);
+
+// The directive SET first: a directive silently dropped is a directive that
+// falls back to default-src, or (for form-action) to no restriction at all.
+assert.deepEqual(
+    Object.keys(shipped).sort(),
+    Object.keys(EXPECTED_DIRECTIVES).sort(),
+    'the shipped policy declares exactly the expected directives, no more and no fewer',
+);
+
+for (const [name, sources] of Object.entries(EXPECTED_DIRECTIVES)) {
+    assert.deepEqual(
+        shipped[name],
+        sources,
+        `${name} must be exactly [${sources.join(' ')}]; got [${(shipped[name] ?? []).join(' ')}]`,
+    );
+}
+
+// form-action had no check here of any kind, which is the gap worth naming: a
+// policy that forbids injected script but lets an injected <form> POST the
+// page's contents to an attacker origin has left open the exfiltration route it
+// closed everywhere else.
+assert.deepEqual(shipped['form-action'], ["'none'"], "form-action is 'none'");
 
 // No script-side code-injection escape hatches.
 assert.doesNotMatch(

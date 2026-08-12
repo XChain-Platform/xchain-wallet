@@ -55,6 +55,45 @@ describe('confirmChecks', () => {
             expect(res.ok).toBe(false);
         });
 
+        // Exact satoshi comparison (). DOGE clears 2^53 koinu at ~90M DOGE, and
+        // `s.value === Number(out.value)` collapsed 9007199254740992 and ...993 onto the
+        // same double, so a one-koinu mutation still matched its expected slot.
+        it('a one-koinu mutation above 2^53 is tamper, not a match', () => {
+            const psbt = 'bigTamper';
+            const expected = buildExpectedOutputs({
+                customOutputs: [{ address: 'payee', value: '9007199254740992' }], encoding: 'OP_RETURN',
+            });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [CARRIER_OPRETURN, { address: 'payee', scriptType: 'p2pkh', scriptPubKeyHex: '76a9', value: '9007199254740993' }] }),
+            });
+            expect(res.ok).toBe(false);
+            expect(res.unexpected).toHaveLength(1);
+            expect(res.unexpected[0].value).toBe('9007199254740993');
+        });
+
+        it('an exact match above 2^53 still passes', () => {
+            const psbt = 'bigClean';
+            const expected = buildExpectedOutputs({
+                customOutputs: [{ address: 'payee', value: '9007199254740993' }], encoding: 'OP_RETURN',
+            });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [CARRIER_OPRETURN, { address: 'payee', scriptType: 'p2pkh', scriptPubKeyHex: '76a9', value: '9007199254740993' }] }),
+            });
+            expect(res.ok).toBe(true);
+        });
+
+        it('matches a number expected value against the string a PSBT decomposes to', () => {
+            const psbt = 'mixed';
+            const expected = buildExpectedOutputs({ customOutputs: [FEE_OUT], encoding: 'OP_RETURN' });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [CARRIER_OPRETURN, { address: 'feeDest', scriptType: 'p2pkh', scriptPubKeyHex: '76a9', value: '2000' }] }),
+            });
+            expect(res.ok).toBe(true);
+        });
+
         it('whitelists the ADS output (present in customOutputs) and flags it isAds', () => {
             const psbt = 'ads';
             const adsOutput = { address: 'donateHere', value: 1500 };

@@ -41,10 +41,24 @@ assert.ok(/data-scheme=/.test(badgeFile),
     'badge exposes a scheme dataset attribute');
 assert.ok(/aria-label/.test(badgeFile),
     'badge sets aria-label for screen readers');
-assert.ok(/MuSig2/.test(badgeFile),
-    'badge labels taproot-musig2 as "MuSig2"');
-assert.ok(/P2SH/.test(badgeFile) && /P2WSH/.test(badgeFile),
-    'badge labels P2SH and P2WSH schemes');
+// The VISIBLE tag is a plain word. A lexical /MuSig2/ over the whole file
+// passed either way once SCHEME_CODE existed, so assert against the
+// SCHEME_TAG body specifically or this stops measuring what a user reads.
+const schemeTagBody = /const SCHEME_TAG = \{([\s\S]*?)\};/.exec(badgeFile)?.[1] || '';
+for (const [scheme, label] of [
+    ['p2sh-multisig', 'Classic'],
+    ['p2wsh-multisig', 'SegWit'],
+    ['taproot-musig2', 'Taproot'],
+]) {
+    assert.ok(new RegExp(`'${scheme}':\\s*'${label}'`).test(schemeTagBody),
+        `badge shows "${label}" as the visible tag for ${scheme}`);
+}
+assert.ok(!/P2SH|P2WSH|MuSig2/.test(schemeTagBody),
+    'badge keeps protocol abbreviations out of the visible tag');
+assert.ok(/MuSig2/.test(badgeFile) && /P2SH/.test(badgeFile) && /P2WSH/.test(badgeFile),
+    'badge still carries the abbreviations as advanced detail (SCHEME_CODE)');
+assert.ok(/SCHEME_CODE\[scheme\]/.test(badgeFile) && /\$\{code \? `, \$\{code\}` : ''\}/.test(badgeFile),
+    'badge appends the protocol abbreviation to the aria/title string');
 
 // ─── Receive: replaces inline multisig pill with the badge ───
 

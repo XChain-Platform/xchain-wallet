@@ -202,7 +202,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 <Section title="Publishing activity" loading={broadcasts.loading} error={broadcasts.error}>
                     {recentBroadcasts.length === 0 ? (
                         <p className={dashStyles.entryDescription}>
-                            No BROADCASTs from this address yet. Use Publisher mode below to publish a feed value.
+                            No published feed values from this address yet. Use Publisher mode below to publish one.
                         </p>
                     ) : (
                         <ul style={{ margin: 0, paddingLeft: '1rem' }}>
@@ -336,7 +336,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
         event.preventDefault();
         if (submitState === 'submitting') return;
         if (!fromAddress) { setError('Source address not loaded yet.'); return; }
-        if (!feedActionIndex.trim()) { setError('Feed action index is required.'); return; }
+        if (!feedActionIndex.trim()) { setError('Feed reference number is required.'); return; }
         if (!value.trim()) { setError('Value is required.'); return; }
         if (!isHwSource && (!signerReady && password.length === 0)) { setError('Password is required.'); return; }
         if (isHwSource && hwStatus !== 'available') { setError('Hardware signer is not ready.'); return; }
@@ -390,15 +390,15 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
             </h3>
             {!open ? (
                 <p className={dashStyles.entryDescription}>
-                    Rapid-entry quick-compose for v3 BROADCAST feed-result publishing. Pre-fills the most recent feed action index; enter successive values without re-typing the feed.
+                    Rapid-entry quick-compose for publishing feed values. Pre-fills your most recent feed reference number, so you can enter successive values without re-typing it.
                 </p>
             ) : (
                 <form onSubmit={handleSubmit} noValidate>
                     <Input
-                        label="Feed action index"
+                        label="Feed reference number"
                         hint={feed
-                            ? 'Pre-filled from your most recent v2 BROADCAST feed-create. Override to publish to a different feed.'
-                            : 'No v2 feed-create found for this address. Enter the action index manually, or sign a v2 BROADCAST first.'}
+                            ? 'Pre-filled from the most recent feed you created. Override it to publish to a different feed.'
+                            : 'No feed found for this address. Enter its reference number, or create a feed first.'}
                         value={feedActionIndex}
                         onChange={(e) => setFeedActionIndex(e.target.value)}
                         autoComplete="off"

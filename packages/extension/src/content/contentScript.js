@@ -120,6 +120,13 @@
     if (chrome.runtime?.onMessage?.addListener) {
         chrome.runtime.onMessage.addListener((message) => {
             if (!message || message.type !== 'bridge.event') return;
+            // The broadcaster picked this tab from a URL snapshot and addressed
+            // the send by tab id, so a navigation since then means the event
+            // belongs to the previous origin, not this document. This listener
+            // is the only check that runs against the page actually loaded, so
+            // it is the authoritative gate: drop anything not stamped for us
+            // ().
+            if (message.origin !== window.location.origin) return;
             window.postMessage({
                 source: EVENT_SOURCE,
                 event: message.event,

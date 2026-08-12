@@ -251,6 +251,24 @@ describe('duplicate and failure defenses', () => {
         expect(notify).not.toHaveBeenCalled();
     });
 
+    // The restart half of . submitWithSigner now AWAITS the durable
+    // 'broadcasting' put before broadcastTx, so any transaction the network could
+    // have accepted has left this exact row behind. This watcher is a fresh instance
+    // with an empty _attempted set - the restarted process - and the durable row is
+    // the only thing standing between the match and a second payment.
+    it("a durable 'broadcasting' row blocks the payment after a restart", async () => {
+        const vault = makeVault({
+            pendingTxs: [{
+                action: 'COINPAY', status: 'broadcasting',
+                actionSummary: 'Auto-paid match #900 for order #7',
+                params: null,
+            }],
+        });
+        const { watcher, coinpayAction } = makeWatcher({ vault });
+        await watcher.pollOnce();
+        expect(coinpayAction).not.toHaveBeenCalled();
+    });
+
     it('compose failure before broadcast frees the attempt and the hold; balance-short is classified', async () => {
         const failing = vi.fn(async () => { throw new Error('Insufficient funds for output + fee'); });
         const { watcher, ledger, notify } = makeWatcher({ coinpayAction: failing });

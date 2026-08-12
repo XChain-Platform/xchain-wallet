@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, Icon, Input, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, Icon, InfoTip, Input, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -751,13 +751,26 @@ export function AddressList({
             fields.push({ label: 'Address format', value: String(selected.record.addressType).toUpperCase() });
         }
         if (selected.multisig) {
+            // The badge, not a template string: interpolating .scheme printed the
+            // stored identifier ("2-of-2 (taproot-musig2)") on the one multisig
+            // surface that did not already render <MultisigBadge> (XC review #4384).
             fields.push({
                 label: 'Multisig',
-                value: `${selected.multisig.threshold}-of-${selected.multisig.cosignerCount} (${selected.multisig.scheme})`,
+                value: (
+                    <MultisigBadge
+                        threshold={selected.multisig.threshold}
+                        cosignerCount={selected.multisig.cosignerCount}
+                        scheme={selected.multisig.scheme}
+                    />
+                ),
             });
         }
         if (selected.record?.derivationPath) {
-            fields.push({ label: 'Derivation path', value: selected.record.derivationPath });
+            fields.push({
+                label: 'Derivation path',
+                value: selected.record.derivationPath,
+                hint: 'Where this account sits inside your recovery phrase. Different paths produce different addresses from the same phrase; it is a technical detail you rarely need to change.',
+            });
         }
         const openXchain = () => {
             const base = d?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
@@ -924,7 +937,10 @@ export function AddressList({
                             someone wraps the value in another element . */}
                         {fields.map((f) => (
                             <div key={f.label} className={local.detailField}>
-                                <div className={local.detailLabel}>{f.label}</div>
+                                <div className={local.detailLabel}>
+                                    {f.label}
+                                    {f.hint ? <InfoTip aria={`${f.label} help`} label={f.hint} /> : null}
+                                </div>
                                 <div
                                     className={local.detailValue}
                                     data-testid={'address-detail-' + f.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}

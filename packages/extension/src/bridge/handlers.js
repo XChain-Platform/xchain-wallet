@@ -178,14 +178,26 @@ export function registerBridgeHandlers(host, opts = {}) {
     register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
         await assertNotBlocked(req, deps);
+        // Read the option names bridge-spec's ConnectOpts actually publishes.
+        // The handler read `chains` / `bridgeVersion`, which no spec-compliant
+        // dApp sends (the inject provider forwards opts verbatim), so chain
+        // preselection was silently dropped and `isBridgeVersionSupported`
+        // always saw `undefined` and passed, skipping negotiation outright
+        // (). Legacy names stay accepted as a fallback so in-repo
+        // callers need no atomic migration.
+        const requiredBridgeVersion = req.requiredBridgeVersion ?? req.bridgeVersion;
+        const requestedChains = req.requestedChains ?? req.chains;
         // Cluster F FOLLOWUP 3: version negotiation. Reject the
         // connect cleanly when the dApp asks for a bridge version
         // we don't implement, instead of accepting and failing later
-        // when a version-specific method gets called.
-        if (!isBridgeVersionSupported(req.bridgeVersion)) {
+        // when a version-specific method gets called. The spec's own comment
+        // on requiredBridgeVersion says "warns the user"; the hard reject is
+        // the deliberate conservative reading and stays until product says
+        // otherwise.
+        if (!isBridgeVersionSupported(requiredBridgeVersion)) {
             throw bridgeError(
                 'BRIDGE_VERSION_MISMATCH',
-                `requested ${JSON.stringify(req.bridgeVersion)}; supported: ${BRIDGE_SUPPORTED_VERSIONS.join(', ')}`,
+                `requested ${JSON.stringify(requiredBridgeVersion)}; supported: ${BRIDGE_SUPPORTED_VERSIONS.join(', ')}`,
             );
         }
         const { origin, appName = origin, appIcon } = req;
@@ -204,7 +216,10 @@ export function registerBridgeHandlers(host, opts = {}) {
             } else {
                 await touchLastUsed(deps.vault, existing);
                 return {
-                    version: req.bridgeVersion ?? BRIDGE_SPEC_VERSION,
+                    // The wallet's own bridge version, never the request's:
+                    // requiredBridgeVersion is a semver RANGE (e.g. '^0.1.0'),
+                    // so echoing it back would report a range as a version.
+                    version: BRIDGE_SPEC_VERSION,
                     supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
                     chains: existing.permissions.chains,
                     accounts: existing.permissions.accounts,
@@ -234,7 +249,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             );
             const accountIds = (await deps.vault.accounts.list()).map((a) => a.id);
             const scope = resolveAutoApproveScope({
-                requestedChains: req.chains,
+                requestedChains,
                 requestedAccounts: req.accounts,
                 activeChainIds,
                 accountIds,
@@ -255,7 +270,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 origin,
                 appName,
                 appIcon,
-                requestedChains: req.chains,
+                requestedChains,
                 requestedAccounts: req.accounts,
             });
         }
@@ -268,6 +283,20 @@ export function registerBridgeHandlers(host, opts = {}) {
             canSignMessage: decision.canSignMessage === true,
             canSignAction: decision.canSignAction ?? {},
         };
+        // §43.3 reads an empty account list as a WILDCARD: getAccounts and
+        // getAddresses fall back to every account, and assertAddressPermitted
+        // returns "all permitted". The connect approval screen has no account
+        // selector and ConnectOpts has no account field, so the prompt path
+        // approved a chain and stored `accounts: []`, handing the site every
+        // account and address with no account review (). Narrow an
+        // empty grant to the primary account, which is exactly what
+        // resolveAutoApproveScope already does on the auto-approve path and for
+        // the same reason. Left empty when the vault has no accounts: there is
+        // nothing to grant, and the read handlers return empty sets anyway.
+        if (permissions.accounts.length === 0) {
+            const [primaryAccount] = await deps.vault.accounts.list();
+            if (primaryAccount) permissions.accounts = [primaryAccount.id];
+        }
         const site = schemas.createConnectedSite({
             origin, appName, appIcon,
             permissions,
@@ -275,7 +304,8 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         await deps.vault.connectedSites.put(site);
         return {
-            version: req.bridgeVersion ?? BRIDGE_SPEC_VERSION,
+            // The wallet's own bridge version; see the existing-site return.
+            version: BRIDGE_SPEC_VERSION,
             supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
             chains: permissions.chains,
             accounts: permissions.accounts,
@@ -741,15 +771,64 @@ async function executeSignAction(req, deps, ctx) {
     const permission = site.permissions.canSignAction?.[actionName] ?? 'ask';
     if (permission === 'never') throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
 
+    // bridge-spec publishes the spending address as `fromAddress` (SEND and
+    // SWEEP alike); the handler read `params.from`, a name no published shape
+    // carries, so the account-scope gate below was fed `undefined` and the flow
+    // call was fed a key it does not accept (). Read the published name
+    // first, keep the legacy one as a fallback, and accept an address record as
+    // well as a plain string since in-repo callers pass both.
+    const rawFrom = req.params?.fromAddress ?? req.params?.from;
+    const spendFromAddress = typeof rawFrom === 'string' ? rawFrom : rawFrom?.address;
+
     // §43.3: enforce the per-account scope granted at connect. SEND/SWEEP
-    // both spend from `params.from`; a site scoped to a subset of accounts
+    // both spend from the source address; a site scoped to a subset of accounts
     // must not initiate a signature for an account it was never granted,
     // even though the approval prompt would also surface it.
-    await assertAddressPermitted(deps, site, req.chainId, req.params?.from);
+    await assertAddressPermitted(deps, site, req.chainId, spendFromAddress);
 
     // The signing wallet is the one that owns the spending address. Resolve it
     // once: it keys the auto-sign cache and is the fallback walletId below.
-    const walletId = await walletIdForAddress(deps.vault, req.params?.from);
+    const walletId = await walletIdForAddress(deps.vault, spendFromAddress);
+
+    // Published destination / asset names, mapped once here so the approval
+    // screen and the flow call read the same fields. The legacy in-repo names
+    // (`to`, `tick`, `amount`) stay as fallbacks; nothing in the repo sends
+    // both ().
+    const params = req.params ?? {};
+    const toAddress = params.toAddress ?? params.to;
+    const sendTick = params.asset ?? params.tick;
+    // One of the published gaps is a UNIT gap, not a name gap: `amountRaw` is
+    // an integer in BASE units while the flow signs a human-scale decimal
+    // AMOUNT (nativePayment.satsStringFromDecimal multiplies it by 1e8 to size
+    // the real output). Renamed rather than converted, the reference dApp's own
+    // `{ asset: 'BTC', amountRaw: '10000' }` (0.0001 BTC) signs as 10,000 BTC.
+    //
+    // Converted BEFORE the approval on purpose: the screen describes whichever
+    // payload the prompt below is handed, so a conversion made after it would
+    // sign a magnitude the user was never shown, which is the same 1e8 swing
+    // relocated rather than fixed. Only entered when the caller actually sent
+    // `amountRaw`, so the legacy decimal path and the gate ordering pinned by
+    // test/unit/bridge/parallel.test.js are untouched.
+    const needsScale = actionName === 'SEND'
+        && params.amountRaw !== undefined && params.amountRaw !== null
+        && (params.amount === undefined || params.amount === null);
+    // A source the vault does not hold is refused BEFORE the indexer is asked
+    // to price it, so an unknown address still reports ADDRESS_NOT_FOUND rather
+    // than a scale failure. Hoisted only on this path: doing it for every
+    // action would move ADDRESS_NOT_FOUND ahead of USER_REJECTED and break the
+    // batch gate order that same parallel.test.js pins.
+    let fromSource = needsScale
+        ? await requireSourceRecord(deps, req.chainId, spendFromAddress)
+        : null;
+    const sendAmount = needsScale
+        ? await decimalAmountFromBaseUnits({
+            deps,
+            chainId: req.chainId,
+            address: spendFromAddress,
+            tick: sendTick,
+            amountRaw: params.amountRaw,
+        })
+        : params.amount;
 
     // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Only for the
     // single-action path (preDecision means the grouped parallel modal already
@@ -776,13 +855,28 @@ async function executeSignAction(req, deps, ctx) {
 
     // A grouped parallel decision is reused for every action in the batch; the
     // single-action path (and the per-action fallback) prompts here.
+    //
+    // The payload is the PROTOCOL shape, not the request's. Everything that
+    // renders this screen reads protocol keys - `decoder.describe`'s decodeSend
+    // takes TICK / AMOUNT / DESTINATION (xchain-sdk describe.js:250-254),
+    // simulateAction takes the same, and resolveDisplayTickers only walks
+    // TICK_REF_FIELDS - so handing it the dApp's own vocabulary rendered
+    // "Send ? ? to ?" with no amount and no destination on the one screen whose
+    // job is to state what is being authorized. Built from the same
+    // `toAddress` / `sendTick` / `sendAmount` the flow call below signs, so the
+    // number on screen is the number signed (). `from` targets the
+    // screen's balance-preview read at the spending address, and `requested`
+    // keeps the dApp's literal params in the developer raw view; neither is a
+    // protocol key and no describer renders them.
     if (!decision) {
         decision = await approvals.signAction({
             origin: req.origin,
             kind: 'signAction',
             chainId: req.chainId,
             action: actionName,
-            payload: req.params,
+            payload: approvalPayload(actionName, {
+                params, toAddress, tick: sendTick, amount: sendAmount, spendFromAddress,
+            }),
         });
     }
     if (!decision?.approved) throw new UserRejectedError('signAction');
@@ -822,10 +916,32 @@ async function executeSignAction(req, deps, ctx) {
     // BroadcastFailedError recovery. Re-applying it after the spread
     // forces every bridge-driven spend to keep tracking on regardless of
     // what the caller sent.
-    const params = req.params ?? {};
+    //
+    // The published param vocabulary is not the flow's. bridge-spec's
+    // SendActionParams / SweepActionParams carry fromAddress / toAddress /
+    // asset / amountRaw as plain strings, while sendToken and sweepToken take
+    // from / to / tick / amount with `from` as a resolved address record
+    // (normalizeSource rejects a bare string). Forwarded unmapped, a
+    // spec-compliant SEND died on "sendToken: from is required" before signing
+    // (). Translate AFTER the spread so the published names win over
+    // anything the caller sent under the same key. `from` is resolved from the
+    // VAULT, not from the request: the flow needs a public key the dApp has
+    // none of, and a caller-named source record would sidestep the lookup.
+    //
+    // `toAddress` / `sendTick` / `sendAmount` were resolved before the approval
+    // so the screen described the same values; the vault lookup stays here
+    // unless the amountRaw path already needed it, because doing it earlier for
+    // every action would turn an unresolvable source into ADDRESS_NOT_FOUND
+    // ahead of USER_REJECTED and break the batch gate order pinned by
+    // test/unit/bridge/parallel.test.js.
+    fromSource = fromSource ?? await requireSourceRecord(deps, req.chainId, spendFromAddress);
     if (actionName === 'SEND') {
         return sendToken({
             ...params,
+            from: fromSource,
+            to: toAddress,
+            tick: sendTick,
+            amount: sendAmount,
             vault: deps.vault,
             walletId: decision.walletId ?? walletId,
             password: decision.password,
@@ -837,8 +953,14 @@ async function executeSignAction(req, deps, ctx) {
         });
     }
     if (actionName === 'SWEEP') {
+        // SweepActionParams' optional single-asset `asset` has no consumer:
+        // sweepToken empties by category flags (balances / ownerships / ...),
+        // not per-asset. Mapping from/to restores the action; per-asset sweep
+        // needs a core change and is deliberately left unwired here.
         return sweepToken({
             ...params,
+            from: fromSource,
+            to: toAddress,
             vault: deps.vault,
             walletId: decision.walletId ?? walletId,
             password: decision.password,
@@ -850,6 +972,113 @@ async function executeSignAction(req, deps, ctx) {
         });
     }
     throw bridgeError('UNREACHABLE', 'supported action fell through');
+}
+
+// The vault's own record for a spending address, or ADDRESS_NOT_FOUND. The
+// flow needs a public key the dApp has none of, so the source is always
+// resolved from the VAULT rather than taken from the request.
+async function requireSourceRecord(deps, chainId, address) {
+    const source = await findAddressByString(deps.vault, address, chainId, deps.chainRegistry);
+    if (!source) throw bridgeError('ADDRESS_NOT_FOUND', address ?? '');
+    return source;
+}
+
+// Base-unit integer string -> plain decimal string at `divisibility` places,
+// BigInt-exact (no float round-trip, no precision ceiling). The inverse of
+// nativePayment.satsStringFromDecimal, which the native send path applies to
+// the value this returns. Returns null for anything that is not a
+// non-negative integer at a sane scale, so the caller refuses rather than
+// signs a guess.
+function decimalFromBaseUnits(raw, divisibility) {
+    const s = String(raw).trim();
+    if (!/^\d+$/.test(s)) return null;
+    const d = Number(divisibility);
+    if (!Number.isInteger(d) || d < 0 || d > 30) return null;
+    if (d === 0) return BigInt(s).toString();
+    const padded = s.padStart(d + 1, '0');
+    const whole = BigInt(padded.slice(0, padded.length - d)).toString();
+    const frac = padded.slice(padded.length - d).replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : whole;
+}
+
+// Resolve a published `amountRaw` (base units) into the decimal AMOUNT the send
+// flow signs, scaling by the ASSET's own divisibility ().
+//
+// The scale is read from the SPENDING address's balances, the same
+// `{ native, tokens }` shape bridge.getBalances already serves: native carries
+// the chain's 8-decimal scale, each token row carries the issuance `decimals`
+// the explorer reports. A token the address does not hold has no row, and a
+// token it does not hold cannot be sent, so "no row" and "cannot send" are the
+// same set.
+//
+// Every failure mode refuses. A missing row, a failed balance read, an
+// unparseable amount and an absurd scale all raise INVALID_PARAMS rather than
+// defaulting to a divisibility, because a defaulted scale is a silent
+// multiplication of the spend. The converted value is what the approval screen
+// displays, so a scale that is wrong is wrong in front of the user rather than
+// behind them.
+async function decimalAmountFromBaseUnits({ deps, chainId, address, tick, amountRaw }) {
+    const asset = typeof tick === 'string' ? tick.trim() : '';
+    if (!asset) {
+        throw bridgeError('INVALID_PARAMS', 'amountRaw needs an asset to scale by; none was sent');
+    }
+    let shape;
+    try {
+        shape = await addressBalances({
+            sdkRegistry: deps.sdkRegistry,
+            chainRegistry: deps.chainRegistry,
+            chainId,
+            address,
+        });
+    } catch (err) {
+        throw bridgeError(
+            'INVALID_PARAMS',
+            `cannot scale amountRaw: ${asset} balance read failed (${err?.message ?? 'unknown error'})`,
+        );
+    }
+    const same = (a) => String(a ?? '').trim().toUpperCase() === asset.toUpperCase();
+    const row = same(shape?.native?.tick)
+        ? shape.native
+        : (Array.isArray(shape?.tokens) ? shape.tokens.find((t) => same(t?.tick)) : null);
+    if (!row || row.divisibility === undefined || row.divisibility === null) {
+        throw bridgeError(
+            'INVALID_PARAMS',
+            `cannot scale amountRaw: ${address} holds no ${asset}, so its divisibility is unknown`,
+        );
+    }
+    const amount = decimalFromBaseUnits(amountRaw, row.divisibility);
+    if (amount === null) {
+        throw bridgeError(
+            'INVALID_PARAMS',
+            `amountRaw must be a non-negative base-unit integer for ${asset}`,
+        );
+    }
+    return amount;
+}
+
+// The protocol-shaped params the approval screen describes, built from the same
+// values the flow call signs. SEND renders TICK / AMOUNT / DESTINATION; SWEEP
+// renders DESTINATION plus the category flags, defaulted exactly as
+// sweepToken defaults them, so the sentence on screen matches what settles.
+function approvalPayload(actionName, { params, toAddress, tick, amount, spendFromAddress }) {
+    const flag = (v, dflt) => ((v ?? dflt) ? '1' : '0');
+    const common = {
+        DESTINATION: toAddress,
+        ...(params.memo !== undefined ? { MEMO: params.memo } : {}),
+        from: { address: spendFromAddress },
+        requested: params,
+    };
+    if (actionName === 'SWEEP') {
+        return {
+            ...common,
+            BALANCES: flag(params.balances, true),
+            OWNERSHIPS: flag(params.ownerships, true),
+            ORDERS: flag(params.orders, false),
+            SWAPS: flag(params.swaps, false),
+            DISPENSERS: flag(params.dispensers, false),
+        };
+    }
+    return { ...common, TICK: tick, AMOUNT: amount };
 }
 
 // Normalize one executeSignAction return into a SignActionResult carrying an

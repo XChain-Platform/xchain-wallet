@@ -100,6 +100,7 @@ export async function runExample(): Promise<ExampleReport> {
     }
 
     const signMsg = await provider.signMessage({
+        chainId,
         address: fromAddress,
         message: 'Hello from example.com',
     });

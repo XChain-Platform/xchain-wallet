@@ -96,6 +96,23 @@ function makeFakeTabs(tabs) {
     assert.equal(fake.sent[0].message.type, 'bridge.event');
     assert.equal(fake.sent[0].message.event, 'disconnect');
     assert.equal(fake.sent[0].message.payload, 'user-requested');
+    // The origin check above reads a URL snapshot while the send is addressed by
+    // a mutable tab id, so the message must name the origin it was meant for and
+    // the content script must re-check it against the document it actually runs
+    // in (). Both halves, or the guard is a comment.
+    assert.equal(
+        fake.sent[0].message.origin,
+        'https://dapp.example',
+        'fanned-out event names its intended origin',
+    );
+    const contentSrc = readFileSync(
+        join(wsRoot, 'packages', 'extension', 'src', 'content', 'contentScript.js'),
+        'utf8',
+    );
+    assert.ok(
+        /message\.origin !== window\.location\.origin\) return;/.test(contentSrc),
+        'content script drops a bridge.event stamped for another origin',
+    );
 }
 
 // --- 2. Skipping degenerate tabs --------------------------------------

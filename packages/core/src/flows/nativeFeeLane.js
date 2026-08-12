@@ -50,6 +50,8 @@
 // prediction is the only thing such a guard could catch, and both callers now
 // branch on `encoded.encoding`.
 
+import { sameSats } from './confirmChecks.js';
+
 /** Encodings whose action rides a second, revealing transaction. */
 const CHUNK_LANE = Object.freeze(['P2SH', 'P2WSH']);
 
@@ -97,8 +99,11 @@ export function isChunkEncoding(encoding) {
  */
 export function withoutCustomOutput(encoderOpts, output) {
     const outs = Array.isArray(encoderOpts?.customOutputs) ? encoderOpts.customOutputs : [];
+    // Exact satoshi match, not Number() equality (): this builds the EXPECTED-OUTPUT
+    // set the §5.3.2 tamper check consumes, so a >2^53 collapse here removes the wrong output
+    // and reopens the same one-koinu hole from the other side.
     const kept = outs.filter((o) => !(o
         && o.address === output.address
-        && Number(o.value) === Number(output.value)));
+        && sameSats(o.value, output.value)));
     return { ...encoderOpts, customOutputs: kept };
 }

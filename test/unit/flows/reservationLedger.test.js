@@ -48,6 +48,59 @@ describe('reservationLedger (in-memory)', () => {
         const deltas = await led.localDeltas('btc', 'w2');
         expect(deltas).toEqual([{ tick: 'JDOG', amount: '100' }]);
     });
+
+    // Exact decimal netting (). Float accumulation understated the delta the
+    // concurrent-spend guard subtracts, which is a silently weakened guard.
+    it('nets fractional reservations exactly (no float residue)', async () => {
+        const led = createReservationLedger();
+        await led.reserve({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: '0.1' });
+        await led.reserve({ id: 'b', chainId: 'btc', tick: 'JDOG', amount: '0.2' });
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '0.3' }]);
+    });
+
+    it('nets integer reservations past 2^53 without rounding', async () => {
+        const led = createReservationLedger();
+        await led.reserve({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: '9007199254740993' });
+        await led.reserve({ id: 'b', chainId: 'btc', tick: 'JDOG', amount: '1' });
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '9007199254740994' }]);
+    });
+
+    it('keeps an 18-decimal dust reservation in the total', async () => {
+        const led = createReservationLedger();
+        await led.reserve({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: '1' });
+        await led.reserve({ id: 'b', chainId: 'btc', tick: 'JDOG', amount: '0.000000000000000001' });
+        expect(await led.localDeltas('btc')).toEqual([
+            { tick: 'JDOG', amount: '1.000000000000000001' },
+        ]);
+    });
+
+    // A reserve() caller stringifies a JS number, so a small enough amount arrives as
+    // "1e-8"; the exact summer skips anything not already plain decimal, and a skipped
+    // reservation is one missing from the delta.
+    it('counts a scientific-notation amount instead of dropping it', async () => {
+        const led = createReservationLedger();
+        await led.reserve({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: String(1e-8) });
+        await led.reserve({ id: 'b', chainId: 'btc', tick: 'JDOG', amount: '1' });
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '1.00000001' }]);
+    });
+
+    // The other half of that rule: an amount no normalizer can read must not be dropped
+    // either. Dropping it understates the delta exactly as the float sum did, so the tick
+    // stays in the result carrying a total no balance can cover, and the guard blocks.
+    it('nets an unreadable reservation at a blocking total rather than dropping it', async () => {
+        const led = createReservationLedger();
+        await led.reserve({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: '5' });
+        await led.reserve({ id: 'b', chainId: 'btc', tick: 'JDOG', amount: Number.NaN });
+
+        const deltas = await led.localDeltas('btc');
+        expect(deltas).toHaveLength(1);
+        expect(deltas[0].tick).toBe('JDOG');
+        // Above the SDK's 1e21 MAX_SUPPLY ceiling, so no balance can survive subtracting it.
+        expect(BigInt(deltas[0].amount) > BigInt('1000000000000000000000')).toBe(true);
+        // The readable sibling is still counted, so the sentinel adds to the guard rather
+        // than replacing what is known.
+        expect(deltas[0].amount).toBe('1000000000000000000000000000005');
+    });
 });
 
 describe('reservationLedger (session-store backed, extension)', () => {

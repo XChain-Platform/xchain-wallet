@@ -85,7 +85,8 @@ fi
 # Before the key file is written, so an archive that fails is refused without
 # the App Store Connect credential ever materialising on disk.
 if ! node "$here/tools/release/verify-ios-artifact.mjs" \
-        "$archive/Products/Applications/App.app" --stage archive --tag "$tag"; then
+        "$archive/Products/Applications/App.app" --stage archive --tag "$tag" \
+        --team-id "$APPLE_TEAM_ID"; then
     echo "ios-export: the archive does not carry what the project pins; nothing was exported" >&2
     exit 1
 fi
@@ -173,7 +174,8 @@ mv "$exported" "$target"
 # somebody later finds on a disk and trusts, and it is the name that
 # expected-artifacts.txt and sign.sh match on. The suffix takes it out of every
 # glob that would pick it up.
-if ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export --tag "$tag"; then
+if ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export --tag "$tag" \
+        --team-id "$APPLE_TEAM_ID"; then
     mv "$target" "$target.rejected"
     echo "ios-export: the exported ipa is not distributable; kept as $(basename "$target").rejected" >&2
     exit 1

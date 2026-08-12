@@ -37,6 +37,19 @@ const webDir = join(wsRoot, 'packages', 'web');
 const viteSrc = readFileSync(join(webDir, 'vite.config.js'), 'utf8');
 assert.match(viteSrc, /import \{ sriPlugin \} from '\.\/sri\.js';/, 'vite.config imports sriPlugin');
 assert.match(viteSrc, /sriPlugin\(\)/, 'vite.config registers sriPlugin()');
+// POSITION, not merely presence. vite.config.js states the invariant in a
+// comment ("Last: must see the final tag set + final bundle bytes") and nothing
+// enforced it, so moving sriPlugin() above another plugin stayed green: any
+// plugin running after it can rewrite an emitted tag or a bundle byte AFTER the
+// hash was taken, and index.html then carries a sha384 of bytes that no longer
+// ship. The browser's answer to that is to refuse to run the wallet's own
+// JavaScript, so a reorder is a build that dies rather than one that degrades.
+assert.match(
+    viteSrc,
+    /sriPlugin\(\)\s*,?\s*\]/,
+    'sriPlugin() must be the LAST entry of the plugins array, so it hashes the'
+    + ' final tag set and the final bundle bytes; move it back to the end',
+);
 
 const sriSrc = readFileSync(join(webDir, 'sri.js'), 'utf8');
 assert.match(sriSrc, /apply: 'build'/, 'SRI is build-only (dev HMR rewrites assets on the fly)');

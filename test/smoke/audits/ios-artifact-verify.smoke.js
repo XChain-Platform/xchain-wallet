@@ -182,6 +182,48 @@ mustFail('a bundle id that is not the one the project builds',
 mustFail('a signature issued for a different app id than the bundle carries',
     { entitlements: buildEntitlements({ 'application-identifier': '829JG9YLH3.io.xchain.other' }) },
     /does not end with \.io\.xchain\.wallet\.ios/);
+
+// The TEAM half of the appID, which nothing here checked until. An
+// appID is `<TEAM>.<bundle id>` and the published apple-app-site-association
+// pins the whole string, so a wrong team with the right bundle id passes every
+// suffix check above and loses Universal Links on devices with no error
+// anywhere. `829JG9YLH3` below is the fixture's own team, not an assertion
+// about the pin; this tool is never the place that reads the AASA.
+{
+    const wrongTeam = (over) => buildEntitlements({
+        'application-identifier': `OTHERTEAM1.${expected.bundleId}`,
+        'com.apple.developer.team-identifier': 'OTHERTEAM1',
+        ...over,
+    });
+
+    mustPass('a correct artifact with the ceremony\'s team supplied', { teamId: '829JG9YLH3' });
+    mustFail('an artifact signed by a team the ceremony never asked for',
+        { entitlements: wrongTeam(), teamId: '829JG9YLH3' },
+        /signed for team "OTHERTEAM1" and the ceremony asked for 829JG9YLH3/);
+    // The circular half, stated as a test so nobody has to re-derive it: with
+    // no external authority reachable, a consistently-wrong team is ACCEPTED.
+    // That is the residual this flag does not close, not an oversight.
+    mustPass('a consistently-wrong team with no requested team supplied',
+        { entitlements: wrongTeam() });
+    assert.ok(
+        run({}).passes.some((p) => /SKIPPED: the signed Team ID/.test(p)),
+        'a run with no --team-id must SAY the signed team went unchecked; a silent omission is how '
+        + '"nothing was checked" reads as "everything passed"',
+    );
+
+    // Needs no --team-id at all: one signature cannot belong to two teams.
+    mustFail('a signature whose two team values disagree with each other',
+        { entitlements: wrongTeam({ 'com.apple.developer.team-identifier': '829JG9YLH3' }) },
+        /prefixed OTHERTEAM1 and com\.apple\.developer\.team-identifier is 829JG9YLH3/);
+    mustFail('a signature carrying no team-identifier entitlement at all',
+        { entitlements: buildEntitlements({ 'com.apple.developer.team-identifier': undefined }) },
+        /com\.apple\.developer\.team-identifier undefined/);
+    assert.ok(
+        run({ teamId: '829JG9YLH3' }).passes.some((p) => /does NOT check that team against the published AASA/.test(p)),
+        'the pass line must refuse to claim the AASA pin it never read, or a green run reads as '
+        + 'evidence of the one comparison this tool cannot make',
+    );
+}
 mustFail('a marketing version that is not what Version.xcconfig pins',
     { info: buildInfo({ CFBundleShortVersionString: '0.335.0' }) },
     /CFBundleShortVersionString is 0\.335\.0/);

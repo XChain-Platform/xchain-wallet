@@ -195,6 +195,12 @@ export type ConnectResult = ConnectSuccess | BridgeErrorResult;
 // ---------------------------------------------------------------------------
 
 export interface SignMessageParams {
+    // Required, like every sibling signing method: the wallet gates the request
+    // on the site's per-chain permission before it prompts, and the signing
+    // scheme itself is chain-specific. Omitted here, a request built from this
+    // type failed MISSING_CHAIN_ID before the user ever saw an approval
+    // (); the type was the incomplete side, not the handler.
+    chainId: ChainId;
     address: string;
     message: string;
     // Optional hint for the wallet's plain-English display. Purely cosmetic.
