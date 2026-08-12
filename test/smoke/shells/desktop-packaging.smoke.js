@@ -158,6 +158,40 @@ assert.equal(
     'build/entitlements.mac.plist',
     'macOS entitlements point at build/entitlements.mac.plist',
 );
+
+// --- The signed app has to be able to START ( row 143) ----------
+//
+// THIS SHIPPED. `com.apple.security.cs.allow-jit` was false, on a comment
+// that said "We don't JIT any code" - and Electron is V8, which does. A
+// hardened-runtime build without it cannot reserve executable memory and
+// dies before a line of our code runs: "Fatal process out of memory:
+// Failed to reserve virtual memory for CodeRange". Measured on the
+// PUBLISHED v0.338.0 .dmg, and proven by flipping only this entitlement
+// on that same bundle, after which it boots.
+//
+// NOTHING ELSE IN THIS SUITE CAN SEE IT, which is the reason for a
+// file-level assertion rather than a behavioural one: every test that
+// launches the app runs it unsigned out of the source tree, where the
+// hardened runtime does not apply, so the app under test is not the app
+// users get. The behavioural check needs a signed, packaged bundle and
+// belongs in the release lane.
+{
+    const entitlements = readFileSync(join(desktop, 'build/entitlements.mac.plist'), 'utf8');
+    const valueFor = (key) => {
+        const m = entitlements.match(new RegExp(`<key>${key}</key>\\s*<(true|false)/>`));
+        return m ? m[1] : null;
+    };
+    assert.equal(
+        valueFor('com.apple.security.cs.allow-jit'),
+        'true',
+        'the hardened runtime must allow JIT: without it the signed app cannot start at all',
+    );
+    assert.equal(
+        valueFor('com.apple.security.cs.allow-unsigned-executable-memory'),
+        'false',
+        'the wider of the two memory entitlements stays off: allow-jit alone was proven sufficient',
+    );
+}
 // --- The direct-download signing identity  -------------------
 //
 // `mac.identity` was `CSC_IDENTITY_NAME || null`, and the only non-null
