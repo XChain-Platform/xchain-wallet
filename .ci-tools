@@ -12,3 +12,10 @@
 # `zip` missing from test-host on 2026-08-06 is what filed ; `unzip` is the
 # same gap one call deeper. tar needs no line here: the suite spawns it directly.
 unzip
+# ditto is a FALSE POSITIVE from the scan ( row 144). It is Apple's own
+# archiver, it exists only on macOS, and every call to it in
+# release-launch-probe.smoke.js sits behind a `process.platform === 'darwin'`
+# guard - the Linux venue drives the AppImage lane instead and never spawns it.
+# Demanding it would make the suite unrunnable on every Linux venue in the pool
+# to satisfy a call none of them reaches.
+-ditto
