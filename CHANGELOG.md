@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The desktop update offer survives being made before the wallet is unlocked, so an update found at launch is still shown once a window exists to show it .
+- `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed .
+- The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched .
 - A Linux `.deb` whose payload carries no compiled native addon is refused before signing, so a rehearsal built where the addon never compiled cannot stand in for a release .
 - `reproduce.sh` forwards `XCHAIN_STAGING_FEED_URL` into the pinned container, so a staging rehearsal can be built the way a release is .
 - The desktop builder config no longer claims the project has no native dependencies; a Linux install compiles `tiny-secp256k1` .

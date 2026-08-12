@@ -340,9 +340,16 @@ try {
     // the file signed happily for as long as no such artifact was staged.
     // Absent, it reads '<unreadable>' and sign.sh refuses - correctly, since
     // an unreadable status is not permission.
+    // launch-probe.mjs is the FOURTH instance of that shape ( row
+    // 144): sign.sh runs it unconditionally before writing the manifest, so
+    // a clone without it cannot sign at all. It launches nothing against
+    // these fixtures and says so - a zip with no Contents/MacOS and an ELF
+    // with no AppImage magic are both reported NOT PROBED by name - which
+    // is the point: what is under test here is sign.sh's pipeline, and the
+    // probe's own branches are driven in release-launch-probe.smoke.js.
     for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt',
         'shipped-lanes.txt', 'update-info.mjs', 'verify-signatures.mjs',
-        'store-profile-status.txt']) {
+        'launch-probe.mjs', 'store-profile-status.txt']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     cpSync(join(root, 'tools/build-reproduce/check-no-dev-mock.sh'),

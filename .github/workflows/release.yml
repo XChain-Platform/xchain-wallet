@@ -467,6 +467,30 @@ jobs:
             packages/desktop/dist/*.yml
           if-no-files-found: error
 
+      #  row 144. THE ONLY STEP IN THIS FILE THAT RUNS WHAT IT BUILT.
+      #
+      # Every other check here reads an artifact: the feed assert parses
+      # yaml, the dev-mock gate greps the bundle, the arch gates read ELF
+      # headers, and downstream the signature gate reads certificates and
+      # the reproduce check compares bytes. v0.338.0 passed all of them and
+      # died three seconds after launch on every Mac. This launches the
+      # AppImage in a throwaway profile and requires it to still be there.
+      #
+      # AFTER the upload on purpose. A failure here must go red without
+      # taking the artifacts with it: the maintainer needs the very build
+      # that would not start in order to work out why.
+      #
+      # --require-probed 1 because the host and the lane match by
+      # construction: this runner built this AppImage. The two host
+      # facilities it needs are a display (the probe uses xvfb-run when
+      # DISPLAY is unset; ubuntu runner images carry xvfb) and nothing else,
+      # since the AppImage is run with its runtime extracted rather than
+      # FUSE-mounted. If a future runner image drops xvfb, the probe names
+      # it in the log and this step fails rather than passing quietly, which
+      # is the whole point of the flag.
+      - name: Launch probe - the packaged app must actually start (§7, row 144)
+        run: node tools/release/launch-probe.mjs packages/desktop/dist --require-probed 1 --timeout 12
+
       # ---- §7.5 rehearsal variant -------------------------------------
       #
       # AppImage only: it is the one Linux format electron-updater can
@@ -620,6 +644,36 @@ jobs:
             packages/desktop/dist/*mac*.zip
             packages/desktop/dist/*.yml
           if-no-files-found: error
+
+      #  row 144, and THIS is the lane the row was written from.
+      #
+      # v0.338.0's macOS build was signed with the Developer ID cert,
+      # notarized by Apple, stapled, hash-manifested and rehearsed, and it
+      # died about three seconds after launch on every Mac with `Fatal
+      # process out of memory: Failed to reserve virtual memory for
+      # CodeRange` - one hardened-runtime entitlement,
+      # com.apple.security.cs.allow-jit, set false. Nothing in this workflow
+      # or in sign.sh executed it, so nothing could see it.
+      #
+      # AFTER the upload, so a build that will not start is still collectable
+      # for diagnosis while the job goes red.
+      #
+      # WHAT IT COVERS AND WHAT IT DOES NOT. It probes the mac zip, which
+      # holds the same .app the dmg wraps, so both are answered. It probes
+      # the runner's NATIVE architecture; the other arch's zip is launched
+      # only if Rosetta 2 is present, and the probe labels such a pass as
+      # translated. That distinction is measured rather than theoretical:
+      # the v0.338.0 x64 bundle starts perfectly under Rosetta on Apple
+      # silicon while its arm64 twin dies, because hardened-runtime JIT
+      # restrictions bite per architecture. So `--require-probed 1` demands
+      # one real launch and not two.
+      #
+      # It needs a macOS GUI session (launchctl managername = Aqua). If a
+      # runner image ever stops providing one, the probe reports NOT PROBED
+      # naming exactly that and this step fails, rather than reporting a
+      # release it never ran as fine.
+      - name: Launch probe - the packaged app must actually start (§7, row 144)
+        run: node tools/release/launch-probe.mjs packages/desktop/dist --require-probed 1 --timeout 12
 
       # ---- §7.5 rehearsal variant -------------------------------------
       #

@@ -738,6 +738,38 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 # can tell the difference.
 node "$REPO_ROOT/tools/release/verify-signatures.mjs" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
 
+# --- Launch probe ( row 144) --------------------------------------
+# EVERY GATE ABOVE THIS LINE READS THE ARTIFACTS. NONE OF THEM RUNS ONE.
+#
+# v0.338.0 shipped a macOS build that died about three seconds after launch
+# with `Fatal process out of memory: Failed to reserve virtual memory for
+# CodeRange`, because the hardened runtime's `com.apple.security.cs.allow-jit`
+# entitlement was false. It passed the signature gate (the signature was
+# real), the arch gate (the Mach-O header was right), the payload gates, the
+# reproducibility check (the bytes matched the container exactly), Apple's
+# notarization (which asks about malware, not about working), and the §7.5
+# rehearsal (which downloads the artifact and checks its hash). A file that
+# is correct in every readable respect and cannot start is invisible to all
+# of them.
+#
+# So this launches it: fresh throwaway profile, a few seconds, still alive,
+# no crash banner in its output. It sits here, after the signature gate and
+# before xr_write_manifest, for the same reason the signature gate does -
+# once K1 has attested the bytes, every downstream check agrees with the
+# manifest forever and nothing left in the pipeline can tell.
+#
+# NO --require-probed HERE, deliberately. This runs on the release Mac
+# against a set that also holds Linux artifacts no Mac can execute, so a
+# minimum-launch count would refuse every release. What prevents a silent
+# pass instead is the probe's own banner: a run that launched nothing says
+# so in block capitals rather than printing an "ok" line. The CI lanes,
+# where the host and the lane match by construction, DO pass a minimum.
+#
+# It opens a real window on the operator's desktop for a few seconds, and
+# over SSH (no Aqua session) it reports NOT PROBED by name rather than
+# failing the ceremony.
+node "$REPO_ROOT/tools/release/launch-probe.mjs" "$INPUT_DIR" "$RELEASE_SET"
+
 echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" \
