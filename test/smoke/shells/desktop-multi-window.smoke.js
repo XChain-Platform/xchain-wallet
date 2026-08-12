@@ -82,7 +82,11 @@ assert.ok(/function forwardDeepLink\(event\)\s*\{[\s\S]*?pickFocusWindow\(\)/.te
     'forwardDeepLink targets the focused window');
 assert.ok(/function broadcastToWindows\(channel,\s*payload\)/.test(src),
     'broadcastToWindows() helper iterates every live window');
-assert.ok(/onEvent:\s*\(event\)\s*=>\s*\{\s*broadcastToWindows\('xchain:updater',\s*event\)/.test(src),
+// The handler retains the event before broadcasting it ( row 148), so
+// what this pins is that every live window still gets it - not that the
+// broadcast is the first statement in the body. `[^}]` keeps that loose
+// reading from wandering out of the handler into unrelated code.
+assert.ok(/onEvent:\s*\(event\)\s*=>\s*\{[^}]*?broadcastToWindows\('xchain:updater',\s*event\)/.test(src),
     'updater events broadcast to every live window via broadcastToWindows');
 
 // --- 5. activate hook + first-window bootstrap --------------------------

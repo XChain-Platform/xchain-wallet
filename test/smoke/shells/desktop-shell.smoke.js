@@ -120,6 +120,26 @@ assert.ok(
         /downloadAndInstall\(\)/.test(mainIndex),
         'main actually calls downloadAndInstall(): the update path is reachable, not merely wired',
     );
+
+    // --- The offer has to survive being made too early ( row 148) ---
+    //
+    // Row 142's two halves were both present and the offer was STILL
+    // unreachable. Main checks the feed at whenReady; the banner exists only
+    // once the vault is unlocked, which is a human typing a passphrase some
+    // seconds or hours later. The broadcast is fire-once with no re-check
+    // anywhere in the app, so on a locked install the event is always gone
+    // before a listener exists. Measured on a packaged build: main logged
+    // `Found version 0.339.0` and the banner, mounted after, showed nothing.
+    assert.ok(
+        /ipcMain\.handle\('xchain:updater-state'/.test(mainIndex),
+        'main answers the updater state channel: a renderer that mounts after '
+        + 'the launch check can still learn an update is on offer',
+    );
+    assert.ok(
+        /lastUpdaterEvent = event/.test(mainIndex),
+        'main RETAINS the event it broadcasts: a state handler that answers from '
+        + 'nothing is the same silence with an extra channel',
+    );
 }
 
 // Negative: preload must NOT import Node fs / path modules (which

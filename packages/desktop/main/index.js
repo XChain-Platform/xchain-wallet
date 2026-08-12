@@ -495,11 +495,38 @@ app.whenReady().then(async () => {
     // electron-updater: only active in packaged builds (isUpdaterActive
     // returns false in dev). Events relay to every open renderer via
     // IPC so any window can surface the "update available" toast.
+    // THE BROADCAST IS FIRE-ONCE AND THE ONLY LISTENER MOUNTS LATER, WHICH
+    // MADE THE WHOLE OFFER UNREACHABLE ( row 148, measured 2026-08-11).
+    //
+    // `checkForUpdates()` below runs at whenReady and resolves within a
+    // second or two. `DesktopUpdateBanner` subscribes when it mounts, and it
+    // is rendered only in the `unlocked` branch of the renderer's state
+    // machine - so on any install with a vault the user is still at the
+    // Locked screen when `available` fires, and on a fresh install they are
+    // in onboarding. By the time a component exists to hear the event, the
+    // event is gone and nothing re-sends it. There is exactly one caller of
+    // `checkForUpdates` in the app and no periodic re-check, so the offer
+    // was not merely delayed, it was never reachable at all.
+    //
+    // Keeping the last event and letting a mounting renderer ASK for it
+    // turns a race nobody could win into a question with an answer. It is
+    // the state, not a replayed event: `getState` returns the same shape
+    // the broadcast carries, so the banner has one code path for both.
+    let lastUpdaterEvent = null;
     try {
         const { checkForUpdates, downloadAndInstall } = await attachUpdater({
             onEvent: (event) => {
+                lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
+        });
+
+        // Same trust boundary as the install handler: the updater state says
+        // whether a version is on offer, which is not sensitive, but a
+        // positively-remote frame has no business reading the app's state.
+        ipcMain.handle('xchain:updater-state', async (event) => {
+            if (!isTrustedSenderEvent(event)) return null;
+            return lastUpdaterEvent;
         });
 
         // THE INSTALL HANDLER IS THE HALF THAT WAS MISSING ( row

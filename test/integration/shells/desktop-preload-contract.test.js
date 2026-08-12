@@ -181,10 +181,13 @@ describe('desktop preload: the renderer sandbox surface', () => {
     // subscribe to, and the only path that installs a verified update had
     // no caller. A world that appeared here with the wrong two functions
     // would reproduce that silence with a name attached.
-    it('gives the renderer both halves of the update path, and only those', () => {
+    // `getState` is the third half, and it is not a convenience: subscribing
+    // alone cannot see an offer main made before this renderer existed, which
+    // on a locked install is every offer there has ever been ( row 148).
+    it('gives the renderer every half of the update path, and only those', () => {
         const pre = runPreload();
         const updater = pre.worlds.get('xchainWalletUpdater');
-        expect(Object.keys(updater).sort()).toEqual(['install', 'onEvent']);
+        expect(Object.keys(updater).sort()).toEqual(['getState', 'install', 'onEvent']);
     });
 
     it('exposes functions only: no ipcRenderer, require, process or module handle crosses over', () => {
@@ -225,6 +228,11 @@ describe('desktop preload: the renderer sandbox surface', () => {
         // channel main never registered would be the same failure the
         // update path already had - a call with nothing at the other end.
         await updater.install();
+        //  row 148: walked for the same reason install is. The state
+        // channel is what a mounting banner asks on, so a preload invoking a
+        // channel main never registered would put the offer back out of
+        // reach in a way that looks wired up from the renderer side.
+        await updater.getState();
 
         const used = new Set([
             ...pre.invokes.map(([channel]) => channel),
@@ -232,7 +240,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // subset check below is vacuously true.
-        expect(used.size).toBe(6);
+        expect(used.size).toBe(7);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {
