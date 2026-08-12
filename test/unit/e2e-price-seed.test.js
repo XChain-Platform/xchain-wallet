@@ -33,6 +33,7 @@ import {
     readStateScript,
     seedMarginSeconds,
     selectedSnapshot,
+    settlePrice,
     unusablePriceMessage,
     venueDisagreement,
     writeRowsScript,
@@ -420,6 +421,98 @@ describe('e2e price seed ', () => {
         it('compares numerically, so trailing-zero formatting is not a mismatch', () => {
             const rows = [row('LTC/USD', '30.000000000000')];
             expect(venueDisagreement({ rows, chainTime: CHAIN, expected: { 'LTC/USD': '30.00000000' } })).toBeNull();
+        });
+    });
+
+    // The Bitcoin venue looked permanently dead for eight days over this loop,
+    // and the reason it was never caught is that it cannot be reproduced on
+    // demand: it needs a block that takes over a minute to parse, and two live
+    // RBTC runs on the day of the fix both passed because the venue happened to
+    // be quiet. So the ORDER of mine / wait / re-probe is pinned here, against
+    // a fake venue that is busy exactly as long as the real one was.
+    describe('settlePrice: a busy quote engine is a lock, not a missing price', () => {
+        const BUSY = { usable: false, retryable: true, busy: true, reason: 'waited 2000ms for the lock' };
+        const PRICED = { usable: true, retryable: false, coinUsdPrice: '100000.00000000' };
+
+        /** A venue that answers `busy` for `busyFor` probes, then prices. */
+        function fakeVenue(busyFor) {
+            const trace = [];
+            let probes = 0;
+            return {
+                trace,
+                io: {
+                    probe: async () => (++probes <= busyFor ? BUSY : PRICED),
+                    mineOne: async () => trace.push('MINE'),
+                    waitForTip: async () => trace.push('WAIT'),
+                    sleep: async () => {},
+                },
+            };
+        }
+
+        it('re-asks a busy venue and mines exactly ONCE while it waits', async () => {
+            // Six busy answers is the shape of the measured 1m 12.8s block
+            // against a 5s re-probe. The mine count is the assertion that
+            // matters: a loop that mines per attempt puts more blocks in front
+            // of the one already holding the lock.
+            const { io, trace } = fakeVenue(6);
+            const { verdict } = await settlePrice({ ...io, attempts: 4, busyReprobes: 20, busyReprobeMs: 1 });
+
+            expect(verdict.usable).toBe(true);
+            expect(trace.filter((t) => t === 'MINE')).toHaveLength(1);
+        });
+
+        it('FALSIFICATION: the same venue defeats the old flat-wait loop', async () => {
+            // `busyReprobes: 0` IS the loop this replaced - mine, wait, probe
+            // once, give up and mine again. Against the identical fake it burns
+            // every attempt inside the lock and reports an unpriceable venue,
+            // which is the RBTC failure exactly.
+            const { io, trace } = fakeVenue(6);
+            const { verdict } = await settlePrice({ ...io, attempts: 4, busyReprobes: 0, busyReprobeMs: 1 });
+
+            expect(verdict.usable).toBe(false);
+            expect(verdict.busy).toBe(true);
+            expect(trace.filter((t) => t === 'MINE')).toHaveLength(4);
+        });
+
+        it('waits for the indexer BEFORE probing, never after', async () => {
+            const order = [];
+            await settlePrice({
+                probe: async () => { order.push('probe'); return PRICED; },
+                mineOne: async () => order.push('mine'),
+                waitForTip: async () => order.push('wait'),
+                sleep: async () => {},
+                attempts: 4, busyReprobes: 20, busyReprobeMs: 1,
+            });
+            expect(order).toEqual(['mine', 'wait', 'probe']);
+        });
+
+        it('stops at a NOT-EVER verdict instead of spending its attempts', async () => {
+            // A venue with native fees switched off answers the same way no
+            // matter how long anyone waits, so mining at it is pure delay.
+            const order = [];
+            const dead = { usable: false, retryable: false, reason: 'no FEE_DESTINATION configured' };
+            const { verdict } = await settlePrice({
+                probe: async () => dead,
+                mineOne: async () => order.push('mine'),
+                waitForTip: async () => {},
+                sleep: async () => {},
+                attempts: 4, busyReprobes: 20, busyReprobeMs: 1,
+            });
+            expect(verdict).toBe(dead);
+            expect(order).toHaveLength(1);
+        });
+    });
+
+    describe('priceVerdict carries busy through', () => {
+        it('marks a busy quote busy, so the caller can tell it from a missing price', () => {
+            const v = priceVerdict({ busy: true, error: 'fee quote busy (the indexer is processing a block)' });
+            expect(v).toMatchObject({ usable: false, retryable: true, busy: true });
+        });
+
+        it('does not mark a priced quote busy', () => {
+            const v = priceVerdict({ coinUsdPrice: '30.00000000', xchainUsdPrice: '2.00000000' });
+            expect(v.usable).toBe(true);
+            expect(v.busy).toBeUndefined();
         });
     });
 });

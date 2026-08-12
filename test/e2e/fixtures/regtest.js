@@ -70,6 +70,7 @@ import {
     priceVerdict,
     readStateScript,
     seedMarginSeconds,
+    settlePrice,
     unusablePriceMessage,
     venueDisagreement,
     writeRowsScript,
@@ -344,6 +345,47 @@ async function probePrice() {
     return priceVerdict(body);
 }
 
+/** How long to let the indexer finish a block before probing it anyway. */
+const INDEXER_CATCHUP_BUDGET_MS = 150_000;
+/** How many times to re-ask a BUSY quote engine, and how long between asks. */
+const BUSY_REPROBES = 20;
+const BUSY_REPROBE_MS = 5_000;
+
+/**
+ * Waits until the indexer and decoder have caught up to the chain tip.
+ *
+ * This is the honest form of "wait for the block to land". `/api/status`
+ * publishes `chain_lag_blocks` and `decoder_lag_blocks` per coin, so a caller
+ * can wait on the thing it actually needs - a quiet indexer - instead of on a
+ * duration it has guessed. Bitcoin regtest is the reason: its block-parse time
+ * spans three orders of magnitude on the same venue (54ms to 1m 12.8s), so no
+ * fixed sleep is both fast and correct.
+ *
+ * Never throws. A budget that runs out means "probe anyway and report what the
+ * venue actually says" - the caller's own error message is far more useful than
+ * one about waiting, and a status endpoint that has stopped answering must not
+ * turn into a second, misleading failure mode.
+ */
+async function waitForIndexedTip({ budgetMs = INDEXER_CATCHUP_BUDGET_MS } = {}) {
+    const deadline = Date.now() + budgetMs;
+    while (Date.now() < deadline) {
+        try {
+            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
+                signal: AbortSignal.timeout(15_000),
+            });
+            const body = await res.json();
+            const chainLag = body?.chain_lag_blocks?.[REGTEST_COIN];
+            const decoderLag = body?.decoder_lag_blocks?.[REGTEST_COIN];
+            if (chainLag === 0 && decoderLag === 0) return true;
+        } catch {
+            // Status blip: keep waiting rather than reporting a venue failure
+            // from a helper whose only job is to be patient.
+        }
+        await new Promise((r) => setTimeout(r, 2_000));
+    }
+    return false;
+}
+
 /**
  * Chain-seconds of usable life left in the venue's price, or null when that
  * cannot be established.
@@ -500,20 +542,38 @@ export async function seedPrices({ attempts = 4 } = {}) {
     }
 
     // Step 3: mine, then re-check against the same public read the wallet uses.
-    let after = before;
-    for (let i = 0; i < attempts; i++) {
-        await minerRpc('generate_blocks', { count: 1 }).catch(() => {});
-        await new Promise((r) => setTimeout(r, 3_000));
-        after = await probePrice();
-        if (after.usable) {
-            return {
-                seeded: true,
-                rows: rows.length,
-                chainTime: state.chainTime,
-                ...after,
-            };
-        }
-        if (!after.retryable) break;
+    //
+    // WAIT FOR THE INDEXER, NOT FOR A NUMBER OF SECONDS. A flat wait is a bet
+    // on block-parse time, and Bitcoin loses it. Measured on this venue
+    // 2026-08-11: most RBTC blocks parse in 54-260ms and the occasional one
+    // takes 1m 12.8s, and for the whole of that window every fee quote answers
+    // `busy` ("waited 2000ms for the database transaction lock"). A 3s wait
+    // then spends all four attempts inside that ONE lock and reports an
+    // unpriceable venue that is, minutes later, perfectly healthy - which is
+    // exactly how RBTC came to look permanently dead while LTC and DOGE ran.
+    // The ORDER of mine / wait / re-probe is the part that was wrong, so it
+    // lives in `settlePrice` where a unit test can drive it against a fake
+    // venue. It cannot be pinned from here: the failure needs a Bitcoin block
+    // that takes over a minute to parse, and that is not summonable on demand -
+    // two live runs on 2026-08-11 both passed because the venue happened to be
+    // quiet, which is precisely why this belongs beside the rest of the
+    // arithmetic this file exists to keep testable.
+    const { verdict: after } = await settlePrice({
+        probe: probePrice,
+        mineOne: () => minerRpc('generate_blocks', { count: 1 }).catch(() => {}),
+        waitForTip: waitForIndexedTip,
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        attempts,
+        busyReprobes: BUSY_REPROBES,
+        busyReprobeMs: BUSY_REPROBE_MS,
+    });
+    if (after.usable) {
+        return {
+            seeded: true,
+            rows: rows.length,
+            chainTime: state.chainTime,
+            ...after,
+        };
     }
 
     throw new Error(unusablePriceMessage({
