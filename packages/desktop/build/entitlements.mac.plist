@@ -5,9 +5,21 @@
     Keep this file as narrow as possible; each entitlement widens the
     attack surface. Notarization will reject anything unused.
 
-    - com.apple.security.cs.allow-unsigned-executable-memory: false
-      (default). We don't JIT any code.
-    - com.apple.security.cs.allow-jit: false. Same.
+    - com.apple.security.cs.allow-jit: TRUE, and the sentence it replaced
+      ("false. We don't JIT any code") shipped a macOS build that cannot
+      start at all ( row 143). Electron IS V8, and V8 JITs: under
+      the hardened runtime without this entitlement it cannot reserve
+      executable memory, and the process dies before any of our code runs
+      with "Fatal process out of memory: Failed to reserve virtual memory
+      for CodeRange". Measured on the PUBLISHED v0.338.0 artifact, not
+      inferred: the app out of the published .dmg dies instantly, and the
+      identical bundle re-signed with only this entitlement flipped boots,
+      logs "Checking for update" and opens its websockets. Nothing caught
+      it because every test runs the app UNSIGNED from the source tree,
+      where the hardened runtime does not apply.
+    - com.apple.security.cs.allow-unsigned-executable-memory: false, and
+      it stays false. It is the wider entitlement of the pair and the
+      launch above was proven with allow-jit alone.
     - com.apple.security.device.usb: required for WebHID on macOS -
       @ledgerhq/hw-transport-webhid opens the Ledger HID interface via
       IOKit, which the hardened runtime gates behind this entitlement.
@@ -26,7 +38,7 @@
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <false/>
     <key>com.apple.security.cs.allow-jit</key>
-    <false/>
+    <true/>
     <key>com.apple.security.device.usb</key>
     <true/>
     <key>com.apple.security.network.client</key>
