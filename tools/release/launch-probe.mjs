@@ -684,7 +684,21 @@ export async function probeArtifact(path, {
         };
     }
     const sess = session ?? hostSessionCapability({ platform });
-    if (!sess.can) return { file, class: cls, state: 'recorded', blocked: true, reason: `NOT PROBED: ${sess.reason}` };
+    if (!sess.can) {
+        // BLOCKING IS SCOPED TO macOS ON PURPOSE, and the two lanes differ in
+        // what stands behind them. The release Mac signs by hand, sign.sh
+        // passes no --require-probed there (the set holds Linux artifacts no
+        // Mac can execute), so a ceremony run over SSH - no Aqua session -
+        // would otherwise probe nothing and sign a macOS release with zero
+        // launch evidence. Nothing else would catch it. The Linux lane has a
+        // backstop already: it launches under CI with --require-probed 1, so
+        // "launched nothing" is red there by that flag. Blocking headless
+        // Linux as well would only make the suite unrunnable on every venue
+        // in the pool that has no xvfb, buying no honesty the flag does not
+        // already buy.
+        const blocked = platform === 'darwin';
+        return { file, class: cls, state: 'recorded', blocked, reason: `NOT PROBED: ${sess.reason}` };
+    }
 
     const work = mkdtempSync(join(tmpdir(), 'xchain-launch-probe-'));
     const userData = join(work, 'user-data');

@@ -647,6 +647,22 @@ if (process.platform === 'darwin') {
     assert.equal(sum.blocked.length, 1,
         'the summary must carry the blocked probe forward, or the run exits 0 having checked nothing');
 
+    // A HEADLESS LINUX HOST IS LOUD BUT NOT BLOCKING, and the asymmetry is
+    // deliberate: the Linux lane launches under CI with --require-probed 1,
+    // so "launched nothing" is already red there, while the macOS ceremony
+    // has no such flag and no other backstop. Blocking headless Linux too
+    // would only make this suite unrunnable on every venue without xvfb.
+    const headlessLinux = await probeArtifact(join(work, 'headless-x86_64.AppImage'), {
+        platform: 'linux',
+        arch: 'x64',
+        timeoutMs: 500,
+        session: { can: false, reason: 'no DISPLAY and no xvfb-run on this host' },
+    });
+    assert.equal(headlessLinux.state, 'recorded');
+    assert.ok(!headlessLinux.blocked,
+        'headless Linux is covered by --require-probed on the lane that builds there');
+    assert.equal(summarise([headlessLinux]).blocked.length, 0);
+
     // And the honest skip stays honest: a Linux image on this Mac is not
     // blocked, so a mac+Linux release set still signs.
     const wrongPlatform = await probeArtifact(join(work, 'blocked-linux.AppImage'), {
