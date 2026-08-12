@@ -280,6 +280,35 @@ const ARTIFACTS = [
 ];
 
 const work = mkdtempSync(join(tmpdir(), 'xc-rel-'));
+
+// THE DISK-IMAGE ASSESSMENT IS STUBBED FOR THIS FILE, AND ONLY THIS FILE
+// ( row 140). Every other artifact in these fixtures is faked at the
+// level its checker reads - a PE with a populated certificate table, a zip
+// carrying the `_CodeSignature` entry name - because those checkers read
+// bytes. The dmg checker does not: it asks the OS, through `spctl`, which
+// is the only reading that answers the question a user's machine asks.
+// Apple cannot notarize fake bytes, so on macOS these fixtures fail a gate
+// that is working correctly, and on Linux the same gate records rather
+// than checks. Stubbing keeps this file testing what it is about (sign.sh,
+// verify.sh, publish.sh and the manifest round trip) on both.
+//
+// The stub is a PATH shim in front of the subprocesses, NOT a flag in the
+// tool. An env var or a `--skip` inside verify-signatures would be a way
+// to switch a signing gate off in production, which is the exact defect
+// family this row belongs to; a fake `spctl` on one test's PATH cannot
+// exist anywhere near a release. The gate's real behaviour is driven
+// unstubbed in release-signature-gate.smoke.js, and was driven against the
+// published v0.338.0 artifacts, which it refuses.
+const shimBin = join(work, 'shim-bin');
+mkdirSync(shimBin, { recursive: true });
+writeFileSync(join(shimBin, 'spctl'),
+    '#!/bin/sh\n'
+    + '# smoke stub: these fixtures are not real disk images ( row 140)\n'
+    + 'echo "stub: accepted"\n'
+    + 'echo "source=Notarized Developer ID"\n'
+    + 'exit 0\n', { mode: 0o755 });
+process.env.PATH = `${shimBin}:${process.env.PATH}`;
+
 let failures = 0;
 const check = (label, cond, detail) => {
     if (cond) return;
@@ -575,6 +604,7 @@ try {
     // the negative cases past the config check without needing GnuPG.
     const gateEnv = { ...process.env, XCHAIN_RELEASE_GPG_KEY: 'smoke-placeholder' };
     delete gateEnv.SIGN_SKIP_DEV_MOCK_CHECK;
+
 
     const signArgs = (dir, tag = TAG) =>
         [SIGN, '--tag', tag, '--repo', repo, '--input', dir];

@@ -109,8 +109,13 @@
 #                            artifacts). Integrity rides the K1 manifest.
 #   store                    the receiving store signs it after upload, so
 #                            what we stage is legitimately unsigned
-#   codesign-unverified      Apple-signed disk image; reading it needs
-#                            macOS codesign, so a Linux runner cannot
+#   codesign-dmg             the disk image itself, signed AND notarized;
+#                            assessed with spctl the way Gatekeeper
+#                            assesses a download ( row 140). It
+#                            replaced `codesign-unverified`, which had
+#                            declared the dmg Apple-signed and skipped the
+#                            check on that basis, while the published dmg
+#                            was not signed at all
 #   authenticode-unverified  the signed PE is inside the archive; the .exe
 #                            row covers the same lane
 #   deferred-android         apksigner's lane , declared not checked
@@ -213,7 +218,7 @@ required  xchain-wallet-extension-v*.zip    default  -         none
 # (§2): a tag that produced only the artifacts the release machine could
 # build natively is exactly the version skew this gate exists to refuse.
 # Satisfying the Windows and macOS rows needs the §5 CI matrix (S4).
-required  *.dmg                             default  x64,arm64 codesign-unverified
+required  *.dmg                             default  x64,arm64 codesign-dmg
 required  *mac*.zip                         default  x64,arm64 codesign
 #
 # EXACTLY TWO WINDOWS INSTALLERS, one per arch (, operator decision

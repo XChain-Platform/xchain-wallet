@@ -60,6 +60,7 @@
 // as `ok`, because "we did not look" and "we looked and it was fine" being
 // indistinguishable is the precise hole this whole file is a response to.
 
+import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename } from 'node:path';
 
@@ -132,14 +133,28 @@ export const SIGNATURE_CLASSES = {
         verify: false,
         what: 'APK/AAB signing is \'s lane (apksigner); declared here, checked there',
     },
-    // Signed by us and NOT checkable from a Linux runner: a .dmg is a
-    // disk image, and reading its signature needs macOS `codesign`. The
-    // mac zip beside it carries the same app bundle and IS checked, so
-    // the lane is not unguarded - but this row is an honest gap with a
-    // name rather than an omission.
-    'codesign-unverified': {
-        verify: false,
-        what: 'Apple-signed disk image; needs macOS codesign, not checkable from a Linux runner',
+    // The disk image itself, which is a DIFFERENT artifact from the app
+    // inside it and fails differently ( row 140).
+    //
+    // THIS CLASS REPLACES `codesign-unverified`, whose text asserted the
+    // very thing that turned out to be false. It read "Apple-signed disk
+    // image; needs macOS codesign, not checkable from a Linux runner" and
+    // set `verify: false` on the strength of it. Measured on the published
+    // v0.338.0 dmg: `codesign -dvvv` answered "code object is not signed
+    // at all", `stapler validate` answered "does not have a ticket stapled
+    // to it", and `spctl` answered `rejected: no usable signature` - while
+    // the `*mac*.zip` row beside it, cited as the reason the lane was
+    // "not unguarded", passed, because the BUNDLE was signed and notarized
+    // exactly as claimed. The two artifacts were never the same check, so
+    // one standing in for the other was a gap wearing a justification.
+    //
+    // What is verified is the assessment a user's own machine performs on
+    // a downloaded image, not merely the presence of a signature: a signed
+    // image with no notarization ticket still shows the unidentified-
+    // developer warning this milestone's acceptance test forbids.
+    'codesign-dmg': {
+        verify: true,
+        what: 'Apple-signed AND notarized disk image, assessed the way Gatekeeper assesses a download',
     },
     // The portable Windows zip. The signed thing is the PE INSIDE the
     // archive, not the archive, so the certificate-table read does not
@@ -220,11 +235,64 @@ export function zipHasCodeSignature(buf) {
 }
 
 /**
+ * Assess a .dmg the way a user's machine assesses a downloaded one.
+ *
+ * `spctl -a -t open --context context:primary-signature` is the exact
+ * evaluation LaunchServices performs on a quarantined disk image, and it
+ * is the command Apple's own notarization documentation gives for testing
+ * one. That is why it is used here in preference to `codesign -v`: a dmg
+ * can carry a perfectly valid Developer ID signature and still show the
+ * unidentified-developer warning, because what clears the warning is the
+ * notarization ticket. `source=Notarized Developer ID` is therefore the
+ * string that decides it, not the exit code alone.
+ *
+ * OFF macOS this records rather than fails, and the distinction is not a
+ * loophole: the mac lane is built and signed on macOS in both venues that
+ * exist (release.yml's `macos-latest` job and the release Mac of §6), so
+ * the check binds everywhere the artifact is actually produced. A Linux
+ * runner that never made a dmg has nothing to say about one. The reason
+ * string says which case it was, so a log cannot read as verified when it
+ * was skipped.
+ *
+ * `run` is injectable so the guard can be driven in both directions
+ * without a 135MB fixture and without a signing certificate.
+ *
+ * @param {string} path
+ * @param {{platform?: string, run?: (cmd: string, args: string[]) => {status: number|null, stdout: string, stderr: string}}} options
+ * @returns {{state: 'ok'|'failed'|'recorded', reason: string}}
+ */
+export function assessDiskImage(path, { platform = process.platform, run = defaultRun } = {}) {
+    if (platform !== 'darwin') {
+        return {
+            state: 'recorded',
+            reason: `NOT CHECKED: spctl exists only on macOS and this ran on ${platform}`,
+        };
+    }
+    const res = run('spctl', ['-a', '-t', 'open', '--context', 'context:primary-signature', '-vv', path]);
+    const output = `${res.stdout || ''}${res.stderr || ''}`.trim();
+    if (/source=Notarized Developer ID/.test(output)) {
+        return { state: 'ok', reason: 'accepted by Gatekeeper, source=Notarized Developer ID' };
+    }
+    const detail = output.replace(/\s+/g, ' ').slice(0, 200) || `spctl exited ${res.status}`;
+    return { state: 'failed', reason: `UNNOTARIZED: ${detail}` };
+}
+
+/**
+ * The default `run` for assessDiskImage: spawnSync, no shell, so a path
+ * with a space in it (every one of these artifacts once had one) cannot
+ * be re-split by anything.
+ */
+function defaultRun(cmd, args) {
+    const res = spawnSync(cmd, args, { encoding: 'utf8' });
+    return { status: res.status, stdout: res.stdout || '', stderr: res.stderr || '' };
+}
+
+/**
  * Check one artifact against one declared signature class.
  * Returns { file, class: cls, state, reason } where state is
  * 'ok' | 'failed' | 'recorded'.
  */
-export function checkArtifact(path, cls) {
+export function checkArtifact(path, cls, options = {}) {
     const spec = SIGNATURE_CLASSES[cls];
     const file = basename(path);
     if (!spec) {
@@ -232,6 +300,14 @@ export function checkArtifact(path, cls) {
     }
     if (!spec.verify) {
         return { file, class: cls, state: 'recorded', reason: spec.what };
+    }
+    // Handled before the file is read: a disk image is checked by asking
+    // the OS, not by scanning bytes, and reading a 135MB artifact into a
+    // Buffer to then ignore it is a real cost on a lane that runs this
+    // over every artifact in the release.
+    if (cls === 'codesign-dmg') {
+        const res = assessDiskImage(path, options);
+        return { file, class: cls, state: res.state, reason: res.reason };
     }
     let buf;
     try {

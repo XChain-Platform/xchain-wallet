@@ -197,6 +197,46 @@ assert.ok(
     'macOS dmg target configured',
 );
 
+// --- The disk image is signed and notarized too ( row 140) ------
+//
+// v0.338.0 published a .dmg containing a signed, notarized, stapled app
+// inside a container `codesign` called "not signed at all", because
+// dmg-builder signs the image only on `sign === true` and the default is
+// false. These two assertions pin the trigger to the same value the app's
+// own signing uses, so the two cannot drift into a signed bundle inside an
+// unsigned image again.
+assert.equal(
+    loadConfig({ ...NO_SIGNING_ENV, CSC_LINK: 'base64-p12' }).dmg.sign,
+    true,
+    'a build with a certificate signs the disk image, not only the app inside it',
+);
+assert.equal(
+    loadConfig(NO_SIGNING_ENV).dmg.sign,
+    false,
+    'an unsigned dev build leaves the image unsigned rather than failing on a missing identity',
+);
+{
+    const { shouldNotarize } = requireCjs(join(here, '../../../packages/desktop/scripts/notarize-dmg.cjs'));
+    // The trigger is the same pair `mac.notarize` uses. A build that
+    // signs but cannot notarize is the case that shipped the warning, so
+    // it must not read as a decision to skip.
+    assert.equal(
+        shouldNotarize({ platform: 'darwin', identity: 'Dankest, LLC', env: { APPLE_API_KEY_ID: 'K' } }).notarize,
+        true,
+        'identity plus App Store Connect credentials notarizes the image',
+    );
+    assert.equal(
+        shouldNotarize({ platform: 'darwin', identity: 'Dankest, LLC', env: {} }).notarize,
+        false,
+        'no credentials is the dev case: quiet, and the release gate is what refuses it',
+    );
+    assert.equal(
+        shouldNotarize({ platform: 'linux', identity: 'Dankest, LLC', env: { APPLE_API_KEY_ID: 'K' } }).notarize,
+        false,
+        'notarytool and stapler do not exist off macOS',
+    );
+}
+
 assert.ok(config.win, 'win target config present');
 
 // electron-builder v26 moved signtool settings into `win.signtoolOptions`

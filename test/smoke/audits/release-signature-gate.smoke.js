@@ -41,6 +41,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 import {
     peHasCertificateTable,
     zipHasCodeSignature,
+    assessDiskImage,
     checkArtifact,
     summarise,
     parseExpected,
@@ -173,13 +174,20 @@ function makePE({ certAddr = 0, certSize = 0, numRva = 16, magic = 0x20b } = {})
         checkArtifact(badExe, 'authenticode'),
         checkArtifact(goodZip, 'codesign'),
         checkArtifact(join(work, 'xchain-wallet-0.335.0.AppImage'), 'none'),
-        checkArtifact(join(work, 'xchain-wallet-0.335.0-x64.dmg'), 'codesign-unverified'),
+        // The dmg is CHECKED now (row 140), so it is driven here on a
+        // stubbed assessment rather than counted as recorded. The stub is
+        // the real spctl output shape, verbatim from the published
+        // v0.338.0 artifact on the good side.
+        checkArtifact(join(work, 'xchain-wallet-0.335.0-x64.dmg'), 'codesign-dmg', {
+            platform: 'darwin',
+            run: () => ({ status: 0, stdout: '', stderr: 'x.dmg: accepted\nsource=Notarized Developer ID\n' }),
+        }),
     ];
     const sum = summarise(results);
 
-    assert.equal(sum.ok, 2, 'the signed exe and the signed mac zip');
+    assert.equal(sum.ok, 3, 'the signed exe, the signed mac zip and the notarized dmg');
     assert.equal(sum.failed, 1, 'the unsigned arm64 installer must fail');
-    assert.equal(sum.recorded, 2, 'the AppImage and the dmg are recorded, not checked');
+    assert.equal(sum.recorded, 1, 'the AppImage alone is recorded, not checked');
     assert.equal(sum.failures[0].file, 'xchain-wallet-setup-0.335.0-arm64.exe');
     assert.match(sum.failures[0].reason, /UNSIGNED/);
 
@@ -194,6 +202,52 @@ function makePE({ certAddr = 0, certSize = 0, numRva = 16, magic = 0x20b } = {})
     assert.equal(wholeReleaseUnsigned.ok, 0);
     assert.equal(wholeReleaseUnsigned.failed, 2,
         'every unsigned artifact is reported, not just the first');
+}
+
+// --- the disk image itself ( row 140) ----------------------------
+//
+// THE CASE THIS EXISTS FOR IS A REAL RELEASE, NOT A HYPOTHETICAL. v0.338.0
+// published a .dmg whose app bundle was signed, notarized and stapled and
+// whose CONTAINER was not signed at all, and the gate said nothing because
+// the dmg's class declared it "Apple-signed" and skipped it on that basis.
+// The rejected output below is the verbatim assessment of that published
+// artifact.
+{
+    const dmg = join(work, 'xchain-wallet-0.338.0-arm64.dmg');
+
+    const published = assessDiskImage(dmg, {
+        platform: 'darwin',
+        run: () => ({ status: 3, stdout: '', stderr: `${dmg}: rejected\nsource=no usable signature\n` }),
+    });
+    assert.equal(published.state, 'failed', 'an unsigned disk image must fail, not record');
+    assert.match(published.reason, /UNNOTARIZED/);
+    assert.match(published.reason, /no usable signature/);
+
+    // A dmg can be validly SIGNED and still warn, because what clears the
+    // warning is the ticket. Signed-but-not-notarized must fail too, or
+    // the fix for row 140 could be "half applied" and read as green.
+    const signedNotNotarized = assessDiskImage(dmg, {
+        platform: 'darwin',
+        run: () => ({ status: 3, stdout: '', stderr: `${dmg}: rejected\nsource=Unnotarized Developer ID\n` }),
+    });
+    assert.equal(signedNotNotarized.state, 'failed',
+        'a signed image with no notarization ticket still shows the warning');
+
+    const good = assessDiskImage(dmg, {
+        platform: 'darwin',
+        run: () => ({ status: 0, stdout: '', stderr: `${dmg}: accepted\nsource=Notarized Developer ID\n` }),
+    });
+    assert.equal(good.state, 'ok');
+
+    // Off macOS it records and SAYS it recorded. The reason must not be
+    // mistakable for a pass: this is the exact shape the old class got
+    // wrong, where a skip read as an assurance.
+    const onLinux = assessDiskImage(dmg, {
+        platform: 'linux',
+        run: () => { throw new Error('spctl must not be invoked off macOS'); },
+    });
+    assert.equal(onLinux.state, 'recorded');
+    assert.match(onLinux.reason, /NOT CHECKED/);
 }
 
 // --- the real declaration, and the wiring that enforces it -------------
