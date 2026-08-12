@@ -142,8 +142,16 @@ function classify(output) {
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
     if (/XCHAIN_RELEASE_GPG_KEY is not set/.test(output)) return 'invoked';
     if (/unknown argument/.test(output)) return 'invoked';
-    if (/UNSIGNED|UNDECLARED|missing/i.test(output)) return 'lane-scope';
+    // The gpg markers are tested FIRST, because reaching them means every
+    // earlier step passed. They used to sit below the generic word match, and a
+    // run that wrote a manifest and then failed at the signature was filed as
+    // `lane-scope` on the strength of the word "missing" appearing anywhere in
+    // the output - measured 2026-08-12 against the v0.339.0 set, where the pin
+    // would have recorded `lane-scope` beside a blocker reading "signing
+    // manifest with key ...". A later step's evidence outranks an earlier
+    // step's vocabulary.
     if (/gpg: |No secret key|Inappropriate ioctl|passphrase/i.test(output)) return 'manifest-written';
+    if (/UNSIGNED|UNDECLARED|missing/i.test(output)) return 'lane-scope';
     return 'invoked';
 }
 
