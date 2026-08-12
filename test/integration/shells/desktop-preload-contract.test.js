@@ -155,6 +155,10 @@ const BRIDGE_WORLDS = [
     'xchainWalletWindow',
     'xchainWalletRegistry',
     'xchainWalletSignerBridge',
+    //  row 142. A fifth world is a widening of the renderer's
+    // privileged surface, so it is declared here deliberately rather than
+    // discovered: this list existing is what made adding it a decision.
+    'xchainWalletUpdater',
 ];
 
 beforeEach(() => {
@@ -166,9 +170,21 @@ afterEach(() => {
 });
 
 describe('desktop preload: the renderer sandbox surface', () => {
-    it('exposes exactly the four bridge worlds and nothing else', () => {
+    it('exposes exactly the declared bridge worlds and nothing else', () => {
         const pre = runPreload();
         expect([...pre.worlds.keys()].sort()).toEqual([...BRIDGE_WORLDS].sort());
+    });
+
+    // The update world is asserted by SHAPE rather than merely counted,
+    // because the defect it exists for was an absence that nothing could
+    // see: main broadcast update events on a channel no renderer could
+    // subscribe to, and the only path that installs a verified update had
+    // no caller. A world that appeared here with the wrong two functions
+    // would reproduce that silence with a name attached.
+    it('gives the renderer both halves of the update path, and only those', () => {
+        const pre = runPreload();
+        const updater = pre.worlds.get('xchainWalletUpdater');
+        expect(Object.keys(updater).sort()).toEqual(['install', 'onEvent']);
     });
 
     it('exposes functions only: no ipcRenderer, require, process or module handle crosses over', () => {
@@ -197,11 +213,18 @@ describe('desktop preload: the renderer sandbox surface', () => {
         const registry = pre.worlds.get('xchainWalletRegistry');
         const signer = pre.worlds.get('xchainWalletSignerBridge');
 
+        const updater = pre.worlds.get('xchainWalletUpdater');
+
         await bridge.sendMessage({ type: 'session.status' });
         await bridge.wipeStorage();
         await win.openDetached({ initialView: 'history' });
         await registry.getRemoteDescriptors();
         signer.postMessage({ kind: 'announce', signerIds: [] });
+        //  row 142: the install call is walked here specifically so
+        // the agreement check below covers it. A preload that invoked a
+        // channel main never registered would be the same failure the
+        // update path already had - a call with nothing at the other end.
+        await updater.install();
 
         const used = new Set([
             ...pre.invokes.map(([channel]) => channel),
@@ -209,7 +232,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // subset check below is vacuously true.
-        expect(used.size).toBe(5);
+        expect(used.size).toBe(6);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {
