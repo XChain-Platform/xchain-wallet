@@ -385,8 +385,15 @@ export function priceVerdict(body) {
     if (!body || typeof body !== 'object') {
         return { usable: false, retryable: true, reason: 'the explorer returned no fee quote at all' };
     }
+    // `busy` is carried through, not just folded into `retryable`, because the
+    // two call for OPPOSITE responses. A missing price is fixed by seeding and
+    // advancing the chain; a busy quote engine is a lock the caller is standing
+    // behind, and mining another block only lengthens the queue holding it.
     if (body.busy) {
-        return { usable: false, retryable: true, reason: body.error || 'the indexer is already at its fee-quote limit' };
+        return {
+            usable: false, retryable: true, busy: true,
+            reason: body.error || 'the indexer is already at its fee-quote limit',
+        };
     }
     if (body.supported === false) {
         return {
@@ -411,6 +418,56 @@ export function priceVerdict(body) {
         usable: false, retryable: true,
         reason: body.error || 'the fee quote carried no oracle price',
     };
+}
+
+/**
+ * Drives a freshly seeded venue until it prices an action, or says why not.
+ *
+ * All I/O is injected, because the bug this replaced was one of ORDER and a
+ * live venue cannot be made to reproduce it: the loop used to mine a block,
+ * wait a flat 3 seconds and re-probe, four times. On Litecoin and Dogecoin
+ * that is plenty. On Bitcoin it is a bet that loses, because the same venue
+ * parses most blocks in 54-260ms and the occasional one in 1m 12.8s, and for
+ * the whole of that window every fee quote answers `busy` ("waited 2000ms for
+ * the database transaction lock"). Four attempts then fit inside ONE lock and
+ * the run reports an unpriceable venue that is, minutes later, healthy - which
+ * is how RBTC came to look permanently dead while the other two chains ran.
+ *
+ * Two rules come out of that, and both are asserted in the unit suite:
+ *   - WAIT ON THE INDEXER, not on a duration. `waitForTip` resolves when the
+ *     chain has actually been absorbed.
+ *   - A BUSY ENGINE IS A LOCK, NOT A MISSING PRICE. Re-ask the same question;
+ *     do not mine again, which only puts another block in front of the one
+ *     already being parsed. The number of MINES is therefore the thing worth
+ *     asserting on, and `trace` exists so a test can.
+ *
+ * @returns {Promise<{verdict: object, trace: string[]}>} the last verdict seen
+ *   and the sequence of actions taken to reach it.
+ */
+export async function settlePrice({
+    probe, mineOne, waitForTip, sleep,
+    attempts = 4, busyReprobes = 20, busyReprobeMs = 5_000,
+}) {
+    let verdict = { usable: false, retryable: true, reason: 'the venue was never probed' };
+    const trace = [];
+    for (let i = 0; i < attempts; i++) {
+        trace.push('mine');
+        await mineOne();
+        trace.push('wait');
+        await waitForTip();
+        trace.push('probe');
+        verdict = await probe();
+        for (let b = 0; verdict.busy && b < busyReprobes; b++) {
+            trace.push('sleep');
+            await sleep(busyReprobeMs);
+            trace.push('probe');
+            verdict = await probe();
+        }
+        if (verdict.usable) return { verdict, trace };
+        // "Not ever" rather than "not yet": another block will not help.
+        if (!verdict.retryable) break;
+    }
+    return { verdict, trace };
 }
 
 /**

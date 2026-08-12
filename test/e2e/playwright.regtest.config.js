@@ -42,10 +42,28 @@ import { defineConfig, devices } from '@playwright/test';
 // so a spec that moves the node's clock still needs to take its turn.
 const PREVIEW_PORT = Number(process.env.XC_PREVIEW_PORT) || 4183;
 
+// XC_REUSE_BUILD serves the `dist/` that is already there instead of making a
+// new one, and it exists for exactly one shape of work: several sessions
+// driving DIFFERENT CHAINS of the same venue at the same time, on different
+// ports, over wallet source nobody is editing. Two concurrent runs otherwise
+// each `vite build` into the one shared `dist/`, and a half-written bundle is a
+// worse failure than a stale one.
+//
+// It is opt-in and loud because it re-opens the trap the build step above
+// closes: whoever sets it owns the freshness of that build, and setting it
+// after touching wallet source will test yesterday's wallet and report on
+// today's. The output dir moves with the port too, so parallel runs cannot
+// overwrite each other's traces.
+const REUSE_BUILD = process.env.XC_REUSE_BUILD === '1';
+if (REUSE_BUILD) {
+    console.warn(`[regtest] XC_REUSE_BUILD=1: serving the EXISTING packages/web/dist on :${PREVIEW_PORT} `
+        + 'without rebuilding. Any wallet source change made since that build is NOT under test.');
+}
+
 export default defineConfig({
     testDir: './tests',
     testMatch: '**/*.regtest.spec.js',
-    outputDir: './test-results-regtest',
+    outputDir: REUSE_BUILD ? `./test-results-regtest-${PREVIEW_PORT}` : './test-results-regtest',
     fullyParallel: false,
     forbidOnly: !!process.env.CI,
     // No retries: a broadcast spec that passes on retry is telling you
@@ -87,7 +105,9 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
+        command: REUSE_BUILD
+            ? `pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`
+            : `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
         url: `http://localhost:${PREVIEW_PORT}`,
         // Always false, even locally: reusing a preview server means
         // reusing whatever build it was started with, which reintroduces
