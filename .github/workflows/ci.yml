@@ -1,11 +1,15 @@
 name: CI
 on:
   push:
-    branches: [master]
+    # develop is where all work lands; master only ever receives release PRs.
+    # Both run the gate: develop so a lane push is verified as it lands, master
+    # so the merge commit a release tag points at has its own green run.
+    branches: [master, develop]
   pull_request:
     branches: [master]
 concurrency:
-  # On master, group per COMMIT. Elsewhere, group per ref.
+  # On a PROTECTED branch (master, develop), group per COMMIT. Elsewhere, group
+  # per ref.
   #
   # `cancel-in-progress: false` below is necessary but NOT sufficient, which was
   # measured the hard way: it protects a RUNNING job, and GitHub separately keeps
@@ -20,17 +24,24 @@ concurrency:
   # master commits are never in the same group, so neither can evict the other
   # and every commit reaches a verdict the release gate can read. Pull requests
   # keep per-ref grouping, where superseding is the whole point.
-  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || 'ref' }}
+  #
+  # develop joins master here rather than inheriting the feature-branch shape.
+  # Under the develop/master model develop is where every agent lane and every
+  # human commit lands, so it inherits exactly the contention that produced the
+  # measurement below, and it is the branch a release is frozen FROM: the
+  # ceremony requires green CI on the specific develop SHA a release branch is
+  # cut at, which a run evicted while queued can never provide.
+  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}
   # Cancel superseded runs on pull requests and feature branches, where only the
-  # latest push matters and runner minutes are the only cost. NEVER cancel on
-  # master: the release gate (tools/release/verify-validated-commit.mjs) requires
-  # a COMPLETED, SUCCESSFUL run on the exact tag commit, so a cancelled master run
-  # leaves that commit permanently unreleasable. With several sessions pushing to
-  # this repo, blanket cancellation made that the normal case rather than the
+  # latest push matters and runner minutes are the only cost. NEVER cancel on a
+  # protected branch: the release gate (tools/release/verify-validated-commit.mjs)
+  # requires a COMPLETED, SUCCESSFUL run on the exact tag commit, so a cancelled
+  # run leaves that commit permanently unreleasable. With several sessions pushing
+  # to this repo, blanket cancellation made that the normal case rather than the
   # exception: measured 2026-08-03, 40 consecutive master runs produced 30
   # cancellations and exactly one success, so a green commit to tag was a matter
   # of luck. Cancellation was masking the record, not saving it.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/develop' }}
 
 jobs:
   # Unit + security + smoke. `pnpm run ci` is the same gate bin/ci-all.sh and the
@@ -106,6 +117,12 @@ jobs:
         with:
           repository: XChain-Platform/xchain-documentation
           ssh-key: ${{ env.XCHAIN_DOCS_READ_KEY }}
+          # DELIBERATELY master, and it stays master after the develop/master
+          # adoption: xchain-documentation is exempt from the branch policy and
+          # remains a master-only repo, so it has no develop branch to track.
+          # A sweep that flips every `master` literal to `develop` would point
+          # this at a ref that does not exist and take the docs-coupled smokes
+          # down with it.
           ref: master
           path: .docs-sibling
       # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step can't
