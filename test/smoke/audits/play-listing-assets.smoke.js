@@ -39,6 +39,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SETS, verifyPin } from '../../../tools/release/verify-listing-assets.mjs';
+import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -239,6 +240,92 @@ check('the set-wide canvas rule covers every asset it is applied to', () => {
             + 'is a gate nobody can pass.');
     }
 });
+
+// --- 6. The drift question is really asked, at the step that uploads --------
+//
+// The other half of the split declared at the top of this file. Pin-versus-
+// bytes is gated above; drift is only a defect at the moment the images are
+// bound to a listing, so it is asked in the ceremony instead of here. That
+// placement only works if the step exists and really runs the tool, which is
+// why the extension lane gates its own Phase 5 the same way: a step that
+// merely SAYS to check the screenshots is prose behind a green check.
+//
+// Read out of the sibling docs checkout, which is where the wallet's operator
+// pages live. An absent-and-undeclared sibling skips this section alone rather
+// than the whole file: the pin checks above need no docs and must not be lost
+// to a checkout that has none. A DECLARED sibling that is missing exits inside
+// docsAvailable(), which is the intended red.
+const PLAY_PAGE = ['release', 'mobile', 'android-play.md'];
+
+if (docsAvailable()) {
+    // 2b is the listing form: the phase that puts the icon, the feature
+    // graphic and the four screenshots into the console. Sliced rather than
+    // searched whole-page, so a mention of the tool somewhere else on the page
+    // cannot stand in for the step at the upload.
+    const ceremony = readDoc(...PLAY_PAGE);
+    const start = ceremony.indexOf('#### 2b');
+    const end = ceremony.indexOf('### Phase 3');
+    const uploadStep = (start >= 0 && end > start) ? ceremony.slice(start, end) : '';
+
+    check('the Play ceremony still has the listing step that uploads the images', () => {
+        assert.ok(uploadStep.length > 0,
+            `the 2b listing step is not on ${WALLET_DOCS}/release/mobile/android-play.md, and it is `
+            + 'the step that uploads the six listing assets. Either the phase was renamed or the '
+            + 'ceremony was scrubbed; either way the drift question now has nowhere to be asked.');
+    });
+
+    const toolLines = uploadStep.split('\n')
+        .filter((l) => l.includes('tools/release/verify-listing-assets.mjs'));
+
+    check('the Play upload step asks which build the images depict', () => {
+        assert.ok(toolLines.length > 0,
+            'the Play listing step never runs tools/release/verify-listing-assets.mjs. The assets '
+            + 'are checked for their dimensions in two places and for what they DEPICT in none, so '
+            + 'a screenshot of a build nobody can install uploads clean onto the live listing.');
+    });
+
+    check('it is asked for THIS set and against the tag being shipped', () => {
+        const drift = toolLines.find((l) => l.includes('--since'));
+        assert.ok(drift,
+            'the Play listing step names the verifier but never with `--since`. Defaulted to HEAD '
+            + "it measures this machine's working tree, which is not what is being uploaded, and it "
+            + 'reports CLEAN on a checkout that happens to sit at the capture commit.');
+        assert.match(drift, /--set\s+play/,
+            `the drift line reads \`${drift.trim()}\` and does not name \`--set play\`. Without it `
+            + 'the tool checks the extension set, so the Play images upload unmeasured behind a '
+            + 'green run about another store.');
+        assert.match(drift, /--since\s+v/,
+            `the drift line reads \`${drift.trim()}\`, whose \`--since\` is not a version tag. The `
+            + 'subject of the question is the build being uploaded, so the ref has to be the tag.');
+    });
+
+    check('all three verdicts are written down', () => {
+        // A three-state check read as two states resolves the missing state as
+        // a pass, and INCONCLUSIVE is the one that gets dropped: this set has
+        // no capture harness, so "no pin" is a live way to reach it.
+        for (const [word, why] of [
+            ['CLEAN', 'the passing outcome'],
+            ['STALE', 'the outcome that must stop the upload'],
+            ['INCONCLUSIVE', 'the outcome that looks like neither and is not a pass'],
+        ]) {
+            assert.ok(uploadStep.includes(word),
+                `the Play listing step does not say what ${word} means (${why}). A verdict an `
+                + 'operator cannot read is one they resolve in favour of uploading.');
+        }
+    });
+
+    check('the way out matches the fact that this lane has no capture script', () => {
+        // The iOS page can say "re-run the capture, it re-pins itself". Here
+        // there is no such script, so an operator who follows that wording
+        // hunts for a harness that does not exist and hand-writes a pin
+        // instead, which is the failure the pin exists to prevent.
+        assert.ok(/--write/.test(uploadStep) && /--set\s+play/.test(uploadStep),
+            'the Play listing step never tells the operator how to re-pin after a reshoot '
+            + '(`node tools/release/verify-listing-assets.mjs --write --set play`). This set '
+            + `declares capture: ${JSON.stringify(playSet.capture)}, so nothing else writes that `
+            + 'pin, and a step that states a problem without its remedy gets uploaded past.');
+    });
+}
 
 if (failures > 0) {
     console.error(`\n${failures} Play listing-asset gate check(s) failed`);
