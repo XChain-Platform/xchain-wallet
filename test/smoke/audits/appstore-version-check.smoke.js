@@ -39,6 +39,7 @@
 //    inconclusive - the same rule the other two gates carry.
 
 import { strict as assert } from 'node:assert';
+import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import {
@@ -442,11 +443,11 @@ assert.equal(ships.betting, true, 'the betting lane ships in the store profile t
 // Node signs ES256 as DER; App Store Connect accepts only fixed-width r||s. A
 // DER signature fails as a 401, which reads exactly like a revoked key and
 // sends the next person to rotate a credential that is fine.
-const KEY_PEM = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgevZzL1gdAFr88hb2
-OF/2NxApJCzGCEDdfSp6VQO30hyhRANCAAQRWz+jn65BtOMvdyHKcvjBeBSDZH2r
-1RTwjmYSi9R/zpBnuQ4EiMnCqfMPWiZqB4QdbAd0E7oH50VpuZ1P087G
------END PRIVATE KEY-----`;
+// Generated fresh per run: the assertions below pin signature SHAPE (64-byte
+// r||s, JOSE header, claim layout), none of which depends on which key signs,
+// and a committed PEM would trip every secret scanner the day the repo is public.
+const KEY_PEM = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+    .privateKey.export({ type: 'pkcs8', format: 'pem' });
 const jwt = ascToken({ keyPem: KEY_PEM, keyId: 'TESTKEYID', issuer: 'test-issuer', nowSec: 1_700_000_000 });
 const [h, p, sig] = jwt.split('.');
 assert.equal(jwt.split('.').length, 3, 'a JWT has three parts');
