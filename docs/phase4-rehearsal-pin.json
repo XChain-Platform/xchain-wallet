@@ -5,16 +5,16 @@
     "reached": "manifest-written",
     "reachedSignature": false,
     "blocker": "sign.sh: signing manifest with key 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7 ...",
-    "scriptRef": "7db8996387306ff576c832e9163e8c55a5577134",
+    "scriptRef": "bd96592a4f3eaa9f8e2af26e84e4ed9d5524b813",
     "repoRef": "4436564154f1111c7e0984f6fb9ece2c55de1f3d",
     "scriptPath": {
         "tools/release/sign.sh": "65987476c38d40982784c3b8cc23ad604da861c4d6660c3e0ce0ffe81ef7a9a5",
         "tools/release/verify.sh": "373d5b3ae6ecc3a7e73e7760d316e1632e481d32eaacea5adb2919eee9d5e395",
-        "tools/release/lib.sh": "14defffbdad4fe2657cdd59fe21e4df29ab0d4ddef464499a40c047c01d03d81"
+        "tools/release/lib.sh": "28762e04562c6b611b6dc28493042659dc48a67488e5707f8ba470666ac07e5c"
     },
     "repoPath": {
         "tools/release/shipped-lanes.txt": "752c153bb426fe9a578e013c12d053907c015878e20b80d248c6be02954392d3",
         "tools/build-reproduce/check-no-dev-mock.sh": "eae85dea44d3941c5c38995a7a0e52cbf49424ba8aa288fedaab82d8c880e99a"
     },
-    "observedAt": "2026-08-12T16:22:10.143Z"
+    "observedAt": "2026-08-13T17:33:03.236Z"
 }
