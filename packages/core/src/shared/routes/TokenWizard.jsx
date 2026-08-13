@@ -46,10 +46,10 @@ const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE'
  *
  * Five-stage flow: template → chain → details → preview → sign.
  *
- *   template:  pick one of six templates (§40.1). Step 4 ships the
- *              Custom template as fully interactive; the other five
- *              are visible as cards but their dedicated detail forms
- *              land in Phase-2 Step 6 (piece 2d).
+ *   template:  pick one of six templates (§40.1), each with its own
+ *              detail form. A seventh, "Community", was retired in
+ *              : it composed the same ISSUE as Utility and
+ *              advertised dividends, which every token supports.
  *   chain:     pick the chain to create the token on. Filtered to
  *              chains the wallet already has an address on (needs a
  *              fee-paying address). Auto-picks the newest external
@@ -81,7 +81,7 @@ export function TokenWizard({ walletId, onBack }) {
         /** @type {'template' | 'chain' | 'details' | 'preview' | 'sign' | 'done' | 'error'} */ ('template'),
     );
     const [template, setTemplate] = useState(
-        /** @type {null | 'meme' | 'utility' | 'collectible' | 'edition' | 'community' | 'subtoken' | 'custom'} */ (null),
+        /** @type {null | 'meme' | 'utility' | 'collectible' | 'edition' | 'subtoken' | 'custom'} */ (null),
     );
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(
@@ -545,7 +545,7 @@ export function TokenWizard({ walletId, onBack }) {
 
     if (stage === 'template') {
         return wrap(renderTemplateStage({
-            onPick: (t) => { setTemplate(t); setStage('chain'); },
+            onPick: (t) => { setTemplate(resolveTemplate(t)); setStage('chain'); },
         }));
     }
 
@@ -710,10 +710,16 @@ export function TokenWizard({ walletId, onBack }) {
  *               signature.) All three locks are needed for "fixed
  *               supply" to be true; see collectible.
  * - **utility**: mintable, adjustable: MAX_SUPPLY + MAX_MINT, no lock
- *               flags. Description encouraged for discovery.
- * - **community**: dividend-capable + mintable: same shape as utility;
- *               dividends are a later DIVIDEND action on the TICK, not
- *               a flag on ISSUE.
+ *               flags. Description encouraged for discovery. 
+ *               folded the old **community** template into this one:
+ *               it composed a byte-identical ISSUE and its only claim
+ *               ("dividend-enabled") is true of every token, because
+ *               DIVIDEND validation has no per-token opt-in - it only
+ *               requires that both ticks exist, that neither they nor
+ *               the source are sleeping, and that the payer has funds.
+ *               The card copy now says so instead of implying that
+ *               dividends are a choice made at creation time. Legacy
+ *               'community' ids still resolve here via TEMPLATE_ALIASES.
  * - **collectible**: single-edition: MAX_SUPPLY=1 + MINT_SUPPLY=1 +
  *               non-divisible + LOCK_MAX_SUPPLY + LOCK_MINT +
  *               LOCK_MINT_SUPPLY. The third lock is what makes the 1-of-1
@@ -743,8 +749,19 @@ export function TokenWizard({ walletId, onBack }) {
  *               create plus three admin edits is one transaction.
  */
 function composeIssueParams(template, form) {
-    const composer = TEMPLATE_COMPOSERS[template] || TEMPLATE_COMPOSERS.custom;
+    const composer = TEMPLATE_COMPOSERS[resolveTemplate(template)] || TEMPLATE_COMPOSERS.custom;
     return composer(form);
+}
+
+/**
+ * Retired template ids, mapped to the template that absorbed them.
+ * Without this a stale id would fall through to `custom`, which shows
+ * different fields and composes a different ISSUE.
+ */
+const TEMPLATE_ALIASES = { community: 'utility' };
+
+function resolveTemplate(template) {
+    return TEMPLATE_ALIASES[template] || template;
 }
 
 const TEMPLATE_COMPOSERS = {
@@ -769,13 +786,6 @@ const TEMPLATE_COMPOSERS = {
         if (form.maxMint) p.MAX_MINT = String(form.maxMint).trim();
         maybeDescription(p, form);
         return p;
-    },
-
-    community(form) {
-        // Dividend support is a protocol-level property of the TICK
-        // (enforced via a DIVIDEND action on an owned token); the ISSUE
-        // shape is the same as utility today.
-        return TEMPLATE_COMPOSERS.utility(form);
     },
 
     collectible(form) {
@@ -890,7 +900,7 @@ const TEMPLATES = [
     {
         id: 'utility',
         name: 'Utility token',
-        tagline: 'Mintable, adjustable supply, descriptive.',
+        tagline: 'Mintable, adjustable supply. Can pay dividends, like every token.',
         interactive: true,
     },
     {
@@ -903,12 +913,6 @@ const TEMPLATES = [
         id: 'edition',
         name: 'Limited edition',
         tagline: 'A fixed set of identical collectibles that anyone can mint.',
-        interactive: true,
-    },
-    {
-        id: 'community',
-        name: 'Community',
-        tagline: 'Dividend-enabled, mintable.',
         interactive: true,
     },
     {
@@ -953,6 +957,16 @@ function renderTemplateStage({ onPick }) {
                     </li>
                 ))}
             </ul>
+            {/* : dividends are not a template setting, and the
+                wizard used to imply they were by selling a "Community"
+                card on a promise every token already keeps. Saying it
+                once here is what stops an issuer from abandoning a
+                perfectly good token and paying a second ISSUE fee to
+                re-create it under the "right" template. */}
+            <p className={styles.stageHint}>
+                Any token you create here can pay dividends to its holders later.
+                That is a property of every token, not something a template turns on.
+            </p>
         </>
     );
 }
@@ -1013,10 +1027,6 @@ const TEMPLATE_FIELDS = {
         name: true, displayName: true, supply: true, divisible: true,
         description: true, maxMint: true,
     },
-    community: {
-        name: true, displayName: true, supply: true, divisible: true,
-        description: true, maxMint: true,
-    },
     collectible: {
         name: true, displayName: true, imageUrl: true,
     },
@@ -1054,12 +1064,13 @@ function renderDetailsStage({
     advancedPanel,
     formError, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
-    const show = TEMPLATE_FIELDS[template] || TEMPLATE_FIELDS.custom;
-    const isEdition = template === 'edition';
+    const resolved = resolveTemplate(template);
+    const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
+    const isEdition = resolved === 'edition';
     return (
         <form onSubmit={onSubmit} noValidate>
             <p className={styles.stageHint}>
-                Template: <strong>{template}</strong>
+                Template: <strong>{resolved}</strong>
             </p>
             {show.parentToken ? (
                 <Input
@@ -1076,7 +1087,7 @@ function renderDetailsStage({
             ) : null}
             {show.name ? (
                 <Input
-                    label={template === 'subtoken' ? 'Subtoken name' : 'Token name (ticker)'}
+                    label={resolved === 'subtoken' ? 'Subtoken name' : 'Token name (ticker)'}
                     hint="A–Z, 0–9. Uppercase."
                     value={name}
                     onChange={(e) => setName(e.target.value.toUpperCase())}
@@ -1204,7 +1215,7 @@ function renderDetailsStage({
                     autoCorrect="off"
                 />
             ) : null}
-            {template === 'custom' && advancedPanel ? (
+            {resolved === 'custom' && advancedPanel ? (
                 <AdvancedIssuePanel {...advancedPanel} />
             ) : null}
             <NativeFeeToggle

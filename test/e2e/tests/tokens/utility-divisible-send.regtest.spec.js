@@ -49,15 +49,17 @@
 // because today nothing checks precision there (`Send.jsx`'s input guard is a
 // bare `/^\d*\.?\d*$/`, and `ContractStakeForm` only HINTS the rule in prose).
 //
-// A NOTE ON THE SIBLING TEMPLATE, since this is the file that would carry it:
-// `TEMPLATE_COMPOSERS.community` returns `TEMPLATE_COMPOSERS.utility(form)`
-// verbatim and `TEMPLATE_FIELDS.community` is field-for-field identical, so
-// the two templates compose the same ISSUE. The Community card's tagline is
+// A NOTE ON THE SIBLING TEMPLATE, since this is the file that raised it:
+// `TEMPLATE_COMPOSERS.community` used to return `TEMPLATE_COMPOSERS.utility(form)`
+// verbatim, with a field-for-field identical `TEMPLATE_FIELDS.community`, so the
+// two templates composed the same ISSUE. The Community card's tagline was
 // "Dividend-enabled, mintable" - and `dividend.js` has no per-token opt-in at
 // all (it requires only that both ticks exist and neither is sleeping), so
-// every token is dividend-enabled, including Meme and Collectible. Recorded as
-// a copy/UX finding rather than tested here, because there is no on-chain
-// difference for a spec to assert.
+// every token is dividend-enabled, including Meme and Collectible. 
+// merged the card into Utility and put the plain statement on the picker; the
+// picker copy and the composed ISSUE are covered by
+// test/unit/routes/TokenWizard.dividendCopy.test.jsx, since there was never an
+// on-chain difference for an e2e spec to assert.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \

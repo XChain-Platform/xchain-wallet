@@ -193,8 +193,11 @@ assert.ok(
     /const \[showAdvanced, setShowAdvanced\] = useState\(false\)/.test(src),
     'the panel is collapsed by default',
 );
+// `resolved` is `template` after TEMPLATE_ALIASES maps retired ids onto
+// the template that absorbed them ( merged Community into
+// Utility); either name reads the same gate.
 assert.ok(
-    /\{template === 'custom' && advancedPanel \?/.test(src),
+    /\{(?:template|resolved) === 'custom' && advancedPanel \?/.test(src),
     'the panel only mounts for the Custom template',
 );
 assert.ok(
