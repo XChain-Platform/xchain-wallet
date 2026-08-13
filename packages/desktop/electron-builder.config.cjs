@@ -39,6 +39,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const { assertWindowsSigningMaterial } = require('./scripts/windows-signing.cjs');
+const { assertMacosSigningMaterial, macosSigningStatus } = require('./scripts/macos-signing.cjs');
 
 const here = __dirname;
 const rootPkg = JSON.parse(
@@ -137,6 +138,25 @@ const macSigningCertSupplied = Boolean(process.env.CSC_LINK || process.env.CSC_K
 // find-identity` and warn on every build. So the certificate itself is the
 // trigger, which is a thing the lane cannot lose without failing loudly.
 const MAC_IDENTITY = process.env.CSC_IDENTITY_NAME || (macSigningCertSupplied ? TEAM_QUALIFIER : null);
+
+// A lane that must ship a SIGNED, NOTARIZED macOS build fails HERE, by name,
+// rather than packing artifacts that Gatekeeper blocks and letting the
+// artifact gate discover it once the release is staged. This is the twin of
+// the Windows check further down, and it exists because the mac lane lost the
+// same way: `CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}` on an unset secret
+// expands to the empty string, `macSigningCertSupplied` above is then false,
+// `MAC_IDENTITY` is null, and app-builder-lib skips signing and exits 0. The
+// v0.336.0 release shipped both mac zips and both dmgs unsigned that way,
+// from a green job, while the Snap and Mac App Store lanes in the same
+// workflow guarded themselves.
+//
+// Opt-in, for the same reason the Windows one is: `pnpm run dist` with no
+// certificate is a legitimate dev build and stays quiet. release.yml sets
+// XCHAIN_REQUIRE_MAC_SIGNING=1 on every step that builds a mainline mac
+// artifact, and test/smoke/audits/macos-signing-required.smoke.js fails if a
+// step is added that does not.
+const macSigningRequired = macosSigningStatus(process.env).required;
+assertMacosSigningMaterial(process.env);
 
 // The Microsoft Store lane (§15), opt-in for the same three
 // reasons as MAS. It needs a Partner-Center-assigned publisher identity
@@ -319,7 +339,16 @@ const config = {
     // nothing. Scoped to the store lane because a dev or CI mac build with
     // no certificate at all is a legitimate unsigned build; a Mac App
     // Store build never is.
-    forceCodeSigning: buildMas,
+    //
+    // The direct-download lane joins it whenever it declares the
+    // requirement, and that is a SECOND check rather than a duplicate of the
+    // credential assert above. The assert answers "this environment was
+    // never handed a certificate", before the build starts. This answers
+    // "the certificate was there and the signature still did not land",
+    // which is the case a present-but-wrong cert produces: an identity that
+    // matches nothing in the keychain reaches `handleNullIdentity`, which
+    // logs and returns false unless this flag is on.
+    forceCodeSigning: buildMas || macSigningRequired,
 
     // --- Reproducible AppImage (DD7) ----------------------------
     //
