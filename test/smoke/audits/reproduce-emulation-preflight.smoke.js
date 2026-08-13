@@ -125,7 +125,9 @@ check('1. a native amd64 host proceeds without mentioning emulation', () => {
 });
 
 check('2. arm64 with Rosetta registered proceeds and names it', () => {
-    const binfmt = fakeBinfmt([{ name: 'RosettaLinux', interpreter: 'REDACTED-LOCAL-PATH' }]);
+    // The interpreter path is inert here (the preflight matches on the handler
+    // NAME), so this carries the path a Rosetta-for-Linux guest really shows.
+    const binfmt = fakeBinfmt([{ name: 'RosettaLinux', interpreter: '/run/rosetta/rosetta' }]);
     const { code, out } = run({ binfmt });
     assert.equal(code, 0, out);
     assert.match(out, /RosettaLinux/);
