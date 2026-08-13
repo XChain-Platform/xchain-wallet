@@ -21,6 +21,25 @@
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 
+/**
+ * How often Home re-runs the whole balance load while the wallet is open.
+ *
+ * Nothing pushes balance changes to the wallet (an incoming send, a mint
+ * landing, a token someone else sent you), so Home polls: 20s balances
+ * catching an incoming token promptly against hammering the SDK/indexer on
+ * every open tab. The polling effect in Home.jsx also refires immediately on
+ * focus/visibility and pauses while the document is hidden.
+ *
+ * It lives HERE, next to the aggregator it re-runs, rather than as a private
+ * const in Home.jsx, because it is not only a UI cadence: it is the wallet's
+ * SUSTAINED request rate against the public endpoints, and
+ * tools/release/cold-open-profile.mjs has to read the same number the app
+ * uses when it works out what the zone rate limits must clear. A profile that
+ * restated the interval would go quietly wrong the first time someone tuned
+ * it .
+ */
+export const BALANCE_POLL_INTERVAL_MS = 20000;
+
 // D-6: the explorer `/balances/` endpoint is the XChain TOKEN ledger only; it
 // never carries the chain's NATIVE coin (BTC/LTC/DOGE) balance, which lives at
 // `/address/` (sourced from the utxo-tracker). The wallet UI (BalanceList /

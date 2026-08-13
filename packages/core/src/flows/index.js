@@ -445,6 +445,7 @@ export {
     chainTipBlockTime,
     indexerWatermark,
     walletBalances,
+    BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
 export {
     verifyAddressBalance,

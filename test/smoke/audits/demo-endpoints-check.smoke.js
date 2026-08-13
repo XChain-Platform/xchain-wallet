@@ -35,7 +35,9 @@ import { strict as assert } from 'node:assert';
 import {
     demoProbesFor, classifyProbe, checkDemoEndpoints, burstProbe, EXIT,
     DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS, preflightVerdict,
+    defaultBurstCount,
 } from '../../../tools/release/verify-demo-endpoints.mjs';
+import { coldOpenBurstSize } from '../../../tools/release/cold-open-profile.mjs';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 
 // --- 1. The probe list comes from the descriptors ----------------------
@@ -862,12 +864,62 @@ assert.ok(
     'a rate-limited burst adds its own failure row rather than hiding inside the per-probe result',
 );
 
+// A CLEAN burst must SAY what it measured. These hosts sit on the zone's
+// twelve-hostname rate-limit skip, so an unthrottled burst measures the skip
+// and says nothing about the limit under it - and the 2026-08-02 run was read
+// as evidence it did, because a clean burst produced no row at all .
+const cleanBurst = await checkDemoEndpoints({
+    descriptors: FAKE,
+    burst: 4,
+    fetchImpl: routed({}),
+});
+const cleanRow = cleanBurst.results.find((r) => r.service === 'rate-limit');
+assert.ok(cleanRow, 'a clean burst still reports what it measured rather than staying silent');
+assert.equal(cleanRow.state, 'live');
+assert.match(
+    cleanRow.detail,
+    /measures the SKIP, not the limit/,
+    'a clean burst must not be readable as proof the limit is survivable',
+);
+
+// "N requests came back 200" is not a rate. How long the burst took decides
+// whether it was ever a test of a limit, so the elapsed time and the observed
+// rate travel with the result.
+assert.equal(typeof burstFine.elapsedMs, 'number');
+assert.ok(Number.isFinite(burstFine.ratePerSec), 'the observed rate must be a finite number');
+
+// `--burst` with no count parses to 'auto', which main() resolves from the
+// measured cold-open. Reaching the run with it unresolved would compare
+// 'auto' > 0, come back false, and skip the burst in SILENCE.
+await assert.rejects(
+    () => checkDemoEndpoints({ descriptors: FAKE, burst: 'auto', fetchImpl: routed({}) }),
+    /burst must be a number/,
+    'an unresolved burst size must fail loudly rather than skip the burst',
+);
+
+// The default burst size is DERIVED from the wallet's own cold-open, not the
+// undefended 8 it used to be. Asserted through the gate's own accessor so the
+// two tools cannot drift apart.
+const measuredBurst = await defaultBurstCount();
+assert.ok(
+    Number.isInteger(measuredBurst) && measuredBurst > 0,
+    'the default burst size must be a measured positive integer',
+);
+assert.equal(
+    measuredBurst,
+    await coldOpenBurstSize(),
+    'the gate\'s default burst must be the cold-open profiler\'s number, not a copy of it',
+);
+
 console.log(
     'OK: demo-endpoint gate smoke (probe list derived from the shipped testnet descriptors and'
     + ' deduplicated; 403 is a failure that names and 429 one that names; a 200 is not a pass on'
     + ' its own, since the hub signature, the explorer available-networks map and the encoder tracker-sync flag'
     + ' each turn a healthy-looking response into the failure a reviewer would hit; inconclusive never becomes a'
-    + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit; the encoder'
+    + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit, its default'
+    + ' size is the measured wallet cold-open rather than a round number, and a CLEAN burst says so rather than'
+    + ' staying silent, because these hosts are on the zone rate-limit skip and an unthrottled burst measures the'
+    + ' skip; the encoder'
     + ' and hub-rpc probes also send a CORS preflight at the exact POST path the SDK uses, trailing slash'
     + ' included, and a blocked preflight is a FAILURE named UNREACHABLE FROM THE APP even when the reply beside'
     + ' it is healthy, asserted on the outgoing OPTIONS request itself so a dropped header cannot hide behind a'

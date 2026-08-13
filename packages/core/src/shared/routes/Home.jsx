@@ -37,7 +37,12 @@ const chainRegistry = registryLib.defaultRegistry();
 // 20s balances catching an incoming token promptly against hammering the
 // SDK/indexer on every open tab; see the polling effect below, which also
 // refreshes immediately on focus/visibility and pauses while hidden.
-const BALANCE_POLL_INTERVAL_MS = 20000;
+//
+// Defined in flows/balances.js, next to the aggregator this re-runs, because
+// the same number is the wallet's sustained request rate against the public
+// endpoints and tools/release/cold-open-profile.mjs has to read the real one
+// when it works out what the zone rate limits must clear .
+const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
 
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the

@@ -800,6 +800,14 @@ export async function checkDemoEndpoints({
     if (probes.length === 0) {
         return { exit: EXIT.CONFIG, results: [], reason: `no descriptors for network kind "${networkKind}"` };
     }
+    // `--burst` with no count parses to the string 'auto', which main()
+    // resolves. Reaching here with it unresolved would compare 'auto' > 0,
+    // come back false, and skip the burst in silence: the one outcome a probe
+    // about an invisible limit must never have.
+    if (typeof burst !== 'number') {
+        throw new Error(`checkDemoEndpoints: burst must be a number (got ${JSON.stringify(burst)});`
+            + ' resolve it with defaultBurstCount() first');
+    }
 
     const results = [];
     for (const probe of probes) {
@@ -841,8 +849,27 @@ export async function checkDemoEndpoints({
                 coin: '-',
                 url: burstResult.url,
                 state: 'failure',
-                detail: `${burstResult.blocked}/${burst} rapid requests came back ${burstResult.statuses.join('/')}:`
+                detail: `${burstResult.blocked}/${burst} rapid requests came back ${burstResult.statuses.join('/')}`
+                    + ` (${burstResult.ratePerSec} req/sec observed):`
                     + ' a wallet cold-open fans out more than this per address',
+            });
+        } else {
+            // A CLEAN burst is not silence, and letting it be silence is what
+            // made the 2026-08-02 run read as evidence it was not. These hosts
+            // are on the zone's twelve-hostname rate-limit SKIP, so an
+            // unthrottled burst measures the skip and says nothing whatever
+            // about the limit underneath it . Reported as a row so a
+            // green run states what it measured rather than implying the
+            // stronger thing it cannot see.
+            results.push({
+                service: 'rate-limit',
+                coin: '-',
+                url: burstResult.url,
+                state: 'live',
+                detail: `${burst}/${burst} rapid requests unthrottled in ${burstResult.elapsedMs}ms`
+                    + ` (${burstResult.ratePerSec} req/sec observed). This host is on the zone's`
+                    + ' rate-limit skip, so this measures the SKIP, not the limit under it:'
+                    + ' run tools/release/cold-open-profile.mjs for what the limit must clear.',
             });
         }
     }
@@ -857,15 +884,46 @@ export async function checkDemoEndpoints({
  * Fire a small burst at one endpoint, because one request per host cannot see
  * a rate limit and a wallet opening on three chains is not one request.
  * Deliberately bounded and opt-in: this points at production.
+ *
+ * The elapsed time is reported alongside the statuses because "8 requests came
+ * back 200" is not a rate. A rate limit is a count inside a counting period,
+ * so how LONG the burst took decides whether it was ever a test of one: eight
+ * requests spread over nine seconds by a slow origin would clear a limit that
+ * the same eight, sent at once, would trip.
  */
 export async function burstProbe(probes, { fetchImpl, timeoutMs, count }) {
     const target = probes.find((p) => p.service === 'explorer') ?? probes[0];
+    const startedAt = Date.now();
     const replies = await Promise.all(
         Array.from({ length: count }, () => probeOnce(target.url, { fetchImpl, timeoutMs })),
     );
+    const elapsedMs = Date.now() - startedAt;
     const statuses = [...new Set(replies.map((r) => r.error ? 'error' : String(r.status)))];
     const blocked = replies.filter((r) => r.status === 429 || r.status === 403).length;
-    return { url: target.url, count, blocked, statuses };
+    // Guard the divide: a fixture-backed burst can complete inside one clock
+    // tick, and an Infinity in the printed line reads as a broken tool.
+    const ratePerSec = elapsedMs > 0 ? Math.round((count / elapsedMs) * 1000) : count;
+    return { url: target.url, count, blocked, statuses, elapsedMs, ratePerSec };
+}
+
+/**
+ * How many requests `--burst` should fire when no count is given.
+ *
+ * DERIVED, by driving the wallet's own cold-open against a recording SDK, from
+ * the number of requests one cold-open puts on the busiest single host. The
+ * old default was 8, which nobody had derived from anything and which is
+ * smaller than the fan-out a three-chain wallet actually produces, so a clean
+ * run at 8 could not even have been a test of the demand.
+ *
+ * Imported lazily and only when it is needed: this gate's --help and probe
+ * table work in a tree with no node_modules (the pristine clone the release
+ * ceremony mandates), and the profiler reaches xchain-sdk. When it cannot be
+ * loaded, this says so and the caller must pass an explicit count rather than
+ * fall back to a made-up one.
+ */
+export async function defaultBurstCount() {
+    const { coldOpenBurstSize } = await import('./cold-open-profile.mjs');
+    return coldOpenBurstSize();
 }
 
 const USAGE = `verify-demo-endpoints.mjs - can a reviewer following the scripted demo
@@ -894,10 +952,16 @@ Options:
                     a GET can never provoke the preflight a browser actually
                     sends first; a blocked preflight means the POST is never
                     sent at all, and this gate reported exit 0 through that too.
-  --burst [n]       also fire a small burst at one endpoint, default 8.
-                    Opt-in because it points at PRODUCTION: one request per
-                    host cannot see a rate limit, and a wallet opening on
-                    three chains is not one request.
+  --burst [n]       also fire a small burst at one endpoint. With no count,
+                    the size is MEASURED: the requests one wallet cold-open
+                    puts on the busiest single host, driven out of the wallet's
+                    own flows by tools/release/cold-open-profile.mjs. Opt-in
+                    because it points at PRODUCTION: one request per host
+                    cannot see a rate limit, and a wallet opening on three
+                    chains is not one request. Note what a CLEAN burst means -
+                    these hosts sit on the zone's twelve-hostname rate-limit
+                    skip, so an unthrottled burst measures the SKIP and says
+                    nothing about the limit under it.
   --json            machine-readable result instead of the table
   -h, --help        print this and exit 0
 
@@ -915,7 +979,14 @@ function parseArgs(argv) {
     const args = { networkKind: 'testnet', burst: 0, json: false, help: false, origin: SHELL_ORIGIN };
     for (let i = 0; i < argv.length; i += 1) {
         if (argv[i] === '--network') args.networkKind = argv[i + 1];
-        else if (argv[i] === '--burst') args.burst = Number(argv[i + 1] ?? 8) || 8;
+        // `--burst` with no count means "the measured cold-open burst",
+        // resolved in main() rather than here so parseArgs stays synchronous
+        // and dependency-free. A NEXT ARG THAT IS NOT A NUMBER is not a count:
+        // the old expression read `--burst --json` as 8.
+        else if (argv[i] === '--burst') {
+            const n = Number(argv[i + 1]);
+            args.burst = Number.isFinite(n) && n > 0 ? n : 'auto';
+        }
         else if (argv[i] === '--origin') args.origin = argv[i + 1];
         else if (argv[i] === '--json') args.json = true;
         else if (argv[i] === '--help' || argv[i] === '-h') args.help = true;
@@ -928,6 +999,20 @@ async function main() {
     if (args.help) {
         process.stdout.write(USAGE);
         return EXIT.LIVE;
+    }
+    if (args.burst === 'auto') {
+        try {
+            args.burst = await defaultBurstCount();
+            console.log(`Burst size ${args.burst}: the requests one wallet cold-open puts on the`
+                + ' busiest single host, measured from the wallet\'s own flows.\n');
+        } catch (e) {
+            // No invented fallback. A burst whose size means nothing cannot
+            // answer the question the burst exists to ask.
+            console.log('Could not measure the cold-open burst size'
+                + ` (${e?.message ?? e}). Pass --burst N explicitly, or run in a tree with`
+                + ' dependencies installed.');
+            return EXIT.CONFIG;
+        }
     }
     const outcome = await checkDemoEndpoints(args);
 
