@@ -1108,6 +1108,118 @@ assert.match(
     'the published policy has the mobile section the data-safety answers derive from',
 );
 
+// --- 12. The content rating declares what the STORE BUILD actually ships ----
+//
+// The Android twin of mobile-ios-shell.smoke.js §16, pointed at the Play
+// runbook. The mechanism ports unchanged because HIDDEN_SURFACES is shared:
+// the store profile is one profile, so a capability that survives it survives
+// it on both stores, and only the form it has to be declared on differs.
+//
+// Why it is worth having twice. Play hands the questionnaire to IARC, and a
+// rating that understates an app is a rejection class before publication and a
+// removal class after it - the same stakes §16 records for the App Store. The
+// Play form is sharper in one way: its user-interaction answer describes the
+// same messaging capability the Data safety form describes, so two console
+// forms can be filled in weeks apart and end up making opposite claims about
+// one binary. That is the shape of the defect this whole family exists for:
+// each of the two age-rating mismatches found on 2026-08-06 came from
+// answering a form section by section against nobody's memory of the build.
+//
+// So this asserts a RELATIONSHIP, not a presence. A presence check ("the
+// runbook has a content-rating section") is exactly what was green through
+// both defects on the Apple side. What is checked is that for each capability
+// the store profile does NOT compile out, the runbook's content rating says
+// so.
+//
+// The link between the two halves is HIDDEN_SURFACES. A surface listed there
+// for the `store` profile is genuinely absent from the artifact (vite swaps
+// the module for an importing-nothing twin, and the build fails if anything
+// else imports it), so hiding a surface is the ONE thing that legitimately
+// lets its question stay NO.
+const { HIDDEN_SURFACES: STORE_HIDDEN, SURFACES: ALL_SURFACES } = await import(
+    pathToFileURL(join(wsRoot, 'packages', 'web', 'src', 'surfaces', 'registry.js')).href
+);
+const hiddenInStore = STORE_HIDDEN.store ?? [];
+
+// Each row: the capability, the surface that would hide it, the routes that
+// prove it ships, and what the runbook has to say while it does ship.
+const RATED_CAPABILITIES = [
+    {
+        name: 'user-to-user messaging',
+        surface: 'messaging',
+        // Routed unconditionally in App.jsx; not owned by any hideable surface.
+        evidence: join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'ComposeMessage.jsx'),
+        // Answered YES on the Apple twin 2026-08-06 with the rating holding at
+        // 4+, so honesty cost nothing there and the next person should not
+        // re-litigate it here either.
+        declares: /\|\s*\*\*Users can interact or exchange content\*\*\s*\|\s*\*\*Yes\.\*\*/,
+        why: 'the wallet composes and sends address-to-address encrypted messages, which is exactly the'
+            + ' "users can interact or exchange content" question',
+    },
+    {
+        name: 'gambling',
+        surface: 'betting',
+        evidence: join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'BetFeedsList.jsx'),
+        // Deliberately NOT a "declare it" assertion, matching the iOS twin.
+        // The operator decided to ship the surface and leave the answer as it
+        // stands, which is a decision and not an oversight - but a decision to
+        // leave a known mismatch in place still needs a tripwire, or it reads
+        // to the next session exactly like a resolved row. What is asserted is
+        // that the runbook carries the re-read instruction for as long as the
+        // surface ships, since the form and the binary are only asserted
+        // together at the moment a release is sent for review.
+        declares: /[Bb]efore you submit, re-read the gambling answers/,
+        why: 'the parimutuel betting lane is compiled into the store build, and gambling has its own Play'
+            + ' policy whose questions nobody has answered for what ships',
+    },
+];
+
+for (const cap of RATED_CAPABILITIES) {
+    // A capability can only be exempt if there is a mechanism that removes it
+    // AND that mechanism is switched on for the store profile. Checking the
+    // second without the first is how `bet-markets` came to be treated as
+    // hideable for a year while no `betting` twin pair existed.
+    const hideable = ALL_SURFACES.includes(cap.surface);
+    const compiledOut = hideable && hiddenInStore.includes(cap.surface);
+    if (compiledOut) continue;
+
+    assert.ok(
+        existsSync(cap.evidence),
+        `${cap.name}: ${cap.evidence} is gone, so this guard is asserting against a capability that no longer`
+        + ' exists - re-derive the row rather than deleting the assertion',
+    );
+    assert.match(
+        runbook,
+        cap.declares,
+        `the store build ships ${cap.name} (${cap.why}), and the Play submission runbook's content rating does`
+        + ` not account for it. Either compile the surface out - add '${cap.surface}' to SURFACES and to`
+        + " HIDDEN_SURFACES.store with its twin pair - or make the runbook's content rating say what ships."
+        + ' A rating that understates the app is a rejection class before publication and a removal class'
+        + ' after it.',
+    );
+}
+
+// The half of this that has no Apple equivalent: on Play the user-interaction
+// answer describes the same capability as the Data safety form, which is
+// documented in a DIFFERENT file. Two documents that answer one question can
+// disagree, and nothing in either would show it - so the content rating is
+// required to send its reader to the data-safety answers rather than to state
+// the reconciliation on its own and let the pair drift apart.
+const ratingSection = runbook.split(/^### Content rating[^\n]*$/m)[1] ?? '';
+assert.ok(
+    ratingSection,
+    'the Play runbook has no content-rating section: the one console form whose Apple twin was measured'
+    + ' wrong twice in a day is also the one that can contradict the Data safety form',
+);
+assert.match(
+    ratingSection.split(/^### /m)[0],
+    /data-safety\.md/,
+    'the content rating declares messaging, and the Data safety form describes the same capability, so the'
+    + ' section has to point at the data-safety answers: a reader who re-answers one form has to re-read'
+    + ' the other in the same sitting or the two console forms end up making opposite claims about one'
+    + ' binary',
+);
+
 console.log(
     'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
     + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
@@ -1136,5 +1248,7 @@ console.log(
     + ' and deliberately not to receive/settings; the update feed carries one semver field and the'
     + ' client renders none of it, identifies nobody and refuses redirects; the capability floor is'
     + ' feature-detected before React mounts; and the listing pack, wire audit, privacy-policy mobile'
-    + ' section and the real K10 fingerprint (key generated 2026-08-01) matching assetlinks and SECURITY.md are all in the repo)',
+    + ' section and the real K10 fingerprint (key generated 2026-08-01) matching assetlinks and SECURITY.md are all in the repo;'
+    + ' the Play content rating accounts for every rated capability the store profile does not compile out,'
+    + ' and points at the data-safety answers the same capability is described in)',
 );
