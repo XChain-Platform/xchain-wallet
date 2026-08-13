@@ -19,8 +19,11 @@
 //      directly; they go through messaging.issueToken).
 //   2. The 5 wizard stages + 'done' + 'error' are present as state
 //      literals; each stage wires to the next via setStage.
-//   3. All six templates appear in the TEMPLATES table, Custom is the
-//      only `interactive: true` entry in Step 4.
+//   3. All six templates appear in the TEMPLATES table and every one of
+//      them is interactive. "Community" is NOT one of them: 
+//      merged it into Utility because it composed a byte-identical
+//      ISSUE and sold "dividend-enabled" as though a template could
+//      confer it, when DIVIDEND has no per-token opt-in at all.
 //   4. Preview stage consumes decoder.decodeAction with action: 'ISSUE'
 //      and the composed params; that's the contract with Piece 2a.
 //   5. Sign stage calls messaging.issueToken; the helper lands in
@@ -77,9 +80,9 @@ for (const transition of [
     assert.ok(src.includes(transition), `wizard performs ${transition}`);
 }
 
-// --- 3. Seven templates; all interactive ------------------------------
+// --- 3. Six templates; all interactive --------------------------------
 
-for (const id of ['meme', 'utility', 'collectible', 'edition', 'community', 'subtoken', 'custom']) {
+for (const id of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'custom']) {
     assert.ok(
         new RegExp(`id: '${id}'`).test(src),
         `TEMPLATES includes "${id}"`,
@@ -89,17 +92,48 @@ const templateBlocks = [...src.matchAll(/\{\s*id:\s*'(\w+)',[^}]*interactive:\s*
 const interactiveMap = Object.fromEntries(
     templateBlocks.map((m) => [m[1], m[2] === 'true']),
 );
-for (const id of ['meme', 'utility', 'community', 'collectible', 'edition', 'subtoken', 'custom']) {
+for (const id of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'custom']) {
     assert.equal(
         interactiveMap[id],
         true,
         `${id} template is interactive`,
     );
 }
+// : the retired Community card must not come back. Re-adding it
+// re-creates the false choice, and the harm is the inverse reading: an
+// issuer who picked Utility believes dividends are closed to them and
+// pays a second ISSUE fee to re-create the token under Community.
+assert.ok(
+    !/id: 'community'/.test(src),
+    'Community is NOT a template (merged into Utility, )',
+);
+// ... and a stale 'community' id must still land on Utility rather than
+// falling through to Custom, which shows other fields and composes a
+// different ISSUE.
+assert.ok(
+    /TEMPLATE_ALIASES\s*=\s*\{[^}]*community:\s*'utility'/.test(src),
+    'legacy community id aliases to utility',
+);
+
+// --- 3a. The dividend copy the merge exists to deliver ---------------
+
+// The Utility card carries the plain statement, and the template stage
+// repeats it once for the whole picker: dividends are a property of
+// every token, not a switch a template flips.
+const utilityCard = src.match(/\{\s*id:\s*'utility',[\s\S]*?\},/);
+assert.ok(utilityCard, 'utility template card found');
+assert.ok(
+    /dividend/i.test(utilityCard[0]) && /every token/i.test(utilityCard[0]),
+    'utility tagline says dividends work on every token',
+);
+assert.ok(
+    /Any token you create here can pay dividends/.test(src),
+    'template stage states dividends are available on any token',
+);
 
 // --- 3b. Per-template composers present -----------------------------
 
-for (const key of ['meme', 'utility', 'community', 'collectible', 'edition', 'subtoken', 'custom']) {
+for (const key of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'custom']) {
     assert.ok(
         new RegExp(`\\b${key}\\s*\\(form\\)\\s*\\{`).test(src),
         `TEMPLATE_COMPOSERS includes a ${key}(form) composer`,
@@ -252,8 +286,8 @@ assert.ok(
     'wizard uppercases the ticker',
 );
 // MINT_SUPPLY defaults to MAX_SUPPLY on create so the initial supply
-// lands in the creator's wallet. Shared across Meme/Utility/Community/
-// Subtoken/Custom composers via the seedSupply helper.
+// lands in the creator's wallet. Shared across Meme/Utility/Subtoken/
+// Custom composers via the seedSupply helper.
 assert.ok(
     /p\.MAX_SUPPLY\s*=\s*supply/.test(src)
         && /p\.MINT_SUPPLY\s*=\s*supply/.test(src),
@@ -342,5 +376,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: token wizard smoke (file exists, 5 stages, 7 templates all interactive, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
+    'OK: token wizard smoke (file exists, 5 stages, 6 templates all interactive, no Community card + legacy alias, dividend copy present, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
 );

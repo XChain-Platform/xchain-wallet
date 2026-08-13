@@ -141,7 +141,7 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
     it('leaves the mintable templates alone: edition keeps its public mint window open', async () => {
         // The lock is only correct where the template promises a supply that
         // cannot grow. Edition's whole point is that anyone can still MINT
-        // prints, and utility/community are mintable by design, so writing
+        // prints, and utility is mintable by design, so writing
         // LOCK_MINT_SUPPLY there would permanently break them.
         mountWizard();
         await pickTemplate('Limited edition');
