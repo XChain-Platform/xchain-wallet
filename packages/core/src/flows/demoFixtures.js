@@ -17,6 +17,15 @@
 // path needs offline-safe placeholders so the NFTs tab (which filters
 // by imageUrl presence) actually shows tiles. Pure SVG keeps the
 // payload tiny and avoids any network fetch.
+//
+// Every function here that dates a row takes `opts.now`, and the two
+// that did not (the DeFi feed and the dispense list) are why a store
+// listing capture could not be repeated: their timestamps moved on
+// every run, so re-capturing an unchanged tree produced different
+// bytes and proved nothing. Keep the pattern - a bare `Date.now()`
+// with no `opts.now` in front of it is a fixture nobody can freeze,
+// and test/smoke/audits/listing-capture-determinism.smoke.js fails on
+// one. See flows/demoCapture.js.
 
 function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
     const t = String(label || '').slice(0, 5);
@@ -184,6 +193,56 @@ export function synthesizeDemoBalances(addressesByChain) {
                 : { native: fixture?.native ? { ...fixture.native, quantity: '0' } : null, tokens: [] },
             error: null,
         }));
+    }
+    return out;
+}
+
+// Fixed 24-hour moves for the demo wallet's native coins, one per
+// coin family (the three networks of a family share a figure, the way
+// they share a fixture). Chosen to read as an ordinary day rather than
+// a rally: one coin up, one flat-ish, one down, so the hero's change
+// line and its colour states are both visible in a demo.
+//
+// These exist because a demo wallet used to take its 24h change from
+// the LIVE price oracle while every other number on the screen was
+// synthetic - so the figure was a real market move applied to
+// imaginary holdings, it made a third-party request from a wallet that
+// is supposed to fetch nothing, and it was the last input keeping two
+// store-listing captures of one tree from matching: whether the fetch
+// landed before the screenshot decided whether the whole card below it
+// sat 24px lower .
+const DEMO_NATIVE_CHANGE_24H_PCT = /** @type {Record<string, number>} */ ({
+    bitcoin: 1.24,
+    litecoin: -0.72,
+    dogecoin: 3.15,
+});
+
+/**
+ * Native-coin price entries for a demo wallet, in the shape
+ * `messaging.getNativePricesRequest` returns (`{ [chainId]: entry | null }`).
+ * The rate is the same one the balance fixtures price the holdings
+ * with, so the hero's total and its change line agree.
+ *
+ * `sparkline` is deliberately null: the portfolio chart falls back to
+ * its own seeded walk when there is no real series, and that walk is
+ * already stable per demo wallet. A fabricated sparkline here would be
+ * a second, redundant source for the same line.
+ *
+ * @param {string[]} chainIds
+ * @returns {Record<string, { priceFiat: number, change24hPct: number, marketCapFiat: null, sparkline: null } | null>}
+ */
+export function synthesizeDemoNativePrices(chainIds) {
+    /** @type {Record<string, any>} */
+    const out = {};
+    if (!Array.isArray(chainIds)) return out;
+    for (const chainId of chainIds) {
+        const fixture = PER_CHAIN_DEFAULTS[chainId];
+        const family = String(chainId).split('-')[0];
+        const pct = DEMO_NATIVE_CHANGE_24H_PCT[family];
+        const rate = fixture?.native?.fiatRate;
+        out[chainId] = typeof pct === 'number' && typeof rate === 'number'
+            ? { priceFiat: rate, change24hPct: pct, marketCapFiat: null, sparkline: null }
+            : null;
     }
     return out;
 }
@@ -505,10 +564,17 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
  * them, but the list-row render only consumes `action / primary /
  * blockIndex / timestamp / status / confirms / chainId`.
  *
+ * @param {object} [opts]
+ * @param {number} [opts.now]   clock injection for tests and for the
+ *                              store-listing capture, which freezes every
+ *                              demo clock so two captures of an unchanged
+ *                              tree produce byte-identical images
+ *                              (flows/demoCapture.js)
  * @returns {Array<{ id: string, kind: 'stake' | 'dispenser' | 'contract', action: string, status: 'confirmed' | 'pending' | 'failed', title: string, primary: string, secondary: string, badge: string, blockIndex: number | null, timestamp: number, confirms: number, chain: string, chainId: string, tick?: string }>}
  */
-export function synthesizeDemoDefiPositions() {
-    const nowSec = Math.floor(Date.now() / 1000);
+export function synthesizeDemoDefiPositions(opts = {}) {
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const nowSec = Math.floor(now / 1000);
     const ago = (delta) => nowSec - delta;
     return [
         // ───── Mainnet ─────
@@ -1117,10 +1183,17 @@ export function synthesizeDemoDispensers(chainId, sourceAddress) {
  * none, e.g. the canceled one).
  *
  * @param {string | number} actionIndex
+ * @param {object} [opts]
+ * @param {number} [opts.now]   clock injection for tests and for the
+ *                              store-listing capture, which freezes every
+ *                              demo clock so two captures of an unchanged
+ *                              tree produce byte-identical images
+ *                              (flows/demoCapture.js)
  * @returns {any[]}
  */
-export function synthesizeDemoDispenses(actionIndex) {
+export function synthesizeDemoDispenses(actionIndex, opts = {}) {
     const rows = DEMO_DISPENSES[String(actionIndex)] || [];
-    const now = Math.floor(Date.now() / 1000);
+    const nowMs = typeof opts.now === 'number' ? opts.now : Date.now();
+    const now = Math.floor(nowMs / 1000);
     return rows.map(({ ageSec, ...r }) => ({ ...r, timestamp: now - (ageSec || 0) }));
 }

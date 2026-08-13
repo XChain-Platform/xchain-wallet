@@ -647,7 +647,16 @@ export {
     DEMO_DEFAULT_TTL_MS,
 } from './demoMode.js';
 export {
+    DEMO_CAPTURE_FLAG_KEY,
+    DEMO_CAPTURE_MNEMONIC,
+    DEMO_CAPTURE_CLOCK_MS,
+    DEMO_CHART_SEED,
+    isDemoCaptureMode,
+    demoCaptureMnemonic,
+} from './demoCapture.js';
+export {
     synthesizeDemoBalances,
+    synthesizeDemoNativePrices,
     synthesizeDemoStaking,
     synthesizeDemoContractStakes,
     synthesizeDemoContractMeta,

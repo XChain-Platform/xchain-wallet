@@ -16,6 +16,8 @@ import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
 
 /**
@@ -29,13 +31,14 @@ import styles from './TotalBalanceHero.module.css';
  *
  * @param {object} props
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
+ * @param {string | null} [props.walletId]       the wallet these rows belong to; only used to tell a demo wallet apart, which prices itself from its own fixtures instead of the live oracle
  * @param {'all' | string} props.networkFilter
  * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
  * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
  * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
  * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  */
-export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings }) {
+export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
@@ -60,8 +63,22 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen
     }, [rows]);
     const nativeChainKey = nativeChainIds.join(',');
 
+    // A demo wallet prices itself from its own fixtures. Every other
+    // number in this hero is synthetic, so a LIVE 24h move applied to
+    // imaginary holdings was never the honest version of this line: it
+    // made a third-party request from a wallet whose whole design is to
+    // fetch nothing, and whether that request landed before a screenshot
+    // decided whether the change line was there at all - which moved the
+    // entire card 24px and was the last thing keeping two store-listing
+    // captures of one tree from matching .
+    const isDemo = isDemoWallet(walletId);
+
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
+        if (isDemo) {
+            setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
+            return undefined;
+        }
         if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
             setPriceMap({});
             return undefined;
@@ -75,7 +92,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Compute 24h delta: for each native row with a known change pct,
     // back-derive the 24h-ago fiat value and accumulate the difference.

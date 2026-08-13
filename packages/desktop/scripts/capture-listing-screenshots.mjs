@@ -32,11 +32,19 @@
 // assert is the canvas size, because an image at the wrong size is refused by
 // App Store Connect at the end of a submission rather than here.
 //
+// REPEATABLE MEANS BYTE-IDENTICAL . This script arms capture mode
+// before the renderer loads, freezing the two inputs the demo lane randomizes
+// per run: the demo wallet's mnemonic (the published BIP39 all-zero test
+// vector, so the address in the images never moves and no reader mistakes it
+// for a real seed) and the clock every synthesized timestamp is measured
+// against. Without that, re-capturing an UNCHANGED tree produced different
+// bytes and proved nothing. See packages/core/src/flows/demoCapture.js.
+//
 // DEMO DATA ONLY, for the same reason the extension capture says so at this
 // length: listing images are permanent public artifacts. Every surface here
 // comes from "Try in demo mode" (packages/core/src/shared/routes/
-// Onboarding.jsx), a freshly generated, randomly seeded, NEVER-FUNDED BIP39
-// wallet whose balances are synthetic overlays from
+// Onboarding.jsx), a NEVER-FUNDED BIP39 wallet whose balances are synthetic
+// overlays from
 // packages/core/src/flows/demoFixtures.js - isDemoWallet short-circuits every
 // balance and history fetch, so nothing here touches a real chain, a real
 // endpoint or an operator's wallet. The profile it is created in is a temp
@@ -99,6 +107,12 @@ const {
     unlockedShell, dismissIntroCarousel, openSettings,
 } = await import(path.join(REPO_ROOT, 'test/e2e/fixtures/wallet.js'));
 const { LICENSE_VERSION } = await import(path.join(REPO_ROOT, 'packages/core/src/buildInfo.js'));
+// The frozen inputs that make this capture REPEATABLE , read from
+// the app's own module so the harness and the demo lane it drives cannot
+// disagree about which mnemonic and which instant a capture runs at.
+const {
+    DEMO_CAPTURE_FLAG_KEY, DEMO_CAPTURE_CLOCK_MS,
+} = await import(path.join(REPO_ROOT, 'packages/core/src/flows/demoCapture.js'));
 
 const OUT_DIR = path.join(DESKTOP_DIR, 'docs', 'listing-assets');
 
@@ -181,6 +195,25 @@ async function main() {
                 window.localStorage.setItem(versionKey, version);
             } catch { /* the license gate renders and the walk fails loudly */ }
         }, [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION]);
+        // Capture mode: the demo lane takes the committed demo-only mnemonic
+        // instead of rolling a new one, so the address in these images is the
+        // same address on every capture .
+        await win.addInitScript(([key]) => {
+            try { window.localStorage.setItem(key, '1'); } catch { /* capture will differ, loudly */ }
+        }, [DEMO_CAPTURE_FLAG_KEY]);
+        // One frozen clock for the whole app: the fixtures date their rows
+        // against `now` and the UI renders those dates as "3 minutes ago"
+        // against its own, so freezing one without the other would put a
+        // months-old wallet in a public listing. `setFixedTime` keeps timers
+        // running, so the app still boots, unlocks and navigates normally.
+        // Guarded rather than fatal: an Electron driver without the clock API
+        // should still produce images, just not provably identical ones.
+        try {
+            await app.context().clock.setFixedTime(DEMO_CAPTURE_CLOCK_MS);
+        } catch (err) {
+            log(`WARNING: could not freeze the clock (${err?.message || err}); `
+                + 'timestamps in these images will move between captures');
+        }
         await win.reload();
 
         // The app's own default window is 420x720 (main/index.js). A listing
