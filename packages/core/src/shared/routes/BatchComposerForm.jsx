@@ -8,21 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BatchComposerForm (PC-36): the ATOMIC batch composer, the counterpart to
-// ParallelComposer (which submits independent actions sequentially, with no
-// rollback). A BATCH executes every queued sub-action in ONE transaction:
-// all-or-nothing, on ONE chain from ONE source address. The user queues
-// sub-actions as (action, JSON params) steps; the composer pre-checks the
-// BATCH constraints live (at most one ISSUE / MINT / FILE; no nested BATCH
-// or DEPLOY), builds the canonical COMMAND host-side via the SDK, previews
-// it, and signs the BATCH through the generic advancedAction path
-// (action='BATCH', params={ COMMAND }) - so software, hardware, and
-// watcher signers all work exactly as they do for any other action.
+// BatchComposerForm (PC-36): the batch composer, the counterpart to
+// ParallelComposer (which submits independent actions as separate
+// transactions, sequentially). A BATCH bundles every queued sub-action into
+// ONE transaction on ONE chain from ONE source address, but that is not the
+// same as all-or-nothing: each sub-action still validates and lands
+// INDEPENDENTLY, so a sub-action that fails partway through (for example,
+// running out of value to cover its fee) fails alone while sub-actions that
+// pass still land. The user queues sub-actions as (action, JSON params)
+// steps; the composer pre-checks the BATCH constraints live (one top-level
+// ISSUE plus any number of its child ISSUEs, at most one MINT and one FILE,
+// up to 250 actions total, no nested BATCH or DEPLOY), builds the canonical
+// COMMAND host-side via the SDK, previews it, and signs the BATCH through
+// the generic advancedAction path (action='BATCH', params={ COMMAND }), so
+// software, hardware, and watcher signers all work exactly as they do for
+// any other action.
 //
 // FILE is excluded from the picker: a FILE sub-action needs the tx's single
 // rawData payload, which the dedicated file / gated publishers own (the two
 // BATCH shapes users actually need). This generic composer targets power
-// users assembling several metadata actions atomically.
+// users assembling several metadata actions in one transaction.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -44,7 +49,7 @@ import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Actions the generic atomic composer cannot queue: the two the protocol
+// Actions this generic composer cannot queue: the two the protocol
 // forbids in a BATCH (nested BATCH, DEPLOY) plus FILE (needs the tx's one
 // rawData payload; the file/gated publishers own that shape).
 const EXCLUDED_ACTIONS = new Set(['BATCH', 'DEPLOY', 'FILE']);
@@ -198,7 +203,13 @@ export function BatchComposerForm({ walletId, onBack }) {
             if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
             if (pr.error) return `Step ${i + 1}: ${pr.error}`;
         }
-        const subActions = parsedRows.map((pr) => ({ action: pr.row.action }));
+        // Pass params through (same shape goReview sends the SDK at compose
+        // time, ~line 216): validateBatchConstraints classifies ISSUE by
+        // params.TICK, so a live check with action-only entries would
+        // treat every ISSUE as top-level and warn on legal parent+child
+        // batches the chain accepts. A row whose TICK is not typed yet
+        // still classifies top-level (conservative), never the reverse.
+        const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
         const constraintErrors = flowsLib.validateBatchConstraints(subActions);
         return constraintErrors.length > 0 ? constraintErrors[0] : null;
     }, [parsedRows]);
@@ -274,7 +285,7 @@ export function BatchComposerForm({ walletId, onBack }) {
     }
 
     const header = (
-        <PageHeader onBack={onBack} title={stage === 'compose' ? 'Atomic batch' : 'Review batch'} />
+        <PageHeader onBack={onBack} title={stage === 'compose' ? 'Batch' : 'Review batch'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -299,7 +310,7 @@ export function BatchComposerForm({ walletId, onBack }) {
         return wrap(
             <>
                 <h2 className={styles.successTitle}>Batch broadcast</h2>
-                <p className={styles.hint}>All {rows.length} action{rows.length === 1 ? '' : 's'} settle together, or not at all.</p>
+                <p className={styles.hint}>All {rows.length} action{rows.length === 1 ? '' : 's'} were sent in one transaction. Each one confirms or fails on its own.</p>
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
@@ -316,9 +327,10 @@ export function BatchComposerForm({ walletId, onBack }) {
         return wrap(
             <form onSubmit={handleSign} noValidate>
                 <p className={styles.summary} style={{ textAlign: 'left' }}>
-                    <strong>Atomic:</strong> all {rows.length} action{rows.length === 1 ? '' : 's'} confirm in one
-                    transaction, or none do. This is the opposite of the parallel composer, where each action
-                    settles on its own.
+                    All {rows.length} action{rows.length === 1 ? '' : 's'} are bundled into one transaction and sent
+                    together, but each still confirms on its own: if one runs out of what it needs (for example fee
+                    coverage), it fails alone and the others still land. This is different from the parallel
+                    composer, where each action is its own transaction from the start.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -390,8 +402,9 @@ export function BatchComposerForm({ walletId, onBack }) {
     return wrap(
         <>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
-                Queue several actions to settle atomically in one transaction from one address. At most one ISSUE,
-                one MINT, and one FILE per batch; no nested batches or contract deploys. FILE-gated content uses the
+                Queue up to 250 actions to run together in one transaction from one address. You can issue one new
+                token plus as many of its sub-tokens (JDOG, then JDOG.1, JDOG.2, ...) as you like; MINT and FILE are
+                still limited to one each. No nested batches or contract deploys. FILE-gated content uses the
                 dedicated publisher.
             </p>
 

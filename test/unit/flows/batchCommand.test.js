@@ -17,8 +17,10 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     validateBatchConstraints,
     buildBatchCommand,
+    classifyIssueTick,
     BATCH_FORBIDDEN_ACTIONS,
     BATCH_SINGLETON_ACTIONS,
+    BATCH_MAX_COMMANDS,
 } from '../../../packages/core/src/flows/batchCommand.js';
 
 describe('validateBatchConstraints (PC-36 pre-check)', () => {
@@ -28,7 +30,7 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
 
     it('accepts a legal mix', () => {
         const errs = validateBatchConstraints([
-            { action: 'SEND' }, { action: 'ISSUE' }, { action: 'MINT' }, { action: 'BROADCAST' },
+            { action: 'SEND' }, { action: 'ISSUE', params: { TICK: 'JDOG' } }, { action: 'MINT' }, { action: 'BROADCAST' },
         ]);
         expect(errs).toEqual([]);
     });
@@ -39,8 +41,8 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
         expect(errs.some((e) => /DEPLOY/.test(e))).toBe(true);
     });
 
-    it('enforces at most one ISSUE / MINT / FILE', () => {
-        for (const action of BATCH_SINGLETON_ACTIONS) {
+    it('enforces at most one MINT / FILE', () => {
+        for (const action of ['MINT', 'FILE']) {
             const errs = validateBatchConstraints([{ action }, { action }]);
             expect(errs.some((e) => new RegExp(`at most one ${action}`, 'i').test(e))).toBe(true);
         }
@@ -49,6 +51,68 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
     it('is case-insensitive on action names', () => {
         expect(validateBatchConstraints([{ action: 'batch' }]).some((e) => /another batch/i.test(e))).toBe(true);
         expect(BATCH_FORBIDDEN_ACTIONS).toEqual(['BATCH', 'DEPLOY']);
+        expect(BATCH_SINGLETON_ACTIONS).toEqual(['ISSUE', 'MINT', 'FILE']);
+    });
+
+    it('accepts one top-level ISSUE plus any number of child ISSUEs', () => {
+        const subActions = [
+            { action: 'ISSUE', params: { TICK: 'JDOG' } },
+            ...Array.from({ length: 50 }, (_, i) => ({ action: 'ISSUE', params: { TICK: `JDOG.${i + 1}` } })),
+        ];
+        expect(validateBatchConstraints(subActions)).toEqual([]);
+    });
+
+    it('rejects two undotted top-level ISSUEs', () => {
+        const errs = validateBatchConstraints([
+            { action: 'ISSUE', params: { TICK: 'JDOG' } },
+            { action: 'ISSUE', params: { TICK: 'PEPE' } },
+        ]);
+        expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
+    });
+
+    it('rejects two caret ISSUEs: a caret TICK is never exempt even with a dot', () => {
+        const errs = validateBatchConstraints([
+            { action: 'ISSUE', params: { TICK: '^12.1' } },
+            { action: 'ISSUE', params: { TICK: '^12.2' } },
+        ]);
+        expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
+    });
+
+    it('does not treat a caret-dotted TICK as a child (classifier)', () => {
+        expect(classifyIssueTick({ params: { TICK: '^12.5' } })).toBe('TOP_LEVEL');
+        expect(classifyIssueTick({ params: { TICK: 'JDOG.1' } })).toBe('CHILD');
+        expect(classifyIssueTick({ params: { TICK: 'JDOG' } })).toBe('TOP_LEVEL');
+        expect(classifyIssueTick({ params: {} })).toBe('TOP_LEVEL');
+    });
+
+    it('rejects a parent ISSUE plus a caret entry: the caret entry is TOP_LEVEL too', () => {
+        const errs = validateBatchConstraints([
+            { action: 'ISSUE', params: { TICK: 'JDOG' } },
+            { action: 'ISSUE', params: { TICK: '^12.1' } },
+        ]);
+        expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
+    });
+
+    it('rejects nested BATCH and DEPLOY even amid otherwise-legal child ISSUEs', () => {
+        const errs = validateBatchConstraints([
+            { action: 'ISSUE', params: { TICK: 'JDOG' } },
+            { action: 'ISSUE', params: { TICK: 'JDOG.1' } },
+            { action: 'BATCH' },
+            { action: 'DEPLOY' },
+        ]);
+        expect(errs.some((e) => /another batch/i.test(e))).toBe(true);
+        expect(errs.some((e) => /DEPLOY/.test(e))).toBe(true);
+    });
+
+    it('accepts exactly 250 commands', () => {
+        const subActions = Array.from({ length: BATCH_MAX_COMMANDS }, () => ({ action: 'SEND' }));
+        expect(validateBatchConstraints(subActions)).toEqual([]);
+    });
+
+    it('rejects 251 commands with a clear cap message', () => {
+        const subActions = Array.from({ length: BATCH_MAX_COMMANDS + 1 }, () => ({ action: 'SEND' }));
+        const errs = validateBatchConstraints(subActions);
+        expect(errs.some((e) => /at most 250 actions/i.test(e))).toBe(true);
     });
 });
 

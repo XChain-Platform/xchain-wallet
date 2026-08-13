@@ -22,8 +22,14 @@
 // signing path with action='BATCH', params={ COMMAND }.
 //
 // Constraints (protocol + SDK validator + BatchBuilder): a BATCH may not
-// contain a nested BATCH or a DEPLOY, and may hold at most one each of
-// ISSUE, MINT, and FILE (one rawData per transaction). This file also
+// contain a nested BATCH or a DEPLOY, may hold at most one each of MINT
+// and FILE (one rawData per transaction), and may hold at most one
+// TOP-LEVEL (undotted) ISSUE - but any number of CHILD ISSUEs, whose TICK
+// contains a '.', are exempt from that slot (a parent plus any number of
+// child tokens in one transaction). A caret TICK (first character '^') is
+// NEVER exempt, even when it contains a dot: its dot is an id separator,
+// not a namespace separator, so two caret ISSUEs still hit the one-ISSUE
+// limit. A BATCH may also carry at most 250 commands total. This file also
 // exports a pure, synchronous pre-check so the form can flag violations
 // live without a host round-trip; the authoritative check still runs in
 // the SDK at compose time.
@@ -31,8 +37,34 @@
 /** Actions a BATCH can never contain (SDK BatchBuilder + validator). */
 export const BATCH_FORBIDDEN_ACTIONS = ['BATCH', 'DEPLOY'];
 
-/** Actions a BATCH may contain at most once. */
+/**
+ * Actions a BATCH may contain at most once. ISSUE only spends this slot
+ * for a TOP-LEVEL (undotted, or caret) issuance; see classifyIssueTick.
+ */
 export const BATCH_SINGLETON_ACTIONS = ['ISSUE', 'MINT', 'FILE'];
+
+/** Maximum number of commands (queued sub-actions) a BATCH may carry. */
+export const BATCH_MAX_COMMANDS = 250;
+
+/**
+ * Classify a queued ISSUE sub-action by its TICK, mirroring the indexer's
+ * dotted-TICK exemption (xchain-indexer/src/actions/batch.js
+ * classifyLimitAction): a dotted, non-caret TICK is a CHILD issuance and
+ * is exempt from the top-level ISSUE slot; everything else (undotted, or
+ * any caret TICK regardless of dots) is TOP_LEVEL and counts against it.
+ * The TICK lives at `entry.params.TICK`, the same field name the SDK
+ * validator requires for ISSUE (`ACTION_REQUIRED_FIELDS.ISSUE`); an entry
+ * queued before its params are known (no TICK yet) is treated as
+ * TOP_LEVEL so an incomplete row cannot silently claim the exempt slot.
+ *
+ * @param {{ params?: Record<string, unknown> }} entry
+ * @returns {'TOP_LEVEL' | 'CHILD'}
+ */
+export function classifyIssueTick(entry) {
+    const tick = String(entry?.params?.TICK ?? '');
+    if (tick.startsWith('^')) return 'TOP_LEVEL';
+    return tick.includes('.') ? 'CHILD' : 'TOP_LEVEL';
+}
 
 /**
  * Pure, synchronous BATCH-constraint pre-check over a queued sub-action
@@ -40,7 +72,7 @@ export const BATCH_SINGLETON_ACTIONS = ['ISSUE', 'MINT', 'FILE'];
  * Mirrors BatchBuilder._validate so the form can warn before composing;
  * the SDK re-checks authoritatively at compose time.
  *
- * @param {Array<{ action: string }>} subActions
+ * @param {Array<{ action: string, params?: Record<string, unknown> }>} subActions
  * @returns {string[]}
  */
 export function validateBatchConstraints(subActions) {
@@ -50,12 +82,19 @@ export function validateBatchConstraints(subActions) {
         errors.push('Add at least one action to the batch.');
         return errors;
     }
+    if (list.length > BATCH_MAX_COMMANDS) {
+        errors.push(`A batch can contain at most ${BATCH_MAX_COMMANDS} actions (found ${list.length}).`);
+    }
     const counts = { ISSUE: 0, MINT: 0, FILE: 0 };
     for (const entry of list) {
         const action = String(entry?.action || '').toUpperCase();
         if (action === 'BATCH') errors.push('A batch cannot contain another batch.');
         if (action === 'DEPLOY') errors.push('A batch cannot contain a DEPLOY (too large for one transaction).');
-        if (action in counts) counts[action] += 1;
+        if (action === 'ISSUE') {
+            if (classifyIssueTick(entry) === 'TOP_LEVEL') counts.ISSUE += 1;
+        } else if (action === 'MINT' || action === 'FILE') {
+            counts[action] += 1;
+        }
     }
     for (const action of BATCH_SINGLETON_ACTIONS) {
         if (counts[action] > 1) {

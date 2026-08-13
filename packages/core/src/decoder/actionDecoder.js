@@ -1600,11 +1600,12 @@ function decodeIssue(p, chainName, chainSuffix) {
 /**
  * BATCH decoder. Composes summaries + warnings from every nested
  * command. The wallet emits BATCH with params shaped as
- * `{ COMMANDS: [{ action, params }, ...] }`; protocol §BATCH v0
- * supports any command set with one ISSUE + one MINT max (no nested
- * BATCH or FILE). If COMMANDS is missing or malformed the decoder
- * falls back to a generic summary so the user sees *something*
- * before signing.
+ * `{ COMMANDS: [{ action, params }, ...] }`; protocol §BATCH v0 allows
+ * at most one top-level (undotted) ISSUE plus any number of child
+ * (dotted, non-caret) ISSUEs, one MINT, one FILE (one rawData per
+ * transaction), up to 250 commands total, and no nested BATCH or
+ * DEPLOY. If COMMANDS is missing or malformed the decoder falls back
+ * to a generic summary so the user sees *something* before signing.
  */
 function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
     const commands = Array.isArray(p.COMMANDS) ? p.COMMANDS : [];
