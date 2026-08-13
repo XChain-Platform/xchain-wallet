@@ -39,6 +39,10 @@ import react from '@vitejs/plugin-react';
 import {
     PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile,
 } from '../web/buildProfile.js';
+// Same reasoning, same mechanism: a `store` build carries no regtest full-node
+// sidecar. Imported from the web shell rather than copied, so the two shells
+// cannot come to disagree about what a `store` build contains. .
+import { regtestSidecarPlugin } from '../web/regtestSidecar.js';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import sharp from 'sharp';
 
@@ -288,6 +292,7 @@ export default defineConfig({
     plugins: [
         polyfillShimResolver,
         stampBuildProfilePlugin(),
+        regtestSidecarPlugin(resolveBuildProfile()),
         react(),
         nodePolyfills({
             include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util'],

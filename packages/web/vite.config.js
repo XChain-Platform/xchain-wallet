@@ -34,6 +34,10 @@ import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buil
 // Which SURFACES this profile carries. The registry is data; the two
 // pieces below are the mechanism that acts on it.
 import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
+// Keep the SDK's regtest full-node sidecar (a Node-only dev path, and the
+// `fullnode.regtest.json` literal beside it) out of a `store` bundle. Inert in
+// every other profile; fails the build shut if a marker survives. .
+import { regtestSidecarPlugin } from './regtestSidecar.js';
 
 const BUILD_PROFILE = resolveBuildProfile();
 const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
@@ -395,6 +399,7 @@ export default defineConfig({
         }),
         styleGuidePlugin,
         surfaceGuardPlugin,
+        regtestSidecarPlugin(BUILD_PROFILE),
         cspPlugin,
         // Last: must see the final tag set + final bundle bytes.
         sriPlugin(),
