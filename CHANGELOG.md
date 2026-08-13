@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `android-applinks-verify.sh` provisions a Google Play emulator image, installs the app and asserts the Android App Links verdict, refusing images that cannot answer.
 - `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect, so publishing no longer needs a signed-in console session.
 
 ### Fixed

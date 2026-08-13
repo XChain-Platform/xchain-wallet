@@ -64,10 +64,17 @@ listing pack under `docs/`
 D-U-N-S, Play enrollment, and the K9/K10 key ceremony, which is also what
 unblocks the assetlinks fingerprints and the `SECURITY.md` slot.
 
-> **No App Link has been verified end to end.** That needs a signed build, a
-> published `assetlinks.json` carrying real fingerprints, and
-> `adb shell pm get-app-links io.xchain.wallet.android`. The failure mode is
-> silent: an unverified link just opens in the browser.
+> **App Links verify, and the check is now a script rather than a session.**
+> `bash tools/release/android-applinks-verify.sh` provisions a
+> `google_apis_playstore` AVD, installs the artifact, resets the verdict and
+> polls `pm get-app-links` until `xchain.io` answers, refusing every venue
+> whose answer would not mean what it says; `--falsify` additionally proves
+> the verdict is contingent on fetching the live `assetlinks.json`. The
+> failure mode it exists for is silent: an unverified link just opens in the
+> browser. **One step stays manual**: an install carrying Google's CURRENT
+> Play app-signing certificate, which reaches a device only through a real
+> Play delivery to a tester account. Install that from Play by hand, then run
+> the script with `--no-provision --no-install`.
 
 > **The Java compiles as of 2026-08-01.** This Mac is now the provisioned
 > release machine (Homebrew `openjdk@21`, Android platform 36 + build-tools 36,
@@ -91,13 +98,18 @@ unblocks the assetlinks fingerprints and the `SECURITY.md` slot.
 > lifecycle driven; FLAG_SECURE has taken effect; the vault's
 > ABSENT/OK/CORRUPT statuses are measured rather than asserted.
 >
-> **Two things an emulator cannot tell you.** `setWebContentsDebuggingEnabled(false)`
-> cannot be checked on any `google_apis` image (`ro.debuggable=1` makes WebView
-> expose DevTools for every app regardless), and no App Link has been verified
-> end to end - that needs a signed build, a published `assetlinks.json` with
-> real fingerprints, and `adb shell pm get-app-links`, which today reports
-> `xchain.io: legacy_failure`. Both need the physical device §7 names as a
-> release gate.
+> **One thing an emulator cannot tell you, and one that only the RIGHT image
+> can.** `setWebContentsDebuggingEnabled(false)` cannot be checked on any
+> emulator image (`ro.debuggable=1` makes WebView expose DevTools for every
+> app regardless), so that one still needs the physical device §7 names as a
+> release gate. App Links were filed beside it and did not belong there: the
+> blocker was the IMAGE, not the emulator. A `google_apis` image carries the
+> verification agent and never invokes it for a sideloaded package, so the
+> domain holds at `none` - an ABSENCE of a verdict, which proves neither pass
+> nor fail and reads as a failure. A `google_apis_playstore` image answers,
+> and `tools/release/android-applinks-verify.sh` is that measurement made
+> repeatable, refusing the `google_apis` venue rather than reporting its
+> silence.
 >
 > **Rebuilding for a device: `pnpm --filter @xchain-wallet/mobile build` stages
 > `www/` only.** The APK reads `android/app/src/main/assets/public`, which only
