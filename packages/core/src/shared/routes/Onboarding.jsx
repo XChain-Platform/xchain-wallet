@@ -206,7 +206,16 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 b.toString(16).padStart(2, '0'),
             ).join('');
             passwordBytes.fill(0);
-            const mnemonic = cryptoLib.generateBip39Mnemonic(128);
+            // Fresh per demo session, except under the store-listing
+            // capture harness, which needs the address in the public
+            // screenshots to be the same address on every capture
+            // (flows/demoCapture.js explains why, and why the phrase it
+            // returns is the published BIP39 test vector rather than
+            // anything that could be mistaken for a real seed). Capture
+            // mode is off unless that harness armed it, so a user still
+            // gets a randomly generated throwaway wallet.
+            const mnemonic = flowsLib.demoCaptureMnemonic()
+                || cryptoLib.generateBip39Mnemonic(128);
             // Cluster J FOLLOWUP 7: demo wallets register chains on
             // mainnet, testnet, AND regtest so the user can flip the
             // activeNetwork setting and see populated views on each.

@@ -127,6 +127,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 wire up; for now they're not in the sum. */}
             <TotalBalanceHero
                 rows={filteredRows}
+                walletId={walletId}
                 networkFilter={networkFilter}
                 lastSyncedAt={balancesFetchedAt}
                 filterOpen={filterOpen}

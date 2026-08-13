@@ -825,6 +825,9 @@ function main(argv) {
                 + (SETS[result.set || 'extension'].recapture
                     || `rebuild the shell at the ref you are submitting and re-run `
                     + `${SETS[result.set || 'extension'].capture}, which re-pins as it goes`)
+                + ' (the capture is reproducible: it freezes the demo wallet and the demo clock, '
+                + 'so re-capturing an unchanged tree rewrites the same bytes and a re-pin here '
+                + 'means the PRODUCT moved, not the demo dice)'
                 + '; or (2) read the commits AND the files listed under each one above, and '
                 + 'record in the release record why none of them can change these pixels. Judge it '
                 + 'on the files: a subject line describes a change\'s purpose, not its reach, and '

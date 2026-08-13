@@ -24,15 +24,25 @@
 //
 // DEMO DATA ONLY. Every surface here is captured from the wallet's "Try in
 // demo mode" onboarding lane (packages/core/src/shared/routes/Onboarding.jsx
-// handleEnterDemo): a freshly generated, randomly seeded, never-funded BIP39
-// wallet whose balances are synthetic overlays from
-// packages/core/src/flows/demoFixtures.js (isDemoWallet short-circuits every
-// balance/history fetch, so nothing here ever touches a real chain or a real
-// endpoint). The address shown IS a real derived address, but it belongs to
-// a throwaway wallet generated fresh by THIS SCRIPT RUN, never funded, and
-// discarded with the temp Chrome profile when the script exits - not an
-// operator's actual wallet. Listing images are permanent public artifacts,
-// so this is the one thing this script must never get wrong.
+// handleEnterDemo): a never-funded BIP39 wallet whose balances are synthetic
+// overlays from packages/core/src/flows/demoFixtures.js (isDemoWallet
+// short-circuits every balance/history fetch, so nothing here ever touches a
+// real chain or a real endpoint). The address shown IS a real derived
+// address, but it belongs to a throwaway wallet that is discarded with the
+// temp Chrome profile when the script exits - not an operator's actual
+// wallet. Listing images are permanent public artifacts, so this is the one
+// thing this script must never get wrong.
+//
+// REPEATABLE MEANS BYTE-IDENTICAL . This script arms capture mode
+// before the first page loads, which freezes the two inputs the demo lane
+// used to randomize: the demo wallet's mnemonic (the published BIP39
+// all-zero test vector, so the address in the images never moves and no
+// reader mistakes it for a real seed) and the clock every synthesized
+// timestamp is measured against. Without that, re-running the capture on an
+// UNCHANGED tree produced different bytes, so verify-listing-assets.mjs's
+// own way out ("re-capture, it re-pins as it goes") always succeeded and
+// could never tell a product change from a dice roll. See
+// packages/core/src/flows/demoCapture.js.
 //
 // Approval-window binding note (see extension-isolated.js's header): the
 // signAction/signMessage approval window only receives its
@@ -56,6 +66,14 @@ import { LICENSE_VERSION } from '../../core/src/buildInfo.js';
 // restated here, so the capture and the check cannot come to disagree about
 // which four files this produces.
 import { ASSETS, writePin } from '../../../tools/release/verify-listing-assets.mjs';
+// The frozen inputs that make this capture REPEATABLE . Read
+// from the app's own module rather than restated here, so the harness and
+// the demo lane it drives cannot disagree about which mnemonic and which
+// instant a capture runs at.
+import {
+    DEMO_CAPTURE_FLAG_KEY,
+    DEMO_CAPTURE_CLOCK_MS,
+} from '../../core/src/flows/demoCapture.js';
 
 // Answered before anything else, and this one is not a courtesy. Without it,
 // `--help` was not recognised as a flag at all: the script ignored it and ran
@@ -88,7 +106,12 @@ OVERWRITES the four listing assets in packages/extension/docs/listing-assets/
 (three 1280x800 screenshots and the 440x280 promo tile).
 
 Demo data only. It never touches a real wallet, and the store listing shows
-only what this produces.`);
+only what this produces.
+
+Reproducible: the demo wallet, the demo clock and the demo prices are all
+frozen for the run, so two captures of an unchanged tree write the same
+bytes. A re-capture that changes an image therefore means the PRODUCT
+changed.`);
     process.exit(0);
 }
 
@@ -165,6 +188,25 @@ async function main() {
         ],
     });
 
+    // ---- Freeze the two dice this capture used to roll  -------
+    // Armed on the CONTEXT, not per page: the sign-approval window is
+    // opened by Chrome rather than by this script, so a per-page init
+    // script would miss the one screenshot that shows an address twice.
+    //
+    // 1. Capture mode, so the demo lane uses the committed demo-only
+    //    mnemonic and the address in the images is the same address on
+    //    every run (packages/core/src/flows/demoCapture.js).
+    await context.addInitScript(([key]) => {
+        try { window.localStorage.setItem(key, '1'); } catch { /* capture will differ, loudly */ }
+    }, [DEMO_CAPTURE_FLAG_KEY]);
+    // 2. One frozen clock for the whole context. This has to cover the UI
+    //    and not just the fixtures: the fixtures date their rows against
+    //    `now` and the UI renders those dates as "3 minutes ago" against
+    //    its own, so freezing only one of the two would put a months-old
+    //    wallet in a public store listing. `setFixedTime` keeps timers
+    //    running, so the app still boots, unlocks and navigates normally.
+    await context.clock.setFixedTime(DEMO_CAPTURE_CLOCK_MS);
+
     const produced = [];
     const missing = [];
 
@@ -193,6 +235,7 @@ async function main() {
         // fetches nothing from a real chain, but token icon <img> tags do
         // load from their real (public, non-secret) URLs.
         await popup.waitForTimeout(1500);
+        await settleImages(popup);
         const popupPng = await popup.screenshot();
         await composeOnCanvas(popupPng, path.join(OUT_DIR, 'screenshot-popup.png'), {
             label: 'Toolbar popup, Home view',
@@ -218,6 +261,7 @@ async function main() {
         // so it always renders "No collectibles yet" here.
         await sidepanel.getByRole('tab', { name: 'Tokens' }).click();
         await sidepanel.waitForTimeout(1500);
+        await settleImages(sidepanel);
         const sidepanelPng = await sidepanel.screenshot();
         await composeOnCanvas(sidepanelPng, path.join(OUT_DIR, 'screenshot-sidepanel.png'), {
             label: 'Side panel, Tokens view',
@@ -411,6 +455,21 @@ async function clickAndLetItClose(locator) {
     } catch (e) {
         if (!/closed/i.test(String(e && e.message))) throw e;
     }
+}
+
+/**
+ * Waits until every <img> on the page has settled (decoded or given up).
+ * Token artwork loads from real public URLs, so a shot taken mid-load
+ * differs from the same shot taken after it, which is a second way for two
+ * captures of one tree to disagree. A failed image counts as complete, so
+ * this bounds the race rather than pretending the network cannot fail.
+ */
+async function settleImages(page, { timeout = 15_000 } = {}) {
+    await page.waitForFunction(
+        () => Array.from(document.images).every((img) => img.complete),
+        undefined,
+        { timeout },
+    ).catch(() => log('WARNING: images still loading at the timeout; shot may not be reproducible'));
 }
 
 async function waitFor(predicate, { timeout = 30_000, interval = 250, message = 'condition never became true' } = {}) {

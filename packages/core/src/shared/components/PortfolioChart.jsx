@@ -14,6 +14,9 @@ import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
+import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import styles from './PortfolioChart.module.css';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
@@ -65,8 +68,16 @@ export function PortfolioChart({ rows, walletId }) {
     }, [rows]);
     const nativeChainKey = nativeChainIds.join(',');
 
+    // A demo wallet prices itself from its own fixtures, like every other
+    // number on this screen (see TotalBalanceHero for the whole argument).
+    const isDemo = isDemoWallet(walletId);
+
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
+        if (isDemo) {
+            setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
+            return undefined;
+        }
         if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
             setPriceMap({});
             return undefined;
@@ -80,11 +91,23 @@ export function PortfolioChart({ rows, walletId }) {
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // A demo wallet's id is a fresh UUID on every demo session, and the
+    // synthesized walk below is seeded by it, so the demo chart (and the
+    // price-change figure printed above it) came out different every
+    // time the same demo was opened. That is per-session noise on data
+    // that is synthetic to begin with, and it is one of the three inputs
+    // that made a store-listing capture unreproducible - the sparkline
+    // and the change figure were two of the only moving bands between
+    // two captures of an unchanged tree. Demo wallets therefore seed on
+    // a constant; real wallets keep seeding on their own id, so flipping
+    // between them still reshuffles. See flows/demoCapture.js.
+    const seedId = isDemo ? DEMO_CHART_SEED : walletId;
 
     const series = useMemo(
-        () => buildPortfolioSeries(rows, priceMap, walletId, range),
-        [rows, priceMap, walletId, range],
+        () => buildPortfolioSeries(rows, priceMap, seedId, range),
+        [rows, priceMap, seedId, range],
     );
 
     const hasData = Array.isArray(series) && series.length >= 2;
@@ -145,7 +168,9 @@ export function PortfolioChart({ rows, walletId }) {
     );
 }
 
-function buildPortfolioSeries(rows, priceMap, walletId, range) {
+// `seedId` is the wallet's own id for a real wallet and a constant for a
+// demo one; it only ever feeds the synthesized walk's seed.
+function buildPortfolioSeries(rows, priceMap, seedId, range) {
     if (!Array.isArray(rows) || rows.length === 0) return null;
     const points = range.points;
     if (points < 2) return null;
@@ -154,7 +179,7 @@ function buildPortfolioSeries(rows, priceMap, walletId, range) {
     for (const row of rows) {
         const current = fiatValueOf(row);
         if (current === null || current === 0) continue;
-        const rowSeries = seriesForRow(row, current, priceMap, walletId, range);
+        const rowSeries = seriesForRow(row, current, priceMap, seedId, range);
         if (!rowSeries) continue;
         anyContrib = true;
         for (let i = 0; i < points; i += 1) sums[i] += rowSeries[i];
@@ -162,7 +187,7 @@ function buildPortfolioSeries(rows, priceMap, walletId, range) {
     return anyContrib ? sums : null;
 }
 
-function seriesForRow(row, current, priceMap, walletId, range) {
+function seriesForRow(row, current, priceMap, seedId, range) {
     // Native row + real CoinGecko sparkline → scale into the row's
     // current fiat value. The series always ends at `current`, so the
     // summed chart's last point equals the portfolio total exactly.
@@ -184,7 +209,7 @@ function seriesForRow(row, current, priceMap, walletId, range) {
     }
     // Otherwise synthesize. Seeded so re-renders stay stable but each
     // (wallet, row, range) combination gets its own walk shape.
-    const key = `${walletId || '_'}|${row.chainId || ''}|${row.kind === 'native' ? 'native' : row.tick}|${range.id}|${current.toFixed(2)}`;
+    const key = `${seedId || '_'}|${row.chainId || ''}|${row.kind === 'native' ? 'native' : row.tick}|${range.id}|${current.toFixed(2)}`;
     const { sparkline } = synthesizeTokenChart(key, current, range.points);
     return sparkline;
 }
