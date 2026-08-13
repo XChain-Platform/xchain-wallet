@@ -174,10 +174,34 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         const messaging = mount(ORACLE_DISPENSER, {
             oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS),
         });
-        expect(await screen.findByText(/1\.5 USD/)).toBeInTheDocument();
+        // The label is "Price per fill" and this dispenser gives 5 tokens a fill,
+        // so the number under it has to be 5 x the oracle's per-token quote. The
+        // oracle publishes the price of ONE TOKEN (its publishing form says so,
+        // and settlement divides by GIVE_AMOUNT under
+        // DISPENSER_ORACLE_PER_TOKEN_PRICE), so printing the bare 1.5 here
+        // under-stated what this dispenser costs by a factor of five.
+        expect(await screen.findByText(/7\.5 USD/)).toBeInTheDocument();
         expect(messaging.oracleFeeds).toHaveBeenCalledWith({
             chainId: CHAIN, address: ORACLE_ADDRESS,
         });
+    });
+
+    it('shows the per-token quote beside the fill price, so the two can be reconciled', async () => {
+        // The oracle's own feed publishes 1.5, and a buyer who looks it up must
+        // not read the panel's 7.5 as a contradiction.
+        mount(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
+        await screen.findByText(/7\.5 USD/);
+        expect(document.body.textContent || '').toMatch(/5 XCHAIN at 1\.5 USD each/);
+    });
+
+    it('adds no breakdown when a fill IS one token', async () => {
+        // At GIVE_AMOUNT 1 the fill price and the per-token price are the same
+        // number, and restating it would read as two different prices.
+        mount({ ...ORACLE_DISPENSER, give_amount: '1' }, {
+            oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS),
+        });
+        expect(await screen.findByText(/1\.5 USD/)).toBeInTheDocument();
+        expect(document.body.textContent || '').not.toMatch(/at 1\.5 USD each/);
     });
 
     it('quotes the LIVE feed, never the one still maturing', async () => {
@@ -185,7 +209,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // prices nothing yet. Showing it would be a price no payment made today
         // can buy at - worse than no number, because it looks like one.
         mount(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
-        await screen.findByText(/1\.5 USD/);
+        await screen.findByText(/7\.5 USD/);
         expect(document.body.textContent || '').not.toMatch(/9\.99/);
     });
 

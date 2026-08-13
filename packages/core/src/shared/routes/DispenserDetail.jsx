@@ -555,6 +555,29 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return multiplyAmounts(giveAmount, String(fillsNum));
     }, [giveAmount, fillsNum]);
 
+    // What ONE fill of a Mode B (oracle-priced) dispenser costs in its fiat
+    // currency. The oracle publishes the price of one TOKEN - its own publishing
+    // form says "Price of one <TICK> in <FIAT>" - and a fill is GIVE_AMOUNT
+    // tokens, so the figure a buyer has to send is the quote multiplied out. The
+    // panel used to print the bare quote as the fill price, which was right about
+    // the chain of the day (settlement spent the quote as the price of one whole
+    // fill) and wrong about the price: it under-stated a GIVE_AMOUNT-5 fill by
+    // 5x. Settlement now divides by GIVE_AMOUNT
+    // (DISPENSER_ORACLE_PER_TOKEN_PRICE), so per-token is what the quote means
+    // everywhere and this multiplication is what a buyer owes.
+    //
+    // Exact decimal multiplication, never floats: a fiat price of '0.05' times a
+    // GIVE_AMOUNT of '3' has to read 0.15, not 0.15000000000000002.
+    // Null whenever there is nothing trustworthy to multiply (no live quote, or
+    // an ownership dispenser, which carries no GIVE_AMOUNT and sells one record
+    // rather than a token quantity), so the copy falls through to its explicit
+    // "no price to show" branch instead of quoting a guess.
+    const oracleFillPrice = useMemo(() => {
+        if (oracleQuote?.value == null) return null;
+        if (!giveAmount) return String(oracleQuote.value);
+        return multiplyAmounts(String(oracleQuote.value), String(giveAmount));
+    }, [oracleQuote, giveAmount]);
+
     async function handleCopy(text, label) {
         try {
             await navigator.clipboard?.writeText(text);
@@ -1782,15 +1805,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                         neither: it named the mechanism and left the
                                         buyer to guess the number, on a payment that
                                         is not returned if it guesses low. The oracle
-                                        prices ONE FILL, not one token - the indexer
-                                        divides the payment by the published value and
-                                        multiplies the result by GIVE_AMOUNT
-                                        (utility.reverseOraclePriceMatch), measured on
-                                        chain 2026-07-31 - so a fill of several tokens
-                                        costs the published figure once. */}
+                                        prices ONE TOKEN, and a fill is GIVE_AMOUNT
+                                        tokens, so the fill price is the quote
+                                        multiplied out (see oracleFillPrice). The
+                                        per-token quote is shown beside it whenever a
+                                        fill is more than one token, because that is
+                                        the number the oracle's own feed publishes and
+                                        a buyer comparing the two should not have to
+                                        guess which is which. */}
                                     {oracleAddress && fiatAmount == null
-                                        ? (oracleQuote?.value != null
-                                            ? `${oracleQuote.value} ${fiatCode}`
+                                        ? (oracleFillPrice != null
+                                            ? `${oracleFillPrice} ${fiatCode}`
+                                              + (giveAmount && String(giveAmount) !== '1'
+                                                  ? ` (${giveAmount} ${giveTick || 'tokens'} at `
+                                                    + `${oracleQuote.value} ${fiatCode} each)`
+                                                  : '')
                                             : (oracleQuoteChecked
                                                 ? `Set by the oracle at ${oracleAddress}, in ${fiatCode}, `
                                                   + 'and it is publishing no price this wallet can read '
