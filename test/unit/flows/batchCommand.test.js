@@ -35,23 +35,58 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
         expect(errs).toEqual([]);
     });
 
-    it('rejects nested BATCH and DEPLOY', () => {
+    it('rejects a nested BATCH, but a lone DEPLOY is legal (the chain accepts exactly one)', () => {
         const errs = validateBatchConstraints([{ action: 'BATCH' }, { action: 'DEPLOY' }]);
         expect(errs.some((e) => /another batch/i.test(e))).toBe(true);
-        expect(errs.some((e) => /DEPLOY/.test(e))).toBe(true);
+        expect(errs.some((e) => /DEPLOY/.test(e))).toBe(false);
     });
 
-    it('enforces at most one MINT / FILE', () => {
-        for (const action of ['MINT', 'FILE']) {
-            const errs = validateBatchConstraints([{ action }, { action }]);
-            expect(errs.some((e) => new RegExp(`at most one ${action}`, 'i').test(e))).toBe(true);
-        }
+    it('accepts a single DEPLOY', () => {
+        const errs = validateBatchConstraints([{ action: 'SEND' }, { action: 'DEPLOY' }]);
+        expect(errs).toEqual([]);
+    });
+
+    it('rejects two DEPLOYs (one VM constructor run is already the most expensive command)', () => {
+        const errs = validateBatchConstraints([{ action: 'DEPLOY' }, { action: 'DEPLOY' }]);
+        expect(errs.some((e) => /at most one DEPLOY/i.test(e))).toBe(true);
+    });
+
+    it('enforces at most one FILE', () => {
+        const errs = validateBatchConstraints([{ action: 'FILE' }, { action: 'FILE' }]);
+        expect(errs.some((e) => /at most one FILE/i.test(e))).toBe(true);
+    });
+
+    it('accepts MINTs of two distinct tokens', () => {
+        const errs = validateBatchConstraints([
+            { action: 'MINT', params: { TICK: 'JDOG' } },
+            { action: 'MINT', params: { TICK: 'PEPE' } },
+        ]);
+        expect(errs).toEqual([]);
+    });
+
+    it('rejects two MINTs of the same token', () => {
+        const errs = validateBatchConstraints([
+            { action: 'MINT', params: { TICK: 'JDOG' } },
+            { action: 'MINT', params: { TICK: 'JDOG' } },
+        ]);
+        expect(errs.some((e) => /mint each token at most once/i.test(e))).toBe(true);
+    });
+
+    it('refuses a MINT pair naming a token once by name and once by ID number, since they might be the same token', () => {
+        const errs = validateBatchConstraints([
+            { action: 'MINT', params: { TICK: 'JDOG' } },
+            { action: 'MINT', params: { TICK: '^614' } },
+        ]);
+        expect(errs.some((e) => /spell every token by name/i.test(e))).toBe(true);
+        // The ambiguous case reports on its own; it should not also claim an
+        // ordinary duplicate, which would imply a certainty the wallet lacks.
+        expect(errs.some((e) => /mint each token at most once/i.test(e))).toBe(false);
     });
 
     it('is case-insensitive on action names', () => {
         expect(validateBatchConstraints([{ action: 'batch' }]).some((e) => /another batch/i.test(e))).toBe(true);
-        expect(BATCH_FORBIDDEN_ACTIONS).toEqual(['BATCH', 'DEPLOY']);
-        expect(BATCH_SINGLETON_ACTIONS).toEqual(['ISSUE', 'MINT', 'FILE']);
+        expect(BATCH_FORBIDDEN_ACTIONS).toEqual(['BATCH']);
+        expect(BATCH_SINGLETON_ACTIONS).toEqual(['ISSUE', 'DEPLOY', 'FILE']);
     });
 
     it('accepts one top-level ISSUE plus any number of child ISSUEs', () => {
@@ -93,15 +128,16 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
         expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
     });
 
-    it('rejects nested BATCH and DEPLOY even amid otherwise-legal child ISSUEs', () => {
+    it('rejects a nested BATCH amid otherwise-legal child ISSUEs and DEPLOYs, but only for the nesting and the SECOND DEPLOY', () => {
         const errs = validateBatchConstraints([
             { action: 'ISSUE', params: { TICK: 'JDOG' } },
             { action: 'ISSUE', params: { TICK: 'JDOG.1' } },
             { action: 'BATCH' },
             { action: 'DEPLOY' },
+            { action: 'DEPLOY' },
         ]);
         expect(errs.some((e) => /another batch/i.test(e))).toBe(true);
-        expect(errs.some((e) => /DEPLOY/.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one DEPLOY/i.test(e))).toBe(true);
     });
 
     it('accepts exactly 250 commands', () => {

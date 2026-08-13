@@ -28,10 +28,19 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 // ---- Flow: constraint pre-check + command builder ----
 assert.equal(typeof flows.validateBatchConstraints, 'function', 'flows.validateBatchConstraints exported');
 assert.equal(typeof flows.buildBatchCommand, 'function', 'flows.buildBatchCommand exported');
-assert.deepEqual(flows.BATCH_FORBIDDEN_ACTIONS, ['BATCH', 'DEPLOY'], 'forbidden actions pinned');
-assert.deepEqual(flows.BATCH_SINGLETON_ACTIONS, ['ISSUE', 'MINT', 'FILE'], 'singleton actions pinned');
+assert.deepEqual(flows.BATCH_FORBIDDEN_ACTIONS, ['BATCH'], 'forbidden actions pinned');
+assert.deepEqual(flows.BATCH_SINGLETON_ACTIONS, ['ISSUE', 'DEPLOY', 'FILE'], 'singleton actions pinned');
 assert.deepEqual(flows.validateBatchConstraints([{ action: 'SEND' }, { action: 'BROADCAST' }]), [], 'legal queue passes');
-assert.ok(flows.validateBatchConstraints([{ action: 'MINT' }, { action: 'MINT' }]).length > 0, 'two MINTs rejected');
+assert.ok(flows.validateBatchConstraints([{ action: 'DEPLOY' }]).length === 0, 'a single DEPLOY is legal');
+assert.ok(flows.validateBatchConstraints([{ action: 'DEPLOY' }, { action: 'DEPLOY' }]).length > 0, 'two DEPLOYs rejected');
+assert.ok(flows.validateBatchConstraints([
+    { action: 'MINT', params: { TICK: 'JDOG' } },
+    { action: 'MINT', params: { TICK: 'JDOG' } },
+]).length > 0, 'two MINTs of the same token rejected');
+assert.ok(flows.validateBatchConstraints([
+    { action: 'MINT', params: { TICK: 'JDOG' } },
+    { action: 'MINT', params: { TICK: 'PEPE' } },
+]).length === 0, 'MINTs of two distinct tokens accepted');
 assert.ok(flows.validateBatchConstraints([]).length > 0, 'empty queue rejected');
 
 // ---- Host + 3-shell messaging ----
@@ -53,7 +62,15 @@ assert.match(form, /action: 'BATCH'/, 'form signs a BATCH action');
 assert.match(form, /advancedAction/, 'form signs through the generic advancedAction path');
 assert.match(form, /buildActionPsbtRequest/, 'form supports watcher encode-only');
 assert.match(form, /EXCLUDED_ACTIONS[\s\S]*'FILE'/, 'FILE is excluded from the picker');
-assert.match(form, /Atomic/, 'form states the all-or-nothing contract');
+assert.match(form, /const EXCLUDED_ACTIONS = new Set\(\['BATCH', 'FILE'\]\)/, 'DEPLOY is no longer excluded: only nested BATCH and FILE are (D5)');
+// A batch is NOT atomic: each sub-action validates and lands on its own, so a
+// child that runs out of fee fails alone and its siblings stand. This assertion
+// used to demand the word "Atomic" and had been red ever since the form started
+// telling the truth instead - a gate pinning the OPPOSITE of the contract.
+assert.match(form, /each still confirms on its own/,
+    'form states that sub-actions confirm individually, not all-or-nothing');
+assert.doesNotMatch(form, /\bAtomic\b/,
+    'form must not claim atomicity: a batch is not all-or-nothing');
 
 // ---- Web-shell route wiring (desktop/ext deferred: concurrent PC-30 edits) ----
 const webApp = read('packages', 'web', 'src', 'App.jsx');

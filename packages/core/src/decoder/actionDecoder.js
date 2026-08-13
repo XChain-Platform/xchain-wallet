@@ -1602,10 +1602,14 @@ function decodeIssue(p, chainName, chainSuffix) {
  * command. The wallet emits BATCH with params shaped as
  * `{ COMMANDS: [{ action, params }, ...] }`; protocol §BATCH v0 allows
  * at most one top-level (undotted) ISSUE plus any number of child
- * (dotted, non-caret) ISSUEs, one MINT, one FILE (one rawData per
- * transaction), up to 250 commands total, and no nested BATCH or
- * DEPLOY. If COMMANDS is missing or malformed the decoder falls back
- * to a generic summary so the user sees *something* before signing.
+ * (dotted, non-caret) ISSUEs, at most one contract DEPLOY (every
+ * DEPLOY runs a constructor in the VM, the most expensive per-command
+ * work the chain does), any number of MINTs as long as each names a
+ * DISTINCT token (at most one MINT per resolved ticker id), one FILE
+ * (one rawData payload per transaction), up to 250 commands total, and
+ * no nested BATCH. If COMMANDS is missing or malformed the decoder
+ * falls back to a generic summary so the user sees *something* before
+ * signing.
  */
 function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
     const commands = Array.isArray(p.COMMANDS) ? p.COMMANDS : [];

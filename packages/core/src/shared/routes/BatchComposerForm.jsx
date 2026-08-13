@@ -17,17 +17,23 @@
 // running out of value to cover its fee) fails alone while sub-actions that
 // pass still land. The user queues sub-actions as (action, JSON params)
 // steps; the composer pre-checks the BATCH constraints live (one top-level
-// ISSUE plus any number of its child ISSUEs, at most one MINT and one FILE,
-// up to 250 actions total, no nested BATCH or DEPLOY), builds the canonical
-// COMMAND host-side via the SDK, previews it, and signs the BATCH through
-// the generic advancedAction path (action='BATCH', params={ COMMAND }), so
+// ISSUE plus any number of its child ISSUEs, any number of MINTs as long as
+// each names a different token, at most one contract DEPLOY and one FILE,
+// up to 250 actions total, no nested BATCH), builds the canonical COMMAND
+// host-side via the SDK, previews it, and signs the BATCH through the
+// generic advancedAction path (action='BATCH', params={ COMMAND }), so
 // software, hardware, and watcher signers all work exactly as they do for
 // any other action.
 //
 // FILE is excluded from the picker: a FILE sub-action needs the tx's single
 // rawData payload, which the dedicated file / gated publishers own (the two
-// BATCH shapes users actually need). This generic composer targets power
-// users assembling several metadata actions in one transaction.
+// BATCH shapes users actually need). DEPLOY IS offered here, capped at one
+// per batch by the same live constraint check that caps ISSUE and FILE: a
+// DEPLOY sub-action's params (contract code, gas limit, optional
+// constructor arguments) are plain JSON like any other action's, with no
+// binary payload the way FILE needs, so this generic composer can build
+// one - just without DeployContractForm's friendlier fields. This form
+// targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -49,15 +55,18 @@ import { externalIndexOf } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Actions this generic composer cannot queue: the two the protocol
-// forbids in a BATCH (nested BATCH, DEPLOY) plus FILE (needs the tx's one
-// rawData payload; the file/gated publishers own that shape).
-const EXCLUDED_ACTIONS = new Set(['BATCH', 'DEPLOY', 'FILE']);
+// Actions this generic composer cannot queue: nested BATCH (the protocol
+// forbids it outright) and FILE (needs the tx's one rawData payload; the
+// file/gated publishers own that shape). DEPLOY is NOT excluded: the chain
+// allows one per batch, its params are plain JSON, and the live constraint
+// check below (validateBatchConstraints) already surfaces the one-per-batch
+// cap the same way it surfaces ISSUE's and FILE's.
+const EXCLUDED_ACTIONS = new Set(['BATCH', 'FILE']);
 
 const FALLBACK_ACTIONS = [
     'SEND', 'ISSUE', 'MINT', 'DESTROY', 'BROADCAST',
     'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
-    'ORDER', 'SWAP', 'COINPAY', 'MESSAGE', 'LINK', 'SLEEP',
+    'ORDER', 'SWAP', 'COINPAY', 'MESSAGE', 'LINK', 'SLEEP', 'DEPLOY',
 ];
 
 let nextRowId = 0;
@@ -403,9 +412,10 @@ export function BatchComposerForm({ walletId, onBack }) {
         <>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
                 Queue up to 250 actions to run together in one transaction from one address. You can issue one new
-                token plus as many of its sub-tokens (JDOG, then JDOG.1, JDOG.2, ...) as you like; MINT and FILE are
-                still limited to one each. No nested batches or contract deploys. FILE-gated content uses the
-                dedicated publisher.
+                token plus as many of its sub-tokens (JDOG, then JDOG.1, JDOG.2, ...) as you like, and mint any
+                number of different tokens (once each). A contract deploy can be queued too, but only one per
+                batch, since each one runs expensive setup work. No batches inside a batch. FILE-gated content
+                uses the dedicated publisher instead.
             </p>
 
             <label className={styles.pickerLabel}>
