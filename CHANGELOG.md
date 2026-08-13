@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.337.1] - 2026-08-13
 
 ### Added
 - Label changes now queue an on-chain sync automatically and ask for the wallet password once per unlock, so renaming many addresses costs one publish instead of one each.
