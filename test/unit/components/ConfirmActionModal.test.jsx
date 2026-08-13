@@ -114,7 +114,9 @@ describe('ConfirmActionModal', () => {
 
     it('shows the queued terminal copy in the signed-not-broadcast phase', () => {
         render(<ConfirmActionModal {...base({ phase: 'signed-not-broadcast' })} />);
-        expect(screen.getByTestId('confirm-queued').textContent).toMatch(/broadcast will retry/i);
+        // : "will retry" promised an auto-drain that does not exist.
+        expect(screen.getByTestId('confirm-queued').textContent).toMatch(/not broadcast yet/i);
+        expect(screen.getByTestId('confirm-queued').textContent).not.toMatch(/retry/i);
     });
 
     it('preflight verdict fail sets aria-live=assertive', () => {

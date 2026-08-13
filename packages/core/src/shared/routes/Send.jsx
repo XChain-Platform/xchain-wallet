@@ -38,6 +38,7 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
@@ -1836,20 +1837,28 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
-        // sitting in the rebroadcast queue, so this is emphatically not an
+        // sitting in the broadcast queue, so this is emphatically not an
         // error - but it is not confirmed-pending either. Say exactly that,
         // and do not offer "Send another" (re-sending the same payment while
         // a signed copy is queued is the double-broadcast trap §5.3.4 forbids).
+        //
+        // : this screen used to promise an automatic re-broadcast.
+        // Nothing in the wallet re-broadcasts anything: the
+        // queue drains only when the user presses "Broadcast now" in
+        // QueuedBroadcastBanner, and all the wallet does on its own is toast
+        // the user when reachability returns. The copy now promises that
+        // reminder and names who does the sending.
         if (result?.queued) {
             return wrap(
                 <>
                     <div className={styles.successCard} role="status" aria-live="polite">
                         <div className={styles.successIcon} aria-hidden="true">⏳</div>
-                        <h2 className={styles.successTitle}>Signed. Broadcast will retry.</h2>
+                        <h2 className={styles.successTitle}>{SIGNED_NOT_BROADCAST_TITLE}</h2>
                         <p className={styles.successHint}>
                             Your transaction is signed but couldn&apos;t reach the network just now.
-                            It&apos;s queued and will be re-broadcast automatically. You can track it
-                            from the queued-transactions banner; don&apos;t send this payment again.
+                            It&apos;s waiting in the queued-transactions banner and won&apos;t go out
+                            until you broadcast it from there; the wallet reminds you when the
+                            network is back. Don&apos;t send this payment again.
                         </p>
                     </div>
                     <div className={styles.actions}>

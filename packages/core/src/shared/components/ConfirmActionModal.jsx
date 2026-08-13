@@ -241,9 +241,12 @@ export function ConfirmActionModal({
                     {phase === 'rechecking' ? (
                         <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
                     ) : null}
+                    {/* : this line used to promise a retry, and nothing retries
+                        on its own. The queue holds the signed transaction until the
+                        user broadcasts it from the queued-transactions banner. */}
                     {phase === 'signed-not-broadcast' ? (
                         <p className={styles.queued} data-testid="confirm-queued">
-                            Signed - broadcast will retry.
+                            Signed - not broadcast yet.
                         </p>
                     ) : null}
                 </div>

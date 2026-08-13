@@ -271,8 +271,9 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             refund window, which costs it the market. */}
                         {result.queued
                             ? `Signed, but the ${result.mode === 'cancel' ? 'cancel' : 'result'} for market `
-                              + `#${result.feedIndex} could not reach the network just now. It is queued and `
-                              + 'will be broadcast automatically; do not submit it again.'
+                              + `#${result.feedIndex} could not reach the network just now. It is waiting in the `
+                              + 'queued-transactions banner and only goes out when you broadcast it from there; '
+                              + 'the wallet reminds you when the network is back. Do not submit it again.'
                             : result.mode === 'cancel'
                                 ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
                                 : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}

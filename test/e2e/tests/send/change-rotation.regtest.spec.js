@@ -165,7 +165,7 @@ async function sendAndBroadcast(page) {
         .toBeVisible({ timeout: 120_000 });
     // The queued path would mean the node never accepted it, and a queued
     // transaction leaves no chain evidence to read.
-    await expect(page.getByText('Signed. Broadcast will retry.')).toHaveCount(0);
+    await expect(page.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
 
     const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
     expect(txid, 'success screen showed no transaction id').toBeTruthy();

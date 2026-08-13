@@ -528,7 +528,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     await expect(two.getByRole('heading', { name: 'Broadcast pending' }),
                         'the restored wallet approved a payment that never reached the node')
                         .toBeVisible({ timeout: 180_000 });
-                    await expect(two.getByText('Signed. Broadcast will retry.')).toHaveCount(0);
+                    await expect(two.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
 
                     // The wallet reporting on itself is not enough. Ask the
                     // chain: a transaction signed with the wrong key never

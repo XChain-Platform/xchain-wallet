@@ -95,13 +95,28 @@ export function isWatcherChunkLane(err) {
 }
 
 /**
+ * The heading for a transaction that was signed and then failed to reach a
+ * node. Shared by every queued done screen so they say one thing .
+ */
+export const SIGNED_NOT_BROADCAST_TITLE = 'Signed. Not broadcast yet.';
+
+/**
  * The sentence for a transaction that was signed and then failed to reach a
  * node. Shared with QueuedResultPanel's hint so the two surfaces agree.
+ *
+ * : this used to promise an automatic re-broadcast, and nothing in the
+ * wallet re-broadcasts anything on its own. The only
+ * caller of the broadcast route is the user pressing "Broadcast now" in
+ * QueuedBroadcastBanner; what the wallet does on its own is show a toast when
+ * reachability flips back to normal. So the copy promises exactly that - a
+ * reminder - and says who does the sending. Change it back only alongside a
+ * real auto-drain; test/smoke/ui/queued-broadcast-copy.smoke.js fails if the
+ * two ever disagree again.
  */
 export const SIGNED_NOT_BROADCAST_MESSAGE =
-    'Your transaction is signed but could not reach the network. It is queued and will be '
-    + 'broadcast automatically; you can track it from the queued-transactions banner. '
-    + 'Do not submit this again.';
+    'Your transaction is signed but could not reach the network. It is waiting in the '
+    + 'queued-transactions banner and only goes out when you broadcast it from there; the '
+    + 'wallet reminds you when the network is back. Do not submit this again.';
 
 /**
  * Turn a caught submit error into the sentence to show.

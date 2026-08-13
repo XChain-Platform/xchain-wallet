@@ -871,10 +871,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             });
             const txid = res?.txid || res?.broadcast?.txid;
             // A TRANSIENT post-sign broadcast failure RESOLVES as
-            // `queued` rather than throwing. The LIST is signed and the queue
-            // will land it, but it has no txid yet, so the pending-airdrop
-            // record that anchors leg 2 cannot be written. Say that, instead
-            // of the "did not return a txid" internal that fell out below.
+            // `queued` rather than throwing. The LIST is signed and waiting in
+            // the broadcast queue for the user to send it , but it has
+            // no txid yet, so the pending-airdrop record that anchors leg 2
+            // cannot be written. Say that, instead of the "did not return a
+            // txid" internal that fell out below.
             if (res?.queued) {
                 setSubmitError(`${SIGNED_NOT_BROADCAST_MESSAGE} Come back and finish the airdrop `
                     + 'once the recipient list has confirmed.');
@@ -931,8 +932,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             });
             const txid = res?.txid || res?.broadcast?.txid;
             // Signed, queued, no txid yet (see leg 1). The pending
-            // record stays at its current stage so the queue's eventual
-            // broadcast is what completes the airdrop.
+            // record stays at its current stage, so broadcasting the queued
+            // copy from the banner is what completes the airdrop.
             if (res?.queued) {
                 setSubmitError(SIGNED_NOT_BROADCAST_MESSAGE);
                 return;

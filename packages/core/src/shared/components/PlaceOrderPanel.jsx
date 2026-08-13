@@ -39,7 +39,7 @@ import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
@@ -458,11 +458,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         padding: '0.75rem',
                     }}
                 >
-                    <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>Signed. Broadcast will retry.</p>
+                    <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>{SIGNED_NOT_BROADCAST_TITLE}</p>
                     <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
                         Your order is signed but couldn&apos;t reach the network just now. It&apos;s
-                        queued and will be broadcast automatically; track it from the
-                        queued-transactions banner, and don&apos;t place it again.
+                        waiting in the queued-transactions banner and only goes out when you
+                        broadcast it from there; the wallet reminds you when the network is back.
+                        Don&apos;t place it again.
                     </p>
                 </div>
             );

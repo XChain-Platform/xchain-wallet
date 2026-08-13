@@ -260,7 +260,7 @@ test.describe('multi-recipient SEND on regtest', () => {
                 .toBeVisible({ timeout: 180_000 });
             // The queued path would mean the node refused the transaction; it
             // must not be reported as the same outcome.
-            await expect(page.getByText('Signed. Broadcast will retry.')).toHaveCount(0);
+            await expect(page.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
 
             txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
             expect(txid, 'success screen showed no transaction id').toBeTruthy();

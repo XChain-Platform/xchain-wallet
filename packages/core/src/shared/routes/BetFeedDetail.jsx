@@ -601,8 +601,9 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                         {/* leg (a): a queued result is SIGNED and not broadcast, so
                             "Bet placed" would claim the one thing that has not happened. */}
                         {result?.queued
-                            ? 'Signed, but your bet could not reach the network just now. It is queued '
-                              + 'and will be broadcast automatically; do not place it again.'
+                            ? 'Signed, but your bet could not reach the network just now. It is waiting in '
+                              + 'the queued-transactions banner and only goes out when you broadcast it from '
+                              + 'there; the wallet reminds you when the network is back. Do not place it again.'
                             : feed.feed_status === 'open'
                                 ? 'Bet placed.'
                                 : 'Bet sent, but betting closed while you were confirming it. A bet is judged '

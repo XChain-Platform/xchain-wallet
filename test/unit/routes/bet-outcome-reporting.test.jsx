@@ -222,7 +222,9 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
 
         const receipt = utils.getByTestId('bet-result');
         expect(receipt.textContent).not.toContain('Bet placed.');
-        expect(receipt.textContent).toMatch(/queued and will be broadcast automatically/i);
+        // : the receipt promises a reminder, never an automatic send.
+        expect(receipt.textContent).toMatch(/waiting in the queued-transactions banner/i);
+        expect(receipt.textContent).not.toMatch(/automatically/i);
         // No txid row: there is no txid, and "n/a" beside a Txid label reads as a
         // broadcast that lost its receipt rather than one that never happened.
         expect(receipt.textContent).not.toContain('Txid');
@@ -287,7 +289,8 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
 
         const receipt = utils.getByTestId('oracle-result');
         expect(receipt.textContent).not.toMatch(/Result sent/);
-        expect(receipt.textContent).toMatch(/queued and\s+will be broadcast automatically/i);
+        expect(receipt.textContent).toMatch(/waiting in the\s+queued-transactions banner/i);
+        expect(receipt.textContent).not.toMatch(/automatically/i);
         expect(receipt.textContent).toContain('#2343');
     });
 

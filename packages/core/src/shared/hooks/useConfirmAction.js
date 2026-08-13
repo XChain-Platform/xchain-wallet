@@ -172,8 +172,9 @@ export function useConfirmAction() {
      * @returns {Promise<any>}   resolves with onApprove's own return value; EXCEPT on a
      *   TRANSIENT post-sign broadcast failure (§5.3.4), where it resolves with
      *   `{ queued: true, broadcast: 'queued', error }` - the tx is signed and handed to the
-     *   rebroadcast queue, so callers must render "Signed - broadcast will retry", not an
-     *   error. A PERMANENT broadcast failure rejects (re-compose required).
+     *   broadcast queue, so callers must render "Signed. Not broadcast yet." (: the
+     *   queue is drained by the user from QueuedBroadcastBanner, never automatically), not
+     *   an error. A PERMANENT broadcast failure rejects (re-compose required).
      */
     const confirm = useCallback((args) => {
         if (activeInstanceId !== null) return Promise.reject(new ConfirmActionBusyError());
@@ -424,9 +425,9 @@ export function useConfirmAction() {
             // to end in the right terminal state.
             const kind = broadcastFailureKindFromError(err);
             if (kind === 'transient') {
-                // The tx IS signed and queued for rebroadcast - not a failure
-                // from the user's point of view. Terminal "Signed - broadcast
-                // will retry", and RESOLVE so callers don't render an error.
+                // The tx IS signed and sitting in the broadcast queue - not a
+                // failure from the user's point of view. Terminal "Signed - not
+                // broadcast yet", and RESOLVE so callers don't render an error.
                 setPhase('signed-not-broadcast');
                 setError(null);
                 const queuedResult = { queued: true, broadcast: 'queued', error: { name: err?.name, message: err?.message } };

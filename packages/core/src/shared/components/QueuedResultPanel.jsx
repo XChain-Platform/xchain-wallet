@@ -24,8 +24,13 @@
 // ~13 action forms that own their own done screen, so the wording (and the
 // deliberate ABSENCE of a "do it again" button - re-signing while a signed
 // copy is queued is the §5.3.4 double-broadcast trap) lives in one place.
+//
+// : the wording promises a REMINDER, not an automatic retry, because a
+// reminder is all the wallet does - the queue drains only when the user
+// presses "Broadcast now" in QueuedBroadcastBanner.
 
 import { Button } from '../../ui/index.js';
+import { SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import styles from './QueuedResultPanel.module.css';
 
 /**
@@ -34,7 +39,7 @@ import styles from './QueuedResultPanel.module.css';
  * @param {string} [props.title]               heading; defaults to the action-neutral sentence
  * @param {string} [props.what]                what was signed, e.g. 'dividend' - used in the hint
  */
-export function QueuedResultPanel({ onDone, title = 'Signed. Broadcast will retry.', what }) {
+export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, what }) {
     const noun = what ? `Your ${what}` : 'Your transaction';
     return (
         <>
@@ -43,8 +48,9 @@ export function QueuedResultPanel({ onDone, title = 'Signed. Broadcast will retr
                 <h2 className={styles.queuedTitle}>{title}</h2>
                 <p className={styles.queuedHint}>
                     {noun} is signed but couldn&apos;t reach the network just now. It&apos;s
-                    queued and will be broadcast automatically. You can track it from the
-                    queued-transactions banner; don&apos;t submit this again.
+                    waiting in the queued-transactions banner and only goes out when you
+                    broadcast it from there; the wallet reminds you when the network is
+                    back. Don&apos;t submit this again.
                 </p>
             </div>
             <div className={styles.actions}>

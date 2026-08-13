@@ -121,12 +121,12 @@ test.describe('confirm -> broadcast on regtest', () => {
         await page.getByTestId('confirm-approve').click();
 
         // The terminal state. `Broadcast pending` means the node ACCEPTED the
-        // transaction; "Signed. Broadcast will retry." is the queued path and
+        // transaction; "Signed. Not broadcast yet." is the queued path and
         // would mean the broadcast failed, so exclude it explicitly rather
         // than matching any success-ish screen.
         await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
             .toBeVisible({ timeout: 120_000 });
-        await expect(page.getByText('Signed. Broadcast will retry.')).toHaveCount(0);
+        await expect(page.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
 
         // Everything above is still the wallet reporting on itself. Ask the
         // CHAIN: mine a block and require the destination to hold a UTXO from
@@ -245,12 +245,18 @@ test.describe('broadcast permanence on regtest', () => {
         await page.getByTestId('confirm-approve').click();
     }
 
-    test('a transient failure ends in "signed, will retry" and refuses to re-send', async ({ page }) => {
+    test('a transient failure ends in "signed, not broadcast yet" and refuses to re-send', async ({ page }) => {
         await failBroadcast(page, 'transient');
         await approveSend(page);
 
-        await expect(page.getByRole('heading', { name: 'Signed. Broadcast will retry.' }))
+        await expect(page.getByRole('heading', { name: 'Signed. Not broadcast yet.' }))
             .toBeVisible({ timeout: 120_000 });
+
+        // : the screen promises a reminder, not an automatic retry -
+        // the queue only drains when the user presses "Broadcast now".
+        await expect(page.getByText(/reminds you when the network is back/i)).toBeVisible();
+        await expect(page.getByText(/broadcast automatically|re-broadcast automatically/i))
+            .toHaveCount(0);
 
         // The signed copy is queued, so offering "Send another" here is the
         // double-broadcast trap §5.3.4 forbids: the user would authorise a
@@ -270,7 +276,7 @@ test.describe('broadcast permanence on regtest', () => {
         // so it must not be presented as queued. Queuing it would retry a
         // doomed transaction forever and tell the user to keep waiting.
         await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 120_000 });
-        await expect(page.getByText('Signed. Broadcast will retry.')).toHaveCount(0);
+        await expect(page.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
         await expect(page.getByRole('heading', { name: 'Broadcast pending' })).toHaveCount(0);
     });
 });
