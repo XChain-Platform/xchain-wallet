@@ -23,6 +23,21 @@ import styles from './DemoBanner.module.css';
  * the App state into the onboarding screen so the user lands back on
  * the Welcome view (next step: G060 animated explainers).
  *
+ * : the visible banner was suppressed for a while, leaving
+ * WalletDetails as the only surface that named the demo. A first-time
+ * visitor never opens that page, so the funnel showed a seven-figure
+ * portfolio above action forms reading "0 BTC available" and no text
+ * anywhere reconciling the two: read surfaces are fixture-fed, action
+ * forms are chain-fed. The copy below has to close exactly that gap,
+ * so it names the demo AND says why the forms read zero. Operator
+ * decision 2026-08-11 put the disclosure back on Home.
+ *
+ * Mounted once per view: the web and desktop shells mount this in
+ * their layout header (it then persists across every unlocked view,
+ * Home included) and pass `demoBannerInHeader` to Home so Home skips
+ * its own copy. The extension popup has no header slot, so Home mounts
+ * it there.
+ *
  * @param {object} props
  * @param {string | null | undefined} props.activeWalletId
  * @param {() => void} [props.onExited]                   refresh callback after wipe
@@ -84,11 +99,40 @@ export function DemoBanner({ activeWalletId, onExited }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isDemo, activeWalletId, autoWiped, busy]);
 
-    // Visible banner suppressed. Exit-demo affordance is moving to the
-    // Demo Wallet picker / detail surface. The component still mounts so
-    // the 24h auto-expire useEffect above keeps wiping stale demo wallets.
-    void expiry; void handleExit; void error;
-    return null;
+    if (!isDemo) return null;
+
+    const expiryHint = formatExpiryHint(expiry);
+    return (
+        <div className={styles.banner} role="status" aria-label="Demo wallet">
+            <div className={styles.body}>
+                <strong className={styles.headline}>Demo wallet: read-only</strong>
+                <span className={styles.copy}>
+                    The balances, prices and history on this screen are sample
+                    data, not real coins. That is why Send and the other action
+                    forms read 0 available: this demo holds nothing to spend, so
+                    it cannot move funds.
+                    {expiryHint ? ` ${expiryHint}` : ''}
+                </span>
+                <span className={styles.copy}>
+                    Exit to wipe the demo and set up a real wallet.
+                </span>
+            </div>
+            <div className={styles.actions}>
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleExit}
+                    loading={busy}
+                    disabled={busy}
+                >
+                    Exit demo &amp; wipe
+                </Button>
+            </div>
+            {error ? (
+                <p role="alert" className={styles.error}>{error}</p>
+            ) : null}
+        </div>
+    );
 }
 
 function formatExpiryHint(expiry) {

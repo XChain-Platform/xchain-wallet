@@ -89,7 +89,7 @@ const BALANCE_POLL_INTERVAL_MS = 20000;
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, demoBannerInHeader = false }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -711,11 +711,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     {loadError ? (
                         <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                     ) : null}
-                    {/* §25.2 / Cluster J FOLLOWUP 2: banner gated to popup
-                        shells. Web + desktop mount the same banner inside
-                        FullLayoutWithNav.header so it persists across
-                        every unlocked view, not just Home. */}
-                    {activeWalletId && shell === 'popup' ? (
+                    {/* §25.2 / Cluster J FOLLOWUP 2 / : shells that
+                        mount the banner in their layout header say so with
+                        `demoBannerInHeader`, and Home skips its own copy so
+                        the disclosure never renders twice. Shells without a
+                        header slot (the extension popup) get it here. */}
+                    {activeWalletId && !demoBannerInHeader ? (
                         <DemoBanner
                             activeWalletId={activeWalletId}
                             onExited={onLocked}
@@ -813,7 +814,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                   * component owns that policy) so an observer sees no cue.
                   */}
                 <PanicFreezeNotice surface="home" />
-                {activeWalletId ? (
+                {/* : the demo disclosure sits above the balances, so a
+                    first-time visitor reads "this is a demo, the forms read 0
+                    because there is nothing to spend" before scrolling into a
+                    seven-figure fixture portfolio. Skipped when the shell
+                    already mounts it in its header (see `demoBannerInHeader`). */}
+                {activeWalletId && !demoBannerInHeader ? (
                     <DemoBanner
                         activeWalletId={activeWalletId}
                         onExited={onLocked}
