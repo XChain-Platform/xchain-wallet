@@ -1,57 +1,57 @@
 {
-    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write), normally from the end of a successful packages/mobile/scripts/screenshots.sh run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set ios), normally from the end of a successful packages/mobile/scripts/screenshots.sh run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "ios",
     "capturedFrom": {
-        "commit": "2731745ecf35a41c093abba6004778afee2cdf87",
-        "version": "0.336.0",
+        "commit": "ff4a25ac2ff131e17cbb76a1f540bba73eb7693c",
+        "version": "0.337.0",
         "how": "capture"
     },
-    "observedAt": "2026-08-10T01:40:21.160Z",
+    "observedAt": "2026-08-13T12:56:24.449Z",
     "assets": {
         "iphone-17-pro-max/01-balances.png": {
-            "sha256": "fb419958357af69d552001224fe11e0328ad3fbf2354e090a4e54d9450598e2e",
+            "sha256": "2eb23d4da556a6e0f05617d5348e6f20ac8b108b1526e67f17bd160ad01ce23c",
             "width": 1320,
             "height": 2868,
             "shows": "iPhone 6.9\": Balances (the wallet home screen)"
         },
         "iphone-17-pro-max/02-receive.png": {
-            "sha256": "6678b4c5d9b3957014cb0aadb8d19c968fc8d00447d62e5fe4ec0624dce79979",
+            "sha256": "dcb2585dc86527bf4b5f2bd70ecff7c7d3e14efc97dcce4146d8bb976b7607cb",
             "width": 1320,
             "height": 2868,
             "shows": "iPhone 6.9\": Receive, with the address QR"
         },
         "iphone-17-pro-max/03-send.png": {
-            "sha256": "3f9b050898bdae6a16134a0ed9d88c55b701b025eb2327f87eb737533040f8ba",
+            "sha256": "deb9b6f957c6749a783be15ad054f82c601b8bfdfc64ef1be57c96144497953a",
             "width": 1320,
             "height": 2868,
             "shows": "iPhone 6.9\": Send"
         },
         "iphone-17-pro-max/04-settings.png": {
-            "sha256": "807279b6ca95ebd3fc1a77e331fc77da2a68314bfdbb05af760089ce1a43467a",
+            "sha256": "3705e7596eb9606f272c22a46f631204720f6b0cd26d9bba7ebf7b1fa3a3c12c",
             "width": 1320,
             "height": 2868,
             "shows": "iPhone 6.9\": Settings"
         },
         "ipad-pro-13-inch-m5/01-balances.png": {
-            "sha256": "998fe64296dae09163a720000fc21b1a961e129888b49b189585e14764fb6266",
+            "sha256": "951ba397f5d4444c569464e24492dbf97bd5c52a2659f60ecc71b34d3b169fd4",
             "width": 2064,
             "height": 2752,
             "shows": "iPad 13\": Balances (the wallet home screen)"
         },
         "ipad-pro-13-inch-m5/02-receive.png": {
-            "sha256": "37d70700030e53010c4168bcd83a4d54e8f78e3bd6f12c73617e44386579dcf5",
+            "sha256": "f2677dd6093f3b010895edf2fda4be6e05ee12f4d2afd350824f4088dc2bf1ec",
             "width": 2064,
             "height": 2752,
             "shows": "iPad 13\": Receive, with the address QR"
         },
         "ipad-pro-13-inch-m5/03-send.png": {
-            "sha256": "a6b7a177d11be0d174263fb897b420c555ee509d6e193aa6d431268fd9608c95",
+            "sha256": "2251b49f1a33f7dfcd23d1911e12aab139e8f6f170a1105b7dc0bcf89a287bf6",
             "width": 2064,
             "height": 2752,
             "shows": "iPad 13\": Send"
         },
         "ipad-pro-13-inch-m5/04-settings.png": {
-            "sha256": "b34506f96030354b14c1d9f0447a77f59c5bac06e536d1f0d5aa3180252886c5",
+            "sha256": "10c5380603ba6e5afa0d4d3ddc68bc366217361556912a3715559c0abf152d71",
             "width": 2064,
             "height": 2752,
             "shows": "iPad 13\": Settings"
