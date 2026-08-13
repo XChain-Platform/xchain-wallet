@@ -960,6 +960,48 @@ xr_check_payload_native() {
     local f="$dir/${name#./}" problems=0 listing="" tmp="" data="" cand offset found
 
     case "${name#./}" in
+        *.snap)
+            # A snap is a BARE squashfs image: no ELF runtime in front of it,
+            # so unlike the AppImage branch there is no offset to find and the
+            # extractor reads the file as given. It carries the same
+            # `resources/app.asar.unpacked/` tree the `.deb` does, which is
+            # what lets the shared tail below ask both the same question.
+            #
+            # It is in scope because the snap is built where the divergence
+            # this gate exists to catch actually happens: snapcraft cannot run
+            # in the pinned container, so the snap lane builds on the runner
+            # (see the desktop-linux job), and a runner that never compiled
+            # the addon produces a snap that starts, installs, verifies
+            # against the signed manifest and silently runs tiny-secp256k1's
+            # JS fallback.
+            if ! command -v unsquashfs >/dev/null 2>&1; then
+                # A missing extractor is a fact about this host, not about the
+                # artifact, and refusing here would block the signing path
+                # itself over a check that is one package away. Name what went
+                # unchecked; what must not happen is silence.
+                echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: unsquashfs is" >&2
+                echo "              not on this host, and a snap's payload is a squashfs" >&2
+                echo "              image nothing else here can read. Install it" >&2
+                echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
+                echo "              have this artifact checked." >&2
+                echo 0
+                return 0
+            fi
+            # With the extractor present the verdict is the artifact's, not
+            # the host's: a snap is squashfs at byte 0, so bytes that will not
+            # list are bytes that are not a snap. That is the `.deb` branch's
+            # posture, and it is deliberately NOT the AppImage branch's -
+            # there the offset is a search that can legitimately come up
+            # empty, here there is nothing to search for.
+            listing="$(unsquashfs -l "$f" 2>/dev/null || true)"
+            if [[ -z "$listing" ]]; then
+                echo "PAYLOAD-NATIVE  '${name#./}' could not be read as a squashfs image," >&2
+                echo "              though unsquashfs is installed here, so nothing has read" >&2
+                echo "              its payload. A snap is squashfs at byte 0; bytes that" >&2
+                echo "              will not list are not a snap." >&2
+                problems=$((problems + 1))
+            fi
+            ;;
         *.deb)
             # `tar`, not `dpkg-deb`, because of where signing happens: sign.sh
             # runs on the RELEASE MACHINE (§8), a Mac with no dpkg at all, and

@@ -395,11 +395,120 @@ try {
     // a release on an assumption.
     {
         for (const name of ['XChain Wallet-9.9.9-arm64.dmg', 'XChain Wallet Setup 9.9.9.exe',
-            'xchain-wallet-9.9.9-mac.zip', 'xchain-wallet_9.9.9_amd64.snap']) {
+            'xchain-wallet-9.9.9-mac.zip']) {
             const dir = stage(name, Buffer.from('bytes\n'));
             const r = native(dir, name);
             check(`${name.split('.').pop()} is out of scope and says nothing`,
                 r.problems === 0 && !/PAYLOAD-NATIVE/.test(r.out), r.out);
+        }
+    }
+
+    // --- 5b. A .snap is in scope, and it is squashfs at byte 0 ---------
+    //
+    // It used to be in case 5's list above, which was scope by accident
+    // rather than by measurement: the snap carries the same
+    // `resources/app.asar.unpacked/` tree the .deb does, and it is built
+    // where this gate's whole defect happens - snapcraft cannot run in the
+    // pinned container, so the snap lane builds on the runner. Out of scope,
+    // it was the one Linux artifact built outside the container that nothing
+    // opened.
+    //
+    // Driven on stubs FIRST so the branch is exercised on every host,
+    // including the ones with no squashfs-tools, and then on real squashfs
+    // bytes wherever mksquashfs exists - a stub proves the plumbing, only
+    // real bytes prove the format is read.
+    {
+        const snapName = 'xchain-wallet_9.9.9_amd64.snap';
+        const snapListing = (withAddon) => 'squashfs-root/resources/app.asar\n'
+            + (withAddon
+                ? 'squashfs-root/resources/app.asar.unpacked/node_modules/'
+                  + 'tiny-secp256k1/build/Release/secp256k1.node\n'
+                : '');
+        const binWith = (name, body) => {
+            const bin = mkdtempSync(join(work, name));
+            for (const tool of ['grep', 'head', 'cut']) {
+                const found = execFileSync('bash', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).trim();
+                symlinkSync(found, join(bin, tool));
+            }
+            if (body !== null) writeFileSync(join(bin, 'unsquashfs'), body, { mode: 0o755 });
+            return bin;
+        };
+
+        // (i) No extractor: named, not silent, and not a release failure.
+        {
+            const r = native(stage(snapName, Buffer.from('hsqs fixture\n')), snapName,
+                binWith('snap-nobin-', null));
+            check('a .snap with no unsquashfs is reported UNCHECKED, by name',
+                /PAYLOAD-NATIVE-UNCHECKED/.test(r.out) && r.out.includes(snapName), r.out);
+            check('and the .snap UNCHECKED line names the tool that would check it',
+                /unsquashfs/.test(r.out) && /squashfs-tools/.test(r.out), r.out);
+            check('and a .snap nothing could read does not fail the release on its own',
+                r.problems === 0, r.out);
+        }
+
+        // (ii) Extractor present: the verdict comes from the listing, and no
+        //      offset is searched for, because a snap has none to search.
+        for (const withAddon of [true, false]) {
+            const bin = binWith(withAddon ? 'snap-ok-' : 'snap-bad-',
+                `#!/bin/sh\nprintf '%s' ${JSON.stringify(snapListing(withAddon))}\n`);
+            const r = native(stage(snapName, Buffer.from('hsqs fixture\n')), snapName, bin);
+            check(`a .snap listing ${withAddon ? 'with' : 'without'} an addon `
+                + `is ${withAddon ? 'passed' : 'refused'}`,
+                r.problems === (withAddon ? 0 : 1), r.out);
+            check(`and the .snap extractor branch was reached (${withAddon ? 'with' : 'without'})`,
+                !/PAYLOAD-NATIVE-UNCHECKED/.test(r.out), r.out);
+        }
+
+        // (iii) Extractor present and the bytes will not list: REFUSED.
+        //
+        // Deliberately the .deb branch's posture rather than the AppImage
+        // branch's. There, the offset is a search that can legitimately come
+        // up empty on a file that is fine, so declining to judge is honest;
+        // here the image starts at byte 0 and there is nothing to search
+        // for, so "unreadable" is a fact about the artifact.
+        {
+            const bin = binWith('snap-unreadable-', '#!/bin/sh\nexit 1\n');
+            const r = native(stage(snapName, Buffer.from('not a snap\n')), snapName, bin);
+            check('a .snap the installed extractor cannot list is refused, not passed',
+                r.problems === 1 && /could not be read as a squashfs image/.test(r.out), r.out);
+            check('and that refusal is not filed as UNCHECKED',
+                !/UNCHECKED/.test(r.out), r.out);
+        }
+
+        // (iv) REAL squashfs bytes, wherever the tools exist. The stubs above
+        //      answer with a listing; only this leg proves the branch reads a
+        //      genuine squashfs image, which is the mistake the AppImage leg
+        //      shipped for months.
+        let mks = '';
+        try {
+            mks = execFileSync('bash', ['-c', 'command -v mksquashfs'], { encoding: 'utf8' }).trim();
+        } catch { mks = ''; }
+        if (mks) {
+            for (const withAddon of [true, false]) {
+                const src = mkdtempSync(join(work, 'snapsrc-'));
+                const addonDir = join(src, 'resources', 'app.asar.unpacked', 'node_modules',
+                    'tiny-secp256k1', 'build', 'Release');
+                const mkdirp = (d) => execFileSync('mkdir', ['-p', d], { stdio: 'ignore' });
+                mkdirp(join(src, 'meta'));
+                mkdirp(join(src, 'resources'));
+                writeFileSync(join(src, 'meta', 'snap.yaml'), 'name: xchain-wallet\n');
+                writeFileSync(join(src, 'resources', 'app.asar'), '{"files":{}}');
+                if (withAddon) {
+                    mkdirp(addonDir);
+                    writeFileSync(join(addonDir, 'secp256k1.node'), 'ELF-ish fixture addon\n');
+                }
+                const built = join(work, `real-${withAddon ? 'with' : 'without'}.snap`);
+                execFileSync(mks, [src, built, '-noappend', '-quiet', '-no-progress'],
+                    { stdio: ['ignore', 'ignore', 'pipe'] });
+                const r = native(stage(snapName, readFileSync(built)), snapName);
+                check(`a REAL squashfs .snap ${withAddon ? 'with' : 'without'} an addon `
+                    + `is ${withAddon ? 'passed' : 'refused'}`,
+                    r.problems === (withAddon ? 0 : 1), r.out);
+                check(`and the real .snap was actually read (${withAddon ? 'with' : 'without'})`,
+                    !/UNCHECKED/.test(r.out), r.out);
+            }
+        } else {
+            console.log('     (real-bytes .snap leg skipped: no mksquashfs on this host)');
         }
     }
 
