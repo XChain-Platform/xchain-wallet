@@ -147,7 +147,7 @@ pnpm --filter @xchain-wallet/e2e test              # Playwright E2E against the 
 ```
 xchain-wallet/
 ├── package.json                 workspace root, single source of truth for version
-├── pnpm-workspace.yaml          packages/* + e2e
+├── pnpm-workspace.yaml          packages/* + test/e2e
 ├── tsconfig.base.json           shared TS config (JS + JSDoc throughout)
 ├── packages/
 │   ├── core/                    React components, state, flows, signers, schemas, SDK integration
@@ -160,8 +160,14 @@ xchain-wallet/
 │   ├── bridge-spec/             window.xchain TypeScript type definitions
 │   └── test-dapp/               reference dApp exercising the bridge
 ├── tools/
-│   └── build-reproduce/         reproducible-build helper scripts
-├── e2e/                         Playwright E2E suite (web shell)
+│   ├── build-reproduce/         reproducible-build helper scripts
+│   ├── release/                 release-signing pipeline: versioning, channels, credential inventory
+│   ├── regtest/                 helpers for running the wallet against a local regtest stack
+│   ├── glossary/                generates the glossary appendix from source
+│   ├── dev/                     links a local SDK checkout in for development
+│   └── eslint/                  custom ESLint plugin and rules for this repo
+├── test/
+│   └── e2e/                     Playwright E2E suite (web shell), a pnpm workspace member
 ├── CHANGELOG.md                 Keep a Changelog format; root is authoritative
 ├── LICENSE.md / NOTICE.md       GNU Affero General Public License v3.0 (AGPL-3.0)
 └── README.md                    this file

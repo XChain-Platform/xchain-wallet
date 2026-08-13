@@ -79,3 +79,16 @@ release-artifacts/
 # one index here, so an untracked stray is one `git add .` away from
 # somebody else's commit.
 /tools/release/store-monitor-state.json
+
+# Playwright writes to a repo-root test-results/ when a spec runs outside the
+# test/e2e config, which the /test/e2e/test-results*/ rules above do not reach.
+/test-results/
+
+# Xcode build output for the iOS shell. The /packages/*/build rule above stops
+# one level short of this path, so a release or rehearsal build leaves a signed
+# .ipa and .xcarchive untracked in a shared index.
+/packages/mobile/ios/build/
+
+# Throwaway venue worktrees. Release rehearsals and e2e runs check a second
+# tree out beside this one; nested worktrees are git plumbing, never content.
+/_s*-venue*/
