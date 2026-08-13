@@ -1,27 +1,27 @@
 {
-    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write), normally from the end of a successful packages/desktop/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set mas), normally from the end of a successful packages/desktop/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "mas",
     "capturedFrom": {
-        "commit": "42bda8b1365545412f3881fedf4654c9ced26093",
+        "commit": "2e29d0f14b8696f03c94107ead95530590e6b466",
         "version": "0.337.0",
         "how": "capture"
     },
-    "observedAt": "2026-08-07T15:14:22.682Z",
+    "observedAt": "2026-08-13T11:41:35.015Z",
     "assets": {
         "screenshot-home.png": {
-            "sha256": "896d449a14612ecfdf454f0574f268b378817f104d70039727bf84c7c8bc5b2a",
+            "sha256": "e81de24c2f49d7a02bf95e6e31c7dae9a5fd1a1c863aab4fbe17e6a9726342ff",
             "width": 1440,
             "height": 900,
             "shows": "Desktop window, Home view with the coin list"
         },
         "screenshot-tokens.png": {
-            "sha256": "ba7e7d87e93cb48a2bec74e87a87dd9f0dabb2e329630343c33537b032245c53",
+            "sha256": "84db8bbae94c22e8757fc2ca214f39f70b301637b0e48fa0b9203c79f53402dd",
             "width": 1440,
             "height": 900,
             "shows": "Desktop window, Tokens view"
         },
         "screenshot-settings.png": {
-            "sha256": "5be14906c565a90e9ea766c682423f4ba128703fdbc07bd9064eae87ab24be0f",
+            "sha256": "4747eefaf4e2b823fcccb3cd8e0a6859e0ad0fcd947dbf8b87096b9842b92509",
             "width": 1440,
             "height": 900,
             "shows": "Desktop window, Settings"
