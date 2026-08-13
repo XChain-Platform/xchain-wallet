@@ -1,0 +1,124 @@
+# The Windows update swap, watched by a machine on NATIVE x64 (§7.5, DD4).
+#
+# WHY THIS FILE EXISTS. DD4 names one Parallels VM on the Mac Studio for both
+# Windows lanes. That box is an M3 Ultra, so `win-arm64` is native there and
+# `win-x64` runs under Windows-on-ARM x64 emulation - which puts the largest
+# desktop audience on the one lane whose attestation does not run on the
+# silicon its users have. The operator accepted that trade deliberately and it
+# stands. A GitHub-hosted `windows-latest` runner is a free NATIVE x64 Windows
+# machine, so the swap can ALSO be performed and observed there, for nothing.
+#
+# WHAT THIS JOB IS NOT. It is not an attestation and it does not take the
+# lane. `rehearse.mjs attest` requires `--by <who watched it>` because whether
+# the download replaced the RUNNING app is an OS-level fact no process can
+# observe about itself; a job that attested its own swap would delete that
+# control rather than automate it. `attest` refuses to run in CI at all, and
+# this workflow calls `check` instead, whose result lands in `automated-checks`
+# and can never satisfy §7.5's per-release swap requirement. The DD4 human
+# attestation on the Parallels VM stays required for both Windows lanes.
+#
+# WHY IT BUILDS ITS OWN PAIR rather than updating from the last release. A
+# swap needs a build to update FROM. The staging set is K1-signed and K1 does
+# not exist yet (ceremony A), so there is no published predecessor to point
+# at, and waiting for one would leave this unrun. Building the tree twice, one
+# patch apart, exercises the same installer, the same updater and the same
+# replacement of the same binary. What it does NOT exercise is Authenticode
+# publisher matching: these two builds are unsigned, so electron-updater skips
+# that check (no `publisherName` in the app-update.yml the drill writes). The
+# publisher half is what the signed staging rehearsal is for.
+#
+# NO SECRETS, NO SIGNING, NO UPLOAD OF INSTALLERS. The only thing that leaves
+# this job is the evidence JSON. Two unsigned nsis installers exist inside it
+# for about twenty minutes and are then destroyed with the runner; publishing
+# them would put unsigned twins of a release artifact somewhere a person could
+# find them.
+
+name: Windows update-swap check
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time per ref. Two of these racing would install and update the same
+# per-user tree on two runners, which is harmless, but a cancelled half-run
+# leaves an evidence file nobody should read.
+concurrency:
+  group: windows-swap-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  swap-check:
+    runs-on: windows-latest
+    # Two full electron-builder runs on a hosted Windows runner. Generous on
+    # purpose: the open question this job answers first is whether the
+    # two-version swap fits in one ephemeral job at all, and a timeout tuned
+    # to a guess would answer it wrong.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # FIRST, and its own step, because it is the claim the whole lane rests
+      # on. If a future runner image is ARM64 with x64 emulation, this lane
+      # stops being worth anything and the drill records the emulation in its
+      # evidence rather than reporting a native check that was not one.
+      - name: Say what silicon this runner really is
+        run: node tools/release/drills/win-update-swap.mjs --silicon
+
+      # The FROM build: the tree exactly as tagged.
+      - name: Build the previous-version installer (x64 nsis)
+        run: pnpm -C packages/desktop dist --win nsis --x64
+      - name: Stage it
+        shell: bash
+        run: |
+          mkdir -p swap-check
+          cp packages/desktop/dist/xchain-wallet-setup-*-x64.exe swap-check/
+          rm -rf packages/desktop/dist
+
+      # The TO build: the same tree, one patch up. Only the desktop package's
+      # version is touched, and only on this throwaway checkout - version
+      # lockstep across the other fifteen declarations is a release concern,
+      # and this job publishes nothing.
+      - name: Bump the desktop package one patch and rebuild
+        shell: bash
+        run: |
+          node -e "const f='packages/desktop/package.json',fs=require('fs');const p=JSON.parse(fs.readFileSync(f,'utf8'));const [a,b,c]=p.version.split('.');p.version=[a,b,Number(c)+1].join('.');fs.writeFileSync(f,JSON.stringify(p,null,4)+'\n');console.log('updating to '+p.version)"
+          pnpm -C packages/desktop dist --win nsis --x64
+      - name: Stage the offered build and its channel pointer
+        shell: bash
+        run: |
+          cp packages/desktop/dist/xchain-wallet-setup-*-x64.exe swap-check/
+          cp packages/desktop/dist/stable.yml swap-check/
+          ls -l swap-check
+
+      # The drill installs the first build for the runner user, drives the
+      # SHIPPED electron-updater against a local feed, and then watches the
+      # on-disk binary for a hash and a version change. It writes evidence
+      # whichever way it goes, so a failure is collectable rather than only
+      # red.
+      - name: Watch the update install itself (swap CHECK, not an attestation)
+        run: node tools/release/drills/win-update-swap.mjs swap-check
+             --out swap-check-result.json
+             --runner "GitHub-hosted windows-latest runner (${{ runner.arch }})"
+
+      # DELIBERATELY ABSENT: any call to `rehearse.mjs attest`. The evidence
+      # leaves here as an artifact and a person on the release machine files
+      # it into the release's record with `rehearse.mjs check --from-result`,
+      # alongside - never instead of - the DD4 attestation.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-swap-check
+          path: swap-check-result.json
+          if-no-files-found: error

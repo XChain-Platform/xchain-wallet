@@ -93,6 +93,16 @@
 // process can observe. A CI job cannot be the witness without removing the
 // witness. A runner could add an automated swap CHECK as separate evidence;
 // it cannot produce an attestation.
+//
+// THAT CHECK NOW EXISTS, beside the attestation rather than in place of it:
+// `drills/win-update-swap.mjs`, run by
+// `.github/workflows/windows-swap-check.yml` on a native-x64
+// `windows-latest` runner. Its result is filed with `rehearse.mjs check`,
+// lands in the record's `automated-checks` and never in `swaps`, and cannot
+// satisfy §7.5's per-release swap requirement - while a check reporting
+// `fail` does stop a publish. `attest` refuses to run in CI at all, which is
+// the fence around the one substitution that would make all of this
+// pointless.
 
 /**
  * @typedef {Object} Lane
@@ -116,7 +126,9 @@ export const LANES = [
             + 'EMULATED SILICON, accepted by the operator 2026-08-03: the '
             + 'installer, the launch and the update swap are all genuinely exercised, '
             + 'and only the CPU is not native. Said here because this string is what '
-            + 'attest copies into the rehearsal record.',
+            + 'attest copies into the rehearsal record. A NATIVE-x64 automated swap check '
+            + 'runs beside this lane (.github/workflows/windows-swap-check.yml); it is '
+            + 'separate evidence filed with `rehearse.mjs check`, never this lane\'s attestation.',
     },
     {
         id: 'win-arm64',

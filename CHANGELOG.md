@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Label changes now queue an on-chain sync automatically and ask for the wallet password once per unlock, so renaming many addresses costs one publish instead of one each.
 - `android-applinks-verify.sh` provisions a Google Play emulator image, installs the app and asserts the Android App Links verdict, refusing images that cannot answer.
 - `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect, so publishing no longer needs a signed-in console session.
+- A Windows CI job now performs the desktop install-and-update swap on native x64 hardware and files the result as its own evidence, alongside the human-observed rehearsal it can never replace.
 
 ### Fixed
 - The desktop update offer now survives being made before the wallet is unlocked.

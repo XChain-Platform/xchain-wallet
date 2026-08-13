@@ -129,6 +129,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `android-applinks-verify.sh` | Takes the App Links verdict for `xchain.io` as a repeatable measurement instead of a session that has to be rediscovered: provisions a `google_apis_playstore` AVD (the image is the whole finding - a `google_apis` image carries the verification agent and never invokes it for a sideloaded package, so the domain holds at `none`, which is the ABSENCE of a verdict and proves nothing either way), installs the artifact, resets and re-verifies, then polls `pm get-app-links` for a real state. Refuses every venue whose answer would not mean what it says: a non-Play image string, an AVD whose `tag.id` is `google_apis`, API 30 (where the command does not exist and the singular `pm get-app-link` returns a user preference from the same-shaped output), and an image with no `com.android.vending`. `--falsify` additionally proves the verdict is contingent on fetching the live `assetlinks.json` by taking the device offline and requiring it to change. Exits 0 verified / 2 caller / 3 this venue cannot answer / 4 no verdict / 5 a stated non-verified verdict / 6 missing tool or artifact / 7 not contingent. **The one step it cannot automate**: an install carrying Google's CURRENT app-signing certificate, which reaches a device only through a real Play delivery to a tester account - run that install by hand, then `--no-provision --no-install`. | Live; the decision table is driven by `test/smoke/audits/android-applinks-verify.smoke.js` against fake `adb`/`sdkmanager`/`avdmanager` shims, so it is checked with no emulator present |
 | `emulation-preflight.sh` | Decides BEFORE a reproduce run starts whether this host can actually execute the amd64 build. Every reproduce lane pins an amd64-only base image, so an arm64 verifier runs the whole build under emulation and two different emulators can serve that platform flag. | Live |
 | `drills/deb-update-swap.mjs` | The install/launch/swap half of a §7.5 rehearsal for the `.deb` lane, watching a real update install itself. It installs and upgrades system packages, so it runs inside a throwaway container and nowhere else. | Drill |
+| `drills/win-update-swap.mjs` | The same half for the Windows nsis lane, on NATIVE x64. DD4 puts both Windows lanes on one Parallels VM where `win-x64` runs under Windows-on-ARM emulation, and a hosted `windows-latest` runner is a free native x64 machine, so this installs the previous build, drives the real `NsisUpdater` against a local feed, and requires both that the installed binary's hash changed and that its ProductVersion moved. It writes evidence for `rehearse.mjs check` and can never produce an attestation: nobody watched it. Refuses any host that is not a CI runner unless told it is disposable. | Drill; runs as `.github/workflows/windows-swap-check.yml` |
 | `electron-cadence.mjs` | §9 CVE clock: is the Chromium we ship still getting security fixes? Reads the version out of `pnpm-lock.yaml` (the caret in `package.json` is not the pin - every release lane installs `--frozen-lockfile`), then compares it against the registry's dist-tags: newer patches on our own major, newer majors past §9's 28-day rule, and upstream's three-major support window. Exits 0 current / 1 behind / 2 unreadable pin / 3 inconclusive - a registry that cannot be reached is never folded into "current". `--json` for a cron, `--offline <packument>` for tests. | Built 2026-08-02, and it went red on its first run: shipped 41.3.0 while 41.10.3 existed, with 42 and 43 both past the rule. Not yet installed anywhere |
 | `credential-expiry.mjs` | §6 credential clock: are the release signing credentials still valid? Reads `credential-expiry.json`, which declares the five dated rows (K3 Developer ID, K18 Apple Distribution, K19 3rd Party Mac Developer Installer, and both provisioning profiles) with what each one breaks, and reports them against a 60-day renewal lead time. **The declaration is not the authority**: every row names the artifact that carries its expiry, and wherever that artifact is reachable the tool reads `notAfter` out of it and fails on any disagreement - a date file nothing measures is how `expected-artifacts.txt` declared artifact classes and never counted them. A row it cannot reach reports `DECLARED-ONLY` with the reason rather than being trusted. Exits 0 current / 1 due, expired or drifted / 2 unreadable declaration. `--json` for a cron. | Built 2026-08-08 and green: K3 has 177 days, the other four 363. Installed weekly as `.github/workflows/credential-expiry.yml`; deliberately NOT a release gate, because once a credential enters its lead time it would block every release for sixty days and be switched off |
 
@@ -461,6 +462,26 @@ The authoritative checklist is §6 of
    installed package version actually moved. It refuses to run anywhere
    that is not obviously disposable - it installs a system package. First
    run 2026-08-02, arm64: `0.334.0 -> 0.334.1`.
+
+   **The Windows lane has a drill and a CI job**, `drills/win-update-swap.mjs`
+   and `.github/workflows/windows-swap-check.yml`, and what they produce is
+   a second KIND of evidence rather than more of the same. DD4 names one
+   Parallels VM for both Windows lanes, so `win-x64` - the largest desktop
+   audience here - is attested on emulated silicon. A hosted
+   `windows-latest` runner is a free native x64 Windows machine, so the job
+   builds the tree twice one patch apart, installs the first build, drives
+   the real `NsisUpdater` against a local feed and requires the installed
+   binary to be replaced. File its result with `rehearse.mjs check --record
+   <record> --from-result <json>`.
+
+   **It is not an attestation and cannot become one.** `attest` demands
+   `--by <who watched it>` because whether the download replaced the running
+   app is an OS-level fact no process observes about itself; it refuses to
+   run in CI, `check` refuses `--by`, a filed check lands in
+   `automated-checks` rather than `swaps`, and no number of them satisfies
+   §7.5's per-release swap requirement. A check that reports `fail` DOES
+   stop a publish. The DD4 human attestation stays required for both
+   Windows lanes.
 5. `bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/
    --tag vX.Y.Z --target <deploy target>
    --public-base https://downloads.xchain.io/wallet --dry-run`, then for

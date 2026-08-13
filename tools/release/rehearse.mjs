@@ -86,6 +86,116 @@ const WALLET_ROOT = resolvePath(HERE, '../..');
 
 export const RECORD_VERSION = 1;
 
+// ------------------------------------------------- the automated swap check
+//
+// A SECOND KIND OF EVIDENCE, DELIBERATELY NOT THE FIRST. A hosted
+// `windows-latest` runner is a free NATIVE x64 Windows machine, which is
+// the silicon the largest desktop audience actually has and the one the
+// DD4 device for `win-x64` (a Parallels VM on an M3 Ultra) emulates. It
+// is worth running the install/update/swap there. It is NOT an
+// attestation, and the distinction is the whole point:
+//
+//   attestation      a person watched the running app be replaced on a
+//                    NAMED DEVICE and put their name to it (`attest`,
+//                    which demands `--by`). §7.5 requires this per
+//                    release, and nothing here weakens it.
+//
+//   automated check  a machine performed the same swap and reported what
+//                    it observed (`check`, which demands `--runner` and
+//                    REFUSES `--by`). It can fail a release. It can never
+//                    satisfy the swap requirement, because a job that
+//                    signs its own homework is the witness removed rather
+//                    than the witness automated.
+//
+// So checks live in their own array, never in `swaps`; they never enter
+// the per-OS swap tally; a FAILING check is a release problem; and a
+// passing one is reported as a NOTE that names the human half still
+// owing. `attest` additionally refuses to run inside CI, because the
+// cheapest way to hollow this out is a job calling `attest --by
+// "github-actions"`.
+export const SWAP_CHECK_VERSION = 1;
+
+/** Result values a check may report. `error` is a check that could not run. */
+export const SWAP_CHECK_RESULTS = ['pass', 'fail', 'error'];
+
+/**
+ * Validate one automated swap-check result.
+ *
+ * Written as a shared function rather than as CLI argument parsing
+ * because the producer (the drill, on the runner) and the consumer (this
+ * tool, on the release machine) are different processes on different
+ * operating systems, and the file travels between them as a CI artifact.
+ * The refusals below are what stops that file from arriving as, or being
+ * edited into, something that reads as a human attestation.
+ *
+ * @param {any} result
+ * @returns {{ok: boolean, reason?: string}}
+ */
+export function validateSwapCheck(result) {
+    if (!result || typeof result !== 'object') return { ok: false, reason: 'not an object' };
+    if (result['check-version'] !== SWAP_CHECK_VERSION) {
+        return { ok: false, reason: `check-version is not ${SWAP_CHECK_VERSION}` };
+    }
+    if (result.kind !== 'automated-swap-check') {
+        return { ok: false, reason: `kind is "${result.kind}", not "automated-swap-check"` };
+    }
+    const lane = laneById(result.lane);
+    if (!lane) return { ok: false, reason: `unknown lane "${result.lane}"` };
+    if (!String(result.runner || '').trim()) {
+        return { ok: false, reason: 'no runner named. A machine result that does not say what '
+            + 'machine produced it is the same unlocated claim `attest` refuses.' };
+    }
+    if (!SWAP_CHECK_RESULTS.includes(result.result)) {
+        return { ok: false, reason: `result is "${result.result}", not one of ${SWAP_CHECK_RESULTS.join('/')}` };
+    }
+    // The two fields that would turn a machine's report into a person's.
+    // `device` is DD4 vocabulary and `attested-by` is `attest`'s: either
+    // one present means somebody is filing CI output as the human half.
+    for (const forbidden of ['attested-by', 'device', 'witness']) {
+        if (result[forbidden] != null) {
+            return { ok: false, reason: `carries "${forbidden}". An automated check names a RUNNER `
+                + 'and never a witness or a DD4 device: whether the running app was replaced is an '
+                + 'OS-level fact a person attests to, and a record that lets a job claim it has '
+                + 'removed the control rather than automated it.' };
+        }
+    }
+    if (!String(result.from || '').trim() || !String(result.to || '').trim()) {
+        return { ok: false, reason: 'a swap check must say which version it updated FROM and TO' };
+    }
+    if (result.from === result.to) {
+        return { ok: false, reason: `from and to are both ${result.from}: nothing was swapped` };
+    }
+    return { ok: true };
+}
+
+/**
+ * Compose a check result. Used by the drill so the shape is produced in
+ * one place and validated in another, rather than hand-built at both ends.
+ *
+ * @param {Object} params
+ * @returns {Object}
+ */
+export function makeSwapCheck({
+    lane, from, to, result, runner, silicon = null, observed = {}, notes = [], at = null,
+}) {
+    return {
+        'check-version': SWAP_CHECK_VERSION,
+        kind: 'automated-swap-check',
+        lane,
+        from,
+        to,
+        result,
+        runner,
+        // Recorded because it is the reason this check exists: the DD4
+        // device for win-x64 runs that arch under emulation, and a check
+        // whose own silicon is unstated cannot answer that.
+        silicon,
+        observed,
+        notes,
+        at: at || new Date().toISOString(),
+    };
+}
+
 // ------------------------------------------------------------ yml parsing
 
 /**
@@ -648,6 +758,17 @@ function gitRun(repo, args) {
     return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
 }
 
+/**
+ * Is this process running inside a CI job?
+ *
+ * Read from the environment every runner sets, and read at CALL time
+ * rather than at import, so a test can drive both answers without
+ * reloading the module.
+ */
+export function inCi(env = process.env) {
+    return Boolean(env.GITHUB_ACTIONS || env.CI || env.BUILDKITE || env.GITLAB_CI);
+}
+
 // ------------------------------------------------------------- the record
 
 /**
@@ -723,6 +844,52 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
 
     // The swap half.
     const swaps = Array.isArray(record.swaps) ? record.swaps : [];
+
+    // An attestation whose witness is a machine is not an attestation, and
+    // the only way one arrives is by hand or by a job that called `attest`
+    // (which refuses to run in CI). Refused here too, because this is the
+    // gate publish.sh runs and it is the last place the substitution can
+    // be caught.
+    for (const swap of swaps) {
+        if (/^\s*(github[ -]?actions?|ci|runner|automation|automated|bot|robot)\b/i
+            .test(String(swap['attested-by'] || ''))) {
+            problems.push(
+                `the swap on ${swap.lane} is attested by "${swap['attested-by']}", which names a `
+                + 'CI system rather than a person. Whether the download replaced the running app '
+                + 'is an OS-level fact no job in the process can observe; file a machine result '
+                + 'with `rehearse.mjs check` instead, which records it as separate evidence.',
+            );
+        }
+    }
+
+    // AUTOMATED CHECKS ARE READ HERE AND ARE DELIBERATELY ABSENT FROM THE
+    // TALLY BELOW. They can add a problem (a check that watched the swap
+    // NOT happen is the strongest possible reason to stop) and they add a
+    // note, but no number of them moves an OS into `swappedOs`.
+    const automated = Array.isArray(record['automated-checks']) ? record['automated-checks'] : [];
+    for (const auto of automated) {
+        const valid = validateSwapCheck(auto);
+        if (!valid.ok) {
+            problems.push(`automated swap check for lane "${auto?.lane}": ${valid.reason}`);
+            continue;
+        }
+        const lane = laneById(auto.lane);
+        if (auto.result === 'pass') {
+            notes.push(
+                `${auto.lane}: an automated swap check PASSED on ${auto.runner}`
+                + `${auto.silicon ? ` (${auto.silicon})` : ''}, ${auto.from} -> ${auto.to}. `
+                + 'That is a machine result and not an attestation: §7.5 still requires a person '
+                + `to watch the swap on ${lane.device}.`,
+            );
+        } else {
+            problems.push(
+                `the automated swap check on ${auto.lane} reported ${auto.result} on `
+                + `${auto.runner}: ${auto.notes?.join('; ') || 'no reason recorded'}. A machine `
+                + 'cannot attest a swap, but it can witness one failing, and this one did.',
+            );
+        }
+    }
+
     const swappedOs = new Set(
         swaps.map((s) => laneById(s.lane)?.os).filter(Boolean),
     );
@@ -847,7 +1014,16 @@ const USAGE = `usage: rehearse.mjs <command> [args]
 
   attest --record <file> --lane <id> --from <version> --by <name>
       Record that a human watched the update install and swap on that
-      lane's named device. Refuses a lane DD4 has not named a device for.
+      lane's named device. Refuses a lane DD4 has not named a device for,
+      and refuses to run inside CI: a job cannot be the witness.
+
+  check --record <file> --from-result <file>
+  check --record <file> --lane <id> --from <version> --runner <what ran it>
+        --result pass|fail|error [--silicon native|emulated]
+      File an AUTOMATED swap check as evidence, separate from the human
+      attestation. A failing check stops a publish; a passing one never
+      satisfies §7.5's swap requirement, which stays owed to a person on
+      the lane's named device.
 
   assert --record <file> --tag <vX.Y.Z> --prod-input <dir>
       Check a record covers the release in hand. This is the gate
@@ -999,6 +1175,10 @@ async function main(argv) {
             lanes,
             'direct-lanes': directLanes,
             swaps: [],
+            // Present and empty from the start, so an older record and a
+            // record with no checks are the same shape rather than two
+            // cases every reader has to remember.
+            'automated-checks': [],
         };
         await writeFile(out, `${JSON.stringify(record, null, 2)}\n`);
         process.stderr.write(`rehearse.mjs: record written to ${out}\n`);
@@ -1031,6 +1211,24 @@ async function main(argv) {
         const from = flag(argv, '--from') || fail('attest needs --from <version installed before the swap>');
         const by = flag(argv, '--by') || fail('attest needs --by <who watched it>');
 
+        // THE CONTROL, NOT A CONVENIENCE CHECK. `--by` exists because
+        // whether the downloaded artifact replaced the RUNNING app is an
+        // OS-level fact no test in this process can observe. A CI job that
+        // calls this command has not automated the witness, it has removed
+        // one, and it is the obvious thing to reach for once a runner is
+        // performing the swap. The runner files its result with `check`.
+        if (inCi()) {
+            fail('refusing to attest from CI. `--by` names the person who WATCHED the running\n'
+                + '  app be replaced, which is the one half of a rehearsal no process can\n'
+                + '  observe about itself. A job attesting its own swap deletes that control\n'
+                + '  rather than automating it.\n'
+                + '  File the machine result instead: rehearse.mjs check --record <file> --lane '
+                + `${laneId} --runner <what ran it> --result pass|fail`);
+        }
+        if (/^\s*(github[ -]?actions?|ci|runner|automation|automated|bot|robot)\b/i.test(by)) {
+            fail(`--by "${by}" names a CI system, not a person. See above: use \`check\`.`);
+        }
+
         const lane = laneById(laneId);
         if (!lane) fail(`unknown lane "${laneId}"`);
         if (!lane.device) {
@@ -1057,6 +1255,70 @@ async function main(argv) {
         writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
         process.stdout.write(`ok   swap attested on ${laneId} (${lane.device}), ${from} -> ${record.tag}\n`);
         return 0;
+    }
+
+    if (command === 'check') {
+        const file = flag(argv, '--record') || fail('check needs --record <file>');
+        if (flag(argv, '--by') !== undefined) {
+            fail('check takes --runner, never --by. `--by` is a person who watched the swap and\n'
+                + '  belongs to `attest`; this command records what a MACHINE observed, which is\n'
+                + '  separate evidence and not a substitute for the attestation.');
+        }
+        const resultFile = flag(argv, '--from-result');
+
+        let result;
+        if (resultFile) {
+            try {
+                result = JSON.parse(readFileSync(resultFile, 'utf8'));
+            } catch (err) {
+                return fail(`${resultFile} is not readable JSON: ${String(err?.message || err)}`);
+            }
+        } else {
+            const laneId = flag(argv, '--lane') || fail('check needs --lane <id> (or --from-result <file>)');
+            result = makeSwapCheck({
+                lane: laneId,
+                from: flag(argv, '--from') || fail('check needs --from <version installed before the swap>'),
+                to: flag(argv, '--to') || '',
+                result: flag(argv, '--result') || fail(`check needs --result ${SWAP_CHECK_RESULTS.join('|')}`),
+                runner: flag(argv, '--runner') || fail('check needs --runner <what machine ran it>'),
+                silicon: flag(argv, '--silicon') || null,
+                notes: flags(argv, '--note'),
+            });
+        }
+
+        const record = JSON.parse(readFileSync(file, 'utf8'));
+        // Defaulted from the record rather than demanded twice: the drill
+        // knows the version it updated to, and a manual invocation should
+        // not be able to file a check against a version this record is not
+        // about.
+        if (!result.to) result.to = String(record.tag).replace(/^v/, '');
+
+        const valid = validateSwapCheck(result);
+        if (!valid.ok) fail(`this is not a usable swap check: ${valid.reason}`);
+        if (result.to !== String(record.tag).replace(/^v/, '')) {
+            fail(`the check updated to ${result.to}, and this record is for ${record.tag}.\n`
+                + '  Evidence is bound to the release it was produced against, the same way the\n'
+                + '  record is bound to its manifest.');
+        }
+
+        record['automated-checks'] = record['automated-checks'] || [];
+        record['automated-checks'].push(result);
+        writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+
+        const lane = laneById(result.lane);
+        process.stdout.write(
+            `ok   automated swap check filed for ${result.lane}: ${result.result} on `
+            + `${result.runner}${result.silicon ? ` (${result.silicon})` : ''}, `
+            + `${result.from} -> ${result.to}\n`,
+        );
+        // Said on the way out, every time, because the whole risk of having
+        // this command at all is that its output starts reading as the
+        // rehearsal it stands beside.
+        process.stderr.write(
+            `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes an observed swap `
+            + `on ${lane.device}, watched by a person (rehearse.mjs attest).\n`,
+        );
+        return result.result === 'pass' ? 0 : 1;
     }
 
     if (command === 'assert') {
@@ -1103,6 +1365,7 @@ async function main(argv) {
     if (command === 'coverage') {
         const dir = flag(argv, '--records') || 'release-artifacts';
         const seen = new Map();
+        const checked = new Map();
         if (existsSync(dir)) {
             for (const name of readdirSync(dir)) {
                 if (!/^REHEARSAL-.*\.json$/.test(name)) continue;
@@ -1110,6 +1373,10 @@ async function main(argv) {
                 try { record = JSON.parse(readFileSync(join(dir, name), 'utf8')); } catch { continue; }
                 for (const swap of record.swaps || []) {
                     seen.set(swap.lane, { tag: record.tag, device: swap.device, at: swap.at });
+                }
+                for (const auto of record['automated-checks'] || []) {
+                    if (!validateSwapCheck(auto).ok) continue;
+                    checked.set(auto.lane, { tag: record.tag, ...auto });
                 }
             }
         }
@@ -1122,12 +1389,21 @@ async function main(argv) {
             const hit = seen.get(lane.id);
             const dd = DIRECT_LANES.includes(lane) ? 'DD-A' : 'DD4';
             const verb = DIRECT_LANES.includes(lane) ? 'installed over' : 'swapped';
+            // An automated check is reported BESIDE the box, never inside
+            // it. It is the one line of this table where a reader could
+            // talk themselves into treating a machine's result as the
+            // rehearsal, so it says which it is on the same line.
+            const auto = checked.get(lane.id);
+            const machine = auto
+                ? `  [automated swap check: ${auto.result} at ${auto.tag} on ${auto.runner}`
+                  + `${auto.silicon ? `, ${auto.silicon}` : ''} - NOT an attestation]`
+                : '';
             if (hit) {
-                process.stdout.write(`✅ ${lane.id.padEnd(22)} ${verb} at ${hit.tag} on ${hit.device}\n`);
+                process.stdout.write(`✅ ${lane.id.padEnd(22)} ${verb} at ${hit.tag} on ${hit.device}${machine}\n`);
             } else {
                 blocked += 1;
                 const why = lane.device ? `device ${lane.device}, never rehearsed` : `NO DEVICE NAMED (${dd})`;
-                process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}\n`);
+                process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}${machine}\n`);
             }
         }
         if (blocked) {
