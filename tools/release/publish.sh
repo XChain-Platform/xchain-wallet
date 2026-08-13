@@ -457,6 +457,25 @@ BINARIES=()
 while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
     xr_list_artifacts "$INPUT_DIR")
 
+# An APK in this set has to be the CEREMONY's own build, never one Google
+# signed. Play's `Prevent unofficial installs` is code injected into the
+# artifact Google produces (measured 2026-08-13,): sideload that
+# artifact and it reports "Local install check failed due to wrong installer",
+# starts its licence-check activity, kills the app, and leaves the Play Store
+# in front of the user. A console "download signed APK" copied in here to save
+# a ceremony run would pass every other check in this script - it is validly
+# signed, hashes into the manifest, and installs - and would break the direct
+# lane for exactly the audience it exists for, discovered only by them.
+for rel in "${BINARIES[@]}"; do
+    name="${rel#./}"
+    [[ "$name" == *.apk ]] || continue
+    if ! node "$HERE/verify-apk-play-protection.mjs" "$INPUT_DIR/$name" >&2; then
+        echo "publish.sh: refusing to publish $name; see the check above." >&2
+        echo "  Publish what tools/release/android-ceremony.sh produced." >&2
+        exit 1
+    fi
+done
+
 # A desktop release with no channel pointer installs nobody. Nothing
 # downstream would fail: the artifacts land, the manifest verifies, the
 # feed looks healthy, and every wallet in the field simply never hears

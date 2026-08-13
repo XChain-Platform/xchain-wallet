@@ -32,6 +32,12 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 import { LANES, DIRECT_LANES } from '../../../tools/release/rehearsal-matrix.mjs';
+// The APK fixtures are STRUCTURALLY REAL zips, not the four bytes `apk-bytes`
+// they used to be, because publish.sh now reads inside every .apk it is given
+// (: Play's injected licence check must never reach the direct lane).
+// A placeholder body would fail that gate for being unreadable, which is a
+// pass for the wrong reason in one direction and a permanent red in the other.
+import { buildApk, buildPlayInjectedApk } from '../_apk.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -493,7 +499,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
 // nobody can install and nobody can check against anything Google handed them.
 {
     const androidRelease = makeRelease('release-android', 'stable', {
-        'xchain-wallet-v0.333.1.apk': 'apk-bytes',
+        'xchain-wallet-v0.333.1.apk': buildApk(),
         'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
     });
     writeRehearsalRecord(androidRelease, { manifestFrom: androidRelease });
@@ -533,6 +539,48 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     writeRehearsalRecord(prodRelease);
 }
 
+// -------------------- an APK GOOGLE signed must never reach the direct lane
+//
+//, measured 2026-08-13. Play's `Prevent unofficial installs` is not
+// a device setting: it is code injected into the artifact Google signs
+// (`com.pairip.*`, a licence-check activity, `com.android.vending.CHECK_LICENSE`,
+// a source stamp). Sideloaded, that artifact reports "Local install check
+// failed due to wrong installer", starts its licence activity and kills the
+// app, leaving the Play Store in front of the user.
+//
+// The failure this guards is one plausible act: publishing a console-downloaded
+// APK to save a ceremony run. It passes everything else in this script - validly
+// signed, hashed into the manifest, right name, right lane - and breaks only for
+// the self-custody audience §6 exists for, who would be the ones to discover it.
+// So the refusal has to happen BEFORE the upload, and this drives that: same
+// release shape as the block above, one artifact swapped.
+{
+    const injected = makeRelease('release-android-injected', 'stable', {
+        'xchain-wallet-v0.333.1.apk': buildPlayInjectedApk(),
+        'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
+    });
+    writeRehearsalRecord(injected, { manifestFrom: injected });
+    const target = makeTarget('feed-android-injected');
+    const r = await run(['--input', injected, '--tag', TAG, '--target', target,
+        '--no-edge-verify']);
+
+    assert.notEqual(r.status, 0,
+        `an APK carrying Play's injected licence check must be refused:\n${r.out}`);
+    assert.match(r.out, /PLAY PROTECTION FOUND/,
+        'and the refusal names what it found rather than failing on a downstream symptom');
+    assert.match(r.out, /android-ceremony\.sh/,
+        'and hands the operator the recovery step, which is to publish the ceremony\'s own build');
+
+    // NOTHING may have landed. A refusal after Phase 1 would leave a
+    // half-published release on the feed, which is worse than either outcome.
+    assert.equal(existsSync(join(target, 'android', 'xchain-wallet-v0.333.1.apk')), false,
+        'the bad APK must not be on the feed at all');
+    assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
+        'and no manifest either: the refusal comes before any upload');
+
+    writeRehearsalRecord(prodRelease);
+}
+
 // ------------------------------ a PARTIAL release, no channel pointers
 //
 // The block above publishes the Android pair ALONGSIDE a full desktop release,
@@ -558,7 +606,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
 {
     const partial = join(work, 'release-partial');
     mkdirSync(partial, { recursive: true });
-    writeFileSync(join(partial, 'xchain-wallet-v0.333.1.apk'), 'apk-bytes');
+    writeFileSync(join(partial, 'xchain-wallet-v0.333.1.apk'), buildApk());
     writeFileSync(join(partial, 'xchain-wallet-android-v0.333.1.aab'), 'aab-bytes');
     // Written through lib.sh with a lane set, so the fixture is the same shape
     // `sign.sh --lane android` produces rather than a hand-rolled header.
@@ -613,7 +661,7 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     // original message describes, and must still be refused.
     const noPointers = join(work, 'release-nopointers');
     mkdirSync(noPointers, { recursive: true });
-    writeFileSync(join(noPointers, 'xchain-wallet-v0.333.1.apk'), 'apk-bytes');
+    writeFileSync(join(noPointers, 'xchain-wallet-v0.333.1.apk'), buildApk());
     execFileSync('bash', ['-c',
         `. "${join(root, 'tools/release/lib.sh')}" && `
         + `xr_write_manifest "${noPointers}" "${TAG}" "${'0'.repeat(40)}" `
