@@ -137,7 +137,30 @@ const config = requireCjs(configPath);
 assert.equal(config.appId, 'io.xchain.wallet.desktop', 'appId is io.xchain.wallet.desktop');
 assert.equal(config.productName, 'XChain Wallet', 'productName is XChain Wallet');
 assert.equal(config.asar, true, 'asar packaging enabled');
-assert.equal(config.npmRebuild, false, 'npmRebuild disabled (no native deps)');
+// NOT "no native deps": there is one, and `pnpm install` inside the pinned
+// container is what compiles it. npmRebuild is off so electron-builder does
+// not invoke node-gyp AFTERWARDS, outside that toolchain. The old message
+// said the opposite, which is what the next person greps for; the payload
+// gate in tools/release/lib.sh exists precisely because a bundle that lost
+// that addon reads as fine everywhere else.
+assert.equal(
+    config.npmRebuild,
+    false,
+    'npmRebuild disabled: the native addon is compiled by pnpm install inside the pinned '
+    + 'container, so electron-builder must not rebuild it afterwards',
+);
+// And the premise is MEASURED rather than re-worded, against the committed
+// lockfile so it reads the same on every host: if tiny-secp256k1 ever really
+// does leave this tree, the flag's rationale changes and this line is where
+// that gets noticed, instead of a comment quietly going stale again.
+assert.match(
+    readFileSync(join(wsRoot, 'pnpm-lock.yaml'), 'utf8'),
+    /^ {2}tiny-secp256k1@/m,
+    'tiny-secp256k1 is no longer in the lockfile. It is the native dependency the whole '
+    + 'install-time-compile arrangement exists for (npmRebuild off, the pinned container, '
+    + 'the release payload gate that refuses a bundle shipping without the addon), so if it '
+    + 'is gone those three things need re-deciding rather than inheriting.',
+);
 assert.equal(
     config.buildDependenciesFromSource,
     false,
