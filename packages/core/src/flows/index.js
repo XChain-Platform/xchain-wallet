@@ -494,9 +494,12 @@ export {
     buildLabelSyncPayload,
     applyLabelSyncPayload,
     publishLabelsNow,
+    createLabelSyncScheduler,
     NoFundedAddressError,
     WifOnlyLabelSyncUnsupportedError,
     LABEL_SYNC_PAYLOAD_VERSION,
+    LABEL_SYNC_AUTO_DEBOUNCE_MS,
+    LABEL_SYNC_AUTO_MAX_WAIT_MS,
 } from './labelSync.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';

@@ -25,13 +25,20 @@
 //     through the `wallet.publishLabels` host handler. User picks a
 //     chain + enters the wallet password; the panel encrypts the
 //     labels + contacts payload, broadcasts it as a FILE action, and
-//     reports the txid + payload size. Auto-sync on label change and
-//     fetch-on-restore decryption are tracked as followups, not yet built.
+//     reports the txid + payload size.
+//   - Label auto-sync (§19.5.2 cadence): the background debounces
+//     label / contact edits and marks ONE publish due per unlock
+//     window; this panel surfaces that as a notice which opens the
+//     same publish form. Fetch-on-restore decryption is still a
+//     followup.
 
 import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+
+/** How often the Backup panel asks the background whether a batched publish came due. */
+const AUTO_SYNC_POLL_MS = 15_000;
 
 const ACTION_BTN = {
     background: 'transparent',
@@ -75,6 +82,33 @@ export function BackupSection({ activeWallet }) {
     );
     const [publishError, setPublishError] = useState(/** @type {string | null} */ (null));
     const [publishResult, setPublishResult] = useState(/** @type {any} */ (null));
+
+    // §19.5.2 auto-sync state. The background debounces label / contact
+    // edits and marks ONE publish due per unlock window; this panel is
+    // where that lands, because publishing needs the wallet password
+    // and the wallet never caches the seed to avoid asking.
+    const [autoSync, setAutoSync] = useState(/** @type {any} */ (null));
+    useEffect(() => {
+        if (typeof messaging?.labelSyncStatusRequest !== 'function') return undefined;
+        let live = true;
+        const poll = () => {
+            messaging.labelSyncStatusRequest()
+                .then((s) => { if (live) setAutoSync(s); })
+                .catch(() => { /* locked or not wired: leave the row hidden */ });
+        };
+        poll();
+        const id = setInterval(poll, AUTO_SYNC_POLL_MS);
+        return () => { live = false; clearInterval(id); };
+    }, [messaging]);
+
+    const autoSyncDue = Boolean(autoSync?.due) && publishStage === 'idle';
+
+    async function dismissAutoSync() {
+        setAutoSync(null);
+        if (typeof messaging?.labelSyncDismissRequest === 'function') {
+            try { await messaging.labelSyncDismissRequest(); } catch { /* best-effort */ }
+        }
+    }
 
     const onExport = async (password) => {
         if (typeof messaging?.exportBackupFile !== 'function') {
@@ -193,6 +227,10 @@ export function BackupSection({ activeWallet }) {
             });
             setPublishResult(r);
             setPublishStage('result');
+            // The background clears the pending batch on a successful
+            // publish; drop it here too so the notice goes away without
+            // waiting for the next poll.
+            setAutoSync(null);
         } catch (err) {
             setPublishError(err?.message || 'Failed to publish labels.');
             setPublishStage('form');
@@ -274,6 +312,14 @@ export function BackupSection({ activeWallet }) {
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
                 />
             )}
+            {autoSyncDue ? (
+                <LabelSyncDueNotice
+                    changeCount={autoSync?.batch?.changeCount ?? autoSync?.changeCount ?? 0}
+                    disabled={!activeWallet}
+                    onPublish={() => { setPublishStage('form'); setPublishError(null); }}
+                    onDismiss={dismissAutoSync}
+                />
+            ) : null}
             {publishStage === 'form' || publishStage === 'running' ? (
                 <PublishLabelsForm
                     walletId={activeWallet?.id}
@@ -296,6 +342,64 @@ export function BackupSection({ activeWallet }) {
                     onClick={() => { setPublishStage('form'); setPublishError(null); }}
                 />
             )}
+        </div>
+    );
+}
+
+/**
+ * §19.5.2 auto-sync notice. Shown once per unlock window, after label
+ * edits have settled, because the on-chain copy is now behind. It asks
+ * rather than publishes: the wallet never keeps the seed around, so
+ * only the user (with the password) can complete the write.
+ *
+ * @param {object} props
+ * @param {number} props.changeCount
+ * @param {boolean} [props.disabled]
+ * @param {() => void} props.onPublish
+ * @param {() => void} props.onDismiss
+ */
+function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
+    const what = changeCount === 1 ? '1 label change' : `${changeCount} label changes`;
+    return (
+        <div
+            style={{
+                ...ROW,
+                alignItems: 'flex-start',
+                gap: 'var(--xc-space-2)',
+                border: '1px solid var(--xc-border)',
+                borderRadius: 'var(--xc-radius-sm)',
+                padding: 'var(--xc-space-3)',
+            }}
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                    Labels changed since the last publish
+                </span>
+                <span style={ROW_HINT}>
+                    {what}
+                    {' '}
+                    have not been saved to the blockchain yet. Publishing needs your
+                    wallet password, so the wallet asks once instead of after every
+                    rename.
+                </span>
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                <button type="button" onClick={onDismiss} style={ACTION_BTN}>
+                    Not now
+                </button>
+                <button
+                    type="button"
+                    onClick={onPublish}
+                    disabled={disabled}
+                    style={{
+                        ...ACTION_BTN,
+                        opacity: disabled ? 0.5 : 1,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                    }}
+                >
+                    Publish…
+                </button>
+            </div>
         </div>
     );
 }

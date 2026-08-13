@@ -270,6 +270,7 @@ const {
     revealMnemonic,
     dryRunRestore,
     publishLabelsNow,
+    createLabelSyncScheduler,
     importWif,
     diagnosticDump,
     listBlockedOrigins,
@@ -842,6 +843,49 @@ export function createBackgroundHost(deps) {
         })();
     }
 
+    // §19.5.2 label auto-sync. One scheduler per host, and a host IS an
+    // unlock window: the shells build it on unlock and tear it down on
+    // lock, so "one publish per unlock window" needs no extra plumbing
+    // here. Every label / contact vault write notifies it; when the
+    // edits stop it raises ONE pending publish, which the Backup panel
+    // surfaces as a prompt. The background deliberately cannot publish
+    // by itself - that would need the seed, and the decided shape keeps
+    // prompting for it instead of caching it.
+    //
+    // Scope note: the pending batch lives in memory for the length of the
+    // host, so a lock forgets that the on-chain copy is behind. The labels
+    // themselves are already safe in the vault; the user loses a reminder,
+    // not data, and the next label edit (or "Publish now") re-raises it.
+    // The scheduler's begin/endUnlockWindow pair carries a batch across a
+    // lock for shells that keep one host alive instead.
+    let labelSyncPending = /** @type {object | null} */ (null);
+    /** @type {import('@xchain-wallet/core').storage.Vault | null} */
+    let labelSyncVault = null;
+    const labelSyncScheduler = createLabelSyncScheduler({
+        isEnabled: async () => {
+            const v = labelSyncVault ?? hostDeps?.vault ?? null;
+            if (!v) return false;
+            try {
+                const settings = await v.settings.get();
+                return settings?.privacy?.labelsSurviveRestore === true;
+            } catch {
+                return false;
+            }
+        },
+        requestPublish: (batch) => { labelSyncPending = batch; },
+        onError: () => { /* best-effort: a failed gate read just skips this cycle */ },
+    });
+    /** @param {{ vault?: unknown }} ctx @param {string | null} [walletId] */
+    function noteLabelChange(ctx, walletId) {
+        if (ctx?.vault && !labelSyncVault) labelSyncVault = ctx.vault;
+        try {
+            labelSyncScheduler.noteLabelChange(
+                typeof walletId === 'string' && walletId ? { walletId } : {},
+            );
+        } catch {
+            // Never let sync bookkeeping fail the edit the user asked for.
+        }
+    }
 
     host.register('wallet.list', async (_req, { vault }) => {
         const wallets = await vault.wallets.list();
@@ -1394,7 +1438,7 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return publishLabelsNow({
+        const r = await publishLabelsNow({
             vault,
             walletId: req?.walletId,
             password: req?.password,
@@ -1405,6 +1449,34 @@ export function createBackgroundHost(deps) {
             fee: req?.fee,
             feePerKb: req?.feePerKb,
         });
+        // The payload just published carries every pending edit,
+        // whether the user got here from the auto-sync prompt or hit
+        // "Publish now" by hand. Either way the batch is satisfied.
+        labelSyncPending = null;
+        labelSyncScheduler.markPublished();
+        return r;
+    });
+
+    // §19.5.2 auto-sync state for the Backup panel. Returns the pending
+    // batch (edits waiting on a publish) plus the scheduler status, so
+    // the shell can raise ONE prompt per unlock window. Read-only: the
+    // publish itself still runs through `wallet.publishLabels` with a
+    // freshly typed password.
+    host.register('wallet.labelSyncStatus', async (_req, { vault }) => {
+        if (vault && !labelSyncVault) labelSyncVault = vault;
+        return {
+            ...labelSyncScheduler.status(),
+            due: labelSyncPending !== null,
+            batch: labelSyncPending,
+        };
+    });
+
+    // Dismiss the pending auto-sync prompt for this unlock window. The
+    // edits stay dirty, so the next unlock window re-raises rather than
+    // silently dropping the user's labels.
+    host.register('wallet.labelSyncDismiss', async () => {
+        labelSyncPending = null;
+        return { ok: true };
     });
 
     // §19.4 encrypted backup: returns the pretty-printed JSON envelope
@@ -1764,6 +1836,11 @@ export function createBackgroundHost(deps) {
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
         await vault.addresses.put({ ...rec, label });
+        // §19.5.2 auto-sync: the label just changed on disk, so the
+        // on-chain copy is stale. The scheduler batches this with every
+        // other rename in the burst.
+        const account = rec.accountId ? await vault.accounts.get(rec.accountId) : null;
+        noteLabelChange({ vault }, account?.walletId ?? null);
         return { ok: true };
     });
 
@@ -3255,10 +3332,17 @@ export function createBackgroundHost(deps) {
         return findContactByAddress({ ...req, vault });
     });
     host.register('contacts.save', async (req, { vault }) => {
-        return saveContact({ ...req, vault });
+        const r = await saveContact({ ...req, vault });
+        // Contacts ride the same §19.5.2 payload as address labels, so
+        // an address-book edit makes the on-chain copy stale too. They
+        // are vault-global, hence no walletId.
+        noteLabelChange({ vault }, null);
+        return r;
     });
     host.register('contacts.delete', async (req, { vault }) => {
-        return deleteContact({ ...req, vault });
+        const r = await deleteContact({ ...req, vault });
+        noteLabelChange({ vault }, null);
+        return r;
     });
 
     // Dispenser discovery + detail: read-only explorer passthroughs

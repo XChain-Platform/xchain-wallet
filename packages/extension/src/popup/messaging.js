@@ -662,6 +662,22 @@ export function publishLabelsRequest(opts) {
 }
 
 /**
+ * §19.5.2 auto-sync state. `due` is true when label / contact edits
+ * have settled and one batched publish is waiting on the user; the
+ * background raises it at most once per unlock window.
+ *
+ * Resolves to `{ due, batch, pending, changeCount, walletIds, ... }`.
+ */
+export function labelSyncStatusRequest() {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncStatus', {}));
+}
+
+/** Dismiss the pending auto-sync prompt for this unlock window. */
+export function labelSyncDismissRequest() {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncDismiss', {}));
+}
+
+/**
  * §15.5 / G020 : add a single imported WIF (private key) to an existing
  * HD wallet. The shell is responsible for surfacing the §15.5.3
  * backup-implications warning before invoking this.

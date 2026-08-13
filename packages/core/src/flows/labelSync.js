@@ -32,8 +32,14 @@
 //   });
 //   await applyLabelSyncPayload({ vault, walletId, payload: body });
 //
+// `createLabelSyncScheduler` is the auto-sync half (§19.5.2 cadence
+// rules): it watches label/contact vault writes and collapses a burst
+// of them into ONE publish per unlock window. It never holds a seed or
+// a password - it only decides WHEN a publish is due and hands that
+// decision to the shell, which prompts the user exactly as the manual
+// "Publish now" button does.
+//
 // FOLLOWUPs (Cluster B FOLLOWUPS.md):
-//   1. On-change debounced auto-sync (§19.5.2 cadence rules).
 //   2. Fetch + decrypt + apply on restore (the import-side wiring).
 
 import {
@@ -316,10 +322,12 @@ export class WifOnlyLabelSyncUnsupportedError extends Error {
  * chain. The from-address is the wallet's newest external HD address
  * on that chain (callers can override via `pickFromAddress`).
  *
- * Auto-sync (debounced on label change) and fetch-on-restore are
- * separate FOLLOWUPs; this flow only powers the manual "Publish now"
- * button. HW wallets are not supported here because the commitment key
- * is derived from the seed, which only exists for software wallets.
+ * This flow powers both the manual "Publish now" button and the
+ * auto-sync path: `createLabelSyncScheduler` decides WHEN a publish is
+ * due, the shell prompts for the password, and the write lands here.
+ * Fetch-on-restore is a separate FOLLOWUP. HW wallets are not
+ * supported here because the commitment key is derived from the seed,
+ * which only exists for software wallets.
  *
  * @param {PublishLabelsNowOpts} opts
  * @returns {Promise<PublishLabelsNowResult>}
@@ -485,4 +493,279 @@ function bytesToHex(bytes) {
         out += bytes[i].toString(16).padStart(2, '0');
     }
     return out;
+}
+
+// --- Auto-sync scheduler (§19.5.2 cadence rules) -------------------------
+//
+// Shape decided 2026-08-11: keep PROMPTING for the seed rather than
+// caching it, and batch label edits into ONE publish per unlock window.
+// The two halves are related. Publishing needs the seed, the seed only
+// exists for the length of a `publishLabelsNow` call, and the only way
+// to get it without keeping a copy is to ask the user again. Asking on
+// every rename would be unusable - renaming eight addresses in a row
+// would cost eight password prompts and eight FILE transactions - so
+// the scheduler debounces the edits and raises at most one prompt per
+// unlock window. A rename storm therefore costs one prompt and one
+// on-chain write; the unlocked session still never holds a raw seed.
+//
+// What the scheduler does NOT do: it does not publish. It decides that
+// a publish is due and calls `requestPublish`, which the shell wires to
+// the same password-prompt-then-`publishLabelsNow` path the manual
+// "Publish now" button uses. Nothing secret ever crosses this API, and
+// `noteLabelChange` refuses input that carries a secret-shaped key so a
+// future caller cannot quietly start passing one through.
+//
+// Window bookkeeping. `attempt` is what the one-per-window cap counts,
+// not `publish`: the user may cancel the prompt, and re-raising it on
+// the next edit would rebuild exactly the nag loop this replaces. A
+// consumed window still keeps the edits dirty, so a cancelled or failed
+// publish retries at the next unlock rather than losing the labels.
+
+/** Quiet period after the last label edit before a publish is due. */
+export const LABEL_SYNC_AUTO_DEBOUNCE_MS = 45_000;
+
+/**
+ * Ceiling on how long a continuous edit stream can defer the publish.
+ * Without it, a user renaming an address every 40s would re-arm the
+ * debounce forever and never sync.
+ */
+export const LABEL_SYNC_AUTO_MAX_WAIT_MS = 5 * 60_000;
+
+/** Keys `noteLabelChange` refuses: the scheduler must never see secrets. */
+const SECRET_KEYS = ['password', 'seed', 'mnemonic', 'bip39Passphrase', 'privateKey', 'wif'];
+
+/**
+ * @typedef {Object} LabelSyncBatch
+ * @property {number} changeCount          label/contact edits collapsed into this publish
+ * @property {string[]} walletIds          wallets whose labels changed (may be empty: contacts are vault-global)
+ * @property {number} firstChangeAt        epoch ms of the oldest un-published edit
+ * @property {number} dueAt                epoch ms the scheduler decided the publish was due
+ * @property {'debounce' | 'maxWait' | 'flush'} reason
+ */
+
+/**
+ * @typedef {Object} LabelSyncSchedulerStatus
+ * @property {boolean} pending             edits are waiting to be published
+ * @property {number} changeCount
+ * @property {string[]} walletIds
+ * @property {number | null} firstChangeAt
+ * @property {number | null} dueAt         when the armed timer will fire (null when not armed)
+ * @property {boolean} unlocked            an unlock window is open
+ * @property {boolean} attemptedThisWindow a publish was already raised in this window
+ * @property {boolean} publishedThisWindow a publish actually completed in this window
+ * @property {number} windowId
+ */
+
+/**
+ * @param {object} [opts]
+ * @param {(batch: LabelSyncBatch) => unknown} [opts.requestPublish]   raise the publish prompt (shell-owned; never handed a secret)
+ * @param {() => boolean | Promise<boolean>} [opts.isEnabled]          opt-in gate; wire to settings.privacy.labelsSurviveRestore. Default: disabled.
+ * @param {number} [opts.debounceMs]
+ * @param {number} [opts.maxWaitMs]
+ * @param {boolean} [opts.startUnlocked]   default true: hosts are built at unlock, so construction opens the first window
+ * @param {() => number} [opts.now]        clock injection for tests
+ * @param {(fn: () => void, ms: number) => unknown} [opts.setTimer]
+ * @param {(handle: unknown) => void} [opts.clearTimer]
+ * @param {(err: unknown) => void} [opts.onError]
+ */
+export function createLabelSyncScheduler(opts = {}) {
+    const requestPublish = typeof opts.requestPublish === 'function'
+        ? opts.requestPublish
+        : () => {};
+    const isEnabled = typeof opts.isEnabled === 'function' ? opts.isEnabled : () => false;
+    const debounceMs = Number.isFinite(opts.debounceMs) && opts.debounceMs >= 0
+        ? Math.floor(opts.debounceMs)
+        : LABEL_SYNC_AUTO_DEBOUNCE_MS;
+    const maxWaitMs = Number.isFinite(opts.maxWaitMs) && opts.maxWaitMs >= 0
+        ? Math.floor(opts.maxWaitMs)
+        : LABEL_SYNC_AUTO_MAX_WAIT_MS;
+    const now = typeof opts.now === 'function' ? opts.now : () => Date.now();
+    const setTimer = typeof opts.setTimer === 'function'
+        ? opts.setTimer
+        : (fn, ms) => setTimeout(fn, ms);
+    const clearTimer = typeof opts.clearTimer === 'function'
+        ? opts.clearTimer
+        : (h) => clearTimeout(h);
+    const onError = typeof opts.onError === 'function' ? opts.onError : () => {};
+
+    let windowId = 1;
+    let unlocked = opts.startUnlocked !== false;
+    let attemptWindowId = /** @type {number | null} */ (null);
+    let publishWindowId = /** @type {number | null} */ (null);
+    let changeCount = 0;
+    let firstChangeAt = /** @type {number | null} */ (null);
+    const dirtyWallets = new Set();
+    let timer = /** @type {unknown} */ (null);
+    let dueAt = /** @type {number | null} */ (null);
+    let disposed = false;
+
+    function disarm() {
+        if (timer !== null) {
+            clearTimer(timer);
+            timer = null;
+        }
+        dueAt = null;
+    }
+
+    function arm() {
+        if (disposed || !unlocked) return;
+        if (changeCount === 0) return;
+        if (attemptWindowId === windowId) return;
+        const at = now();
+        const debouncedAt = at + debounceMs;
+        const ceilingAt = (firstChangeAt ?? at) + maxWaitMs;
+        // Each edit pushes the deadline out by another quiet period,
+        // which is what collapses a rename storm - but never past the
+        // ceiling, so a steady stream still syncs.
+        const nextDueAt = Math.min(debouncedAt, ceilingAt);
+        const reason = nextDueAt < debouncedAt ? 'maxWait' : 'debounce';
+        disarm();
+        dueAt = nextDueAt;
+        timer = setTimer(() => { void fire(reason); }, Math.max(0, nextDueAt - at));
+    }
+
+    /** @param {'debounce' | 'maxWait' | 'flush'} reason */
+    async function fire(reason) {
+        timer = null;
+        dueAt = null;
+        if (disposed || !unlocked) return null;
+        if (changeCount === 0) return null;
+        if (attemptWindowId === windowId) return null;
+        let enabled = false;
+        try {
+            enabled = (await isEnabled()) === true;
+        } catch (err) {
+            onError(err);
+            return null;
+        }
+        // Opt-out means no on-chain copy at all, so the edits are not
+        // "pending" - drop them rather than banking a publish the user
+        // would get prompted for the moment they opt in.
+        if (!enabled) {
+            reset();
+            return null;
+        }
+        attemptWindowId = windowId;
+        /** @type {LabelSyncBatch} */
+        const batch = {
+            changeCount,
+            walletIds: [...dirtyWallets],
+            firstChangeAt: firstChangeAt ?? now(),
+            dueAt: now(),
+            reason,
+        };
+        try {
+            await requestPublish(batch);
+        } catch (err) {
+            onError(err);
+        }
+        return batch;
+    }
+
+    function reset() {
+        changeCount = 0;
+        firstChangeAt = null;
+        dirtyWallets.clear();
+        disarm();
+    }
+
+    return {
+        /**
+         * Record one label / contact vault write. Safe to call on every
+         * keystroke-level edit: the debounce is what collapses them.
+         *
+         * @param {{ walletId?: string | null }} [change]
+         * @returns {{ scheduled: boolean, reason: string, dueAt: number | null }}
+         */
+        noteLabelChange(change = {}) {
+            if (change && typeof change === 'object') {
+                for (const key of SECRET_KEYS) {
+                    if (key in change) {
+                        throw new Error(
+                            `labelSyncScheduler.noteLabelChange: "${key}" must never be passed; the scheduler never holds secrets`,
+                        );
+                    }
+                }
+            }
+            if (disposed) return { scheduled: false, reason: 'disposed', dueAt: null };
+            const at = now();
+            changeCount += 1;
+            if (firstChangeAt === null) firstChangeAt = at;
+            if (typeof change?.walletId === 'string' && change.walletId.length > 0) {
+                dirtyWallets.add(change.walletId);
+            }
+            if (!unlocked) {
+                // Locked: nothing can be published (the prompt lives in an
+                // unlocked UI). Keep the edit dirty; the next unlock arms it.
+                return { scheduled: false, reason: 'locked', dueAt: null };
+            }
+            if (attemptWindowId === windowId) {
+                return { scheduled: false, reason: 'window-consumed', dueAt: null };
+            }
+            arm();
+            return { scheduled: timer !== null, reason: 'armed', dueAt };
+        },
+
+        /** Open a new unlock window: the one-publish cap resets and carried-over edits re-arm. */
+        beginUnlockWindow() {
+            if (disposed) return;
+            windowId += 1;
+            unlocked = true;
+            arm();
+        },
+
+        /** Close the unlock window. Pending edits survive to the next one. */
+        endUnlockWindow() {
+            unlocked = false;
+            disarm();
+        },
+
+        /**
+         * Force the due decision now, ignoring the remaining debounce.
+         * Still honours the one-attempt-per-window cap.
+         *
+         * @returns {Promise<LabelSyncBatch | null>}
+         */
+        flush() {
+            disarm();
+            return fire('flush');
+        },
+
+        /**
+         * Called by the shell after a publish actually lands (auto OR
+         * manual: a manual "Publish now" carries the same payload, so it
+         * satisfies the pending auto-sync too).
+         */
+        markPublished() {
+            if (disposed) return;
+            publishWindowId = windowId;
+            attemptWindowId = windowId;
+            reset();
+        },
+
+        /** Drop pending edits without publishing (e.g. the user opted out). */
+        clearPending() {
+            reset();
+        },
+
+        /** @returns {LabelSyncSchedulerStatus} */
+        status() {
+            return {
+                pending: changeCount > 0,
+                changeCount,
+                walletIds: [...dirtyWallets],
+                firstChangeAt,
+                dueAt,
+                unlocked,
+                attemptedThisWindow: attemptWindowId === windowId,
+                publishedThisWindow: publishWindowId === windowId,
+                windowId,
+            };
+        },
+
+        dispose() {
+            disposed = true;
+            disarm();
+        },
+    };
 }

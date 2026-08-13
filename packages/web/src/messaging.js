@@ -522,6 +522,20 @@ export function publishLabelsRequest(opts) {
 }
 
 /**
+ * §19.5.2 auto-sync state. `due` is true when label / contact edits
+ * have settled and one batched publish is waiting on the user; the
+ * background raises it at most once per unlock window.
+ */
+export function labelSyncStatusRequest() {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncStatus', {}));
+}
+
+/** Dismiss the pending auto-sync prompt for this unlock window. */
+export function labelSyncDismissRequest() {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncDismiss', {}));
+}
+
+/**
  * §15.5 / G020: add a single imported WIF to an existing HD wallet.
  *
  * @param {{ walletId: string, password: string, chainId: string, wif: string, addressType?: string, label?: string }} opts
