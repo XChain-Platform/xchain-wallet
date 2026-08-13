@@ -45,6 +45,7 @@
         "release:gate": "pnpm run ci && pnpm run test:e2e:regtest",
         "release:sign": "bash tools/release/sign.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
         "release:verify": "bash tools/release/verify.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
+        "release:verify-controls": "node tools/release/verify-ci-controls.mjs",
         "sdk:link": "node tools/dev/sdk-link.mjs link",
         "sdk:unlink": "node tools/dev/sdk-link.mjs unlink",
         "sdk:status": "node tools/dev/sdk-link.mjs status"

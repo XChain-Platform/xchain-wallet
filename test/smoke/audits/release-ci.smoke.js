@@ -16,13 +16,21 @@
 // help: the output of a compromised run is a properly signed, notarized
 // binary that a direct downloader never runs past a store at all.
 //
-// Half the protection lives in repository settings, which no test can
-// reach (the release CI-setup doc tracks those). The half that lives in
-// the workflow file is pinned here, because each of these is one
-// plausible edit away from being undone by someone fixing something
-// else, and none of them fails visibly when it breaks. A workflow that
-// has quietly started handing secrets to pull requests still goes
-// green.
+// Half the protection lives in repository settings, which this offline
+// suite cannot reach. That half is measured by
+// `tools/release/verify-ci-controls.mjs`, which reads the live settings
+// with `gh api` and compares them to what the public page claims. It is
+// not part of `npm run ci` (network, authenticated `gh`), so it is run
+// before a release and after any settings or page change - and the first
+// time it ran it found the page's third false claim in nine days
+// (2026-08-12: signing credentials described as environment-scoped while
+// all ten sat at repository scope).
+//
+// The half that lives in the workflow file is pinned here, because each
+// of these is one plausible edit away from being undone by someone
+// fixing something else, and none of them fails visibly when it breaks.
+// A workflow that has quietly started handing secrets to pull requests
+// still goes green.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -274,6 +282,17 @@ const SETUP_DOC = 'components/wallet/release/ci-setup.md';
 assert.ok(wf.includes('https://docs.xchain.io/components/wallet/release/ci-setup'),
     'release.yml points at the settings the file itself cannot enforce');
 
+// Everything below pins the page's WORDING, which is all an offline suite
+// can do, and wording is not truth: the page can be perfectly self-
+// consistent and still describe a repository that does not exist. The
+// settings-side audit is the only thing that closes that, so its absence
+// has to be red here. Without this assertion, deleting the audit restores
+// exactly the state that let three false claims reach a public page: prose
+// about settings, checked only against itself.
+assert.ok(existsSync(join(root, 'tools/release/verify-ci-controls.mjs')),
+    'tools/release/verify-ci-controls.mjs exists: it is what measures the page against the '
+    + 'live repository settings, and this suite can only check the page against itself');
+
 if (docsAvailable()) {
     // Whitespace-flattened: the doc is hard wrapped, so any phrase worth
     // asserting on will eventually straddle a line break.
@@ -335,26 +354,79 @@ if (docsAvailable()) {
     // reviewer" says the same false thing and matches neither. So the
     // property, not the wording - the page may name a reviewer gate or a
     // tag rule ONLY to say it is absent. Any sentence that mentions one
-    // without a negation in it is asserting it.
+    // without denying it is asserting it.
     //
     // This is not hypothetical: §2 went on saying an environment-scoped
     // secret is "only readable by a job that has already cleared the
     // approval gate above" after §1 had been corrected to say there is no
     // such gate, so the page both denied and asserted the same control
     // (found 2026-08-04, re-scan).
-    const NEGATED = /\bno\b|\bnot\b|never|cannot|refuses|previously said|would both fail/i;
+    //
+    // BOTH HALVES OF THAT GUARD LEAKED, measured by mutation 2026-08-12
+    // ( verification), and the leaks compose into exactly the claim
+    // this whole block exists to keep off the page:
+    //
+    //   1. The mention vocabulary was three phrases lifted from the old
+    //      wording, so "held until the release maintainer approves it from
+    //      the deployments tab" was never even examined.
+    //   2. "Contains a negation token" is not "denies the control". The
+    //      survivor that proves it is "The tag ruleset does not allow
+    //      anyone but the release maintainer to create a v* tag" - the
+    //      false claim itself, stated in the affirmative, waved through on
+    //      the `\bnot\b` inside "does not allow".
+    //
+    // So the vocabulary is now the concept rather than the sentence, and a
+    // sentence must carry an EXPLICIT statement of absence, not merely a
+    // negation somewhere in it. Phrasings that describe the control working
+    // ("does not start until", "does not allow anyone but") no longer count
+    // as denying that it exists.
+    const ABSENCE = new RegExp([
+        'there (?:is|are) no\\b',
+        '\\bno such\\b',
+        '\\bnone was created\\b',
+        '\\bno partial rule\\b',
+        'does not exist|do not exist|neither control exists',
+        'is not available|are not available|not available on',
+        'was not created|were not created',
+        'cannot be (?:expressed|created)|could not be created',
+        'refuses to create',
+        'not in force',
+        'previously said',
+        'would both fail',
+        'never will',
+    ].join('|'), 'i');
+
+    // Sentences that use this vocabulary about a DIFFERENT, real control.
+    // §4's fork-run approval is a genuine platform behaviour and has nothing
+    // to do with the per-run reviewer gate on the signing environment.
+    //
+    // Deliberately narrow: "pull request" alone must NOT exempt a sentence.
+    // §2's whole argument for environment scoping is that a repository-wide
+    // secret is readable "from a pull request branch", and that is the exact
+    // sentence which once went on to invoke the non-existent approval gate.
+    // An exemption keyed on "pull request" hides the one regression this
+    // guard was written for (measured 2026-08-12: it did).
+    const OTHER_CONTROL = /\bfork(?:s|ed)?\b|outside collaborator/i;
+
     const sentences = setup.split(/(?<=[.!?])\s+/);
     for (const [control, mention] of [
         ['a reviewer approval gate on the signing environment',
-            /approval gate|reviewer|approve each run/i],
+            /\breviewers?\b|\bapproval (?:gate|step|rule)\b|\bapproves?\b|\bapproving\b|\bsigns? off\b|\bsigning off\b|\bsign-off\b|waiting for approval|deployments tab|human review\b/i],
+        // Either the settings vocabulary, or any sentence that puts a rule
+        // and a tag together - "a rule restricts tag creation to the
+        // maintainer" names no console label at all.
         ['a rule restricting who may create a release tag',
-            /tag ruleset|tag protection|restricted to the release maintainer/i],
+            /tag ruleset|tag protection|tag[- ]protection|restricted to the release maintainer|who (?:can|may) create (?:a |the )?(?:release )?tag/i],
     ]) {
         for (const sentence of sentences) {
-            if (!mention.test(sentence)) continue;
-            assert.match(sentence, NEGATED,
-                `${SETUP_DOC} mentions ${control} in a sentence that does not deny it, so the `
-                + `page is asserting a control that does not exist: "${sentence.trim()}"`);
+            const names = mention.test(sentence)
+                || (control.includes('release tag')
+                    && /\brulesets?\b|\brules?\b|protection/i.test(sentence) && /\btags?\b/i.test(sentence));
+            if (!names || OTHER_CONTROL.test(sentence)) continue;
+            assert.match(sentence, ABSENCE,
+                `${SETUP_DOC} mentions ${control} in a sentence that does not state its `
+                + `absence, so the page is asserting a control that does not exist: `
+                + `"${sentence.trim()}"`);
         }
     }
 

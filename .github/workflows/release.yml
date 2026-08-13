@@ -582,6 +582,16 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # An unsigned or un-notarized artifact from THIS step is a failed
+          # release, not a quiet one. Every value above is silent when it is
+          # absent: an unset secret expands to the empty string, the config
+          # then resolves mac.identity to null and app-builder-lib skips
+          # signing with exit 0, and a missing APPLE_API_KEY_ID turns
+          # notarization off with no message at all. That is exactly how
+          # v0.336.0 shipped two unsigned mac zips and two unsigned dmgs from
+          # a green job. The build config now refuses to load instead. See
+          # packages/desktop/scripts/macos-signing.cjs.
+          XCHAIN_REQUIRE_MAC_SIGNING: '1'
         run: pnpm -C packages/desktop dist --mac --x64 --arm64
       # The Mac App Store package (§13), the SECOND macOS channel and a
       # committed goal since 2026-08-01. Same gap as the Store lane on the
@@ -696,6 +706,12 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+          # The rehearsal exercises the REAL update path, and MacUpdater
+          # checks the signature of the downloaded zip before it swaps, so an
+          # unsigned rehearsal build rehearses the wrong thing. Same
+          # requirement as the production step, and the staging mac row in
+          # expected-artifacts.txt declares `codesign` for the same reason.
+          XCHAIN_REQUIRE_MAC_SIGNING: '1'
         run: pnpm -C packages/desktop dist --mac --x64 --arm64
       - name: Assert the rehearsal variant points at STAGING
         if: env.STAGING_FEED != ''
