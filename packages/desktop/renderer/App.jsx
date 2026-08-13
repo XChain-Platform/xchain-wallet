@@ -2109,8 +2109,12 @@ function AppInner() {
                 );
             }
             return (
+                //  `demoBannerInHeader`: this shell mounts DemoBanner in
+                // the layout header, which already renders above Home, so Home
+                // must not mount a second one.
                 <Home
-                        activeWalletId={activeWalletId}
+                    activeWalletId={activeWalletId}
+                    demoBannerInHeader
                     onLocked={refresh}
                     onSend={activeWalletId ? () => {
                         setSendPrefill(null);
