@@ -48,6 +48,12 @@ const AZURE_VARS = {
 };
 const OWNED_VARS = [...Object.keys(AZURE_VARS), 'APPLE_API_KEY_ID', 'APPLE_TEAM_ID',
     'XCHAIN_STAGING_FEED_URL',
+    // The signed-or-fail requirement (§14). Ambient in the shell it would
+    // turn every load below into a thrown WindowsSigningCredentialsMissing,
+    // which is that check working and this file testing the caller's
+    // environment. Its own behaviour is driven in
+    // windows-signing-required.smoke.js.
+    'XCHAIN_REQUIRE_WIN_SIGNING',
     // The three store-lane flags: ambient values would make the pinned
     // target-list assertions below test the caller's shell, not the config.
     'XCHAIN_BUILD_MAS', 'XCHAIN_BUILD_APPX', 'XCHAIN_BUILD_SNAP'];

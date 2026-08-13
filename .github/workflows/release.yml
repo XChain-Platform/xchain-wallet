@@ -772,6 +772,12 @@ jobs:
           AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          # An unsigned artifact from THIS step is a failed release, not a
+          # quiet one: every missing piece of the environment above is silent
+          # on its own, so the build config refuses to load rather than pack
+          # installers nothing will sign. See
+          # packages/desktop/scripts/windows-signing.cjs.
+          XCHAIN_REQUIRE_WIN_SIGNING: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
       # The Microsoft Store package (§15), the SECOND Windows channel and a
       # committed goal since 2026-08-01. The lane exists in the builder config
@@ -782,10 +788,25 @@ jobs:
       # a missing `publisher` and emits a package that BUILDS and is then
       # rejected at ingestion for an identity mismatch, so a lane that ran
       # without these would produce exactly the artifact §15 warns about.
+      #
+      # IT CARRIES THE SIGNING ENVIRONMENT TOO, and that is not belt-and-
+      # braces. `XCHAIN_BUILD_APPX=1` does not narrow the target list to the
+      # store package: the config emits nsis + zip + appx, so this step
+      # REBUILDS the two installers the step above just signed, into the same
+      # `dist/`, overwriting them. Without these values that rebuild is
+      # unsigned, and the release would upload unsigned twins of correctly
+      # signed files with nothing in the log to say so.
       - name: Build the Microsoft Store package (opt-in, §15)
         if: env.APPX_IDENTITY_NAME != '' && env.APPX_PUBLISHER != ''
         env:
           XCHAIN_BUILD_APPX: '1'
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          XCHAIN_REQUIRE_WIN_SIGNING: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Drop delta metadata and build byproducts
         shell: bash
@@ -823,6 +844,12 @@ jobs:
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
+          # The rehearsal exercises the REAL update path, and half of what
+          # electron-updater checks is the Authenticode publisher, so an
+          # unsigned rehearsal installer rehearses the wrong thing. Same
+          # requirement as the production step, and the staging row in
+          # expected-artifacts.txt declares `authenticode` for the same reason.
+          XCHAIN_REQUIRE_WIN_SIGNING: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Assert the rehearsal variant points at STAGING
         if: env.STAGING_FEED != ''

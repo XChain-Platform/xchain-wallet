@@ -38,6 +38,8 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
+const { assertWindowsSigningMaterial } = require('./scripts/windows-signing.cjs');
+
 const here = __dirname;
 const rootPkg = JSON.parse(
     readFileSync(join(here, '..', '..', 'package.json'), 'utf8'),
@@ -270,9 +272,10 @@ const WIN_PUBLISHER = 'Dankest, LLC';
 // this file. `endpoint` is REQUIRED by the v26 type and is region-specific,
 // which is why it is its own variable rather than a default.
 //
-// DD2 is still open, so this is a skeleton: with no Azure vars set it is
-// entirely inert and the classic-cert path is used exactly as before. A
-// dev build with no cert config at all still produces unsigned artifacts.
+// With no Azure vars set this block is entirely inert and the classic-cert
+// path is used exactly as before. A dev build with no cert config at all
+// still produces unsigned artifacts - deliberately, and ONLY when no lane
+// declared otherwise (see the requirement check immediately below).
 const azureSigning
     = process.env.AZURE_CODE_SIGNING_ENDPOINT
         && process.env.AZURE_CODE_SIGNING_NAME
@@ -284,6 +287,22 @@ const azureSigning
             certificateProfileName: process.env.AZURE_CERT_PROFILE_NAME,
         }
         : null;
+
+// A lane that must ship a SIGNED Windows build fails HERE, by name, rather
+// than packing unsigned installers and letting the artifact gate discover it
+// at the end of the release. Everything about the environment above is
+// silent when it is incomplete: a missing config value drops azureSignOptions
+// and falls back to a classic path with no certificate, and the three Entra
+// credentials are read by the Azure SDK rather than by this file, so their
+// absence is invisible from here entirely.
+//
+// Opt-in for the same reason `forceCodeSigning` is scoped to the store lane:
+// an unsigned dev build is legitimate and must stay quiet, an unsigned
+// release build never is. release.yml sets XCHAIN_REQUIRE_WIN_SIGNING=1 on
+// every step that builds a Windows artifact, and
+// test/smoke/audits/windows-signing-required.smoke.js fails if a step is
+// added that does not.
+assertWindowsSigningMaterial(process.env);
 
 /** @type {import('electron-builder').Configuration} */
 const config = {
