@@ -559,7 +559,7 @@ const PKG = 'io.xchain.wallet.android';
 
 // ------------------------------------------------- the DIRECT lane
 //
-//  row 130. The lane watching the only artifact this project has
+// row 130. The lane watching the only artifact this project has
 // actually shipped. Every case below is scored by `judgeDirect`, which is
 // pure precisely so the wrong-answer branches - the ones that only exist
 // when something is broken - can be exercised without waiting for a real
@@ -642,6 +642,6 @@ const PKG = 'io.xchain.wallet.android';
 
 rmSync(dir, { recursive: true, force: true });
 console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md, '
-    + 'the Play absence latch, and the  row 130 direct lane: a served APK that does not '
+    + 'the Play absence latch, and the row 130 direct lane: a served APK that does not '
     + 'match its signed manifest is an ALERT, and absence needs no latch here because this lane '
     + 'is already published)');

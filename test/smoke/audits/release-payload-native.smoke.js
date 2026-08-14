@@ -341,8 +341,8 @@ try {
     // host here with unsquashfs). unsquashfs at 32609 lists nothing, so every
     // real AppImage fell through to UNCHECKED and returned 0: the gate had
     // never once read an AppImage, and it failed by declining to judge rather
-    // than by judging wrong, which is the shape nothing notices (
-    // frontier row 132).
+    // than by judging wrong, which is the shape nothing notices
+    // (frontier row 132).
     //
     // The stub here answers ONLY at the true offset and exits non-zero at any
     // other, which is what a real extractor does at a decoy. So a scan that
@@ -554,8 +554,8 @@ try {
 
     // --- 6c. An unsuffixed package is still opened ----------------------
     //
-    // The hole this closes was an ORDERING accident, not a design (
-    // frontier row 131). xr_check_payload_arches skipped the whole iteration
+    // The hole this closes was an ORDERING accident, not a design
+    // (frontier row 131). xr_check_payload_arches skipped the whole iteration
     // when a name carried no arch token, deliberately, so that the missing
     // suffix stayed xr_check_expected's finding to report rather than being
     // double-counted here. The native check does not need an arch and was

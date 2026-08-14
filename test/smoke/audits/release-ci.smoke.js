@@ -363,7 +363,7 @@ if (docsAvailable()) {
     // (found 2026-08-04, re-scan).
     //
     // BOTH HALVES OF THAT GUARD LEAKED, measured by mutation 2026-08-12
-    // ( verification), and the leaks compose into exactly the claim
+    // verification, and the leaks compose into exactly the claim
     // this whole block exists to keep off the page:
     //
     //   1. The mention vocabulary was three phrases lifted from the old

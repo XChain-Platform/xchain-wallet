@@ -53,7 +53,7 @@ for (const cfCache of ['BYPASS', 'bypass']) {
         `cf-cache-status=${cfCache} on a published pointer with no-store is the contract`);
 }
 
-// --- DYNAMIC is not the good case, and used to be ( row 35) -------
+// --- DYNAMIC is not the good case, and used to be (row 35) -------
 //
 // The 404 trap above, one layer deeper. A LIVE pointer behind a bypass
 // rule PROVEN to match it by Cloudflare Trace reads DYNAMIC - and so does
@@ -144,7 +144,7 @@ for (const cfCache of ['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATI
     assert.equal(judgeArtifact({ status: 404, cacheControl: 'no-store' }).verdict, 'UNPROVEN',
         'an unpublished artifact proves nothing either way');
 
-    //  run 22. Cached and cached-BY-RULE are different states, and this
+    // run 22. Cached and cached-BY-RULE are different states, and this
     // judge scored them identically until the origin was probed with
     // Cloudflare bypassed and answered with no cache-control at all. A bare
     // max-age is what the CDN falls back to when nothing covers the name, so
@@ -163,7 +163,7 @@ for (const cfCache of ['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATI
         'PASS', 'immutable is the load-bearing word; a rule that sets it is a rule');
 }
 
-// --- the Android pointer is IN the probe set ( run 20) ------------
+// --- the Android pointer is IN the probe set (run 20) ------------
 //
 // The lane this tool was written for has never published a pointer; the
 // direct-APK lane has, and until run 20 this tool did not know it existed.
@@ -210,7 +210,7 @@ for (const cfCache of ['HIT', 'MISS', 'EXPIRED', 'REVALIDATED', 'STALE', 'UPDATI
         + 'the origin sets no header on it at all');
 }
 
-console.log('OK: edge cache contract smoke ( §3 / : a 404 is UNPROVEN, never a pass; '
+console.log('OK: edge cache contract smoke (§3: a 404 is UNPROVEN, never a pass; '
     + 'MISS and EXPIRED are as fatal as HIT; the origin and the edge are both required; '
-    + ' run 20: the Android pointer is derived from the app\'s own feed URL; '
-    + ' row 35: DYNAMIC is UNMEASURED, never a pass - only BYPASS proves the rule)');
+    + 'run 20: the Android pointer is derived from the app\'s own feed URL; '
+    + 'row 35: DYNAMIC is UNMEASURED, never a pass - only BYPASS proves the rule)');

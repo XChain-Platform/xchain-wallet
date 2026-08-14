@@ -872,7 +872,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             const txid = res?.txid || res?.broadcast?.txid;
             // A TRANSIENT post-sign broadcast failure RESOLVES as
             // `queued` rather than throwing. The LIST is signed and waiting in
-            // the broadcast queue for the user to send it , but it has
+            // the broadcast queue for the user to send it, but it has
             // no txid yet, so the pending-airdrop record that anchors leg 2
             // cannot be written. Say that, instead of the "did not return a
             // txid" internal that fell out below.

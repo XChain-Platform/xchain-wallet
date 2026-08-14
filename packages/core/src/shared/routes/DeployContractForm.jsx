@@ -313,7 +313,7 @@ export function DeployContractForm({ walletId, onBack }) {
             .then((p) => { if (!cancelled) setPlan(p); })
             // The planner reports an over-budget contract as
             // "…exceeds MAX_DEPLOY_CHUNKS (16)"; deployDiagnostic restates the
-            // SDK constant as a limit the author can act on (XC #4374).
+            // SDK constant as a limit the author can act on.
             .catch((e) => { if (!cancelled) setPlanError(humanizeDeployDiagnostic(e).message || 'Could not size this contract.'); });
         return () => { cancelled = true; };
     }, [messaging, chainId, code, gasLimit, suggestedGas, constructorParams]);
@@ -744,7 +744,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 {/* Lint advisories are already written for a contract author
                     (line number, symbol, prescribed fix), so deployDiagnostic
                     passes them through and rewrites only the ones stated in SDK
-                    internals (XC #4374). */}
+                    internals. */}
                 {validation?.warnings && validation.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {validation.warnings.map((w, i) => (
@@ -1066,7 +1066,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     {/* The SDK's rationale is a raw count dump ("… 1 indexed
                         for, charged 2x/iteration …"); restate it in plain
                         counts, keeping the raw string when the shape moves
-                        upstream (XC #4374). */}
+                        upstream. */}
                     {suggestedRationale ? ` (${humanizeGasRationale(suggestedRationale) || suggestedRationale})` : ''}
                 </p>
             ) : null}

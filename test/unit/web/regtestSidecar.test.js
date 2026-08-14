@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The regtest full-node sidecar is not in a `store` build .
+// The regtest full-node sidecar is not in a `store` build.
 //
 // The transform under test is string surgery over a package we do not own, so
 // the tests that matter run it against the REAL `xchain-sdk` source on disk

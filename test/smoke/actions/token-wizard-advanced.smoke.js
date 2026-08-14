@@ -194,7 +194,7 @@ assert.ok(
     'the panel is collapsed by default',
 );
 // `resolved` is `template` after TEMPLATE_ALIASES maps retired ids onto
-// the template that absorbed them ( merged Community into
+// the template that absorbed them (merged Community into
 // Utility); either name reads the same gate.
 assert.ok(
     /\{(?:template|resolved) === 'custom' && advancedPanel \?/.test(src),

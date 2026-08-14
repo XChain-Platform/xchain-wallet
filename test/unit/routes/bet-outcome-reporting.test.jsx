@@ -222,7 +222,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
 
         const receipt = utils.getByTestId('bet-result');
         expect(receipt.textContent).not.toContain('Bet placed.');
-        // : the receipt promises a reminder, never an automatic send.
+        // the receipt promises a reminder, never an automatic send.
         expect(receipt.textContent).toMatch(/waiting in the queued-transactions banner/i);
         expect(receipt.textContent).not.toMatch(/automatically/i);
         // No txid row: there is no txid, and "n/a" beside a Txid label reads as a

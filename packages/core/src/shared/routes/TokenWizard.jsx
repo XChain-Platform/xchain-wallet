@@ -48,7 +48,7 @@ const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE'
  *
  *   template:  pick one of six templates (§40.1), each with its own
  *              detail form. A seventh, "Community", was retired in
- *              : it composed the same ISSUE as Utility and
+ *              it composed the same ISSUE as Utility and
  *              advertised dividends, which every token supports.
  *   chain:     pick the chain to create the token on. Filtered to
  *              chains the wallet already has an address on (needs a
@@ -710,7 +710,7 @@ export function TokenWizard({ walletId, onBack }) {
  *               signature.) All three locks are needed for "fixed
  *               supply" to be true; see collectible.
  * - **utility**: mintable, adjustable: MAX_SUPPLY + MAX_MINT, no lock
- *               flags. Description encouraged for discovery. 
+ *               flags. Description encouraged for discovery.
  *               folded the old **community** template into this one:
  *               it composed a byte-identical ISSUE and its only claim
  *               ("dividend-enabled") is true of every token, because
@@ -957,7 +957,7 @@ function renderTemplateStage({ onPick }) {
                     </li>
                 ))}
             </ul>
-            {/* : dividends are not a template setting, and the
+            {/* dividends are not a template setting, and the
                 wizard used to imply they were by selling a "Community"
                 card on a promise every token already keeps. Saying it
                 once here is what stops an issuer from abandoning a

@@ -20,7 +20,7 @@
 //   2. The 5 wizard stages + 'done' + 'error' are present as state
 //      literals; each stage wires to the next via setStage.
 //   3. All six templates appear in the TEMPLATES table and every one of
-//      them is interactive. "Community" is NOT one of them: 
+//      them is interactive. "Community" is NOT one of them.
 //      merged it into Utility because it composed a byte-identical
 //      ISSUE and sold "dividend-enabled" as though a template could
 //      confer it, when DIVIDEND has no per-token opt-in at all.
@@ -99,13 +99,13 @@ for (const id of ['meme', 'utility', 'collectible', 'edition', 'subtoken', 'cust
         `${id} template is interactive`,
     );
 }
-// : the retired Community card must not come back. Re-adding it
+// the retired Community card must not come back. Re-adding it
 // re-creates the false choice, and the harm is the inverse reading: an
 // issuer who picked Utility believes dividends are closed to them and
 // pays a second ISSUE fee to re-create the token under Community.
 assert.ok(
     !/id: 'community'/.test(src),
-    'Community is NOT a template (merged into Utility, )',
+    'Community is NOT a template (merged into Utility)',
 );
 // ... and a stale 'community' id must still land on Utility rather than
 // falling through to Custom, which shows other fields and composes a

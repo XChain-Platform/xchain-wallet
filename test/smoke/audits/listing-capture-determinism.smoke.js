@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the store-listing capture must be REPRODUCIBLE.
+// Smoke for the store-listing capture must be REPRODUCIBLE.
 //
 // verify-listing-assets.mjs tells a STALE operator to "rebuild the shell at
 // the ref you are submitting and re-run the capture, which re-pins as it

@@ -12,7 +12,7 @@
 //
 // The tool exists because Play's `Prevent unofficial installs` turned out to
 // be code Google injects into the artifact IT signs, not a device-side rule
-// (, measured 2026-08-13 by diffing the published K10 direct APK
+// (measured 2026-08-13 by diffing the published K10 direct APK
 // against the console's universal APK for the same version code, and by
 // sideloading both onto a Play-enabled emulator). The direct lane is therefore
 // safe only while the bytes it publishes are the ceremony's own, and the way

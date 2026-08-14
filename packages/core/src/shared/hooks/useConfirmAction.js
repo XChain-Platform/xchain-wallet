@@ -172,7 +172,7 @@ export function useConfirmAction() {
      * @returns {Promise<any>}   resolves with onApprove's own return value; EXCEPT on a
      *   TRANSIENT post-sign broadcast failure (§5.3.4), where it resolves with
      *   `{ queued: true, broadcast: 'queued', error }` - the tx is signed and handed to the
-     *   broadcast queue, so callers must render "Signed. Not broadcast yet." (: the
+     *   broadcast queue, so callers must render "Signed. Not broadcast yet." (the
      *   queue is drained by the user from QueuedBroadcastBanner, never automatically), not
      *   an error. A PERMANENT broadcast failure rejects (re-compose required).
      */

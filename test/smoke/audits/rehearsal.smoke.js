@@ -683,7 +683,7 @@ const check = (over) => assertRecord({
 // frozen roster said NOT-SHIPPED about the very release that shipped them,
 // and at v0.339.0 the swap was waived for BOTH desktop OSes while `assert`
 // exited 0. The waiver fired on a false premise for the first release that
-// had a real predecessor to swap from ( row 147).
+// had a real predecessor to swap from (row 147).
 //
 // The published manifest cannot be wrong in that direction, because it IS
 // the publish. These cases pin the whole decision surface, including the one

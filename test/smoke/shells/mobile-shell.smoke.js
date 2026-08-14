@@ -1033,14 +1033,14 @@ assert.match(
     /^android\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
     'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
 );
-// The feed column () is asserted, not merely tolerated. Play is its
+// The feed column is asserted, not merely tolerated. Play is its
 // own update channel, so this lane carries no electron-updater pointer and
 // publish.sh waives the channel-pointer and §7.5 rehearsal checks for a
 // partial release covering it. That waiver is safe only while the lane really
 // is store-only: a mobile row that ever claimed `updater` would take the
 // waiver with a feed nobody rehearsed, which is the substitution §7.5 exists
 // to prevent.
-// The full-feature direct APK  is its OWN lane, and this pins that
+// The full-feature direct APK is its OWN lane, and this pins that
 // separation rather than merely that the lane exists. Hanging its glob off the
 // android row above would arm the parity requirement for an artifact no
 // ceremony builds by default, failing every release until one did; a lane of

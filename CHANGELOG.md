@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 
 ### Fixed
-- `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed .
-- The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched .
+- `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed.
+- The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched.
 - Queued transactions are reported truthfully instead of promising an automatic rebroadcast.
 - Batches the network accepts are no longer refused by the wallet.
 - The batch menu entry states its real rule and settlement behavior.
@@ -28,38 +28,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.339.0] - 2026-08-12
 
 ### Added
-- The desktop wallet now offers an available update and installs it, which nothing in the app could do before .
+- The desktop wallet now offers an available update and installs it, which nothing in the app could do before.
 
 ### Fixed
-- The signed macOS app can start: the hardened runtime allows JIT, without which Electron's V8 cannot reserve executable memory and the app dies at launch .
-- The macOS `.dmg` is signed, notarized and stapled, so it installs without an unidentified-developer warning .
-- The release signature gate verifies the disk image itself on macOS instead of recording it as unverifiable .
-- The release verification page names both published releases and what each covers, instead of stating that no desktop artifact exists .
+- The signed macOS app can start: the hardened runtime allows JIT, without which Electron's V8 cannot reserve executable memory and the app dies at launch.
+- The macOS `.dmg` is signed, notarized and stapled, so it installs without an unidentified-developer warning.
+- The release signature gate verifies the disk image itself on macOS instead of recording it as unverifiable.
+- The release verification page names both published releases and what each covers, instead of stating that no desktop artifact exists.
 
 ## [0.338.0] - 2026-08-11
 
 ### Added
-- `shipped-lanes.txt` declares the three desktop lanes and the update feed each lane ships through, so `sign.sh --lane mac,linux` can cut a release the Windows signing identity does not gate .
-- `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session .
+- `shipped-lanes.txt` declares the three desktop lanes and the update feed each lane ships through, so `sign.sh --lane mac,linux` can cut a release the Windows signing identity does not gate.
+- `upload-listing-assets.mjs` uploads the pinned iOS listing screenshots to App Store Connect over the API, so the set no longer needs a signed-in console session.
 
 ### Fixed
-- The desktop update offer survives being made before the wallet is unlocked, so an update found at launch is still shown once a window exists to show it .
-- `publish.sh` keys its partial-release waivers on a lane`s declared feed rather than on the release being partial, so a desktop partial is no longer published with the channel-pointer assertion and the §7.5 rehearsal silently skipped .
-- The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see .
-- The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up" .
-- A Linux `.deb` whose payload carries no compiled native addon is refused before signing, so a rehearsal built where the addon never compiled cannot stand in for a release .
-- `reproduce.sh` forwards `XCHAIN_STAGING_FEED_URL` into the pinned container, so a staging rehearsal can be built the way a release is .
-- The desktop builder config no longer claims the project has no native dependencies; a Linux install compiles `tiny-secp256k1` .
-- `sign.sh --passphrase-file` lets a staging rehearsal sign without a pinentry, refuses the flag on a production run, and fails closed when it cannot read the file's mode .
-- The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see .
-- The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up" .
-- The lint rule's trivial-string bullet describes the real whitespace/digits/punctuation class instead of implying a letter allowance ().
-- USER_FACING_ATTRS covers the heading, emptyText and actionLabel component props that ship user-visible copy ().
-- The App Links comment states that the manifest lists Google's app-signing certificate, not both signing certs ().
-- The `no-jsx-literal-strings` rule now flags a literal held in a JSX expression container, which its own docs and helper already claimed it caught ().
-- The rule header lists all ten user-facing attributes and states the real technical-attribute exemption, instead of six and a false one ().
-- The `en` locale header no longer calls the interpreter a lightweight ICU subset: `t()` renders through formatjs with the full ICU grammar ().
-- Multisig signing no longer leaks internal crypto jargon into user-facing copy: the raw session status enum, the Schnorr aggregation hint and nonce round labels all read in plain language ().
+- The desktop update offer survives being made before the wallet is unlocked, so an update found at launch is still shown once a window exists to show it.
+- `publish.sh` keys its partial-release waivers on a lane`s declared feed rather than on the release being partial, so a desktop partial is no longer published with the channel-pointer assertion and the §7.5 rehearsal silently skipped.
+- The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see.
+- The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up".
+- A Linux `.deb` whose payload carries no compiled native addon is refused before signing, so a rehearsal built where the addon never compiled cannot stand in for a release.
+- `reproduce.sh` forwards `XCHAIN_STAGING_FEED_URL` into the pinned container, so a staging rehearsal can be built the way a release is.
+- The desktop builder config no longer claims the project has no native dependencies; a Linux install compiles `tiny-secp256k1`.
+- `sign.sh --passphrase-file` lets a staging rehearsal sign without a pinentry, refuses the flag on a production run, and fails closed when it cannot read the file's mode.
+- The demo-endpoint gate now says why a chain is absent (withdrawn for staleness, never configured, or unexplained) instead of asserting a cause it cannot see.
+- The listing screenshot harness enrols simulator biometry and refuses a Settings capture that reads "No fingerprint or face is set up".
+- The lint rule's trivial-string bullet describes the real whitespace/digits/punctuation class instead of implying a letter allowance.
+- USER_FACING_ATTRS covers the heading, emptyText and actionLabel component props that ship user-visible copy.
+- The App Links comment states that the manifest lists Google's app-signing certificate, not both signing certs.
+- The `no-jsx-literal-strings` rule now flags a literal held in a JSX expression container, which its own docs and helper already claimed it caught.
+- The rule header lists all ten user-facing attributes and states the real technical-attribute exemption, instead of six and a false one.
+- The `en` locale header no longer calls the interpreter a lightweight ICU subset: `t()` renders through formatjs with the full ICU grammar.
+- Multisig signing no longer leaks internal crypto jargon into user-facing copy: the raw session status enum, the Schnorr aggregation hint and nonce round labels all read in plain language.
 
 ## [0.337.0] - 2026-08-07
 
@@ -150,10 +150,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.333.1] - 2026-07-16
 
 ### Fixed
-- Send.jsx converts decimal amounts to sats via exact BigInt string math (exactSatsFromDecimalString) at both gate sites instead of floating-point multiply ().
-- ExecuteContractForm copy humanized: 'Review contract call' / 'Call contract #N' / 'Contract call failed.' ().
-- ContractsList empty-state de-jargoned into plain language ().
-- ADDRESS_PARAMS exported for the new wallet-sdk derivation-parity integration test pinning every per-coin byte param against the SDK NETWORKS table ().
+- Send.jsx converts decimal amounts to sats via exact BigInt string math (exactSatsFromDecimalString) at both gate sites instead of floating-point multiply.
+- ExecuteContractForm copy humanized: 'Review contract call' / 'Call contract #N' / 'Contract call failed.'.
+- ContractsList empty-state de-jargoned into plain language.
+- ADDRESS_PARAMS exported for the new wallet-sdk derivation-parity integration test pinning every per-coin byte param against the SDK NETWORKS table.
 
 
 ## [0.333.0] - 2026-06-20

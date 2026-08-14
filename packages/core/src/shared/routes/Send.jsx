@@ -1842,7 +1842,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         // and do not offer "Send another" (re-sending the same payment while
         // a signed copy is queued is the double-broadcast trap §5.3.4 forbids).
         //
-        // : this screen used to promise an automatic re-broadcast.
+        // this screen used to promise an automatic re-broadcast.
         // Nothing in the wallet re-broadcasts anything: the
         // queue drains only when the user presses "Broadcast now" in
         // QueuedBroadcastBanner, and all the wallet does on its own is toast

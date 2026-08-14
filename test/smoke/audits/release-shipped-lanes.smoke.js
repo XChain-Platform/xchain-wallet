@@ -136,7 +136,7 @@ const BASE = [
     'mas       NOT-SHIPPED  store-only  *-mas.pkg',
     'msstore   NOT-SHIPPED  store-only  *-appx.appx',
     'snap      NOT-SHIPPED  store-only  *.snap',
-    //  declared a second direct APK as an `optional` row, and every
+    // declared a second direct APK as an `optional` row, and every
     // optional row must be claimed by SOME lane or the gate refuses. Its own
     // NOT-SHIPPED lane is what lets the declaration exist before the artifact
     // does; without this line the fixture fails that check rather than the
@@ -302,7 +302,7 @@ try {
             && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
     }
 
-    // 8. THE FEED COLUMN (, operator answer to dq-11 2026-08-11).
+    // 8. THE FEED COLUMN (operator answer to dq-11 2026-08-11).
     //
     //    publish.sh waives the channel-pointer assertion and the §7.5
     //    rehearsal for a partial release. That was safe only while every

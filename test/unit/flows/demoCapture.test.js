@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: . The store-listing capture has to be REPRODUCIBLE, or
+// Unit: the store-listing capture has to be REPRODUCIBLE, or
 // verify-listing-assets.mjs's own way out ("re-capture, it re-pins as it
 // goes") can never distinguish a product change from a dice roll.
 //

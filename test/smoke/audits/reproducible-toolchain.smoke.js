@@ -472,10 +472,10 @@ function jobBlock(name) {
     //    Narrowing it to the snap target is what keeps that from happening
     //    the day the Snap credential lands.
     //    THE REHEARSAL VARIANT USED TO BE EXEMPT HERE AND IS NOT ANY MORE
-    //    ( row 136). The exemption reasoned about reproducibility -
+    //    (row 136). The exemption reasoned about reproducibility -
     //    nothing publishes a pre-signing hash for a rehearsal, so it has no
     //    reproduction for a host toolchain to break - and that was true and
-    //    beside the point. measured what a host build omits: the
+    //    beside the point. A later fix measured what a host build omits: the
     //    runner install never compiles tiny-secp256k1 into the packaged tree,
     //    so a host-built rehearsal ships the JS elliptic-curve fallback where
     //    a release ships the addon, and xr_check_payload_native refuses that
@@ -538,7 +538,7 @@ function jobBlock(name) {
 // FIXED `-e` list that did not carry it, so the container could only ever
 // produce a production set. Meanwhile a rehearsal built OUTSIDE the
 // container carries no compiled tiny-secp256k1, and xr_check_payload_native
-// in tools/release/lib.sh now refuses exactly that (). So the only
+// in tools/release/lib.sh now refuses exactly that. So the only
 // rehearsal a maintainer could build was correctly refused, and the only
 // build path that satisfies the gate could not bake the staging feed: §7.5
 // was unreachable, with every check in this file green.
@@ -633,7 +633,7 @@ function jobBlock(name) {
         + 'electron-builder.config.cjs selects the §7.5 rehearsal variant off that variable '
         + 'at build time, so without it the container can only produce a production set - '
         + 'and a rehearsal built outside the container has no compiled tiny-secp256k1, which '
-        + 'xr_check_payload_native in tools/release/lib.sh refuses (). Between the '
+        + 'xr_check_payload_native in tools/release/lib.sh refuses. Between the '
         + 'two, §7.5 has no build path at all.');
     assert.equal(set[idx - 1], '-e',
         'the forwarded XCHAIN_STAGING_FEED_URL is not preceded by `-e`, so docker reads it '
@@ -658,7 +658,7 @@ function jobBlock(name) {
     assert.equal((reproduceSh.match(/^docker run /gm) || []).length, 1,
         'reproduce.sh has more than one `docker run`. The in-place mode the release lane '
         + 'uses and the worktree mode a verifier uses must share ONE container invocation, '
-        + 'or the lane and the verification drift apart exactly as they did before .');
+        + 'or the lane and the verification drift apart exactly as they did before.');
 }
 
 // ------- home 7: the rehearsal has to be MANIFESTED from its own directory
@@ -694,7 +694,7 @@ function jobBlock(name) {
         'build.sh still cds to a hard-coded packages/desktop/dist. Under '
         + 'XCHAIN_REPRODUCE_IN_PLACE=1 that path exists from the production build in the '
         + 'same job, so a rehearsal silently manifests the production artifacts instead of '
-        + 'failing ().');
+        + 'failing.');
     assert.ok(/^cd "\/workspace\/packages\/desktop\/\$\{DIST_DIR\}"$/m.test(buildSh),
         'build.sh does not cd into the directory its own selector chose, so the selector '
         + 'decides nothing.');
@@ -915,7 +915,7 @@ function jobBlock(name) {
         'build.sh still cds to a hard-coded packages/desktop/dist. Under '
         + 'XCHAIN_REPRODUCE_IN_PLACE=1 that path exists from the production build in the '
         + 'same job, so a rehearsal silently manifests the production artifacts instead of '
-        + 'failing ().');
+        + 'failing.');
     assert.ok(/^cd "\/workspace\/packages\/desktop\/\$\{DIST_DIR\}"$/m.test(buildSh),
         'build.sh does not cd into the directory its own selector chose, so the selector '
         + 'decides nothing.');

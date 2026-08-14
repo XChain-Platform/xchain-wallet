@@ -23,7 +23,7 @@ import styles from './DemoBanner.module.css';
  * the App state into the onboarding screen so the user lands back on
  * the Welcome view (next step: G060 animated explainers).
  *
- * : the visible banner was suppressed for a while, leaving
+ * the visible banner was suppressed for a while, leaving
  * WalletDetails as the only surface that named the demo. A first-time
  * visitor never opens that page, so the funnel showed a seven-figure
  * portfolio above action forms reading "0 BTC available" and no text

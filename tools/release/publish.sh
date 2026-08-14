@@ -322,7 +322,7 @@ fi
 # and every store lane ships without a channel pointer. So "partial"
 # implied "no pointer" and the three waivers below keyed on partiality.
 #
-# The desktop lanes are nameable now , and a partial release
+# The desktop lanes are nameable now, and a partial release
 # covering them carries pointers that real installs will fetch. Keying on
 # partiality would waive the pointer assertion and the §7.5 rehearsal for
 # exactly the release that most needs both. The lane's own feed column
@@ -511,7 +511,7 @@ while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
 
 # An APK in this set has to be the CEREMONY's own build, never one Google
 # signed. Play's `Prevent unofficial installs` is code injected into the
-# artifact Google produces (measured 2026-08-13,): sideload that
+# artifact Google produces (measured 2026-08-13): sideload that
 # artifact and it reports "Local install check failed due to wrong installer",
 # starts its licence-check activity, kills the app, and leaves the Play Store
 # in front of the user. A console "download signed APK" copied in here to save

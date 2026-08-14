@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the demo disclosure reaches Home in every shell,
+// Smoke for the demo disclosure reaches Home in every shell,
 // exactly once.
 //
 // The component's own behaviour is covered by

@@ -96,7 +96,7 @@ export function isWatcherChunkLane(err) {
 
 /**
  * The heading for a transaction that was signed and then failed to reach a
- * node. Shared by every queued done screen so they say one thing .
+ * node. Shared by every queued done screen so they say one thing.
  */
 export const SIGNED_NOT_BROADCAST_TITLE = 'Signed. Not broadcast yet.';
 
@@ -104,7 +104,7 @@ export const SIGNED_NOT_BROADCAST_TITLE = 'Signed. Not broadcast yet.';
  * The sentence for a transaction that was signed and then failed to reach a
  * node. Shared with QueuedResultPanel's hint so the two surfaces agree.
  *
- * : this used to promise an automatic re-broadcast, and nothing in the
+ * this used to promise an automatic re-broadcast, and nothing in the
  * wallet re-broadcasts anything on its own. The only
  * caller of the broadcast route is the user pressing "Broadcast now" in
  * QueuedBroadcastBanner; what the wallet does on its own is show a toast when

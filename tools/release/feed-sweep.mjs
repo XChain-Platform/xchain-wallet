@@ -57,7 +57,7 @@ import { isUpdateInfoContent } from './update-info.mjs';
 // 0 finding(s)" against a feed holding a published APK and its update
 // pointer: a clean bill of health over an empty set. The one binary this
 // project has shipped to the public was the one the swap detector could not
-// see. ( rows 128 and 130 are the same blindness in the edge-cache
+// see. (rows 128 and 130 are the same blindness in the edge-cache
 // verifier and the store monitor; three tools, one cause - all written for
 // desktop, none extended when Android became the lane that shipped.)
 //

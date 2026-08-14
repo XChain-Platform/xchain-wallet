@@ -252,7 +252,7 @@ test.describe('broadcast permanence on regtest', () => {
         await expect(page.getByRole('heading', { name: 'Signed. Not broadcast yet.' }))
             .toBeVisible({ timeout: 120_000 });
 
-        // : the screen promises a reminder, not an automatic retry -
+        // the screen promises a reminder, not an automatic retry -
         // the queue only drains when the user presses "Broadcast now".
         await expect(page.getByText(/reminds you when the network is back/i)).toBeVisible();
         await expect(page.getByText(/broadcast automatically|re-broadcast automatically/i))

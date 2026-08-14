@@ -944,7 +944,7 @@ export async function checkDemoEndpoints({
             // made the 2026-08-02 run read as evidence it was not. These hosts
             // are on the zone's twelve-hostname rate-limit SKIP, so an
             // unthrottled burst measures the skip and says nothing whatever
-            // about the limit underneath it . Reported as a row so a
+            // about the limit underneath it. Reported as a row so a
             // green run states what it measured rather than implying the
             // stronger thing it cannot see.
             results.push({

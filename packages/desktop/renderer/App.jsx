@@ -2109,7 +2109,7 @@ function AppInner() {
                 );
             }
             return (
-                //  `demoBannerInHeader`: this shell mounts DemoBanner in
+                // `demoBannerInHeader`: this shell mounts DemoBanner in
                 // the layout header, which already renders above Home, so Home
                 // must not mount a second one.
                 <Home

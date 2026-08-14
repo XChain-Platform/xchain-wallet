@@ -210,7 +210,7 @@ export function synthesizeDemoBalances(addressesByChain) {
 // is supposed to fetch nothing, and it was the last input keeping two
 // store-listing captures of one tree from matching: whether the fetch
 // landed before the screenshot decided whether the whole card below it
-// sat 24px lower .
+// sat 24px lower.
 const DEMO_NATIVE_CHANGE_24H_PCT = /** @type {Record<string, number>} */ ({
     bitcoin: 1.24,
     litecoin: -0.72,

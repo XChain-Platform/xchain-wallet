@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// XC #4374: DeployContractForm rendered SDK validate / plan / metering strings
+// DeployContractForm rendered SDK validate / plan / metering strings
 // verbatim. The translator rewrites only the ones naming an internal the author
 // cannot act on, and PASSES the rest of lint-core's advisories through untouched
 // - those already carry the line, the symbol and the fix, so translating them

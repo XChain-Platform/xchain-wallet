@@ -311,7 +311,7 @@ const V2 = {
     'a good signature from someone else is still rejected on both fields');
 }
 
-// ------------------------------------- the android lane ( row 136)
+// ------------------------------------- the android lane (row 136)
 //
 // The direct-APK lane is the only one that has ever published, and this
 // sweep could not see it: PAYLOAD_DIRS listed desktop/extension/web, and
@@ -376,6 +376,6 @@ const V2 = {
 }
 
 rmSync(root, { recursive: true, force: true });
-console.log('feed-sweep.smoke.js: ok (including the  row 136 android lane: '
+console.log('feed-sweep.smoke.js: ok (including the row 136 android lane: '
     + 'the published APK is hashed against its signed manifest and the JSON '
     + 'update pointer is checked, neither of which this sweep could see)');

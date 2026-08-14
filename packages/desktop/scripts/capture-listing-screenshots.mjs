@@ -32,7 +32,7 @@
 // assert is the canvas size, because an image at the wrong size is refused by
 // App Store Connect at the end of a submission rather than here.
 //
-// REPEATABLE MEANS BYTE-IDENTICAL . This script arms capture mode
+// REPEATABLE MEANS BYTE-IDENTICAL. This script arms capture mode
 // before the renderer loads, freezing the two inputs the demo lane randomizes
 // per run: the demo wallet's mnemonic (the published BIP39 all-zero test
 // vector, so the address in the images never moves and no reader mistakes it
@@ -107,7 +107,7 @@ const {
     unlockedShell, dismissIntroCarousel, openSettings,
 } = await import(path.join(REPO_ROOT, 'test/e2e/fixtures/wallet.js'));
 const { LICENSE_VERSION } = await import(path.join(REPO_ROOT, 'packages/core/src/buildInfo.js'));
-// The frozen inputs that make this capture REPEATABLE , read from
+// The frozen inputs that make this capture REPEATABLE, read from
 // the app's own module so the harness and the demo lane it drives cannot
 // disagree about which mnemonic and which instant a capture runs at.
 const {
@@ -197,7 +197,7 @@ async function main() {
         }, [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION]);
         // Capture mode: the demo lane takes the committed demo-only mnemonic
         // instead of rolling a new one, so the address in these images is the
-        // same address on every capture .
+        // same address on every capture.
         await win.addInitScript(([key]) => {
             try { window.localStorage.setItem(key, '1'); } catch { /* capture will differ, loudly */ }
         }, [DEMO_CAPTURE_FLAG_KEY]);

@@ -36,7 +36,7 @@ import { importedAddressIdsFor } from './_importedAddressIds.js';
  * tools/release/cold-open-profile.mjs has to read the same number the app
  * uses when it works out what the zone rate limits must clear. A profile that
  * restated the interval would go quietly wrong the first time someone tuned
- * it .
+ * it.
  */
 export const BALANCE_POLL_INTERVAL_MS = 20000;
 

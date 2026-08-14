@@ -70,7 +70,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     // fetch nothing, and whether that request landed before a screenshot
     // decided whether the change line was there at all - which moved the
     // entire card 24px and was the last thing keeping two store-listing
-    // captures of one tree from matching .
+    // captures of one tree from matching.
     const isDemo = isDemoWallet(walletId);
 
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));

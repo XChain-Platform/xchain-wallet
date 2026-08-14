@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// . The wizard used to offer COMMUNITY and UTILITY as separate
+// The wizard used to offer COMMUNITY and UTILITY as separate
 // templates that composed a byte-identical ISSUE: the Community composer
 // was literally `return TEMPLATE_COMPOSERS.utility(form)` and its field
 // map was field-for-field the same. Community's only distinguishing
@@ -86,7 +86,7 @@ async function composedParams() {
 
 afterEach(() => cleanup());
 
-describe('TokenWizard template picker (: no phantom dividend template)', () => {
+describe('TokenWizard template picker (no phantom dividend template)', () => {
     it('offers no Community card, so no one can pick the template that changed nothing', async () => {
         mountWizard();
         await screen.findByText('Utility token');

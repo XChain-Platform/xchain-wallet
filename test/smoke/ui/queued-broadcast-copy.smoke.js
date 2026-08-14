@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for : the queued-broadcast copy must match the shipped
+// Smoke for the queued-broadcast copy must match the shipped
 // behaviour.
 //
 // The wallet used to tell a user whose broadcast failed that the signed
@@ -90,7 +90,7 @@ for (const file of scanned) {
         assert.fail(
             `${relative(wsRoot, file)} promises an automatic re-broadcast near "${hit[0]}" `
             + `(${pattern}). Nothing in the wallet re-broadcasts a queued transaction: the user `
-            + 'does it from QueuedBroadcastBanner. Say the wallet will REMIND them , or '
+            + 'does it from QueuedBroadcastBanner. Say the wallet will REMIND them, or '
             + 'build the auto-drain first and then change this smoke.',
         );
     }
@@ -174,7 +174,7 @@ assert.deepEqual(
     ['packages/core/src/shared/components/QueuedBroadcastBanner.jsx'],
     'the queued-broadcast route has exactly one caller (the banner\'s "Broadcast now" button). '
     + `Found: ${callers.join(', ') || 'none'}. If an auto-drain was added, the done-screen copy `
-    + 'in QUEUED_SURFACES has to be made true again ( remedy b).',
+    + 'in QUEUED_SURFACES has to be made true again (remedy b).',
 );
 
 const banner = readFileSync(join(shared, 'components', 'QueuedBroadcastBanner.jsx'), 'utf8');

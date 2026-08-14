@@ -488,7 +488,7 @@ export async function checkPlay({
 
 // --------------------------------------------------------- DIRECT lane
 //
-//  row 130. Chrome and Play are both watched above; the lane that
+// row 130. Chrome and Play are both watched above; the lane that
 // has ACTUALLY SHIPPED TO THE PUBLIC was not watched at all. The direct
 // APK, its signed manifest and its update feed have been live on
 // downloads.xchain.io since 2026-08-06 and were re-measured only when a
@@ -507,7 +507,7 @@ export async function checkPlay({
 //   - the manifest for the version the feed names answers
 //   - the APK the CDN actually serves hashes to the digest that manifest
 //     claims for it
-// That last one is the point. Rows 93/94/97/102/103 of  are all the
+// That last one is the point. Rows 93/94/97/102/103 of are all the
 // same failure - a published surface saying something false, found only
 // by looking - and the digest is the only one of these that a silent
 // re-upload would break.
@@ -735,7 +735,7 @@ production promote.
   PLAY_PACKAGE_NAME  defaults to ${PLAY_PACKAGE_NAME}
   PLAY_STATE_PATH    defaults to the file beside this script
 
-DIRECT lane ( row 130): the direct-APK download feed, which is the
+DIRECT lane (row 130): the direct-APK download feed, which is the
 only artifact this project has actually shipped to the public. Fetches
 the update pointer, the signed manifest for the version it names, and
 the APK itself, then hashes the served bytes and ALERTS if they do not

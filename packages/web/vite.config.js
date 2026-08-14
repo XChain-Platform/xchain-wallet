@@ -36,7 +36,7 @@ import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buil
 import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 // Keep the SDK's regtest full-node sidecar (a Node-only dev path, and the
 // `fullnode.regtest.json` literal beside it) out of a `store` bundle. Inert in
-// every other profile; fails the build shut if a marker survives. .
+// every other profile; fails the build shut if a marker survives.
 import { regtestSidecarPlugin } from './regtestSidecar.js';
 
 const BUILD_PROFILE = resolveBuildProfile();

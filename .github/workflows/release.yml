@@ -509,7 +509,7 @@ jobs:
       # above, and it used to be host-built on purpose. That justification -
       # nothing publishes a pre-signing hash for a rehearsal, so it has no
       # reproduction for a host C toolchain to break - was true about
-      # REPRODUCIBILITY and wrong about the artifact. measured what
+      # REPRODUCIBILITY and wrong about the artifact. A later fix measured what
       # a host build omits: `pnpm install` on the runner never compiles
       # tiny-secp256k1 for the packaged tree, so the rehearsal shipped the JS
       # elliptic-curve fallback while a release ships secp256k1.node. A

@@ -2407,7 +2407,7 @@ function AppInner() {
             // across every unlocked view, not only Home.
             return (
                 <>
-                    {/*  `demoBannerInHeader`: this shell mounts
+                    {/* `demoBannerInHeader`: this shell mounts
                         DemoBanner in the layout header, which already renders
                         above Home, so Home must not mount a second one. */}
                     <Home

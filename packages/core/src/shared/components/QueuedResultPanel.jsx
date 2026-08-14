@@ -25,7 +25,7 @@
 // deliberate ABSENCE of a "do it again" button - re-signing while a signed
 // copy is queued is the §5.3.4 double-broadcast trap) lives in one place.
 //
-// : the wording promises a REMINDER, not an automatic retry, because a
+// the wording promises a REMINDER, not an automatic retry, because a
 // reminder is all the wallet does - the queue drains only when the user
 // presses "Broadcast now" in QueuedBroadcastBanner.
 

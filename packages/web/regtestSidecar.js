@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Keep the regtest full-node SIDECAR out of a `store` build .
+// Keep the regtest full-node SIDECAR out of a `store` build.
 //
 // The coin registry (`xchain-sdk/src/coins/index.js`, canonical in
 // `xchain-hub`) resolves the FULLNODE block per network, and on regtest it
@@ -276,7 +276,7 @@ export function regtestSidecarPlugin(profile) {
                         + ' packages/web/regtestSidecar.js did not recognize the'
                         + ' shape it was given - most likely xchain-sdk rewrote'
                         + ' resolveFullnode(). Update the transform there rather'
-                        + ' than the scan .',
+                        + ' than the scan.',
                     );
                 }
             }

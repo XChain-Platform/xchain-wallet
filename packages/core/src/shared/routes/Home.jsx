@@ -41,7 +41,7 @@ const chainRegistry = registryLib.defaultRegistry();
 // Defined in flows/balances.js, next to the aggregator this re-runs, because
 // the same number is the wallet's sustained request rate against the public
 // endpoints and tools/release/cold-open-profile.mjs has to read the real one
-// when it works out what the zone rate limits must clear .
+// when it works out what the zone rate limits must clear.
 const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
 
 /**
@@ -716,7 +716,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     {loadError ? (
                         <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
                     ) : null}
-                    {/* §25.2 / Cluster J FOLLOWUP 2 / : shells that
+                    {/* §25.2 / Cluster J FOLLOWUP 2: shells that
                         mount the banner in their layout header say so with
                         `demoBannerInHeader`, and Home skips its own copy so
                         the disclosure never renders twice. Shells without a
@@ -819,7 +819,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                   * component owns that policy) so an observer sees no cue.
                   */}
                 <PanicFreezeNotice surface="home" />
-                {/* : the demo disclosure sits above the balances, so a
+                {/* the demo disclosure sits above the balances, so a
                     first-time visitor reads "this is a demo, the forms read 0
                     because there is nothing to spend" before scrolling into a
                     seven-figure fixture portfolio. Skipped when the shell

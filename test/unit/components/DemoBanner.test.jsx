@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// : the demo has to admit it is a demo, on Home, unprompted.
+// the demo has to admit it is a demo, on Home, unprompted.
 //
 // THE DEFECT THIS PINS is an absence, not a rendering bug. DemoBanner
 // ended in `return null` while still mounting for its 24h auto-expire

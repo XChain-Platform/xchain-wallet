@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for tools/release/cold-open-profile.mjs .
+// Smoke for tools/release/cold-open-profile.mjs.
 //
 // The tool answers the question the burst probe structurally cannot: what does
 // one wallet cold-open ASK FOR, on the paths the zone's two rate-limiting rules

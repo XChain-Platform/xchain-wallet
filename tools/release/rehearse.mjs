@@ -780,7 +780,7 @@ const LANE_NAME_TO_OS = { mac: 'darwin', linux: 'linux', windows: 'win32' };
  * frozen v0.338.0 roster says `mac NOT-SHIPPED` and `linux NOT-SHIPPED`
  * about the very release that shipped them, and at v0.339.0 this function
  * waived the swap for BOTH desktop OSes and `assert` exited 0. Measured,
- * not theorised ( frontier row 147): the waiver fired on a false
+ * not theorised (frontier row 147): the waiver fired on a false
  * premise for the first release that had a real predecessor to swap from,
  * which is the one case the gate exists for.
  *
@@ -904,7 +904,7 @@ export async function publishedOsesAt({ previousTag, prodFeedBase, fetchImpl = f
  *
  * `lanesInRelease` answers desktop yes/no for the whole release, which was
  * right while a desktop release meant all six lanes. A partial release
- *  makes that too coarse: v0.338.0 ships mac and Linux, and the
+ * makes that too coarse: v0.338.0 ships mac and Linux, and the
  * gate demanded passing WINDOWS lanes of it, for a lane whose artifacts it
  * deliberately does not contain and whose signing identity does not exist.
  *
@@ -1006,7 +1006,7 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
 
     const { desktop: desktopInRelease, direct: directInRelease } = lanesInRelease(releaseArtifacts);
 
-    // Which OSes this release actually carries . Null means the
+    // Which OSes this release actually carries. Null means the
     // listing could not be read, and null keeps the historical every-lane
     // behaviour rather than waiving anything.
     const releaseOses = osesInRelease(releaseArtifacts);
@@ -1026,7 +1026,7 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
         // record legitimately carries failures for lanes it has no
         // artifacts for. Demanding those made a mac+Linux release
         // unpublishable on the absence of a Windows signing identity,
-        // which is the exact coupling  removed from sign.sh.
+        // which is the exact coupling removed from sign.sh.
         if (declared && !laneShipsHere(declared)) {
             if (!lane.ok) {
                 notes.push(`lane ${lane.id} failed, and is not demanded: this release carries no `

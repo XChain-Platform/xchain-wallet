@@ -209,13 +209,13 @@ XR_SETS=(release staging)
 XR_STAGING_OSES=(linux mac windows)
 
 # The update channel a lane's users actually receive versions through,
-# declared per lane in shipped-lanes.txt (, dq-11 answer 2026-08-11).
+# declared per lane in shipped-lanes.txt (dq-11 answer 2026-08-11).
 #
 # `store-only` is every lane that ships through a store: Play, the App
 # Stores, Snap, Chrome. The store IS their update channel, so a release
 # covering only such lanes carries no electron-updater pointer and has no
 # desktop update path to rehearse - which is why publish.sh waives both
-# checks for them .
+# checks for them.
 #
 # `updater` is the three desktop lanes, whose users update through OUR
 # feed: a channel pointer we publish, walked by electron-updater, proven
@@ -1074,7 +1074,7 @@ xr_check_payload_native() {
             # 32609 lists nothing, so the branch fell through to UNCHECKED and
             # returned 0 - meaning this gate has never once read an AppImage,
             # and it failed in the one way nothing notices, by declining to
-            # judge rather than by judging wrong ( frontier row 132).
+            # judge rather than by judging wrong (frontier row 132).
             #
             # Try the candidates in order and keep the first that actually
             # lists. The extractor reading the image is the only honest test of
@@ -1143,7 +1143,7 @@ xr_check_payload_arches() {
             *) continue ;;
         esac
         # The same set answers a second question, and the §7.5 rehearsal got
-        # it wrong (): does the payload carry the addon a Linux
+        # it wrong: does the payload carry the addon a Linux
         # install compiles? Tallied apart from the arch count so each gate
         # reports the defect it actually found.
         #

@@ -55,7 +55,7 @@
 // two templates composed the same ISSUE. The Community card's tagline was
 // "Dividend-enabled, mintable" - and `dividend.js` has no per-token opt-in at
 // all (it requires only that both ticks exist and neither is sleeping), so
-// every token is dividend-enabled, including Meme and Collectible. 
+// every token is dividend-enabled, including Meme and Collectible.
 // merged the card into Utility and put the plain statement on the picker; the
 // picker copy and the composed ISSUE are covered by
 // test/unit/routes/TokenWizard.dividendCopy.test.jsx, since there was never an

@@ -33,7 +33,7 @@
 // wallet. Listing images are permanent public artifacts, so this is the one
 // thing this script must never get wrong.
 //
-// REPEATABLE MEANS BYTE-IDENTICAL . This script arms capture mode
+// REPEATABLE MEANS BYTE-IDENTICAL. This script arms capture mode
 // before the first page loads, which freezes the two inputs the demo lane
 // used to randomize: the demo wallet's mnemonic (the published BIP39
 // all-zero test vector, so the address in the images never moves and no
@@ -66,7 +66,7 @@ import { LICENSE_VERSION } from '../../core/src/buildInfo.js';
 // restated here, so the capture and the check cannot come to disagree about
 // which four files this produces.
 import { ASSETS, writePin } from '../../../tools/release/verify-listing-assets.mjs';
-// The frozen inputs that make this capture REPEATABLE . Read
+// The frozen inputs that make this capture REPEATABLE. Read
 // from the app's own module rather than restated here, so the harness and
 // the demo lane it drives cannot disagree about which mnemonic and which
 // instant a capture runs at.
@@ -188,7 +188,7 @@ async function main() {
         ],
     });
 
-    // ---- Freeze the two dice this capture used to roll  -------
+    // ---- Freeze the two dice this capture used to roll -------
     // Armed on the CONTEXT, not per page: the sign-approval window is
     // opened by Chrome rather than by this script, so a per-page init
     // script would miss the one screenshot that shows an address twice.

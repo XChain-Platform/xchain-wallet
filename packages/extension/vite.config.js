@@ -41,7 +41,7 @@ import {
 } from '../web/buildProfile.js';
 // Same reasoning, same mechanism: a `store` build carries no regtest full-node
 // sidecar. Imported from the web shell rather than copied, so the two shells
-// cannot come to disagree about what a `store` build contains. .
+// cannot come to disagree about what a `store` build contains.
 import { regtestSidecarPlugin } from '../web/regtestSidecar.js';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import sharp from 'sharp';

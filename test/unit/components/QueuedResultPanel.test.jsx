@@ -23,7 +23,7 @@ describe('QueuedResultPanel', () => {
         expect(screen.queryByText(/broadcast complete/i)).toBeNull();
     });
 
-    // : nothing in the wallet re-broadcasts a queued transaction, so the
+    // nothing in the wallet re-broadcasts a queued transaction, so the
     // panel may promise a reminder and never an automatic retry.
     it('promises a reminder, not an automatic re-broadcast', () => {
         render(<QueuedResultPanel onDone={() => {}} />);

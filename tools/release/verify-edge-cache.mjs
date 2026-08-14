@@ -46,7 +46,7 @@
 // names from update-info.mjs's own rule so it cannot drift from what the
 // build emits.
 //
-// DESKTOP IS NOT THE ONLY LANE WITH A POINTER, and until  run 20 it
+// DESKTOP IS NOT THE ONLY LANE WITH A POINTER, and until run 20 it
 // was the only lane this tool knew about. The direct-APK lane has a
 // channel pointer of its own - `android/latest.json`, read by
 // `directUpdateCheck.js` - and it is the ONLY pointer in this project that
@@ -59,7 +59,7 @@
 // name no client fetches produces a green result and protects nothing.
 //
 // AND THE EDGE HALF CANNOT BE READ FROM `cf-cache-status` AT ALL, which is
-// the same trap one layer deeper ( row 35, measured 2026-08-11). The
+// the same trap one layer deeper (row 35, measured 2026-08-11). The
 // warning above says a 404 is indistinguishable from a pass. The sharper
 // version is that a LIVE pointer behind a PROVEN-MATCHING bypass rule is
 // equally indistinguishable from one behind no rule. Four probes taken in
@@ -345,8 +345,8 @@ export function judgeArtifact(r) {
         };
     }
 
-    // Cached is not the same as cached BY RULE, and until  run 22 this
-    // function could not tell the difference.  §3's binary half is
+    // Cached is not the same as cached BY RULE, and until run 22 this
+    // function could not tell the difference. §3's binary half is
     // written at the origin as `public, max-age=31536000, immutable`, and
     // `immutable` is the one word in it a CDN fallback never supplies:
     // Cloudflare's default is a bare four-hour `max-age`. Measured 2026-08-10
