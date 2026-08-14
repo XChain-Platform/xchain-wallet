@@ -149,7 +149,7 @@
 
 .error {
     font-size: var(--xc-text-sm);
-    color: #FFFFFF;
+    color: var(--xc-on-danger);
     background: var(--xc-danger);
     border: 1px solid var(--xc-danger);
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -241,6 +241,16 @@
     padding: var(--xc-space-2);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-2);
+    background: var(--xc-surface-raised);
     word-break: break-all;
+}
+
+/* Box-shadow focus rings are not painted in forced-colors mode, so give
+ * this control a real outline there (WCAG 2.4.7). */
+@media (forced-colors: active) {
+    .mnemonicPopup:focus,
+    .mnemonicFull:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
 }

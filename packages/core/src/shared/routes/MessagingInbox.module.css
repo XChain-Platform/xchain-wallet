@@ -197,7 +197,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--xc-space-2) var(--xc-space-3);
-    color: #fff;
+    color: var(--xc-on-accent);
     background: var(--xc-accent-primary);
     border: 1px solid var(--xc-accent-primary);
     border-radius: 0 var(--xc-radius-md) var(--xc-radius-md) 0;
@@ -368,4 +368,13 @@
     white-space: nowrap;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
+}
+
+/* Box-shadow focus rings are not painted in forced-colors mode, so give
+ * this control a real outline there (WCAG 2.4.7). */
+@media (forced-colors: active) {
+    .composerInput:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
 }

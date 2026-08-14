@@ -38,7 +38,7 @@
     width: 0.625rem;
     height: 0.625rem;
     border-radius: 50%;
-    background: var(--xc-muted);
+    background: var(--xc-bg-muted);
     flex: 0 0 auto;
 }
 

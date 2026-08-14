@@ -174,7 +174,7 @@
     padding: 0 0.4rem;
     border-radius: 999px;
     background: var(--xc-accent-primary, #0b84ff);
-    color: #fff;
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: 1.35rem;

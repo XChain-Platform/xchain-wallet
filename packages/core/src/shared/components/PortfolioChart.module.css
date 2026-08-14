@@ -76,7 +76,7 @@
 
 .rangeActive {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }
 
 .rangeActive:hover {

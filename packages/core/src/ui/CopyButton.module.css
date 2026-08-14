@@ -5,7 +5,7 @@
     padding: 4px var(--xc-space-3);
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     background: var(--xc-accent-primary);
     border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-md);

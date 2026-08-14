@@ -61,7 +61,7 @@
 
 .primary {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }
 .primary:hover:not(:disabled) {
     background: var(--xc-accent-primary-hover);
@@ -92,7 +92,7 @@
 
 .danger {
     background: var(--xc-danger);
-    color: #FFFFFF;
+    color: var(--xc-on-danger);
 }
 .danger:hover:not(:disabled) {
     filter: brightness(0.92);

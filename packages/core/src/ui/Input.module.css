@@ -77,3 +77,12 @@
     font-size: var(--xc-text-sm);
     line-height: 1;
 }
+
+/* Box-shadow focus rings are not painted in forced-colors mode, so give
+ * this control a real outline there (WCAG 2.4.7). */
+@media (forced-colors: active) {
+    .input:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+}

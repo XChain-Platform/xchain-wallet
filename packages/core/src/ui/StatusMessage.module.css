@@ -49,7 +49,7 @@
 
 .error {
     background: var(--xc-danger);
-    color: #FFFFFF;
+    color: var(--xc-on-danger);
     border: 1px solid var(--xc-danger);
     font-weight: 500;
 }

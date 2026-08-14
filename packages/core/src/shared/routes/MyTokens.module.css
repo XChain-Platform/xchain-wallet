@@ -120,7 +120,7 @@
 }
 
 .error {
-    color: var(--xc-status-error);
+    color: var(--xc-danger-text);
     font-size: var(--xc-text-sm);
 }
 

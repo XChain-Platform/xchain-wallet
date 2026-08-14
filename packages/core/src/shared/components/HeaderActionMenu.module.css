@@ -146,7 +146,7 @@
 .rowBadge {
     flex: 0 0 auto;
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-size: 11px;
     font-weight: 700;
     padding: 1px 8px;
@@ -173,7 +173,7 @@
     padding: var(--xc-space-3) var(--xc-space-4);
     font-size: var(--xc-text-md);
     font-weight: 700;
-    color: #FFFFFF;
+    color: var(--xc-on-danger);
     border-radius: var(--xc-radius-md);
     cursor: pointer;
 }

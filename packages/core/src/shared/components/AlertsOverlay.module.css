@@ -49,7 +49,7 @@
 
 .count {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     padding: 1px 8px;
@@ -144,7 +144,7 @@
     appearance: none;
     align-self: flex-start;
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     border: 1px solid var(--xc-accent-primary);
     border-radius: 8px;
     padding: 6px 14px;

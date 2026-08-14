@@ -193,7 +193,7 @@
 
 .kindToggleBtnActive {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-weight: 700;
 }
 

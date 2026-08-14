@@ -418,7 +418,7 @@
     border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     cursor: pointer;

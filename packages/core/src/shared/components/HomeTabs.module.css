@@ -68,7 +68,7 @@
 
 .tabActive .tabCount {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }
 
 /* ───── Tab panel ───── */

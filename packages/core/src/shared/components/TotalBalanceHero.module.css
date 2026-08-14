@@ -138,3 +138,12 @@
 .changeNeutral {
     color: rgba(255, 255, 255, 0.7);
 }
+
+/* Engines disagree on whether gradients survive forced-colors mode, so pin
+ * the surface and its label to one system pair instead of guessing. */
+@media (forced-colors: active) {
+    .hero {
+        background: var(--xc-accent-primary);
+        color: var(--xc-on-accent);
+    }
+}

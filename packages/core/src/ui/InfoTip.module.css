@@ -50,7 +50,7 @@
 
 .trigger:hover .glyph,
 .trigger:focus-visible .glyph {
-    border-color: var(--xc-accent);
+    border-color: var(--xc-accent-primary);
     background: var(--xc-bg);
 }
 
@@ -61,7 +61,7 @@
 }
 
 .trigger:focus-visible .glyph {
-    outline: 2px solid var(--xc-accent);
+    outline: 2px solid var(--xc-accent-primary);
     outline-offset: 1px;
 }
 

@@ -709,7 +709,7 @@
 .subtabActive,
 .subtabActive:hover {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }
 
 /* Each TIS image type (large / hires / standard / icon) renders in its
@@ -1037,4 +1037,13 @@
 }
 .officialBannerProject {
     font-weight: 600;
+}
+
+/* Engines disagree on whether gradients survive forced-colors mode, so pin
+ * the surface and its label to one system pair instead of guessing. */
+@media (forced-colors: active) {
+    .balanceHero {
+        background: var(--xc-accent-primary);
+        color: var(--xc-on-accent);
+    }
 }

@@ -96,7 +96,7 @@
 
 .wifErrorBox {
     font-size: var(--xc-text-xs);
-    color: #FFFFFF;
+    color: var(--xc-on-danger);
     background: var(--xc-danger);
     border: 1px solid var(--xc-danger);
     padding: var(--xc-space-1) var(--xc-space-2);

@@ -30,5 +30,5 @@
 .segmentActive,
 .segmentActive:hover {
     background: var(--xc-accent-primary);
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }

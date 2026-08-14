@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Store builds no longer ship the regtest full-node sidecar.
 - A Play-signed APK is refused before it reaches the direct download lane.
 - A macOS build is refused when its signing credentials are missing.
+- Accent and danger fills keep readable labels, gradients are pinned, and controls keep a visible focus outline in Windows high-contrast (forced-colors) mode.
 
 ## [0.339.0] - 2026-08-12
 

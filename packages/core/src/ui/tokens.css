@@ -75,6 +75,13 @@
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
+
+    /* Labels sitting on an accent or danger fill. In the normal palettes both
+     * are white; the forced-colors block re-pairs them with the system color
+     * of the fill they sit on (Canvas on LinkText, MarkText on Mark), which is
+     * what keeps button labels readable in Windows high-contrast mode. */
+    --xc-on-accent: #FFFFFF;
+    --xc-on-danger: #FFFFFF;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
@@ -282,7 +289,9 @@
         --xc-text-inverted: Canvas;
         --xc-accent-primary: LinkText;
         --xc-accent-primary-hover: VisitedText;
+        --xc-on-accent: Canvas;
         --xc-danger: Mark;
+        --xc-on-danger: MarkText;
         --xc-focus-ring: Highlight;
     }
 }
