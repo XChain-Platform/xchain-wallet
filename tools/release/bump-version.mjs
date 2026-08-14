@@ -118,6 +118,13 @@ function stage(file, contents, what, from, to) {
     edits.push({ file, what, from, to });
 }
 
+// Escapes every regex metacharacter (not just '.') so `target` (a
+// command-line argument) can't change what the constructed RegExp matches
+// if it ever contains something other than a plain dotted version number.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const current = JSON.parse(read('package.json')).version;
 if (current === target) {
     fail(`the tree already declares ${target}`,
@@ -210,7 +217,7 @@ for (const rel of packageFiles) {
 {
     const rel = 'CHANGELOG.md';
     const text = read(rel);
-    const heading = new RegExp(`^## \\[${target.replaceAll('.', '\\.')}\\]`, 'm');
+    const heading = new RegExp(`^## \\[${escapeRegExp(target)}\\]`, 'm');
     if (heading.test(text)) {
         fail(`CHANGELOG.md already has a "## [${target}]" section`,
             'A previous bump got this far. Finish it by hand or revert it; this tool',

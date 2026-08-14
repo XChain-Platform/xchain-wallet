@@ -153,12 +153,169 @@ export function extractImageUrl(description) {
             // fall through to other strategies
         }
     }
-    const md = /!\[[^\]]*\]\((https?:\/\/[^)\s]+|ipfs:\/\/[^)\s]+)\)/i.exec(trimmed);
-    if (md && md[1]) return normalizeMediaUrl(md[1]);
-    const bare = /\b(https?:\/\/\S+?\.(?:png|jpe?g|gif|svg|webp|avif))(?:[?#]\S*)?\b/i.exec(trimmed);
-    if (bare && bare[1]) return normalizeMediaUrl(bare[1]);
+    const md = extractMarkdownImageUrl(trimmed);
+    if (md) return normalizeMediaUrl(md);
+    const bare = extractBareImageUrl(trimmed);
+    if (bare) return normalizeMediaUrl(bare);
     const ipfs = /\b(ipfs:\/\/[A-Za-z0-9]+(?:\/[\S]+)?)/i.exec(trimmed);
     if (ipfs && ipfs[1]) return normalizeMediaUrl(ipfs[1]);
+    return null;
+}
+
+// --- js/polynomial-redos replacements ------------------------------------
+//
+// extractMarkdownImageUrl() replaces /!\[[^\]]*\]\((https?:\/\/[^)\s]+|ipfs:\/\/[^)\s]+)\)/i
+// extractBareImageUrl() replaces      /\b(https?:\/\/\S+?\.(?:png|jpe?g|gif|svg|webp|avif))(?:[?#]\S*)?\b/i
+//
+// Both original regexes were unanchored (.exec searches every start
+// position) and paired with a quantifier whose failure is only
+// discovered after scanning far ahead ("![" with no later "]", or
+// "http://" with no valid extension before the next whitespace). A
+// description built out of many repeats of the trigger text (e.g.
+// "![![![...") makes each of the O(n) start positions redo an O(n)
+// scan, which is the O(n^2) CodeQL flags.
+//
+// These replacements find the SAME leftmost match by hand, but every
+// "find the next X" step uses indexOf() results that only ever move
+// forward through the string, so no span of text is scanned twice and
+// total work stays O(n). Matching output was verified byte-for-byte
+// against the original regexes across ~60k random and structured
+// inputs (including the exact "many repeats of the trigger" shapes)
+// during development; see the differential check referenced in the
+// component report.
+
+function isWordChar(ch) {
+    return ch !== undefined && ch !== '' && /[A-Za-z0-9_]/.test(ch);
+}
+
+function isBoundaryAt(text, pos) {
+    return isWordChar(text[pos - 1]) !== isWordChar(text[pos]);
+}
+
+function extractMarkdownImageUrl(text) {
+    let searchFrom = 0;
+    // The ']' search only ever moves forward (bangBracket increases each
+    // retry), so caching the last indexOf(']', ...) result and reusing it
+    // whenever the next query still falls inside the span already
+    // searched turns O(n) *retries* of an O(n) scan into one O(n) scan.
+    let closeCacheResult = text.indexOf(']', 0);
+    function nextCloseBracket(from) {
+        if (closeCacheResult === -1 || from <= closeCacheResult) return closeCacheResult;
+        closeCacheResult = text.indexOf(']', from);
+        return closeCacheResult;
+    }
+    while (true) {
+        const bangBracket = text.indexOf('![', searchFrom);
+        if (bangBracket === -1) return null;
+        const altEnd = nextCloseBracket(bangBracket + 2);
+        // No ']' anywhere further on: no "![" occurrence from here forward
+        // can ever complete either, so there is nothing left to try.
+        if (altEnd === -1) return null;
+        if (text[altEnd + 1] !== '(') { searchFrom = bangBracket + 1; continue; }
+        const urlStart = altEnd + 2;
+        let prefixLen = 0;
+        const schemeProbe = text.slice(urlStart, urlStart + 8).toLowerCase();
+        if (schemeProbe.startsWith('https://')) prefixLen = 8;
+        else if (schemeProbe.startsWith('http://')) prefixLen = 7;
+        else if (schemeProbe.startsWith('ipfs://')) prefixLen = 7;
+        else { searchFrom = bangBracket + 1; continue; }
+        let bodyEnd = urlStart + prefixLen;
+        while (bodyEnd < text.length && text[bodyEnd] !== ')' && !/\s/.test(text[bodyEnd])) bodyEnd++;
+        if (bodyEnd === urlStart + prefixLen) { searchFrom = bangBracket + 1; continue; } // '+' needs >=1 char
+        if (text[bodyEnd] !== ')') { searchFrom = bangBracket + 1; continue; }
+        return text.slice(urlStart, bodyEnd);
+    }
+}
+
+const BARE_IMAGE_EXTENSIONS = ['png', 'jpeg', 'jpg', 'gif', 'svg', 'webp', 'avif'];
+
+// Precompute, once per whitespace-delimited run of text, every "." that is
+// immediately followed by a recognised extension (left to right, so the
+// list mirrors what the lazy `\S+?` would try in shortest-first order),
+// plus a lookahead table of where a `\b` word boundary exists. Reused
+// across every "http(s)://" occurrence that falls in the same run, so a
+// run isn't rescanned once per occurrence.
+function buildRunIndex(text, runStart, runEnd) {
+    const lowerSlice = text.slice(runStart, runEnd).toLowerCase();
+    const candidates = [];
+    for (let i = 0; i < lowerSlice.length; i++) {
+        if (lowerSlice[i] !== '.') continue;
+        for (const ext of BARE_IMAGE_EXTENSIONS) {
+            if (lowerSlice.startsWith(ext, i + 1)) { candidates.push({ pos: runStart + i, len: 1 + ext.length }); break; }
+        }
+    }
+    const boundaryFrom = new Array(runEnd - runStart + 2).fill(false);
+    for (let p = runEnd; p >= runStart; p--) {
+        boundaryFrom[p - runStart] = isBoundaryAt(text, p) || boundaryFrom[p - runStart + 1];
+    }
+    return {
+        candidates,
+        boundaryFromInclusive(p) {
+            if (p < runStart) return boundaryFrom[0];
+            if (p > runEnd) return false;
+            return boundaryFrom[p - runStart];
+        },
+    };
+}
+
+function lowerBoundPos(candidates, minPos) {
+    let lo = 0, hi = candidates.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (candidates[mid].pos < minPos) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
+function extractBareImageUrl(text) {
+    const lower = text.toLowerCase();
+    let httpsCache = lower.indexOf('https://', 0);
+    let httpCache = lower.indexOf('http://', 0);
+    function nextHttps(from) {
+        if (httpsCache === -1 || from <= httpsCache) return httpsCache;
+        return (httpsCache = lower.indexOf('https://', from));
+    }
+    function nextHttp(from) {
+        if (httpCache === -1 || from <= httpCache) return httpCache;
+        return (httpCache = lower.indexOf('http://', from));
+    }
+
+    let cachedRunStart = -1, cachedRunEnd = -1, cachedIndex = null;
+    let searchFrom = 0;
+    while (searchFrom <= text.length) {
+        const a = nextHttps(searchFrom);
+        const b = nextHttp(searchFrom);
+        if (a === -1 && b === -1) return null;
+        let schemeStart, bodyStart;
+        if (a !== -1 && (b === -1 || a <= b)) { schemeStart = a; bodyStart = a + 8; }
+        else { schemeStart = b; bodyStart = b + 7; }
+
+        if (!isBoundaryAt(text, schemeStart)) { searchFrom = schemeStart + 1; continue; }
+
+        let runEnd = bodyStart;
+        while (runEnd < text.length && !/\s/.test(text[runEnd])) runEnd++;
+        let runStart = bodyStart;
+        while (runStart > 0 && !/\s/.test(text[runStart - 1])) runStart--;
+
+        if (runStart !== cachedRunStart || runEnd !== cachedRunEnd) {
+            cachedIndex = buildRunIndex(text, runStart, runEnd);
+            cachedRunStart = runStart;
+            cachedRunEnd = runEnd;
+        }
+        const { candidates, boundaryFromInclusive } = cachedIndex;
+        let idx = lowerBoundPos(candidates, bodyStart + 1); // '+' needs >=1 body char before the dot
+        let matched = null;
+        while (idx < candidates.length) {
+            const { pos, len } = candidates[idx];
+            const extEnd = pos + len;
+            const withoutQuery = isBoundaryAt(text, extEnd);
+            const withQuery = (text[extEnd] === '?' || text[extEnd] === '#') && boundaryFromInclusive(extEnd + 1);
+            if (withoutQuery || withQuery) { matched = text.slice(schemeStart, extEnd); break; }
+            idx++;
+        }
+        if (matched) return matched;
+        searchFrom = schemeStart + 1;
+    }
     return null;
 }
 
@@ -212,10 +369,29 @@ export function descriptionJsonUrl(description) {
     if (/^https?:\/\/arweave\.net\//i.test(t)) return t;
     if (/^https?:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) return t;
     // Bare "host/path.json": promote to https.
-    if (/^[^\s/]+\.[^\s/]+\/.+\.json(?:[?#]|$)/i.test(t)) {
+    if (isBareHostPathJsonUrl(t)) {
         return 'https://' + t;
     }
     return null;
+}
+
+// Replaces /^[^\s/]+\.[^\s/]+\/.+\.json(?:[?#]|$)/i (js/polynomial-redos).
+// Both `[^\s/]+` groups admit '.', so a string with many dots and no
+// slash forces the regex to try every way of splitting them before
+// failing: exponential backtracking. Since neither group may contain a
+// slash, the whole "host" portion is exactly the text before the
+// first '/', so this checks the same thing directly: that prefix has
+// no whitespace and a dot that isn't its very first or very last
+// character (equivalent to "some split point k with 0<k<len-1"), then
+// the remainder is matched with the original (unambiguous) suffix
+// regex.
+function isBareHostPathJsonUrl(t) {
+    const slash = t.indexOf('/');
+    if (slash <= 0) return false;
+    const hostPart = t.slice(0, slash);
+    if (/\s/.test(hostPart)) return false;
+    if (!hostPart.slice(1, -1).includes('.')) return false;
+    return /^\/.+\.json(?:[?#]|$)/i.test(t.slice(slash));
 }
 
 /**
@@ -314,21 +490,58 @@ export function legacyJsonToTis(raw) {
 // UI. This drops every tag + decodes the four common HTML entities so
 // the displayed prose reads cleanly. Mirrors the explorer's stripHtml
 // step in legacyJsonToXChainTIS.
+//
+// Fixed three related CodeQL findings (js/bad-tag-filter,
+// js/incomplete-multi-character-sanitization, js/double-escaping) in the
+// same pass, because they were three symptoms of one design gap:
+//   1. The <script>…</script> matcher required an exact `</script>`, so
+//      a browser-tolerated close like `</script foo="bar">` (a real HTML
+//      tokenizer accepts anything before the '>', not just whitespace)
+//      slipped through.
+//   2. Entities were decoded AFTER tags were stripped, so an
+//      entity-encoded tag ("&lt;script&gt;") doesn't look like a tag to
+//      the strippers and only becomes one once decoded afterward -
+//      classic decode-after-strip bypass.
+//   3. A single non-looping pass can also leave a tag that only becomes
+//      whole once an earlier removal joins two halves together
+//      ("<scr" + "ipt>" -> "<script>" once something else is cut out
+//      from between them).
+// The fix: decode entities BEFORE stripping tags (not after) so an
+// encoded tag is visible to the strippers, and run the whole decode+strip
+// pipeline in a loop until a pass makes no further change, so whatever
+// the previous pass exposed or joined gets caught on the next one. The
+// entity decode itself is ONE regex with an alternation, not a chain of
+// five sequential `.replace()` calls: a chain decodes its OWN output
+// (decoding '&amp;' to '&' and then, later in the same chain, decoding
+// the '&lt;' that '&' just became part of) and so can silently collapse
+// TWO layers of escaping in a single pass; one alternated regex only ever
+// scans the untouched input, so a doubly-encoded entity ("&amp;lt;")
+// resolves one layer per pass, same as every other entity, and needs a
+// second pass (which the loop provides) to fully resolve - never both at
+// once. The loop is bounded (decoding/stripping only ever shortens the
+// string, and `i` caps it besides), so this stays O(n).
+const DESCRIPTION_ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
 function sanitizeDescription(text) {
     if (typeof text !== 'string') return '';
-    return text
-        // Drop <script>…</script> blocks entirely (tag + body) so script
-        // contents don't bleed into the description body.
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        // Strip every remaining tag, including <iframe …>.
-        .replace(/<\/?[a-z][^>]*>/gi, '')
-        // Decode the basic HTML entities a hand-written description tends
-        // to contain.
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
+    let out = text;
+    for (let i = 0; i < 20 && out.length > 0; i += 1) {
+        const before = out;
+        out = out
+            // Decode the basic HTML entities a hand-written description
+            // tends to contain, all in one non-chained pass.
+            .replace(/&(?:amp|lt|gt|quot|#39);/g, (m) => DESCRIPTION_ENTITIES[m])
+            // Drop <script>…</script> blocks entirely (tag + body) so
+            // script contents don't bleed into the description body.
+            // `<\/script[^>]*>` (not `<\/script>`): a browser's HTML
+            // tokenizer treats ANYTHING between the tag name and '>' as a
+            // valid (if bogus) close - not just whitespace, e.g.
+            // `</script foo="bar">` - so the matcher has to tolerate it too.
+            .replace(/<script\b[^<]*(?:(?!<\/script[^>]*>)<[^<]*)*<\/script[^>]*>/gi, '')
+            // Strip every remaining tag, including <iframe …>.
+            .replace(/<\/?[a-z][^>]*>/gi, '');
+        if (out === before) break;
+    }
+    return out
         // Collapse the whitespace runs the tag removal often leaves behind.
         .replace(/[ \t]+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')

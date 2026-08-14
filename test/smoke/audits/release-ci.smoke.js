@@ -47,6 +47,17 @@ const WORKFLOW = '.github/workflows/release.yml';
 assert.ok(existsSync(join(root, WORKFLOW)), `${WORKFLOW} exists`);
 const wf = read(WORKFLOW);
 
+// A boundary-aware "does the file reference this exact URL" check: a plain
+// substring search would also match the URL appearing as a piece of some
+// other, longer URL (e.g. with more path segments tacked on), which would
+// let the assertion pass without the file actually pointing at this page.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function fileReferencesUrl(text, url) {
+    return new RegExp(`(^|[^\\w./-])${escapeRegExp(url)}(?![\\w./-])`).test(text);
+}
+
 // Split the file into top-level sections and jobs by indentation. A
 // real YAML parser would be better, but adding a dependency to read one
 // file is worse, and the shape here is fixed and simple.
@@ -279,7 +290,7 @@ for (const [name, block] of jobs) {
 // what this pins now; each is the reason the workflow file alone is not
 // enough.
 const SETUP_DOC = 'components/wallet/release/ci-setup.md';
-assert.ok(wf.includes('https://docs.xchain.io/components/wallet/release/ci-setup'),
+assert.ok(fileReferencesUrl(wf, 'https://docs.xchain.io/components/wallet/release/ci-setup'),
     'release.yml points at the settings the file itself cannot enforce');
 
 // Everything below pins the page's WORDING, which is all an offline suite

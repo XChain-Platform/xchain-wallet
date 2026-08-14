@@ -919,6 +919,11 @@ if (invokedDirectly) {
                 process.exit(2);
             }
             try {
+                // js/regex-injection: deliberate no-op here. `--expect-log`
+                // is a grep-style CLI flag whose whole job is letting the
+                // operator pass a real regex to match against launch logs
+                // (this is local release tooling, not a network-facing
+                // input path); escaping it would defeat the flag's purpose.
                 expect.push(new RegExp(pattern));
             } catch (err) {
                 process.stderr.write(`launch-probe: --expect-log '${pattern}' is not a regex: ${String(err?.message || err)}\n`);

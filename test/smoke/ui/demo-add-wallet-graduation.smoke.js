@@ -47,6 +47,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 
+// Escapes every regex metacharacter so a literal string can be embedded in
+// `new RegExp()` without any of it being read as pattern syntax.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ─── 1. exported surface ────────────────────────────────────────────────
 
 for (const [name, fn] of Object.entries({
@@ -136,7 +142,7 @@ assert.match(
 for (const lane of ['create', 'import', 'import-freewallet']) {
     assert.match(
         onboardingSrc,
-        new RegExp(`handleGraduate\\('${lane.replace(/-/g, '-')}'`),
+        new RegExp(`handleGraduate\\('${escapeRegExp(lane)}'`),
         `the ${lane} lane graduates out of the demo first`,
     );
 }

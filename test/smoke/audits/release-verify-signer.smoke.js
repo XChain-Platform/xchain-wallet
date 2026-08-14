@@ -41,7 +41,7 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -156,7 +156,7 @@ try {
     const detached = join(work, 'detached', 'tools', 'release');
     mkdirSync(detached, { recursive: true });
     for (const f of ['verify.sh', 'lib.sh']) {
-        writeFileSync(join(detached, f), execFileSync('cat', [join(root, 'tools', 'release', f)]));
+        writeFileSync(join(detached, f), readFileSync(join(root, 'tools', 'release', f)));
     }
     const unbound = spawnSync('bash', [join(detached, 'verify.sh'), '--input', dir, '--tag', 'v9.9.9'], {
         env: { ...gpgEnv, XCHAIN_VERIFY_KEY: '' },

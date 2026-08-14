@@ -51,7 +51,7 @@ function aliasFor(pkgName, subpath, target, pkgDir) {
     const [head] = specifier.split('*');
     return {
         find: new RegExp(`^${escapeRe(head)}(.*)$`),
-        replacement: abs.replace('*', '$1'),
+        replacement: abs.replaceAll('*', '$1'),
     };
 }
 

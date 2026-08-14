@@ -38,6 +38,16 @@
  * @param {typeof fetch} [opts.fetch]
  * @returns {Promise<RegtestFundResult>}
  */
+// Was `.replace(/\/+$/, '')`: unanchored, so js/polynomial-redos flags the
+// O(n^2) worst case where the string does NOT end in '/' (the engine
+// backtracks the trailing run at every start position before giving up).
+// A while-loop strips the exact same trailing '/'s in one O(n) pass.
+function stripTrailingSlashes(s) {
+    let end = s.length;
+    while (end > 0 && s.charCodeAt(end - 1) === 47 /* '/' */) end--;
+    return s.slice(0, end);
+}
+
 export async function fundBtcFromMiner({ minerUrl, address, amount, apiKey, fetch: fetchImpl }) {
     const doFetch = fetchImpl ?? globalThis.fetch;
     if (typeof doFetch !== 'function') {
@@ -56,7 +66,7 @@ export async function fundBtcFromMiner({ minerUrl, address, amount, apiKey, fetc
 
     let resp;
     try {
-        resp = await doFetch(minerUrl.replace(/\/+$/, '') + '/', {
+        resp = await doFetch(stripTrailingSlashes(minerUrl) + '/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

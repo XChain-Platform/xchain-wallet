@@ -347,8 +347,13 @@ export function decodeCloudflareEmails(html) {
 /** Tags, scripts, styles and comments out; entities folded. No CF decoding. */
 function visibleText(html) {
     return normalizeText(String(html)
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        // `<\/script[^>]*>` (not `<\/script>`): a browser's HTML tokenizer
+        // treats ANYTHING between the tag name and '>' as a valid (if
+        // bogus) close, not just whitespace, e.g. `</script foo="bar">` -
+        // so the matcher has to tolerate it too or that content survives
+        // into what's supposed to be the "visible" (script-free) text.
+        .replace(/<script[\s\S]*?<\/script[^>]*>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style[^>]*>/gi, ' ')
         .replace(/<!--[\s\S]*?-->/g, ' ')
         .replace(/<[^>]+>/g, ' '));
 }

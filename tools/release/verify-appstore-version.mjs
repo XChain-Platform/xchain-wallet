@@ -522,6 +522,11 @@ const b64u = (b) => Buffer.from(b).toString('base64').replace(/=/g, '').replace(
  * The DER signature Node produces is re-encoded to the fixed-width r||s form
  * JOSE requires; a DER signature is accepted by nothing and fails as a 401,
  * which reads exactly like a bad key.
+ *
+ * js/insufficient-password-hash no-change: this is ECDSA-SHA256 (ES256)
+ * JWT SIGNING against Apple's private API key, not password hashing.
+ * SHA-256 is what ES256 requires; swapping it for a slow KDF would produce
+ * a signature App Store Connect rejects, not a more secure one.
  */
 export function ascToken({ keyPem, keyId, issuer, nowSec = Math.floor(Date.now() / 1000) }) {
     const header = b64u(JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' }));

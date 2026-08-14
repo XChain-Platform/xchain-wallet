@@ -66,9 +66,13 @@ assert.ok(/Discard/.test(qb),
 // --- 3. Background handlers register the queue routes -------------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
+// Escapes every regex metacharacter (not just '.') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 for (const route of ['broadcast.queue.list', 'broadcast.queue.broadcast', 'broadcast.queue.discard']) {
     assert.ok(
-        new RegExp(`host\\.register\\(\\s*['"]${route.replace(/\./g, '\\.')}['"]`).test(bg),
+        new RegExp(`host\\.register\\(\\s*['"]${escapeRegExp(route)}['"]`).test(bg),
         `background registers ${route}`,
     );
 }

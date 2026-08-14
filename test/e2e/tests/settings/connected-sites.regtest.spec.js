@@ -85,6 +85,17 @@ const PASSWORD = 'regtestpassword123';
 const ORIGIN = 'https://evil-e2e.example';
 const WILDCARD = '*.wild-e2e.example';
 
+// A boundary-aware "does this text mention that origin" check: a plain
+// substring search would also match the origin appearing inside a longer,
+// different host (e.g. "https://evil-e2e.example.attacker.test"), which
+// would let the audit-entry assertion pass against the wrong origin.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function textMentionsOrigin(text, origin) {
+    return new RegExp(`(^|[^\\w.-])${escapeRegExp(origin)}($|[^\\w.-])`).test(text);
+}
+
 /** Opens Settings and walks into the Connected Sites sub-page. */
 async function openConnectedSites(page) {
     await openSettings(page);
@@ -264,7 +275,7 @@ test.describe('Settings: connected sites', () => {
 
                     const newest = auditRows(page).first();
                     const newestText = (await newest.innerText()).trim();
-                    expect(newestText.includes(ORIGIN),
+                    expect(textMentionsOrigin(newestText, ORIGIN),
                         'the newest audit entry is not the origin that was just unblocked')
                         .toBe(true);
                     expect(/\bunblock\b/.test(newestText),

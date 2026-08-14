@@ -27,7 +27,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
     from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
@@ -421,7 +421,11 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
         // artifact name contains a space.
         const name = decodeURIComponent(req.url.replace(/^\/+/, ''));
         if (missing !== null && name.endsWith(missing)) { res.writeHead(404); res.end(); return; }
-        const file = join(dir, name);
+        const file = resolvePath(dir, name);
+        // The request path decides `name`, so a '../' can walk it outside
+        // `dir` (js/path-injection): resolve it and require the result to
+        // still be inside the served directory before anything touches disk.
+        if (!file.startsWith(resolvePath(dir) + sep)) { res.writeHead(404); res.end(); return; }
         if (!existsSync(file) || !statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
         const size = wrongLength !== null && name.endsWith(wrongLength)
             ? statSync(file).size + 4096

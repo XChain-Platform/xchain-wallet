@@ -47,6 +47,13 @@ import { UPDATE_FEED_URL, updateNoticeText } from '../../../packages/web/src/upd
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 
+// Escapes every regex metacharacter (not just '.') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 if (spawnSync('gpg', ['--version'], { encoding: 'utf8' }).status !== 0) {
     process.stderr.write('android-update-rehearsal.smoke.js: SKIPPED - gpg is not installed\n');
     process.exit(0);
@@ -208,7 +215,7 @@ const probe = (feedDir, over = {}) => {
     });
     const r = await probe(feed.dir);
     assert.equal(r.failed, 'version');
-    assert.match(r.reason, new RegExp(`says ${PREVIOUS.replace(/\./g, '\\.')}`));
+    assert.match(r.reason, new RegExp(`says ${escapeRegExp(PREVIOUS)}`));
 }
 
 {

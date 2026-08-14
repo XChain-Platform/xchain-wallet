@@ -99,6 +99,16 @@ function resolveFetch() {
     return null;
 }
 
+// Was `.replace(/\/+$/, '')`: unanchored, so js/polynomial-redos flags the
+// O(n^2) worst case where the string does NOT end in '/' (the engine
+// backtracks the trailing run at every start position before giving up).
+// A while-loop strips the exact same trailing '/'s in one O(n) pass.
+function stripTrailingSlashes(s) {
+    let end = s.length;
+    while (end > 0 && s.charCodeAt(end - 1) === 47 /* '/' */) end--;
+    return s.slice(0, end);
+}
+
 // The oracle prices real (mainnet) coins; every coin family's rate
 // comes from its mainnet explorer regardless of which network the
 // user is currently on (a regtest BTC balance is still priced as BTC,
@@ -112,7 +122,7 @@ function explorerUrlForCoin(chainCoin) {
     const raw = (deps.explorerUrlByCoin && deps.explorerUrlByCoin[chainCoin])
         || defaultRegistry().byCoin(chainCoin).find((d) => d.networkKind === 'mainnet')?.explorer?.defaultUrl;
     if (typeof raw !== 'string' || raw.length === 0) return null;
-    return raw.replace(/\/+$/, '') + '/' + tickerForCoin(chainCoin);
+    return stripTrailingSlashes(raw) + '/' + tickerForCoin(chainCoin);
 }
 
 async function fetchJson(fetchImpl, url) {

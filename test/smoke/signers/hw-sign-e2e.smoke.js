@@ -59,6 +59,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 
+// Escapes every regex metacharacter (not just '.') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ---------------------------------------------------------------
 // Mock renderer-side TrezorSigner + transport
 // ---------------------------------------------------------------
@@ -536,7 +543,7 @@ for (const action of [
     'action.advanced.hw',
 ]) {
     assert.ok(
-        new RegExp(`registerHwHandler\\('${action.replace(/\./g, '\\.')}'`).test(bgSrc),
+        new RegExp(`registerHwHandler\\('${escapeRegExp(action)}'`).test(bgSrc),
         `background host registers ${action} via registerHwHandler`,
     );
 }

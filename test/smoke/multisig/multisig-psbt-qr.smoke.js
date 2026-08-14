@@ -233,6 +233,14 @@ assert.ok(/createXcwCollector|addChunkToCollector/.test(route),
 // Strip the code identifiers first: publicNonceHex, contributeMultisigNonce,
 // aggregatedSchnorrSig and the STATUS_LABELS keys are wire/API vocabulary and
 // are allowed to say "nonce"/"Schnorr". Only the remaining text is user copy.
+//
+// js/incomplete-multi-character-sanitization no-change: CodeQL flags this
+// block as though it were an HTML sanitizer that could still leave an "on"
+// (event-handler) attribute behind. `route` here is source-file TEXT read
+// for a jargon-in-copy assertion, never HTML and never rendered; `routeCopy`
+// is only ever passed to `.test()` below. There is no DOM/HTML involved, so
+// the "on" it flags is the shared substring inside "[Nn]once", not an
+// event-handler attribute.
 const routeCopy = route
     .replace(/\b\w*[Nn]once\w*\b(?=\s*[:,)\]}.=])/g, '')
     .replace(/\bcontributeMultisigNonce\b|\bpublicNonceHex\b|\baggregatedSchnorrSig\b|\baggNonce\b/g, '')

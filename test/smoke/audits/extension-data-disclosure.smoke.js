@@ -170,7 +170,11 @@ assert.deepEqual(documented, actual,
 // Desktop-only egress must not be claimed. Named explicitly rather than left
 // to the set comparison, because this is the specific mistake the Play form
 // already made once and had to correct  .
-assert.ok(!documented.includes('downloads.xchain.io'),
+// `documented` is an array of exact hostnames (see above), so `.some(===)`
+// is the same exact-match check as `.includes()` here; spelled out this way
+// so it reads unambiguously as an exact-equality membership test rather
+// than a substring search that could match a lookalike host.
+assert.ok(!documented.some((host) => host === 'downloads.xchain.io'),
     `${DISCLOSURE} §3 claims downloads.xchain.io. That is the desktop update feed; the extension updates `
     + 'through the browser store and never requests it.');
 assert.ok(/downloads\.xchain\.io\W+(?:is deliberately absent|is not contacted)/.test(doc),

@@ -20,6 +20,10 @@
 
 name: Electron cadence
 
+# Least privilege for the default GITHUB_TOKEN: every job here only reads the repo.
+permissions:
+  contents: read
+
 on:
   schedule:
     # Mondays, 09:00 UTC. Weekly is the right resolution for a 28-day rule.

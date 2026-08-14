@@ -33,6 +33,25 @@
 // a still-valid signed tx as `failed` loses money (the fee) - the
 // conservative default keeps the signed tx recoverable.
 
+// Stand-in for `/first.*second/i` that avoids js/polynomial-redos: an
+// unanchored ".*" between two literals backtracks over every start
+// position in the string, which is O(n^2) on adversarial node-reject
+// text (e.g. many repeats of the first literal with no second literal
+// ever following). Two indexOf() calls give the identical "first
+// appears, then second appears later, case-insensitively" match in
+// linear time.
+function orderedSubstringMatcher(first, second) {
+    const needleA = first.toLowerCase();
+    const needleB = second.toLowerCase();
+    return {
+        test(reason) {
+            const haystack = String(reason).toLowerCase();
+            const atA = haystack.indexOf(needleA);
+            return atA !== -1 && haystack.indexOf(needleB, atA + needleA.length) !== -1;
+        },
+    };
+}
+
 // Inputs spent or missing, or a confirmed conflicting tx: the signed tx
 // is dead and only a re-compose (new inputs) can succeed.
 const PERMANENT_PATTERNS = [
@@ -43,7 +62,7 @@ const PERMANENT_PATTERNS = [
     /missing\s+inputs/i,
     /txn-already-known/i,           // already confirmed under a different path
     /txn-already-in-mempool/i,      // an identical tx is already queued (not a re-sign case)
-    /conflict.*confirmed/i,
+    orderedSubstringMatcher('conflict', 'confirmed'),
     /already\s+spent/i,
     // A dust output is a property of the signed BYTES, not of the node's mood: every node
     // on every relay policy rejects the same transaction, so re-queuing it retries forever.
@@ -57,7 +76,7 @@ const PERMANENT_PATTERNS = [
 const TRANSIENT_PATTERNS = [
     /ECONNREFUSED/i, /ECONNRESET/i, /ETIMEDOUT/i, /ENOTFOUND/i,
     /timeout/i, /timed out/i, /network/i, /socket hang up/i,
-    /too-long-mempool-chain/i, /mempool.*full/i, /mempool min fee/i,
+    /too-long-mempool-chain/i, orderedSubstringMatcher('mempool', 'full'), /mempool min fee/i,
     /min relay fee/i, /insufficient priority/i, /rate.?limit/i,
     /502|503|504/,
     /txn-mempool-conflict/i,        // a competing UNconfirmed tx; may clear

@@ -23,6 +23,13 @@ const wsRoot = join(here, '..', '..', '..');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
 
+// Escapes every regex metacharacter (not just '.') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // --- 1. Provider exposes every §43.2 method (G126, G128, G129) ---------
 
 const providerPath = join(ext, 'src', 'inject', 'xchainProvider.js');
@@ -81,7 +88,7 @@ for (const route of [
     // v0.290.0 / Cluster Q FOLLOWUP 4: handlers.js shadows host.register
     // with a local register() that wraps every channel in entry/exit
     // logging. Either form satisfies "background registers <route>".
-    const escaped = route.replace(/\./g, '\\.');
+    const escaped = escapeRegExp(route);
     const wrapped = new RegExp(`\\bregister\\(\\s*['"]${escaped}['"]`).test(handlers);
     const bare = new RegExp(`host\\.register\\(\\s*['"]${escaped}['"]`).test(handlers);
     assert.ok(wrapped || bare, `background registers ${route}`);

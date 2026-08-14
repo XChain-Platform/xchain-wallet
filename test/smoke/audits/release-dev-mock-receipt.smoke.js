@@ -33,7 +33,7 @@
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import {
-    chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync,
+    chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -235,7 +235,7 @@ const RECEIPT_REFUSAL = 'exited 0 without saying it read anything';
 // again. This is the one assertion tying the contract to the shipped gate.
 {
     const gate = join(root, 'tools/build-reproduce/check-no-dev-mock.sh');
-    const src = execFileSync('cat', [gate], { encoding: 'utf8' });
+    const src = readFileSync(gate, { encoding: 'utf8' });
     assert.match(src, /OK - \$scanned bundle\(s\) scanned/,
         'check-no-dev-mock.sh no longer prints the "N bundle(s) scanned" receipt that sign.sh '
         + 'requires before it will write `enforced`. Change both together: as it stands, no gate '

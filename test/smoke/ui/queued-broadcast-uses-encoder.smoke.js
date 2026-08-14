@@ -97,7 +97,10 @@ console.log('queued-broadcast-uses-encoder smoke OK');
  * don't confuse the brace-depth tracker.
  */
 function sliceRouteBody(src, route) {
-    const escaped = route.replace(/\./g, '\\.');
+    // Escapes every regex metacharacter (not just '.') so a literal string
+    // can be embedded in `new RegExp()` without a stray backslash in the
+    // input changing how the following character is interpreted.
+    const escaped = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const m = new RegExp(`host\\.register\\(\\s*['"]${escaped}['"]`, 'g').exec(src);
     if (!m) return null;
     const arrowIdx = src.indexOf('=>', m.index);

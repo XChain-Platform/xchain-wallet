@@ -634,6 +634,13 @@ for (const line of storeInstalledSteps) {
 // still honour it. The second half is DRIVEN, not read, because "it accepts a
 // directory" is precisely the kind of claim that rots silently.
 
+// Escapes every regex metacharacter (not just '.') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const AUDIT = 'packages/extension/scripts/remote-code-audit.mjs';
 const auditSteps = disclosure.split('\n').filter((l) => /^[⬜✅]/.test(l) && /remote.code audit/i.test(l));
 
@@ -644,7 +651,7 @@ assert.equal(auditSteps.length, 1,
 
 // The command block under that step has to name the audit AND give it a target.
 const auditBlock = disclosure.slice(disclosure.indexOf(auditSteps[0]));
-const auditCmd = auditBlock.match(new RegExp(`node\\s+${AUDIT.replace(/[.]/g, '\\.')}([^\\n]*)`));
+const auditCmd = auditBlock.match(new RegExp(`node\\s+${escapeRegExp(AUDIT)}([^\\n]*)`));
 assert.ok(auditCmd,
     `the disclosure's remote-code step no longer shows the ${AUDIT} command. An operator answering a `
     + 'permanent store question from a step with no command in it is answering from memory.');

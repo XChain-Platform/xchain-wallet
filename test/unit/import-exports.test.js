@@ -161,7 +161,7 @@ describe('every named/default import resolves to a real export', () => {
                     const prefix = key.slice(0, -1);
                     if (subpath.startsWith(prefix)) {
                         const t = pick(val);
-                        if (t) return t.replace('*', subpath.slice(prefix.length));
+                        if (t) return t.replaceAll('*', subpath.slice(prefix.length));
                     }
                 }
             }

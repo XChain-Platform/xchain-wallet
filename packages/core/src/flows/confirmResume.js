@@ -139,10 +139,18 @@ export function resumeAfter(session, txid) {
     if (path && path.length > 0 && txid) {
         let cursor = body;
         for (let i = 0; i < path.length - 1; i += 1) {
-            if (typeof cursor[path[i]] !== 'object' || cursor[path[i]] === null) cursor[path[i]] = {};
-            cursor = cursor[path[i]];
+            const key = path[i];
+            // Guard against a malicious/corrupted `txidPath` walking into
+            // Object.prototype (js/prototype-polluting-assignment): each
+            // segment is checked immediately before it is used as a key.
+            if (key === '__proto__' || key === 'constructor' || key === 'prototype') { cursor = null; break; }
+            if (typeof cursor[key] !== 'object' || cursor[key] === null) cursor[key] = {};
+            cursor = cursor[key];
         }
-        cursor[path[path.length - 1]] = txid;
+        const lastKey = path[path.length - 1];
+        if (cursor && lastKey !== '__proto__' && lastKey !== 'constructor' && lastKey !== 'prototype') {
+            cursor[lastKey] = txid;
+        }
     }
     return { method: after.method, body };
 }

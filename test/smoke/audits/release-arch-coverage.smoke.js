@@ -48,6 +48,13 @@ const expected = join(repo, 'tools', 'release', 'expected-artifacts.txt');
 
 const V = '0.333.1';
 
+// Escapes every regex metacharacter (not just '*') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // The real names, as electron-builder emits them from the pinned config:
 // EVERY artifactName is user-forced since §7.1's rename, so every artifact
 // carries its arch on BOTH arches and is lowercase-with-dashes. The deb keeps
@@ -155,7 +162,7 @@ try {
         // The row still matches the OTHER arch, so the pre-existing
         // MISSING check stays silent - this message is the only one.
         check(`and it says which arch, for ${pattern} ${arch}`,
-            new RegExp(`MISSING-ARCH\\s+pattern '\\${pattern.replace(/\*/g, '\\*')}' has no ${arch}`)
+            new RegExp(`MISSING-ARCH\\s+pattern '\\${escapeRegExp(pattern)}' has no ${arch}`)
                 .test(r.out.replace(/\\\*/g, '*')) || r.out.includes(`has no ${arch} artifact`),
             r.out);
     }

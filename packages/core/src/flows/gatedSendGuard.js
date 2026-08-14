@@ -130,11 +130,21 @@ export function clearGatedGroupsCache() {
 
 const THRESHOLD_SCALE = 18;
 
+// Was `.replace(/0+$/, '')`: unanchored, so js/polynomial-redos flags the
+// O(n^2) worst case where the string does NOT end in '0' (the engine
+// backtracks the trailing run at every start position before giving up).
+// A while-loop strips the exact same trailing '0's in one O(n) pass.
+function stripTrailingZeros(s) {
+    let end = s.length;
+    while (end > 0 && s.charCodeAt(end - 1) === 48 /* '0' */) end--;
+    return s.slice(0, end);
+}
+
 /** @param {string} s @returns {{ int: string, frac: string } | null} */
 function parseDecimal(s) {
     const m = /^(\d+)(?:\.(\d+))?$/.exec(String(s ?? '').trim());
     if (!m) return null;
-    return { int: m[1], frac: (m[2] || '').replace(/0+$/, '') };
+    return { int: m[1], frac: stripTrailingZeros(m[2] || '') };
 }
 
 /** @param {string} s @returns {bigint | null} value at THRESHOLD_SCALE */

@@ -93,9 +93,15 @@ const expectedHandlers = [
     'bridge.parallel',
     'bridge.signIn',
 ];
+// Escapes every regex metacharacter (not just '.') so a literal string can
+// be embedded in `new RegExp()` without a stray backslash in the input
+// changing how the following character is interpreted.
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 for (const channel of expectedHandlers) {
-    const inWrapper = new RegExp(`\\bregister\\('${channel.replace(/\./g, '\\.')}'`).test(bridgeSrc);
-    const bareHostRegister = new RegExp(`host\\.register\\('${channel.replace(/\./g, '\\.')}'`).test(bridgeSrc);
+    const inWrapper = new RegExp(`\\bregister\\('${escapeRegExp(channel)}'`).test(bridgeSrc);
+    const bareHostRegister = new RegExp(`host\\.register\\('${escapeRegExp(channel)}'`).test(bridgeSrc);
     assert.ok(inWrapper, `bridge handler ${channel} registers through the logging wrapper`);
     assert.ok(!bareHostRegister, `bridge handler ${channel} no longer calls host.register directly`);
 }

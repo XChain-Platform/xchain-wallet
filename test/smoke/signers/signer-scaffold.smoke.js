@@ -54,6 +54,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 
+// Checks the URL's actual hostname rather than substring-searching the raw
+// URL: a substring check would also pass for a lookalike host that merely
+// contains "trezor.io" somewhere (e.g. "trezor.io.evil.example" or
+// "evil.example/trezor.io"), which defeats the point of pinning the vendor
+// update-page host.
+function updateUrlHostIs(url, host) {
+    if (typeof url !== 'string') return false;
+    try {
+        const h = new URL(url).hostname;
+        return h === host || h.endsWith(`.${host}`);
+    } catch {
+        return false;
+    }
+}
+
 // --- 1. Firmware manifest shape --------------------------------------
 
 assert.ok(
@@ -86,7 +101,7 @@ assert.ok(
     'Ledger Nano X entry present',
 );
 assert.ok(
-    manifest.vendors.trezor.updateUrl?.includes('trezor.io'),
+    updateUrlHostIs(manifest.vendors.trezor.updateUrl, 'trezor.io'),
     'trezor updateUrl points at trezor.io',
 );
 
@@ -101,7 +116,7 @@ const { checkFirmware, compareVersions } = signers;
     assert.equal(v.vendor, 'trezor');
     assert.equal(v.displayName, 'Trezor Model T');
     assert.equal(v.recommended, '2.7.2');
-    assert.ok(v.updateUrl?.includes('trezor.io'));
+    assert.ok(updateUrlHostIs(v.updateUrl, 'trezor.io'));
 }
 
 // 2b. Outdated (above minimum, below recommended).
@@ -138,7 +153,7 @@ const { checkFirmware, compareVersions } = signers;
 {
     const v = checkFirmware({ vendor: 'trezor', model: 'TX9', version: '9.0.0' });
     assert.equal(v.status, 'unknown');
-    assert.ok(v.updateUrl?.includes('trezor.io'));
+    assert.ok(updateUrlHostIs(v.updateUrl, 'trezor.io'));
 }
 
 // 2g. Missing version string: 'unknown'.

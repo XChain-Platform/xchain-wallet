@@ -1,4 +1,8 @@
 name: CI
+# Least privilege for the default GITHUB_TOKEN: every job here only reads the repo.
+permissions:
+  contents: read
+
 on:
   push:
     # develop is where all work lands; master only ever receives release PRs.
