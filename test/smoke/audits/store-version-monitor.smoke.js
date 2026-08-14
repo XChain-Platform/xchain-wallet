@@ -19,6 +19,7 @@
 // `fetchImpl` injected into `run()`.
 
 import { strict as assert } from 'node:assert';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,12 +33,16 @@ import {
     checkItem,
     classifyPlayListingHtml,
     extractVersionFromListingHtml,
+    judgeDirect,
     judgePlay,
+    parseDirectFeedVersion,
+    parseReleaseManifest,
     parsePublishLog,
     readState,
     run,
     writeState,
 } from '../../../tools/release/store-version-monitor.mjs';
+import { parseUpdateFeed } from '../../../packages/web/src/update/directUpdateCheck.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'xchain-store-version-monitor-'));
 const logPath = join(dir, 'publish-log.md');
@@ -161,7 +166,7 @@ writeFileSync(logPath, LOG);
     // clear message and must NOT attempt any network call.
     let fetchCalled = false;
     const fetchImpl = async () => { fetchCalled = true; return ok(listingHtml('0.333.1')); };
-    const result = await run({ argv: [], env: {}, fetchImpl });
+    const result = await run({ argv: ['--no-direct'], env: {}, fetchImpl });
     assert.equal(result.exitCode, 2, 'unset CWS_MAIN_ITEM_ID is a config error, not a clean run');
     assert.match(result.stderr, /CWS_MAIN_ITEM_ID is not set/);
     assert.equal(result.stdout, '', 'nothing is reported as checked, because nothing was');
@@ -172,7 +177,7 @@ writeFileSync(logPath, LOG);
     // silent on stderr (so cron mails nothing).
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: ['--no-play'],
+        argv: ['--no-play', '--no-direct'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', CWS_BETA_ITEM_ID: 'bbbb', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -186,7 +191,7 @@ writeFileSync(logPath, LOG);
     // loud on stderr so cron mails it.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('9.9.9')) });
     const result = await run({
-        argv: ['--no-play'],
+        argv: ['--no-play', '--no-direct'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -200,7 +205,7 @@ writeFileSync(logPath, LOG);
     // code from both clean (0) and alert (1), loud on stderr.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => { throw new Error('ETIMEDOUT'); } });
     const result = await run({
-        argv: ['--no-play'],
+        argv: ['--no-play', '--no-direct'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -213,7 +218,7 @@ writeFileSync(logPath, LOG);
     // error: it must not alert or fail the run by itself.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: ['--no-play'],
+        argv: ['--no-play', '--no-direct'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
         fetchImpl,
     });
@@ -225,7 +230,7 @@ writeFileSync(logPath, LOG);
     // compare against), not a clean run.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: ['--no-play'],
+        argv: ['--no-play', '--no-direct'],
         env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: join(dir, 'no-such-file.md') },
         fetchImpl,
     });
@@ -236,7 +241,7 @@ writeFileSync(logPath, LOG);
     // --main-id / --beta-id flags override the environment.
     const fetchImpl = fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('0.333.1')) });
     const result = await run({
-        argv: ['--main-id', 'aaaa', '--log', logPath, '--no-play'],
+        argv: ['--main-id', 'aaaa', '--log', logPath, '--no-play', '--no-direct'],
         env: {},
         fetchImpl,
     });
@@ -246,6 +251,29 @@ writeFileSync(logPath, LOG);
     const result = await run({ argv: ['--help'], env: {} });
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /usage: store-version-monitor/);
+
+    // --help must describe EVERY flag the parser accepts, and the list is
+    // derived from the parser rather than written out here - a literal list
+    // is the shape that let this fail in the first place. The direct lane
+    // shipped with `--no-direct` and `--direct-base` in the parser and
+    // neither in the usage text, while `tools/release/README.md` tells an
+    // operator to run `--help` for the flags. So the only way to learn the
+    // lane could be turned off was to trigger the every-lane-disabled error.
+    // The next lane added must not be able to repeat that.
+    const source = readFileSync(join(here, '../../../tools/release/store-version-monitor.mjs'), 'utf8');
+    const parsed = [...source.matchAll(/a === '(--[a-z-]+)'/g)].map((m) => m[1]);
+    assert.ok(
+        parsed.length >= 12,
+        `expected to derive the parser's flags from the source, found ${parsed.length} - `
+        + 'the derivation broke, so this check would have passed while asserting nothing',
+    );
+    for (const flag of new Set(parsed)) {
+        assert.ok(
+            result.stdout.includes(flag),
+            `${flag} is accepted by parseArgs but appears nowhere in --help, so an operator `
+            + 'reading the documented interface cannot know it exists',
+        );
+    }
 }
 
 // ------------------------------- the parser against the REAL publish log
@@ -461,7 +489,7 @@ const PKG = 'io.xchain.wallet.android';
 
 {
     const first = await run({
-        argv: ['--no-chrome', '--state', statePath],
+        argv: ['--no-chrome', '--no-direct', '--state', statePath],
         env: {},
         fetchImpl: fakeFetch({ 'play.google.com': () => ok(playHtml(PKG, 'XChain Wallet')) }),
     });
@@ -471,7 +499,7 @@ const PKG = 'io.xchain.wallet.android';
 
     // Same state file, listing now gone: this is the transition the lane exists for.
     const after = await run({
-        argv: ['--no-chrome', '--state', statePath],
+        argv: ['--no-chrome', '--no-direct', '--state', statePath],
         env: {},
         fetchImpl: fakeFetch({ 'play.google.com': () => ok('gone', 404) }),
     });
@@ -481,19 +509,139 @@ const PKG = 'io.xchain.wallet.android';
 }
 {
     // Disabling both lanes must not look like a clean run.
-    const none = await run({ argv: ['--no-chrome', '--no-play'], env: {} });
+    const none = await run({ argv: ['--no-chrome', '--no-play', '--no-direct'], env: {} });
     assert.equal(none.exitCode, 2, 'a run that checked nothing is a config error, not clean');
 }
 {
     // The Chrome contract is unchanged: no item id is still a hard config
     // error - but it must now also say the Play lane did not run, so an
     // operator cannot read it as "the Android listing is being watched".
-    const unset = await run({ argv: [], env: {} });
+    const unset = await run({ argv: ['--no-direct'], env: {} });
     assert.equal(unset.exitCode, 2);
     assert.match(unset.stderr, /--no-chrome/,
         'the config error must name the way to run the Play lane on its own');
 }
 
+
+// --- the monitor's feed validator must not drift from the app's -------
+//
+// The monitor deliberately COPIES directUpdateCheck.js's rule instead of
+// importing it: this tool is deployed standalone (origin-host cron) and is
+// copied alone into a scratch repo by rollback-rerelease.sh, so an import
+// into packages/web makes it unloadable in both places. That was measured,
+// not guessed - the import broke the rollback smoke the moment it landed.
+// A copy is only safe if something proves the two agree, so this does.
+{
+    const table = [
+        JSON.stringify({ version: '0.336.0' }),
+        JSON.stringify({ version: '1.2.3' }),
+        JSON.stringify({ version: '0.0.0' }),
+        JSON.stringify({ version: '01.2.3' }),      // leading zero
+        JSON.stringify({ version: '1.2' }),         // too few parts
+        JSON.stringify({ version: '1.2.3-rc.1' }),  // pre-release
+        JSON.stringify({ version: 3 }),             // not a string
+        JSON.stringify({ notVersion: '1.2.3' }),
+        JSON.stringify([{ version: '1.2.3' }]),     // array
+        JSON.stringify(null),
+    ];
+    const score = (fn, text) => {
+        try { return { ok: true, value: fn(JSON.parse(text)) }; }
+        catch { return { ok: false, value: null }; }
+    };
+    for (const text of table) {
+        const mine = score(parseDirectFeedVersion, text);
+        const app = score(parseUpdateFeed, text);
+        assert.deepEqual(mine, app,
+            `the monitor and the app disagree about ${text}: a feed one accepts and the `
+            + 'other rejects means the monitor is not watching what the app reads');
+    }
+}
+
+// ------------------------------------------------- the DIRECT lane
+//
+//  row 130. The lane watching the only artifact this project has
+// actually shipped. Every case below is scored by `judgeDirect`, which is
+// pure precisely so the wrong-answer branches - the ones that only exist
+// when something is broken - can be exercised without waiting for a real
+// outage.
+{
+    const APK = 'xchain-wallet-v0.336.0.apk';
+    const bytes = Buffer.from('pretend this is a signed APK');
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const feed = JSON.stringify({ version: '0.336.0' });
+    const manifest = [
+        '# XChain Wallet release manifest',
+        '# tag: v0.336.0',
+        `${digest}  ./${APK}`,
+    ].join('\n');
+
+    // The parser reads the tag and the digest table and ignores the rest.
+    const parsed = parseReleaseManifest(manifest);
+    assert.equal(parsed.tag, 'v0.336.0');
+    assert.equal(parsed.digests[APK], digest);
+
+    // The happy path.
+    const good = judgeDirect({ feedText: feed, manifestText: manifest, apkBytes: bytes, apkName: APK });
+    assert.equal(good.state, 'ok', 'a served APK matching its signed manifest is the contract');
+    assert.equal(good.version, '0.336.0');
+
+    // THE CASE THIS LANE EXISTS FOR: the published binary is not the one
+    // that was signed. A silent re-upload changes nothing a human would
+    // notice on the page, and everything about what a user installs.
+    const swapped = judgeDirect({
+        feedText: feed, manifestText: manifest, apkName: APK,
+        apkBytes: Buffer.from('a DIFFERENT binary at the same URL'),
+    });
+    assert.equal(swapped.state, 'alert', 'a served APK that does not match its manifest is an ALERT');
+    assert.match(swapped.detail, /is NOT the one that was signed/);
+
+    // Absence is ALWAYS an alert here - no latch, unlike Play - because
+    // this lane is published now and in use by every sideloaded install.
+    const goneFeed = judgeDirect({ feedText: null });
+    assert.equal(goneFeed.state, 'alert', 'a missing direct feed is an outage, never a "not yet"');
+    // Assert WHICH alert. Without this the case passes even with the
+    // absence branch deleted, because a null body then falls through and
+    // trips the validator instead - a green tick for a check that is gone.
+    assert.match(goneFeed.detail, /feed is GONE/,
+        'the absence of the feed must be reported as absence, not as a parse failure');
+    const goneApk = judgeDirect({ feedText: feed, manifestText: manifest, apkBytes: null, apkName: APK });
+    assert.equal(goneApk.state, 'alert', 'a manifest digest with no file behind it is a dead download link');
+
+    // A feed the APP would reject must not be scored clean by the monitor:
+    // the two must not disagree about what a valid feed is, which is why
+    // this reuses directUpdateCheck's own validator rather than a copy.
+    const badFeed = judgeDirect({ feedText: JSON.stringify({ version: '1.2' }) });
+    assert.equal(badFeed.state, 'alert', "a feed the app's own validator rejects is an alert");
+
+    // Feed and manifest describing two different releases.
+    const skewed = judgeDirect({
+        feedText: JSON.stringify({ version: '0.337.0' }), manifestText: manifest, apkName: APK,
+    });
+    assert.equal(skewed.state, 'alert', 'a feed and manifest naming different tags is a mis-serve');
+    // Same trap: with the tag check deleted this still reaches an alert by
+    // a different route (no bytes), so the message is what pins it.
+    assert.match(skewed.detail, /two different releases/,
+        'the skew must be reported as skew, not as a missing file');
+
+    // Cannot-tell is never folded into clean, same rule as the Chrome lane.
+    assert.equal(judgeDirect({ transport: 'ETIMEDOUT' }).state, 'inconclusive',
+        'an unreachable feed is UNSURE, never OK');
+
+    // A manifest that lists no digest for the APK cannot be scored either way.
+    assert.equal(judgeDirect({ feedText: feed, manifestText: '# tag: v0.336.0', apkName: APK }).state,
+        'inconclusive', 'no digest for the file means nothing was actually compared');
+}
+{
+    // The lane is ON by default, and a Chrome config error must not silently
+    // take it down with it - that is the failure the Play lane already had
+    // to name once, and the direct lane is the one with real users.
+    const unset = await run({ argv: [], env: {} });
+    assert.match(unset.stderr, /published APK went unchecked/,
+        'a missing Chrome id must say the direct lane did not run either');
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md, '
-    + 'and the Play absence latch)');
+    + 'the Play absence latch, and the  row 130 direct lane: a served APK that does not '
+    + 'match its signed manifest is an ALERT, and absence needs no latch here because this lane '
+    + 'is already published)');

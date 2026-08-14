@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/signers-trezor",
-    "version": "0.337.1",
+    "version": "0.339.0",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "description": "TrezorSigner - XChain Wallet HW-signer integration for Trezor devices (§17.3 / §18). Vendor-specific implementation extracted from @xchain-wallet/core per §9 / G001.",

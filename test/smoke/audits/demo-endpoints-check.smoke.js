@@ -34,8 +34,8 @@ import { strict as assert } from 'node:assert';
 
 import {
     demoProbesFor, classifyProbe, checkDemoEndpoints, burstProbe, EXIT,
-    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS, preflightVerdict,
-    defaultBurstCount,
+    DEMO_COIN, STALE_AFTER_MS, MAX_INDEXER_LAG_BLOCKS, MAX_DEMO_LAG_BLOCKS, preflightVerdict,
+    replicaHaltVerdict, defaultBurstCount,
 } from '../../../tools/release/verify-demo-endpoints.mjs';
 import { coldOpenBurstSize } from '../../../tools/release/cold-open-profile.mjs';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
@@ -201,10 +201,15 @@ assert.ok(
 
 const NOW = 1_786_000_000_000;
 const secondsAgo = (ms) => Math.floor((NOW - ms) / 1000);
-const explorerBody = (coin, { blockTime, lag } = {}) => {
+// `halted` defaults to `false` so every freshness-focused fixture below keeps
+// exercising the freshness branch unchanged; a test of the halt signal itself
+// passes `halted` explicitly or `omitHalted: true` to build a body with no
+// replica_halted key at all (the older-explorer-deployment shape).
+const explorerBody = (coin, { blockTime, lag, halted = false, omitHalted = false } = {}) => {
     const body = { available: { [coin]: 'a network' } };
     if (blockTime !== undefined) body.last_block_time = { [coin]: blockTime };
     if (lag !== undefined) body.decoder_lag_blocks = { [coin]: lag };
+    if (!omitHalted) body.replica_halted = { [coin]: halted };
     return JSON.stringify(body);
 };
 const demoProbe = { service: 'explorer', coin: 'TBTC', isDemoCoin: true };
@@ -234,8 +239,26 @@ assert.match(behindDemo.detail, /trails the decoder by 756,703 blocks/);
 // widen them past the state actually found in production.
 assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(STALE_AFTER_MS - 60_000), lag: 0 })).state, 'live');
 assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(STALE_AFTER_MS + 60_000), lag: 0 })).state, 'failure');
-assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS })).state, 'live');
-assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS + 1 })).state, 'failure');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_DEMO_LAG_BLOCKS })).state, 'live');
+assert.equal(at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: MAX_DEMO_LAG_BLOCKS + 1 })).state, 'failure');
+
+// The loose ceiling still governs every OTHER chain, so tightening the demo coin
+// did not quietly re-tune the rest of the board.
+assert.doesNotMatch(
+    at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS })).detail,
+    /NOT FUNDABLE/);
+assert.match(
+    at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(60_000), lag: MAX_INDEXER_LAG_BLOCKS + 1 })).detail,
+    /NOT FUNDABLE/);
+
+// The exact production shape of 2026-08-10, which both loose thresholds passed:
+// a replica fail-closed on a consensus divergence at block 147814 while its
+// source ran on, reported as `lag 41, newest block 5h old` and certified "demo
+// chain current" for hours. A halt is terminal, so no rate threshold sized for
+// ordinary churn can see it; only the tight demo ceiling does.
+const haltedDemo = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(5 * 60 * 60_000), lag: 41 }));
+assert.equal(haltedDemo.state, 'failure', 'a frozen demo replica must not read as current');
+assert.match(haltedDemo.detail, /trails the decoder by 41 blocks \(ceiling 2\)/);
 
 // A body with no clock at all cannot answer the question, and this script's
 // standing rule is that a check which cannot tell says so instead of passing.
@@ -255,6 +278,66 @@ assert.doesNotMatch(
     /NOT FUNDABLE/,
     'a current non-demo chain is not warned about, so the warning means something',
 );
+
+// --- 2b. Replica halt: the fact a lag ceiling can only proxy (row 84) ---
+//
+// A lag ceiling only ever proxies a halt: a replica halted AT its source's
+// tip has no gap to measure until the source mints its next block. Measured
+// 2026-08-10: this gate exited 0 twice, 22 minutes apart, over a provably
+// halted demo chain, because MAX_DEMO_LAG_BLOCKS had nothing yet to measure.
+// replica_halted asks the fact instead of inferring one from a rate.
+
+// Demo coin, halted, at zero lag with a fresh clock: the exact gap this row
+// closes. Every freshness signal reads perfectly current; only the halt flag
+// knows better.
+const demoHaltedAtTip = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: 0, halted: true }));
+assert.equal(demoHaltedAtTip.state, 'failure', 'a halted demo replica is fatal even with zero lag and a fresh clock');
+assert.match(demoHaltedAtTip.detail, /HALT/, 'the message names it as a HALT, not staleness or lag');
+assert.match(demoHaltedAtTip.detail, /operator/, 'the message says a halt needs an operator, the different remedy from staleness');
+assert.doesNotMatch(demoHaltedAtTip.detail, /trails the decoder/, 'the halt reason must not be reported as a lag number');
+assert.doesNotMatch(demoHaltedAtTip.detail, /newest indexed block/, 'the halt reason must not be reported as staleness');
+
+// Non-demo coin, halted: the existing loud, non-fatal NOT FUNDABLE register,
+// same shape as a stale non-demo chain - reported, never held over.
+const otherHalted = at(otherProbe, explorerBody('TDOGE', { blockTime: secondsAgo(60_000), lag: 0, halted: true }));
+assert.equal(otherHalted.state, 'live', 'a halted chain nobody funds is information, not a blocker');
+assert.match(otherHalted.detail, /NOT FUNDABLE/);
+assert.match(otherHalted.detail, /HALT/);
+assert.match(otherHalted.detail, new RegExp(`Fund the demo wallet on ${DEMO_COIN}`));
+
+// Demo coin, field absent entirely (an older explorer deployment): NOT a pass
+// and NOT a failure, the gate's existing inconclusive/unknown class.
+const demoHaltAbsent = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: 0, omitHalted: true }));
+assert.equal(demoHaltAbsent.state, 'inconclusive', 'an explorer that predates replica_halted cannot silently pass');
+assert.match(demoHaltAbsent.detail, /halt state cannot be checked/);
+
+// Demo coin, field explicitly null: the same unknown class as absent, not a
+// third outcome and not a pass.
+const demoHaltNull = classifyProbe(demoProbe, {
+    status: 200,
+    body: JSON.stringify({
+        available: { TBTC: 'a network' },
+        last_block_time: { TBTC: secondsAgo(60_000) },
+        decoder_lag_blocks: { TBTC: 0 },
+        replica_halted: { TBTC: null },
+    }),
+}, { nowMs: NOW });
+assert.equal(demoHaltNull.state, 'inconclusive', 'a null halt reading is exactly as unusable as an absent one');
+assert.match(demoHaltNull.detail, /halt state cannot be checked/);
+
+// Demo coin, field false: passes exactly as it did before this signal
+// existed, so a healthy replica is never held over a signal it already
+// satisfies.
+const demoHaltFalse = at(demoProbe, explorerBody('TBTC', { blockTime: secondsAgo(60_000), lag: 0, halted: false }));
+assert.equal(demoHaltFalse.state, 'live', 'a replica that reports no halt passes as today');
+
+// Unit level: replicaHaltVerdict() itself, no network, exercising all three
+// states directly rather than only through classifyProbe's fold.
+assert.equal(replicaHaltVerdict({ replica_halted: { TBTC: true } }, 'TBTC').state, 'halted');
+assert.equal(replicaHaltVerdict({ replica_halted: { TBTC: false } }, 'TBTC').state, 'ok');
+assert.equal(replicaHaltVerdict({ replica_halted: { TBTC: null } }, 'TBTC').state, 'unknown');
+assert.equal(replicaHaltVerdict({}, 'TBTC').state, 'unknown');
+assert.equal(replicaHaltVerdict(null, 'TBTC').state, 'unknown');
 
 // The flag has to reach the real probe list, or every check above is dead code
 // in production. Exactly one explorer probe carries it, and it is the pinned
@@ -330,6 +413,7 @@ const HEALTHY = {
         available: { TBTC: 'BTC (testnet)' },
         last_block_time: { TBTC: nowSec - 60 },
         decoder_lag_blocks: { TBTC: 0 },
+        replica_halted: { TBTC: false },
     }),
     'https://encoder.example/TBTC/status': JSON.stringify({ status: 'healthy', tracker_reachable: true, tracker_synced: true }),
 };
@@ -811,11 +895,62 @@ const staleDemoRun = await checkDemoEndpoints({
             available: { TBTC: 'BTC (testnet)' },
             last_block_time: { TBTC: nowSec - 32 * 24 * 60 * 60 },
             decoder_lag_blocks: { TBTC: 756_703 },
+            replica_halted: { TBTC: false },
         })),
     }),
 });
 assert.equal(staleDemoRun.exit, EXIT.FAILURE);
 assert.equal(staleDemoRun.results.find((r) => r.service === 'explorer').state, 'failure');
+
+// A halted demo replica has to reach the EXIT CODE too, same property as the
+// stale case above and the reason row 84's residue is a gate defect and not
+// just a wording one: this is the exact 2026-08-10 shape (zero-ish lag, fresh
+// clock) that this gate certified "live" twice, 22 minutes apart.
+const haltedDemoRun = await checkDemoEndpoints({
+    descriptors: FAKE,
+    fetchImpl: routed({
+        'https://explorer.example/TBTC/api/status': reply(JSON.stringify({
+            available: { TBTC: 'BTC (testnet)' },
+            last_block_time: { TBTC: nowSec - 60 },
+            decoder_lag_blocks: { TBTC: 0 },
+            replica_halted: { TBTC: true },
+        })),
+    }),
+});
+assert.equal(haltedDemoRun.exit, EXIT.FAILURE, 'a halted demo replica fails the run even at zero lag and a fresh clock');
+const haltedDemoResult = haltedDemoRun.results.find((r) => r.service === 'explorer');
+assert.equal(haltedDemoResult.state, 'failure');
+assert.match(haltedDemoResult.detail, /HALT/);
+
+// A halted NON-demo chain stays live and the demo path still passes: the same
+// "reported, never held over" property already pinned for a stale non-demo
+// chain, one signal over.
+const haltedOtherFake = [
+    { ...FAKE[0], coin: 'dogecoin' },
+];
+const haltedOtherRun = await checkDemoEndpoints({
+    descriptors: haltedOtherFake,
+    fetchImpl: async (url, init = {}) => {
+        if (url.includes('/api/status')) {
+            return {
+                status: 200,
+                text: async () => JSON.stringify({
+                    available: { TDOGE: 'a network' },
+                    last_block_time: { TDOGE: nowSec - 60 },
+                    decoder_lag_blocks: { TDOGE: 0 },
+                    replica_halted: { TDOGE: true },
+                }),
+            };
+        }
+        if (url.endsWith('/status')) return { status: 200, text: async () => HEALTHY['https://encoder.example/TBTC/status'] };
+        if (init.method === 'POST') return { status: 200, text: async () => RPC_PONG };
+        return { status: 200, text: async () => '{}' };
+    },
+});
+const haltedOtherResult = haltedOtherRun.results.find((r) => r.service === 'explorer');
+assert.equal(haltedOtherResult.state, 'live', 'a halted chain nobody funds is information, not a blocker for the demo path');
+assert.match(haltedOtherResult.detail, /NOT FUNDABLE/);
+assert.match(haltedOtherResult.detail, /HALT/);
 
 // A failure outranks an inconclusive: a run that has both must not be reported
 // as merely "could not tell", which reads as retryable.

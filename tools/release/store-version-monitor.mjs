@@ -161,6 +161,7 @@
 // monitor cannot tell "never published" from "was published and is now
 // gone", which is the one distinction it exists to make.
 
+import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -485,12 +486,234 @@ export async function checkPlay({
     };
 }
 
+// --------------------------------------------------------- DIRECT lane
+//
+//  row 130. Chrome and Play are both watched above; the lane that
+// has ACTUALLY SHIPPED TO THE PUBLIC was not watched at all. The direct
+// APK, its signed manifest and its update feed have been live on
+// downloads.xchain.io since 2026-08-06 and were re-measured only when a
+// person happened to run a sweep by hand.
+//
+// WHY THIS LANE NEEDS NO LATCH, which is the whole difference from Play.
+// Play's absence is the normal starting state, so a 404 there is only an
+// alarm once the listing has been seen live (hence the latch). The direct
+// lane is the opposite: it is published NOW, so absence is ALWAYS an
+// alert and there is no state to keep. A lane that needs no state file
+// cannot have a corrupt one, which removes the entire failure mode the
+// Play lane's exit-2 branch exists for.
+//
+// WHAT THIS CHECKS: presence and IDENTITY.
+//   - the feed answers and parses under the same strict rule the app applies
+//   - the manifest for the version the feed names answers
+//   - the APK the CDN actually serves hashes to the digest that manifest
+//     claims for it
+// That last one is the point. Rows 93/94/97/102/103 of  are all the
+// same failure - a published surface saying something false, found only
+// by looking - and the digest is the only one of these that a silent
+// re-upload would break.
+//
+// WHAT THIS DELIBERATELY DOES NOT CHECK, stated so nobody reads "a direct
+// monitor exists" as covering it: the GPG signature on the manifest. That
+// needs a keyring and a trust decision about which key is canonical, and
+// a monitor that imports a key from the same host it is auditing proves
+// nothing. Verifying K1 against the published fingerprint stays the
+// documented human step (release/verify-release.md).
+
+/**
+ * The feed's ONLY field, validated exactly as the app validates it.
+ *
+ * Deliberately a COPY of `directUpdateCheck.js`'s rule rather than an
+ * import of it. This tool is deployed standalone - it runs from cron on
+ * origin-host, and `rollback-rerelease.sh` copies it alone into a scratch
+ * repo - so an import reaching into `packages/web` makes it unloadable
+ * in both places (measured: it broke the rollback smoke immediately).
+ * The two must not drift, so the smoke asserts this function and the
+ * app's agree across a table of inputs, where both files exist.
+ *
+ * @param {unknown} body
+ * @returns {string} the validated version
+ */
+export function parseDirectFeedVersion(body) {
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        throw new Error('body must be a JSON object');
+    }
+    const version = body.version;
+    if (typeof version !== 'string') throw new Error('missing a string "version"');
+    if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+        throw new Error(`"${String(version).slice(0, 32)}" is not a plain MAJOR.MINOR.PATCH`);
+    }
+    return version;
+}
+
+export const DEFAULT_DIRECT_BASE = 'https://downloads.xchain.io/wallet';
+
+/**
+ * Parse a release manifest into its tag and its digest table.
+ *
+ * The format is `sha256␠␠./name` lines under `# key: value` comments, and
+ * the ONLY fields read are the tag and the digests - anything else is a
+ * comment as far as this is concerned.
+ *
+ * @param {string} text
+ * @returns {{tag: string|null, digests: Record<string, string>}}
+ */
+export function parseReleaseManifest(text) {
+    if (typeof text !== 'string') throw new TypeError('manifest must be text');
+    const digests = {};
+    let tag = null;
+    for (const raw of text.split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (line.startsWith('#')) {
+            const m = /^#\s*tag:\s*(\S+)/.exec(line);
+            if (m) tag = m[1];
+            continue;
+        }
+        const m = /^([0-9a-f]{64})\s+\.?\/?(.+)$/i.exec(line);
+        if (m) digests[m[2].trim()] = m[1].toLowerCase();
+    }
+    return { tag, digests };
+}
+
+/**
+ * Score the direct lane from already-fetched material. Pure, so every
+ * branch is testable without touching the network - including the ones
+ * that only appear when something is wrong, which is exactly when a
+ * monitor must not be improvising.
+ *
+ * @param {{feedText?: string|null, manifestText?: string|null,
+ *          apkBytes?: Uint8Array|null, apkName?: string,
+ *          transport?: string|null}} m
+ * @returns {{state: 'ok'|'alert'|'inconclusive', detail: string, version: string|null}}
+ */
+export function judgeDirect(m) {
+    if (m.transport) {
+        return { state: 'inconclusive', detail: `could not reach the feed: ${m.transport}`, version: null };
+    }
+    if (m.feedText === null || m.feedText === undefined) {
+        return {
+            state: 'alert',
+            detail: 'the direct update feed is GONE. It is published and in use by every '
+                + 'sideloaded install, so its absence is an outage, never a "not yet"',
+            version: null,
+        };
+    }
+    let version;
+    try {
+        version = parseDirectFeedVersion(JSON.parse(m.feedText));
+    } catch (e) {
+        return {
+            state: 'alert',
+            detail: `the feed is served but the app's own validator rejects it (${e.message}), `
+                + 'so every direct install is reading a feed it will discard',
+            version: null,
+        };
+    }
+    if (m.manifestText === null || m.manifestText === undefined) {
+        return {
+            state: 'alert',
+            detail: `the feed names ${version} but no signed manifest is published for it, so a `
+                + 'user told to verify their download has nothing to verify against',
+            version,
+        };
+    }
+    const { tag, digests } = parseReleaseManifest(m.manifestText);
+    if (tag && tag !== `v${version}`) {
+        return {
+            state: 'alert',
+            detail: `the feed says ${version} and the manifest it points at is tagged ${tag}: `
+                + 'these are two different releases and one of them is being mis-served',
+            version,
+        };
+    }
+    const expected = digests[m.apkName];
+    if (!expected) {
+        return {
+            state: 'inconclusive',
+            detail: `the manifest for ${tag || version} lists no digest for ${m.apkName}, so the `
+                + 'served APK cannot be checked against it',
+            version,
+        };
+    }
+    if (!m.apkBytes) {
+        return {
+            state: 'alert',
+            detail: `the manifest publishes a digest for ${m.apkName} but the CDN does not serve `
+                + 'the file: the download page links a binary that is not there',
+            version,
+        };
+    }
+    const actual = createHash('sha256').update(m.apkBytes).digest('hex');
+    if (actual !== expected) {
+        return {
+            state: 'alert',
+            detail: `the APK served for ${version} hashes to ${actual} but its signed manifest `
+                + `claims ${expected}. The published binary is NOT the one that was signed`,
+            version,
+        };
+    }
+    return {
+        state: 'ok',
+        detail: `${m.apkName} is published and its SHA-256 matches the signed manifest `
+            + `(${actual.slice(0, 8)}…${actual.slice(-4)})`,
+        version,
+    };
+}
+
+/**
+ * Fetch and score the direct lane.
+ * @returns {Promise<{key: string, itemId: string, state: string, version: string|null, detail: string}>}
+ */
+export async function checkDirect({
+    base = DEFAULT_DIRECT_BASE, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS,
+} = {}) {
+    const root = String(base).replace(/\/+$/, '');
+    const get = async (url, asBytes = false) => {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), timeoutMs);
+        try {
+            const res = await fetchImpl(url, { signal: ctl.signal, redirect: 'error' });
+            if (res.status === 404) return null;
+            if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+            return asBytes ? new Uint8Array(await res.arrayBuffer()) : await res.text();
+        } finally { clearTimeout(timer); }
+    };
+
+    let feedText = null; let manifestText = null; let apkBytes = null;
+    let apkName = ''; let transport = null;
+    try {
+        feedText = await get(`${root}/android/latest.json`);
+        if (feedText !== null) {
+            // Read the version the same way the app does before using it to
+            // build any further URL: a malformed feed must not send this
+            // monitor fetching an attacker-shaped path.
+            let version = null;
+            try { version = parseDirectFeedVersion(JSON.parse(feedText)); } catch { /* judged below */ }
+            if (version) {
+                apkName = `xchain-wallet-v${version}.apk`;
+                manifestText = await get(`${root}/RELEASE_HASHES/v${version}.txt`);
+                if (manifestText !== null) apkBytes = await get(`${root}/android/${apkName}`, true);
+            }
+        }
+    } catch (e) {
+        transport = e.message;
+    }
+
+    const judged = judgeDirect({ feedText, manifestText, apkBytes, apkName, transport });
+    return {
+        key: 'direct', itemId: `${root}/android`, state: judged.state,
+        version: judged.version, detail: judged.detail,
+    };
+}
+
 // ------------------------------------------------------------------ CLI
 
 const USAGE = `usage: store-version-monitor.mjs [--main-id <id>] [--beta-id <id>]
                                   [--log <path>] [--timeout <ms>] [--json]
                                   [--play-package <id>] [--state <path>]
-                                  [--no-play] [--no-chrome]
+                                  [--direct-base <url>]
+                                  [--no-play] [--no-chrome] [--no-direct]
+                                  [--help]
 
 CHROME lane: compares the live Chrome Web Store version of each
 configured item against packages/extension/docs/publish-log.md
@@ -512,6 +735,19 @@ production promote.
   PLAY_PACKAGE_NAME  defaults to ${PLAY_PACKAGE_NAME}
   PLAY_STATE_PATH    defaults to the file beside this script
 
+DIRECT lane ( row 130): the direct-APK download feed, which is the
+only artifact this project has actually shipped to the public. Fetches
+the update pointer, the signed manifest for the version it names, and
+the APK itself, then hashes the served bytes and ALERTS if they do not
+match the digest that manifest claims. It keeps NO state and needs no
+latch: this lane is published now, so an absent feed is always an
+outage rather than a "not published yet". It does NOT verify the
+manifest's GPG signature - that needs a keyring and a trust decision,
+and a monitor importing a key from the host it audits proves nothing -
+so verifying K1 stays the documented human step.
+
+  DIRECT_FEED_BASE   defaults to ${DEFAULT_DIRECT_BASE}
+
 Exit codes: 0 clean, 1 ALERT (rogue publish, or a listing that was live
 and is now gone), 2 config error (item id unset, log unreadable, latch
 unreadable, or both lanes disabled - the monitor did NOT run a full
@@ -520,25 +756,25 @@ same as clean).
 
 Install, release-host cron (see the manual QA checklist at
 https://docs.xchain.io/components/wallet/release/qa-checklist for the
-one-time setup steps). Installed 2026-08-01; the Play lane is ARMED and
-the Chrome lane is staged-and-commented until the first upload assigns
-an item id.
+one-time setup steps). The Chrome lane stays disarmed until an item id
+exists, because a missing id is a whole-run config error; the other two
+lanes need no id and are LIVE on origin-host as of 2026-08-10:
 
-PLAY_STATE_PATH is in both lines on purpose. Its default sits beside
-this script, and on the release host that directory is root-owned
-/opt/xchain, which the cron user cannot write. That failure is silent
-while the listing is absent (a 404 exits 0) and arrives as EACCES exit
-2 on the FIRST SIGHTING of a live listing, then repeats every six hours.
+  0 */6 * * * PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \\
+    /usr/bin/node /opt/xchain/store-version-monitor.mjs --no-chrome >/dev/null
+
+PLAY_STATE_PATH is set there rather than left at its default because
+/opt/xchain is root-owned and the cron user cannot write into it. That
+misconfiguration is invisible on the day you make it: with no listing
+published the run exits 0, and only the FIRST SIGHTING of a live one
+tries to write the latch and dies EACCES exit 2 - the exact promote day
+the latch exists to arm itself on. Give the latch a writable home.
+
+Once the extension is uploaded, move to the combined line:
 
   0 */6 * * * CWS_MAIN_ITEM_ID=<id> CWS_BETA_ITEM_ID=<id> \\
     PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \\
     /usr/bin/node /opt/xchain/store-version-monitor.mjs >/dev/null
-
-Before a Chrome item exists, the Play lane can run on its own:
-
-  0 */6 * * * PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json \\
-    /usr/bin/node /opt/xchain/store-version-monitor.mjs \\
-    --no-chrome >/dev/null
 `;
 
 function parseArgs(argv) {
@@ -553,6 +789,8 @@ function parseArgs(argv) {
         else if (a === '--play-package') flags.playPackage = argv[i += 1];
         else if (a === '--state') flags.statePath = argv[i += 1];
         else if (a === '--no-play') flags.noPlay = true;
+        else if (a === '--no-direct') flags.noDirect = true;
+        else if (a === '--direct-base') flags.directBase = argv[i += 1];
         else if (a === '--no-chrome') flags.noChrome = true;
         else if (a === '--help' || a === '-h') flags.help = true;
     }
@@ -576,6 +814,7 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
 
     const chromeEnabled = !flags.noChrome;
     const playEnabled = !flags.noPlay;
+    const directEnabled = !flags.noDirect;
     const mainId = flags.mainId || env.CWS_MAIN_ITEM_ID || '';
 
     if (chromeEnabled && !mainId) {
@@ -591,16 +830,19 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
         // leaving an operator to conclude the Android listing is being watched.
         // Android is AHEAD of Chrome in this programme, so "no Chrome item yet"
         // must not silently mean "no Android listing check either".
-        if (playEnabled) {
+        if (playEnabled || directEnabled) {
             err.push(
-                'The Play lane did NOT run either, because this is a whole-run config error. '
+                'The Play and direct lanes did NOT run either, because this is a whole-run config '
+                + 'error. Both need no Chrome item, and the DIRECT lane watches the only artifact '
+                + 'this project has actually shipped to the public, so a missing Chrome id must '
+                + 'never silently mean the published APK went unchecked. '
                 + 'To watch the Play listing before a Chrome item exists, run with --no-chrome.',
             );
         }
         return { exitCode: 2, stdout: '', stderr: err.join('\n') };
     }
-    if (!chromeEnabled && !playEnabled) {
-        err.push('store-version-monitor: both lanes are disabled (--no-chrome and --no-play), '
+    if (!chromeEnabled && !playEnabled && !directEnabled) {
+        err.push('store-version-monitor: every lane is disabled (--no-chrome, --no-play and --no-direct), '
             + 'so nothing was checked. Refusing to exit 0 on a run that verified nothing.');
         return { exitCode: 2, stdout: '', stderr: err.join('\n') };
     }
@@ -653,6 +895,11 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
             );
             return { exitCode: 2, stdout: '', stderr: err.join('\n') };
         }
+    }
+
+    if (directEnabled) {
+        const directBase = flags.directBase || env.DIRECT_FEED_BASE || DEFAULT_DIRECT_BASE;
+        results.push(await checkDirect({ base: directBase, fetchImpl, timeoutMs }));
     }
 
     const alerts = results.filter((r) => r.state === 'alert');

@@ -1,20 +1,20 @@
 {
     "_comment": "Written by tools/release/phase4-rehearsal.mjs from a run it just watched. Records how deep a ceremony Phase 4 rehearsal got and against which two trees. Do not hand-edit: the value of this file is that only an observation can set it. A `reached` short of \"signature\" is the NORMAL case, not a defect - the signature needs K1 at a pinentry and no automated run can supply it.",
-    "tag": "v0.336.0",
-    "lane": "extension",
-    "reached": "dev-mock-gate",
+    "tag": "v0.339.0",
+    "lane": "mac,linux",
+    "reached": "manifest-written",
     "reachedSignature": false,
-    "blocker": "release/lib.sh: 'extension' is not a lane declared in <repo>/tools/release/shipped-lanes.txt.",
-    "scriptRef": "5657ff4e43fa358d40c8428ad3f40ac7dcf44fa0",
-    "repoRef": "2731745ecf35a41c093abba6004778afee2cdf87",
+    "blocker": "sign.sh: signing manifest with key 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7 ...",
+    "scriptRef": "bd96592a4f3eaa9f8e2af26e84e4ed9d5524b813",
+    "repoRef": "4436564154f1111c7e0984f6fb9ece2c55de1f3d",
     "scriptPath": {
-        "tools/release/sign.sh": "480c1577262ab184ef84bcdc435cfe2b79db31bdcfbbba84430657f01de7f54f",
-        "tools/release/verify.sh": "4a2b9c5425c6bf712ea34d4eb3bef64d55258a7f853dd0dd6fb529dfe4dc07c6",
-        "tools/release/lib.sh": "8a912bdcd5b615ada8a05a6d55abec666e4c0c54a79f0b03201deea30d091b19"
+        "tools/release/sign.sh": "65987476c38d40982784c3b8cc23ad604da861c4d6660c3e0ce0ffe81ef7a9a5",
+        "tools/release/verify.sh": "373d5b3ae6ecc3a7e73e7760d316e1632e481d32eaacea5adb2919eee9d5e395",
+        "tools/release/lib.sh": "28762e04562c6b611b6dc28493042659dc48a67488e5707f8ba470666ac07e5c"
     },
     "repoPath": {
-        "tools/release/shipped-lanes.txt": "c017e4c3adbf9e82cc93f0899f8642262b3098f313c07c8bcd1b06bac77eedb0",
-        "tools/build-reproduce/check-no-dev-mock.sh": "54f0c28ec17038fc160836bb60485620828b583122aeb635a5e82da04a0806e4"
+        "tools/release/shipped-lanes.txt": "752c153bb426fe9a578e013c12d053907c015878e20b80d248c6be02954392d3",
+        "tools/build-reproduce/check-no-dev-mock.sh": "eae85dea44d3941c5c38995a7a0e52cbf49424ba8aa288fedaab82d8c880e99a"
     },
-    "observedAt": "2026-08-11T02:30:57.370Z"
+    "observedAt": "2026-08-13T17:33:03.236Z"
 }

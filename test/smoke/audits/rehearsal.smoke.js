@@ -48,6 +48,8 @@ import {
     probeLane,
     assertRecord,
     swapRequirement,
+    bootstrapOsesAt,
+    resolveProdFeed,
     RECORD_VERSION,
 } from '../../../tools/release/rehearse.mjs';
 import { LANES } from '../../../tools/release/rehearsal-matrix.mjs';
@@ -669,6 +671,92 @@ const check = (over) => assertRecord({
     assert.match(coverage.stdout, /never rehearsed/);
     assert.doesNotMatch(coverage.stdout, /✅/,
         'no swap has been attested, so no lane may report as covered');
+}
+
+// --- the bootstrap waiver reads the FEED, not a declaration -------------
+//
+// WHY THIS EXISTS. `bootstrapOsesAt` used to answer "did the previous tag
+// publish this OS?" from `shipped-lanes.txt` AT that tag, and that file is a
+// declaration made before the tag is published: the flip to SHIPPED is a
+// human step in the release commit. For v0.338.0 - the release that put mac
+// and Linux on the feed - the flip landed after the tag was cut, so the
+// frozen roster said NOT-SHIPPED about the very release that shipped them,
+// and at v0.339.0 the swap was waived for BOTH desktop OSes while `assert`
+// exited 0. The waiver fired on a false premise for the first release that
+// had a real predecessor to swap from ( row 147).
+//
+// The published manifest cannot be wrong in that direction, because it IS
+// the publish. These cases pin the whole decision surface, including the one
+// that matters most: what happens when the feed cannot be read.
+{
+    const manifest = (names) => [
+        '# XChain Wallet release manifest',
+        '# tag: v0.338.0',
+        ...names.map((n) => `${'0'.repeat(64)}  ./${n}`),
+    ].join('\n');
+
+    const stub = (status, body) => async () => ({
+        ok: status >= 200 && status < 300,
+        status,
+        text: async () => body,
+    });
+
+    const desktop = ['darwin', 'linux', 'win32'];
+    const base = 'https://downloads.example.invalid/wallet';
+
+    // A previous tag that published mac + Linux waives ONLY windows. This is
+    // the case the old implementation got backwards.
+    const shipped = await bootstrapOsesAt({
+        previousTag: 'v0.338.0',
+        prodFeedBase: base,
+        fetchImpl: stub(200, manifest([
+            'xchain-wallet-0.338.0-x64-mac.zip',
+            'xchain-wallet-0.338.0-x64.dmg',
+            'xchain-wallet-0.338.0-x86_64.AppImage',
+            'xchain-wallet_0.338.0_amd64.deb',
+        ])),
+    });
+    assert.deepEqual(shipped.oses, ['win32'],
+        'a previous tag that published mac and Linux artifacts must leave darwin and '
+        + 'linux DEMANDED, and waive only the OS it did not publish');
+
+    // A tag that published no manifest at all is the real bootstrap case,
+    // and a 404 is the feed stating that rather than failing to answer.
+    const absent = await bootstrapOsesAt({
+        previousTag: 'v0.337.0',
+        prodFeedBase: base,
+        fetchImpl: stub(404, ''),
+    });
+    assert.deepEqual(absent.oses, desktop,
+        'a previous tag with no published manifest has nothing to update FROM on any '
+        + 'OS, which is exactly what the bootstrap waiver is for');
+
+    // FAIL SHUT, and this is the leg with teeth: an unreadable feed must
+    // waive NOTHING. A gate that treats "I could not check" as "no check was
+    // needed" is worse than no gate, because it reports green.
+    for (const [label, impl] of [
+        ['a network failure', async () => { throw new Error('fetch failed'); }],
+        ['a 500 from the edge', stub(500, 'upstream error')],
+    ]) {
+        const shut = await bootstrapOsesAt({
+            previousTag: 'v0.338.0', prodFeedBase: base, fetchImpl: impl,
+        });
+        assert.deepEqual(shut.oses, [],
+            `${label} must waive no OS: an unreadable feed is not permission to skip `
+            + 'the swap requirement');
+    }
+
+    // No feed base resolved at all is the same posture reached by a different
+    // road (an unreadable builder config).
+    const noBase = await bootstrapOsesAt({ previousTag: 'v0.338.0', prodFeedBase: null });
+    assert.deepEqual(noBase.oses, [], 'an unresolved production feed must waive no OS');
+
+    // And the feed base must be the ROOT rather than the desktop directory:
+    // RELEASE_HASHES/ is shared with every other lane and sits one level up,
+    // so a resolver that kept `desktop/` would 404 every previous release and
+    // silently bootstrap the world.
+    assert.equal(resolveProdFeed(root), 'https://downloads.xchain.io/wallet',
+        'resolveProdFeed must return the feed root, with the desktop directory dropped');
 }
 
 server.close();

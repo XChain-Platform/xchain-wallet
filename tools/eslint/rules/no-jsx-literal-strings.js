@@ -52,14 +52,12 @@
 //     token carrying one ("0x", "1d", "v2") is non-trivial and IS
 //     flagged; the smoke test pins those three.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
-//   - Every attribute outside USER_FACING_ATTRS, which is the single
-//     authority on both sides of the rule: `className`, `style`, `id`,
-//     `key`, `role`, `type`, `htmlFor`, `name`, `data-*`, `on*` and the
-//     rest are allowed because they are absent from that set, not
-//     because a separate deny-list names them. So `aria-label`,
-//     `aria-description`, `aria-roledescription` and `aria-valuetext`
-//     stay checked while `aria-labelledby`, `aria-hidden` and every
-//     other `aria-*` do not.
+//   - Technical attributes that never render to humans: `className`,
+//     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
+//     `on*`, and every `aria-*` outside USER_FACING_ATTRS (so
+//     `aria-label`, `aria-description`, `aria-roledescription` and
+//     `aria-valuetext` stay checked while `aria-labelledby`,
+//     `aria-hidden` and the rest do not).
 //   - Files matching `ignoreFiles` glob list (defaults exclude
 //     `*.smoke.js`, `test/**`, `*.test.js`, `*.test.jsx`,
 //     `tools/**`, `claude/**`).
@@ -112,6 +110,18 @@ const DEFAULT_IGNORE_FILES = [
     /\/dist\//,
     /\/node_modules\//,
 ];
+
+function isTechnicalAttr(name) {
+    if (!name) return true;
+    if (TECHNICAL_ATTR_NAMES.has(name)) return true;
+    for (const prefix of TECHNICAL_ATTR_PREFIXES) {
+        if (name.startsWith(prefix)) return true;
+    }
+    // aria-* is mostly technical except for the USER_FACING_ATTRS members
+    // (aria-label, aria-description, aria-roledescription, aria-valuetext).
+    if (name.startsWith('aria-') && !USER_FACING_ATTRS.has(name)) return true;
+    return false;
+}
 
 /**
  * Decide whether a string value is "trivial" enough to ignore: pure
