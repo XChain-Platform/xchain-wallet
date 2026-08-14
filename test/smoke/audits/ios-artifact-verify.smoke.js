@@ -387,7 +387,15 @@ if (process.platform === 'darwin') {
             if (Array.isArray(v)) return `<key>${k}</key><array>${v.map((s) => `<string>${s}</string>`).join('')}</array>`;
             return `<key>${k}</key><string>${v}</string>`;
         };
-        const info = buildInfo();
+        // The version pair the CLI itself will trust on THIS machine. A
+        // generated Version.xcconfig outranks supplied flags by design (a
+        // flag pair must never override a present file), so on a machine
+        // mid-release the fixture app has to carry the file's pair for this
+        // to stay a can-the-CLI-read-an-app test rather than a version test.
+        // On a fresh clone both halves fall back to the pins above.
+        const cliMarketing = repoExpectations.marketingVersion || MARKETING;
+        const cliBuild = repoExpectations.buildNumber || BUILD;
+        const info = buildInfo({ CFBundleShortVersionString: cliMarketing, CFBundleVersion: cliBuild });
         writeFileSync(join(app, 'Info.plist'), [
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
@@ -409,7 +417,7 @@ if (process.platform === 'darwin') {
         };
 
         const unsignedRun = cli([app, '--stage', 'archive', '--unsigned',
-            '--marketing-version', MARKETING, '--build-number', BUILD]);
+            '--marketing-version', cliMarketing, '--build-number', cliBuild]);
         if (unsignedRun.code === 0) console.log('  ok   the CLI reads an XML Info.plist out of a .app');
         else { failures += 1; console.error(`  FAIL the CLI could not read a synthesised .app:\n${unsignedRun.out}`); }
 

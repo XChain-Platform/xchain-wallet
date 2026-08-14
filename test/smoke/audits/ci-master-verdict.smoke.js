@@ -123,17 +123,28 @@ assert.match(value, /refs\/heads\/master/,
 // with nothing deriving it.
 const evaluate = (ref) => {
     const inner = value.replace(/^\$\{\{/, '').replace(/\}\}$/, '').trim();
-    const m = inner.match(/^github\.ref\s*(!=|==)\s*'([^']+)'$/);
-    assert.ok(m,
-        `the \`cancel-in-progress\` expression (${inner}) is no longer a simple github.ref `
-        + 'comparison, so this gate can no longer evaluate it. Extend the evaluator in the same '
-        + 'change rather than deleting the assertions below: they are what proves master is exempt.');
-    return m[1] === '!=' ? ref !== m[2] : ref === m[2];
+    // A conjunction of simple comparisons ("!= master && != develop", the shape
+    // the develop protection added) evaluates clause-by-clause; anything richer
+    // than that still refuses loudly rather than guessing.
+    return inner.split('&&').map((clause) => {
+        const m = clause.trim().match(/^github\.ref\s*(!=|==)\s*'([^']+)'$/);
+        assert.ok(m,
+            `the \`cancel-in-progress\` expression (${inner}) is no longer a conjunction of simple `
+            + 'github.ref comparisons, so this gate can no longer evaluate it. Extend the evaluator '
+            + 'in the same change rather than deleting the assertions below: they are what proves '
+            + 'the protected branches are exempt.');
+        return m[1] === '!=' ? ref !== m[2] : ref === m[2];
+    }).reduce((a, b) => a && b);
 };
 
 assert.equal(evaluate('refs/heads/master'), false,
     'the `cancel-in-progress` expression evaluates TRUE on refs/heads/master, so master runs would '
     + 'still be cancelled and the release gate would still have no completed run to read.');
+
+assert.equal(evaluate('refs/heads/develop'), false,
+    'the `cancel-in-progress` expression evaluates TRUE on refs/heads/develop, which the develop '
+    + 'gate protection exists to prevent: a develop run cancelled by the next push leaves that '
+    + 'commit with no verdict either.');
 
 assert.equal(evaluate('refs/pull/42/merge'), true,
     'the `cancel-in-progress` expression evaluates FALSE for pull requests, so superseded PR runs '
@@ -171,7 +182,10 @@ assert.match(groupValue, /refs\/heads\/master/,
     + 'conditional on master.');
 
 // A push to master must still be a trigger, or the gate above guards nothing.
-assert.match(ci, /on:\n(?:.*\n)*?\s*push:\n\s*branches:\s*\[\s*master\s*\]/,
+// The branch list may carry develop beside master (the develop/master model
+// runs the gate on both) and comment lines above it; what this asserts is that
+// master itself is in the push trigger.
+assert.match(ci, /on:\n(?:.*\n)*?\s*push:\n(?:\s*#.*\n)*\s*branches:\s*\[[^\]]*\bmaster\b[^\]]*\]/,
     'ci.yml no longer runs on pushes to master. The release gate reads a ci.yml run on the tag '
     + 'commit, and tags are cut from master, so without this trigger no commit is ever releasable.');
 
