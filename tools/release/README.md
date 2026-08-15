@@ -100,7 +100,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `rehearsal-matrix.mjs` | The shipped update lanes and the named hardware each is smoked on (DD4). Two sets: `LANES` (electron-updater) and `DIRECT_LANES` (the sideloaded APK, whose feed carries a notice and no installer). Data, not code. | Live |
 | `release-record.mjs` | The §6 release record, opened and enforced. `open --tag vX.Y.Z` instantiates `claude/reports/wallet-releases/vX.Y.Z.md` from `TEMPLATE.md` with the identity fields filled (store integers asked of `packages/mobile/scripts/version.js`, never recomputed from §2's formula) and never overwrites an existing record. `assert --tag` is the gate `publish.sh` runs before a production publish; an untouched copy of the template does not count. `coverage` checks that every `v*` tag AND the version the working tree declares have a record, and is run by `test/smoke/audits/release-record.smoke.js` inside `pnpm ci`. Exits 0 covered / 1 missing / 3 the records directory is not in this checkout. Tags whose commit declares a different version are reported, not failed: `release.yml`'s verify-tag refuses those, so they never produced a release. | Live, and gating since 2026-08-04 |
 | `bump-version.mjs` | §6 step 1: write the release version into every place this repo declares it, in one pass. Membership is derived from the filesystem exactly as `test/smoke/audits/version-lockstep.smoke.js` derives it (the root `package.json`, every `packages/*/package.json`, the extension manifest's `version` and `version_name`, core's `WALLET_VERSION`, README's badge and Status line), so a package added tomorrow is reached without editing anything here. The CHANGELOG section is promoted from `## [Unreleased]`, and the tool REFUSES to bump while that section is empty: a release heading with no entries under it satisfied every gate in this repo and documented nothing. `--dry-run` prints the plan and writes nothing. | Live; driven by `test/smoke/audits/release-bump-version.smoke.js` |
-| `deploy-web.sh` | §6 step 5b: unpack the web tarball into a versioned directory and flip a symlink. | Live |
+| `deploy-web.sh` | §6 step 5b: verify the web tarball against the signed manifest, then unpack it into a versioned directory and flip a symlink. `--manifest` is required and `verify.sh` runs before anything is written (hash for this one artifact, tag anchor, signature bound to the release key), so the last hop of the web lane cannot serve bytes nobody signed. `--no-sig` forwards to `verify.sh`'s degraded mode for a webroot host with no gpg; there is no flag that skips the manifest. | Live |
 | `expected-artifacts.txt` | The declared artifact set a release must contain. Data, not code. | Live |
 | `verify-store.sh` | §4 post-publish verification: verifies the CI-built extension zip via `verify.sh`, then diffs it file-by-file against the store-served item (`--unpacked-dir` or `--crx`), skipping `_metadata/` and structurally diffing `manifest.json`. | Live |
 | `manifest-diff.mjs` | Structural JSON diff helper for `verify-store.sh`: deep-equal ignoring named top-level keys (default `update_url`, `key`). | Live |
@@ -526,8 +526,12 @@ The authoritative checklist is §6 of
    manifest under its versioned name, fetches every artifact back through
    the edge, and uploads the channel pointers last.
 5b. `bash tools/release/deploy-web.sh --tarball <the published tarball>
-   --tag vX.Y.Z --webroot <webroot>` for the SPA. Deploy the tarball
-   that was signed, never a fresh local build.
+   --manifest RELEASE_HASHES/vX.Y.Z.txt --tag vX.Y.Z --webroot <webroot>`
+   for the SPA. Deploy the tarball that was signed, never a fresh local
+   build: the script verifies it against the signed manifest and refuses
+   to flip if it does not match, so carry the manifest and its `.asc` to
+   the webroot host alongside the tarball. `--dry-run` runs the same
+   verification, which makes it a preflight rather than an echo.
 6. `pnpm release:verify` from a clean checkout to confirm the round
    trip.
 

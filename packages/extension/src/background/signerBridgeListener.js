@@ -26,6 +26,12 @@ import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 
 const { createBackgroundTransport } = signers;
 
+// Most ids one `register` message may carry. A renderer announces the
+// hardware signers it holds live, which is a handful; the desktop
+// listener caps the same message at the same number. Matching it keeps
+// one invariant on the shared registry instead of two.
+export const MAX_SIGNER_IDS_PER_MESSAGE = 64;
+
 /**
  * Attach the signer-bridge onConnect listener. Returns a detach
  * function for tests + hot reload.
@@ -60,6 +66,18 @@ export function attachSignerBridgeListener(chromeRuntime) {
         const onMessage = (msg) => {
             if (!msg) return;
             if (msg.kind === 'register' && Array.isArray(msg.signerIds)) {
+                // Drop an over-cap batch whole rather than applying part of
+                // it: a legitimate renderer announces a handful of ids, so an
+                // oversized message is a bug or a misbehaving page and half a
+                // registry is worse than none.
+                if (msg.signerIds.length > MAX_SIGNER_IDS_PER_MESSAGE) return;
+                // No cross-owner guard here, unlike the desktop twin, and that
+                // is deliberate: isTrustedExtensionSender collapses popup,
+                // full-screen tab and side panel to ONE trust level, and the
+                // newest page is the one the user is looking at, so it must be
+                // able to take over signing from a still-open popup. Refusing
+                // the re-point would route the device prompt to a surface the
+                // user cannot see.
                 for (const id of msg.signerIds) {
                     if (typeof id !== 'string' || id.length === 0) continue;
                     signerBridge.setTransport(id, transport);

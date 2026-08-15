@@ -92,3 +92,40 @@ export function isMessageAllowedFromSender(type, sender, runtimeId) {
     if (isTrustedExtensionSender(sender, runtimeId)) return true;
     return isPublicBridgeType(type);
 }
+
+/**
+ * The web origin a message ACTUALLY came from, as the browser reports it,
+ * or `null` when it cannot be derived.
+ *
+ * Every `bridge.*` permission decision keys on `request.origin`, which the
+ * content-script relay stamps. That stamp is page-supplied data by the time
+ * the background sees it, so the background needs its own, unspoofable
+ * reading; `sender` is filled in by the browser and a page cannot touch it.
+ *
+ * Returns null rather than guessing whenever the answer is not a plain
+ * http(s) origin (opaque/sandboxed frames report `"null"`, Firefox omits
+ * `sender.origin`, `about:` URLs have no meaningful origin). A null answer
+ * means "do not adjudicate", so a caller must fall through rather than
+ * refuse: this is a second layer, and it must never be the reason a
+ * legitimate dApp call fails.
+ *
+ * @param {{ origin?: string, url?: string } | null | undefined} sender
+ * @returns {string | null}
+ */
+export function webSenderOrigin(sender) {
+    if (!sender) return null;
+    if (typeof sender.origin === 'string' && isWebOrigin(sender.origin)) {
+        return sender.origin;
+    }
+    if (typeof sender.url === 'string' && sender.url.length > 0) {
+        try {
+            const origin = new URL(sender.url).origin;
+            if (isWebOrigin(origin)) return origin;
+        } catch { /* unparseable sender URL: not derivable */ }
+    }
+    return null;
+}
+
+function isWebOrigin(value) {
+    return value.startsWith('https://') || value.startsWith('http://');
+}

@@ -88,6 +88,13 @@ export const ERROR_NAME_TO_BRIDGE_ERROR_CODE = Object.freeze({
     VaultClosedError: 'WALLET_LOCKED',
     SignerLockedError: 'WALLET_LOCKED',
     BroadcastFailedError: 'BROADCAST_FAILED',
+
+    // Transport-level refusals raised by MessageHost BEFORE a handler is
+    // found, so they never pass the handlers' own translation wrapper. Both
+    // mean the page sent a call the wallet cannot even route, which is the
+    // same thing INVALID_PARAMS tells a dApp about a malformed request.
+    UnknownMessageTypeError: 'INVALID_PARAMS',
+    InvalidMessageError: 'INVALID_PARAMS',
 });
 
 /**

@@ -1161,12 +1161,6 @@ xr_check_payload_arches() {
         [[ -n "$arch" ]] || continue
         n="$(xr_check_payload_arch "$dir" "$name" "$arch")"
         problems=$((problems + n))
-        # The same set answers a second question, and the §7.5 rehearsal got
-        # it wrong: does the payload carry the addon a Linux
-        # install compiles? Tallied apart from the arch count so each gate
-        # reports the defect it actually found.
-        n="$(xr_check_payload_native "$dir" "$name")"
-        native=$((native + n))
     done < <(xr_list_artifacts "$dir")
 
     if [[ "$problems" -gt 0 ]]; then

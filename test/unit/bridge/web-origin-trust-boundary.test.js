@@ -33,7 +33,11 @@ import {
 } from '../../../packages/extension/src/bridge/publicSurface.js';
 import { attachChromeRuntime } from '../../../packages/extension/src/background/ChromeRuntimeAdapter.js';
 import { attachSessionMetaListener } from '../../../packages/extension/src/background/sessionMeta.js';
-import { attachSignerBridgeListener } from '../../../packages/extension/src/background/signerBridgeListener.js';
+import {
+    attachSignerBridgeListener,
+    MAX_SIGNER_IDS_PER_MESSAGE,
+} from '../../../packages/extension/src/background/signerBridgeListener.js';
+import * as signerBridge from '../../../packages/extension/src/background/signerBridge.js';
 import contentScriptSource from '../../../packages/extension/src/content/contentScript.js?raw';
 
 const EXT_ID = 'abcdefghijklmnopabcdefghijklmnop';
@@ -66,6 +70,10 @@ function fakeRuntime() {
         emit: (...args) => listener(...args),
     };
 }
+
+// Drain the microtask queue the adapter's promise chain settles on, so an
+// assertion reads the envelope that actually reached sendResponse.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('publicSurface helpers', () => {
     it('classifies only bridge.* as public', () => {
@@ -152,6 +160,122 @@ describe('ChromeRuntimeAdapter sender gate', () => {
     });
 });
 
+describe('ChromeRuntimeAdapter origin cross-check (second confused-deputy layer)', () => {
+    function setup() {
+        const calls = [];
+        const host = { handle: async (m) => { calls.push(m); return { ok: true, result: 'HANDLED' }; } };
+        const runtime = fakeRuntime();
+        attachChromeRuntime(host, runtime);
+        return { calls, runtime };
+    }
+
+    it('refuses a web sender claiming ANOTHER origin, without hitting the host', async () => {
+        const { calls, runtime } = setup();
+        const responses = [];
+        // evil.example relays a call stamped with a victim origin: if this
+        // reached the host, findConnectedSite would hand it the victim's grants.
+        runtime.emit(
+            { type: 'bridge.signPsbt', request: { origin: 'https://good.example', psbt: 'x' } },
+            WEB_SENDER,
+            (r) => responses.push(r),
+        );
+        await Promise.resolve();
+        expect(calls).toHaveLength(0);
+        expect(responses[0].ok).toBe(false);
+        expect(responses[0].error.code).toBe('INVALID_PARAMS');
+    });
+
+    it('passes a web sender whose stamped origin matches the browser-reported one', async () => {
+        const { calls, runtime } = setup();
+        runtime.emit(
+            { type: 'bridge.getAccounts', request: { origin: 'https://evil.example' } },
+            WEB_SENDER,
+            () => {},
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(calls).toHaveLength(1);
+    });
+
+    it('falls OPEN when the sender origin is not derivable', async () => {
+        const { calls, runtime } = setup();
+        // No origin and an unparseable url: the layer must not be the reason a
+        // legitimate call fails, so it declines to adjudicate.
+        runtime.emit(
+            { type: 'bridge.getAccounts', request: { origin: 'https://good.example' } },
+            { url: 'about:blank', tab: { id: 9 } },
+            () => {},
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(calls).toHaveLength(1);
+    });
+
+    it('never applies the cross-check to the trusted extension UI', async () => {
+        const { calls, runtime } = setup();
+        runtime.emit(
+            { type: 'bridge.getAccounts', request: { origin: 'https://good.example' } },
+            EXT_SENDER_TAB,
+            () => {},
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(calls).toHaveLength(1);
+    });
+});
+
+describe('ChromeRuntimeAdapter publishes a BridgeErrorCode on every web-visible failure', () => {
+    it('stamps INVALID_PARAMS on an unknown bridge.* type', async () => {
+        const runtime = fakeRuntime();
+        // A hand-rolled postMessage with a bogus bridge.* type passes the
+        // relay's prefix gate and misses the handler map; MessageHost
+        // serializes UnknownMessageTypeError, which carries no code.
+        const host = {
+            handle: async () => ({
+                ok: false,
+                error: { name: 'UnknownMessageTypeError', message: 'unknown message type "bridge.nope"' },
+            }),
+        };
+        attachChromeRuntime(host, runtime);
+        const responses = [];
+        runtime.emit({ type: 'bridge.nope', request: {} }, WEB_SENDER, (r) => responses.push(r));
+        await flush();
+        expect(responses[0].error.code).toBe('INVALID_PARAMS');
+        // The precise cause must survive for a Developer-Mode log.
+        expect(responses[0].error.name).toBe('UnknownMessageTypeError');
+    });
+
+    it('leaves an already-published code alone', async () => {
+        const runtime = fakeRuntime();
+        const host = {
+            handle: async () => ({
+                ok: false,
+                error: { name: 'BridgeError', code: 'USER_REJECTED', message: 'no' },
+            }),
+        };
+        attachChromeRuntime(host, runtime);
+        const responses = [];
+        runtime.emit({ type: 'bridge.connect', request: {} }, WEB_SENDER, (r) => responses.push(r));
+        await flush();
+        expect(responses[0].error.code).toBe('USER_REJECTED');
+    });
+
+    it('leaves the trusted extension UI envelope untouched', async () => {
+        const runtime = fakeRuntime();
+        const host = {
+            handle: async () => ({
+                ok: false,
+                error: { name: 'UnknownMessageTypeError', message: 'unknown message type "wallet.nope"' },
+            }),
+        };
+        attachChromeRuntime(host, runtime);
+        const responses = [];
+        runtime.emit({ type: 'wallet.nope', request: {} }, EXT_SENDER, (r) => responses.push(r));
+        await flush();
+        expect(responses[0].error.code).toBeUndefined();
+    });
+});
+
 describe('sessionMeta pre-host sender gate', () => {
     it('rejects session lifecycle types from a web-origin sender', async () => {
         const runtime = fakeRuntime();
@@ -208,6 +332,40 @@ describe('signer-bridge port sender gate', () => {
     });
 });
 
+describe('signer-bridge register batch cap', () => {
+    function connect(runtime) {
+        let onMessage = null;
+        const port = {
+            name: 'signer-bridge',
+            sender: EXT_SENDER_TAB,
+            postMessage: () => {},
+            disconnect: () => {},
+            onMessage: { addListener: (fn) => { onMessage = fn; }, removeListener: () => {} },
+            onDisconnect: { addListener: () => {}, removeListener: () => {} },
+        };
+        runtime.emit(port);
+        return (msg) => onMessage(msg);
+    }
+
+    it('registers a normal batch', () => {
+        signerBridge.clearAll();
+        const runtime = fakeRuntime();
+        attachSignerBridgeListener(runtime);
+        connect(runtime)({ kind: 'register', signerIds: ['sig-a', 'sig-b'] });
+        expect(signerBridge.registeredIds().sort()).toEqual(['sig-a', 'sig-b']);
+    });
+
+    it('drops an over-cap batch WHOLE rather than registering part of it', () => {
+        signerBridge.clearAll();
+        const runtime = fakeRuntime();
+        attachSignerBridgeListener(runtime);
+        const ids = Array.from({ length: MAX_SIGNER_IDS_PER_MESSAGE + 1 }, (_, i) => `sig-${i}`);
+        connect(runtime)({ kind: 'register', signerIds: ids });
+        expect(signerBridge.registeredIds()).toEqual([]);
+        signerBridge.clearAll();
+    });
+});
+
 describe('content script relay allowlist', () => {
     it('only relays bridge.* types (source pins the guard)', () => {
         // The content script is an IIFE that runs on import against a live
@@ -220,5 +378,18 @@ describe('content script relay allowlist', () => {
         const relayIdx = contentScriptSource.indexOf('chrome.runtime.sendMessage({ type: data.type');
         expect(guardIdx).toBeGreaterThan(-1);
         expect(relayIdx).toBeGreaterThan(guardIdx);
+    });
+
+    it('stamps the real page origin AFTER spreading the page-supplied request', () => {
+        // First layer of the confused-deputy defense, and its whole strength
+        // is the ORDER of two lines: spread the page's request, then overwrite
+        // origin. Flip them and any page inherits any connected site's grants.
+        const spreadIdx = contentScriptSource.indexOf('...(data.request ?? {})');
+        const stampIdx = contentScriptSource.indexOf('origin: window.location.origin');
+        expect(spreadIdx).toBeGreaterThan(-1);
+        expect(stampIdx).toBeGreaterThan(spreadIdx);
+        // ...and both inside the same object literal handed to sendMessage.
+        const relayIdx = contentScriptSource.indexOf('chrome.runtime.sendMessage({ type: data.type');
+        expect(relayIdx).toBeGreaterThan(stampIdx);
     });
 });
