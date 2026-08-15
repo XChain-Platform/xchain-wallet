@@ -182,12 +182,22 @@ assert.ok(
 // And the invariant those two are instances OF, because pinning instances is
 // how this got here. `unlockedShell` is BY DEFINITION the far side of an
 // Argon2id derivation - it is what a create or an unlock resolves to - so no
-// wait on it may carry a hand-picked number. When was found, five
-// of the six call sites did anyway, all at a bare 90_000, which is HALF what
-// the budget computes on CI; one of the five (add-wallet-activation) was in
-// the flaky set of the same run that produced the hard failure. The budget
+// wait on it may carry a hand-picked number. When the consent race was found,
+// five of the six call sites did anyway, all at a bare 90_000, which is HALF
+// what the budget computes on CI; one of the five (add-wallet-activation) was
+// in the flaky set of the same run that produced the hard failure. The budget
 // module was extracted for exactly this assertion and only one caller ever
 // used it.
+//
+// This scan reads STATEMENTS, not lines, and follows a locator bound to a
+// name, because its first shape read only the line the mention sat on and
+// four more literals were hiding in the two blind spots that leaves. A wait
+// long enough to carry a message wraps, putting `timeout:` on a later line
+// (`backup-pointer-restore` pinned 180_000 three times that way, and
+// `scan-qr-import` pinned 120_000 under a comment naming Argon2id), and
+// `const hero = unlockedShell(page)` moves the wait one hop off the call
+// site (`balances.regtest` pinned 60_000 there). Both read as clean to a
+// line-at-a-time scan while being the same defect it exists to refuse.
 const shellWaits = [];
 for (const dir of ['fixtures', 'tests']) {
     const stack = [join(e2e, dir)];
@@ -200,12 +210,38 @@ for (const dir of ['fixtures', 'tests']) {
         }
     }
 }
+// The statement a mention sits in: from the nearest preceding delimiter to
+// the semicolon that ends it. That is the unit a timeout belongs to, and it
+// is what a line is a lossy sample of.
+const statementAround = (src, index) => {
+    const head = Math.max(
+        src.lastIndexOf(';', index),
+        src.lastIndexOf('{', index),
+        src.lastIndexOf('}', index),
+    ) + 1;
+    const end = src.indexOf(';', index);
+    return src.slice(head, end === -1 ? src.length : end + 1);
+};
+
 const offenders = [];
 for (const file of shellWaits) {
-    for (const line of readFileSync(file, 'utf8').split('\n')) {
-        if (!/unlockedShell\(/.test(line)) continue;
+    const src = readFileSync(file, 'utf8');
+    const at = (index) => `${file}:${src.slice(0, index).split('\n').length}`;
+
+    // Direct call sites, plus the visibility waits on any name the locator
+    // was bound to. Only visibility waits for the aliases: asserting on the
+    // shell's TEXT once it is already on screen is a different wait with a
+    // different budget, and flagging it would be noise.
+    const mentions = [...src.matchAll(/unlockedShell\(/g)].map((m) => m.index);
+    for (const [, name] of src.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*unlockedShell\(/g)) {
+        const wait = new RegExp(`expect\\(\\s*${name}\\b|\\b${name}\\.waitFor\\b`, 'g');
+        for (const m of src.matchAll(wait)) mentions.push(m.index);
+    }
+
+    for (const index of mentions) {
         // A named constant or a call is the budget; a digit is a guess.
-        if (/timeout:\s*[0-9]/.test(line)) offenders.push(`${file}: ${line.trim()}`);
+        const literal = statementAround(src, index).match(/timeout:\s*[0-9][0-9_]*/);
+        if (literal) offenders.push(`${at(index)}: ${literal[0]}`);
     }
 }
 assert.equal(

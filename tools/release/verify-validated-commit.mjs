@@ -44,16 +44,33 @@
 // does not matter, the fix is to make CI green and re-run this workflow,
 // which re-evaluates from scratch.
 //
+// WAITING IS NOT WEAKENING (--wait, added for the develop/master flow).
+// Under `release-management.md` a release tag is cut on master's MERGE
+// commit, and that commit's CI does not exist until the merge happens: the
+// ceremony merges, then tags. Run without --wait at that moment the gate
+// answers "no run exists for this commit at all" or "still in_progress",
+// both correct and both useless as a ceremony step, because the operator
+// is then told to re-run a workflow by hand at a time nobody can predict.
+// --wait polls until every required workflow CONCLUDES, so the wallet
+// ceremony's wait-for-master-CI-green step is a command rather than a
+// sentence. The verdict is untouched: a concluded non-success refuses
+// immediately without waiting the clock out, and a timeout is a refusal.
+// Waiting changes WHEN the gate answers, never WHAT it accepts.
+//
 // Usage:
 //   node tools/release/verify-validated-commit.mjs --sha <sha> [--repo owner/name]
+//                                                  [--wait [--wait-timeout <s>] [--poll <s>]]
 //
 // Env:
 //   GITHUB_TOKEN        required; needs `actions: read`
 //   GITHUB_API_URL      optional, defaults to https://api.github.com
 //   XCHAIN_REQUIRED_WORKFLOWS  optional, comma-separated workflow file
 //                       names; defaults to `ci.yml`
+//   XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
 
 const REQUIRED_DEFAULT = 'ci.yml';
+const WAIT_SECONDS_DEFAULT = 1800;
+const POLL_SECONDS_DEFAULT = 20;
 
 function fail(message) {
     process.stderr.write(`\nRELEASE GATE REFUSED (§6 step 1)\n\n${message}\n\n`);
@@ -77,11 +94,22 @@ run of every required workflow.
 
 Usage:
   GITHUB_TOKEN=<token> node tools/release/verify-validated-commit.mjs \\
-    --sha <full-40-char-sha> [--repo owner/name]
+    --sha <full-40-char-sha> [--repo owner/name] [--wait]
 
-  --sha    REQUIRED, and must be the full 40 characters. A short SHA is
-           refused on purpose: this gate names exactly one commit.
-  --repo   owner/name. Defaults to $GITHUB_REPOSITORY.
+  --sha           REQUIRED, and must be the full 40 characters. A short SHA
+                  is refused on purpose: this gate names exactly one commit.
+  --repo          owner/name. Defaults to \$GITHUB_REPOSITORY.
+  --wait          Poll until every required workflow CONCLUDES, instead of
+                  refusing a run that has not started or has not finished.
+                  This is the release ceremony's wait-for-master-CI-green
+                  step: after the release PR merges, master's merge commit
+                  has no run yet, and the tag is cut on that commit. Waiting
+                  does not soften the verdict - a concluded run that is not
+                  \`success\` refuses at once, and running out of time
+                  refuses too.
+  --wait-timeout  Seconds to wait with --wait. Default
+                  \$XCHAIN_GATE_WAIT_SECONDS, else ${WAIT_SECONDS_DEFAULT}.
+  --poll          Seconds between polls with --wait. Default ${POLL_SECONDS_DEFAULT}.
 
 Env:
   GITHUB_TOKEN               required; needs \`actions: read\`. Not knowing
@@ -90,9 +118,10 @@ Env:
   GITHUB_API_URL             optional, defaults to https://api.github.com
   XCHAIN_REQUIRED_WORKFLOWS  optional, comma-separated workflow file names;
                              defaults to \`${REQUIRED_DEFAULT}\`
+  XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
 
 Exit codes: 0 the commit has a green run of every required workflow; 1 refused
-(including "cannot tell"). A refusal is not a tool fault.`);
+(including "cannot tell" and "ran out of time"). A refusal is not a tool fault.`);
     process.exit(0);
 }
 
@@ -105,6 +134,12 @@ const required = (process.env.XCHAIN_REQUIRED_WORKFLOWS || REQUIRED_DEFAULT)
     .map((s) => s.trim())
     .filter(Boolean);
 
+const wait = process.argv.slice(2).includes('--wait');
+const waitSeconds = Number(arg('wait-timeout')
+    ?? process.env.XCHAIN_GATE_WAIT_SECONDS
+    ?? WAIT_SECONDS_DEFAULT);
+const pollSeconds = Number(arg('poll') ?? POLL_SECONDS_DEFAULT);
+
 if (!sha || !/^[0-9a-f]{40}$/.test(sha)) {
     fail('--sha must be a full 40-character commit SHA. A short SHA is not accepted: '
         + 'the whole point of this gate is to name exactly one commit.');
@@ -115,6 +150,17 @@ if (!repo || !/^[^/]+\/[^/]+$/.test(repo)) {
 if (!token) {
     fail('GITHUB_TOKEN is not set, so this gate cannot see whether the commit was '
         + 'validated. Not knowing is a refusal, never a pass.');
+}
+// A wait bounded by a value nobody can read is not bounded. An unparseable
+// or non-positive budget refuses here rather than resolving to a default,
+// because the two plausible defaults - wait forever, or do not wait - are
+// opposite behaviours and the operator meant one of them.
+if (wait && (!Number.isFinite(waitSeconds) || waitSeconds <= 0)) {
+    fail('--wait-timeout (or XCHAIN_GATE_WAIT_SECONDS) must be a positive number of '
+        + `seconds; got "${arg('wait-timeout') ?? process.env.XCHAIN_GATE_WAIT_SECONDS}".`);
+}
+if (wait && (!Number.isFinite(pollSeconds) || pollSeconds <= 0)) {
+    fail(`--poll must be a positive number of seconds; got "${arg('poll')}".`);
 }
 
 async function api(path) {
@@ -149,11 +195,6 @@ async function api(path) {
     return res.json();
 }
 
-const runs = await api(`/repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`);
-const all = runs.workflow_runs || [];
-
-const problems = [];
-const evidence = [];
 const diagnoses = [];
 
 // S41. The verdict below was always right and the ADVICE under it was
@@ -218,46 +259,108 @@ async function diagnose(runId) {
               + 'account\'s Actions billing and runner availability.');
 }
 
-for (const wanted of required) {
-    // Match on the workflow's FILE PATH, not its display name: the name is
-    // a human label that can be edited in the same commit that would sneak
-    // past a name-matched gate.
-    const mine = all.filter((r) => (r.path || '').endsWith(`/${wanted}`) || r.path === wanted);
+// One pass over the API's answer. Split out of the top level so --wait can
+// ask again: the state it reports is the whole verdict, and PENDING is kept
+// apart from PROBLEMS because only pending is worth waiting on. A concluded
+// non-success never becomes success by waiting; it becomes a different run,
+// which is a new question and a fresh invocation of this gate.
+async function evaluate() {
+    const runs = await api(`/repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`);
+    const all = runs.workflow_runs || [];
 
-    if (mine.length === 0) {
-        problems.push(`no run of \`${wanted}\` exists for this commit at all`);
-        continue;
+    const problems = [];
+    const evidence = [];
+    const pending = [];
+    const failedRuns = [];
+
+    for (const wanted of required) {
+        // Match on the workflow's FILE PATH, not its display name: the name is
+        // a human label that can be edited in the same commit that would sneak
+        // past a name-matched gate.
+        const mine = all.filter((r) => (r.path || '').endsWith(`/${wanted}`) || r.path === wanted);
+
+        if (mine.length === 0) {
+            problems.push(`no run of \`${wanted}\` exists for this commit at all`);
+            pending.push(`${wanted}: no run yet`);
+            continue;
+        }
+
+        // Newest first. A re-run after a fix is the answer that counts, and it
+        // is the one with the highest run_number / most recent creation.
+        mine.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const newest = mine[0];
+
+        evidence.push(`${wanted}: run ${newest.id} status=${newest.status} `
+            + `conclusion=${newest.conclusion ?? 'null'} (${newest.html_url})`);
+
+        if (newest.status !== 'completed') {
+            problems.push(`\`${wanted}\` run ${newest.id} is still ${newest.status}. `
+                + 'Wait for it, then re-run this workflow'
+                + (wait ? '' : ' (or pass --wait and let this gate wait for it)'));
+            pending.push(`${wanted}: run ${newest.id} ${newest.status}`);
+            continue;
+        }
+        if (newest.conclusion !== 'success') {
+            problems.push(`\`${wanted}\` run ${newest.id} concluded \`${newest.conclusion}\`, `
+                + 'not `success`');
+            failedRuns.push(newest.id);
+        }
     }
 
-    // Newest first. A re-run after a fix is the answer that counts, and it
-    // is the one with the highest run_number / most recent creation.
-    mine.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const newest = mine[0];
-
-    evidence.push(`${wanted}: run ${newest.id} status=${newest.status} `
-        + `conclusion=${newest.conclusion ?? 'null'} (${newest.html_url})`);
-
-    if (newest.status !== 'completed') {
-        problems.push(`\`${wanted}\` run ${newest.id} is still ${newest.status}. `
-            + 'Wait for it, then re-run this workflow');
-        continue;
-    }
-    if (newest.conclusion !== 'success') {
-        problems.push(`\`${wanted}\` run ${newest.id} concluded \`${newest.conclusion}\`, `
-            + 'not `success`');
-        const why = await diagnose(newest.id);
-        if (why) diagnoses.push(why);
-    }
+    return { problems, evidence, pending, failedRuns };
 }
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+let state = await evaluate();
+let timedOut = false;
+
+// The wait loop. It exits the moment nothing is pending (green, or a real
+// failure to report) and never sits through a failure: a run that concluded
+// anything but success is answered now, because the operator's next act is
+// to fix CI, not to keep watching it.
+if (wait && state.pending.length > 0 && state.failedRuns.length === 0) {
+    const deadline = Date.now() + waitSeconds * 1000;
+    process.stdout.write(`Waiting up to ${waitSeconds}s for CI to conclude on ${sha}\n`
+        + `  (${state.pending.join('; ')})\n`);
+    while (state.pending.length > 0 && state.failedRuns.length === 0) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+            timedOut = true;
+            break;
+        }
+        await sleep(Math.min(pollSeconds * 1000, remaining));
+        state = await evaluate();
+        if (state.pending.length > 0) {
+            process.stdout.write(`  still waiting: ${state.pending.join('; ')}\n`);
+        }
+    }
+    process.stdout.write('\n');
+}
+
+const { problems, evidence } = state;
 
 process.stdout.write(`Commit ${sha}\nRepo   ${repo}\nRequired workflows: ${required.join(', ')}\n\n`);
 for (const line of evidence) process.stdout.write(`  ${line}\n`);
 process.stdout.write('\n');
 
 if (problems.length > 0) {
+    for (const runId of state.failedRuns) {
+        const why = await diagnose(runId);
+        if (why) diagnoses.push(why);
+    }
     fail(`This tag points at a commit that was never validated:\n\n`
         + problems.map((p) => `  - ${p}`).join('\n')
         + '\n\n'
+        + (timedOut
+            ? `WAITED ${waitSeconds}s AND CI DID NOT CONCLUDE. Running out of time is a\n`
+              + 'refusal, exactly like every other way of not knowing: this gate has\n'
+              + 'not seen a green run of this commit, so it has nothing to certify.\n'
+              + 'Nothing here says the commit is bad. Check that the push actually\n'
+              + 'triggered CI (a merge commit on a protected branch does trigger it),\n'
+              + 'then run this gate again, with a longer --wait-timeout if the suite\n'
+              + 'is simply slower than the budget.\n\n'
+            : '')
         + (diagnoses.length > 0
             ? 'THE SUITE NEVER RAN, so nothing here is evidence about this commit:\n\n'
               + diagnoses.map((d) => `  - ${d}`).join('\n')

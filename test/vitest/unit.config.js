@@ -151,17 +151,27 @@ export default defineConfig({
                 'packages/core/src/ui/tokens.css',
             ],
             // A RATCHET, not the target. G166 wants >=80% on core; the suite is
-            // at ~50% across this lens today, so an 80% gate would just fail
+            // at ~65% across this lens today, so an 80% gate would just fail
             // every push and get switched off within a week. These floors sit
             // just under the current numbers: coverage can go up, never down.
             // Raise them as the coverage tail lands. A threshold that
             // is always red teaches people to ignore the build; one that only
             // goes red on a real regression gets believed.
+            //
+            // Re-measured 2026-08-15 over 6070 unit tests: 65.36 statements/lines,
+            // 69.78 branches, 56.54 functions, with a second run at 65.48 / 69.79 /
+            // 56.68, so v8's own run-to-run spread here is around a tenth of a
+            // point. The floors below had been left at their original seeding while
+            // the suite grew past them, so they sat 9 to 15 points under measured:
+            // a ratchet that far below the real number cannot catch a regression,
+            // it only records that one was once possible. Keep the gap at ~1-1.5
+            // points, the platform convention, which is ten times that spread and
+            // so leaves ample slack for runner-to-runner variation.
             thresholds: {
-                statements: 50,
-                branches: 57,
-                functions: 47,
-                lines: 50,
+                statements: 64,
+                branches: 68.3,
+                functions: 55.2,
+                lines: 64,
             },
         },
     },

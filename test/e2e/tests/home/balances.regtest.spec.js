@@ -366,7 +366,11 @@ test.describe('Home balances against the chain', () => {
         })}`;
 
         const hero = unlockedShell(page);
-        await expect(hero).toBeVisible({ timeout: 60_000 });
+        // The shell is the far side of a derivation whichever name it is held
+        // under, so it takes the shared KDF budget like the two waits above.
+        // The poll that follows is a different wait: by then the shell has
+        // painted and what is outstanding is a price round trip.
+        await expect(hero).toBeVisible({ timeout: kdfStepTimeout() });
 
         await expect
             .poll(async () => ((await hero.innerText()).match(/\$[\d,]+\.\d{2}/) || [null])[0], {

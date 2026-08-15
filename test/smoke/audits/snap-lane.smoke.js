@@ -329,6 +329,76 @@ const targets = (cfg) => cfg.linux.target.map((t) => (typeof t === 'string' ? t 
 // been measured not to deliver it. Or it can narrow back to "untested",
 // which reads as unexamined when the truth is examined-and-decided, and
 // invites somebody to spend the day again.
+//
+// AND THE PROSE WAS ONLY EVER HALF OF IT (the reproduce.sh half).
+//
+// The two guards below used to hold the published PAGES and nothing else,
+// on the reading that a verifier gets the scope from the page. They do not
+// arrive that way. They run `scripts/reproduce.sh`, sit through the
+// container build, and read the recipe the script PRINTS at the end - a
+// two-sided diff whose `grep -E` filter is the only thing keeping the snap
+// out of the comparison. That copy of the filter carried no reason at all,
+// so the non-claim was documented everywhere except the one surface the
+// person doing the verifying actually looks at, and widening it is a
+// one-character-class edit that reads like fixing an oversight.
+//
+// Widened, the verifier diffs a snap that is measured not to reproduce
+// against a manifest that lists it, gets a mismatch, and is told by the
+// next sentence of that same output to read a mismatch as supply-chain
+// tampering. So the filter is held here, in both copies at once: the
+// recipe is a TWIN (script + page), and twins that drift are how one side
+// gets fixed and the other keeps shipping the old answer.
+// The filter, as each copy of the recipe writes it. Anchored on
+// `official.txt` so it is this recipe rather than any other grep in the
+// file. Module scope because the twin check below reads the docs copy.
+const RECIPE_FILTER = /official\.txt\s*\|\s*grep -E '([^']+)'/g;
+const recipeFilters = (text) => [...text.matchAll(RECIPE_FILTER)].map((m) => m[1]);
+
+const reproduce = readFileSync(join(desktop, 'scripts', 'reproduce.sh'), 'utf8');
+
+{
+    // Only what the script PRINTS. The comment above the heredoc says all of
+    // this too, at length, and a verifier never opens the file - so asserting
+    // over the whole source would let the printed half be gutted while the
+    // guard stayed green on the comment alone.
+    const printed = reproduce.match(/cat <<'MSG'\n([\s\S]*?)\nMSG\n/);
+    assert.ok(printed, 'reproduce.sh must end by printing the comparison protocol');
+    const protocol = printed[1];
+
+    const filters = recipeFilters(protocol);
+    assert.equal(filters.length, 1,
+        'reproduce.sh must print exactly one comparison recipe; two copies of the '
+        + 'filter is the drift this guard exists to stop');
+    assert.ok(!/snap/i.test(filters[0]),
+        `reproduce.sh's comparison filter (${filters[0]}) sweeps in the snap. The `
+        + 'snap does not reproduce (measured 2026-08-07: two epoch-pinned builds '
+        + 'hash all 84 payload files identically and still differ, on timestamps '
+        + 'snapcraft writes inside LXD), so a verifier following this recipe would '
+        + 'get a mismatch on an artifact nothing ever promised - and the line below '
+        + 'it tells them to read a mismatch as supply-chain tampering.');
+
+    // Silence is not the same as scope. The printed output has to SAY the
+    // snap is out, or the reader concludes the filter is arbitrary.
+    assert.match(protocol, /\.snap/,
+        'reproduce.sh must name the snap in the protocol it prints: a bare filter '
+        + 'with no reason attached is what invited widening it');
+    assert.ok(/must not be widened/i.test(protocol),
+        'and must say the filter is deliberate, in the printed text rather than '
+        + 'only in a comment a verifier never sees');
+    assert.ok(/Snap Store sign(s|ing)|snapd install(s|ing) only what the Store/i
+        .test(protocol),
+        'and must state the integrity story a snap DOES have, so the non-claim '
+        + 'reads as a different trust model rather than as an unverifiable artifact');
+
+    // The reproduce container must not build one either. An artifact sitting
+    // in the verifier's output directory reads as covered by the manifest
+    // beside it, whatever any prose says.
+    assert.ok(!/XCHAIN_BUILD_SNAP/.test(reproduce),
+        'the reproduce container must never build a snap: an unreproducible '
+        + 'artifact in the verifier\'s output directory reads as one of the '
+        + 'artifacts this protocol covers');
+}
+
 if (docsAvailable()) {
     const repro = readDoc('reproducible-builds.md');
     const snapPage = readDoc('release', 'desktop', 'snap-store.md');
@@ -357,6 +427,20 @@ if (docsAvailable()) {
         );
     }
 
+    // THE TWIN. The page and the script carry the same two-sided diff, and
+    // the filter is the whole scope of the claim. Two copies of one rule
+    // cannot re-converge once they drift, so they are compared rather than
+    // each checked against a description of the rule.
+    const docFilters = recipeFilters(repro);
+    assert.equal(docFilters.length, 1,
+        'reproducible-builds.md must carry exactly one comparison recipe, or the '
+        + 'script and the page cannot be held to one filter');
+    assert.equal(docFilters[0], recipeFilters(reproduce)[0],
+        'the published recipe and the one reproduce.sh prints must use the SAME '
+        + 'artifact filter. They are twins: a scope narrowed or widened on one '
+        + 'side only leaves the other still telling verifiers the old answer, and '
+        + 'the snap is exactly the artifact that difference decides.');
+
     assert.match(
         repro,
         /Snap Store signs what it serves|snapd installs only what the Store/i,
@@ -376,5 +460,10 @@ console.log(
     + ' attachUpdater before electron-updater is loaded, one stray SNAP variable'
     + ' does not, and selectUpdater hands a snap NO updater class even when the'
     + ' bundle carries a stray package-type; the release gate declares the'
-    + ' artifact and release.yml can produce it behind the store credential)',
+    + ' artifact and release.yml can produce it behind the store credential;'
+    + ' and the determinism non-claim is held on every surface a verifier'
+    + ' reaches - the recipe reproduce.sh prints names the snap, says the filter'
+    + ' is deliberate and gives the store-signing story instead, the reproduce'
+    + ' container never builds a snap, and the script and the published page'
+    + ' carry one identical artifact filter rather than two that can drift)',
 );

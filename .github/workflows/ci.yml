@@ -53,16 +53,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      # Hoisted so the checkout step below can gate on presence: the `secrets`
-      # context is not usable in a step `if`, an `env` one is. Absent secret =
-      # empty string = the step does not run and the docs-coupled smokes behave
-      # exactly as they do today.
-      XCHAIN_DOCS_READ_KEY: ${{ secrets.XCHAIN_DOCS_READ_KEY }}
-      # Always set, deliberately. When the checkout ran, this is where the docs
-      # are. When it did not, this names a path that does not exist, which is
-      # what _docs-repo.js already reports honestly - and pointing it at a real
-      # location only when a credential happens to exist would make the two
-      # cases differ in more than one way at once.
+      # Where the docs checkout below lands. _docs-repo.js honours this ahead of
+      # its relative default, which it has to: actions/checkout refuses a path
+      # outside the workspace, so the sibling cannot sit beside the repo the way
+      # a developer checkout puts it.
       XCHAIN_DOCS_ROOT: ${{ github.workspace }}/.docs-sibling
     steps:
       - uses: actions/checkout@v4
@@ -80,24 +74,19 @@ jobs:
       # its sibling is indistinguishable from a gate whose sibling is fine",
       # one layer up, at the gate that authorises signing.
       #
-      # WHY IT IS CONDITIONAL RATHER THAN UNCONDITIONAL. xchain-documentation
-      # is PRIVATE, and the repository-scoped GITHUB_TOKEN cannot read another
-      # repository, so this needs its own credential. The credential now EXISTS
-      # (2026-08-05): a read-only ed25519 DEPLOY KEY on
-      # xchain-documentation, whose private half is the XCHAIN_DOCS_READ_KEY
-      # Actions secret here. The gate is kept anyway, because it is what lets a
-      # fork - which has neither the secret nor any way to obtain it - run this
-      # workflow at all instead of failing at checkout.
+      # WHY IT IS UNCONDITIONAL. It used to be gated on an XCHAIN_DOCS_READ_KEY
+      # deploy-key secret, because xchain-documentation was private and the
+      # repository-scoped GITHUB_TOKEN cannot read another repository. That repo
+      # is public now, so an anonymous checkout resolves it and the credential is
+      # no longer needed - including on a fork, which was the other reason the
+      # gate existed.
       #
-      # WHY A DEPLOY KEY AND NOT A PAT. A deploy key is scoped to exactly ONE
-      # repository and was verified read-only by driving it: it clones
-      # xchain-documentation, and it is REFUSED both when pushing to that repo
-      # and when reading any other repo in the org. A fine-grained PAT would
-      # carry an account identity, an expiry to re-manage, and a blast radius
-      # wider than the one repo this job needs. It is also why this is
-      # `ssh-key:` rather than `token:` - deploy keys authenticate over SSH,
-      # and unlike a PAT they can be minted through the API, so nothing about
-      # this credential requires a human at a browser.
+      # The gate had to go rather than stay harmlessly: no such secret exists on
+      # this repo, so the step never ran, XCHAIN_DOCS_ROOT named a path with
+      # nothing at it, and 29 smokes failed with "the wallet docs sibling is
+      # DECLARED in .ci-siblings but unreachable". A conditional whose condition
+      # is never met is indistinguishable from a missing checkout, which is the
+      # failure this whole block exists to prevent one layer up.
       #
       # THE PATH IS NOT ARBITRARY. test/smoke/_docs-repo.js resolves the
       # sibling from its OWN location as <repo>/../xchain-documentation, never
@@ -107,26 +96,19 @@ jobs:
       # TWO MECHANICS HERE ARE NOT PREFERENCES, they are what the platforms
       # allow, and both were established by reading rather than guessed:
       #
-      #   - The gate is `if: env.X != ''` off a JOB-LEVEL env, not
-      #     `if: secrets.X != ''`. That is the idiom release.yml already uses
-      #     for MAS_CSC_LINK and APPX_IDENTITY_NAME; matching it keeps one
-      #     pattern for "this step is inert until a credential exists".
       #   - `path:` is INSIDE the workspace. actions/checkout refuses a path
       #     outside GITHUB_WORKSPACE, so the sibling cannot be placed where a
       #     developer checkout puts it. XCHAIN_DOCS_ROOT exists for exactly
       #     this and _docs-repo.js honours it ahead of its relative default.
       - name: Check out the xchain-documentation sibling
-        if: env.XCHAIN_DOCS_READ_KEY != ''
         uses: actions/checkout@v4
         with:
           repository: XChain-Platform/xchain-documentation
-          ssh-key: ${{ env.XCHAIN_DOCS_READ_KEY }}
-          # DELIBERATELY master, and it stays master after the develop/master
-          # adoption: xchain-documentation is exempt from the branch policy and
-          # remains a master-only repo, so it has no develop branch to track.
-          # A sweep that flips every `master` literal to `develop` would point
-          # this at a ref that does not exist and take the docs-coupled smokes
-          # down with it.
+          # DELIBERATELY master. xchain-documentation now has a develop branch
+          # (levelled 2026-08-15) and its own CI runs on both, but what these
+          # smokes assert is the PUBLISHED documentation a user reads, which is
+          # master. Tracking develop here would gate a wallet release on docs
+          # wording that has not shipped yet.
           ref: master
           path: .docs-sibling
       # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step can't

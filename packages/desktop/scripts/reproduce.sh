@@ -310,6 +310,34 @@ if [ "${IN_PLACE}" = "1" ]; then
     echo "[reproduce] artifacts: ${REPO_ROOT}/packages/desktop/dist"
     echo
 fi
+# THE FILTER IN THIS RECIPE IS LOAD-BEARING, AND IT IS A TWIN.
+#
+# The published reproducible-builds page carries the same two-sided diff,
+# and it already explains why the filter is there. This copy is the one a
+# verifier actually reads, because it is printed at the end of the run they
+# just sat through, and until now it was the bare grep with no reason
+# attached - one character class away from being widened by anybody who
+# assumed the omission was an oversight.
+#
+# What widening it would do: the official manifest also covers the Snap
+# Store package, and the snap is measured NOT to reproduce. Two
+# epoch-pinned builds hash all 84 payload files identically and still
+# differ, because snapcraft assembles the squashfs image inside its own LXD
+# container and writes wall-clock mtimes plus a squashfs creation time that
+# SOURCE_DATE_EPOCH never reaches. The remedy is known and proven
+# (`-all-time` / `-mkfs-time` on the mksquashfs 4.6.1 snapcraft bundles)
+# and there is no invocation of ours to add it to, so this is a stated
+# non-claim rather than an open bug. A verifier who sweeps the snap into
+# the comparison therefore gets a mismatch on an artifact that was never
+# promised, and the sentence below tells them to read a mismatch as
+# supply-chain tampering. That is the false alarm this paragraph exists to
+# prevent, and `test/smoke/audits/snap-lane.smoke.js` holds both copies of
+# the recipe to the same filter.
+#
+# The snap is not left without an integrity story, which is why the
+# non-claim costs little: the Snap Store signs what it serves and `snapd`
+# installs only what the Store signed, so a store install is verified by a
+# different mechanism rather than by nothing.
 cat <<'MSG'
 [reproduce] These are the PACKAGED Linux artifacts, under the same
 [reproduce] filenames the release publishes, so this manifest compares
@@ -317,6 +345,19 @@ cat <<'MSG'
 [reproduce]
 [reproduce]   diff <(grep -v '^#' official.txt | grep -E '\.(AppImage|deb)$' | sort) \
 [reproduce]        <(grep -v '^#' <OUT>/RELEASE_HASHES.txt | sort)
+[reproduce]
+[reproduce] The filter is deliberate and must not be widened. The official
+[reproduce] manifest also covers macOS, Windows, web and the Snap Store
+[reproduce] package (.snap), none of which this protocol reproduces. The
+[reproduce] snap in particular is a measured non-claim rather than an
+[reproduce] untested one: two epoch-pinned builds of one commit carry
+[reproduce] identical payload files and still differ as images, because
+[reproduce] snapcraft assembles the squashfs inside its own container and
+[reproduce] stamps timestamps SOURCE_DATE_EPOCH never reaches. A snap
+[reproduce] install is verified by the Snap Store signing what it serves
+[reproduce] and snapd installing only what the Store signed, not by this
+[reproduce] recipe. Full scope:
+[reproduce] https://docs.xchain.io/components/wallet/reproducible-builds
 [reproduce]
 [reproduce] A zero-byte diff means our published bytes are what this
 [reproduce] source produces. A mismatch indicates build-environment drift

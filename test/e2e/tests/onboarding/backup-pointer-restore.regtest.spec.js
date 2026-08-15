@@ -76,6 +76,7 @@ import {
     unlockAfterReload,
     waitForConfirmedUtxo,
 } from '../../fixtures/regtest.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 
 const DEVICE_PASSWORD = 'regtestpassword123';
@@ -333,8 +334,14 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     mode: 'add',
                 });
                 await two.getByRole('button', { name: 'Restore', exact: true }).click();
+                // A restore is a derivation like any create or unlock (the
+                // backup's own password, then the device vault), so it takes
+                // the shared KDF budget rather than a number picked here. The
+                // 180_000 this replaced was the CI value transcribed by hand:
+                // right on CI by luck, and unable to follow the budget the
+                // day the budget moves.
                 await expect(unlockedShell(two), 'the restore never returned to an unlocked wallet')
-                    .toBeVisible({ timeout: 180_000 });
+                    .toBeVisible({ timeout: kdfStepTimeout() });
             });
 
             await test.step('the wallet that was pointed at is now on this device', async () => {
@@ -455,7 +462,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                         'the fresh-install restore never reached an unlocked wallet - is the'
                         + 'item that says it could not, so check whether the pre-host lane is wired '
                         + 'into this shell before assuming a regression')
-                        .toBeVisible({ timeout: 180_000 });
+                        .toBeVisible({ timeout: kdfStepTimeout() });
                 });
 
                 await test.step('it came from the pointer, over https', async () => {
@@ -631,7 +638,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 await expect(unlockedShell(two),
                     'the second attempt with the right password did not restore, so the first attempt '
                     + 'left the install in a state it cannot recover from')
-                    .toBeVisible({ timeout: 180_000 });
+                    .toBeVisible({ timeout: kdfStepTimeout() });
             } finally {
                 await context.close();
             }
