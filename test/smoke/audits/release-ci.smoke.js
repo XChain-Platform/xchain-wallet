@@ -538,37 +538,28 @@ assert.ok(!SIGNING_SECRET.test(ci),
 //
 //`.ci-siblings` declares xchain-documentation, and a
 // declared-but-absent sibling is a REFUSAL rather than a skip - so this
-// workflow is the only thing standing between the release gate and 26 red
-// Smokes on every master commit. The credential exists (2026-08-05:
-// a read-only deploy key on xchain-documentation, private half in the
-// XCHAIN_DOCS_READ_KEY Actions secret), so the failure this guards is no
-// longer "nobody added the secret" but the quieter one: somebody edits this
-// workflow and the checkout step, its gate, or its path stops matching what
-// _docs-repo.js resolves. Each assertion below pins one thing that has to
-// stay true for the docs-coupled smokes to actually RUN.
+// workflow is the only thing standing between the release gate and 29 red
+// smokes on every master commit. Each assertion below pins one thing that has
+// to stay true for the docs-coupled smokes to actually RUN.
 const testJob = ci.slice(ci.indexOf('\n  test:'), ci.indexOf('\n  build:'));
 
-// The env hoist. `if: secrets.X != ''` is not legal in a step condition, so
-// the gate reads a job-level env; losing the hoist silently disables the
-// checkout, because an undefined env is the empty string and the step just
-// stops running.
-assert.ok(/^\s{6}XCHAIN_DOCS_READ_KEY:\s*\$\{\{\s*secrets\.XCHAIN_DOCS_READ_KEY\s*\}\}/m.test(testJob),
-    'the test job must hoist XCHAIN_DOCS_READ_KEY into job-level env; a step `if:` '
-    + 'cannot read the secrets context, so without the hoist the sibling checkout '
-    + 'never runs and 26 docs-coupled smokes go red on every commit.');
-
-// The checkout itself: right repo, gated on the credential, and SSH rather
-// than a token. A deploy key cannot authenticate over HTTPS, so a `token:`
-// here would 404 against a private repo while looking perfectly correct.
+// The checkout itself, and it must be UNCONDITIONAL. It used to be gated on
+// an XCHAIN_DOCS_READ_KEY deploy key because the docs repo was private; the
+// repo is public now, so an anonymous checkout resolves it and a fork can run
+// this workflow too. The gate is what actually broke: no such secret was ever
+// set on this repo, so the step never ran and 29 smokes failed with the
+// sibling reported unreachable. A condition that is never met and a missing
+// checkout are the same outcome, which is the failure this block exists to
+// catch, so re-gating this step needs a credential that demonstrably exists.
 assert.ok(/repository:\s*XChain-Platform\/xchain-documentation/.test(testJob),
     'the sibling checkout must name XChain-Platform/xchain-documentation');
-assert.ok(/ssh-key:\s*\$\{\{\s*env\.XCHAIN_DOCS_READ_KEY\s*\}\}/.test(testJob),
-    'the sibling checkout must authenticate with `ssh-key:`. The credential is a '
-    + 'DEPLOY KEY (repo-scoped, read-only, mintable through the API); deploy keys '
-    + 'are SSH-only, so `token:` cannot read this private repo however valid it looks.');
-assert.ok(/if:\s*env\.XCHAIN_DOCS_READ_KEY\s*!=\s*''/.test(testJob),
-    "the sibling checkout must stay gated on `env.XCHAIN_DOCS_READ_KEY != ''`; a fork "
-    + 'has no access to the secret and an ungated step fails the whole workflow at checkout.');
+assert.ok(!/if:\s*env\.XCHAIN_DOCS_READ_KEY/.test(testJob),
+    'the sibling checkout must not be gated on XCHAIN_DOCS_READ_KEY: that secret does '
+    + 'not exist on this repo, so the gate silently skipped the checkout and every '
+    + 'docs-coupled smoke refused. xchain-documentation is public; no credential is needed.');
+assert.ok(!/ssh-key:/.test(testJob),
+    'the sibling checkout reads a PUBLIC repo and needs no credential; an ssh-key here '
+    + 'reintroduces a secret the repo does not hold.');
 
 // The path is not cosmetic: _docs-repo.js resolves the sibling from its own
 // location, never from cwd, and actions/checkout refuses any path outside
