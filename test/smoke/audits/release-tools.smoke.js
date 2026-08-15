@@ -32,7 +32,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-// ---------------------------------------------------------------- shape
+// Shape: every piece of the pipeline exists and is executable.
 
 const files = [
     'tools/release/README.md',
@@ -99,22 +99,12 @@ assert.ok(/xchain-wallet-android-vX\.Y\.Z\.aab/.test(readme),
 assert.ok(/xchain-wallet-ios-vX\.Y\.Z\.ipa/.test(readme),
     'README pins the iOS artifact name');
 
-// --- A documented cron line must not arm a lane into a directory it cannot write ---
-//
-// S45. `store-version-monitor.mjs` grew a second lane whose latch file
-// defaults to sitting BESIDE the script, and on the release host the script
-// lives in root-owned `/opt/xchain`. The failure mode is spelled out in the
-// assertion message below; what the message cannot say is why the invariant
-// sits on the LINE. The deployed crontab already carries `PLAY_STATE_PATH` and
-// neither README recipe did, so the documented install was a step BEHIND the
-// host, and prose warning about it is not a fix: the operator copies the LINE,
-// not the paragraph under it.
-//
-// BOTH homes are checked, and the second one is the point. The README's own
-// inventory row defers to `--help` for the cron line, so `--help` is where an
-// operator actually copies from. A check that read only the README would go
-// green on a fixed document while the pasted line stayed broken, which is
-// §13's degrade-quietly defect and precisely the class this assertion closes.
+// A documented cron line must not arm a lane into a directory it cannot write.
+// The invariant sits on the LINE rather than on prose around it, because the
+// operator copies the line. Both homes are checked: the README's inventory row
+// defers to `--help` for the cron line, so a README-only check would go green
+// on a fixed document while the pasted line stayed broken. The failure itself
+// is spelled out in the assertion message.
 const cronSources = [['tools/release/README.md', readme]];
 {
     const help = spawnSync(process.execPath,
@@ -146,14 +136,11 @@ for (const { origin, line } of monitorCronLines) {
         + `deployed) or --no-play. Offending line, from ${origin}: ${line.trim()}`);
 }
 
-// S46. The two lines above are the only homes this repository can reach, and
-// there is a third one it cannot: the entry already sitting commented out in
-// the crontab on the host, staged in 2026-08 and so predating the Play lane,
-// carrying neither variable (measured over SSH 2026-08-10). "Staged and
-// commented out" invites the one gesture that reproduces the fault, so the
-// install section has to say outright that arming means REPLACING that line.
-// The assertion is on the instruction, not on its wording, so rewriting the
-// paragraph is free and deleting the rule is not.
+// A third home exists that this repo cannot reach: a commented-out crontab
+// entry on the host, predating the Play lane and carrying neither variable
+// (measured 2026-08-10). Uncommenting it reproduces the fault, so the install
+// section must say that arming means REPLACING it. Asserted on the
+// instruction, not its wording, so rewriting the paragraph stays free.
 {
     const installSection = readme.slice(readme.indexOf('### Installing the store-version monitor'))
         .split(/\n### /)[0];
@@ -210,11 +197,10 @@ assert.ok(/\. "\$HERE\/lib\.sh"/.test(publishSrcOrder),
     'publish.sh sources lib.sh, so its split is the one sign.sh hashed');
 assert.ok(/no channel pointers in/.test(publishSrcOrder),
     'publish.sh refuses a release with no channel pointer (invisible to every install)');
-/* Not /gpg --verify/: that string is in this file's own prose about the bare
- * check S37 replaced, so the assertion passed on a comment saying the opposite
- * of what it was asserting. What has to be true is that the signature is
- * attributed to an expected fingerprint, a VALIDSIG comparison that
- * release-verify-signer.smoke.js drives for real. */
+/* Not /gpg --verify/: that string appears in this file's own prose, so the
+ * assertion used to pass on a comment saying the opposite of what it asserted.
+ * What must be true is that the signature is attributed to an expected
+ * fingerprint, a VALIDSIG comparison release-verify-signer.smoke.js drives. */
 assert.ok(/--status-fd/.test(verifySrc) && /VALIDSIG/.test(verifySrc),
     'verify.sh reads gpg status output so it can attribute the signature to a key');
 assert.ok(/EXPECT_KEY/.test(verifySrc) && /--key/.test(verifySrc),
@@ -222,7 +208,7 @@ assert.ok(/EXPECT_KEY/.test(verifySrc) && /--key/.test(verifySrc),
 assert.ok(/--no-sig/.test(verifySrc) && /--recompute/.test(verifySrc),
     'verify.sh accepts --no-sig and --recompute');
 
-// ------------------------------------------------------- runtime harness
+// Runtime harness: the pipeline driven against a throwaway repo.
 
 const sh = (args, opts = {}) => spawnSync('bash', args, { encoding: 'utf8', ...opts });
 const git = (cwd, args) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
@@ -231,10 +217,9 @@ const TAG = 'v9.9.9';
 const ARTIFACTS = [
     'xchain-wallet-web-v9.9.9.tar.gz',
     'xchain-wallet-extension-v9.9.9.zip',
-    // Both arches of every desktop lane, because the gate requires them (§8).
-    // This list once held one arch, an un-suffixed `Setup 9.9.9.exe` and an
-    // arch-less `-win.zip`, and the gate signed it without complaint, which is
-    // precisely the release shape that strands every arm64 install.
+    // Both arches of every desktop lane (§8). A one-arch list with an
+    // un-suffixed `Setup 9.9.9.exe` once signed without complaint, which is the
+    // release shape that strands every arm64 install.
     'xchain-wallet-9.9.9-x64.dmg',
     'xchain-wallet-9.9.9-arm64.dmg',
     'xchain-wallet-9.9.9-x64-mac.zip',
@@ -247,31 +232,23 @@ const ARTIFACTS = [
     'xchain-wallet-9.9.9-arm64.AppImage',
     'xchain-wallet_9.9.9_amd64.deb',
     'xchain-wallet_9.9.9_arm64.deb',
-    // The Android pair, because "complete" is not a fixed list: it is whatever
-    // tools/release/shipped-lanes.txt currently says has users. Android
-    // shipped in v0.336.0, so a release without these two is a lane regression
-    // and sign.sh refuses it. The next lane to flip adds its artifacts here.
+    // "Complete" is whatever tools/release/shipped-lanes.txt says has users.
+    // Android shipped in v0.336.0, so a release without these two is a lane
+    // regression and sign.sh refuses it. The next lane to flip adds its rows.
     'xchain-wallet-android-v9.9.9.aab',
     'xchain-wallet-v9.9.9.apk',
 ];
 
 const work = mkdtempSync(join(tmpdir(), 'xc-rel-'));
 
-// THE DISK-IMAGE ASSESSMENT IS STUBBED FOR THIS FILE, AND ONLY THIS FILE
-// (row 140). Every other artifact here is faked at the level its checker
-// reads, because those checkers read bytes. The dmg checker does not: it asks
-// the OS through `spctl`, and Apple cannot notarize fake bytes, so on macOS
-// these fixtures fail a gate that is working correctly. Stubbing keeps this
-// file testing what it is about (sign.sh, verify.sh, publish.sh and the
-// manifest round trip) on both platforms.
+// The disk-image assessment is stubbed here and only here. Other fixtures are
+// faked at the byte level their checkers read; the dmg checker instead asks the
+// OS through `spctl`, and Apple cannot notarize fake bytes, so on macOS these
+// fixtures would fail a gate that works correctly.
 //
-// The stub is a PATH shim in front of the subprocesses, NOT a flag in the
-// tool. An env var or a `--skip` inside verify-signatures would be a way to
-// switch a signing gate off in production, which is the exact defect family
-// this row belongs to; a fake `spctl` on one test's PATH cannot exist anywhere
-// near a release. The gate's real behaviour is driven unstubbed in
-// release-signature-gate.smoke.js against the published v0.338.0 artifacts,
-// which it refuses.
+// The stub is a PATH shim rather than a flag in the tool: an env var or
+// `--skip` inside verify-signatures would be a way to switch a signing gate off
+// in production. The gate runs unstubbed in release-signature-gate.smoke.js.
 const shimBin = join(work, 'shim-bin');
 mkdirSync(shimBin, { recursive: true });
 writeFileSync(join(shimBin, 'spctl'),
@@ -296,17 +273,10 @@ try {
     mkdirSync(join(repo, 'tools', 'build-reproduce'), { recursive: true });
     // Every file below is a gate input sign.sh reads UNCONDITIONALLY before it
     // writes the manifest, so a pristine clone missing any one of them cannot
-    // sign at all. Failing shut is the point of all of them; the trap is that
-    // each absence reads as a staging problem rather than a missing file.
-    // update-info.mjs decides what is an artifact and what is a channel
-    // pointer (absent, the artifact set reads as empty); shipped-lanes.txt
-    // says which lanes already have users, and a release must never be signed
-    // without that (§6); verify-signatures.mjs and launch-probe.mjs (row 144)
-    // both run ahead of the manifest, and the probe reports these fixtures NOT
-    // PROBED by name, its own branches being driven in
-    // release-launch-probe.smoke.js; store-profile-status.txt stayed invisible
-    // until the Android pair joined ARTIFACTS, because the gate reading it
-    // only fires on a store-profile artifact, and absent it reads
+    // sign at all. The trap is that each absence reads as a staging problem
+    // rather than a missing file: store-profile-status.txt in particular stayed
+    // invisible until the Android pair joined ARTIFACTS, since the gate reading
+    // it only fires on a store-profile artifact and absent it reads
     // '<unreadable>', which is not permission.
     for (const f of ['lib.sh', 'sign.sh', 'verify.sh', 'expected-artifacts.txt',
         'shipped-lanes.txt', 'update-info.mjs', 'verify-signatures.mjs',
@@ -319,13 +289,11 @@ try {
     git(repo, ['add', '-A']);
     git(repo, ['-c', 'user.email=smoke@test.invalid', '-c', 'user.name=smoke',
         'commit', '-qm', 'init']);
-    // `tag.gpgsign=false` for the same reason the commits above pass an
-    // identity: this throwaway repo must not inherit the operator's git
-    // config. The release-rails GPG work turned `tag.gpgsign` on globally on
-    // the dev box, which turns a lightweight `git tag` into a signed annotated
-    // one and fails it with "no tag message?", so without this the smoke is
-    // red on the machine that does real releases and green in a clean CI
-    // container.
+    // The throwaway repo must not inherit the operator's git config, the same
+    // reason the commits above pass an identity. A global `tag.gpgsign=true`
+    // (set on the dev box) turns a lightweight tag into a signed annotated one
+    // and fails it with "no tag message?": red where releases are cut, green in
+    // a clean CI container.
     git(repo, ['-c', 'tag.gpgsign=false', 'tag', TAG]);
     const tagCommit = git(repo, ['rev-parse', TAG]).stdout.trim();
     assert.ok(/^[0-9a-f]{40}$/.test(tagCommit), 'throwaway repo has a tagged commit');
@@ -333,18 +301,14 @@ try {
     const SIGN = join(repo, 'tools/release/sign.sh');
     const VERIFY = join(repo, 'tools/release/verify.sh');
 
-    // A staged artifact has to LOOK SIGNED, because sign.sh refuses a release
-    // whose artifacts are not. These fixtures carry the two markers that gate
-    // reads: a populated PE certificate table for a Windows installer, and a
-    // sealed _CodeSignature entry name for a macOS zip. Everything else is
-    // genuinely unsigned by design. Writing plain bytes for all of them would
-    // make every case in this file fail for one reason, "unsigned", and hide
-    // whatever it was actually testing.
+    // A staged artifact has to LOOK SIGNED: sign.sh refuses a release whose
+    // artifacts are not, and plain bytes would make every case in this file
+    // fail for that one reason instead of the one under test. The two markers
+    // the gate reads are a populated PE certificate table for a Windows
+    // installer and a sealed _CodeSignature entry for a macOS zip.
     //
-    // The .deb below is an ar archive of debian-binary + control.tar.gz +
-    // data.tar.gz, written by hand because neither dpkg-deb nor GNU ar is
-    // guaranteed on a developer machine and the fixture has to be identical on
-    // both.
+    // The .deb is hand-written as an ar archive because neither dpkg-deb nor
+    // GNU ar is guaranteed on a developer machine.
     const tarGz = (entries) => {
         const blocks = [];
         for (const [path, body] of entries) {
@@ -375,17 +339,12 @@ try {
             'Package: xchain-wallet\nVersion: 9.9.9\n'
             + `Architecture: ${arch}\nMaintainer: XChain <releases@dankest.llc>\n`
             + 'Description: fixture\n']]);
-        // Three payload files, none of them decoration, and the same lesson
-        // three times: a fixture has to be real enough for the gates that have
-        // learned to read it. The multiarch library under this architecture's
-        // own triplet is what sign.sh's payload-architecture gate reads.
-        // `resources/app.asar` is what the pre-sign dev-mock gate reads now
-        // that it opens desktop installers, and a `.deb` with no app bundle
-        // fails that gate's positive check. The unpacked `.node` is the
-        // payload-native gate's subject, which refuses a Linux package built
-        // where the addon never compiled. Keep that path under 100 bytes or
-        // tarGz truncates the ustar name field and the entry silently stops
-        // ending in `.node`.
+        // One payload file per gate that has learned to read a deb: the
+        // multiarch library for the payload-architecture gate,
+        // `resources/app.asar` for the pre-sign dev-mock gate, and the unpacked
+        // `.node` for the payload-native gate. Keep the last path under 100
+        // bytes or tarGz truncates the ustar name field and the entry silently
+        // stops ending in `.node`.
         const data = tarGz([
             [`./usr/lib/${triplet}/libfixture.so`, 'fixture\n'],
             ['./opt/XChain Wallet/resources/app.asar',
@@ -426,25 +385,20 @@ try {
             b.writeUInt32LE(2048, opt + 112 + 36);     // and its size
             return b;
         }
-        // A mac zip is staged as a REAL zip, and this fixture has been caught
-        // by the same class of change twice. The signature gate reads it as a
-        // bundle, so `_CodeSignature` has to be inside it; the pre-sign
-        // dev-mock gate now UNZIPS it and greps the app bundle, so a file
-        // merely NAMED `-mac.zip` reads as a corrupt release artifact. Returns
-        // null so the caller builds it with `zip`, which needs a directory.
+        // A real zip: the signature gate reads `_CodeSignature` inside it and
+        // the dev-mock gate unzips and greps the bundle, so a file merely NAMED
+        // `-mac.zip` reads as a corrupt artifact. Null defers to the caller,
+        // which builds it with `zip` from a directory.
         if (/mac.*\.zip$/.test(name)) return null;
-        // A .deb has to be a REAL Debian archive for the same reason, and it
-        // is the case that only shows up on the venue: the gate reads a deb
-        // with dpkg-deb, which a Mac lacks (artifact reported UNCHECKED, the
-        // fixture passes locally) and the Linux CI venue has (a text file is
-        // an unreadable package and the whole release is refused).
+        // Likewise a real Debian archive, and this one only shows up on the
+        // venue: dpkg-deb is absent on a Mac (artifact reported UNCHECKED) and
+        // present on Linux CI, where a text file is an unreadable package.
         if (name.endsWith('.deb')) {
             return deb(/arm64/.test(name) ? 'arm64' : 'amd64');
         }
-        // An AppImage IS an ELF, and sign.sh's payload-architecture gate reads
-        // its header rather than its name, so a plain-text fixture reads as an
-        // artifact that is not the self-executing image the format promises.
-        // 64 bytes of real header, with the e_machine the filename claims.
+        // An AppImage IS an ELF and the payload-architecture gate reads its
+        // header, not its name: 64 bytes of real header, with the e_machine
+        // the filename claims.
         if (name.endsWith('.AppImage')) {
             const b = Buffer.alloc(64);
             b.write('\x7fELF', 0, 'binary');
@@ -458,12 +412,10 @@ try {
         return Buffer.from(`bytes of ${name}\n`);
     };
 
-    // The web tarball and the extension zip are staged as REAL archives, for
-    // the same reason signedBytes() above writes real PE and _CodeSignature
-    // bytes: sign.sh's pre-sign dev-mock gate unpacks and greps them (S33), so
-    // a file merely NAMED `.tar.gz` reads as a corrupt release artifact. Each
-    // carries the real-SDK literal and none of the mock markers, which is what
-    // a healthy shipped bundle looks like to that gate.
+    // Real archives for the reason signedBytes() writes real bytes: the
+    // pre-sign dev-mock gate unpacks and greps them. Each carries the real-SDK
+    // literal and none of the mock markers, which is what a healthy shipped
+    // bundle looks like to that gate.
     const realArchive = (dir, name) => {
         const src = mkdtempSync(join(work, 'bundle-'));
         writeFileSync(join(src, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
@@ -478,10 +430,9 @@ try {
         const r = name.endsWith('.zip')
             ? spawnSync('zip', ['-qr', join(dir, name), '.'], { cwd: src, encoding: 'utf8' })
             : spawnSync('tar', ['czf', join(dir, name), '.'], { cwd: src, encoding: 'utf8' });
-        // A missing binary gives status null and an undefined stderr, so the
-        // bare assertion read "staged a real ...zip: undefined / null !== 0"
-        // and named neither the tool nor the machine. That is what the CI
-        // venue reported for an hour on 2026-08-06 while `zip` was not there.
+        // A missing binary gives status null and undefined stderr, so the bare
+        // assertion named neither the tool nor the machine: an hour of that on
+        // CI on 2026-08-06 while `zip` was not installed.
         assert.ok(!r.error, `staged a real ${name}: ${r.error?.code === 'ENOENT'
             ? `the '${name.endsWith('.zip') ? 'zip' : 'tar'}' command is not installed on this machine`
             : r.error?.message}`);
@@ -507,13 +458,11 @@ try {
         rmSync(src, { recursive: true, force: true });
     };
 
-    // An android container the dev-mock gate can open, the third time this
-    // fixture has had to become more real. `.aab` and `.apk` are zips, and the
-    // Capacitor shell's web bundle sits at `assets/public/` in an APK and
-    // `base/assets/public/` in a bundle, so that is where the real-SDK literal
-    // goes. A file merely NAMED `.apk` reads to that gate as an artifact it
-    // could not open: the right answer for a release, the wrong reason for a
-    // test to fail.
+    // An android container the dev-mock gate can open. `.aab` and `.apk` are
+    // zips, and the Capacitor shell's web bundle sits at `assets/public/` in an
+    // APK and `base/assets/public/` in a bundle, so the real-SDK literal goes
+    // there. A file merely NAMED `.apk` reads as an artifact the gate could not
+    // open: right for a release, wrong as a reason for a test to fail.
     const realAndroid = (dir, name) => {
         const src = mkdtempSync(join(work, 'android-'));
         const payload = join(src, name.endsWith('.aab') ? join('base', 'assets', 'public')
@@ -549,11 +498,9 @@ try {
         }
         for (const name of extra) writeFileSync(join(dir, name), 'extra\n');
         // Channel pointers: present in a real staging dir, never in the
-        // manifest. Real names because our channel is `stable`, so
-        // `latest*.yml` is not what a build emits (§7.1); real SHAPE because
-        // the split is decided on content, and a stub reading `version: 9.9.9`
-        // alone would be classified as an artifact and hard-fail the
-        // expected-artifacts gate.
+        // manifest. Real names because our channel is `stable` (§7.1), and real
+        // SHAPE because the split is decided on content: a stub of just
+        // `version: 9.9.9` classifies as an artifact and fails the gate.
         for (const name of ['stable.yml', 'stable-mac.yml', 'stable-linux.yml',
             'stable-linux-arm64.yml']) {
             writeFileSync(join(dir, name),
@@ -665,16 +612,12 @@ try {
             /UNDECLARED.*blockmap/.test(r.stderr), r.stderr);
     }
 
-    // 7b. The tag names one version and the staged bytes are another (S33).
-    //     Every gate above counts artifacts; none asked whether they are the
-    //     version the tag names, so the anchor this script exists to provide
-    //     was asserted in its own --tag diagnostic and derived from nothing.
-    //
-    //     Reachable by accident, not by attack, which is why it is here.
-    //     `pnpm release:sign` builds BOTH --tag and --input from the local
-    //     package.json, so a checkout behind the staged release signs the
-    //     older tag over the newer bytes, with every other gate passing and
-    //     the signature good.
+    // 7b. The tag names one version and the staged bytes are another. Every
+    //     gate above counts artifacts; none asked whether they are the version
+    //     the tag names. Reachable by accident: `pnpm release:sign` builds both
+    //     --tag and --input from the local package.json, so a checkout behind
+    //     the staged release signs the older tag over the newer bytes with
+    //     every other gate passing and the signature good.
     {
         git(repo, ['-c', 'tag.gpgsign=false', 'tag', '-f', 'v9.9.8']);
         const r = sh(signArgs(stage(), 'v9.9.8'), { env: gateEnv });
@@ -689,19 +632,14 @@ try {
             !/does not match the staged artifacts/.test(ok.stderr), ok.stderr);
     }
 
-    // 7c. THE CHECK ABOVE READS THE NAME, AND A NAME IS A `cp` AWAY FROM BEING
-    //     ANYTHING (S46). Driven on the real thing rather than reasoned about:
-    //     the CI-built xchain-wallet-extension-v0.336.0.zip, copied to a
-    //     v0.337.0 filename, passed every gate in this pipeline and was hashed
-    //     into the manifest.
-    //
-    //     The extension is the lane where that costs the most. Its
-    //     manifest.json version is not our bookkeeping: the Chrome Web Store
-    //     reads it, displays it, and enforces it monotonically, and the
-    //     store-version monitor compares the LIVE store version against the
-    //     publish log. So a stale zip signed under a new tag surfaces later as
-    //     a live version no publish-log row matches, which is the
-    //     rogue-publish signal, raised by the release that was legitimate.
+    // 7c. The check above reads the NAME, and a name is a `cp` away from being
+    //     anything: the CI-built extension zip for v0.336.0, renamed to
+    //     v0.337.0, passed every gate here and was hashed into the manifest.
+    //     The extension lane pays most for that, because the Chrome Web Store
+    //     reads manifest.json's version and enforces it monotonically, so a
+    //     stale zip under a new tag later surfaces as a live version no
+    //     publish-log row matches: the rogue-publish signal, raised by a
+    //     release that was legitimate.
     {
         const dir = stage();
         const zip = readdirSync(dir).find((n) => /^xchain-wallet-extension-v.*\.zip$/.test(n));
@@ -750,12 +688,9 @@ try {
         check('sign.sh cites G180', /G180/.test(r.stderr), r.stderr);
     }
 
-    // --------------------------------------------- signed round trip
-    //
-    // Needs a working GnuPG. Skipped rather than failed where there
-    // isn't one: this smoke runs on developer machines and in CI, and a
-    // missing gpg is an environment fact, not a regression. The gates
-    // above all ran regardless.
+    // Signed round trip. Needs a working GnuPG, and is skipped rather than
+    // failed without one: a missing gpg is an environment fact, not a
+    // regression, and the gates above all ran regardless.
     const gnupgHome = mkdtempSync(join(tmpdir(), 'xcg-'));
     const gpgEnv = { ...process.env, GNUPGHOME: gnupgHome };
     const keygen = spawnSync('gpg', [
@@ -774,11 +709,10 @@ try {
     if (!fpr) {
         console.log('SKIP  signed round trip (no usable gpg in this environment)');
     } else {
-        /* XCHAIN_VERIFY_KEY because verify.sh binds a signature to an
-         * expected fingerprint S37, and this fixture repo
-         * carries no docs/release-key-pin.json to supply one. The
-         * throwaway key IS the expected key here; that binding has its
-         * own driver in release-verify-signer.smoke.js. */
+        /* verify.sh binds a signature to an expected fingerprint and this
+         * fixture repo has no release-key pin, so the throwaway key IS the
+         * expected key. That binding is driven for real in
+         * release-verify-signer.smoke.js. */
         const env = { ...gpgEnv, XCHAIN_RELEASE_GPG_KEY: fpr, XCHAIN_VERIFY_KEY: fpr };
         delete env.SIGN_SKIP_DEV_MOCK_CHECK;
 
@@ -811,11 +745,10 @@ try {
             ARTIFACTS.every((a) => manifest.includes(`./${a}`)), manifest);
         check('signature file was written', existsSync(`${manifestPath}.asc`));
 
-        // S5: the interop that decides whether the desktop update lane works.
-        // The maintainer signs with the gpg CLI; the app verifies with
-        // openpgp.js. If those two OpenPGP implementations disagree about the
-        // signature gpg just produced, every desktop update fails in the field
-        // for a reason no unit test with synthetic keys would show.
+        // The interop that decides whether the desktop update lane works: the
+        // maintainer signs with the gpg CLI and the app verifies with
+        // openpgp.js. If those two disagree, every desktop update fails in the
+        // field for a reason synthetic-key unit tests never show.
         {
             const openpgp = await import('openpgp');
             const { verifyManifestSignature } =
@@ -901,18 +834,12 @@ try {
         check('verify.sh catches a tampered artifact', tampered.status === 1,
             `${tampered.stdout}${tampered.stderr}`);
 
-        // --- verify.sh must be able to read what verify.sh writes ---
-        //
-        // Found 2026-08-02 by running the submission ceremony's Phase 4 step
-        // against the real v0.334.0 CI artifact: `--recompute` wrote a
-        // manifest that `verify.sh` then REFUSED, on any tag. The profile
-        // check was gated on xr_has_header, but a recompute manifest carries
-        // the same "# manifest-version: 2" line a signed one does, so the
-        // check ran against exactly the manifests documented to have no
-        // profile lines. It matters more than a tool arguing with itself:
-        // signing is still blocked on the release-key ceremony, so
-        // --recompute is the ONLY way an operator can hash-verify an artifact
-        // today, and the runbook's Phase 4 sends them down it.
+        // verify.sh must be able to read what verify.sh writes. Found
+        // 2026-08-02: `--recompute` wrote a manifest verify.sh then refused on
+        // any tag, because the profile check keyed on a header line a recompute
+        // manifest also carries. It matters because signing is blocked on the
+        // release-key ceremony, so --recompute is the only way an operator can
+        // hash-verify an artifact today and the runbook sends them down it.
         const rt = stage();
         rmSync(join(rt, 'RELEASE_HASHES.txt'), { force: true });
         rmSync(join(rt, 'RELEASE_HASHES.txt.asc'), { force: true });
@@ -963,7 +890,7 @@ try {
     rmSync(work, { recursive: true, force: true });
 }
 
-// ------------------------------------------------------- wiring + gate
+// Wiring and gate: the package scripts that drive all of the above.
 
 const rootPkg = JSON.parse(read('package.json'));
 assert.ok(/tools\/release\/sign\.sh/.test(rootPkg.scripts['release:sign'] || ''),
@@ -1020,19 +947,14 @@ const expectedRows = expected.split('\n')
     .filter((l) => l && !l.startsWith('#'))
     .map((l) => l.split(/\s+/));
 assert.ok(expectedRows.length > 0, 'expected-artifacts.txt declares rows');
-// The status column names both the strength AND the release set:
-// `required`/`optional` describe a production release, and the
-// `staging-<os>-*` tokens the §7.5 rehearsal set, which holds only the update-capable formats
-// and therefore can never satisfy the production rows. Enumerated rather
-// than matched on a `staging-` prefix on purpose: a typo like
-// `stagng-required` has to fail here rather than be waved through, which is
-// the same reason lib.sh and verify-signatures.mjs both refuse an unknown
-// status instead of skipping the row.
-// AND, on a staging row, the OS it belongs to (§7.5, 2026-08-07): a
-// rehearsal is per-OS, so the whole list is enumerated here rather than
-// derived, and this array is the third of three places that must agree
-// about what a status means (lib.sh's xr_set_for_status,
-// verify-signatures.mjs's SET_FOR_STATUS, and this).
+// The status column names both the strength and the release set:
+// `required`/`optional` describe a production release, `staging-<os>-*` the
+// §7.5 per-OS rehearsal set, which holds only update-capable formats and can
+// never satisfy a production row. Enumerated rather than prefix-matched so a
+// typo like `stagng-required` fails here instead of being waved through, the
+// same reason lib.sh and verify-signatures.mjs refuse an unknown status. This
+// array is the third of three places that must agree (lib.sh's
+// xr_set_for_status, verify-signatures.mjs's SET_FOR_STATUS, and this).
 const EXPECTED_STATUSES = [
     'required', 'optional',
     'staging-linux-required', 'staging-linux-optional',
@@ -1056,7 +978,7 @@ for (const pat of ['xchain-wallet-android-v*.aab', 'xchain-wallet-ios-v*.ipa']) 
 assert.ok(!expectedRows.some(([, p]) => p.includes('blockmap')),
     'blockmaps stay undeclared (differential updates are a non-goal)');
 
-// ---------------------------------------------- reproduce wiring
+// Reproduce wiring: the scripts that rebuild a shipped bundle.
 
 const driverSrc = read('tools/regtest/test-integration.sh');
 assert.ok(/set -euo pipefail/.test(driverSrc), 'regtest driver has strict-mode guard');
@@ -1068,11 +990,9 @@ for (const shell of ['web', 'extension']) {
     const repro = `packages/${shell}/scripts/reproduce.sh`;
     const buildSh = `packages/${shell}/scripts/build.sh`;
     const dockerfile = `packages/${shell}/Dockerfile`;
-    // The per-shell REPRODUCIBLE_BUILDS.md is no longer a file here
-    // merged all four repro docs into one page in xchain-documentation, with a
-    // section per shell. That page is gated by repro-build-root-doc.smoke.js,
-    // which checks the section AND the anchor the About panel links to; this
-    // loop keeps the scripts, which are what actually reproduce a build.
+    // The per-shell REPRODUCIBLE_BUILDS.md now lives as one page in
+    // xchain-documentation, gated by repro-build-root-doc.smoke.js. This loop
+    // keeps the scripts, which are what actually reproduce a build.
     for (const p of [repro, buildSh, dockerfile]) {
         assert.ok(existsSync(join(root, p)), `${p} exists`);
     }
@@ -1093,13 +1013,10 @@ for (const shell of ['web', 'extension']) {
 
     const dockerSrc = read(dockerfile);
     assert.ok(/@sha256:/.test(dockerSrc), `${dockerfile} pins its base image by digest`);
-    // `NODE_SHA256=` OR `NODE_SHA256_X64=`. The parameterised form is the
-    // correct one and is what the desktop lane always used; the extension
-    // and web lanes were moved onto it in 2026-08 when it turned
-    // out their hardcoded `ENV NODE_SHA256=` pinned a Node MAJOR below the
-    // one the release lane builds with. This assertion is about the tarball
-    // being verified at all - reproducible-toolchain.smoke.js is what holds
-    // the value itself to tools/release/toolchain.json.
+    // Either spelling: the parameterised `NODE_SHA256_X64=` is correct, and the
+    // extension and web lanes moved onto it once their hardcoded form was found
+    // pinning a Node MAJOR below the release lane's. This asserts the tarball
+    // is verified at all; reproducible-toolchain.smoke.js holds the value.
     assert.ok(/NODE_SHA256(_X64)?=/.test(dockerSrc),
         `${dockerfile} SHA256-verifies the Node tarball`);
 
@@ -1108,31 +1025,18 @@ for (const shell of ['web', 'extension']) {
         `packages/${shell}/package.json has a reproduce script`);
 }
 
-// -------------------------------------- the store listing assets are pinned
+// The store listing assets are pinned.
 //
-// row 42. The listing-pack smoke re-reads every listing asset's pixel
-// dimensions out of its PNG header, and the ceremony page states that check as
-// though it settled the assets. It settles the ADDRESS. A 1280x800 screenshot
-// of a product three versions old passes it perfectly, and on 2026-08-06 that
-// was not hypothetical: the four assets were captured at v0.333.1 while the
-// release staged for submission was v0.336.0, with 33 commits to the surfaces
-// they depict in between - including a fix to the consent lines that render
-// inside the sign-approval window, which is one of the three screenshots.
-// Nothing could say so, because nothing recorded which build they came from.
+// A pixel-dimension check settles the ADDRESS, not the contents: on 2026-08-06
+// the four assets were captured at v0.333.1 while the staged release was
+// v0.336.0, 33 commits later, and nothing recorded which build they came from.
 //
-// This section holds the half that is checkable everywhere: the pin exists,
-// covers every asset, and still matches the bytes on disk. It deliberately
-// does NOT gate the drift half (has anything an asset depicts moved since
-// capture), which would go red on every UI commit until somebody recaptured.
-// Drift is only a defect at the moment the images are uploaded, so it lives in
-// the ceremony's Phase 5 step - the same placement row 31 chose for the
-// monitor's own drift, and for the same reason.
-//
-// It lives in THIS file rather than beside the dimension check because its
-// subject is entirely inside this repo. extension-listing-pack.smoke.js skips
-// itself when the documentation sibling is absent, and §13's lesson was that a
-// check whose subject the venue does not check out is not a check in that
-// venue.
+// This section holds the half checkable everywhere (the pin exists, covers
+// every asset, and matches the bytes on disk) and deliberately not the drift
+// half, which would go red on every UI commit; drift is only a defect at upload
+// time, so it lives in the ceremony's Phase 5 step. It lives in THIS file
+// because its subject is entirely inside this repo, while
+// extension-listing-pack.smoke.js skips itself when the docs sibling is absent.
 const pinned = verifyPin();
 assert.ok(!pinned.reason,
     `the Chrome Web Store listing assets have no usable capture pin: ${pinned.reason}. `
@@ -1165,27 +1069,16 @@ assert.equal(ASSETS.length, 4,
     + '1280x800 screenshots and the 440x280 promo tile). A map that shrank stops checking an '
     + 'asset that is still uploaded.');
 
-// ------------------------------- the README's Scripts table is the inventory
+// The README's Scripts table is the inventory, and it is derived rather than
+// remembered: the person who forgets to add a row is the person who would have
+// to remember to check for it. Measured 2026-08-06, the table described 16 of
+// the 30 scripts here and looked complete, omitting verify-signatures.mjs,
+// verify-release-key.sh and cws-upload.mjs. A tool absent from the inventory is
+// invisible until somebody greps for it, mid-ceremony.
 //
-// row 43, and it is §13's own lesson arriving one layer up. §13 stopped
-// harvesting tool names out of prose and started scanning the DIRECTORY,
-// because a page-derived list covers whatever somebody remembered to name.
-// Nobody turned that on the page itself. Measured 2026-08-06: the README's
-// Scripts table, which is the map an operator reads to find out what exists,
-// described 16 of the 30 scripts in this directory and looked complete.
-// Among the fourteen it did not name were verify-signatures.mjs (the gate
-// that refuses an unsigned release, and the reason v0.336.0 cannot be
-// signed), verify-release-key.sh (which ceremony Phase 4b hands the
-// operator), and cws-upload.mjs (built, gated and landed two stages earlier).
-//
-// A tool absent from the inventory is not absent from the tree: it is
-// invisible until somebody greps for it, which is the state row 24 already
-// showed is expensive mid-ceremony. Derived rather than remembered, on the
-// same reasoning as §9's stage table: the person who forgets to add the row
-// is the person who would have to remember to check for it.
-// Recursive, for the same reason §13's scan is: tools/release/drills/ holds
-// the single most side-effecting script in the tree, and a non-recursive walk
-// would report a complete inventory without it.
+// Recursive because tools/release/drills/ holds the most side-effecting script
+// in the tree, and a non-recursive walk would report a complete inventory
+// without it.
 const walkScripts = (relDir) => readdirSync(join(root, relDir), { withFileTypes: true })
     .flatMap((entry) => (entry.isDirectory()
         ? walkScripts(`${relDir}/${entry.name}`)
