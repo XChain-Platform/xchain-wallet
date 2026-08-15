@@ -426,9 +426,18 @@ function assertRecordAgainst(lane, over) {
 // ------------------------------------------------------------- the CLI
 
 {
+    // The CI markers are cleared deliberately. `attest` refuses outright under
+    // inCi(), so on a runner every assertion below about WHY it refused would
+    // read back the CI refusal instead of the rule under test. This file was
+    // written on a developer machine and only began running on a runner once
+    // the docs-sibling checkout was fixed, at which point it failed on exactly
+    // that: an assertion that passed for the wrong reason everywhere it had
+    // ever run. Each marker is emptied rather than deleted because inCi()
+    // tests truthiness, so '' is as good as absent and survives a key copy.
     const cli = (...args) => spawnSync(
         process.execPath, [join(root, 'tools/release/rehearse.mjs'), ...args],
-        { encoding: 'utf8' },
+        { encoding: 'utf8',
+          env: { ...process.env, CI: '', GITHUB_ACTIONS: '', BUILDKITE: '', GITLAB_CI: '' } },
     );
 
     // `attest` refuses the lane while DD-A is unanswered. Recording an
@@ -440,6 +449,17 @@ function assertRecordAgainst(lane, over) {
         '--from', PREVIOUS, '--by', 'nobody');
     assert.equal(attest.status, 1);
     assert.match(attest.stderr, /no named smoke device/);
+
+    // And the CI refusal itself, which the clearing above would otherwise hide.
+    // A runner attesting its own install-over deletes the human witness rather
+    // than automating it, so that refusal is a control and not a limitation.
+    const fromCi = spawnSync(
+        process.execPath, [join(root, 'tools/release/rehearse.mjs'), 'attest',
+            '--record', record, '--lane', 'android-direct', '--from', PREVIOUS, '--by', 'nobody'],
+        { encoding: 'utf8', env: { ...process.env, CI: '1' } },
+    );
+    assert.equal(fromCi.status, 1);
+    assert.match(fromCi.stderr, /refusing to attest from CI/);
     assert.equal(readFileSync(record, 'utf8').includes('android-direct'), true);
     assert.equal(JSON.parse(readFileSync(record, 'utf8')).swaps.length, 1,
         'a refused attestation must not have written a swap');
