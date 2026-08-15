@@ -55,6 +55,7 @@ import {
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -158,10 +159,14 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                 await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
                 await page.getByRole('button', { name: 'Import', exact: true }).click();
 
-                // Argon2id, then the vault write.
+                // Argon2id, then the vault write. The budget is the shared
+                // one for exactly that reason: a hand-picked number here is a
+                // bet on how fast this venue derives, and the 120_000 that
+                // used to sit on this line was BELOW what the budget computes
+                // on a loaded box or on CI.
                 await expect(unlockedShell(page),
                     'the scanned phrase never became an unlocked wallet')
-                    .toBeVisible({ timeout: 120_000 });
+                    .toBeVisible({ timeout: kdfStepTimeout() });
             } finally {
                 await close();
             }
