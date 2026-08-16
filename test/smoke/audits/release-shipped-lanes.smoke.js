@@ -76,6 +76,9 @@ const ANDROID_APK = `xchain-wallet-v${V}.apk`;
 const work = mkdtempSync(join(tmpdir(), 'xc999-lanes-'));
 let failures = 0;
 
+// Collect rather than throw, so ONE run reports every broken gate instead of
+// stopping at the first. The tally is gated by the assertion at the tail; see
+// the note there for why that is an assertion and not a process.exit.
 function check(label, cond, detail) {
     if (cond) return;
     failures += 1;
@@ -373,12 +376,22 @@ try {
     rmSync(work, { recursive: true, force: true });
 }
 
-if (failures > 0) {
-    console.error(`\n${failures} shipped-lane check(s) failed.`);
-    process.exit(1);
-}
-
-assert.ok(true);
+// THE post-condition, and an assertion rather than the `process.exit(1)` that
+// used to stand here. That exit made the file end on a decided question: with
+// the failing runs already gone, a trailing assertion had nothing left to say,
+// and whatever was written there could only be a constant. Anything this file
+// can actually catch - xr_check_shipped_lanes losing its LANE-REGRESSION path,
+// a status word other than SHIPPED/NOT-SHIPPED falling through to the
+// permissive branch, the feed column defaulting instead of being refused,
+// xr_lanes_have_updater_feed failing OPEN on an unreadable list, or
+// shipped-lanes.txt itself retiring the android row or re-declaring a desktop
+// lane as store-only - raises `failures` in some check() above and fails HERE.
+// Each has already printed its own FAIL line with the gate output, so the count
+// is the summary and the lines are the diagnosis.
+assert.equal(
+    failures, 0,
+    `${failures} shipped-lane check(s) failed; the FAIL line(s) above name which.`,
+);
 console.log(
     'OK: release shipped-lane smoke (§6, §2:'
     + ' tools/release/shipped-lanes.txt declares which lanes have users, and'

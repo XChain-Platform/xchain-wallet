@@ -22,8 +22,10 @@
 //      origin matches the supplied origin.
 //   2. Tabs with no `url`, with malformed URLs, or sitting on a
 //      different origin are skipped.
-//   3. With no `chrome.tabs` surface, every method becomes a no-op
-//      (no throws; important for shells without extension APIs).
+//   3. With no `chrome.tabs` surface - or with only half of one - every
+//      method becomes a no-op that never reaches the tab query, and
+//      noopBridgeEvents carries the same method set as the live
+//      broadcaster (shells without extension APIs default to it).
 //   4. emitPermissionDiff fires accountsChanged when the accounts list
 //      changes, and chainChanged when a single chain is added.
 //   5. emitPermissionDiff is silent when there is no diff.
@@ -137,18 +139,49 @@ function makeFakeTabs(tabs) {
 
 {
     const events = createBridgeEventBroadcaster({});
-    await events.disconnect('https://dapp.example');
-    await events.accountsChanged('https://dapp.example', []);
-    await events.chainChanged('https://dapp.example', 'bitcoin');
-    // Reaching here without throws is the assertion.
-    assert.ok(true, 'no chrome.tabs path is silent');
+    assert.deepEqual(
+        Object.keys(events).sort(),
+        ['accountsChanged', 'chainChanged', 'disconnect'],
+        'the full event surface exists even with no chrome.tabs behind it',
+    );
+    assert.equal(await events.disconnect('https://dapp.example'), undefined);
+    assert.equal(await events.accountsChanged('https://dapp.example', []), undefined);
+    assert.equal(await events.chainChanged('https://dapp.example', 'bitcoin'), undefined);
+
+    // The observable that "no-op" actually names: a HALF surface (query but no
+    // sendMessage, which is what a shell exposing a partial chrome namespace
+    // hands over) is never queried at all. The guard has to short-circuit
+    // BEFORE the enumeration, or every state mutation in such a shell pays for
+    // a tab query and then throws on the send.
+    const queried = [];
+    const half = createBridgeEventBroadcaster({
+        tabs: {
+            query: (filter, cb) => {
+                queried.push(filter);
+                if (typeof cb === 'function') { cb([]); return undefined; }
+                return Promise.resolve([]);
+            },
+        },
+    });
+    await half.disconnect('https://dapp.example', 'user-requested');
+    await half.accountsChanged('https://dapp.example', []);
+    await half.chainChanged('https://dapp.example', 'bitcoin');
+    assert.deepEqual(queried, [], 'a tabs surface missing sendMessage is not queried');
 }
 {
-    // noopBridgeEvents is the static no-op surface used as a default.
-    await noopBridgeEvents.disconnect('https://dapp.example');
-    await noopBridgeEvents.accountsChanged('https://dapp.example', []);
-    await noopBridgeEvents.chainChanged('https://dapp.example', 'bitcoin');
-    assert.ok(true);
+    // noopBridgeEvents is the static default `registerBridgeHandlers` falls
+    // back to, so its shape has to track the live broadcaster's: an event added
+    // to one and not the other throws in exactly the shells that have no
+    // chrome.tabs, which are the ones nothing else here covers.
+    const live = createBridgeEventBroadcaster({ tabs: makeFakeTabs([]).surface });
+    assert.deepEqual(
+        Object.keys(noopBridgeEvents).sort(),
+        Object.keys(live).sort(),
+        'the noop surface carries every method the live broadcaster does',
+    );
+    assert.equal(await noopBridgeEvents.disconnect('https://dapp.example'), undefined);
+    assert.equal(await noopBridgeEvents.accountsChanged('https://dapp.example', []), undefined);
+    assert.equal(await noopBridgeEvents.chainChanged('https://dapp.example', 'bitcoin'), undefined);
 }
 
 // --- 4. emitPermissionDiff fires events on diff -----------------------
