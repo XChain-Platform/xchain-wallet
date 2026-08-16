@@ -41,6 +41,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows, decoder } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -308,7 +309,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the dividend sub-route`,
     );
     assert.ok(
-        /id:\s*['"]dividend['"]/.test(app),
+        surfacesEntry(app, 'dividend', 'Pay dividend'),
         `${shell} App.jsx registers the Pay dividend entry`,
     );
     assert.ok(

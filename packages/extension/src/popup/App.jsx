@@ -82,6 +82,7 @@ import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.j
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
+import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
 import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity.jsx';
@@ -2065,7 +2066,16 @@ function AppInner() {
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),
-                        })}
+                            // The BTC-gated handlers above pass undefined on a
+                            // wallet with no Bitcoin address, and the shared
+                            // menu drops those rows. The popup used to render
+                            // them anyway, as buttons with no onClick.
+                            //
+                            // pairsTrezor stays false: the MV3 extension ships
+                            // no Trezor factory (PairSignerForm gets
+                            // pairTrezor={null}), so the entry must not offer
+                            // one.
+                        }, { pairsTrezor: false })}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
@@ -2317,269 +2327,4 @@ function AppInner() {
         default:
             return <Loading error={`unknown state "${status.state}"`} />;
     }
-}
-
-/**
- * Build the Actions menu entries shared across both shells. Each entry
- * maps a §40.2+ authoring surface to the host's sub-route. New entries
- * land here as the standalone forms ship (MINT, DESTROY, admin, …).
- */
-function buildActionEntries({
-    onIssue, onMint, onDestroy, onSweep,
-    onLock, onUpdateDescription, onTransferOwnership,
-    onBroadcast,
-    onPublishOraclePrice,
-    onCreateDispenser,
-    onMyDispensers,
-    onBrowseDispensers,
-    onPayDividend,
-    onAirdrop,
-    onAdvanced,
-    onLockAddress,
-    onPairSigner,
-    onPayCoinpay,
-    onSwap,
-    onCreateOrder,
-    onMyOrders,
-    onMySwaps,
-    onPublishFile,
-    onLink,
-    onParallel,
-    onBatch,
-    onCrossChainSwap,
-    onCrossChainTemplates,
-    onMultisigCreate,
-    onMultisigSign,
-    onCoSignerAccounts,
-    onVoteGovernance,
-    onBetting,
-    onContacts,
-    onSignMessage,
-    onVerifySignature,
-    onSignPsbt,
-}) {
-    return [
-        {
-            id: 'issue',
-            label: 'Issue token',
-            description: 'Create a token with every option exposed.',
-            onSelect: onIssue,
-        },
-        {
-            id: 'mint',
-            label: 'Mint',
-            description: 'Mint additional supply of a token you own.',
-            onSelect: onMint,
-        },
-        {
-            id: 'destroy',
-            label: 'Destroy',
-            description: 'Burn part of your balance. Irreversible.',
-            onSelect: onDestroy,
-        },
-        {
-            id: 'sweep',
-            label: 'Sweep address',
-            description: 'Move every token balance and ownership from one address to a destination, optionally force-closing its open offers.',
-            onSelect: onSweep,
-        },
-        {
-            id: 'lock',
-            label: 'Lock',
-            description: 'Permanently lock one or more settings on a token you own (supply, minting, description, and more).',
-            onSelect: onLock,
-        },
-        {
-            id: 'description',
-            label: 'Update description',
-            description: 'Change a token\'s on-chain description.',
-            onSelect: onUpdateDescription,
-        },
-        {
-            id: 'transfer',
-            label: 'Transfer ownership',
-            description: 'Hand token ownership to another address.',
-            onSelect: onTransferOwnership,
-        },
-        {
-            id: 'broadcast',
-            label: 'Broadcast',
-            description: 'Publish text, oracle value, or feed reference on-chain.',
-            onSelect: onBroadcast,
-        },
-        {
-            id: 'oracle',
-            label: 'My oracle',
-            description: 'Publish what your token is worth in a currency so dispensers can sell at that rate.',
-            onSelect: onPublishOraclePrice,
-        },
-        {
-            id: 'dispenser',
-            label: 'Create dispenser',
-            description: 'Open a vending machine that sells your token for coin or fiat currency.',
-            onSelect: onCreateDispenser,
-        },
-        {
-            id: 'dispensers-list',
-            label: 'My dispensers',
-            description: 'Manage dispensers you have opened: view + cancel.',
-            onSelect: onMyDispensers,
-        },
-        {
-            id: 'dispenser-explorer',
-            label: 'Browse dispensers',
-            description: 'Search for open dispensers by token or address.',
-            onSelect: onBrowseDispensers,
-        },
-        {
-            id: 'dividend',
-            label: 'Pay dividend',
-            description: 'Pay a dividend in any token to a token\'s holders, pro rata.',
-            onSelect: onPayDividend,
-        },
-        {
-            id: 'airdrop',
-            label: 'Airdrop tokens',
-            description: 'Distribute a token to a pasted or uploaded list of addresses.',
-            onSelect: onAirdrop,
-        },
-        {
-            id: 'coinpay',
-            label: 'Pay for a matched order',
-            description: 'Finish a matched order by paying the coin side.',
-            onSelect: onPayCoinpay,
-        },
-        {
-            id: 'swap',
-            label: 'Swap tokens',
-            description: 'Swap one token directly for another, with no coin payment step.',
-            onSelect: onSwap,
-        },
-        {
-            id: 'create-order',
-            label: 'Create order',
-            description: 'Place a DEX limit order on any pair, including native-coin sides, with expiration and allow/block lists.',
-            onSelect: onCreateOrder,
-        },
-        {
-            id: 'my-orders',
-            label: 'My orders',
-            description: 'View, edit, and cancel your open orders across every pair.',
-            onSelect: onMyOrders,
-        },
-        {
-            id: 'my-swaps',
-            label: 'My swaps',
-            description: 'View, edit, and cancel your open atomic swaps across every pair.',
-            onSelect: onMySwaps,
-        },
-        {
-            id: 'publish-file',
-            label: 'Publish file',
-            description: 'Store a file on the chain: public, or encrypted so only holders of your token can open it.',
-            onSelect: onPublishFile,
-        },
-        {
-            id: 'link',
-            label: 'Link cross-chain actions',
-            description: 'Tie two existing actions on different chains together. Both sides thread together in History.',
-            onSelect: onLink,
-        },
-        {
-            id: 'parallel',
-            label: 'Parallel cross-chain actions',
-            description: 'Compose multiple independent actions across any chains and sign them sequentially. Not atomic; failures do not roll back.',
-            onSelect: onParallel,
-        },
-        {
-            id: 'batch',
-            label: 'Batch',
-            description: 'Bundle several actions on one chain into a single transaction. Not all-or-nothing: each action confirms or fails on its own. Issue one new token plus as many of its subtokens as you like, mint each token at most once, and add at most one contract deploy, up to 250 actions; no nested batches.',
-            onSelect: onBatch,
-        },
-        {
-            id: 'cross-chain-swap',
-            label: 'Cross-chain swap',
-            description: 'Offer a token on one chain in exchange for a token on another. Settles automatically when a counterparty fills the offer.',
-            onSelect: onCrossChainSwap,
-        },
-        {
-            id: 'cross-chain-templates',
-            label: 'Cross-chain templates',
-            description: 'Pre-baked multi-chain flows: launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills the Parallel composer.',
-            onSelect: onCrossChainTemplates,
-        },
-        {
-            id: 'multisig-create',
-            label: 'Create multisig',
-            description: 'Set up a shared wallet: pick your co-signers, an address type, and how many signatures are required. Bitcoin only at launch.',
-            onSelect: onMultisigCreate,
-        },
-        {
-            id: 'multisig-sign',
-            label: 'Multisig signing',
-            description: 'Resume a shared-wallet transaction that is waiting for signatures and track who has signed.',
-            onSelect: onMultisigSign,
-        },
-        {
-            id: 'governance-polls',
-            label: 'Governance',
-            description: 'Create and vote on token-weighted polls, and delegate your voting weight.',
-            onSelect: onVoteGovernance,
-        },
-        {
-            id: 'bet-markets',
-            label: 'Betting',
-            description: 'Browse betting markets and place a bet, track your bets, or run a market of your own as its oracle.',
-            onSelect: onBetting,
-        },
-        {
-            id: 'cosigner-accounts',
-            label: 'Agent accounts',
-            description: 'Share a 2-of-2 address with an automated agent. This wallet co-signs each request that fits the policy you set. Bitcoin only at launch.',
-            onSelect: onCoSignerAccounts,
-        },
-        {
-            id: 'contacts',
-            label: 'Contacts',
-            description: 'Local address book: label counterparties, quick-compose to saved recipients.',
-            onSelect: onContacts,
-        },
-        {
-            id: 'sign-message',
-            label: 'Sign message',
-            description: 'Sign an arbitrary message with one of your addresses to prove ownership.',
-            onSelect: onSignMessage,
-        },
-        {
-            id: 'verify-signature',
-            label: 'Verify signature',
-            description: 'Verify a signature from any address, your own or someone else\'s.',
-            onSelect: onVerifySignature,
-        },
-        {
-            id: 'sign-psbt',
-            label: 'Sign transaction',
-            description: 'Paste an unsigned transaction (hex / base64) and sign it with one of your keys.',
-            onSelect: onSignPsbt,
-        },
-        {
-            id: 'advanced',
-            label: 'Advanced action',
-            description: 'Submit any action the SDK supports. Power-user surface for ADDRESS / CALLBACK / SLEEP / raw MESSAGE.',
-            onSelect: onAdvanced,
-        },
-        {
-            id: 'lock-address',
-            label: 'Lock this address',
-            description: 'Safety freeze: block all actions from this address until a chosen block. One-way until it unlocks.',
-            onSelect: onLockAddress,
-        },
-        {
-            id: 'pair-signer',
-            label: 'Pair hardware signer',
-            description: 'Add a Ledger to this wallet via WebHID. Trezor is available in the XChain web and desktop wallets.',
-            onSelect: onPairSigner,
-        },
-    ];
 }

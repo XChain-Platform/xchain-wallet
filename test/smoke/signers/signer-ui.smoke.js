@@ -26,6 +26,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -243,7 +244,7 @@ for (const [shell, appPath, offersTrezor] of [
         );
     }
     assert.ok(
-        /id:\s*['"]pair-signer['"]/.test(app),
+        surfacesEntry(app, 'pair-signer', 'Pair hardware signer'),
         `${shell} App.jsx registers the pair-signer entry in buildActionEntries`,
     );
     assert.ok(

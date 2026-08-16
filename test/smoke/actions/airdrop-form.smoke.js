@@ -48,6 +48,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
+import { surfacesEntry } from '../_action-entries.js';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -363,7 +364,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the airdrop sub-route`,
     );
     assert.ok(
-        /id:\s*['"]airdrop['"]/.test(app),
+        surfacesEntry(app, 'airdrop', 'Airdrop tokens'),
         `${shell} App.jsx registers the Airdrop tokens entry`,
     );
     assert.ok(

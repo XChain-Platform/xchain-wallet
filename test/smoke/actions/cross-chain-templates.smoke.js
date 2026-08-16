@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { validateCrossChainTemplate } from '../../../packages/core/src/templates/cross-chain/validate.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -128,7 +129,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks parallelPrefill state`);
     assert.ok(/initialRows=\{parallelPrefill \|\| undefined\}/.test(app),
         `${shell} passes parallelPrefill into ParallelComposer.initialRows`);
-    assert.ok(/Cross-chain templates/.test(app),
+    assert.ok(surfacesEntry(app, 'cross-chain-templates', 'Cross-chain templates'),
         `${shell} ActionsMenu surfaces the "Cross-chain templates" entry`);
 }
 

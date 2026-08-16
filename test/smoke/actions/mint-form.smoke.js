@@ -34,6 +34,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -257,7 +258,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the mint sub-route`,
     );
     assert.ok(
-        /id:\s*['"]mint['"]/.test(app),
+        surfacesEntry(app, 'mint', 'Mint'),
         `${shell} App.jsx registers the mint entry in buildActionEntries`,
     );
     assert.ok(

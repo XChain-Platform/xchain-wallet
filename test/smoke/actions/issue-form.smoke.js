@@ -37,6 +37,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -226,7 +227,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx passes entries via buildActionEntries`,
     );
     assert.ok(
-        /id:\s*['"]issue['"]/.test(app),
+        surfacesEntry(app, 'issue', 'Issue token'),
         `${shell} App.jsx includes the issue entry`,
     );
     assert.ok(

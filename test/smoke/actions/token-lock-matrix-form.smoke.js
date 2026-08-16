@@ -42,6 +42,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { armsEntry, entryLabel } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -181,7 +182,7 @@ for (const [shell, appPath] of [
 ]) {
     const app = readFileSync(appPath, 'utf8');
     assert.ok(
-        /id:\s*'lock',\s*\n\s*label:\s*'Lock',/.test(app),
+        entryLabel('lock') === 'Lock' && armsEntry(app, 'lock'),
         `${shell} App.jsx Actions-menu 'lock' entry label reflects the matrix (no longer "Lock supply")`,
     );
 }

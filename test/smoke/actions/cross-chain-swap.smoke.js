@@ -15,6 +15,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -122,7 +123,7 @@ for (const [shell, appPath] of [
         `${shell} ActionsMenu wires onCrossChainSwap → 'cross-chain-swap'`);
     assert.ok(/<CrossChainSwapForm\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <CrossChainSwapForm> with the active walletId`);
-    assert.ok(/Cross-chain swap/.test(app),
+    assert.ok(surfacesEntry(app, 'cross-chain-swap', 'Cross-chain swap'),
         `${shell} ActionsMenu surfaces the "Cross-chain swap" entry`);
 }
 

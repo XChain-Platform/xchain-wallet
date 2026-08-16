@@ -38,6 +38,7 @@ if (!globalThis.crypto) {
 }
 
 import { flows, storage } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -168,7 +169,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports ContactsList`);
     assert.ok(app.includes("'contacts'"),
         `${shell} App.jsx tracks the contacts sub-route`);
-    assert.ok(/id:\s*['"]contacts['"]/.test(app),
+    assert.ok(surfacesEntry(app, 'contacts', 'Contacts'),
         `${shell} App.jsx registers the Contacts entry`);
     assert.ok(/onSendMessage=/.test(app),
         `${shell} App.jsx threads onSendMessage from ContactsList to ComposeMessage prefill`);

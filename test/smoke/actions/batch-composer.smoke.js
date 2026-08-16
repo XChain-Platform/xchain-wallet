@@ -20,6 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry, entryDescription } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -87,7 +88,8 @@ for (const shell of [
     const app = read(...shell);
     assert.match(app, /BatchComposerForm/, `${name} App imports + renders BatchComposerForm`);
     assert.match(app, /'batch-compose'/, `${name} App routes the batch-compose view`);
-    assert.match(app, /id: 'batch'/, `${name} App menu offers the batch composer`);
+    assert.ok(surfacesEntry(app, 'batch', 'Batch'),
+        `${name} App menu offers the batch composer`);
     assert.match(app, /onBatch/, `${name} App wires onBatch through buildActionEntries`);
 }
 
@@ -96,16 +98,13 @@ for (const shell of [
 // per batch, and one DEPLOY per batch IS allowed (BATCH_SINGLETON_ACTIONS).
 // The original web string claimed "at most one MINT" and "no ... deploys",
 // and was about to be copied into two more shells.
-for (const shell of [
-    ['packages', 'web', 'src', 'App.jsx'],
-    ['packages', 'desktop', 'renderer', 'App.jsx'],
-    ['packages', 'extension', 'src', 'popup', 'App.jsx'],
-]) {
-    const entry = read(...shell).split("id: 'batch'")[1].slice(0, 600);
-    assert.doesNotMatch(entry, /at most one MINT/,
-        `${shell[1]} batch copy must not cap MINT at one per batch`);
-    assert.doesNotMatch(entry, /no nested batches or deploys/,
-        `${shell[1]} batch copy must not deny DEPLOY: one per batch is legal`);
-}
+// There is now ONE copy of this string, in the shared menu, which is
+// what closed #5114: the fix below would otherwise have had to be pasted
+// into a third and fourth shell.
+const batchCopy = entryDescription('batch');
+assert.doesNotMatch(batchCopy, /at most one MINT/,
+    'batch copy must not cap MINT at one per batch');
+assert.doesNotMatch(batchCopy, /no nested batches or deploys/,
+    'batch copy must not deny DEPLOY: one per batch is legal');
 
 console.log('batch-composer smoke: all assertions passed');

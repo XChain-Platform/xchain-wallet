@@ -25,6 +25,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -240,7 +241,7 @@ for (const [shell, ...p] of [
     // Reachable from the menu, not merely present in the bundle.
     assert.match(src, /onBetting: \(\) => setUnlockedView\('bet-markets'\)/,
         `${shell}: the actions menu opens the betting hub`);
-    assert.match(src, /onSelect: onBetting/, `${shell}: the betting menu entry is wired`);
+    assert.ok(surfacesEntry(src, 'bet-markets', 'Betting'), `${shell}: the betting menu entry is wired`);
     // The oracle record has no menu entry by design: it is a question about ONE
     // oracle and needs an address as its subject, so the market page is its only
     // door. That makes this handler the whole reachability story - the route

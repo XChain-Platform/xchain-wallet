@@ -15,6 +15,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -87,7 +88,7 @@ for (const [shell, appPath] of [
         `${shell} ActionsMenu wires onParallel → 'parallel-compose'`);
     assert.ok(/<ParallelComposer\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <ParallelComposer> with the active walletId`);
-    assert.ok(/Parallel cross-chain actions/.test(app),
+    assert.ok(surfacesEntry(app, 'parallel', 'Parallel cross-chain actions'),
         `${shell} ActionsMenu surfaces the "Parallel cross-chain actions" entry`);
 }
 

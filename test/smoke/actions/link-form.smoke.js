@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -169,7 +170,7 @@ for (const [shell, appPath] of [
         `${shell} ActionsMenu wires onLink → 'link-form'`);
     assert.ok(/<LinkForm\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <LinkForm> with the active walletId`);
-    assert.ok(/Link cross-chain actions/.test(app),
+    assert.ok(surfacesEntry(app, 'link', 'Link cross-chain actions'),
         `${shell} ActionsMenu surfaces a "Link cross-chain actions" entry`);
 }
 
