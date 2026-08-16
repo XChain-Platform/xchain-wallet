@@ -64,7 +64,7 @@ assert.match(queries, /ORACLE_ACTIVATION_DELAY_S = 86400/, 'activation delay pin
 const decoderSrc = read('packages', 'core', 'src', 'decoder', 'actionDecoder.js');
 assert.match(decoderSrc, /action === 'PRICE'/, 'PRICE reaches a dedicated decoder case');
 assert.match(decoderSrc, /cannot be changed or withdrawn before then/, 'confirm screen carries the 24h rail');
-assert.match(decoderSrc, /published by the validator federation/, 'v0 flagged as not wallet-publishable');
+assert.match(decoderSrc, /not from a wallet/, 'v0 flagged as not wallet-publishable');
 
 // ---- Host + messaging ----
 const host = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');

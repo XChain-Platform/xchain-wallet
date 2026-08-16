@@ -40,8 +40,13 @@ import { bridgeErrorCodeFor } from '../bridge/errorCodes.js';
  *
  * @param {import('./MessageHost.js').MessageHost} host
  * @param {{ onMessage: { addListener: Function, removeListener: Function } }} [chromeRuntime]
- * @param {{ onActivity?: () => void }} [opts]   onActivity fires once per message
- *        from the trusted extension UI, feeding the background auto-lock backstop.
+ * @param {{
+ *   onActivity?: () => void,
+ *   onWebSender?: (tabId: number, origin: string) => void,
+ * }} [opts]   onActivity fires once per message from the trusted extension UI,
+ *        feeding the background auto-lock backstop. onWebSender fires once per
+ *        accepted `bridge.*` message from a web page, carrying the browser's own
+ *        reading of which tab and which origin it came from.
  * @returns {() => void}                                                       detach fn
  */
 export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
@@ -53,6 +58,7 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
         );
     }
     const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : null;
+    const onWebSender = typeof opts.onWebSender === 'function' ? opts.onWebSender : null;
 
     const listener = (message, sender, sendResponse) => {
         // Pre-host listener (sessionMeta.js) owns a small set of types
@@ -120,6 +126,18 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
                     },
                 });
                 return true;
+            }
+            // §43.2 delivery set. Anything reaching here from an untrusted
+            // sender is a `bridge.*` call that passed both confused-deputy
+            // layers, so this tab is genuinely in conversation with the wallet
+            // at this origin. Record it: the event broadcaster cannot learn the
+            // same fact from `chrome.tabs.query`, which withholds `Tab.url`
+            // from a manifest with no "tabs" or host permission. `sender` is
+            // filled in by the browser, so a page cannot register itself under
+            // someone else's origin. Skipped when the origin is not derivable
+            // (opaque/sandboxed frames), which costs delivery, never safety.
+            if (onWebSender && senderOrigin && typeof sender?.tab?.id === 'number') {
+                try { onWebSender(sender.tab.id, senderOrigin); } catch { /* best-effort */ }
             }
         }
         Promise.resolve()

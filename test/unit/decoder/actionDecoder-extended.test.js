@@ -576,7 +576,7 @@ describe('decodeAction extended', () => {
         it('v0 is flagged as validator-only rather than summarized as signable', () => {
             const d = decodeAction({ action: 'PRICE', params: { VERSION: '0', COIN: 'BTC', FIAT: 'USD', VALUE: '100000' } });
             expect(d.summary).toBe('Validator price snapshot');
-            expect(d.warnings.some((w) => /published by the validator federation/.test(w))).toBe(true);
+            expect(d.warnings.some((w) => /not from a wallet/.test(w))).toBe(true);
         });
     });
 });

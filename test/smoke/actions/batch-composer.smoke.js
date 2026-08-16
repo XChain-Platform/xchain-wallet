@@ -10,7 +10,7 @@
 
 // Smoke for PC-36 atomic BATCH composer: the batchCommand flow (COMMAND
 // assembly + constraint pre-check), its host + 3-shell messaging wiring,
-// the BatchComposerForm surface, and its web-shell route wiring. Signing
+// the BatchComposerForm surface, and its 3-shell route wiring. Signing
 // reuses the generic advancedAction path (action='BATCH'), so no new sign
 // flow is asserted.
 
@@ -73,9 +73,39 @@ assert.doesNotMatch(form, /\bAtomic\b/,
     'form must not claim atomicity: a batch is not all-or-nothing');
 
 // ---- Web-shell route wiring (desktop/ext deferred: concurrent PC-30 edits) ----
-const webApp = read('packages', 'web', 'src', 'App.jsx');
-assert.match(webApp, /BatchComposerForm/, 'web App imports + renders BatchComposerForm');
-assert.match(webApp, /'batch-compose'/, 'web App routes the batch-compose view');
-assert.match(webApp, /id: 'batch'/, 'web App menu offers the atomic batch');
+// Every shell, not just web. The web-only version of this block carried the
+// note "desktop/ext deferred: concurrent PC-30 edits", and the deferral then
+// outlived the reason: core advertises BATCH on every chain and all three
+// shells already expose batch.buildCommand, but two of the three menus never
+// grew the entry, so the composer was unreachable outside web (#5112/#5113).
+for (const shell of [
+    ['packages', 'web', 'src', 'App.jsx'],
+    ['packages', 'desktop', 'renderer', 'App.jsx'],
+    ['packages', 'extension', 'src', 'popup', 'App.jsx'],
+]) {
+    const name = shell[1];
+    const app = read(...shell);
+    assert.match(app, /BatchComposerForm/, `${name} App imports + renders BatchComposerForm`);
+    assert.match(app, /'batch-compose'/, `${name} App routes the batch-compose view`);
+    assert.match(app, /id: 'batch'/, `${name} App menu offers the batch composer`);
+    assert.match(app, /onBatch/, `${name} App wires onBatch through buildActionEntries`);
+}
+
+// The menu copy states the BATCH limits, so it has to state the ones the
+// validator actually enforces: MINT is capped per token rather than at one
+// per batch, and one DEPLOY per batch IS allowed (BATCH_SINGLETON_ACTIONS).
+// The original web string claimed "at most one MINT" and "no ... deploys",
+// and was about to be copied into two more shells.
+for (const shell of [
+    ['packages', 'web', 'src', 'App.jsx'],
+    ['packages', 'desktop', 'renderer', 'App.jsx'],
+    ['packages', 'extension', 'src', 'popup', 'App.jsx'],
+]) {
+    const entry = read(...shell).split("id: 'batch'")[1].slice(0, 600);
+    assert.doesNotMatch(entry, /at most one MINT/,
+        `${shell[1]} batch copy must not cap MINT at one per batch`);
+    assert.doesNotMatch(entry, /no nested batches or deploys/,
+        `${shell[1]} batch copy must not deny DEPLOY: one per batch is legal`);
+}
 
 console.log('batch-composer smoke: all assertions passed');

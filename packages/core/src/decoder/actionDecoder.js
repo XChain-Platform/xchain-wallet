@@ -1281,7 +1281,7 @@ function decodePrice(p, chainSuffix) {
                 ...(value ? [{ label: 'Value', value }] : []),
             ],
             warnings: [
-                'PRICE v0 is published by the validator federation, not by a wallet. The network will reject this transaction.',
+                'Price snapshots like this one are published by the network itself, not from a wallet, so this transaction cannot be sent from here and the network would reject it.',
             ],
         };
     }

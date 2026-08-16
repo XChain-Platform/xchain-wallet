@@ -111,18 +111,6 @@ const DEFAULT_IGNORE_FILES = [
     /\/node_modules\//,
 ];
 
-function isTechnicalAttr(name) {
-    if (!name) return true;
-    if (TECHNICAL_ATTR_NAMES.has(name)) return true;
-    for (const prefix of TECHNICAL_ATTR_PREFIXES) {
-        if (name.startsWith(prefix)) return true;
-    }
-    // aria-* is mostly technical except for the USER_FACING_ATTRS members
-    // (aria-label, aria-description, aria-roledescription, aria-valuetext).
-    if (name.startsWith('aria-') && !USER_FACING_ATTRS.has(name)) return true;
-    return false;
-}
-
 /**
  * Decide whether a string value is "trivial" enough to ignore: pure
  * whitespace, a single character, all digits / punctuation, or in

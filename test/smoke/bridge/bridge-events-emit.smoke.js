@@ -17,13 +17,22 @@
 // existed. v0.280.0 adds `createBridgeEventBroadcaster` + threads it
 // through `bridge.disconnect` and `updateSitePermissions`.
 //
+// The first cut selected target tabs with `chrome.tabs.query({})` filtered by
+// `new URL(tab.url).origin`, and therefore delivered NOTHING: MV3 populates
+// `Tab.url` only for an extension holding the "tabs" permission or a matching
+// host permission, and manifest.json holds neither. The fake tabs here always
+// supplied a `url`, so the smoke went on passing over a dead pipeline. Targets
+// now come from the connected-tab registry (`background/connectedTabs.js`),
+// built from unforgeable `sender` data, and this file asserts against that
+// registry rather than against a `url` the browser never provides.
+//
 // Asserts:
-//   1. createBridgeEventBroadcaster fans out only to tabs whose URL
-//      origin matches the supplied origin.
-//   2. Tabs with no `url`, with malformed URLs, or sitting on a
-//      different origin are skipped.
-//   3. With no `chrome.tabs` surface - or with only half of one - every
-//      method becomes a no-op that never reaches the tab query, and
+//   1. createBridgeEventBroadcaster delivers only to the tab ids the registry
+//      holds for the supplied origin, and stamps that origin on the message.
+//   2. Registry entries for other origins are never addressed, and a
+//      non-integer tab id is skipped.
+//   3. With no `chrome.tabs.sendMessage` surface - or with no registry - every
+//      method becomes a no-op that never reaches the registry, and
 //      noopBridgeEvents carries the same method set as the live
 //      broadcaster (shells without extension APIs default to it).
 //   4. emitPermissionDiff fires accountsChanged when the accounts list
@@ -35,7 +44,8 @@
 //   7. createBackgroundHost accepts a `bridgeEvents` dep and threads
 //      it through to registerBridgeHandlers.
 //   8. background.js wires the broadcaster against chrome.tabs +
-//      chrome.runtime.
+//      chrome.runtime + the connected-tab registry, records web senders into
+//      that registry, and manifest.json still asks for no "tabs" permission.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -64,44 +74,49 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-// --- 1. Origin filtering ----------------------------------------------
+// --- 1. Registry-driven delivery --------------------------------------
 
-function makeFakeTabs(tabs) {
+function makeFakeTabs() {
     const sent = [];
     return {
         sent,
         surface: {
-            query: (_filter, cb) => {
-                if (typeof cb === 'function') {
-                    cb(tabs);
-                    return undefined;
-                }
-                return Promise.resolve(tabs);
-            },
-            sendMessage: (tabId, message) => {
+            sendMessage: (tabId, message, cb) => {
                 sent.push({ tabId, message });
+                if (typeof cb === 'function') cb();
             },
         },
     };
 }
 
+// The registry the broadcaster reads. The real one is built from chrome's own
+// `sender` data; here it is a literal map so the assertion is about the
+// broadcaster's selection, not about how the map was filled.
+function fakeRegistry(map) {
+    return { tabsForOrigin: async (origin) => (map[origin] ?? []) };
+}
+
 {
-    const fake = makeFakeTabs([
-        { id: 1, url: 'https://dapp.example/page' },
-        { id: 2, url: 'https://other.example/page' },
-        { id: 3, url: 'https://dapp.example/another' },
-    ]);
-    const events = createBridgeEventBroadcaster({ tabs: fake.surface, runtime: {} });
+    const fake = makeFakeTabs();
+    const events = createBridgeEventBroadcaster({
+        tabs: fake.surface,
+        runtime: {},
+        connectedTabs: fakeRegistry({
+            'https://dapp.example': [1, 3],
+            'https://other.example': [2],
+        }),
+    });
     await events.disconnect('https://dapp.example', 'user-requested');
-    assert.equal(fake.sent.length, 2, 'fan-out hits both matching tabs');
+    assert.equal(fake.sent.length, 2, 'fan-out hits both registered tabs');
     assert.deepEqual(fake.sent.map((s) => s.tabId).sort(), [1, 3]);
     assert.equal(fake.sent[0].message.type, 'bridge.event');
     assert.equal(fake.sent[0].message.event, 'disconnect');
     assert.equal(fake.sent[0].message.payload, 'user-requested');
-    // The origin check above reads a URL snapshot while the send is addressed by
-    // a mutable tab id, so the message must name the origin it was meant for and
-    // the content script must re-check it against the document it actually runs
-    // in. Both halves, or the guard is a comment.
+    // A registry entry is a delivery hint bound to a mutable tab id, so a tab
+    // that navigated since its last bridge call is still addressed. The message
+    // must therefore name the origin it was meant for, and the content script
+    // must re-check it against the document it actually runs in. Both halves,
+    // or the guard is a comment.
     assert.equal(
         fake.sent[0].message.origin,
         'https://dapp.example',
@@ -117,25 +132,31 @@ function makeFakeTabs(tabs) {
     );
 }
 
-// --- 2. Skipping degenerate tabs --------------------------------------
+// --- 2. Other origins and degenerate ids ------------------------------
 
 {
-    const fake = makeFakeTabs([
-        { id: 1 },                                  // no url
-        { id: 2, url: 'chrome://newtab' },          // wrong origin
-        { id: 3, url: 'not a url at all' },         // malformed
-        { url: 'https://dapp.example/page' },       // no id
-        { id: 5, url: 'https://dapp.example/page' },
-    ]);
-    const events = createBridgeEventBroadcaster({ tabs: fake.surface });
+    const fake = makeFakeTabs();
+    const events = createBridgeEventBroadcaster({
+        tabs: fake.surface,
+        connectedTabs: fakeRegistry({
+            'https://dapp.example': ['7', null, undefined, 1.5, 5],
+            'https://other.example': [9],
+        }),
+    });
     await events.accountsChanged('https://dapp.example', [{ id: 'acct-0', name: 'Main' }]);
-    assert.equal(fake.sent.length, 1);
+    assert.equal(fake.sent.length, 1, 'only the one integer tab id is addressed');
     assert.equal(fake.sent[0].tabId, 5);
     assert.equal(fake.sent[0].message.event, 'accountsChanged');
     assert.deepEqual(fake.sent[0].message.payload, [{ id: 'acct-0', name: 'Main' }]);
+
+    // An origin the registry knows nothing about sends nothing at all, rather
+    // than falling back to every tab it does know.
+    fake.sent.length = 0;
+    await events.chainChanged('https://unconnected.example', 'bitcoin');
+    assert.deepEqual(fake.sent, [], 'an unregistered origin gets no fan-out');
 }
 
-// --- 3. No chrome.tabs → no-op ----------------------------------------
+// --- 3. No sendMessage / no registry → no-op --------------------------
 
 {
     const events = createBridgeEventBroadcaster({});
@@ -148,32 +169,39 @@ function makeFakeTabs(tabs) {
     assert.equal(await events.accountsChanged('https://dapp.example', []), undefined);
     assert.equal(await events.chainChanged('https://dapp.example', 'bitcoin'), undefined);
 
-    // The observable that "no-op" actually names: a HALF surface (query but no
-    // sendMessage, which is what a shell exposing a partial chrome namespace
-    // hands over) is never queried at all. The guard has to short-circuit
-    // BEFORE the enumeration, or every state mutation in such a shell pays for
-    // a tab query and then throws on the send.
-    const queried = [];
+    // The observable that "no-op" actually names: a tabs surface with no
+    // sendMessage (what a shell exposing a partial chrome namespace hands over)
+    // never reaches the registry at all. The guard has to short-circuit BEFORE
+    // the lookup, or every state mutation in such a shell pays for a
+    // storage.session read and then throws on the send.
+    const looked = [];
     const half = createBridgeEventBroadcaster({
-        tabs: {
-            query: (filter, cb) => {
-                queried.push(filter);
-                if (typeof cb === 'function') { cb([]); return undefined; }
-                return Promise.resolve([]);
-            },
+        tabs: {},
+        connectedTabs: {
+            tabsForOrigin: async (origin) => { looked.push(origin); return [1]; },
         },
     });
     await half.disconnect('https://dapp.example', 'user-requested');
     await half.accountsChanged('https://dapp.example', []);
     await half.chainChanged('https://dapp.example', 'bitcoin');
-    assert.deepEqual(queried, [], 'a tabs surface missing sendMessage is not queried');
+    assert.deepEqual(looked, [], 'a tabs surface missing sendMessage is not looked up');
+
+    // And the mirror case: a real tabs surface with no registry behind it sends
+    // nothing rather than falling back to a broadcast.
+    const noRegistry = makeFakeTabs();
+    const blind = createBridgeEventBroadcaster({ tabs: noRegistry.surface });
+    await blind.disconnect('https://dapp.example', 'user-requested');
+    assert.deepEqual(noRegistry.sent, [], 'no registry means no delivery, never a broadcast');
 }
 {
     // noopBridgeEvents is the static default `registerBridgeHandlers` falls
     // back to, so its shape has to track the live broadcaster's: an event added
     // to one and not the other throws in exactly the shells that have no
     // chrome.tabs, which are the ones nothing else here covers.
-    const live = createBridgeEventBroadcaster({ tabs: makeFakeTabs([]).surface });
+    const live = createBridgeEventBroadcaster({
+        tabs: makeFakeTabs().surface,
+        connectedTabs: fakeRegistry({}),
+    });
     assert.deepEqual(
         Object.keys(noopBridgeEvents).sort(),
         Object.keys(live).sort(),
@@ -306,12 +334,51 @@ const bgSrc = readFileSync(
     'utf8',
 );
 assert.ok(
-    /createBridgeEventBroadcaster\(\{\s*tabs:\s*chrome\.tabs,\s*runtime:\s*chrome\.runtime\s*\}\)/.test(bgSrc),
-    'background.js constructs broadcaster with chrome.tabs + chrome.runtime',
+    /createBridgeEventBroadcaster\(\{[\s\S]{0,400}?tabs:\s*chrome\.tabs,[\s\S]{0,400}?runtime:\s*chrome\.runtime,[\s\S]{0,400}?connectedTabs,/.test(bgSrc),
+    'background.js constructs broadcaster with chrome.tabs + chrome.runtime + the registry',
 );
 assert.ok(
     /bridgeEvents:[\s\S]*?createBridgeEventBroadcaster/.test(bgSrc),
     'background.js passes bridgeEvents into createBackgroundHost',
+);
+// The registry only holds anything if the runtime adapter feeds it. Without
+// this half the broadcaster looks wired and still delivers to nobody, which is
+// exactly the shape of the bug the URL filter had.
+assert.ok(
+    /onWebSender:\s*\(tabId,\s*origin\)\s*=>\s*connectedTabs\.record\(tabId,\s*origin\)/.test(bgSrc),
+    'background.js feeds accepted web senders into the connected-tab registry',
+);
+assert.ok(
+    /connectedTabs\.attach\(chrome\.tabs\)/.test(bgSrc),
+    'background.js wires tab-close eviction for the registry',
+);
+
+// The whole reason the registry exists: this manifest must keep asking for no
+// "tabs" permission. If a later change adds it, the install prompt grows a
+// "read your browsing history" warning on a self-custodial wallet, and this
+// assertion is the place that argument gets re-read before that happens.
+const manifest = JSON.parse(
+    readFileSync(join(wsRoot, 'packages', 'extension', 'manifest.json'), 'utf8'),
+);
+assert.ok(
+    !manifest.permissions.includes('tabs'),
+    'manifest does not request the "tabs" permission',
+);
+assert.deepEqual(
+    manifest.host_permissions,
+    [],
+    'manifest requests no host permissions (which would also populate Tab.url)',
+);
+
+// And the receiving half stays permission-free too: the broadcaster must not
+// reintroduce a tab.url read, which MV3 leaves undefined for this manifest.
+const broadcasterSrc = readFileSync(
+    join(wsRoot, 'packages', 'extension', 'src', 'bridge', 'bridgeEvents.js'),
+    'utf8',
+);
+assert.ok(
+    !/tab\.url/.test(broadcasterSrc.replace(/^\s*\/\/.*$/gm, '')),
+    'the broadcaster selects targets without reading tab.url',
 );
 
 // --- 9. handlers.js threads events into updateSitePermissions ------
@@ -334,5 +401,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: bridge-events-emit smoke (Cluster F FOLLOWUP 1: createBridgeEventBroadcaster fans bridge.event messages to chrome.tabs filtered by URL.origin, skipping no-url / malformed-url / wrong-origin / no-id tabs and degrading to no-op without chrome.tabs; emitPermissionDiff fires accountsChanged + chainChanged on diff and stays silent on equal permissions; bridge.disconnect handler fires events.disconnect with user-requested reason; createBackgroundHost + background.js + handlers.js wired)',
+    'OK: bridge-events-emit smoke (Cluster F FOLLOWUP 1: createBridgeEventBroadcaster delivers bridge.event messages to the tab ids the connected-tab registry holds for the origin, skipping other origins and non-integer ids and degrading to no-op without a sendMessage surface or without a registry; emitPermissionDiff fires accountsChanged + chainChanged on diff and stays silent on equal permissions; bridge.disconnect handler fires events.disconnect with user-requested reason; createBackgroundHost + background.js + handlers.js wired, registry fed from accepted web senders, manifest still free of the "tabs" permission)',
 );

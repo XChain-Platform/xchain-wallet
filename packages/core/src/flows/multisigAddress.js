@@ -159,5 +159,5 @@ function formatSchemeLabel(config) {
     const n = config.cosigners.length;
     if (config.scheme === 'p2sh-multisig') return `${t}-of-${n} Classic multi-signature`;
     if (config.scheme === 'p2wsh-multisig') return `${t}-of-${n} SegWit multi-signature (lower fees)`;
-    return `${t}-of-${n} Taproot-MuSig2`;
+    return `${t}-of-${n} Taproot multi-signature (looks like a single-key address)`;
 }

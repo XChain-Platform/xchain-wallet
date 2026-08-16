@@ -224,6 +224,105 @@ describe('ChromeRuntimeAdapter origin cross-check (second confused-deputy layer)
     });
 });
 
+// §43.2 delivery set. The event broadcaster cannot learn which tab sits on
+// which origin from chrome.tabs.query - MV3 withholds Tab.url from a manifest
+// holding no "tabs" or host permission, which is why the original URL filter
+// delivered nothing - so the adapter reports it from the `sender` the browser
+// fills in. Anything recorded here becomes a delivery target, so it must come
+// from the browser's reading and never from the page's own stamp.
+describe('ChromeRuntimeAdapter connected-tab reporting', () => {
+    function setup() {
+        const seen = [];
+        const host = { handle: async () => ({ ok: true, result: 'HANDLED' }) };
+        const runtime = fakeRuntime();
+        attachChromeRuntime(host, runtime, {
+            onWebSender: (tabId, origin) => seen.push({ tabId, origin }),
+        });
+        return { seen, runtime };
+    }
+
+    it('reports the browser-supplied tab id and origin for an accepted bridge call', async () => {
+        const { seen, runtime } = setup();
+        runtime.emit({ type: 'bridge.getAccounts', request: {} }, WEB_SENDER, () => {});
+        await flush();
+        expect(seen).toEqual([{ tabId: 42, origin: 'https://evil.example' }]);
+    });
+
+    it('reports the SENDER origin, never the origin the page stamped', async () => {
+        const { seen, runtime } = setup();
+        runtime.emit(
+            { type: 'bridge.getAccounts', request: { origin: 'https://evil.example' } },
+            { ...WEB_SENDER, origin: 'https://evil.example' },
+            () => {},
+        );
+        await flush();
+        // A page that could register itself under a victim's origin would
+        // receive that victim's accountsChanged payloads.
+        expect(seen).toEqual([{ tabId: 42, origin: 'https://evil.example' }]);
+    });
+
+    it('reports nothing for a refused privileged type', async () => {
+        const { seen, runtime } = setup();
+        runtime.emit({ type: 'action.send', request: {} }, WEB_SENDER, () => {});
+        await flush();
+        expect(seen).toEqual([]);
+    });
+
+    it('reports nothing for a request whose stamped origin was refused', async () => {
+        const { seen, runtime } = setup();
+        runtime.emit(
+            { type: 'bridge.signPsbt', request: { origin: 'https://good.example', psbt: 'x' } },
+            WEB_SENDER,
+            () => {},
+        );
+        await flush();
+        expect(seen).toEqual([]);
+    });
+
+    it('reports nothing for the trusted extension UI', async () => {
+        const { seen, runtime } = setup();
+        runtime.emit({ type: 'bridge.getAccounts', request: {} }, EXT_SENDER_TAB, () => {});
+        await flush();
+        expect(seen).toEqual([]);
+    });
+
+    it('reports nothing when the sender origin is not derivable', async () => {
+        const { seen, runtime } = setup();
+        // Opaque/sandboxed frame: no usable origin, so there is nothing safe to
+        // key a delivery set on. Costs delivery for that frame, never safety.
+        runtime.emit(
+            { type: 'bridge.getAccounts', request: {} },
+            { url: 'about:blank', tab: { id: 9 } },
+            () => {},
+        );
+        await flush();
+        expect(seen).toEqual([]);
+    });
+
+    it('reports nothing when the sender carries no tab', async () => {
+        const { seen, runtime } = setup();
+        runtime.emit(
+            { type: 'bridge.getAccounts', request: {} },
+            { origin: 'https://evil.example', url: 'https://evil.example/' },
+            () => {},
+        );
+        await flush();
+        expect(seen).toEqual([]);
+    });
+
+    it('survives a throwing reporter without failing the bridge call', async () => {
+        const calls = [];
+        const host = { handle: async (m) => { calls.push(m); return { ok: true }; } };
+        const runtime = fakeRuntime();
+        attachChromeRuntime(host, runtime, {
+            onWebSender: () => { throw new Error('registry exploded'); },
+        });
+        runtime.emit({ type: 'bridge.getAccounts', request: {} }, WEB_SENDER, () => {});
+        await flush();
+        expect(calls).toHaveLength(1);
+    });
+});
+
 describe('ChromeRuntimeAdapter publishes a BridgeErrorCode on every web-visible failure', () => {
     it('stamps INVALID_PARAMS on an unknown bridge.* type', async () => {
         const runtime = fakeRuntime();

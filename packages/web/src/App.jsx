@@ -2880,7 +2880,7 @@ function buildActionEntries({
         {
             id: 'batch',
             label: 'Batch',
-            description: 'Bundle several actions on one chain into a single transaction. Not all-or-nothing: each action confirms or fails on its own. Issue one new token plus as many of its sub-tokens as you like, at most one MINT and one FILE, up to 250 actions; no nested batches or deploys.',
+            description: 'Bundle several actions on one chain into a single transaction. Not all-or-nothing: each action confirms or fails on its own. Issue one new token plus as many of its subtokens as you like, mint each token at most once, and add at most one contract deploy, up to 250 actions; no nested batches.',
             onSelect: onBatch,
         },
         {

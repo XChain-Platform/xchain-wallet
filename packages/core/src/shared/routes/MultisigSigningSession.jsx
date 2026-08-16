@@ -544,13 +544,13 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 <p className={styles.hint}>
                     {roundLabel || 'Contribute the local cosigner\'s signature for this session.'}
                 </p>
+                {/* Same wording the hardware signers throw (#5082): the screen
+                    and the device error must not describe the limit two ways. */}
                 <p className={styles.hint}>
-                    Wallet password unlocks the software signer; the corresponding
-                    primitive runs based on the session's scheme + round
-                    (§22.3). Hardware MuSig2 paths surface a clear "Update
-                    firmware to use MuSig2 on this device" error per spec.
-                    Use the software signer instead until firmware ships
-                    BIP327 nonce + partial-sign primitives.
+                    Your wallet password unlocks the key this app holds so it can
+                    add your signature. A key kept on a hardware device cannot
+                    co-sign shared wallets yet. Update the device, or sign with
+                    this wallet's built-in signer.
                 </p>
                 <Input
                     type="password"
@@ -711,11 +711,4 @@ export function MultisigSigningSession({ walletId, onBack }) {
 function shortPk(pk) {
     if (typeof pk !== 'string' || pk.length < 12) return pk;
     return `${pk.slice(0, 8)}…${pk.slice(-4)}`;
-}
-
-function schemeLabel(s) {
-    if (!s) return '';
-    if (s.scheme === 'p2sh-multisig') return `${s.threshold}-of-${s.cosignerPubkeys.length} Classic multi-signature`;
-    if (s.scheme === 'p2wsh-multisig') return `${s.threshold}-of-${s.cosignerPubkeys.length} SegWit multi-signature (lower fees)`;
-    return `${s.threshold}-of-${s.cosignerPubkeys.length} Taproot-MuSig2`;
 }
