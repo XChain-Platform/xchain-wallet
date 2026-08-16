@@ -14,5 +14,12 @@
 # commit stale, while the same suite was green locally and had passed on another runner.
 # Declaring it makes the harness ship the canonical origin/master copy and rm -rf
 # any leftover, so the guard runs against the single source of truth.
+#
+# xchain-documentation is PINNED to master (the `name@branch` form), because the
+# wallet's GitHub checkout of it names `ref: master` and the docs repo has since
+# grown a develop branch. Unpinned, the venue gate prefers the branch being
+# pushed, so a develop push would gate against docs-develop while GitHub gates
+# against docs-master: the same measure-against-the-wrong-branch class as
+# XC-1519, pointing the other way. The pin follows the workflow's ref.
 xchain-sdk
-xchain-documentation
+xchain-documentation@master
