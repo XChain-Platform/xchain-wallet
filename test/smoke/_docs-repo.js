@@ -92,14 +92,6 @@ export function docsDeclared() {
             .split('\n')
             .map((l) => l.trim())
             .filter((l) => l && !l.startsWith('#'))
-            // A declaration may carry modifiers: `name@branch` pins the branch
-            // the harness ships (docs is pinned to master, matching this repo's
-            // own GitHub checkout of it), `name+scripts` picks the install mode.
-            // The NAME is what declares the dependency, so read past both. An
-            // exact-line match read the pin as "never declared", which is the
-            // silent skip this guard exists to prevent, arriving through the
-            // guard itself.
-            .map((l) => l.split('+')[0].split('@')[0])
             .includes('xchain-documentation');
     } catch {
         return false;                    // no .ci-siblings: nothing was promised
