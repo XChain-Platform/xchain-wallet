@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// cws-upload.mjs must read the SIGNATURE, not the presence of a file (XC-1513).
+// cws-upload.mjs must read the SIGNATURE, not the presence of a file.
 //
 // WHAT THIS PINS. Until 2026-08-15 the tool's provenance gate set
 // `signed = true` on a successful stat() of `<manifest>.asc`. A zero-byte
@@ -271,10 +271,10 @@ try {
             spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: gpgEnv });
         }
     } else if (process.env.CI) {
-        // A SKIP IS A PASS EVERYWHERE ELSE AND MUST NOT BE ONE HERE. XC-1513
-        // asks for this refusal on a RUNNER rather than only on the release
-        // machine, and a runner that quietly lost gpg would report green with
-        // the real-signature half of this file never executed.
+        // A SKIP IS A PASS EVERYWHERE ELSE AND MUST NOT BE ONE HERE: this refusal
+        // must run on a RUNNER, not only the release machine, or a runner that
+        // quietly lost gpg would report green with the real-signature cases
+        // never executed.
         check('CI: the REAL GPG cases ran rather than skipping', false,
             'gpg is not on PATH on this runner, so the signature refusals were not driven against '
             + 'real signatures. Install gnupg in the workflow rather than letting the skip stand.');
@@ -292,7 +292,7 @@ if (failures.length) {
     process.exit(1);
 }
 
-console.log('PASS cws-upload-signature.smoke.js (XC-1513: the provenance gate reads gpg\'s VALIDSIG '
+console.log('PASS cws-upload-signature.smoke.js (the provenance gate reads gpg\'s VALIDSIG '
     + 'rather than the existence of a .asc, so a zero-byte signature, one from the wrong key, one '
     + 'that is not a signature at all, and a missing gpg are each refused with their own diagnosis, '
     + 'while a genuine subkey signature under the published primary passes)');

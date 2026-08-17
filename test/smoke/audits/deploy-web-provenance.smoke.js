@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// deploy-web.sh must verify the tarball BEFORE it extracts anything (XC-1513).
+// deploy-web.sh must verify the tarball BEFORE it extracts anything.
 //
 // WHAT THIS PINS, and why a source grep is not it. Until 2026-08-15 this
 // script checked its inputs for existence and for an index.html and then
@@ -319,11 +319,10 @@ try {
             spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: gpgEnv });
         }
     } else if (process.env.CI) {
-        // A SKIP IS A PASS EVERYWHERE ELSE AND MUST NOT BE ONE HERE. XC-1513
-        // asks for these refusals on a RUNNER rather than only on the release
-        // machine, and a runner that quietly lost gpg would report green with
-        // the signature half of this file never executed, which is the exact
-        // shape of the hole it pins.
+        // A SKIP IS A PASS EVERYWHERE ELSE AND MUST NOT BE ONE HERE: these refusals
+        // must run on a RUNNER, not only the release machine, or a runner that
+        // quietly lost gpg would report green with the signature cases never
+        // executed.
         check('CI: the SIGNED cases ran rather than skipping', false,
             'gpg is not on PATH on this runner, so the signature refusals were not driven. '
             + 'Install gnupg in the workflow rather than letting the skip stand.');
@@ -341,7 +340,7 @@ if (failures.length) {
     process.exit(1);
 }
 
-console.log('PASS deploy-web-provenance.smoke.js (XC-1513: deploy-web.sh verifies the tarball '
+console.log('PASS deploy-web-provenance.smoke.js (deploy-web.sh verifies the tarball '
     + 'against the signed manifest before it extracts anything, so a rebuilt or tampered tarball, '
     + 'another release\'s manifest, an unlisted artifact, a missing manifest, a wrong-key signature '
     + 'and a zero-byte .asc all leave the webroot untouched)');
