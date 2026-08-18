@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import { contentSecurityPolicyFor } from './src/csp.js';
+import { metaContentSecurityPolicyFor } from './src/csp.js';
 // Which feature set this build carries. Resolved once,
 // here, so the CSP and the stamp written into the dist cannot disagree.
 import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buildProfile.js';
@@ -156,7 +156,7 @@ const cspPlugin = {
                     // Trezor origins, which no WebView can reach anyway, rather
                     // than shipping a permanently-allowed remote script origin
                     // for a feature it does not have.
-                    content: contentSecurityPolicyFor(BUILD_PROFILE),
+                    content: metaContentSecurityPolicyFor(BUILD_PROFILE),
                 },
                 injectTo: 'head-prepend',
             },

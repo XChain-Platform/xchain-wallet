@@ -100,7 +100,8 @@ describe('the exact policy each profile ships', () => {
 
     it('serializes to exactly those directives, in that order', () => {
         // The map is what the code reasons about; this string is what a browser
-        // enforces, and cspMetaTag embeds it verbatim.
+        // enforces via a server header. cspMetaTag embeds it minus the
+        // header-only directives a <meta> CSP ignores (frame-ancestors).
         const serialize = (policy) => Object.entries(policy)
             .map(([name, values]) => `${name} ${values.join(' ')}`)
             .join('; ');
@@ -157,6 +158,16 @@ describe('the store profile CSP', () => {
         expect(cspMetaTag('store')).toMatch(/^<meta http-equiv="Content-Security-Policy"/);
         expect(cspMetaTag('store')).not.toContain('trezor');
         expect(cspMetaTag()).toContain(TREZOR);
+    });
+
+    it('omits header-only directives from the meta tag, keeps them in the header policy', () => {
+        // frame-ancestors is header-only by spec: a <meta> CSP ignores it and
+        // browsers warn per document, so the meta tag drops it while the
+        // header policy (which Apache sends on wallet.xchain.io) keeps it.
+        for (const profile of ['default', 'store']) {
+            expect(cspMetaTag(profile)).not.toContain('frame-ancestors');
+            expect(contentSecurityPolicyFor(profile)).toContain("frame-ancestors 'none'");
+        }
     });
 });
 

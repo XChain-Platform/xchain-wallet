@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 
 ### Fixed
+- The CSP meta tag no longer carries `frame-ancestors`, which browsers ignore in meta and warn about on every load; the serving host sends it as a header instead.
 - `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed.
 - The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched.
 - Queued transactions are reported truthfully instead of promising an automatic rebroadcast.
