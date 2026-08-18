@@ -20,6 +20,7 @@
         "lint": "pnpm -r --if-present lint",
         "build": "pnpm -r --if-present build",
         "ci": "pnpm test:unit && pnpm test:integration && pnpm test:security && pnpm test:fuzz && pnpm test:smoke",
+        "ci:full": "bash bin/ci-full.sh",
         "test": "pnpm test:unit && pnpm test:fuzz && pnpm test:smoke",
         "test:unit": "vitest run --config test/vitest/unit.config.js",
         "test:unit:watch": "vitest --config test/vitest/unit.config.js",

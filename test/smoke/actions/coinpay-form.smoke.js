@@ -32,6 +32,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -186,7 +187,7 @@ for (const [shell, appPath] of [
     const app = readFileSync(appPath, 'utf8');
     assert.ok(app.includes('CoinpayForm'), `${shell} App.jsx imports CoinpayForm`);
     assert.ok(app.includes("'coinpay'"), `${shell} App.jsx tracks the coinpay sub-route`);
-    assert.ok(/id:\s*['"]coinpay['"]/.test(app),
+    assert.ok(surfacesEntry(app, 'coinpay'),
         `${shell} App.jsx registers the Pay COINPAY entry`);
     assert.ok(/onPayCoinpay:/.test(app),
         `${shell} App.jsx wires onPayCoinpay`);

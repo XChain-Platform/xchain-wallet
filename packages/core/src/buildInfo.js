@@ -50,7 +50,23 @@ export const SECURITY_PUBLISHED = true;
 // shell; the desktop-specific recipe is a section of that same page.
 export const REPRODUCIBLE_BUILD_DOC = 'https://docs.xchain.io/components/wallet/reproducible-builds';
 export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'https://docs.xchain.io/components/wallet/reproducible-builds#desktop-xchain-walletdesktop';
-export const RELEASE_SIGNATURES_DOC = 'packages/extension/RELEASE_SIGNATURES.md';
+// Where a user reads the release signing key's fingerprint. This is NOT on
+// the documentation site, and that is deliberate rather than an omission:
+// the fingerprint is a trust root, a stale second copy of it is worse than
+// no copy, so it is published in exactly one place and the docs point at
+// that place instead of restating it (components/wallet/release/
+// verify-release.md, "Where the release key fingerprint is published").
+//
+// This constant used to read 'packages/extension/RELEASE_SIGNATURES.md',
+// a repo-relative path to a file the docs migration deleted. Nothing broke,
+// because RELEASE_SIGNATURES_PUBLISHED is false and the About panel renders
+// the muted "not yet published" hint instead of the link, which is what made
+// it a trap: the flag is a one-word edit and flipping it would have shipped
+// users a pointer to a file that does not exist anywhere.
+export const RELEASE_SIGNATURES_DOC = 'https://xchain.io/security';
+// Stays false until the operator arms the release-signing posture. The link
+// target above is live and independent of that decision, so flipping this
+// is now a posture change and nothing else.
 export const RELEASE_SIGNATURES_PUBLISHED = false;
 // Cluster T FOLLOWUP 2: verification recipe for end users (key import
 // -> manifest download -> GPG verify -> artifact hash check -> optional

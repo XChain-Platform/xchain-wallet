@@ -35,11 +35,16 @@
 //     temporary file. The only thing it ever says about a credential is
 //     whether it was present.
 //   - It refuses to upload a zip that is not covered by a SIGNED release
-//     manifest. Automation that can upload any file on disk would undo the
-//     entire provenance chain ceremony Phase 4 exists to enforce: the whole
-//     point there is that the uploaded artifact is the CI-built, hash-checked,
-//     K1-signed one, and a convenient script that skips it is how that rule
-//     stops being true.
+//     manifest, where SIGNED means the detached signature VERIFIES and the
+//     key that made it is the pinned release key. Automation that can upload
+//     any file on disk would undo the entire provenance chain ceremony Phase 4
+//     exists to enforce: the whole point there is that the uploaded artifact
+//     is the CI-built, hash-checked, K1-signed one, and a convenient script
+//     that skips it is how that rule stops being true.
+//     Until 2026-08-15 this gate read the signature as a stat() of the .asc
+//     file, so a zero-byte or arbitrary one satisfied it and 'signed' in the
+//     output meant a file existed. That is the same gap S37 closed in
+//     verify.sh, on the same .asc, against the same key.
 //   - It refuses to publish PUBLICLY unless told twice. This spec's
 //     first-submission rule is UNLISTED, and D3 (answered 2026-08-06) puts
 //     every later release through a beta soak first, so "publish to the
@@ -49,9 +54,19 @@
 // upload alone changes nothing users can see, which is why --publish is
 // separate and opt-in rather than implied.
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// The one value in this repo that only an observed signing run can write
+// (verify-release-key.sh drove the real pipeline to set it). It is not a
+// publication channel for the fingerprint - SECURITY.md and
+// https://xchain.io/security are the two channels - it is the in-repo copy
+// verify.sh already reads, so both readers of a manifest signature bind to
+// the same key.
+const PIN_FILE = fileURLToPath(new URL('../../docs/release-key-pin.json', import.meta.url));
 
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const UPLOAD_URL = (id) => `https://www.googleapis.com/upload/chromewebstore/v1.1/items/${id}`;
@@ -74,9 +89,15 @@ Options:
   --yes-really-public   required alongside --publish default
   --manifest <path>     RELEASE_HASHES.txt covering the zip
                         (default: RELEASE_HASHES.txt beside the zip)
-  --allow-unsigned      accept a manifest with no detached signature
+  --allow-unsigned      accept a manifest whose signature is missing, or
+                        does not verify, or is not from the release key
   --dry-run             do every check, then stop before the network
   -h, --help            print this and exit 0
+
+The manifest's detached signature is verified with gpg and bound to the
+release key's fingerprint (XCHAIN_VERIFY_KEY, else docs/release-key-pin.json).
+A good signature from any OTHER key is refused: this project has three GPG
+keys in its orbit and they are not interchangeable.
 
 Credentials, read from the environment and never written anywhere:
   CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN
@@ -201,14 +222,79 @@ export function hashFromManifest(manifestText, artifactName) {
 }
 
 /**
- * The provenance gate. This is the check that makes the automation safe to
- * have at all: the bytes about to be uploaded must be the bytes a signed
- * release manifest describes.
+ * Attribute a manifest's detached signature to one fingerprint.
+ *
+ * Reads gpg's machine-readable status, never its exit code and never its
+ * human text: gpg exits 0 for a good signature from an UNTRUSTED key, which
+ * is exactly what an attacker signing with their own key produces. VALIDSIG
+ * carries the fingerprint that actually signed, so it is the only line that
+ * answers "was this the release key".
+ *
+ * Matches the PRIMARY key as well as the signing one, because they are
+ * different fingerprints and the world only ever sees one of them: K1 signs
+ * with a subkey (VALIDSIG field 1) while every published channel names the
+ * primary (VALIDSIG's last field). Matching field 1 alone reports a bad
+ * signature on a perfectly good K1 one - a failure feed-sweep.mjs already
+ * paid for and documents at verifyManifestSignature.
  *
  * @param {object} opts
- * @returns {Promise<{ sha256: string, manifestPath: string, signed: boolean }>}
+ * @returns {'ok'|'no-gpg'|'bad'|'wrong-key'}
  */
-export async function checkProvenance({ zipPath, manifestPath, allowUnsigned, readFileImpl = readFile }) {
+export function attributeSignature({ manifestPath, fingerprint, runImpl = spawnSync }) {
+    const result = runImpl('gpg', ['--status-fd=1', '--verify', `${manifestPath}.asc`, manifestPath],
+        { encoding: 'utf8' });
+    if (result.error && result.error.code === 'ENOENT') return 'no-gpg';
+    if (result.error || typeof result.stdout !== 'string') return 'bad';
+
+    const validsig = /^\[GNUPG:\] VALIDSIG (.+)$/m.exec(result.stdout);
+    if (!validsig) return 'bad';
+    const fields = validsig[1].trim().split(/\s+/);
+    const want = fingerprint.replace(/\s+/g, '').toUpperCase();
+    const matches = (fpr) => /^[0-9A-F]{40}$/.test(fpr.toUpperCase()) && fpr.toUpperCase() === want;
+    const signing = fields[0] || '';
+    const primary = fields.length > 1 ? fields[fields.length - 1] : '';
+    return matches(signing) || matches(primary) ? 'ok' : 'wrong-key';
+}
+
+/**
+ * The fingerprint the signature must come from, and where it came from.
+ *
+ * XCHAIN_VERIFY_KEY first, under the name verify.sh already uses, so a
+ * rotated key is namable without reaching for --allow-unsigned; the in-repo
+ * pin otherwise. A fingerprint that is not a full 40 hex characters is not
+ * usable: a key id or a partial selects a key without identifying it.
+ *
+ * @param {(p: string, enc: string) => Promise<string>} readFileImpl
+ * @param {Record<string, string | undefined>} env
+ * @returns {Promise<{ fingerprint: string, source: string }>}
+ */
+export async function expectedSigner(readFileImpl = readFile, env = process.env) {
+    const fromEnv = String(env.XCHAIN_VERIFY_KEY || '').replace(/\s+/g, '').toUpperCase();
+    if (fromEnv) return { fingerprint: fromEnv, source: 'XCHAIN_VERIFY_KEY' };
+    try {
+        const parsed = JSON.parse(await readFileImpl(PIN_FILE, 'utf8'));
+        return {
+            fingerprint: String(parsed.fingerprint || '').replace(/\s+/g, '').toUpperCase(),
+            source: 'docs/release-key-pin.json',
+        };
+    } catch {
+        return { fingerprint: '', source: 'docs/release-key-pin.json' };
+    }
+}
+
+/**
+ * The provenance gate. This is the check that makes the automation safe to
+ * have at all: the bytes about to be uploaded must be the bytes a signed
+ * release manifest describes, and the manifest must carry a signature the
+ * release key actually made.
+ *
+ * @param {object} opts
+ * @returns {Promise<{ sha256: string, manifestPath: string, signed: boolean,
+ *                     signature: string }>}
+ */
+export async function checkProvenance({
+    zipPath, manifestPath, allowUnsigned, readFileImpl = readFile, runImpl = spawnSync,
+}) {
     const manifest = manifestPath || join(dirname(zipPath), 'RELEASE_HASHES.txt');
 
     let manifestText;
@@ -224,16 +310,64 @@ export async function checkProvenance({ zipPath, manifestPath, allowUnsigned, re
         );
     }
 
-    let signed = false;
+    let sigPresent = true;
     try {
         await stat(`${manifest}.asc`);
-        signed = true;
-    } catch { /* absence is handled just below */ }
+    } catch {
+        sigPresent = false;
+    }
+
+    // What went wrong, in the caller's words, kept beside the boolean so the
+    // refusal and the log line can both say WHICH of these it was. A missing
+    // .asc, one that does not verify, and one from the wrong key are three
+    // different events, and only the first is "you forgot to sign it".
+    let signed = false;
+    let signature = `no detached signature (${basename(manifest)}.asc)`;
+    let why = `${manifest} has no detached signature (${basename(manifest)}.asc).\n`
+        + '  An unsigned manifest proves the zip matches itself and nothing about who built it.';
+
+    if (sigPresent) {
+        const pin = await expectedSigner(readFileImpl);
+        if (!/^[0-9A-F]{40}$/.test(pin.fingerprint)) {
+            signature = 'signature present, no key to attribute it to';
+            why = `${basename(manifest)}.asc cannot be attributed: no usable release-key fingerprint`
+                + ` (via ${pin.source}).\n`
+                + '  A good signature from an unknown key is not a verification; this project has three\n'
+                + '  GPG keys in its orbit and they are not interchangeable. Set XCHAIN_VERIFY_KEY to the\n'
+                + '  fingerprint published at https://xchain.io/security, or run from a checkout carrying\n'
+                + '  docs/release-key-pin.json.';
+        } else {
+            const verdict = attributeSignature({
+                manifestPath: manifest, fingerprint: pin.fingerprint, runImpl,
+            });
+            if (verdict === 'ok') {
+                signed = true;
+                signature = `signed by ${pin.fingerprint} (via ${pin.source})`;
+            } else if (verdict === 'no-gpg') {
+                signature = 'signature present, gpg not found to check it';
+                why = `gpg is not on PATH, so the signature on ${basename(manifest)} cannot be checked.\n`
+                    + '  A check that cannot run has not passed. Install gpg, or run this from the release\n'
+                    + '  machine that holds the keyring.';
+            } else if (verdict === 'wrong-key') {
+                signature = 'signature from the WRONG KEY';
+                why = `the signature on ${basename(manifest)} is GOOD and it is from the WRONG KEY.\n`
+                    + `    expected: ${pin.fingerprint} (via ${pin.source})\n`
+                    + '  This is the failure a bare gpg --verify cannot report: it answers whether somebody\n'
+                    + '  in your keyring signed the manifest, never whether the release key did. Do not\n'
+                    + '  upload this zip. If the release key was rotated, name the new fingerprint in\n'
+                    + '  XCHAIN_VERIFY_KEY.';
+            } else {
+                signature = 'signature did not verify';
+                why = `the signature on ${basename(manifest)} did not verify.\n`
+                    + '  gpg reported no VALIDSIG for it, so the .asc beside this manifest is not a good\n'
+                    + '  signature over these bytes. Re-fetch the manifest and its signature together.';
+            }
+        }
+    }
 
     if (!signed && !allowUnsigned) {
         throw new Refusal(
-            `${manifest} has no detached signature (${basename(manifest)}.asc).\n`
-            + '  An unsigned manifest proves the zip matches itself and nothing about who built it.\n'
+            `${why}\n`
             + '  Sign the release, or pass --allow-unsigned if you genuinely mean to upload without\n'
             + '  that evidence.', 1,
         );
@@ -259,7 +393,7 @@ export async function checkProvenance({ zipPath, manifestPath, allowUnsigned, re
         );
     }
 
-    return { sha256: actual, manifestPath: manifest, signed };
+    return { sha256: actual, manifestPath: manifest, signed, signature };
 }
 
 /**
@@ -336,7 +470,8 @@ async function main(argv, env, log = console.log) {
     });
     log(`artifact: ${basename(args.zip)}`);
     log(`sha256:   ${prov.sha256}`);
-    log(`manifest: ${prov.manifestPath}${prov.signed ? ' (signed)' : ' (UNSIGNED, allowed by flag)'}`);
+    log(`manifest: ${prov.manifestPath} (${prov.signature}`
+        + `${prov.signed ? ')' : ', allowed by --allow-unsigned)'}`);
 
     const creds = credentialState(env);
     if (!creds.ok) {

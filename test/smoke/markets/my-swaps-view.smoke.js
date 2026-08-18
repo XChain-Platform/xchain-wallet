@@ -18,6 +18,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -52,7 +53,7 @@ for (const shell of [
         + (shell[1] === 'web' ? read(...WEB_DEX_SURFACE) : '');
     assert.ok(src.includes('MySwapsView'), `${shell.join('/')} imports MySwapsView`);
     assert.ok(src.includes("unlockedView === 'my-swaps'"), `${shell.join('/')} routes my-swaps`);
-    assert.ok(src.includes("id: 'my-swaps'"), `${shell.join('/')} lists a My swaps action`);
+    assert.ok(surfacesEntry(src, 'my-swaps', 'My swaps'), `${shell.join('/')} lists a My swaps action`);
 }
 
 // ---- Command palette ----

@@ -1,0 +1,10 @@
+# Siblings shipped at a branch OTHER than the one being pushed (name=branch).
+#
+# This repo's GitHub checkout of xchain-documentation names `ref: master`, and
+# that repo has since grown a develop branch. Unpinned, the venue gate prefers
+# the branch being pushed, so a develop push would gate against docs-develop
+# while GitHub gates against docs-master: measuring against the wrong branch.
+#
+# Kept out of .ci-siblings deliberately: that file is read verbatim as a list
+# of repo NAMES by GitHub workflow loops and by roster guards.
+xchain-documentation=master

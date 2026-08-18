@@ -84,6 +84,7 @@ for (const route of [
     'bridge.signPsbt',
     'bridge.coSign',
     'bridge.signIn',
+    'bridge.parallel',
 ]) {
     // v0.290.0 / Cluster Q FOLLOWUP 4: handlers.js shadows host.register
     // with a local register() that wraps every channel in entry/exit

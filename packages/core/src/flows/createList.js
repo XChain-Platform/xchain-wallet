@@ -21,6 +21,12 @@
 // The wire shape for LIST uses a rest-field: `params.ITEM` is an array
 // of strings (addresses for TYPE=2, tickers for TYPE=1). The SDK
 // format serializer expands the array into repeating `|ITEM` slots.
+//
+// MEMO is optional and sits BEFORE that tail on both versions
+// (`VERSION|TYPE|MEMO|...ITEM`), unlike every other action, where it
+// trails: after a variadic field a memo is indistinguishable from one
+// more item. Callers pass it as `params.MEMO`; omitting it serializes an
+// empty slot, which the indexer stores as a null memo.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -35,7 +41,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {Record<string, string | string[]>} params   LIST field map (VERSION, TYPE, ITEM[], and v1's EDIT + LIST_ACTION_INDEX)
+ * @property {Record<string, string | string[]>} params   LIST field map (VERSION, TYPE, ITEM[], optional MEMO, and v1's EDIT + LIST_ACTION_INDEX)
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]

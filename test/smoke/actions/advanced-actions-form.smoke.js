@@ -43,6 +43,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -249,7 +250,7 @@ for (const [shell, appPath] of [
     assert.ok(app.includes('AdvancedActionsForm'), `${shell} App.jsx imports AdvancedActionsForm`);
     assert.ok(app.includes("'advanced'"), `${shell} App.jsx tracks the advanced sub-route`);
     assert.ok(
-        /id:\s*['"]advanced['"]/.test(app),
+        surfacesEntry(app, 'advanced', 'Advanced action'),
         `${shell} App.jsx registers the Advanced action entry`,
     );
     assert.ok(

@@ -21,6 +21,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -86,7 +87,8 @@ for (const p of shells) {
     assert.match(src, /'publish-file'/, `${label}: view id registered`);
     assert.match(src, /unlockedView === 'publish-file'/, `${label}: view dispatched`);
     assert.match(src, /onPublishFile/, `${label}: ActionsMenu entry wired`);
-    assert.match(src, /id: 'publish-file'/, `${label}: entry present in buildActionEntries`);
+    assert.ok(surfacesEntry(src, 'publish-file', 'Publish file'),
+        `${label}: entry present in the shared menu and armed here`);
 }
 
 // ---- Command palette ----------------------------------------------------

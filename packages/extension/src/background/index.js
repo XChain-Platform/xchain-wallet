@@ -16,6 +16,11 @@ export {
 export { createBackgroundHost } from './createBackgroundHost.js';
 export { attachChromeRuntime } from './ChromeRuntimeAdapter.js';
 export {
+    createConnectedTabRegistry,
+    CONNECTED_TABS_SESSION_KEY,
+    DEFAULT_MAX_CONNECTED_TABS,
+} from './connectedTabs.js';
+export {
     attachSessionMetaListener,
     dispatchPreHost,
     handleSessionStatus,

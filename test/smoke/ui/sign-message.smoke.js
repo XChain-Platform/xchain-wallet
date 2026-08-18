@@ -14,6 +14,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -130,9 +131,8 @@ for (const [src, name] of [
         /onSignMessage: \(\) => setUnlockedView\('sign-message'\)/,
         `${name} App passes onSignMessage to ActionsMenu`,
     );
-    assert.match(
-        src,
-        /id: 'sign-message'[\s\S]*onSelect: onSignMessage/,
+    assert.ok(
+        surfacesEntry(src, 'sign-message', 'Sign message'),
         `${name} App buildActionEntries lists Sign message entry`,
     );
 }

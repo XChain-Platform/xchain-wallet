@@ -39,6 +39,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows, decoder } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -392,7 +393,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the dispenser sub-route`,
     );
     assert.ok(
-        /id:\s*['"]dispenser['"]/.test(app),
+        surfacesEntry(app, 'dispenser', 'Create dispenser'),
         `${shell} App.jsx registers the dispenser entry in buildActionEntries`,
     );
     assert.ok(

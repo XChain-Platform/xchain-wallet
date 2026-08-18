@@ -20,6 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -136,7 +137,7 @@ for (const [shell, appPath] of [
         /onVoteGovernance: hasGovernanceAddress \? \(\) => setUnlockedView\('governance-polls'\)/.test(app),
         `${shell} gates onVoteGovernance via hasGovernanceAddress`,
     );
-    assert.ok(/id: 'governance-polls'/.test(app), `${shell} surfaces the "Governance" action entry`);
+    assert.ok(surfacesEntry(app, 'governance-polls', 'Governance'), `${shell} surfaces the "Governance" action entry`);
 }
 
 // --- Manifest walletForm flag ---

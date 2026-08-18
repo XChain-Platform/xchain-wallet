@@ -42,6 +42,7 @@ import {
     attachSessionMetaListener,
     attachSignerBridgeListener,
     createBackgroundHost,
+    createConnectedTabRegistry,
     createDevMockSdk as createDevMockSdkImpl,
     resolveSdkFactory,
 } from './background/index.js';
@@ -161,6 +162,17 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk,
 // if no wallet is unlocked.
 const approvalBroker = new ApprovalBroker();
 
+// §43.2 delivery set for bridge events: which tab ids are talking to which
+// dApp origin. Module-scoped and its tab-close eviction wired at worker boot,
+// so a lock/unlock cycle (which detaches and re-attaches the host listener)
+// does not drop tabs that are still connected. Backed by chrome.storage.session
+// inside the registry, so an MV3 worker eviction between a dApp's last call and
+// the wallet UI's permission change does not lose the map.
+const connectedTabs = createConnectedTabRegistry();
+if (typeof chrome !== 'undefined' && chrome.tabs) {
+    connectedTabs.attach(chrome.tabs);
+}
+
 let host = null;
 let vault = null;
 let detachHost = null;
@@ -260,10 +272,16 @@ async function ensureHost() {
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
-        // site state. Background uses chrome.tabs to find tabs sitting
-        // on the matching origin.
+        // site state. Targets come from the connected-tab registry, not
+        // from chrome.tabs.query: MV3 withholds Tab.url from a manifest
+        // holding no "tabs" or host permission, which left the URL match
+        // skipping every tab and delivering nothing.
         bridgeEvents: typeof chrome !== 'undefined' && chrome.tabs
-            ? createBridgeEventBroadcaster({ tabs: chrome.tabs, runtime: chrome.runtime })
+            ? createBridgeEventBroadcaster({
+                tabs: chrome.tabs,
+                runtime: chrome.runtime,
+                connectedTabs,
+            })
             : undefined,
         // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build.
         getDiagnosticContext: async () => ({
@@ -282,7 +300,10 @@ async function ensureHost() {
             },
         }),
     });
-    detachHost = attachChromeRuntime(host, undefined, { onActivity: noteAutoLockActivity });
+    detachHost = attachChromeRuntime(host, undefined, {
+        onActivity: noteAutoLockActivity,
+        onWebSender: (tabId, origin) => connectedTabs.record(tabId, origin),
+    });
 
     // §46: start the live notification watcher once a vault is open. Guarded
     // so the keepalive's repeat ensureHost() calls don't double-start; a cold

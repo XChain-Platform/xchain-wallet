@@ -15,28 +15,42 @@
 // `chrome.runtime.onMessage({ type: 'bridge.event', event, payload })`
 // to the page via postMessage; the inject script dispatches to
 // subscribers registered through `provider.on(...)`). This module is
-// the missing background-side sender. Bridge handlers call
+// the background-side sender. Bridge handlers call
 // `events.accountsChanged(origin, accounts)` etc. when permissions or
-// connected-site state change, and the broadcaster fans the message
-// out to every tab currently sitting on a matching origin via
+// connected-site state change, and the broadcaster delivers the message
+// to each tab known to be talking to that origin via
 // `chrome.tabs.sendMessage`.
 //
-// Tabs are matched by `URL.origin` against the supplied origin string.
-// Mismatches are silently dropped (a dApp on a different origin must
-// not see another site's events). Tabs without a `url` (chrome://, the
-// New Tab page) are skipped. Send failures are swallowed; a tab may
-// have been closed between query and send, and the event is best-
-// effort anyway.
+// The delivery set comes from the connected-tab registry
+// (`../background/connectedTabs.js`), NOT from `chrome.tabs.query` plus
+// `new URL(tab.url).origin`. That URL filter was the original design and it
+// never delivered anything: MV3 leaves `Tab.url` undefined unless the
+// extension holds the "tabs" permission or a matching host permission, and
+// this manifest holds neither, so every tab failed the
+// `typeof tab.url === 'string'` guard. The registry answers the same question
+// from the unforgeable `sender.tab.id` and sender origin the worker already
+// receives on every `bridge.*` call, with no permission escalation and no
+// broadcast to unrelated tabs. That module carries the full rationale.
 //
-// In environments without `chrome.tabs` (Node smokes, web/desktop
-// shells that do not expose extension APIs) every method becomes a
-// no-op. The wallet can still mutate state without crashing.
+// A registry entry is a delivery HINT, not a boundary: a tab that navigated
+// since it last called the bridge is still addressed by id. Every message
+// therefore carries the origin it was meant for, and `contentScript.js` drops
+// any `bridge.event` whose stamp does not match the document actually loaded.
+// That receiver-side check is the authority, and it is unchanged.
+//
+// Send failures are swallowed; a tab may have closed between lookup and send,
+// and the event is best-effort anyway.
+//
+// Without a `chrome.tabs.sendMessage` surface, or without a registry (Node
+// smokes, web/desktop shells that expose no extension APIs), every method
+// becomes a no-op. The wallet can still mutate state without crashing.
 
 const EVENT_MESSAGE_TYPE = 'bridge.event';
 
 /**
  * @param {{
- *   tabs?: { query: Function, sendMessage: Function },
+ *   tabs?: { sendMessage: Function },
+ *   connectedTabs?: { tabsForOrigin: (origin: string) => Promise<number[]> | number[] },
  *   runtime?: { lastError?: { message: string } | undefined },
  *   logger?: { warn?: (msg: string, err?: unknown) => void },
  * }} deps
@@ -44,41 +58,41 @@ const EVENT_MESSAGE_TYPE = 'bridge.event';
 export function createBridgeEventBroadcaster(deps = {}) {
     const tabs = deps.tabs;
     const runtime = deps.runtime;
+    const connectedTabs = deps.connectedTabs;
 
     async function fanOut(origin, event, payload) {
         if (!origin || typeof origin !== 'string') return;
-        if (!tabs || typeof tabs.query !== 'function' || typeof tabs.sendMessage !== 'function') {
-            return;
-        }
-        let matched;
+        if (!tabs || typeof tabs.sendMessage !== 'function') return;
+        if (!connectedTabs || typeof connectedTabs.tabsForOrigin !== 'function') return;
+        let targets;
         try {
-            matched = await queryTabs(tabs, runtime);
+            targets = await connectedTabs.tabsForOrigin(origin);
         } catch (_err) {
             return;
         }
-        for (const tab of matched) {
-            if (!tab || typeof tab.id !== 'number' || typeof tab.url !== 'string') continue;
-            let tabOrigin;
+        if (!Array.isArray(targets)) return;
+        for (const tabId of targets) {
+            if (!Number.isInteger(tabId)) continue;
             try {
-                tabOrigin = new URL(tab.url).origin;
-            } catch {
-                continue;
-            }
-            if (tabOrigin !== origin) continue;
-            try {
-                // The check above reads a URL SNAPSHOT while delivery is bound
-                // to a mutable tab id, so a tab that navigates between the
-                // query and the send hands the NEW origin's content script the
-                // old origin's event (accountsChanged carries account ids and
-                // names). Stamp the intended origin: the receiver always runs
-                // against the document actually loaded and can drop what was
-                // never meant for it.
-                tabs.sendMessage(tab.id, {
-                    type: EVENT_MESSAGE_TYPE,
-                    event,
-                    payload,
-                    origin,
-                });
+                // Delivery is bound to a mutable tab id, so a tab that navigated
+                // since it last called the bridge would hand the NEW origin's
+                // content script the old origin's event (accountsChanged carries
+                // account ids and names). Stamp the intended origin: the receiver
+                // always runs against the document actually loaded and can drop
+                // what was never meant for it.
+                tabs.sendMessage(
+                    tabId,
+                    { type: EVENT_MESSAGE_TYPE, event, payload, origin },
+                    // The callback exists to READ runtime.lastError, which is
+                    // what stops Chrome logging "Unchecked runtime.lastError"
+                    // (and, on the callback-free overload, rejecting the
+                    // returned promise into the worker's unhandled set). An
+                    // event is one-way, so the receiver never calls
+                    // sendResponse and lastError is set on a healthy send as
+                    // well as on a stale tab id. Neither is actionable: a tab
+                    // that has gone re-registers on its next bridge call.
+                    () => { void runtime?.lastError; },
+                );
             } catch (_err) {
                 // Tab discarded mid-fire; best-effort delivery.
             }
@@ -161,39 +175,4 @@ export async function emitPermissionDiff(args) {
 function sortedSet(list) {
     if (!Array.isArray(list)) return '';
     return [...new Set(list)].sort().join(',');
-}
-
-async function queryTabs(tabs, runtime) {
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const cb = (result) => {
-            if (settled) return;
-            settled = true;
-            const err = runtime?.lastError;
-            if (err) reject(new Error(err.message ?? 'tabs.query failed'));
-            else resolve(Array.isArray(result) ? result : []);
-        };
-        try {
-            const ret = tabs.query({}, cb);
-            if (ret && typeof ret.then === 'function') {
-                ret.then(
-                    (result) => {
-                        if (settled) return;
-                        settled = true;
-                        resolve(Array.isArray(result) ? result : []);
-                    },
-                    (err) => {
-                        if (settled) return;
-                        settled = true;
-                        reject(err);
-                    },
-                );
-            }
-        } catch (err) {
-            if (!settled) {
-                settled = true;
-                reject(err);
-            }
-        }
-    });
 }

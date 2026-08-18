@@ -24,6 +24,7 @@ if (!globalThis.crypto) {
 }
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -131,7 +132,7 @@ for (const [shell, appPath] of [
         /onCoSignerAccounts: hasBtcAddress \? \(\) => setUnlockedView\('cosigner-accounts'\)/.test(app),
         `${shell} BTC-gates onCoSignerAccounts via hasBtcAddress`,
     );
-    assert.ok(/id: 'cosigner-accounts'/.test(app), `${shell} surfaces the "Agent accounts" action entry`);
+    assert.ok(surfacesEntry(app, 'cosigner-accounts', 'Agent accounts'), `${shell} surfaces the "Agent accounts" action entry`);
 }
 
 console.log(

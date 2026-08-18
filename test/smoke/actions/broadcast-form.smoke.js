@@ -42,6 +42,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows, decoder } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -270,7 +271,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the broadcast sub-route`,
     );
     assert.ok(
-        /id:\s*['"]broadcast['"]/.test(app),
+        surfacesEntry(app, 'broadcast', 'Broadcast'),
         `${shell} App.jsx registers the broadcast entry in buildActionEntries`,
     );
     assert.ok(

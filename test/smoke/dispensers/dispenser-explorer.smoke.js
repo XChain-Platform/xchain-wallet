@@ -35,6 +35,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -179,7 +180,7 @@ for (const [shell, appPath] of [
         `${shell} tracks the dispenser-explorer sub-route`,
     );
     assert.ok(
-        /id:\s*['"]dispenser-explorer['"]/.test(app),
+        surfacesEntry(app, 'dispenser-explorer', 'Browse dispensers'),
         `${shell} registers the Browse dispensers entry`,
     );
     assert.ok(

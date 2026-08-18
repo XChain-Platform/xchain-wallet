@@ -299,8 +299,11 @@ assert.ok(/Sign with my key/.test(route),
     'sign-screen surfaces a "Sign with my key" entry point');
 assert.ok(/messaging\.signMultisigLocally/.test(route),
     'sign-screen calls messaging.signMultisigLocally');
-assert.ok(/Update[\s\S]*firmware to use MuSig2 on this device/.test(route),
-    'sign-screen surfaces the §22.3 firmware-too-old guidance');
+// The screen must repeat the limit in the SAME words the signers throw
+// (LedgerSigner / TrezorSigner hwMusig2UnsupportedError), not the raw
+// qualified string those keep on err.cause for logs (#5082).
+assert.ok(/cannot[\s\S]{0,40}co-sign shared wallets yet/.test(route),
+    'sign-screen surfaces the hardware-cosigner limit in the plain-language wording');
 assert.ok(/sign-locally/.test(route),
     'sign-screen has a sign-locally view state');
 
@@ -328,5 +331,5 @@ for (const name of ['signPsbt', 'signMessage', 'getAddresses', 'getStatus', 'get
 }
 
 console.log(
-    'OK: multisig signer smoke (Signer base abstracts + Trezor/Ledger firmware-too-old MuSig2 + classical-deferred errors + signMultisigLocally re-export + flow guards + status-gated round dispatch + bg multisigSign.signLocally handler + 3-shell signMultisigLocally helpers + sign-screen "Sign with my key" surface + spec-text firmware guidance + SDK pin ^1.12.0)',
+    'OK: multisig signer smoke (Signer base abstracts + Trezor/Ledger firmware-too-old MuSig2 + classical-deferred errors + signMultisigLocally re-export + flow guards + status-gated round dispatch + bg multisigSign.signLocally handler + 3-shell signMultisigLocally helpers + sign-screen "Sign with my key" surface + plain-language hardware-cosigner limit matching the signers\' own wording + SDK pin ^1.12.0)',
 );

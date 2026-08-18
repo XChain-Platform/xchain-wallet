@@ -41,6 +41,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -258,7 +259,7 @@ for (const [shell, appPath] of [
     assert.ok(app.includes("'dispensers-list'"), `${shell} tracks the dispensers-list sub-route`);
     assert.ok(app.includes("'dispenser-detail'"), `${shell} tracks the dispenser-detail sub-route`);
     assert.ok(
-        /id:\s*['"]dispensers-list['"]/.test(app),
+        surfacesEntry(app, 'dispensers-list', 'My dispensers'),
         `${shell} registers the My dispensers entry`,
     );
     // Accept both the bare-arrow form and a block body that records a

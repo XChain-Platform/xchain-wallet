@@ -32,6 +32,7 @@ import {
     MULTISIG_SESSION_STATUSES,
 } from '../../../packages/core/src/schemas/multisigSigningSession.js';
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -524,7 +525,7 @@ for (const [shell, appPath] of [
         `${shell} BTC-gates onMultisigSign via hasBtcAddress`);
     assert.ok(/<MultisigSigningSession\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <MultisigSigningSession> with the active walletId`);
-    assert.ok(/Multisig signing/.test(app),
+    assert.ok(surfacesEntry(app, 'multisig-sign', 'Multisig signing'),
         `${shell} ActionsMenu surfaces a "Multisig signing" entry`);
 }
 

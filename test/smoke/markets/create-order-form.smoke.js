@@ -17,6 +17,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -83,7 +84,7 @@ for (const shell of [
         /onCreateOrder: (?:DEX_SURFACE_ENABLED \? )?\(\) => setUnlockedView\('create-order'\)/.test(src),
         `${shell.join('/')} wires the ActionsMenu entry`,
     );
-    assert.ok(src.includes("id: 'create-order'"), `${shell.join('/')} lists a Create order action`);
+    assert.ok(surfacesEntry(src, 'create-order', 'Create order'), `${shell.join('/')} lists a Create order action`);
 }
 
 // ---- Command palette ----

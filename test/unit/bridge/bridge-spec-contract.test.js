@@ -422,21 +422,34 @@ describe('signAction consumes the published SEND parameter shape', () => {
 });
 
 describe('Bridge events carry the origin they were meant for', () => {
-    function fakeTabs(tabList) {
+    function fakeTabs() {
         const sent = [];
         return {
             _sent: sent,
-            query: async () => tabList,
-            sendMessage: (id, message) => { sent.push({ id, message }); },
+            sendMessage: (id, message, cb) => {
+                sent.push({ id, message });
+                if (typeof cb === 'function') cb();
+            },
         };
     }
 
+    // Target selection comes from the connected-tab registry, not from
+    // `tab.url`: MV3 leaves Tab.url undefined for a manifest holding no "tabs"
+    // or host permission, which is exactly why the URL filter delivered
+    // nothing. A fake registry keeps this test about the origin stamp.
+    function fakeConnectedTabs(map) {
+        return { tabsForOrigin: async (origin) => (map[origin] ?? []) };
+    }
+
     it('stamps the intended origin on every fanned-out event', async () => {
-        const tabs = fakeTabs([
-            { id: 1, url: 'https://dapp.example/app' },
-            { id: 2, url: 'https://other.example/' },
-        ]);
-        const events = createBridgeEventBroadcaster({ tabs });
+        const tabs = fakeTabs();
+        const events = createBridgeEventBroadcaster({
+            tabs,
+            connectedTabs: fakeConnectedTabs({
+                [ORIGIN]: [1],
+                'https://other.example': [2],
+            }),
+        });
         await events.accountsChanged(ORIGIN, [{ id: 'acct-primary', name: 'Primary' }]);
 
         expect(tabs._sent).toHaveLength(1);
@@ -447,8 +460,11 @@ describe('Bridge events carry the origin they were meant for', () => {
     });
 
     it('stamps chainChanged and disconnect the same way', async () => {
-        const tabs = fakeTabs([{ id: 1, url: 'https://dapp.example/app' }]);
-        const events = createBridgeEventBroadcaster({ tabs });
+        const tabs = fakeTabs();
+        const events = createBridgeEventBroadcaster({
+            tabs,
+            connectedTabs: fakeConnectedTabs({ [ORIGIN]: [1] }),
+        });
         await events.chainChanged(ORIGIN, CHAIN);
         await events.disconnect(ORIGIN, 'user-requested');
         expect(tabs._sent.map((s) => s.message.origin)).toEqual([ORIGIN, ORIGIN]);

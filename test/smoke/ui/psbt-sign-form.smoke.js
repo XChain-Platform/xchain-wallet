@@ -18,6 +18,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -104,7 +105,7 @@ assert.ok(/unlockedView === ['"]sign-psbt['"]/.test(extApp),
     'extension App routes unlockedView "sign-psbt" to PsbtSignForm');
 assert.ok(/onSignPsbt:\s*\(\)\s*=>\s*setUnlockedView\(\s*['"]sign-psbt['"]\s*\)/.test(extApp),
     'extension App wires onSignPsbt → setUnlockedView("sign-psbt")');
-assert.ok(/id:\s*['"]sign-psbt['"]/.test(extApp),
+assert.ok(surfacesEntry(extApp, 'sign-psbt', 'Sign transaction'),
     'extension action menu has a sign-psbt entry');
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
@@ -114,7 +115,7 @@ assert.ok(/unlockedView === ['"]sign-psbt['"]/.test(webApp),
     'web App routes unlockedView "sign-psbt" to PsbtSignForm');
 assert.ok(/onSignPsbt:\s*\(\)\s*=>\s*setUnlockedView\(\s*['"]sign-psbt['"]\s*\)/.test(webApp),
     'web App wires onSignPsbt → setUnlockedView("sign-psbt")');
-assert.ok(/id:\s*['"]sign-psbt['"]/.test(webApp),
+assert.ok(surfacesEntry(webApp, 'sign-psbt', 'Sign transaction'),
     'web action menu has a sign-psbt entry');
 
 console.log('psbt-sign-form smoke OK');

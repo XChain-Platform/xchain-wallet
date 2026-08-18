@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -188,7 +189,7 @@ for (const [shell, appPath] of [
     const app = readFileSync(appPath, 'utf8');
     assert.ok(app.includes('SwapForm'), `${shell} App.jsx imports SwapForm`);
     assert.ok(app.includes("'swap'"), `${shell} App.jsx tracks the swap sub-route`);
-    assert.ok(/id:\s*['"]swap['"]/.test(app),
+    assert.ok(surfacesEntry(app, 'swap', 'Swap tokens'),
         `${shell} App.jsx registers the Swap tokens entry`);
     assert.ok(/onSwap:/.test(app), `${shell} App.jsx wires onSwap`);
 }

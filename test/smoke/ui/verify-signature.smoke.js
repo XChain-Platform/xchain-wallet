@@ -14,6 +14,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -117,9 +118,8 @@ for (const [src, name] of [
         /onVerifySignature: \(\) => setUnlockedView\('verify-signature'\)/,
         `${name} App passes onVerifySignature`,
     );
-    assert.match(
-        src,
-        /id: 'verify-signature'[\s\S]*onSelect: onVerifySignature/,
+    assert.ok(
+        surfacesEntry(src, 'verify-signature', 'Verify signature'),
         `${name} App lists Verify signature in ActionsMenu`,
     );
 }

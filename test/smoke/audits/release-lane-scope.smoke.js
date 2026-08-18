@@ -64,6 +64,9 @@ const WEB = `xchain-wallet-web-v${V}.tar.gz`;
 const work = mkdtempSync(join(tmpdir(), 'xc999-lane-scope-'));
 let failures = 0;
 
+// Collect rather than throw, so ONE run reports every broken gate instead of
+// stopping at the first. The tally is gated by the assertion at the tail; see
+// the note there for why that is an assertion and not a process.exit.
 function check(label, cond, detail) {
     if (cond) return;
     failures += 1;
@@ -463,12 +466,20 @@ try {
     rmSync(work, { recursive: true, force: true });
 }
 
-if (failures > 0) {
-    console.error(`\n${failures} lane-scope check(s) failed.`);
-    process.exit(1);
-}
-
-assert.ok(true);
+// THE post-condition, and an assertion rather than the `process.exit(1)` that
+// used to stand here. That exit made the file end on a decided question: with
+// the failing runs already gone, a trailing assertion had nothing left to say,
+// and whatever was written there could only be a constant. Anything this file
+// can actually catch - lib.sh dropping xr_lane_scope's promotion to `required`,
+// sign.sh losing its --lane branch or pointing a gate at the unscoped list,
+// xr_write_manifest omitting `# coverage: partial`, verify.sh no longer reading
+// the lanes field - raises `failures` in some check() above and fails HERE.
+// Each of those has already printed its own FAIL line with the gate output, so
+// the count is the summary and the lines are the diagnosis.
+assert.equal(
+    failures, 0,
+    `${failures} lane-scope check(s) failed; the FAIL line(s) above name which.`,
+);
 console.log(
     'OK: release lane-scope smoke (sign.sh --lane derives a'
     + ' partial-release scope from shipped-lanes.txt, so a lane whose artifacts'

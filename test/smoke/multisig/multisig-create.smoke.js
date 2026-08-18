@@ -28,6 +28,7 @@ import {
     COSIGNER_ORIGINS,
 } from '../../../packages/core/src/schemas/multisigConfig.js';
 import { flows } from '../../../packages/core/src/index.js';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -238,7 +239,7 @@ for (const [shell, appPath] of [
         `${shell} ActionsMenu BTC-gates onMultisigCreate via hasBtcAddress`);
     assert.ok(/<MultisigCreate\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <MultisigCreate> with the active walletId`);
-    assert.ok(/Create multisig/.test(app),
+    assert.ok(surfacesEntry(app, 'multisig-create', 'Create multisig'),
         `${shell} ActionsMenu surfaces the "Create multisig" entry`);
 }
 

@@ -32,6 +32,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -133,7 +134,7 @@ for (const [shell, appPath] of [
             `${shell} App.jsx tracks the ${mode} sub-route`,
         );
         assert.ok(
-            new RegExp(`id:\\s*['"]${mode}['"]`).test(app),
+            surfacesEntry(app, mode),
             `${shell} App.jsx registers the ${mode} entry in buildActionEntries`,
         );
     }
