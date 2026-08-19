@@ -377,6 +377,7 @@ export async function submitAction({
                 vault,
                 chainId,
                 donationIncluded: adsPlan.canSubmit,
+                chainRegistry,
             });
         } catch (e) {
             // ADS accounting is non-critical; don't let a write failure

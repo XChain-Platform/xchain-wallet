@@ -43,6 +43,9 @@ const COMMON = {
     supportedActions: BITCOIN_ACTIONS,
     uriScheme: 'bitcoin',
     adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
+    // §36.1 per-coin ADS defaults: 1,000 sats per tx, donation output
+    // attached to the next tx once 25,000 sats have accumulated.
+    adsDefaults: { perTxAmountSats: 1000, triggerAmountSats: 25000 },
 };
 
 /** @type {import('../validate.js').ChainDescriptor[]} */

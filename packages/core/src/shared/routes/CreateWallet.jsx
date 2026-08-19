@@ -242,8 +242,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     fontSize: 'var(--xc-text-sm)',
                     color: 'var(--xc-text-muted)',
                 }}>
-                    <li>Default: 1 sat per transaction (sent when accumulated &gt; 1,000 sats)</li>
-                    <li>Configurable per chain (Bitcoin / Litecoin / Dogecoin)</li>
+                    <li>Bitcoin: 1,000 sats per transaction (sent when accumulated &gt; 25,000 sats)</li>
+                    <li>Litecoin: 0.001 LTC per transaction (sent when accumulated &gt; 0.025 LTC)</li>
+                    <li>Dogecoin: 0.05 DOGE per transaction (sent when accumulated &gt; 1.25 DOGE)</li>
+                    <li>Amounts configurable per chain in Settings</li>
                     <li>No donation line on sign screens; runs invisibly after setup</li>
                 </ul>
                 {adsError ? (

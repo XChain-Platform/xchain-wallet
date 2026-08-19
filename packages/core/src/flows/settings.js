@@ -29,8 +29,11 @@
 
 import {
     createDefaultSettings,
+    resolveAdsChainConfig,
+    resolveFeeConfig,
     validateSettings,
 } from '../schemas/settings.js';
+import { defaultRegistry } from '../registry/index.js';
 
 /**
  * Return the persisted Settings record, falling back to the default
@@ -59,7 +62,7 @@ export async function updateSettings(vault, patch) {
         throw new Error('updateSettings: patch must be an object');
     }
     const current = await getSettings(vault);
-    const merged = deepMerge(current, patch);
+    const merged = normalizeChainScopedDefaults(deepMerge(current, patch));
     const validation = validateSettings(merged);
     if (!validation.ok) {
         const detail = (validation.errors ?? [])
@@ -91,4 +94,48 @@ function deepMerge(base, patch) {
         }
     }
     return out;
+}
+
+// §35.10 / §36.6 (the FreeWallet rule): a per-chain preference written
+// with a value EQUAL to the chain descriptor's current default is
+// stored as null ("follow the release default") instead. Users who
+// pick the default value keep following it when a later release
+// retunes it; only a value that differs from the default is a real
+// override. Chains the registry doesn't know (tests, stale entries)
+// pass through untouched. Top-level fields need no equivalent here:
+// the vault's deflate pass drops those against createDefaultSettings.
+function normalizeChainScopedDefaults(settings) {
+    const registry = defaultRegistry();
+    let fees = settings.fees;
+    for (const [chainId, entry] of Object.entries(settings.fees ?? {})) {
+        const descriptor = registry.get(chainId);
+        if (!descriptor || !entry) continue;
+        const d = resolveFeeConfig(null, descriptor);
+        const next = { ...entry };
+        if (next.strategy != null && next.strategy === d.strategy) next.strategy = null;
+        if (next.rbfByDefault != null && next.rbfByDefault === d.rbfByDefault) next.rbfByDefault = null;
+        if (next.strategy !== entry.strategy || next.rbfByDefault !== entry.rbfByDefault) {
+            if (fees === settings.fees) fees = { ...settings.fees };
+            fees[chainId] = next;
+        }
+    }
+    let perChain = settings.ads?.perChain;
+    for (const [chainId, state] of Object.entries(settings.ads?.perChain ?? {})) {
+        const descriptor = registry.get(chainId);
+        if (!descriptor || !state) continue;
+        const d = resolveAdsChainConfig(null, descriptor);
+        const next = { ...state };
+        if (next.perTxAmountSats != null && next.perTxAmountSats === d.perTxAmountSats) next.perTxAmountSats = null;
+        if (next.triggerAmountSats != null && next.triggerAmountSats === d.triggerAmountSats) next.triggerAmountSats = null;
+        if (next.perTxAmountSats !== state.perTxAmountSats || next.triggerAmountSats !== state.triggerAmountSats) {
+            if (perChain === settings.ads.perChain) perChain = { ...settings.ads.perChain };
+            perChain[chainId] = next;
+        }
+    }
+    if (fees === settings.fees && perChain === settings.ads?.perChain) return settings;
+    return {
+        ...settings,
+        fees,
+        ads: settings.ads ? { ...settings.ads, perChain } : settings.ads,
+    };
 }

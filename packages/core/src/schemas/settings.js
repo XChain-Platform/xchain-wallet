@@ -8,8 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Settings record (§11.3.7). Global per-wallet user preferences. ADS
-// defaults follow §36 (opt-out default, 1 sat per tx, 1000 sat trigger).
+// Settings record (§11.3.7). Global per-wallet user preferences.
+// Stored SPARSE (§35.10): only deltas from the release defaults persist
+// (deflateSettings / inflateSettings); per-chain preference fields hold
+// null for "follow the release default" and resolve against the chain
+// descriptor (resolveFeeConfig / resolveAdsChainConfig, §36.6).
 
 import {
     check,
@@ -23,7 +26,7 @@ import {
     result,
 } from './validate.js';
 
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 export const THEMES = /** @type {const} */ (['system', 'light', 'dark']);
 export const FEE_STRATEGIES = /** @type {const} */ (['low', 'normal', 'fast', 'custom']);
@@ -54,9 +57,63 @@ export const NETWORK_DEFAULT = 'mainnet';
 
 // ADS default: single source of truth per §36. Flip this to false to
 // make ADS opt-in without touching call sites.
+//
+// The per-tx / trigger constants are the LAST-RESORT fallback (used for
+// user-added Developer Mode chains whose descriptors carry no
+// `adsDefaults`). The three built-in coins carry per-coin values in
+// each descriptor's `adsDefaults` block (§36.1): a "sat" is a
+// chain-specific base unit with wildly different value on BTC, LTC and
+// DOGE, so one flat number can't be right on all three. The fallback
+// values match Bitcoin's.
+//
+// Defaults are RESOLVED AT READ TIME, never copied into the stored
+// record: a per-chain field holding null (or absent) means "follow the
+// current release's default", so retuning a descriptor's `adsDefaults`
+// in a later release reaches every wallet whose user hasn't explicitly
+// overridden that field (§36.6). Use `resolveAdsChainConfig` to read.
 export const ADS_DEFAULT_ENABLED = true;
-export const ADS_DEFAULT_PER_TX_SATS = 1;
-export const ADS_DEFAULT_TRIGGER_SATS = 1000;
+export const ADS_DEFAULT_PER_TX_SATS = 1000;
+export const ADS_DEFAULT_TRIGGER_SATS = 25000;
+
+/**
+ * Resolve a per-chain ADS state's effective amounts. Stored null/absent
+ * fields follow the descriptor's `adsDefaults` (falling back to the
+ * generic constants for user-added chains without one); a stored number
+ * is an explicit user override and wins.
+ *
+ * @param {Partial<AdsChainState> | null | undefined} state
+ * @param {{ adsDefaults?: { perTxAmountSats: number, triggerAmountSats: number } } | null | undefined} descriptor
+ * @returns {{ perTxAmountSats: number, triggerAmountSats: number }}
+ */
+export function resolveAdsChainConfig(state, descriptor) {
+    return {
+        perTxAmountSats:
+            state?.perTxAmountSats ??
+            descriptor?.adsDefaults?.perTxAmountSats ??
+            ADS_DEFAULT_PER_TX_SATS,
+        triggerAmountSats:
+            state?.triggerAmountSats ??
+            descriptor?.adsDefaults?.triggerAmountSats ??
+            ADS_DEFAULT_TRIGGER_SATS,
+    };
+}
+
+/**
+ * Resolve a per-chain fee entry's effective preferences the same way:
+ * stored null/absent fields follow the descriptor's `feeStrategy`
+ * defaults; a stored value is an explicit user override.
+ *
+ * @param {{ strategy?: string | null, customSatsPerKb?: number | null, rbfByDefault?: boolean | null } | null | undefined} entry
+ * @param {{ feeStrategy?: { defaultStrategy: string, rbfSupported: boolean } } | null | undefined} descriptor
+ * @returns {{ strategy: string, customSatsPerKb: number | null, rbfByDefault: boolean }}
+ */
+export function resolveFeeConfig(entry, descriptor) {
+    return {
+        strategy: entry?.strategy ?? descriptor?.feeStrategy?.defaultStrategy ?? 'normal',
+        customSatsPerKb: entry?.customSatsPerKb ?? null,
+        rbfByDefault: entry?.rbfByDefault ?? descriptor?.feeStrategy?.rbfSupported ?? true,
+    };
+}
 
 // Pre-flight privacy control (§4.8): two-state. 'full' (default) runs both
 // tiers; 'local' runs Tier-2 local checks only (zero network). There is no
@@ -108,15 +165,15 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
 
 /**
  * @typedef {Object} FeeSettings
- * @property {typeof FEE_STRATEGIES[number]} strategy
+ * @property {typeof FEE_STRATEGIES[number] | null} strategy   null/absent = follow the descriptor's defaultStrategy (§35.10)
  * @property {number | null} customSatsPerKb
- * @property {boolean} rbfByDefault
+ * @property {boolean | null} rbfByDefault                     null/absent = follow the descriptor's rbfSupported (§35.10)
  */
 
 /**
  * @typedef {Object} AdsChainState
- * @property {number} perTxAmountSats
- * @property {number} triggerAmountSats
+ * @property {number | null} perTxAmountSats    null/absent = follow the release default (descriptor `adsDefaults`), §36.6
+ * @property {number | null} triggerAmountSats  null/absent = follow the release default (descriptor `adsDefaults`), §36.6
  * @property {number} accumulatedSats
  * @property {number} lifetimeDonatedSats
  * @property {number} lifetimeTxCount
@@ -124,7 +181,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
 
 /**
  * @typedef {Object} Settings
- * @property {2} schemaVersion
+ * @property {3} schemaVersion
  * @property {typeof THEMES[number]} theme
  * @property {typeof REDUCED_MOTION_MODES[number]} reducedMotion        v2: `auto` follows the OS `prefers-reduced-motion`; `always` forces reduce; `never` ignores the OS preference
  * @property {number} autolockMinutes
@@ -267,11 +324,18 @@ export function createDefaultSettings() {
     };
 }
 
-/** @returns {AdsChainState} */
+/**
+ * Fresh per-chain ADS state. The per-tx / trigger amounts start as null
+ * ("follow the current release default", §36.6): only an explicit user
+ * override in Settings writes a number. The counters are real state and
+ * always stored.
+ *
+ * @returns {AdsChainState}
+ */
 export function createDefaultAdsChainState() {
     return {
-        perTxAmountSats: ADS_DEFAULT_PER_TX_SATS,
-        triggerAmountSats: ADS_DEFAULT_TRIGGER_SATS,
+        perTxAmountSats: null,
+        triggerAmountSats: null,
         accumulatedSats: 0,
         lifetimeDonatedSats: 0,
         lifetimeTxCount: 0,
@@ -285,16 +349,19 @@ const isSdkEndpoint = (v) =>
     isString(v.hubUrl) &&
     isBoolean(v.custom);
 
+// Preference fields are nullable in v3: null/absent = follow the
+// release default (resolved via resolveFeeConfig / resolveAdsChainConfig
+// against the chain descriptor). Only user overrides store a value.
 const isFeeSettings = (v) =>
     isPlainObject(v) &&
-    isOneOf(v.strategy, FEE_STRATEGIES) &&
-    (v.customSatsPerKb === null || isNonNegativeInteger(v.customSatsPerKb)) &&
-    isBoolean(v.rbfByDefault);
+    (v.strategy == null || isOneOf(v.strategy, FEE_STRATEGIES)) &&
+    (v.customSatsPerKb == null || isNonNegativeInteger(v.customSatsPerKb)) &&
+    (v.rbfByDefault == null || isBoolean(v.rbfByDefault));
 
 const isAdsChainState = (v) =>
     isPlainObject(v) &&
-    isNonNegativeInteger(v.perTxAmountSats) &&
-    isNonNegativeInteger(v.triggerAmountSats) &&
+    (v.perTxAmountSats == null || isNonNegativeInteger(v.perTxAmountSats)) &&
+    (v.triggerAmountSats == null || isNonNegativeInteger(v.triggerAmountSats)) &&
     isNonNegativeInteger(v.accumulatedSats) &&
     isNonNegativeInteger(v.lifetimeDonatedSats) &&
     isNonNegativeInteger(v.lifetimeTxCount);
@@ -626,4 +693,129 @@ export function validateSettings(record) {
     }
 
     return result(errors);
+}
+
+// ---------------------------------------------------------------------------
+// Sparse storage (§35.10 / §36.6, the "FreeWallet rule"): the vault stores
+// only what DIFFERS from the current release's defaults. `deflateSettings`
+// runs before persistence and drops every field whose value equals the
+// code default; `inflateSettings` runs on read and lays the stored deltas
+// over `createDefaultSettings()`. A default retuned in a later release
+// therefore reaches every wallet whose user never overrode that field.
+//
+// Chain-keyed records (fees, ads.perChain, sdkEndpoints) are the one
+// exception to plain diffing: their KEYS are load-bearing (they encode
+// which chains are active, see seedChainIds), so entries always survive
+// even when emptied to {}; only null preference fields inside them are
+// dropped (null and absent both mean "follow the release default").
+
+/** Structural equality for JSON-ish settings data. */
+function deepEqual(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+    if (Array.isArray(a) || Array.isArray(b)) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+        return a.every((v, i) => deepEqual(v, b[i]));
+    }
+    const ka = Object.keys(a);
+    const kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every((k) => deepEqual(a[k], b[k]));
+}
+
+const CHAIN_KEYED_FIELDS = ['fees', 'sdkEndpoints'];
+
+/**
+ * Reduce a full Settings record to the stored form: only deltas vs
+ * `createDefaultSettings()` survive, plus `schemaVersion` and the
+ * chain-keyed records' entries (with null fields dropped).
+ *
+ * @param {Settings} full
+ * @returns {Record<string, unknown>}
+ */
+export function deflateSettings(full) {
+    if (!isPlainObject(full)) return full;
+    const defaults = createDefaultSettings();
+    const out = { schemaVersion: full.schemaVersion };
+    for (const [k, v] of Object.entries(full)) {
+        if (k === 'schemaVersion') continue;
+        if (CHAIN_KEYED_FIELDS.includes(k)) {
+            const entries = dropNullFieldsPerEntry(v);
+            if (entries && Object.keys(entries).length > 0) out[k] = entries;
+            continue;
+        }
+        if (k === 'ads') {
+            const ads = {};
+            if (!deepEqual(v?.enabled, defaults.ads.enabled)) ads.enabled = v?.enabled;
+            const perChain = dropNullFieldsPerEntry(v?.perChain);
+            if (perChain && Object.keys(perChain).length > 0) ads.perChain = perChain;
+            if (Object.keys(ads).length > 0) out.ads = ads;
+            continue;
+        }
+        const deflated = deflateValue(v, defaults[k]);
+        if (deflated !== OMIT) out[k] = deflated;
+    }
+    return out;
+}
+
+const OMIT = Symbol('omit');
+
+function deflateValue(value, defaultValue) {
+    if (deepEqual(value, defaultValue)) return OMIT;
+    if (isPlainObject(value) && isPlainObject(defaultValue)) {
+        // One-level-deep objects (privacy, notifications, grace, ...):
+        // keep only the differing sub-fields.
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+            if (!deepEqual(v, defaultValue[k])) out[k] = v;
+        }
+        return Object.keys(out).length > 0 ? out : OMIT;
+    }
+    return value;
+}
+
+/** Per-chain entries survive with their null preference fields dropped. */
+function dropNullFieldsPerEntry(record) {
+    if (!isPlainObject(record)) return record;
+    const out = {};
+    for (const [chainId, entry] of Object.entries(record)) {
+        if (!isPlainObject(entry)) { out[chainId] = entry; continue; }
+        const kept = {};
+        for (const [k, v] of Object.entries(entry)) {
+            if (v !== null) kept[k] = v;
+        }
+        out[chainId] = kept;
+    }
+    return out;
+}
+
+/**
+ * Lay a stored (sparse) record over the current release's defaults to
+ * produce the full Settings record every reader sees. Stored values win;
+ * one-level-deep objects merge; chain-keyed entries are taken verbatim
+ * (their absent preference fields resolve later, against the chain
+ * descriptor, via resolveFeeConfig / resolveAdsChainConfig).
+ *
+ * @param {Record<string, unknown> | null | undefined} stored
+ * @returns {Settings}
+ */
+export function inflateSettings(stored) {
+    const defaults = createDefaultSettings();
+    if (!isPlainObject(stored)) return defaults;
+    const out = { ...defaults };
+    for (const [k, v] of Object.entries(stored)) {
+        if (v === undefined) continue;
+        if (isPlainObject(v) && isPlainObject(defaults[k]) && !CHAIN_KEYED_FIELDS.includes(k) && k !== 'ads') {
+            out[k] = { ...defaults[k], ...v };
+        } else if (k === 'ads') {
+            out.ads = {
+                enabled: v.enabled === undefined ? defaults.ads.enabled : v.enabled,
+                perChain: isPlainObject(v.perChain) ? v.perChain : {},
+            };
+        } else {
+            out[k] = v;
+        }
+    }
+    out.schemaVersion = stored.schemaVersion ?? defaults.schemaVersion;
+    return out;
 }

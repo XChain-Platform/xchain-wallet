@@ -47,6 +47,7 @@ import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import {
+    resolveFeeConfig,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
@@ -1048,9 +1049,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             prefillFeeConsumedRef.current = false;
             return;
         }
-        const chainFees = settings.fees[chainId];
-        if (!chainFees || typeof chainFees.strategy !== 'string') return;
+        if (!settings.fees[chainId]) return;
         const desc = chainRegistry.get(chainId);
+        // §35.10: a stored null strategy follows the release default,
+        // resolved against the chain descriptor.
+        const chainFees = resolveFeeConfig(settings.fees[chainId], desc);
         const tableUnit = desc?.coin === 'dogecoin' ? 'DOGE/kB' : 'sat/vB';
         if (chainFees.strategy === 'custom' && Number.isFinite(chainFees.customSatsPerKb)) {
             setFeePick({
@@ -1071,10 +1074,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [rbfEnabled, setRbfEnabled] = useState(true);
     useEffect(() => {
         if (!chainId || !settings?.fees) return;
-        const chainFees = settings.fees[chainId];
-        if (chainFees && typeof chainFees.rbfByDefault === 'boolean') {
-            setRbfEnabled(chainFees.rbfByDefault);
-        }
+        if (!settings.fees[chainId]) return;
+        // §35.10: stored null follows the descriptor default (true on
+        // BTC/LTC, false on DOGE where RBF isn't standard).
+        const { rbfByDefault } = resolveFeeConfig(settings.fees[chainId], chainRegistry.get(chainId));
+        setRbfEnabled(rbfByDefault);
     }, [chainId, settings]);
 
     // Step 4 of §44: async fetcher probes the shell's messaging

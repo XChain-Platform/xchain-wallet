@@ -9,20 +9,20 @@
 // contact legal@dankest.llc.
 
 // seedSettings: populate per-chain entries in Settings.fees and
-// Settings.ads.perChain from chain-registry defaults. Idempotent:
-// existing entries are never overwritten, so a user's customized
-// fee strategy or ADS amount survives a second invocation (e.g.,
-// activating an additional chain later, or a fresh wallet created
-// in an already-configured vault).
+// Settings.ads.perChain. Idempotent: existing entries are never
+// overwritten, so a user's customized fee strategy or ADS amount
+// survives a second invocation (e.g., activating an additional chain
+// later, or a fresh wallet created in an already-configured vault).
 //
-// Per-chain fee defaults come from the descriptor's `feeStrategy`:
-//   strategy        → descriptor.feeStrategy.defaultStrategy
-//   customSatsPerKb → null
-//   rbfByDefault    → descriptor.feeStrategy.rbfSupported
-//
-// Per-chain ADS entries start at zeroed lifetime counters; the tx/
-// trigger amounts come from the ADS_DEFAULT_* constants in the
-// settings schema.
+// Seeding creates the ENTRY (its key marks the chain as configured,
+// see seedChainIds) but copies NO default values into it (§35.10 /
+// §36.6): every preference field starts null = "follow the current
+// release's default", resolved at read time against the chain
+// descriptor via resolveFeeConfig / resolveAdsChainConfig. Only an
+// explicit user override ever writes a concrete value, so a later
+// release can retune descriptor defaults and reach every wallet that
+// never overrode them. ADS lifetime counters are real state and start
+// at zero.
 
 import {
     createDefaultAdsChainState,
@@ -55,9 +55,9 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
         }
         if (!fees[chainId]) {
             fees[chainId] = {
-                strategy: descriptor.feeStrategy.defaultStrategy,
+                strategy: null,
                 customSatsPerKb: null,
-                rbfByDefault: descriptor.feeStrategy.rbfSupported,
+                rbfByDefault: null,
             };
         }
         if (!adsPerChain[chainId]) {

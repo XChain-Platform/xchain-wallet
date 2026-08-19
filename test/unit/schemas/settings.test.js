@@ -105,10 +105,10 @@ describe('createDefaultSettings', () => {
 });
 
 describe('createDefaultAdsChainState', () => {
-    it('creates expected defaults', () => {
+    it('stores NO amounts (null = follow the release default), counters zeroed', () => {
         const a = createDefaultAdsChainState();
-        expect(a.perTxAmountSats).toBe(1);
-        expect(a.triggerAmountSats).toBe(1000);
+        expect(a.perTxAmountSats).toBe(null);
+        expect(a.triggerAmountSats).toBe(null);
         expect(a.accumulatedSats).toBe(0);
         expect(a.lifetimeDonatedSats).toBe(0);
         expect(a.lifetimeTxCount).toBe(0);

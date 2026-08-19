@@ -42,23 +42,31 @@
 // descriptor's `adsDonationAddress`.
 
 import { isDonationAddressConfigured } from '../registry/validate.js';
+import { resolveAdsChainConfig } from '../schemas/settings.js';
 
 /**
  * Check whether the NEXT transaction on `chainId` should include a
  * donation output (accumulator has already crossed the trigger on a
  * previous tx). Read-only.
  *
+ * Per-chain state stores null for "follow the release default"
+ * (§36.6); pass `chainRegistry` so the trigger resolves against the
+ * chain descriptor's `adsDefaults`. Without it the generic constants
+ * apply, which is only correct for user-added chains.
+ *
  * @param {import('../schemas/settings.js').Settings | null} settings
  * @param {string} chainId
+ * @param {import('../registry/index.js').ChainRegistry} [chainRegistry]
  * @returns {{ donationAmount: number }}   0 if ADS disabled, chain not seeded, or trigger not reached
  */
-export function resolveAdsForNextTx(settings, chainId) {
+export function resolveAdsForNextTx(settings, chainId, chainRegistry) {
     if (!settings || !settings.ads || !settings.ads.enabled) {
         return { donationAmount: 0 };
     }
     const state = settings.ads.perChain?.[chainId];
     if (!state) return { donationAmount: 0 };
-    if (state.accumulatedSats >= state.triggerAmountSats) {
+    const { triggerAmountSats } = resolveAdsChainConfig(state, chainRegistry?.get?.(chainId));
+    if (state.accumulatedSats >= triggerAmountSats) {
         return { donationAmount: state.accumulatedSats };
     }
     return { donationAmount: 0 };
@@ -106,7 +114,8 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
             reason: 'chain-not-seeded',
         };
     }
-    if (state.accumulatedSats < state.triggerAmountSats) {
+    const { triggerAmountSats } = resolveAdsChainConfig(state, descriptor);
+    if (state.accumulatedSats < triggerAmountSats) {
         return {
             donationAmount: 0,
             donationAddress: null,
@@ -138,23 +147,28 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
  * transaction. Pure function: returns a new object if something changed, or
  * the same reference if no change would be applied.
  *
- * - `donationIncluded = false` (normal): accumulator += perTxAmountSats;
- *   lifetimeTxCount += 1.
+ * - `donationIncluded = false` (normal): accumulator += the resolved
+ *   per-tx amount; lifetimeTxCount += 1.
  * - `donationIncluded = true`: the tx we just broadcast carried the
  *   donation. lifetimeDonatedSats += the pre-reset accumulator;
- *   accumulator resets to perTxAmountSats (this tx's own contribution
- *   toward the next cycle); lifetimeTxCount += 1.
+ *   accumulator resets to the resolved per-tx amount (this tx's own
+ *   contribution toward the next cycle); lifetimeTxCount += 1.
+ *
+ * The per-tx amount resolves against the chain descriptor when
+ * `chainRegistry` is passed (§36.6: stored null = follow the release
+ * default); the generic constant otherwise.
  *
  * @param {import('../schemas/settings.js').Settings} settings
  * @param {string} chainId
- * @param {{ donationIncluded: boolean }} params
+ * @param {{ donationIncluded: boolean, chainRegistry?: import('../registry/index.js').ChainRegistry }} params
  * @returns {import('../schemas/settings.js').Settings}
  */
-export function stepAdsAccumulator(settings, chainId, { donationIncluded }) {
+export function stepAdsAccumulator(settings, chainId, { donationIncluded, chainRegistry }) {
     if (!settings || !settings.ads || !settings.ads.enabled) return settings;
     const state = settings.ads.perChain?.[chainId];
     if (!state) return settings;
 
+    const { perTxAmountSats } = resolveAdsChainConfig(state, chainRegistry?.get?.(chainId));
     const prior = state.accumulatedSats;
     const nextState = {
         ...state,
@@ -162,9 +176,9 @@ export function stepAdsAccumulator(settings, chainId, { donationIncluded }) {
     };
     if (donationIncluded) {
         nextState.lifetimeDonatedSats = state.lifetimeDonatedSats + prior;
-        nextState.accumulatedSats = state.perTxAmountSats;
+        nextState.accumulatedSats = perTxAmountSats;
     } else {
-        nextState.accumulatedSats = prior + state.perTxAmountSats;
+        nextState.accumulatedSats = prior + perTxAmountSats;
     }
 
     return {
@@ -184,13 +198,14 @@ export function stepAdsAccumulator(settings, chainId, { donationIncluded }) {
  * @param {import('../storage/Vault.js').Vault} opts.vault
  * @param {string} opts.chainId
  * @param {boolean} opts.donationIncluded
+ * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]  resolves the per-tx amount against the descriptor (§36.6)
  * @returns {Promise<import('../schemas/settings.js').Settings | null>}
  */
-export async function commitAdsStep({ vault, chainId, donationIncluded }) {
+export async function commitAdsStep({ vault, chainId, donationIncluded, chainRegistry }) {
     if (!vault) throw new Error('commitAdsStep: vault is required');
     const settings = await vault.settings.get();
     if (!settings) return null;
-    const next = stepAdsAccumulator(settings, chainId, { donationIncluded });
+    const next = stepAdsAccumulator(settings, chainId, { donationIncluded, chainRegistry });
     if (next !== settings) {
         await vault.settings.put(next);
     }

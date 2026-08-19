@@ -36,6 +36,9 @@ const COMMON = {
     supportedActions: DOGECOIN_ACTIONS,
     uriScheme: 'dogecoin',
     adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
+    // §36.1 per-coin ADS defaults: 0.05 DOGE per tx (5,000,000 koinu),
+    // donation attached once 1.25 DOGE has accumulated (~25 txs).
+    adsDefaults: { perTxAmountSats: 5_000_000, triggerAmountSats: 125_000_000 },
 };
 
 /** @type {import('../validate.js').ChainDescriptor[]} */

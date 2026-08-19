@@ -56,6 +56,7 @@ import {
     base64ToBytes,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
+import { migrateSettings } from '../schemas/migrations.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import {
@@ -346,7 +347,10 @@ export async function importBackupFile({
     if (decoded.settings) {
         const existing = await vault.settings.get();
         if (!existing || (onConflict === 'overwrite' && mode !== 'add')) {
-            await vault.settings.put(decoded.settings);
+            // A backup can carry an older schema (e.g. a v2 record whose
+            // per-chain values are frozen copies of that release's
+            // defaults); migrate before put or validation rejects it.
+            await vault.settings.put(migrateSettings(decoded.settings));
             writes.settings = true;
         } else {
             skipped.settings = true;

@@ -89,6 +89,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} hub
  * @property {string} adsDonationAddress          §36.3 destination for Automatic Donation System output; `ADS_DONATION_ADDRESS_PLACEHOLDER` disables submission
+ * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  §36.1 per-coin ADS seed values in the chain's base unit; absent = generic ADS_DEFAULT_* fallback
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
  */
 
@@ -271,6 +272,18 @@ export function validateChainDescriptor(record) {
     );
     if (r.isUserAdded !== undefined) {
         check(errors, 'isUserAdded', isBoolean(r.isUserAdded), 'must be a boolean');
+    }
+    // Optional so pasted Developer Mode descriptors keep working; when
+    // present both amounts must be non-negative integers in base units.
+    if (r.adsDefaults !== undefined) {
+        check(
+            errors,
+            'adsDefaults',
+            isPlainObject(r.adsDefaults) &&
+                isNonNegativeInteger(r.adsDefaults.perTxAmountSats) &&
+                isNonNegativeInteger(r.adsDefaults.triggerAmountSats),
+            'must be { perTxAmountSats, triggerAmountSats } with non-negative integers',
+        );
     }
 
     // Cross-field: every addressType must have a derivation path template.
