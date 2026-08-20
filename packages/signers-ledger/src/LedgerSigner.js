@@ -50,7 +50,7 @@
 // (matches the convention in @xchain-wallet/signers-trezor).
 
 import { sha256 } from '@noble/hashes/sha2';
-import { Signer, SignerStatusError } from '../../core/src/signers/Signer.js';
+import { Signer, SignerStatusError, assertCannotSignEnvelopeReveal } from '../../core/src/signers/Signer.js';
 import {
     addressTypeFromPath,
     composeBitcoinCompactSignature,
@@ -315,7 +315,13 @@ export class LedgerSigner extends Signer {
      * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
      */
-    async signPsbt({ psbtHex, chainId, signingPaths }) {
+    async signPsbt({ psbtHex, chainId, signingPaths, envelopeReveal }) {
+        // The renderer registers THIS class as the live signer, so the
+        // RemoteSigner backstop is not in the path on desktop or the popup.
+        // Without this the flag was ignored and the request failed later at
+        // `input has only a witnessUtxo`, which reads as a broken PSBT rather
+        // than as the capability limit it is.
+        assertCannotSignEnvelopeReveal(this._id, { envelopeReveal });
         this._assertSdkRegistry('signPsbt');
         if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
             throw new Error('LedgerSigner.signPsbt: psbtHex is required');

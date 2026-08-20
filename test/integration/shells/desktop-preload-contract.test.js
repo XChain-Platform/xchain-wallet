@@ -351,6 +351,22 @@ describe('desktop preload: window + registry bridges', () => {
 });
 
 describe('desktop preload: signer-bridge duplex port', () => {
+    // The world's method set, pinned, because the preload header can advertise
+    // {postMessage, onMessage, onDisconnect} while the exposure block carried
+    // only the first two, and nothing here caught the drift: the surface tests
+    // above assert every world's values are functions, never which keys a
+    // world has. `onDisconnect` belongs to the SYNTHETIC port on the main side
+    // (main/signerBridgeListener.js), where `sender.once('destroyed')` is what
+    // observes the renderer going away; the renderer builds its PortLike from
+    // the two methods below and has no consumer for it. This file defines the
+    // sandbox boundary, so an `onDisconnect` appearing here later is a real
+    // widening of that boundary and has to fail this assertion first.
+    it('exposes exactly {postMessage, onMessage}, not the main-side onDisconnect', () => {
+        const pre = runPreload();
+        expect(Object.keys(pre.worlds.get('xchainWalletSignerBridge')).sort())
+            .toEqual(['onMessage', 'postMessage']);
+    });
+
     it('sends renderer → main fire-and-forget (send, never invoke)', () => {
         const pre = runPreload();
         const msg = { kind: 'announce', signerIds: ['trezor-1'] };

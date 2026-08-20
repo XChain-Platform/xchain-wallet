@@ -49,6 +49,40 @@ export class NotImplementedError extends Error {
     }
 }
 
+/**
+ * The backstop every non-software signer runs at the top of `signPsbt`.
+ *
+ * A Taproot envelope reveal is a BIP341 script-path spend, and no shipping
+ * hardware firmware signs one. The primary gate is
+ * `flows/signerCapability.js#signerSupportsTapscript`, which keeps hardware
+ * accounts off the envelope encoding entirely; this is the backstop for when it
+ * does not. It lived only in RemoteSigner, so a renderer-registered
+ * LedgerSigner/TrezorSigner (the desktop and popup shells register the concrete
+ * device signer, not the transport shim) received `envelopeReveal: true` and
+ * ignored it, failing later and deeper with `unsupported input scriptType
+ * "p2tr"` or `input has only a witnessUtxo` instead of the capability message.
+ *
+ * Guards `envelopeReveal` ONLY, deliberately, and `reveal` is NOT added here.
+ * The two flags sit on opposite sides of the first broadcast. `envelopeReveal`
+ * is dispatched while nothing is on chain (submitWithSigner step 3b, before the
+ * commit), so refusing it costs an error. `reveal` is the P2SH/P2WSH phase-2
+ * spend, dispatched AFTER phase 1 has been broadcast, so a refusal there
+ * completes the commit and never the reveal, which is the stranded-funds event
+ * §6 forbids. A guard on that path would have to be a pre-dispatch capability
+ * check in submitWithSigner, not a refusal at the signer.
+ *
+ * @param {string} signerId
+ * @param {{ envelopeReveal?: boolean } | null | undefined} params
+ */
+export function assertCannotSignEnvelopeReveal(signerId, params) {
+    if (params && params.envelopeReveal) {
+        throw new SignerStatusError(
+            signerId, 'error',
+            'signPsbt: this signer cannot sign a Taproot envelope reveal (BIP341 script path)',
+        );
+    }
+}
+
 /** @typedef {'software' | 'trezor' | 'ledger' | 'multisig' | 'airgap'} SignerKind */
 /** @typedef {'available' | 'locked' | 'disconnected' | 'wrong-app' | 'unsupported-network' | 'error'} SignerStatus */
 
