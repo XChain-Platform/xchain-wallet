@@ -124,6 +124,33 @@ describe('verifyAddressBalance (§7/§8)', () => {
         });
     });
 
+    it('binds the proof to the requested identity (`expected` rides every call)', async () => {
+        const { registry, calls } = makeRegistry({
+            verifyBalance: () => ({ verified: true, amount: '1', height: 1 }),
+        });
+        await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        // The wallet asks for exactly the (address, tick) it queried, so a
+        // genuine proof for a different key refuses rather than verifying.
+        expect(calls[0][1].expected).toEqual({ address: REQ.address, tick: REQ.tick });
+    });
+
+    it('maps a requested-identity mismatch to failed (the server substituted its answer)', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: false, reason: 'REQUESTED_IDENTITY_MISMATCH', height: 120 }),
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.status).toBe('failed');
+        expect(res.reason).toBe('REQUESTED_IDENTITY_MISMATCH');
+    });
+
+    it('maps a balance-query mismatch to failed (proof proves a different key)', async () => {
+        const { registry } = makeRegistry({
+            verifyBalance: () => ({ verified: false, reason: 'BALANCE_QUERY_MISMATCH', height: 120 }),
+        });
+        const res = await verifyAddressBalance({ sdkRegistry: registry, ...REQ });
+        expect(res.status).toBe('failed');
+    });
+
     it('synthesizes an http:// URL with the port when baseUrl lacks a scheme', async () => {
         const { registry, calls } = makeRegistry({
             verifyBalance: () => ({ verified: true, amount: '1', height: 1 }),
@@ -162,6 +189,22 @@ describe('verifyAddressAction (§7/§8)', () => {
         const { registry } = makeRegistry({ verifyBalance: () => ({ verified: true }) });
         const res = await verifyAddressAction({ sdkRegistry: registry, chainId: REQ.chainId, actionIndex: 42 });
         expect(res.reason).toBe('SPV_UNSUPPORTED');
+    });
+
+    it('binds the proof to the requested action index (`expected` rides every call)', async () => {
+        const { registry, calls } = makeRegistry({
+            verifyAction: () => ({ verified: true, height: 200, reason: null }),
+        });
+        await verifyAddressAction({ sdkRegistry: registry, chainId: REQ.chainId, actionIndex: 42 });
+        expect(calls[0][1].expected).toEqual({ action_index: '42' });
+    });
+
+    it('maps a requested-identity mismatch on an action proof to failed', async () => {
+        const { registry } = makeRegistry({
+            verifyAction: () => ({ verified: false, reason: 'REQUESTED_IDENTITY_MISMATCH' }),
+        });
+        const res = await verifyAddressAction({ sdkRegistry: registry, chainId: REQ.chainId, actionIndex: 42 });
+        expect(res.status).toBe('failed');
     });
 });
 

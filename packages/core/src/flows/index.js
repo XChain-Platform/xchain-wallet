@@ -93,8 +93,11 @@ export { broadcastAction } from './broadcastAction.js';
 export {
     buildBatchCommand,
     validateBatchConstraints,
+    batchEntryWeight,
+    batchQueueWeight,
     BATCH_FORBIDDEN_ACTIONS,
     BATCH_SINGLETON_ACTIONS,
+    BATCH_WEIGHT_BUDGET,
 } from './batchCommand.js';
 export { oraclePriceAction } from './oraclePriceAction.js';
 export {
